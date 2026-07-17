@@ -10,14 +10,22 @@ lane; and issues/PRs/discussions against `moq-dev`, the upstream MoQ
 implementation).
 
 This document exists so that the rest of the repository can make claims and cite
-evidence for them here, rather than restating the evidence inline.
+evidence for them here, rather than restating the evidence inline. It is the
+*narrative* credibility spine; the *executable* companion — exact methods,
+commands, and measured result tables (baseline TS, both transport lanes, remote
+end-to-end, and network impairment) — lives in [test-plan](test-plan.md), which
+this document cites for the hard numbers. The two are kept separate deliberately:
+this is the "what we learned and why it matters" for readers of the paper; the
+test plan is the "how to reproduce and falsify it" for a sceptical engineer.
 
 ---
 
 ## 1. The transport is real but unstable — and we architected around it
 
 We transport live MPEG-TS over MoQ end-to-end, over the public internet, via a
-cloud (AWS EC2) relay, out to broadcast egress. On the IETF path we conform to
+cloud (AWS EC2) relay, out to broadcast egress — now demonstrated with a live SRT
+contribution feed traversing the whole chain with 0 continuity errors
+([test-plan](test-plan.md) §8). On the IETF path we conform to
 the MSFTS `m2ts` packaging draft (`draft-gregoire-moq-msfts`) and publish an MSF
 catalog. **But** the MoQ wire protocol is moving under us:
 
@@ -57,8 +65,10 @@ MoQ delivers objects/groups in bursts, so a reconstructed MPEG-TS has PCR
 *intervals* that no longer track a constant mux rate — the bytes (including the
 PCR values themselves) are intact, but the delivery *cadence* is not. Soft players
 tolerate it; **hardware IRDs lock a PLL to PCR and raise TR 101 290 P1/P2
-alarms.** Measured over a file: ~24% of PCR intervals exceeded the 40 ms limit (up
-to 133 ms). To be precise about attribution: this cadence problem is the part that
+alarms.** Measured on the media-aware lane, 13–26% of PCR intervals exceeded the
+40 ms limit depending on source, both on loopback and over the public-internet
+EC2 path ([test-plan](test-plan.md) §6, §8); the opaque lane, fed raw, holds
+0% > 40 ms on file ([test-plan](test-plan.md) §7). To be precise about attribution: this cadence problem is the part that
 is inherent to MoQ's object model (the same way SRT/Zixi/RIST are bursty on the
 wire and groom the TS before hand-off); it is *not* the same as the separate
 PCR/PTS *regeneration* problem the media-aware re-mux path has, which the opaque
@@ -86,7 +96,11 @@ as it stood (keyframe detection keyed only on IDR NAL type), which then tripped 
 misleading SCTE-35/no-video export error. This is common for contribution feeds,
 not a niche quirk. **Our opaque m2ts lane carries the TS verbatim** — preserving
 SDT/service identity, PMT PID, SCTE-35, teletext, and continuity counters that a
-media-aware re-mux discarded — so it sidesteps the whole failure class.
+media-aware re-mux discarded — so it sidesteps the whole failure class. This is now
+measured end-to-end: on the opaque lane the egress reproduces the source
+byte-for-byte (full PSI/SI, SCTE-35, teletext, TSID/ONID, CBR, 0% PCR > 40 ms),
+whereas the media-aware lane drops SI and renumbers the PMT
+([test-plan](test-plan.md) §7, with the decisive side-by-side in §7.7).
 
 Two honest caveats on this evidence: it records behaviour *as measured at the
 time*, and upstream has since begun addressing the media-aware import weaknesses

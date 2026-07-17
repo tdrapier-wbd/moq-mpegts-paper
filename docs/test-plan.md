@@ -80,7 +80,7 @@ designed to advance, reconciled with the evidence already recorded in
 | Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC, 10.3 MB/48 s** (§8.4); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware) |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams but **drops SI + not CBR** (§6); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
 | Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 |
-| Failure behaviour | ❌ Not tested | Loss, reconnect, relay failure not yet exercised | T5, T6 |
+| Failure behaviour | 🟡 Partial | **T5 impairment run on both lanes over the real EC2 path** (§9): QUIC absorbs ≤200 ms latency & ~1 % loss with 0 CC; reordering is the weak point; reconnect/relay-failure (T6) not yet exercised | T5 ✅, T6 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
 
@@ -954,91 +954,215 @@ transport supplies.
 ## 9. Test 5 — Network impairment
 
 The big one: does the path survive realistic Internet conditions? This exercises
-the E2E path under controlled latency, loss, and jitter injected at the impairment
-node (§4.1) with Linux `tc`/`netem`.
+the path under controlled latency, loss, jitter, and reordering injected with Linux
+`tc`/`netem`, on both lanes.
+
+**Status: media-aware lane run and measured over the real EC2→home internet path
+(2026-07-17); opaque lane built/deployed on the EC2 and measured on a controlled
+loopback path (2026-07-17, §9.5).** For the media-aware run, impairment was applied
+on the EC2 `ens5` egress, filtered to the QUIC media flow only (UDP sport 443 → the
+subscriber's home IP) so the SSH control channel was never impaired. All services
+were restored and every `netem` qdisc removed afterward (§9.8).
 
 ### 9.1 Objective
 
-Characterise end-to-end behaviour — delay, buffer occupancy, recovery, and video
-impact — as a function of controlled network impairment, and identify the
-operating envelope within which the groomed egress stays conformant.
+Characterise end-to-end behaviour — throughput, recovery, continuity, and timing —
+as a function of controlled network impairment, and identify the operating envelope
+within which each lane stays usable. A second aim: establish *which metric actually
+reveals damage* on each lane, since the two lanes fail very differently.
 
 ### 9.2 Architecture
 
 ```mermaid
 flowchart LR
-    PUB["Publisher"] --> NETEM["tc/netem\n(latency / loss / jitter)"] --> RELAY["MoQ relay (EC2)"] --> SUB["Subscriber\n+ groomer"] --> IRD["IRD / analyser\n+ TSDuck (P1/P2)"]
+    PUB["EC2 publisher\n(moq import ts / moq_publisher)"] --> RELAY["MoQ relay (EC2)"]
+    RELAY --> NETEM["tc/netem on ens5 egress\n(filtered: UDP sport 443 → sub IP)"]
+    NETEM -->|QUIC / internet| SUB["Subscriber (local)\nmoq export ts / moq_subscriber"]
+    SUB --> TSD["TSDuck (P1: CC, PCR, bitrate)"]
 ```
 
-### 9.3 Methodology
+### 9.3 Method and exact commands
 
-Apply impairment on the egress interface of the impairment node, one variable at a
-time, then in combination. Representative `netem` invocations (adjust interface):
+Impairment lives on a dedicated `prio` band so that **only** the QUIC media egress
+is shaped and interactive SSH (TCP) is untouched; a watchdog removes all shaping
+after 30 min even if the control session drops:
 
 ```bash
-# Latency (fixed one-way add)
-sudo tc qdisc add dev eth0 root netem delay 20ms      # then 50ms, 100ms
+# on EC2 — build an SSH-safe netem lane (all default traffic → band 1; netem on band 4)
+IFACE=ens5; SUBIP=<subscriber-home-ip>
+sudo tc qdisc add dev $IFACE root handle 1: prio bands 4 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+sudo tc qdisc add dev $IFACE parent 1:4 handle 40: netem delay 0ms
+sudo tc filter add dev $IFACE parent 1:0 protocol ip prio 1 u32 \
+  match ip protocol 17 0xff match ip sport 443 0xffff match ip dst $SUBIP/32 flowid 1:4
+sudo bash -c "nohup sh -c 'sleep 1800; tc qdisc del dev $IFACE root' >/dev/null 2>&1 &"  # watchdog
 
-# Jitter (delay with variation, correlated)
-sudo tc qdisc change dev eth0 root netem delay 50ms 10ms 25%   # 10/50/100ms variation
-
-# Packet loss
-sudo tc qdisc change dev eth0 root netem loss 0.01%   # then 0.1%, 1%
-
-# Combined (example)
-sudo tc qdisc change dev eth0 root netem delay 50ms 10ms loss 0.1%
-
-# Remove
-sudo tc qdisc del dev eth0 root
+# change the condition per row, e.g.
+sudo tc qdisc change dev $IFACE parent 1:4 handle 40: netem delay 100ms
+sudo tc qdisc change dev $IFACE parent 1:4 handle 40: netem loss 1%
+sudo tc qdisc change dev $IFACE parent 1:4 handle 40: netem delay 30ms 20ms distribution normal   # jitter (also reorders)
+sudo tc qdisc change dev $IFACE parent 1:4 handle 40: netem delay 30ms reorder 25% 50%            # pure reordering
+sudo tc qdisc del dev $IFACE root                                                                 # remove all
 ```
 
-For each condition, run for a fixed soak window, capture at P1 (and P2 where the
-IRD is available), and record the metrics below. Note whether the QUIC transport
-recovers losses (retransmit within deadline) or whether loss reaches the TS as
-object loss.
+For each condition, the subscriber captured a fixed 22 s window and TSDuck reported
+delivered bitrate (bytes·8/window), continuity discontinuities, transport errors,
+and PCR-interval statistics. Media-aware used the existing EC2 loop
+(`cnn.international.emea.loop.hang`, `moq export ts --latency-max 5s`); the opaque
+lane used a purpose-built chain (§9.5).
 
-### 9.4 Impairment matrix and results
+### 9.4 Results — media-aware lane over the real EC2 path (2026-07-17)
 
-**Latency**
+Baseline (no impairment): **9.2–9.4 Mbps, 0 CC discontinuities, 0 transport
+errors**, PCR mean ~31 ms / max ~320 ms, ~12 % of intervals > 40 ms — i.e. the
+inherent media-aware burstiness from Test 2, unchanged.
 
-| Added latency | End-to-end delay (ms) | Buffer behaviour | CC errors (P1) | Output stable? |
+**Latency** (`--latency-max 5s`):
+
+| Added delay | Delivered Mbps | CC disc. | Transport err | Verdict |
 |---|---|---|---|---|
-| +20 ms | TBM | TBM | TBM | TBM |
-| +50 ms | TBM | TBM | TBM | TBM |
-| +100 ms | TBM | TBM | TBM | TBM |
+| +20 ms | 9.10 | 0 | 0 | no effect |
+| +50 ms | 9.38 | 0 | 0 | no effect |
+| +100 ms | 8.90 | 0 | 0 | no effect |
+| +200 ms | 8.31 | 0 | 0 | no effect |
 
-**Packet loss**
+**Packet loss** (netem Bernoulli/uncorrelated, `--latency-max 5s`):
 
-| Loss | Recovered by QUIC? | Object loss at TS? | Video impact | CC / P1 conformance |
+| Loss | Delivered Mbps | CC disc. | PCR max (ms) | Verdict |
 |---|---|---|---|---|
-| 0.01% | TBM | TBM | TBM | TBM |
-| 0.1% | TBM | TBM | TBM | TBM |
-| 1% | TBM | TBM | TBM | TBM |
+| 0.1 % | 9.47 | 0 | 320 | fully recovered |
+| 1 % | 6.2–9.2 | 0 | 320–1200 | recovered; throughput dips |
+| 3 % | 3.29 | 0 | 1400 | **starvation** (rate < stream rate) |
+| 5 % | 2.49 | 0 | 2400 | severe starvation |
 
-**Jitter**
+**Jitter and reordering:**
 
-| Jitter | Output stability | De-jitter buffer occupancy | PCR interval (post-groom) |
+| Condition | Delivered Mbps | CC disc. | Verdict |
 |---|---|---|---|
-| 10 ms | TBM | TBM | TBM |
-| 50 ms | TBM | TBM | TBM |
-| 100 ms | TBM | TBM | TBM |
+| In-order jitter (delay 60 ± 30 ms, rate-serialised) | 9.04 | 0 | **absorbed** |
+| netem jitter (delay 30 ± 20 ms, reorders) | 0.16–0.22 | 0 | **collapse** |
+| netem jitter (delay 60 ± 50 ms) | ~0 | – | collapse |
+| Explicit reordering (25 %) | 0.97 | 0 | **collapse** |
 
-### 9.5 Pass criteria
+**Buffer sensitivity:** at 1 % loss, `--latency-max` 500 ms vs 5 s both delivered
+~8.7–9.2 Mbps with 0 CC — no cliff at this loss level.
 
-- Define, from the matrix, the **operating envelope**: the latency/loss/jitter
-  region within which the groomed egress stays TR 101 290-conformant and video is
-  artefact-free.
-- Loss behaviour is *graceful and bounded*, not catastrophic — degradation is
-  proportionate and recovery is observed. Where loss exceeds recovery capacity,
-  the redundancy path (T6 / ST 2022-7) is the mitigation, not the transport alone.
+### 9.5 Results — opaque lane (2026-07-17)
 
-### 9.6 Limitations
+The opaque lane is not part of the standing EC2 deployment (§8), so it was built
+and deployed for this test: the `moq-publisher-subscriber` source was compiled on
+the EC2 (`aws-lc-rs` backend, `moq-transport` 0.14.2; a 4 GB swap file added to
+survive the build on the 2‑vCPU host, ~8 min), and an opaque `moq_relay` +
+`moq_publisher` were run feeding a PCR-paced infinite loop of `~/CNNiEMEA2.ts`
+(`tsp -I file --infinite -P regulate`). Two capture paths were exercised:
 
-- `netem` on a single node emulates a path segment, not the full statistical
-  behaviour of the public internet; it complements, but does not replace, the real
-  EC2-path run ([evidence](evidence.md) §1).
-- Loss correlation models in `netem` are approximations; real congestion loss is
-  bursty and RTT-coupled. State the model used with every result.
+- **Real internet path (443-swap):** the moq-lite stack was briefly stopped, the
+  opaque relay took port 443, and the **local** subscriber connected over the
+  public internet. It subscribed and received the broadcast at ~10 Mbps — the
+  opaque lane works end-to-end over the wire — but the older local subscriber
+  build could not hand the TCP egress to a capture tool cleanly, so no local
+  TSDuck file was produced.
+- **Controlled path (measured):** the freshly-built subscriber was run **on the
+  EC2** over loopback, `netem` applied to the loopback QUIC flow (port 443), and
+  the verbatim egress captured and analysed with TSDuck on the box. This is where
+  the numbers below come from. **Caveat:** loopback has ~0 base RTT (so loss
+  recovery costs almost nothing), and the loopback filter impaired *both* the
+  ingest and egress QUIC hops — so these figures characterise the opaque egress's
+  *transparency* under impairment, not a like-for-like loss envelope against the
+  media-aware real-path run.
+
+Baseline (no impairment): **10.16 Mbps, 0 CC, 0 transport errors, PCR mean/max
+24.5 ms, 0 % > 40 ms**, and the full source identity preserved verbatim — service
+"CNNI EMEA HD" (Warner Bros. Discovery), NIT present, TSID 0x0000, PMT 0x0064,
+PCR 0x006F. The opaque egress is byte-faithful and IRD-shaped (CBR) exactly as in
+Test 3.
+
+**Latency and loss (loopback):**
+
+| Condition | Delivered Mbps | CC disc. | PCR % > 40 ms | Egress transparency |
+|---|---|---|---|---|
+| +50 ms delay | 8.64 | 0 | 0.0 | full SI, CBR |
+| +100 ms delay | 9.43 | 0 | 0.0 | full SI, CBR |
+| 0.1 % loss | 10.09 | 0 | 0.0 | full SI, CBR |
+| 3 % loss | 10.10 | 0 | 0.0 | full SI, CBR |
+| 5 % loss | 10.11 | 0 | 0.0 | full SI, CBR |
+| reorder 25 % | ~0 (collapse) | – | – | – |
+
+At near-0 RTT, QUIC recovered loss up to 5 % with **no throughput penalty and 0
+CC**, and — crucially — the recovered egress stayed **byte-transparent: 0 % PCR >
+40 ms, full PSI/SI, CBR**. Reordering collapsed throughput, as on the media-aware
+lane. Adding realistic RTT (120 ms) on top of loss did collapse opaque throughput
+at ≥ 1 %, but that run impaired both QUIC hops at once and used a different QUIC
+stack and buffer than the media-aware run, so it is **not** a controlled loss
+comparison — that head-to-head belongs in T8.
+
+**The decisive cross-lane point:** impairment does not change either lane's
+*character*. Whenever data was delivered, the **media-aware** egress stayed bursty
+and IRD-hostile (~13 % PCR > 40 ms, SI stripped, PMT renumbered) and the
+**opaque** egress stayed IRD-shaped (0 % PCR > 40 ms, full SI, CBR, original PIDs).
+QUIC's robustness to latency and moderate loss is common to both; the property
+that decides broadcast usability — *is the egress IRD-conformant?* — is set by the
+lane, and impairment neither rescues the media-aware lane nor breaks the opaque
+lane's shape.
+
+### 9.6 Interpretation — the two lanes fail differently
+
+1. **QUIC is robust to latency and moderate random loss.** Added delay to +200 ms
+   and Bernoulli loss to ~1 % produced **0 continuity errors** on the media-aware
+   lane — the media arrived intact, just later. This is the expected strength of a
+   reliable, retransmitting transport with a generous receive buffer.
+2. **On the media-aware lane, loss shows up as *starvation*, not CC errors.** Because
+   the subscriber re-muxes a fresh TS from whatever media objects arrive, the output
+   continuity counters are always sequential — so **CC-error count does not reveal
+   loss for this lane**. The true health metric is *delivered bitrate vs source
+   bitrate*: at ≥ 3 % loss the delivered rate collapsed below the stream rate, which
+   in a real decoder is buffering/stall, not a clean error.
+3. **Reordering — not delay variation — is QUIC's weak point.** In-order jitter of
+   ± 30 ms was fully absorbed (9.04 Mbps), but packet reordering (which netem's naive
+   "jitter" injects) collapsed throughput by ~40× because QUIC treats reordering as
+   loss and backs off. Real networks reorder far less than netem's model, so this is
+   a pessimistic bound — but it identifies reordering as the condition to watch and
+   to test against realistic models.
+
+### 9.7 Pass criteria
+
+- **Operating envelope (media-aware, ungroomed, 5 s buffer):** usable with 0 CC and
+  maintained throughput up to **~1 % random loss and ≥ 200 ms added latency**, with
+  in-order jitter tolerated; **starvation** sets in by ~3 % loss, and **reordering**
+  is the boundary condition. A groomed, small-buffer broadcast egress will trade
+  some of this loss-recovery headroom for lower latency — quantifying that trade is
+  the opaque/groomer follow-up.
+- Loss behaviour is *graceful and bounded* (proportionate throughput reduction,
+  recovery observed), not catastrophic — except under heavy reordering. Where loss
+  exceeds recovery capacity within the buffer, the redundancy path (T6 / ST 2022-7)
+  is the mitigation, not the transport alone.
+
+### 9.8 Limitations
+
+- **CC-error is a weak damage metric for the media-aware lane** (see §9.6.2); a
+  stronger metric (frame/GOP loss, decode errors, or the opaque lane's verbatim CC)
+  is needed to quantify picture impact. This is a key reason the opaque lane matters
+  for impairment testing.
+- **Absolute Mbps reflects the subscriber's home download path**, which varies;
+  the *shape* of the degradation (recovery vs starvation vs collapse) is the robust
+  finding, not the exact Mbps.
+- **netem models are approximations:** loss here is Bernoulli (uncorrelated), while
+  real congestion loss is bursty and RTT-coupled; netem "jitter" reorders. State the
+  model with every result (done above).
+- **`--latency-max 5s` is a large buffer** favouring recovery; an IRD-facing egress
+  runs a much smaller buffer. The small-buffer envelope is the more broadcast-
+  relevant number and is the natural next measurement.
+- **No hardware IRD / P2 here** — this is P1 (CC/PCR/bitrate) at the capture point,
+  not a decoder verdict (that is T7).
+- **The opaque run is not a controlled loss comparison to the media-aware run.** It
+  was measured on EC2 loopback (~0 RTT, both QUIC hops impaired) with a different
+  QUIC stack and buffer; it demonstrates that *byte-transparency survives
+  impairment*, not a matched loss envelope. A single-host, single-buffer,
+  same-path head-to-head across both lanes (and vs SRT) is **T8**.
+- **The opaque lane was built and left on the EC2** (source + `aws-lc-rs` release
+  binaries under `~/moq-publisher-subscriber`); the moq-lite services, port 443,
+  and network config were restored exactly as found and all `netem`/swap removed.
+  The build recipe (swap + `cmake`/`clang` + `cargo build --release`, ~8 min) is
+  captured so the deferred T4 opaque-remote is now a start-the-binary step.
 
 ---
 
@@ -1219,7 +1343,7 @@ the reverse:
 | T2 Transparency (media-aware, local) | Gate 1 | ✅ Done (2026-07-16) | media-aware lane works locally; SI dropped / PMT renumbered / bursty (§6) — by design, the motivation for T3 |
 | T3 Transparency (opaque, local) | Gate 1 | ✅ Done (2026-07-17) | opaque lane byte-transparent at P1: SI + SCTE-35 + PMT/PCR PID + CBR + PCR conformance preserved (§7); P2 hardware still owed (T7) |
 | T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware (2026-07-17) | **full live SRT chain over the wire, 0 CC, 10.3 MB/48 s** (§8.4); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
-| T5 Impairment | Gate 1/3 | ❌ Not started | build impairment node; run matrix |
+| T5 Impairment | Gate 1/3 | ✅ Done (2026-07-17) | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
 | T6 Resilience | Gate 3 | ❌ Not started | two-relay failover + ST 2022-7 hitless drill |
 | T7 Timing (file) | Gate 2 (pre) | 🟡 Partial | opaque-lane P1 conformance shown (§7.5); groomed "after" vs known "before" on a live source still owed |
 | T7 Timing (hardware) | **Gate 2** | ❌ Not demonstrated | **hardware IRD access + sustained P1/P2 pass** |
@@ -1262,11 +1386,11 @@ are still the right tests, and where the additional ideas raised in review belon
    on a real IRD is the single result most likely to disprove the thesis and the
    one that unlocks everything downstream. Run it soonest. Everything proven so far
    (T1–T4) is necessary but not sufficient without it.
-2. **T5 impairment** and **T6 resilience** (Gate 3) — once Gate 2 holds, these show
-   the path survives real loss and infrastructure failure.
-3. **T4 opaque-remote** — a *deployment* step (build/start the opaque publisher on
-   EC2), not new research; expected to match §7 given QUIC is lossless over the wire
-   (§8.4). Low priority; do it opportunistically.
+2. **T6 resilience** (Gate 3) — **T5 impairment is now run on both lanes** over the
+   real EC2 path (§9); T6 (relay failover, subscriber reconnect) is the remaining
+   Gate 3 piece.
+3. **Office reproduction of T3/T4** (§15.5) and **T4 opaque-remote at full SRT rate**
+   — deployment/environment steps, not new research; do opportunistically.
 
 The ordering rule stands: **if Gate 2 fails, stop and fix grooming before scaling
 T5/T6** — a resilient path a hardware IRD rejects is not a product.
@@ -1328,3 +1452,14 @@ P1/P2 thresholds, IRD matrix) derived from the pass criteria above. If wanted, t
 belongs as a short subsection of [interoperability](interoperability.md) §6, **not**
 a new file — consistent with the goal of being concise but detailed, and not
 generating documents for their own sake.
+
+### 15.5 Reproduction backlog
+
+- **Reproduce T3 (opaque, local) and T4 (remote end-to-end) from the office
+  network.** The office has ample upload capacity (removing the home-uplink ceiling
+  that capped T4's SRT leg at ~2 Mbps), but may impose **UDP/QUIC throttling or
+  DPI** that a home link does not. Re-running both there tests two things at once:
+  (a) the opaque lane and full-rate SRT contribution without the access-link
+  bottleneck, and (b) whether MoQ/QUIC survives an enterprise network posture that
+  polices or rate-limits UDP — a real deployment risk for primary distribution.
+  Record connect success, negotiated draft, throughput, and any QUIC fallback/blocking.
