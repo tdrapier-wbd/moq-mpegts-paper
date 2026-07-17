@@ -92,7 +92,8 @@ submit — the same standard as any other contribution.
 If you are not sure where a change belongs, the [README](README.md) has the full
 document map. In brief: [`vision`](docs/vision.md) (why), [`transport`](docs/transport.md)
 (why MoQ specifically), [`architecture`](docs/architecture.md) (how, integrative),
-[`implementation`](docs/implementation.md) (build and test), the topic deep-dives
+[`implementation`](docs/implementation.md) (build and test),
+[`test-plan`](docs/test-plan.md) (formal validation plan and results), the topic deep-dives
 (`relay`, `control-plane`, `entitlement`, `security`, `interoperability`,
 `operations`), [`economics`](docs/economics.md) (cost framework), and
 [`evidence`](docs/evidence.md) (what the prototype showed).

@@ -106,6 +106,10 @@ At a high level, and without reproducing sensitive detail:
 
 ## 6. Testing and validation
 
+The validation pyramid below is the conceptual ordering; the formal, executable
+plan that operationalises it — with per-test methodology, `tc`/`netem` impairment
+profiles, result tables, and pass criteria — is in the [test plan](test-plan.md).
+
 The validation pyramid, from cheapest/fastest to most decisive:
 
 1. **Unit / property tests.** Byte-level round-trip fidelity of the media layer,

@@ -64,6 +64,7 @@ Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for 
 | [Transport](docs/transport.md) | Why MoQ specifically; QUIC/WebTransport, MPEG-TS/MSFTS carriage, and draft-stability strategy. |
 | [Architecture](docs/architecture.md) | End-to-end reference architecture for a broadcast-grade MoQ distribution platform. |
 | [Implementation](docs/implementation.md) | Components, prerequisites, reference deployment, and the test path to the hardware-IRD proof. |
+| [Test Plan](docs/test-plan.md) | Formal validation plan: maturity baseline, the five tests, methodology, result tables, and pass criteria. |
 | [Relay](docs/relay.md) | Relay fabric, routing, fan-out, federation, and resilience. |
 | [Control Plane](docs/control-plane.md) | Provisioning and orchestration. |
 | [Entitlement](docs/entitlement.md) | Dynamic, revocable distribution rights. |
