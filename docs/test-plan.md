@@ -376,9 +376,8 @@ honest.
   open-GOP contribution class per [evidence](evidence.md) §5, but IDR cadence /
   recovery-point SEI were not quantified in this run; add an IDR-interval
   measurement when T2's non-ideal-source variant is run.
-- **Raw artifacts** (full `analyze` reports and `*_pcr.csv`) are the evidence of
-  record and are kept out of this repository (§13); the commands in §5.4
-  regenerate them deterministically from the source clips.
+- **Raw artifacts** (`analyze` reports, `*_pcr.csv`): not committed (§13); the §5.4
+  commands regenerate them from the source clips.
 
 ---
 
@@ -666,10 +665,8 @@ This test has two distinct bars:
 - **moq-lite-04, not draft-14.** The upstream binary speaks moq-lite; the platform
   pins moq-transport draft-14. Same media-layer questions, different wire version —
   do not read these timing numbers as the opaque platform's egress.
-- **Opaque-lane counterpart delivered.** The complementary run — opaque `m2ts`
-  carriage preserving SI verbatim, groomed to CBR, with the P1 conformance delta
-  vs P0 — is **Test 3 (§7)**: SI/SCTE-35/PMT/PCR preserved, 0 % of intervals
-  > 40 ms. What remains for Gate 1→2 is the live wire (T7).
+- **Opaque-lane counterpart:** the complementary run (opaque `m2ts`, SI preserved,
+  groomed to CBR) is **Test 3 (§7)**; what remains for Gate 1→2 is the live wire (T7).
 - **Byte round-trip (media layer, lossless):** independently **pass** per
   [evidence](evidence.md) §1; not re-run here.
 - **`mpegts-pacer` is a pacer, not a muxer (§6.7):** it fixes PCR/stuffing/CBR but
@@ -679,9 +676,8 @@ This test has two distinct bars:
   against clustered elementary streams, not a pacing defect; and the target mux
   rate (≈ 1.2× source) is an operator choice trading stuffing overhead against
   burst headroom.
-- **Raw artifacts** (`*_out.ts`, `*_paced.ts`, `*_pcr.csv`, publisher/subscriber
-  logs) are the evidence of record and kept out of this repository (§13); the §6.4
-  commands (steps 1–6) regenerate them.
+- **Raw artifacts** (`*_out.ts`, `*_paced.ts`, `*_pcr.csv`, logs): not committed
+  (§13); the §6.4 commands regenerate them.
 
 ---
 
@@ -889,10 +885,8 @@ evidence, at P1, it doesn't.
 - **`--no-decoder-start-gate`** was used for transport-only capture on the richer
   clips; it does not affect steady-state PCR/SI/CC (it only governs the join
   buffer).
-- **Draft-14 pin** — the same tracked dependency as §13.
-- **Raw artifacts** (`*_out.ts`, `*_pcr.csv`, publisher/subscriber logs) are the
-  evidence of record and kept out of this repository (§13); the §7.4 commands
-  regenerate them.
+- **Raw artifacts** (`*_out.ts`, `*_pcr.csv`, logs): not committed (§13); the §7.4
+  commands regenerate them. Draft-14 pin and other cross-cutting caveats: §13.
 
 ---
 
@@ -906,26 +900,16 @@ contribution chain
 [evidence](evidence.md) §1).
 
 **Status: media-aware end-to-end chain complete (2026-07-17); opaque-remote
-deferred.** Inspecting the EC2 by SSH established a material fact: **the deployed
-cloud path is the `moq-dev` media-aware lane, not the opaque lane.** The relay is
-`moq-relay` (moq-lite-04, systemd service, UDP 443, untouched), and both
-publishers use `moq import ts`:
-
-- `cnn.international.emea.loop.hang` — a `CNNiEMEA2.ts` loop (media-aware);
-- `cnn.international.emea.live.hang` — the **SRT-fed live** broadcast: `ffmpeg`
-  SRT listener on UDP 9000 → `moq import ts` (media-aware).
-
-The opaque `moq_publisher` is **not deployed on EC2** — the `moq-publisher.service`
-unit even carries the opaque `moq_publisher --broadcast mpegts --track ts` line
-*commented out*, with the active `ExecStart` running the media-aware import. So the
-**full end-to-end SRT contribution chain was completed over the media-aware lane**
-(local `~/FFmpeg` SRT caller → EC2 :9000 → `moq import` → relay → local
-`moq export ts` → TSDuck: **10.3 MB / ~48 s, 0 CC errors**, §8.4). Because our
-overall goal is carrying TS end-to-end *media-aware lane or not*, this closes the
-"works on the wire" milestone for the deployed lane. **Opaque-remote (T3 over the
-wire) is a deployment step, not a code gap:** it needs the opaque `moq_publisher`
-built and started on EC2; the opaque lane's transparency is already proven locally
-(§7). See §8.5.
+deferred.** SSH inspection established a material fact: **the deployed cloud path is
+the `moq-dev` media-aware lane, not the opaque lane** — the relay is `moq-relay`
+(moq-lite-04, UDP 443) and both publishers use `moq import ts` (the loop and the
+SRT-fed live broadcast); the opaque `moq_publisher` is present but its service line
+is commented out (§8.5). So the **full live SRT contribution chain was completed
+over the media-aware lane** (local `~/FFmpeg` SRT caller → EC2 :9000 → `moq import`
+→ relay → local `moq export ts` → TSDuck: **10.3 MB / ~48 s, 0 CC errors**, §8.4),
+closing the "works on the wire" milestone for the deployed lane. **Opaque-remote
+(T3 over the wire) is a deployment step, not a code gap** (§8.5); the opaque lane's
+transparency is already proven locally (§7).
 
 ### 8.1 Objective
 
@@ -1265,8 +1249,8 @@ lane's shape.
 - **`--latency-max 5s` is a large buffer** favouring recovery; an IRD-facing egress
   runs a much smaller buffer. The small-buffer envelope is the more broadcast-
   relevant number and is the natural next measurement.
-- **No hardware IRD / P2 here** — this is P1 (CC/PCR/bitrate) at the capture point,
-  not a decoder verdict (that is T7).
+- **P1 only** (CC/PCR/bitrate at the capture point, not a decoder verdict — that is
+  T7 / §13).
 - **The opaque run is not a controlled loss comparison to the media-aware run.** It
   was measured on EC2 loopback (~0 RTT, both QUIC hops impaired) with a different
   QUIC stack and buffer; it demonstrates that *byte-transparency survives
@@ -1689,20 +1673,19 @@ Comparative, agreed before the numbers:
   absolute throughput and one home path is not a population; the *shape* of the
   comparison (relative latency, recovery curves) is the robust output, not the
   absolute Mbps.
-- **`netem` is an emulator** (§9.8): the added conditions 5–8 make it more
-  realistic but it is still not the real congested internet (T4).
-- **P1 only, no hardware IRD.** Egress quality is judged at the capture point
-  (CC/PCR/bitrate), not a decoder verdict — that is T7. Zixi/RIST are out of scope
-  unless access is available; SRT is the primary incumbent to beat.
+- **`netem` is an emulator** (§9.8, §13): conditions 5–8 make it more realistic but
+  it is still not the real congested internet (T4).
+- **P1 only; Zixi/RIST out of scope.** Egress quality is judged at the capture point
+  (CC/PCR/bitrate), not a decoder verdict (T7); SRT is the incumbent to beat, Zixi
+  and RIST are out of scope unless access is available.
 - **Latency-read precision.** Burnt-timecode OCR is ± one frame; for sub-frame
   numbers, raise the overlay rate or corroborate with a packet-arrival timestamp
   method (first-byte wall-clock of a marked packet on each flow via `tcpdump`).
 - **EC2 hygiene.** As in T4/T5, run T8's source/SRT listener on a separate
   broadcast/port, leave the standing services and port 443 as found, and remove all
   `netem` afterward (§9.8 watchdog).
-- **Raw artefacts** (`t8_*` captures, `*_pcr.csv`, pcaps, CPU logs) are the
-  evidence of record and kept out of this repository (§13); the §12.4 commands
-  regenerate them.
+- **Raw artefacts** (`t8_*`, `*_pcr.csv`, pcaps, CPU logs): not committed (§13); the
+  §12.4 commands regenerate them.
 
 ---
 
@@ -1836,29 +1819,19 @@ inside them*, and only two justify new standalone tests. Mapping:
   services. Primary distribution is frequently MPTS; SPTS-only evidence is
   incomplete. Gate 1 (fidelity) at multi-service scale.
 
-Everything else above is folded into T3/T5/T6/T7 as variants or metrics rather than
-new documents or tests — deliberately, to keep the campaign concise.
-
 ### 16.4 On a separate "Broadcast MoQ Interoperability Specification"
 
-**Recommendation: do not create a new document.** The value it would carry already
-exists and is better placed where it is:
-
-- [interoperability](interoperability.md) already specifies the installed-base
-  contract, ingest, media-carriage fidelity, egress, **TR 101 290 conformance**,
-  non-ideal-source handling, and a compatibility matrix (§§1–9) — that *is* the
-  interoperability specification.
-- This plan's **pass criteria** (T1 §5.7, T2 §6.8, T3 §7.8, T7 §11.5) are the
-  measurable, agreed-before-the-numbers conformance requirements a spec would state.
-
-A standalone spec now would duplicate both and, worse, freeze a "standard" before
-Gate 2 (hardware) has validated the approach — cart before horse. The one genuinely
-useful distillation is a single **broadcast-grade egress conformance profile**: a
-one-table checklist (byte-transparency, SI/SCTE-35 preservation, CBR, TR 101 290
-P1/P2 thresholds, IRD matrix) derived from the pass criteria above. If wanted, that
-belongs as a short subsection of [interoperability](interoperability.md) §6, **not**
-a new file — consistent with the goal of being concise but detailed, and not
-generating documents for their own sake.
+**Recommendation: do not create a new document.** [interoperability](interoperability.md)
+§§1–9 already specifies the installed-base contract, media-carriage fidelity, egress,
+**TR 101 290 conformance**, and a compatibility matrix — that *is* the
+interoperability specification — and this plan's **pass criteria** (T1 §5.7, T2 §6.8,
+T3 §7.8, T7 §11.5) are the measurable, agreed-before-the-numbers requirements a spec
+would state. A standalone spec would duplicate both and freeze a "standard" before
+Gate 2 (hardware) has validated the approach. The one useful distillation is a single
+**broadcast-grade egress conformance profile** (a one-table checklist:
+byte-transparency, SI/SCTE-35 preservation, CBR, TR 101 290 P1/P2 thresholds, IRD
+matrix), which belongs as a short subsection of [interoperability](interoperability.md)
+§6, **not** a new file.
 
 ### 16.5 Reproduction backlog
 
