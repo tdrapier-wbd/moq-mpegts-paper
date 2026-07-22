@@ -39,7 +39,7 @@ acceptance gates) and draws its empirical baseline from [evidence](evidence.md).
 - [9. Test 5 — Network impairment](#9-test-5--network-impairment) — ✅ done (both lanes)
 - [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 ST 2022-7 determinism precondition analysed; drills planned
 - [11. Test 7 — Timing integrity (the decisive test)](#11-test-7--timing-integrity-the-decisive-test) — **Gate 2, make-or-break**
-- [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path baseline (§12.9); latency/impairment planned
+- [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path (§12.9) + impairment matrix (§12.10) run; glass-to-glass latency planned
 - [13. Test 9 — System performance and resource utilisation](#13-test-9--system-performance-and-resource-utilisation) — planned
 - [14. Cross-cutting limitations](#14-cross-cutting-limitations-stated-up-front)
 - [15. Status summary](#15-status-summary)
@@ -82,7 +82,7 @@ designed to advance, reconciled with the evidence already recorded in
 | Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC** (§8.4), and the **full ~9.93 Mbps feed pulled home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (T8 clean-path, §12.9); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware), T8 clean-path ✅ |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams + PMT descriptors (reliably on `dev` per issue #1979, §6.8), and PR [#2440](https://github.com/moq-dev/moq/pull/2440) now adds the **DVB service layer — SDT/NIT/PMT-PID/TSID/ONID preserved**, leaving only **TDT/TOT/EIT** and CBR (restored downstream by `mpegts-pacer`, §6.7); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim, incl. TDT/TOT** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
 | Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7, T7 P1 across four clips §11.4.1); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 P1 ✅ |
-| Failure behaviour | 🟡 Partial | **T5 impairment run on both lanes over the real EC2 path** (§9): QUIC absorbs ≤200 ms latency & ~1 % loss with 0 CC; reordering is the weak point; reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 output-determinism precondition analysed** (§10.4): a single deterministic/offline groom is byte-exact reproducible, two independent *live* pacers are not yet byte-identical — no worse than SRT/Zixi on this axis, with a roadmap | T5 ✅, T6 |
+| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: QUIC absorbs latency, duplication and *bursty* loss with 0 CC, but **collapses under uniform random loss ≥ 2 %, reordering and jitter** (loss-based congestion control + reorder sensitivity — buffer-independent), whereas **SRT holds full rate through all of it** within its ARQ window; MoQ recovers from transient bursts with a ~2–3 s rebuffer. Reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 output-determinism precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
 
@@ -1779,15 +1779,19 @@ head-to-head. This is the test that turns "MoQ carries broadcast TS" into "MoQ i
 competitive with SRT for it," and it is the empirical feed for
 [economics](economics.md) §8. Promoted here from the campaign roadmap (§17.3).
 
-**Status: clean-path baseline run (2026-07-22, §12.9); latency + impairment matrix
-still planned.** The condition-0 (no-impairment) *delivered-quality* head-to-head
-is now measured over the real EC2→home internet path — sustained full-rate delivery,
-0 CC, and the transparency contrast on both transports (§12.9). The **glass-to-glass
-latency** headline (§12.5 rows 1–3) and the **impairment matrix** (§12.6) remain
-`TBM` — they need the burnt-timecode/NTP read rig and the `netem` node. The value of
-the method, matched-conditions discipline, and agreed metrics still holds: a benchmark
-whose ground rules are set before either side is measured cannot be accused of being
-rigged after the fact.
+**Status: clean-path baseline (§12.9) + full impairment matrix (§12.10) run
+2026-07-22 over the real EC2→home internet path.** Both transports were measured
+head-to-head under a granular `netem` sweep — latency, uniform/bursty loss,
+reordering, jitter, duplication, combined WAN, transient loss-burst recovery, and
+bandwidth constraint — at matched 2 s buffers on a rebuilt EC2 origin (`moq
+0.8.7-5e0e98c1`, latest `main`; security-patched FFmpeg). The delivered-quality,
+resilience and recovery numbers that decide the *robustness* comparison are now
+measured (§12.10); only the **glass-to-glass latency** headline (§12.5 rows 1–3)
+remains `TBM` — it needs the burnt-timecode/NTP read rig, and lowering latency was
+explicitly *not* the objective here (robust delivery under degradation was). The
+value of the method — matched-conditions discipline, metrics agreed before the
+numbers — still holds: a benchmark whose ground rules are set before either side is
+measured cannot be accused of being rigged after the fact.
 
 **This is a comparison, not a pass/fail gate** ([implementation](implementation.md)
 §6 step 7). MoQ does not have to *beat* SRT on every axis to be viable; the
@@ -1989,35 +1993,38 @@ remain `TBM`.
 |---|---|---|---|
 | Glass-to-glass latency (ms, B = 1 s) | TBM | TBM | absolute, NTP; mean ± stddev |
 | **Relative latency MoQ − SRT (ms)** | — | — | **TBM** (headline delta) |
-| Min buffer B for 0 CC / no stall (ms) | TBM | TBM | latency-vs-resilience knee |
-| Recovery time after loss burst (s) | TBM | TBM | 20 % loss × 2 s, then clear |
-| **Delivered bitrate, clean path (Mbps)** | **9.48** (240 s) | **9.96** | **source ≈ 9.93; §12.9** |
-| Delivered bitrate @ 1 % / 3 % loss (Mbps) | TBM | TBM | vs source rate |
+| Min buffer B for 0 CC / no stall (ms) | **buffer does not rescue loss** | **≈ ARQ window** | **§12.10**; MoQ 2/6/10 s all ≈ 5 Mbps @ 2 % loss |
+| **Recovery time after loss burst** | **~2–3 s stall + catch-up (91 % over window)** | **~0 s (seamless, 100 %)** | **§12.10**; 20 % loss × 3 s, matched B = 2 s |
+| **Delivered bitrate, clean path (Mbps)** | **9.67** | **9.96** | **source ≈ 9.93; §12.9/§12.10** |
+| **Delivered @ 1 % / 2 % / 10 % uniform loss** | **95 % / 53 % / 13 %** | **100 % / 100 % / 100 %** | **§12.10** (of own clean baseline) |
 | PCR intervals > 40 ms, egress (%) | **0.06 % (paced)** | **0 %** | **§12.9**; MoQ raw 10.8 %→pacer; SRT native |
-| CC errors / discontinuities, egress | **0 / 8 skips** | **0 / 0** | **§12.9**; MoQ skips = live group-eviction |
-| Reordering collapse threshold | TBM | TBM | which tolerates more |
+| CC errors / discontinuities, egress | **0** (degradation = missing content, not CC) | **0 / 0** | **§12.9/§12.10**; MoQ exporter always emits clean TS |
+| **Reordering / jitter collapse** | **collapses (20 % / 2 % delivered)** | **immune (100 %)** | **§12.10**; QUIC weak point (§9.6.3) confirmed |
 | Protocol overhead (wire ÷ TS payload − 1, %) | TBM | TBM | tcpdump per flow, fixed window |
 | CPU: origin publish / relay / receive (%) | **~34 % import / 2.6 % relay / —** | **~1 % / — (no relay)** | **§12.9** (2-vCPU EC2, `pidstat`) |
 | Reconnect after link drop (s) | TBM | TBM | drop and restore the flow |
-| **Transparency (SI / PMT PID / PCR)** | **stripped / 0x1000 / groomed** | **preserved / 0x0064 / native** | **§12.9**; MoQ = pre-#2440 media-aware |
+| **Transparency (SI / PMT PID / PCR)** | **stripped / 0x1000 / groomed** | **preserved / 0x0064 / native** | **§12.9/§12.10**; MoQ = pre-#2440 media-aware |
 
 ### 12.6 Impairment matrix
 
 Baseline (no impairment) first, then the T5 conditions (§9.4) applied identically
-to both flows, plus impairments T5 did not cover that a head-to-head warrants:
+to both flows, plus impairments T5 did not cover that a head-to-head warrants. The
+**"run"** column records the level actually swept in the 2026-07-22 run (§12.10);
+impairment was steered onto *only* the two media UDP flows via an SSH-safe
+`prio`+`u32` `netem` lane on the EC2 egress (forward path only — see §12.10).
 
-| # | Condition | `netem`/`tc` | Why (beyond T5) |
+| # | Condition | `netem`/`tc` run (§12.10) | Why (beyond T5) |
 |---|---|---|---|
-| 0 | Baseline | none | reference for both |
-| 1 | Latency | `delay {20,50,100,200} ms` | RTT sensitivity (as T5) |
-| 2 | Random loss | `loss {0.1,1,3,5} %` | Bernoulli (as T5) |
-| 3 | In-order jitter | `delay 60ms 30ms distribution normal` (rate-serialised) | absorbed on QUIC (T5) — does SRT differ? |
-| 4 | Reordering | `delay 30ms reorder 25% 50%` | QUIC's weak point (§9.6.3); SRT head-to-head |
-| 5 | **Bursty/correlated loss** | `loss 1% 25%` or Gilbert-Elliott `loss gemodel …` | realistic congestion loss, not Bernoulli — answers §16 open question |
-| 6 | **Bandwidth constraint** | `tbf`/`htb` cap at 1.05× / 1.0× / 0.9× stream rate | congestion response; per-transport (not shared) |
-| 7 | **Combined WAN** | `delay 120ms loss 1%` | transcontinental profile (RTT + loss together) |
-| 8 | **Loss burst → recover** | `loss 20%` for 2 s, then `del` | the recovery-time metric (§12.5) |
-| 9 | Duplication | `duplicate 1%` | both should ignore; confirms robustness |
+| 0 | Baseline | none ✅ | reference for both |
+| 1 | Latency | `delay {20,50,100,200} ms` ✅ | RTT sensitivity (as T5) |
+| 2 | Random loss | `loss {0.5,1,2,5,10} %` ✅ | Bernoulli (as T5) — MoQ knee at 2 % |
+| 3 | In-order jitter | `delay 60ms 30ms distribution normal` ✅ | absorbed on QUIC (T5)? — SRT immune, MoQ collapses |
+| 4 | Reordering | `delay 20ms reorder 25% 50%` ✅ | QUIC's weak point (§9.6.3); SRT head-to-head |
+| 5 | **Bursty/correlated loss** | `loss 3% 25%` (correlated) ✅ | realistic congestion loss, not Bernoulli — MoQ tolerates it |
+| 6 | **Bandwidth constraint** | `netem rate {12,10,9} mbit`, per-transport ✅ | congestion response near/below line rate |
+| 7 | **Combined WAN** | `delay 120ms loss 1%` ✅ | transcontinental profile (RTT + loss together) |
+| 8 | **Loss burst → recover** | `loss 20%` for 3 s, then clear ✅ | the recovery-time metric (§12.5) |
+| 9 | Duplication | `duplicate 1%` ✅ | both should ignore; confirms robustness |
 
 ### 12.7 Interpretation / comparison criteria
 
@@ -2128,10 +2135,129 @@ build); FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
    CPU-bound at ~1/3 of one core (≈32 Mbps ceiling per core on this instance) — an
    input for [economics](economics.md) §8 and T9 (§13).
 
-**Still owed for full T8:** glass-to-glass latency (all buffer rungs), the impairment
-matrix (§12.6), protocol overhead (tcpdump per flow), and the opaque-lane transparency
-comparison. These are the load-bearing comparative numbers; this run establishes the
-clean-path baseline they extend.
+**Still owed for full T8:** glass-to-glass latency (all buffer rungs), protocol
+overhead (tcpdump per flow), and the opaque-lane transparency comparison. The
+impairment matrix (§12.6) is now run — see §12.10.
+
+### 12.10 Results — impairment matrix, MoQ vs SRT head-to-head (2026-07-22)
+
+Same real EC2 (`34.246.187.61`, eu-west-1) → home path as §12.9, on the **rebuilt
+origin**: `moq 0.8.7-5e0e98c1` (latest `main`, "fixes a bunch of issues") +
+security-patched FFmpeg `8.0.1-3ubuntu2`. The new build was verified to still
+**strip DVB SI** on the media-aware egress (service "(unknown)", PMT renumbered) —
+i.e. **#2440 is not yet in `main`**, so the transparency gap of §12.9 is unchanged.
+
+**Rig.** Both legs paced from `~/CNNiEMEA2.ts` by `tsp regulate --pcr-synchronous`
+(§12.9 lesson); MoQ = media-aware `moq import` → relay `:443` → home `moq export ts`;
+SRT = byte-faithful `tsp -O srt :9010` → home `tsp -I srt`. **Matched buffers B = 2 s**
+(MoQ `--latency-max 2s`, SRT `--latency 2000`). Impairment was applied on the EC2
+egress (`ens5`) through an **SSH-safe `prio`+`u32` `netem` lane** that steers *only*
+the two media UDP flows (QUIC sport 443, SRT sport 9010) to the home IP into the shaped
+band — SSH/control stays unshaped and both media flows see identical shaping. Shaping
+is on the **forward (download) path only**; the reverse ACK/NAK path is clean (this
+flatters both ARQ mechanisms equally). Each condition = one **40 s concurrent** capture
+of both transports; delivered rate is normalised to each transport's own clean baseline
+(MoQ 9.67, SRT 9.96 Mbps). One run per condition — indicative, not averaged.
+
+**Table 1 — delivered rate (% of that transport's own clean baseline; every capture had 0 CC errors).**
+
+| Condition (`netem`) | MoQ over QUIC | SRT |
+|---|---|---|
+| Baseline | 9.67 Mbps (100 %) | 9.96 Mbps (100 %) |
+| delay 20 / 50 / 100 / 200 ms | 102 / 99 / 97 / 91 %† | 100 % |
+| loss 0.5 % | 97 % | 100 % |
+| loss 1 % | 95 % | 100 % |
+| **loss 2 %** | **53 %** | **100 %** |
+| **loss 5 %** | **31 %** | **100 %** |
+| **loss 10 %** | **13 %** | **100 %** |
+| bursty loss 3 % (25 % corr) | 99 % | 100 % |
+| **reorder 20 ms 25 %** | **20 %** | **100 %** |
+| **jitter 60 ± 30 ms (normal)** | **2 %** | **100 %** |
+| duplicate 1 % | 99 % | 100 % |
+| **combined WAN 120 ms + 1 % loss** | **14 %** | **100 %** |
+
+† latency rows are lossless for *both*; MoQ's sub-100 % is a fixed-40 s-window buffering
+artefact (2 s buffer + added delay shifts the capture window), not lost content. SRT
+delivered an identical 49,784,092 B on **every** fully-recovered run — deterministic
+proof of complete carriage.
+
+**Table 2 — MoQ buffer sensitivity @ 2 % uniform loss** (is the collapse buffer-tunable?).
+
+| MoQ `--latency-max` | Delivered |
+|---|---|
+| 2 s | 5.85 Mbps |
+| 6 s | 5.19 Mbps |
+| 10 s | 5.20 Mbps |
+
+Buffer-independent ceiling ≈ 5 Mbps (< 9.9 Mbps source) → the collapse is
+**congestion-control-driven, not a buffering knob**.
+
+**Table 3 — transient loss burst** (20 % loss × 3 s at t ≈ 12 s within a 40 s window).
+
+| | Over-window delivered | Behaviour (per-second trace) |
+|---|---|---|
+| MoQ | 9.08 Mbps (91 %) | ~2–3 s stall to 0, then catch-up overshoot (11–16 Mbps) back to full |
+| SRT | 9.96 Mbps (100 %) | no visible dip — ARQ absorbs the burst inside the 2 s window |
+
+**Table 4 — bandwidth constraint** (`netem rate`, per-transport, no added loss).
+
+| Cap | MoQ | SRT |
+|---|---|---|
+| 12 Mbit | 9.52 (98 %) | 9.89 (99 %) |
+| 10 Mbit | 9.49 (98 %) | 9.85 (99 %) |
+| 9 Mbit (< line rate) | 7.58 (78 %) | 6.68 (67 %) |
+
+Below the ~9.9 Mbps line rate both degrade gracefully and comparably. (Two spurious
+"SRT = 0" points in an early back-to-back batch were `netem`-transition harness
+artefacts; re-measured in isolation and corrected to the values above.)
+
+**Findings.**
+
+1. **SRT is unconditionally robust across every loss / reorder / jitter / WAN
+   condition tested** — full rate, byte-faithful, 0 CC, at all loss up to 10 %, under
+   reordering and jitter, and on the combined WAN profile. Its 2 s ARQ window recovers
+   everything the forward path drops.
+2. **MoQ over QUIC collapses under *uniform* random loss ≥ 2 %** (95 % @ 1 % → 53 % @
+   2 % → 13 % @ 10 %): QUIC's **loss-based congestion control reads random loss as
+   congestion** and throttles below the CBR source rate. It is **not** buffer-tunable —
+   a 10 s buffer hits the same ~5 Mbps ceiling at 2 % loss as a 2 s buffer (Table 2).
+3. **MoQ is highly sensitive to reordering and jitter** (20 % and 2 % delivered) — the
+   §9.6.3 prediction, now quantified head-to-head. QUIC's loss detection mistakes
+   reordered/jittered packets for loss and both retransmits and backs off; SRT's
+   sequence-number reassembly is immune.
+4. **MoQ handles *bursty* loss and duplication fine** (99 % each). Clustered loss (25 %
+   correlation) leaves long clean intervals in which QUIC's window recovers, so **3 %
+   bursty ≫ 2 % uniform** for MoQ — the *pattern* of loss matters more than its mean.
+5. **MoQ recovers from a transient burst, with a rebuffer** (Table 3): a 3 s pulse
+   stalls it for ~2–3 s then it catches up; SRT shows no dip. MoQ's transient-event
+   failure mode is a bounded stall-and-recover (tolerable for many live use-cases);
+   under *sustained* loss it is an unrecoverable rate collapse.
+6. **Under a hard bandwidth cap both degrade gracefully** and comparably (Table 4);
+   QUIC's congestion control is, if anything, marginally better at extracting goodput
+   from a starved link.
+7. **Integrity manifests differently on each transport.** The MoQ exporter always emits
+   a *syntactically clean* TS, so CC errors are 0 even when it delivers 13 % of the
+   program — its degradation is **missing content / frozen video**, correctly measured
+   by delivered-rate-vs-source, not by CC counters. SRT's degradation (only seen below
+   line rate) shows as `RCV-DROPPED` gaps.
+
+**Bottom line for community feedback.** The dominant, actionable gap is **QUIC
+congestion-control behaviour under non-congestive (random) loss and under
+reordering/jitter**. For broadcast contribution over lossy or reordering internet
+paths, MoQ as-built is materially less robust than SRT *unless* (a) the path is clean
+or loss is bursty rather than uniform, or (b) the QUIC congestion controller is changed
+to a loss-tolerant one (BBR-style) and reordering thresholds relaxed. **Buffer size
+does not close the gap.** SRT's costs are its fixed added-latency ARQ window and a
+byte-pipe with no relay fan-out; MoQ's architectural wins (relay CDN, single transport,
+[relay](relay.md)) are real, but its loss/reorder resilience needs the CC work above
+before it is contribution-grade on degraded paths.
+
+**Caveats.** Single home path, single run per condition (±~5 % window noise);
+forward-path-only impairment; matched 2 s buffers; MoQ media-aware lane (delivered bytes
+normalised per-transport); QUIC congestion controller = the `moq`/`quinn` default — the
+specific controller *is* the loss-sensitivity determinant, so confirming/parametrising
+it is the natural next step. `netem` is an emulator (§9.8), not the real congested
+internet (T4).
 
 ---
 
@@ -2325,7 +2451,7 @@ the reverse:
 | T2 Transparency (media-aware, local) | Gate 1 | ✅ Done (2026-07-16; `mpegts-pacer` 2026-07-18; `dev` re-run 2026-07-21; PR #2440) | media-aware lane works locally. `mpegts-pacer` grooms the VBR egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations (§6.7). The `dev` re-run (§6.8) confirms #1979 (#2072 + #2066) makes the CNN open-GOP + SCTE-35 feed round-trip deterministically with elementary streams + PMT descriptors intact; PR [#2440](https://github.com/moq-dev/moq/pull/2440) then adds the DVB service layer (SDT/NIT/PMT-PID/TSID/ONID). **Only TDT/TOT + EIT remain unpreserved** |
 | T3 Transparency (opaque, local) | Gate 1 | ✅ Done (2026-07-17) | opaque lane byte-transparent at P1: SI + SCTE-35 + PMT/PCR PID + CBR + PCR conformance preserved (§7); P2 hardware still owed (T7) |
 | T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware (2026-07-17; full-rate re-run 2026-07-22) | **full live SRT chain over the wire, 0 CC** (§8.4); **full ~9.93 Mbps feed home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (§12.9); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
-| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path baseline (2026-07-22) | delivered-quality head-to-head measured (§12.9): both full-rate, 0 CC; SRT byte-faithful preserves SI, media-aware MoQ strips it + needs pacer. **Latency + impairment matrix + overhead still `TBM`** |
+| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path + impairment matrix (2026-07-22) | Head-to-head over the real EC2→home path under a granular `netem` sweep (§12.10): **SRT holds full rate through all loss (≤10 %), reorder, jitter and WAN**; **MoQ/QUIC collapses under uniform loss ≥ 2 %, reorder and jitter** (loss-based CC, buffer-independent) but is fine on latency/bursty-loss/duplication and recovers from transient bursts. Clean-path transparency (§12.9): SRT byte-faithful preserves SI, media-aware MoQ strips it (still pre-#2440 on `main`). **Glass-to-glass latency + overhead still `TBM`** |
 | T5 Impairment | Gate 1/3 | ✅ Done (2026-07-17) | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
 | T6 Resilience | Gate 3 | 🟡 Partial (determinism precondition analysed 2026-07-20) | ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). Two-relay failover + subscriber-reconnect + on-hardware hitless drill still owed |
 | T7 Timing (file) | Gate 2 (pre) | ✅ Done (2026-07-22) | media-aware lane + `mpegts-pacer` P1 pass on four clips (§11.4.1): 0 % PCR > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC errors; opaque-lane P1 also shown (§7.5). Hardware (P2) is the remaining gate |
