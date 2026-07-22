@@ -82,7 +82,7 @@ designed to advance, reconciled with the evidence already recorded in
 | Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC** (§8.4), and the **full ~9.93 Mbps feed pulled home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (T8 clean-path, §12.9); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware), T8 clean-path ✅ |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams + PMT descriptors (reliably on `dev` per issue #1979, §6.8), and PR [#2440](https://github.com/moq-dev/moq/pull/2440) now adds the **DVB service layer — SDT/NIT/PMT-PID/TSID/ONID preserved**, leaving only **TDT/TOT/EIT** and CBR (restored downstream by `mpegts-pacer`, §6.7); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim, incl. TDT/TOT** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
 | Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7, T7 P1 across four clips §11.4.1); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 P1 ✅ |
-| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). Residual: extreme jitter (loss-detection tuning). Reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 |
+| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). Residual: pathological *reordering* — in-order jitter is fine (97 %), so this is a loss-detection/HOL item, not CC (§12.10.1). Reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
 
@@ -1789,7 +1789,8 @@ quinn's default CUBIC controller MoQ collapsed under uniform loss ≥ 2 %, reord
 WAN, while SRT held full rate — **but switching the relay to BBR (`delay`, PR #2432,
 one non-breaking flag) removes the collapse: MoQ is now full-rate/0-CC through 10 %
 loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). The residual
-gaps are extreme jitter (a loss-detection item) and the media-aware SI-transparency gap.
+gaps are pathological *reordering* (in-order jitter is fine — 97 %; a loss-detection/HOL
+item, not CC) and the media-aware SI-transparency gap.
 Only the **glass-to-glass latency** headline (§12.5 rows 1–3) remains `TBM` — it needs
 the burnt-timecode/NTP read rig, and lowering latency was explicitly *not* the objective
 here (robust delivery under degradation was). The
@@ -2003,7 +2004,7 @@ remain `TBM`.
 | **Delivered @ 2 % / 10 % uniform loss** | **CUBIC 53 % / 13 % → BBR 100 % / 100 %** | **100 % / 100 %** | **§12.10.1**; BBR (`delay`, #2432) matches SRT |
 | PCR intervals > 40 ms, egress (%) | **0.06 % (paced)** | **0 %** | **§12.9**; MoQ raw 10.8 %→pacer; SRT native |
 | CC errors / discontinuities, egress | **0** (degradation = missing content, not CC) | **0 / 0** | **§12.9/§12.10**; MoQ exporter always emits clean TS |
-| **Reordering / jitter (BBR)** | **reorder fixed (99 %); extreme jitter residual (7 %)** | **immune (100 %)** | **§12.10.1**; reorder was CC, jitter is loss-detection |
+| **Reordering / jitter (BBR)** | **bounded reorder 99 %; in-order jitter 97 %; non-ordered jitter 7–13 %** | **immune (100 %)** | **§12.10.1**; "jitter" collapse is reordering/HOL, not delay variation |
 | Protocol overhead (wire ÷ TS payload − 1, %) | TBM | TBM | tcpdump per flow, fixed window |
 | CPU: origin publish / relay / receive (%) | **~34 % import / 2.6 % relay / —** | **~1 % / — (no relay)** | **§12.9** (2-vCPU EC2, `pidstat`) |
 | Reconnect after link drop (s) | TBM | TBM | drop and restore the flow |
@@ -2178,15 +2179,17 @@ congestion control (`--server-quic-congestion-control delay`, PR #2432 — see t
 | **loss 10 %** | **13 %** | **100 %** | 100 % |
 | bursty loss 3 % (25 % corr) | 99 % | 99 % | 100 % |
 | **reorder 20 ms 25 %** | **20 %** | **99 %** | 100 % |
-| jitter 30 ± 10 ms (normal) | — | **41 %** | 100 % |
-| **jitter 60 ± 30 ms (normal)** | **2 %** | **7 %** | 100 % |
+| jitter 60 ± 30 ms — **non-ordered** (netem delay, reorders) | **2 %** | **7–13 %** | 100 % |
+| jitter 60 ± 30 ms — **in-order** (netem `slot`, FIFO) | — | **97 %** | 95 %‡ |
 | duplicate 1 % | 99 % | not re-run (was fine) | 100 % |
 | **combined WAN 120 ms + 1 % loss** | **14 %** | **97 %** | 100 % |
 
 † latency rows are lossless for *both*; MoQ's sub-100 % is a fixed-40 s-window buffering
 artefact (2 s buffer + added delay shifts the capture window), not lost content. SRT
 delivered an identical 49,784,092 B on **every** fully-recovered run — deterministic
-proof of complete carriage.
+proof of complete carriage. ‡ netem `slot` (in-order jitter) mildly rate-caps, so both
+transports sit ~5 % below line rate; the point is they are *comparable and near-full* —
+in-order jitter does not collapse MoQ, unlike reordering (§12.10.1).
 
 **Table 2 — MoQ buffer sensitivity @ 2 % uniform loss** (is the collapse buffer-tunable?).
 
@@ -2255,10 +2258,12 @@ artefacts; re-measured in isolation and corrected to the values above.)
 The findings above were measured with quinn's **default CUBIC** controller. PR
 [#2432](https://github.com/moq-dev/moq/pull/2432) (merged to `main` 2026-07-21, present
 in the EC2 build `5e0e98c1`) **exposes a congestion-control knob** —
-`--server-quic-congestion-control {loss|delay}` (and the `--client-quic-…` twin), where
-`delay` selects **BBR** (BBRv1 on the quinn backend). Re-running the failing conditions
-with the **relay** switched to `delay` (the relay is the sender on the impaired
-download hop; everything else identical to the CUBIC A/B):
+`--server-quic-congestion-control {loss|delay}` (and the `--client-quic-…` twin). MoQ
+therefore now supports **two CC families**: `loss` = **CUBIC** (loss-based, the quinn
+default) and `delay` = **BBR** (delay/rate-based). The BBR *generation* is backend-specific:
+**BBRv1 on the quinn backend** (what we ran), **BBRv2 on quiche**, **BBRv3 on noq/iroh**.
+Re-running the failing conditions with the **relay** switched to `delay` (the relay is the
+sender on the impaired download hop; everything else identical to the CUBIC A/B):
 
 - **The uniform-loss collapse disappears entirely.** loss 2 % **53 % → 100 %**, loss 5 %
   **31 % → 100 %**, loss 10 % **13 % → 100 %** — MoQ now matches SRT's full-rate,
@@ -2267,13 +2272,19 @@ download hop; everything else identical to the CUBIC A/B):
   spurious retransmits are cheap (there is bandwidth headroom), so throughput holds.
 - **Combined WAN (120 ms + 1 %) is fixed:** **14 % → 97 %**.
 - **Bursty loss stays fine** (99 %), as under CUBIC.
-- **Extreme jitter is the one residual weakness.** `jitter 60 ± 30 ms` improved only
-  **2 % → 7 %**, and a milder `jitter 30 ± 10 ms` reached **41 %** — degradation scales
-  with jitter magnitude. Heavy independent per-packet jitter reorders so aggressively
-  that it still trips QUIC loss detection and outruns the live-edge reassembly; this is
-  also `netem`'s least realistic knob (real jitter is correlated, §9.8), but it flags a
-  genuine QUIC reorder/jitter sensitivity that a relaxed reorder threshold (Tier 1,
-  §12.10.2) should target next.
+- **The one apparent residual — "jitter" — is really *reordering*, and true in-order
+  jitter is a non-issue.** *Non-ordered* `netem` jitter (independent per-packet delay, so
+  packets overtake) still collapses under BBR — 60 ± 30 ms → **7–13 %** — and adding
+  `netem` correlation does **not** help (50 % → 12 %, 90 % → 16 %), because a 30 ms swing
+  dwarfs the ~1.2 ms packet spacing so packets still overtake. But **true in-order jitter
+  of the same magnitude — `netem slot 30–90 ms`, a FIFO that varies timing without
+  reordering — delivers 97 %** (`slot 45–75 ms` → 98 %), matching SRT (~95 %; `slot`
+  mildly rate-caps both). So the collapse is QUIC's **in-order-stream head-of-line
+  blocking under reordering**, not delay variation. Real network jitter is queuing-delay
+  variation that stays *in order*, so this is largely a `netem` artefact (§9.8); genuine
+  unbounded reordering only arises on LEO/mobile handovers (§9.9) and, if it matters
+  there, is a QUIC loss-detection/reorder-threshold tuning item (Tier 1, §12.10.2) — not
+  a CC or protocol issue.
 
 **Implications of the fix.** Congestion control is **sender-local and per-connection —
 it is not on the wire, not negotiated, and invisible to peers and relays.** So the
@@ -2290,20 +2301,23 @@ loss" result was a **default-configuration** artefact of loss-based CUBIC, not a
 protocol limitation.* With BBR (`delay`, already merged via #2432) MoQ over QUIC is
 **full-rate and byte-complete through 10 % uniform loss, 25 % reordering, and the WAN
 profile — on par with SRT** — while keeping its architectural wins (relay CDN fan-out,
-single transport, [relay](relay.md)). The **residual gaps** are (1) **extreme
-jitter/reorder**, a QUIC loss-detection tuning item (not CC), and (2) **transparency** —
-the media-aware lane still strips DVB SI (#2440 not yet on `main`; the opaque lane, §7,
-or a #2440 build closes it). Net: MoQ is a credible primary-distribution transport once
-`delay` is the deployed default and the jitter/SI items are addressed; none of the fixes
-are protocol-breaking.
+single transport, [relay](relay.md)). The **residual gaps** are (1) **pathological
+*reordering*** (uncorrelated `netem` jitter) — a QUIC loss-detection/HOL item, not CC;
+*in-order* jitter of the same magnitude is fine (97 %), and (2) **transparency** — the
+media-aware lane still strips DVB SI (#2440 not yet on `main`; the opaque lane, §7, or a
+#2440 build closes it). Net: MoQ is a credible primary-distribution transport once
+`delay` is the deployed default and the SI item is addressed; none of the fixes are
+protocol-breaking.
 
 ### 12.10.2 Next steps
 
 1. **Make `delay` (BBR) the deployed default** for contribution/distribution relays and
    clients (or document it as required config); re-baseline latency/overhead under BBR.
-2. **Characterise the jitter/reorder residual** — sweep `netem` reorder/jitter with a
-   *correlated* (realistic) model and, if it persists, relax QUIC's packet-reorder/time
-   loss-detection thresholds (Tier 1: local, non-breaking) and re-measure.
+2. **Reorder residual (in-order jitter now cleared).** Confirmed the "jitter" collapse is
+   pure reordering: in-order jitter (`netem slot`) delivers 97 %. Remaining work is to
+   drive a *realistic reordering* model (LEO/mobile handover, §9.9) and, if it degrades,
+   relax QUIC's packet-reorder/time loss-detection thresholds (Tier 1: local, non-breaking)
+   and re-measure — this is a loss-detection/HOL item, not CC.
 3. **Re-run the buffer-sensitivity and transient-recovery tests under BBR** (Tables 2–3)
    to confirm recovery is now seamless rather than stall-and-catch-up.
 4. **BBR robustness envelope:** push loss beyond 10 % (20–30 %) and add a bandwidth cap
@@ -2565,7 +2579,7 @@ are still the right tests, and where the additional ideas raised in review belon
    and the on-hardware hitless-switch drill under loss. Making the *downstream*
    two-pacer ST 2022-7 placement work also carries the stream-clocked-grooming
    engineering item from §10.4.
-3. **Office reproduction of T3/T4** (§17.5) and **T4 opaque-remote at full SRT rate**
+3. **Office reproduction of T3/T4** (§17.6) and **T4 opaque-remote at full SRT rate**
    — deployment/environment steps, not new research; do opportunistically.
 
 The ordering rule stands: **if Gate 2 fails, stop and fix grooming before scaling
@@ -2626,7 +2640,40 @@ byte-transparency, SI/SCTE-35 preservation, CBR, TR 101 290 P1/P2 thresholds, IR
 matrix), which belongs as a short subsection of [interoperability](interoperability.md)
 §6, **not** a new file.
 
-### 17.5 Reproduction backlog
+### 17.5 Broadcast-aware scheduling above modern CC (research direction)
+
+**Assessment: the direction is valid and the stronger research contribution; some
+specifics need qualifying.** The sound core is: **do not reimplement a bespoke
+congestion controller** (SRT-style LiveCC). Keep a modern QUIC CC — BBR now, BBRv2/v3
+as backends mature (§12.10.1) — and add a **broadcast-aware scheduling/prioritisation
+layer above it** that exploits MoQ's object model (priority, expiry, per-group streams)
+to make richer decisions than SRT's flat packet stream: prioritise critical objects
+under transient congestion, budget retransmits against playout deadline (don't resend
+past-deadline data), and degrade gracefully. This is a credible "MoQ can *outperform*
+SRT, not just match it" thesis. Three qualifications:
+
+- **It largely extends what MoQ already has**, rather than a clean-sheet controller. MoQ
+  already carries object/group/track **priority** and **expiry** and the subscriber
+  already evicts late groups at the live edge. The novelty is making the layer
+  *media-semantics-aware* (PCR-bearing packets, I- vs B-frame objects, SCTE-35/emergency
+  signalling first), not inventing the priority mechanism.
+- **Media-semantic awareness conflicts with the opaque byte-transparent lane** that
+  broadcast fidelity relies on (§7). To rank "PCR packets" or "I-frame objects" the
+  transport must *parse* the TS — which is the media-aware lane, the one that today
+  strips SI. So this layer buys the most in the media-aware lane and must be reconciled
+  with the transparency requirement (or fed by side-channel metadata), not assumed free.
+- **For *primary distribution*, "drop the least-important object" is usually the wrong
+  default.** Contribution-grade delivery wants full fidelity; the value here is
+  **prioritisation + retransmit-deadline budgeting** under transient stress, with dropping
+  reserved as a last-resort graceful-degradation mode. The object-drop framing fits
+  low-latency OTT more than contribution.
+
+Receiver-derived CC inputs (decoder-buffer model, remaining playout time) also need a
+subscriber→publisher feedback path MoQ does not richly expose today. **Verdict:** capture
+as a roadmap research item — *modern CC + MoQ-object-aware scheduling* — gated behind the
+CC (§12.10.2) and transparency (#2440 / opaque-lane) work; not a near-term test.
+
+### 17.6 Reproduction backlog
 
 - **Reproduce T3 (opaque, local) and T4 (remote end-to-end) from the office
   network.** The office has ample upload capacity (removing the home-uplink ceiling
