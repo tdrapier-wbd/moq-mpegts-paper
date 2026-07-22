@@ -220,6 +220,21 @@ programme as a single opaque object stream. The rule is therefore "media-aware
 unless a specific feed or endpoint forces the fallback," not a free choice between
 equals.
 
+**T-STD (buffer-model) conformance is a muxing property, distinct from PCR pacing.**
+The MPEG-2 Systems T-STD (Transport Stream System Target Decoder) is the reference
+buffer model every conformant multiplex must respect: per-PID transport buffers drain
+at defined leak rates, and a compliant stream must never over- or underflow them given
+the PCR-derived arrival schedule. This has two faces. The *timing* face — keeping the
+PCR-to-PTS/DTS relationship valid — is a grooming concern (architecture §7). The
+*occupancy* face is a re-mux concern: a media-aware exporter that emits an access unit's
+packets contiguously produces "clustered" per-PID delivery that a strict T-STD model can
+flag as a transient buffer overflow, even though real IRDs (with larger-than-minimum
+buffers) usually decode it cleanly. A broadcast-grade media-aware lane should therefore
+interleave elementary-stream packets in a T-STD-aware way. This is separate from CBR/PCR
+pacing (a pacer cannot fix it, since it does not re-order packets) and separate from the
+SI-signalling gap; it is currently observed only as a compliance-tool shape warning and
+has not been root-caused to the exporter's interleaving versus the source content.
+
 ### 4.2 Track, group, and object mapping
 
 Under the opaque lane, the transport stream is segmented into MoQ objects grouped

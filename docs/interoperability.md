@@ -113,8 +113,11 @@ MoQ's object/burst delivery produces a reconstructed stream whose PCR is
 smooth-but-not-byte-accurate; hardware IRDs lock a PLL to PCR and raise TR 101 290
 P1/P2 alarms in response ([evidence](evidence.md) §3 measured ~24% of PCR
 intervals exceeding the 40 ms limit before grooming). The edge grooming layer —
-byte-locked CBR, monotonic PCR re-stamp, PCR re-insertion — is designed to restore
-conformant timing ([architecture](architecture.md) §7.2).
+byte-locked CBR, monotonic PCR re-stamp, PCR re-insertion — restores conformant
+timing: measured on file it takes the bursty egress from 13–26% of PCR intervals
+> 40 ms to **0%** with 0 `pcrverify` violations at 500 µs
+([test-plan](test-plan.md) §6.7, [architecture](architecture.md) §7.2), subject to
+the hardware caveat below.
 
 > Grooming is file-validated and structurally sound, but **must be proven to pass
 > P1/P2 on real hardware IRDs**: file analysis confirms the PCR arithmetic, not

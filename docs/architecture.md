@@ -512,9 +512,13 @@ egress PCR clock diverge and the T-STD buffer eventually under- or overflows),
 or PCR-PID changes, `discontinuity_indicator` handling; the safe default is to
 preserve source discontinuity signalling, not mask it). None of this is solved by
 the re-stamp arithmetic alone, and the hardware acceptance work must exercise it,
-not just steady-state conformance on a clean capture. This function does not exist
-in the upstream transport — it is one of the clearest examples of broadcast-grade
-work living in the platform, not the protocol.
+not just steady-state conformance on a clean capture. This function is not provided
+by the upstream transport; it lives in the platform, realised today by a
+byte-locked CBR groomer (the public `mpegts-pacer` crate) that is file-validated to
+deliver CBR/PCR conformance — 13–26% of PCR intervals > 40 ms taken to 0%, 0
+`pcrverify` violations at 500 µs ([test-plan](test-plan.md) §6.7) — subject to the
+hardware caveat below. It is one of the clearest examples of broadcast-grade work
+living in the platform, not the protocol.
 
 The design decision to place grooming at the *edge* rather than at the publisher
 is deliberate: grooming depends on the delivery jitter accumulated across the
@@ -1013,9 +1017,17 @@ though not packet-for-packet phase alignment. This determinism *and* rate
 coherence is a hard requirement and an open validation item (§17): any
 non-determinism, including divergent object-loss recovery, breaks the property,
 so the outputs must be verified bit-identical *under loss*, not only in the clean
-case. Where deterministic grooming cannot be guaranteed for a feed, the honest
-fallback is 1+1 hot-standby with a brief switch artefact, not a claimed-hitless
-pair.
+case. A first characterisation now exists ([test-plan](test-plan.md) §10.4): the
+groomer's offline / stream-clocked path is byte-exact reproducible (identical
+SHA-256 run-to-run, on par with FFmpeg CBR and TSDuck `pcradjust`), but its *live*
+real-time path is not yet byte-identical across two independent instances — its
+content/null placement is gated on wall-clock emit time, so tens of microseconds of
+scheduling jitter diverge the two legs. The downstream two-pacer placement therefore
+needs the live path made stream-clocked (emission and RTP framing keyed to stream
+position, not the real clock); a single groomer duplicated onto both paths already
+satisfies identity today. Where deterministic grooming cannot be guaranteed for a
+feed, the honest fallback is 1+1 hot-standby with a brief switch artefact, not a
+claimed-hitless pair.
 
 ### 14.2 Graceful degradation
 

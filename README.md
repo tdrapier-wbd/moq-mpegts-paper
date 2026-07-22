@@ -109,14 +109,16 @@ LinkedIn: https://www.linkedin.com/in/tdrapier/
 
 ## References
 
-- MoQ implementation: https://github.com/moq-dev/moq
-- OpenMoQ: https://openmoq.org/
-- IETF MoQ working group: https://datatracker.ietf.org/group/moq/about/
+- MOQ-dev implementation: https://github.com/moq-dev/moq
+- MPEG-TS VBR to CBR Pacer : https://github.com/tdrapier-wbd/mpegts-pacer
+- OpenMOQ: https://openmoq.org/
+- IETF MOQ working group: https://datatracker.ietf.org/group/moq/about/
+- MOQ Transport IETF working group working area https://github.com/moq-wg/moq-transport
 - MSFTS: https://github.com/mondain/msfts
-- MPEG-TS over MoQ: https://edis.mx/insights/mpeg-ts-over-moq.html
-- MPEG-TS over MoQ — PCR: https://edis.mx/insights/mpeg-ts-over-moq-pcr.html
-- MPEG-TS over MoQ — pacing: https://edis.mx/insights/mpeg-ts-over-moq-pacing.html
-- MoQ Interop Runner: https://github.com/englishm/moq-interop-runner
+- MPEG-TS over MOQ: https://edis.mx/insights/mpeg-ts-over-moq.html
+- MPEG-TS over MOQ — PCR: https://edis.mx/insights/mpeg-ts-over-moq-pcr.html
+- MPEG-TS over MOQ — pacing: https://edis.mx/insights/mpeg-ts-over-moq-pacing.html
+- MOQ Interop Runner: https://github.com/englishm/moq-interop-runner
 
 ---
 

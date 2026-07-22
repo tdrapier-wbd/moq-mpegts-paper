@@ -72,9 +72,13 @@ EC2 path ([test-plan](test-plan.md) §6, §8); the opaque lane, fed raw, holds
 is inherent to MoQ's object model (the same way SRT/Zixi/RIST are bursty on the
 wire and groom the TS before hand-off); it is *not* the same as the separate
 PCR/PTS *regeneration* problem the media-aware re-mux path has, which the opaque
-lane sidesteps by carrying the values verbatim. We built the piece that fixes it (a byte-locked CBR
-+ monotonic PCR re-stamp + PCR re-insertion "groomer") which does **not** exist
-upstream. The measurement above is file-based and therefore *necessary but not
+lane sidesteps by carrying the values verbatim. We built the piece that fixes it:
+the public [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) groomer —
+byte-locked CBR, monotonic PCR re-stamp, and PCR re-insertion — which the upstream
+transport does not provide. Fed the bursty media-aware egress it takes 13–26% of
+PCR intervals > 40 ms to **0%**, with **0 `pcrverify` violations at 500 µs**
+([test-plan](test-plan.md) §6.7): the pacer delivers CBR/PCR conformance at P1. The
+measurement above is file-based and therefore *necessary but not
 sufficient*: it confirms the re-stamp arithmetic, but not the real-time pacing
 jitter of a software CBR pacer or PCR_accuracy (±500 ns) at the physical output,
 which only a hardware analyser/IRD on the live egress can confirm — so the
