@@ -39,7 +39,7 @@ acceptance gates) and draws its empirical baseline from [evidence](evidence.md).
 - [9. Test 5 — Network impairment](#9-test-5--network-impairment) — ✅ done (both lanes)
 - [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 ST 2022-7 determinism precondition analysed; drills planned
 - [11. Test 7 — Timing integrity (the decisive test)](#11-test-7--timing-integrity-the-decisive-test) — **Gate 2, make-or-break**
-- [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — planned
+- [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path baseline (§12.9); latency/impairment planned
 - [13. Test 9 — System performance and resource utilisation](#13-test-9--system-performance-and-resource-utilisation) — planned
 - [14. Cross-cutting limitations](#14-cross-cutting-limitations-stated-up-front)
 - [15. Status summary](#15-status-summary)
@@ -79,9 +79,9 @@ designed to advance, reconciled with the evidence already recorded in
 | Area | Status | Comment | Test(s) |
 |---|---|---|---|
 | MoQ transport | ✅ Proven | Publisher → relay → subscriber works end-to-end on **both** lanes locally: `moq-dev` media-aware (§6) and the platform's opaque `m2ts` lane (§7) | T2 ✅, T3 ✅ |
-| Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC, 10.3 MB/48 s** (§8.4); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware) |
+| Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC** (§8.4), and the **full ~9.93 Mbps feed pulled home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (T8 clean-path, §12.9); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware), T8 clean-path ✅ |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams + PMT descriptors (reliably on `dev` per issue #1979, §6.8), and PR [#2440](https://github.com/moq-dev/moq/pull/2440) now adds the **DVB service layer — SDT/NIT/PMT-PID/TSID/ONID preserved**, leaving only **TDT/TOT/EIT** and CBR (restored downstream by `mpegts-pacer`, §6.7); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim, incl. TDT/TOT** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
-| Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 |
+| Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7, T7 P1 across four clips §11.4.1); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 P1 ✅ |
 | Failure behaviour | 🟡 Partial | **T5 impairment run on both lanes over the real EC2 path** (§9): QUIC absorbs ≤200 ms latency & ~1 % loss with 0 CC; reordering is the weak point; reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 output-determinism precondition analysed** (§10.4): a single deterministic/offline groom is byte-exact reproducible, two independent *live* pacers are not yet byte-identical — no worse than SRT/Zixi on this axis, with a roadmap | T5 ✅, T6 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
@@ -1182,6 +1182,13 @@ exactly as local Test 2 predicted. (This EC2 build predates PR #2440, §6.8: the
 SI/PMT/TSID rows above reflect the pre-#2440 media-aware lane; #2440 preserves the
 service layer, leaving only TDT/TOT/EIT.)
 
+> **Later confirmation at full rate (2026-07-22, §12.9).** The run above was
+> SRT-latency/uplink-limited to ~1.66 Mbps. The T8 clean-path run drove the **full
+> ~9.93 Mbps** `CNNiEMEA2.ts` loop through the same media-aware lane and pulled it
+> home over QUIC at **9.48 Mbps sustained for 4 minutes with 0 CC** — i.e. the remote
+> path carries the full contribution rate cleanly; the earlier low Mbps was the
+> source, not the transport. Same media-aware fingerprint (SI stripped, PMT → 0x1000).
+
 **On PCR cadence:** the media-aware lane transports whatever PCR spacing the
 encoder produced — it neither adds nor corrects broadcast-grade cadence. The CNN
 loop's native, variable PCR came through with 13.2 % of intervals > 40 ms, while
@@ -1642,6 +1649,11 @@ built):**
 Where broadcasters will focus, and the make-or-break gate. File-based timing first
 (cheap), then **hardware TR 101 290 P1/P2 on a real IRD** (Gate 2).
 
+> **Status (2026-07-22):** P1 (file) is **passed** on the media-aware lane +
+> `mpegts-pacer` across four clips — 0 % of PCR intervals > 40 ms, exact CBR, 0
+> `pcrverify` violations at ±500 ns, 0 CC errors (§11.4 / §11.4.1). P2 (hardware
+> IRD) is still `TBM` and remains the load-bearing gate.
+
 ### 11.1 Objective
 
 Prove that the groomed egress is timing-conformant **on real hardware**: PCR
@@ -1681,25 +1693,58 @@ flowchart LR
 
 ### 11.4 Metrics and results table
 
+P1 (file) figures below are the range across four groomed clips measured
+2026-07-22 (§11.4.1); P2 remains the load-bearing open item.
+
 | Metric | Unit | Limit | P1 (file) | P2 (hardware) |
 |---|---|---|---|---|
-| PCR accuracy | ns | ±500 (P2) | TBM (arithmetic only) | **TBM (load-bearing)** |
-| PCR interval — max | ms | ≤ 40 | TBM | TBM |
-| PCR interval — % > 40 ms | % | 0 | TBM | TBM |
-| PTS/DTS continuity | pass/fail | no gaps | TBM | TBM |
-| Mux-rate stability | Mbps / jitter | CBR | TBM | TBM |
-| TR 101 290 P1 | pass/fail | pass | n/a (file) | **TBM** |
+| PCR accuracy | ns | ±500 (P2) | **0 viol. @ ±500 ns; ≤ 74 ns floor¹** | **TBM (load-bearing)** |
+| PCR interval — max | ms | ≤ 40 | **30.6–32.2** | TBM |
+| PCR interval — % > 40 ms | % | 0 | **0.0000%** (all 4 clips) | TBM |
+| PTS/DTS continuity | pass/fail | no gaps | **pass** (no gaps; DTS authored) | TBM |
+| Mux-rate stability | Mbps / jitter | CBR | **exact CBR** (bitrate = pcrbitrate) | TBM |
+| TR 101 290 P1 | pass/fail | pass | **pass** (file-level checks) | **TBM** |
 | TR 101 290 P2 | pass/fail | pass | n/a (file) | **TBM** |
 | IRD PLL lock (sustained) | hh:mm | stable | n/a | TBM (≥ 24 h target) |
-| Drift / discontinuity / wrap handling | pass/fail | pass | TBM | TBM |
+| Drift / discontinuity / wrap handling | pass/fail | pass | **0 disc. (steady state)²** | TBM |
 
-**Known baseline (pre-groom, file, P1):** ~24% of PCR intervals exceeded 40 ms,
-up to 133 ms ([evidence](evidence.md) §3). This is the problem grooming exists to
-solve and the "before" figure against which the groomed "after" must be reported.
-A file-based "after" now exists on the media-aware lane: the `mpegts-pacer` grooming
-stage takes that egress from 13.6–25.4 % > 40 ms to **0 % > 40 ms** with **0
-`pcrverify` violations at 500 µs** (§6.7). That is the P1 arithmetic pass; the
-load-bearing open item remains the **P2 hardware** pass below.
+¹ File arithmetic, not wire timing: `pcrverify` records **0** violations at the
+±500 ns IRD tolerance on all four clips; the tightest floor is ≤ 74 ns (≤ 2 PCR
+units) on `testloop_clean` and ≤ 37 ns (≤ 1 unit) on the other three. Because the
+pacer byte-locks PCR to output position, file jitter is near-zero *by construction*
+— the wire (P2) test is the one that decides PCR_accuracy (§11.6).
+² 0 continuity-counter errors and 0 PCR discontinuities in steady state; the
+boundary cases (source-clock drift, 33-bit wrap, mid-stream PID change — §11.3 step 3)
+are not exercised by these clips and remain `TBM`.
+
+**Known baseline (pre-groom, file, P1):** ~24 % of PCR intervals exceeded 40 ms, up
+to 133 ms ([evidence](evidence.md) §3) — the problem grooming exists to solve.
+
+#### 11.4.1 Results — file-based (P1) run, media-aware lane + `mpegts-pacer` (2026-07-22)
+
+The full lane was run locally per §11.3 (step 1): `~/CNNiEMEA2.ts` (and the three other T1
+clips) → `tsp regulate` → `moq import ts` → `moq-relay` → `moq export ts` →
+`mpegts-pacer` (`cbr_file`, `auto regenerate`) → TSDuck. Binaries were rebuilt from
+`moq-dev` `feat/mux-ts-dvb-service-layer` **@ `5eaf99bc`** (`moq` 0.8.7, `moq-relay`
+0.13.7, `moq-native` 0.18.3 — the branch carrying #2072/#2066 and the #2440 service
+layer), so the exporter round-trips the CNN open-GOP + triple-SCTE-35 feed
+deterministically and **keeps the PMT PID at 0x0064** (no longer renumbered).
+`mpegts-pacer` 0.1.0; TSDuck 3.44-4676. Per clip, raw media-aware egress → paced:
+
+| Clip (paced CBR) | Raw egress > 40 ms | Paced > 40 ms | Paced PCR max (ms) | Mux rate (exact CBR) | `pcrverify` > 500 µs | CC err |
+|---|---|---|---|---|---|---|
+| `testloop_clean` (synthetic) | 25.15 % | **0 %** | 32.15 | **9.731 Mbps** | **0** | 0 |
+| `testloop` (27.5 Mbps 4:2:2) | 0 %³ | **0 %** | 30.64 | **30.085 Mbps** | **0** | 0 |
+| `CNNiEMEA` (CNN, 5 min) | 13.92 % | **0 %** | 31.84 | **11.006 Mbps** | **0** | 0 |
+| `CNNiEMEA2` (CNN, 10 min) | 9.08 % | **0 %** | 31.84 | **11.006 Mbps** | **0** | 0 |
+
+³ `testloop`'s native 27 ms PCR cadence is already < 40 ms before grooming; pacing
+still converts it to exact CBR (`bitrate = pcrbitrate = userbitrate`) with byte-locked
+PCR. For every clip the pacer inserts byte-locked PCR-only packets where the source
+spacing exceeds 40 ms (117–737 per clip) and stuffs 12.7–13.0 % nulls, dropping 0
+content packets. This is the P1 arithmetic pass across a synthetic CBR reference, a
+27.5 Mbps 4:2:2 mux, and two real CNN contribution captures; the load-bearing open
+item remains the **P2 hardware** pass below.
 
 ### 11.5 Pass criteria (Gate 2 — make-or-break)
 
@@ -1734,11 +1779,15 @@ head-to-head. This is the test that turns "MoQ carries broadcast TS" into "MoQ i
 competitive with SRT for it," and it is the empirical feed for
 [economics](economics.md) §8. Promoted here from the campaign roadmap (§17.3).
 
-**Status: planned — not yet run.** All result cells are `TBM` (§4.4). The value of
-this section before the numbers exist is the method, the matched-conditions
-discipline, and the agreed comparison metrics — a benchmark whose ground rules are
-set before either side is measured cannot be accused of being rigged after the
-fact.
+**Status: clean-path baseline run (2026-07-22, §12.9); latency + impairment matrix
+still planned.** The condition-0 (no-impairment) *delivered-quality* head-to-head
+is now measured over the real EC2→home internet path — sustained full-rate delivery,
+0 CC, and the transparency contrast on both transports (§12.9). The **glass-to-glass
+latency** headline (§12.5 rows 1–3) and the **impairment matrix** (§12.6) remain
+`TBM` — they need the burnt-timecode/NTP read rig and the `netem` node. The value of
+the method, matched-conditions discipline, and agreed metrics still holds: a benchmark
+whose ground rules are set before either side is measured cannot be accused of being
+rigged after the fact.
 
 **This is a comparison, not a pass/fail gate** ([implementation](implementation.md)
 §6 step 7). MoQ does not have to *beat* SRT on every axis to be viable; the
@@ -1847,6 +1896,17 @@ delta (no NTP needed); the `localtime` overlay gives the **absolute** glass-to-g
 number (NTP needed). Escaping is environment-specific — verify the overlay renders
 before trusting the read.
 
+> **Pacing caveat (measured §12.9).** For the *delivered-quality* runs that carry the
+> original TS `-c copy` (no timecode re-encode), do **not** pace with `ffmpeg -re`:
+> its reader stalls on sparse data PIDs (SCTE-35/teletext), collapsing a 10 Mbps
+> source to ~1/3 real-time and backpressuring the chain. Pace the looped file with
+> **`tsp -I file <clip> --infinite -P regulate --pcr-synchronous -O file -`** instead
+> (paces the muxed TS by PCR). The `libx264` + `-re` encode above is only needed for
+> the *latency* runs where a burnt-in timecode is required, and re-encoding regularises
+> the PTS so `-re` paces correctly there. Likewise, keep FFmpeg out of the SRT
+> *carriage* path (use `tsp -O srt`/`srt-live-transmit`) — an `ffmpeg -c copy -f mpegts`
+> hop re-muxes and is not byte-transparent (§7.3, §12.9).
+
 **2. Local — MoQ receive → groom → measure.**
 
 ```bash
@@ -1921,7 +1981,9 @@ resilience.
 ### 12.5 Metrics and results table
 
 Reported per buffer rung B (§12.3); the table below is the B = 1 s, clean-path
-head. Columns are the two transports as delivered locally.
+head. Columns are the two transports as delivered locally. **Bold** cells are
+measured on the clean path (condition 0, §12.9); latency and impaired-only rows
+remain `TBM`.
 
 | Metric (unit) | MoQ + `mpegts-pacer` | SRT | Notes |
 |---|---|---|---|
@@ -1929,13 +1991,15 @@ head. Columns are the two transports as delivered locally.
 | **Relative latency MoQ − SRT (ms)** | — | — | **TBM** (headline delta) |
 | Min buffer B for 0 CC / no stall (ms) | TBM | TBM | latency-vs-resilience knee |
 | Recovery time after loss burst (s) | TBM | TBM | 20 % loss × 2 s, then clear |
+| **Delivered bitrate, clean path (Mbps)** | **9.48** (240 s) | **9.96** | **source ≈ 9.93; §12.9** |
 | Delivered bitrate @ 1 % / 3 % loss (Mbps) | TBM | TBM | vs source rate |
-| PCR intervals > 40 ms, egress (%) | TBM | TBM | P1; MoQ groomed by pacer |
-| CC errors / discontinuities, egress | TBM | TBM | see §9.6.2 caveat for MoQ |
+| PCR intervals > 40 ms, egress (%) | **0.06 % (paced)** | **0 %** | **§12.9**; MoQ raw 10.8 %→pacer; SRT native |
+| CC errors / discontinuities, egress | **0 / 8 skips** | **0 / 0** | **§12.9**; MoQ skips = live group-eviction |
 | Reordering collapse threshold | TBM | TBM | which tolerates more |
 | Protocol overhead (wire ÷ TS payload − 1, %) | TBM | TBM | tcpdump per flow, fixed window |
-| CPU: origin encode+publish / relay / receive (%) | TBM | TBM | `pidstat`; SRT has no relay |
+| CPU: origin publish / relay / receive (%) | **~34 % import / 2.6 % relay / —** | **~1 % / — (no relay)** | **§12.9** (2-vCPU EC2, `pidstat`) |
 | Reconnect after link drop (s) | TBM | TBM | drop and restore the flow |
+| **Transparency (SI / PMT PID / PCR)** | **stripped / 0x1000 / groomed** | **preserved / 0x0064 / native** | **§12.9**; MoQ = pre-#2440 media-aware |
 
 ### 12.6 Impairment matrix
 
@@ -2006,6 +2070,68 @@ Comparative, agreed before the numbers:
   `netem` afterward (§9.8 watchdog).
 - **Raw artefacts** (`t8_*`, `*_pcr.csv`, pcaps, CPU logs): not committed (§14); the
   §12.4 commands regenerate them.
+
+### 12.9 Results — clean-path (condition 0) delivered-quality run (2026-07-22)
+
+Run over the **real public-internet path** EC2 (`34.246.187.61`, eu-west-1) → home,
+looping `~/CNNiEMEA2.ts` (1080i25 H.264, ~9.93 Mbps, 3× SCTE-35) on EC2 for
+several minutes. This measures the *delivered-quality/throughput/transparency*
+head-to-head (matrix condition 0); glass-to-glass **latency** and the impairment
+sweep (§12.6) were **not** run (need the timecode/NTP read rig and `netem` node).
+
+**Pipeline actually used.** MoQ leg: `tsp regulate --pcr-synchronous` (realtime PCR
+pacing of the looped file) → `moq import ts` (media-aware, `t8.bench.hang`) →
+`moq-relay :443/anon` → **home** `moq export ts` over QUIC → `mpegts-pacer`
+(`cbr_file auto regenerate`). SRT leg: `tsp regulate` → SRT listener `:9010` → home
+`tsp -I srt` (byte-faithful carriage). EC2 `moq` @ `/home/ubuntu/moq` (pre-#2440
+build); FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
+
+| Result (clean path) | MoQ over QUIC + pacer | SRT (byte-faithful) |
+|---|---|---|
+| Sustained delivery | **9.48 Mbps over 240 s** (1.51 M pkts) | **9.96 Mbps over 40 s** |
+| CC errors | **0** | **0** |
+| Egress PCR > 40 ms | raw 10.78 % (max 1200 ms) → **paced 0.06 %** (8 gaps, max 139 ms) | **0 %** (native, mean 24.5 ms) |
+| PCR accuracy (paced) | **0 `pcrverify` viol. @ ±500 ns**; exact CBR 10.892 Mbps | n/a (native cadence) |
+| Service / SI | **stripped** → service "(unknown)", **PMT PID renumbered 0x1000** | **preserved** — "CNNI EMEA HD" / WBD / type 0x19, **PMT PID 0x0064** |
+| Origin CPU (2-vCPU EC2) | `moq import` **~34 %** of one core; relay **2.6 %**; load ~1.45 | `tsp regulate`+carriage **~1 %**, no relay |
+| Reference: raw TCP same path | **292 Mbps** (SSH bulk) — link is not the limit | — |
+
+**Findings.**
+
+1. **The QUIC download is not the bottleneck — it delivers full rate cleanly.** Once
+   the source was paced correctly, the home client pulled the full ~9.5 Mbps over
+   QUIC with **0 CC errors sustained for 4 minutes**; raw TCP on the same path runs
+   at 292 Mbps, so the access link has ample headroom.
+2. **`ffmpeg -re` mis-paces MPEG-TS with sparse data streams — a publish-side trap.**
+   The first attempts fed `moq import` with `ffmpeg -stream_loop -1 -re -map 0 -c copy`.
+   FFmpeg's `-re` reader stalled on the SCTE-35/teletext PIDs (their PTS barely
+   advances), collapsing the source to **~1/3 real-time (~2.6 Mbps)** and
+   backpressuring the whole chain — which *looked* like a download problem but was
+   purely the encoder. An EC2-loopback subscriber saw the same ~2.6 Mbps, and feeding
+   `moq import` **without** `-re` drained at **32 Mbps** (one core pegged), proving the
+   cap was `-re`. **Fix: pace the looped file with `tsp regulate --pcr-synchronous`**
+   (paces the muxed TS by PCR, immune to per-ES timestamp quirks) — this restored
+   full-rate delivery. (Method note added to §12.4.)
+3. **Transparency is the real MoQ−SRT difference on this path, not delivery.** SRT is
+   a dumb byte pipe: carried byte-faithfully (via `tsp`) it preserves the **original
+   SI** (SDT "CNNI EMEA HD"/WBD, service type 0x19), **PMT PID 0x0064**, and the native
+   PCR cadence (0 % > 40 ms). The **as-deployed media-aware MoQ lane** (this EC2 build
+   predates PR #2440) strips SDT/NIT, renumbers PMT to 0x1000, and emits bursty VBR
+   PCR — restored to exact CBR and P1 by `mpegts-pacer`, but the *service layer* is
+   still lost. The opaque lane (§7) or a #2440 build (§6.8) closes that gap; deploying
+   either on EC2 is the opaque-remote follow-up (§8.5).
+4. **A remux in the SRT path is not transparent (confirms §7.3).** Carrying SRT via
+   `ffmpeg -c copy -f mpegts` instead of `tsp` re-muxed the stream — synthetic
+   "Service01"/"FFmpeg" SDT and an ~80 ms PCR cadence — so the fair SRT reference must
+   avoid FFmpeg in the carriage path (use `tsp -O srt` / `srt-live-transmit`).
+5. **Origin cost.** At 10 Mbps real-time the media-aware `moq import` is single-thread
+   CPU-bound at ~1/3 of one core (≈32 Mbps ceiling per core on this instance) — an
+   input for [economics](economics.md) §8 and T9 (§13).
+
+**Still owed for full T8:** glass-to-glass latency (all buffer rungs), the impairment
+matrix (§12.6), protocol overhead (tcpdump per flow), and the opaque-lane transparency
+comparison. These are the load-bearing comparative numbers; this run establishes the
+clean-path baseline they extend.
 
 ---
 
@@ -2198,10 +2324,11 @@ the reverse:
 | T1 Baseline | precondition | ✅ Done (2026-07-16) | 4 P0 references characterised (§5.5); GOP-cadence measurement outstanding |
 | T2 Transparency (media-aware, local) | Gate 1 | ✅ Done (2026-07-16; `mpegts-pacer` 2026-07-18; `dev` re-run 2026-07-21; PR #2440) | media-aware lane works locally. `mpegts-pacer` grooms the VBR egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations (§6.7). The `dev` re-run (§6.8) confirms #1979 (#2072 + #2066) makes the CNN open-GOP + SCTE-35 feed round-trip deterministically with elementary streams + PMT descriptors intact; PR [#2440](https://github.com/moq-dev/moq/pull/2440) then adds the DVB service layer (SDT/NIT/PMT-PID/TSID/ONID). **Only TDT/TOT + EIT remain unpreserved** |
 | T3 Transparency (opaque, local) | Gate 1 | ✅ Done (2026-07-17) | opaque lane byte-transparent at P1: SI + SCTE-35 + PMT/PCR PID + CBR + PCR conformance preserved (§7); P2 hardware still owed (T7) |
-| T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware (2026-07-17) | **full live SRT chain over the wire, 0 CC, 10.3 MB/48 s** (§8.4); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
+| T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware (2026-07-17; full-rate re-run 2026-07-22) | **full live SRT chain over the wire, 0 CC** (§8.4); **full ~9.93 Mbps feed home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (§12.9); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
+| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path baseline (2026-07-22) | delivered-quality head-to-head measured (§12.9): both full-rate, 0 CC; SRT byte-faithful preserves SI, media-aware MoQ strips it + needs pacer. **Latency + impairment matrix + overhead still `TBM`** |
 | T5 Impairment | Gate 1/3 | ✅ Done (2026-07-17) | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
 | T6 Resilience | Gate 3 | 🟡 Partial (determinism precondition analysed 2026-07-20) | ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). Two-relay failover + subscriber-reconnect + on-hardware hitless drill still owed |
-| T7 Timing (file) | Gate 2 (pre) | 🟡 Partial | opaque-lane P1 conformance shown (§7.5); groomed "after" vs known "before" on a live source still owed |
+| T7 Timing (file) | Gate 2 (pre) | ✅ Done (2026-07-22) | media-aware lane + `mpegts-pacer` P1 pass on four clips (§11.4.1): 0 % PCR > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC errors; opaque-lane P1 also shown (§7.5). Hardware (P2) is the remaining gate |
 | T7 Timing (hardware) | **Gate 2** | ❌ Not demonstrated | **hardware IRD access + sustained P1/P2 pass** |
 
 The single most valuable next result is **T7 hardware (Gate 2)**: a sustained

@@ -1,0 +1,25 @@
+---
+description: Local testing environment — server access, paths, and test baselines
+globs:
+alwaysApply: true
+---
+
+# Testing environment
+
+Before running, building, or reasoning about any MoQ ⇄ MPEG-TS test in this project,
+**always read `INSTRUCTIONS.local.md` in the project root first.** It holds the raw,
+machine-specific details that are deliberately kept out of Git:
+
+- local relay server address/ports and the exact start command (incl. the
+  `--server-quic-gso=false` and `https://` + `--client-tls-fingerprint` gotchas);
+- repository paths, branch/commit under test, and how to locate the freshly-built
+  binaries (the `cargo` target dir is redirected — `~/moq-dev/target/release` is stale);
+- `mpegts-pacer` build + invocation;
+- local test data (`~/*.ts` source clips) and the test-runner scripts (`~/t7-p1/…`);
+- analysis tooling (TSDuck, `compliance.py`) and the measured P1 baselines;
+- the remote EC2 path (IP, ports, SSH target, systemd services).
+
+`INSTRUCTIONS.local.md` (and any `.env.local`) are git-ignored — do not commit them and
+do not copy their raw IPs/paths/fingerprints into tracked files. When environment facts
+change (rebuilds, new commit, new relay address, new clips), update
+`INSTRUCTIONS.local.md` so it stays the single source of truth for local execution.
