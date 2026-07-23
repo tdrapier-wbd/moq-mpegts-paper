@@ -39,7 +39,7 @@ acceptance gates) and draws its empirical baseline from [evidence](evidence.md).
 - [9. Test 5 — Network impairment](#9-test-5--network-impairment) — ✅ done (both lanes)
 - [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 ST 2022-7 determinism precondition analysed; drills planned
 - [11. Test 7 — Timing integrity (the decisive test)](#11-test-7--timing-integrity-the-decisive-test) — **Gate 2, make-or-break**
-- [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path (§12.9) + impairment matrix + BBR fix (§12.10) run; glass-to-glass latency planned
+- [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path (§12.9) + impairment matrix (§12.10) + CUBIC/BBRv1/BBR2/BBR3 side-by-side (§12.10.3) run; glass-to-glass latency planned
 - [13. Test 9 — System performance and resource utilisation](#13-test-9--system-performance-and-resource-utilisation) — planned
 - [14. Cross-cutting limitations](#14-cross-cutting-limitations-stated-up-front)
 - [15. Status summary](#15-status-summary)
@@ -82,7 +82,7 @@ designed to advance, reconciled with the evidence already recorded in
 | Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC** (§8.4), and the **full ~9.93 Mbps feed pulled home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (T8 clean-path, §12.9); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware), T8 clean-path ✅ |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams + PMT descriptors (reliably on `dev` per issue #1979, §6.8), and PR [#2440](https://github.com/moq-dev/moq/pull/2440) now adds the **DVB service layer — SDT/NIT/PMT-PID/TSID/ONID preserved**, leaving only **TDT/TOT/EIT** and CBR (restored downstream by `mpegts-pacer`, §6.7); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim, incl. TDT/TOT** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
 | Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7, T7 P1 across four clips §11.4.1); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 P1 ✅ |
-| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). Residual: pathological *reordering* — in-order jitter is fine (97 %), so this is a loss-detection/HOL item, not CC (§12.10.1). Reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 |
+| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). Validated across all BBR backends (§12.10.3): quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker at reorder/high-loss. Residual: pathological *reordering* — in-order jitter is fine (~100 %) and no BBR generation fixes it, so it is a QUIC loss-detection/HOL item, not a CC choice (§12.10.3). Reconnect/relay-failure (T6) not yet exercised. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
 
@@ -2001,10 +2001,10 @@ remain `TBM`.
 | Min buffer B for 0 CC / no stall (ms) | **CUBIC: buffer doesn't rescue loss** | **≈ ARQ window** | **§12.10**; CUBIC 2/6/10 s all ≈ 5 Mbps @ 2 % loss |
 | **Recovery time after loss burst** | **CUBIC ~2–3 s stall + catch-up (91 %)** | **~0 s (seamless, 100 %)** | **§12.10**; 20 % loss × 3 s, matched B = 2 s |
 | **Delivered bitrate, clean path (Mbps)** | **9.67** | **9.96** | **source ≈ 9.93; §12.9/§12.10** |
-| **Delivered @ 2 % / 10 % uniform loss** | **CUBIC 53 % / 13 % → BBR 100 % / 100 %** | **100 % / 100 %** | **§12.10.1**; BBR (`delay`, #2432) matches SRT |
+| **Delivered @ 2 % / 10 % uniform loss** | **CUBIC 53 % / 13 % → BBRv1 & BBR3 100 % / ~100 %** (BBR2 95 % / ~50–70 %) | **100 % / 100 %** | **§12.10.1/.3**; quinn-BBRv1 & noq-BBR3 match SRT; quiche-BBR2 weaker |
 | PCR intervals > 40 ms, egress (%) | **0.06 % (paced)** | **0 %** | **§12.9**; MoQ raw 10.8 %→pacer; SRT native |
 | CC errors / discontinuities, egress | **0** (degradation = missing content, not CC) | **0 / 0** | **§12.9/§12.10**; MoQ exporter always emits clean TS |
-| **Reordering / jitter (BBR)** | **bounded reorder 99 %; in-order jitter 97 %; non-ordered jitter 7–13 %** | **immune (100 %)** | **§12.10.1**; "jitter" collapse is reordering/HOL, not delay variation |
+| **Reordering / jitter** | **bounded reorder: BBRv1 99 % / BBR3 100 % / BBR2 25–31 %; in-order jitter ~100 % (all); non-ordered jitter collapses (all BBR gens)** | **immune (100 %)** | **§12.10.1/.3**; "jitter" collapse = reordering/HOL, CC-version-independent |
 | Protocol overhead (wire ÷ TS payload − 1, %) | TBM | TBM | tcpdump per flow, fixed window |
 | CPU: origin publish / relay / receive (%) | **~34 % import / 2.6 % relay / —** | **~1 % / — (no relay)** | **§12.9** (2-vCPU EC2, `pidstat`) |
 | Reconnect after link drop (s) | TBM | TBM | drop and restore the flow |
@@ -2164,32 +2164,34 @@ flatters both ARQ mechanisms equally). Each condition = one **40 s concurrent** 
 of both transports; delivered rate is normalised to each transport's own clean baseline
 (MoQ 9.67, SRT 9.96 Mbps). One run per condition — indicative, not averaged.
 
-**Table 1 — delivered rate (% of that transport's own clean baseline; every capture had 0 CC errors).**
-The **BBR** column re-runs the failing conditions after switching the relay to delay-based
-congestion control (`--server-quic-congestion-control delay`, PR #2432 — see the BBR update below).
+**Table 1 — delivered rate (% of each config's own clean baseline; every capture had 0 CC errors).**
+All four MoQ congestion controllers are now shown side by side (§12.10.3 for how the
+non-quinn backends were built and run). Latency rows are omitted — they are lossless for
+every transport (the sub-100 % is a fixed-window buffering artefact, not lost content).
 
-| Condition (`netem`) | MoQ — CUBIC (quinn default) | MoQ — BBR (`delay`, #2432) | SRT |
-|---|---|---|---|
-| Baseline | 9.67 Mbps (100 %) | 9.59 Mbps (100 %) | 9.96 Mbps (100 %) |
-| delay 20 / 50 / 100 / 200 ms | 102 / 99 / 97 / 91 %† | not re-run (Cubic already lossless) | 100 % |
-| loss 0.5 % | 97 % | **100 %** | 100 % |
-| loss 1 % | 95 % | **100 %** | 100 % |
-| **loss 2 %** | **53 %** | **100 %** | 100 % |
-| **loss 5 %** | **31 %** | **100 %** | 100 % |
-| **loss 10 %** | **13 %** | **100 %** | 100 % |
-| bursty loss 3 % (25 % corr) | 99 % | 99 % | 100 % |
-| **reorder 20 ms 25 %** | **20 %** | **99 %** | 100 % |
-| jitter 60 ± 30 ms — **non-ordered** (netem delay, reorders) | **2 %** | **7–13 %** | 100 % |
-| jitter 60 ± 30 ms — **in-order** (netem `slot`, FIFO) | — | **97 %** | 95 %‡ |
-| duplicate 1 % | 99 % | not re-run (was fine) | 100 % |
-| **combined WAN 120 ms + 1 % loss** | **14 %** | **97 %** | 100 % |
+| Condition (`netem`) | CUBIC (quinn) | BBRv1 (quinn) | BBR2 (quiche) | BBR3 (noq) | SRT |
+|---|---|---|---|---|---|
+| Baseline | 100 % | 100 % | 100 % | 100 % | 100 % |
+| loss 0.5 % | 97 % | 100 % | 99 % | ~74 %‡ | 100 % |
+| loss 1 % | 95 % | 100 % | 98 % | 93 % | 100 % |
+| **loss 2 %** | **53 %** | **100 %** | 95 % | **100 %** | 100 % |
+| **loss 5 %** | **31 %** | **100 %** | 93 % | **100 %** | 100 % |
+| **loss 10 %** | **13 %** | **100 %** | **47–70 %** | **97 %** | 100 % |
+| bursty loss 3 % (25 % corr) | 99 % | 99 % | 100 % | 100 % | 100 % |
+| **reorder 20 ms 25 %** | **20 %** | **99 %** | **25–31 %** | **100 %** | 100 % |
+| jitter 60 ± 30 ms — **non-ordered** (reorders) | **2 %** | **7–13 %** | **2 %** | **8–71 %**§ | 100 % |
+| jitter 60 ± 30 ms — **in-order** (`slot`, FIFO) | — | 97 % | 100 % | 100 % | 95 %¶ |
+| duplicate 1 % | 99 % | ~100 % | 98 % | 100 % | 100 % |
+| **combined WAN 120 ms + 1 % loss** | **14 %** | **97 %** | 96 % | 93 % | 100 % |
 
-† latency rows are lossless for *both*; MoQ's sub-100 % is a fixed-40 s-window buffering
-artefact (2 s buffer + added delay shifts the capture window), not lost content. SRT
-delivered an identical 49,784,092 B on **every** fully-recovered run — deterministic
-proof of complete carriage. ‡ netem `slot` (in-order jitter) mildly rate-caps, so both
-transports sit ~5 % below line rate; the point is they are *comparable and near-full* —
-in-order jitter does not collapse MoQ, unlike reordering (§12.10.1).
+Clean baselines: CUBIC 9.67, BBRv1 9.59, BBR2 (quiche) 9.28, BBR3 (noq) 9.63, SRT 9.96 Mbps.
+Ranges (e.g. 47–70 %, 25–31 %, 8–71 %) are the spread across two runs — see the noise
+caveat below. ‡ BBR3's loss-0.5 % figure was low on **both** runs (72 %, 78 %) yet 1/2/5 %
+were ≥ 93 % (non-monotonic) → most likely a join-window artefact, not a CC effect.
+§ non-ordered jitter under BBR3 was **unstable** — one run 71 %, the next 8 %; the
+reordering/HOL residual is not reliably fixed by any BBR generation. ¶ netem `slot`
+(in-order jitter) mildly rate-caps, so both transports sit ~5 % below line rate; the point
+is they are *comparable and near-full* — in-order jitter does not collapse any MoQ variant.
 
 **Table 2 — MoQ buffer sensitivity @ 2 % uniform loss** (is the collapse buffer-tunable?).
 
@@ -2261,7 +2263,7 @@ in the EC2 build `5e0e98c1`) **exposes a congestion-control knob** —
 `--server-quic-congestion-control {loss|delay}` (and the `--client-quic-…` twin). MoQ
 therefore now supports **two CC families**: `loss` = **CUBIC** (loss-based, the quinn
 default) and `delay` = **BBR** (delay/rate-based). The BBR *generation* is backend-specific:
-**BBRv1 on the quinn backend** (what we ran), **BBRv2 on quiche**, **BBRv3 on noq/iroh**.
+**BBRv1 on the quinn backend** (what we ran), **BBRv2 on quiche**, **BBRv3 on noq**.
 Re-running the failing conditions with the **relay** switched to `delay` (the relay is the
 sender on the impaired download hop; everything else identical to the CUBIC A/B):
 
@@ -2321,18 +2323,60 @@ protocol-breaking.
 3. **Re-run the buffer-sensitivity and transient-recovery tests under BBR** (Tables 2–3)
    to confirm recovery is now seamless rather than stall-and-catch-up.
 4. **BBR robustness envelope:** push loss beyond 10 % (20–30 %) and add a bandwidth cap
-   *with* loss to find where BBRv1's loss cliff/fairness bites; compare BBRv2/BBRv3
-   backends (quiche/noq) if a head-to-head is wanted.
+   *with* loss to find where BBRv1's loss cliff/fairness bites. The BBRv2/BBRv3 backend
+   head-to-head is now **done** (§12.10.3): quinn-BBRv1 and noq-BBR3 are the strongest;
+   quiche-BBR2 is weaker under reorder/high loss. Remaining: fairness and >10 % loss.
 5. **Close the transparency gap** — land a #2440 build or the opaque lane on EC2 for the
    like-for-like SI-preserving comparison (§8.5), independent of the CC work.
 6. **Feed the CUBIC→BBR delta back to the MoQ community** as the headline result: a
    one-flag, non-breaking change moves QUIC from "loss-fragile" to "SRT-comparable" on
    degraded paths.
 
-**Caveats.** Single home path, single run per condition (±~5 % window noise);
-forward-path-only impairment; matched 2 s buffers; MoQ media-aware lane (delivered bytes
-normalised per-transport). BBR here = **BBRv1 on the quinn backend**; other backends
-ship BBRv2/v3. `netem` is an emulator (§9.8), not the real congested internet (T4).
+**Caveats.** Single home path, 1–2 runs per condition (±~5 % window noise, larger for the
+collapse-regime rows); forward-path-only impairment; matched 2 s buffers; MoQ media-aware
+lane (delivered bytes normalised per-transport). `netem` is an emulator (§9.8), not the
+real congested internet (T4).
+
+### 12.10.3 All BBR generations vs the backends — CUBIC / BBRv1 / BBR2 / BBR3 side by side (2026-07-23)
+
+MoQ's `delay` knob selects the *BBR family*, but the **generation is fixed by the
+compiled QUIC backend** — BBRv1 on quinn, BBRv2 on quiche, BBRv3 on noq
+([#1706](https://github.com/moq-dev/moq/pull/1706) made BBR3 the noq default;
+`rs/moq-native/src/quic.rs`). To compare them we built two extra **single-backend**
+`moq-relay` binaries on EC2 — `--no-default-features --features noq` (BBR3) and
+`… --features quiche` (BBR2) — and swapped each in for the standing quinn relay
+(`~/t8run/cc_relay.sh`), leaving the quinn `moq` publisher/subscriber unchanged.
+**Cross-backend interop held cleanly** (quinn clients ↔ noq/quiche relay, all negotiating
+`moq-lite-05`), and every backend delivered full clean-path rate (noq 9.63, quiche 9.28,
+quinn 9.6 Mbps). Full numbers in Table 1. The picture is more nuanced than "BBR fixes it":
+
+- **Every BBR generation kills the CUBIC uniform-loss collapse at 2–5 %** (CUBIC 53 / 31 %
+  → all BBR ≥ 93 %). That headline result is backend-independent.
+- **At the stress edges the generations diverge, and the *implementation* matters more than
+  the version number.** **quinn-BBRv1 and noq-BBR3 are the strongest** — both hold ~100 %
+  through 10 % loss and 25 % bounded reordering. **quiche-BBR2 is the weakest**: it fades at
+  10 % loss (**47–70 %**) and, tellingly, handles bounded reordering about as badly as CUBIC
+  (**25–31 %**). quiche's loss-detection is quicker to read reordering/high-loss as
+  congestion. So "use BBR" is necessary but not sufficient — *which QUIC stack* ships it is
+  a first-order variable.
+- **The reordering (non-ordered-jitter) residual is CC-version-independent.** It collapses
+  under CUBIC (2 %), BBRv1 (7–13 %), BBR2 (2 %), and is *unstable* under BBR3 (one run 71 %,
+  the next 8 %). Meanwhile **in-order jitter (`slot`) is ~100 % for every controller.** This
+  confirms §12.10.1: the culprit is QUIC's in-order-stream head-of-line blocking under
+  reordering, a loss-detection/reorder-threshold item — **no BBR generation fixes it**, so
+  it must be addressed at the QUIC layer, not by picking a CC.
+- **Maturity vs generation trade-off.** The freshest generation is not the safest bet:
+  quinn (mature, BBRv1) is the best all-rounder here and is the default/production backend;
+  noq (BBR3) matches it and occasionally tolerates reordering better, but is a newer stack;
+  quiche (BBR2) is a mature stack whose BBR2 underperforms on our stress edges. For a
+  broadcast deployment today, **quinn + `delay` (BBRv1) is the pragmatic choice**; BBR3/noq
+  is the one to keep watching (and to re-test as BBRv2/v3 tuning lands upstream).
+
+**Implication for the roadmap.** This narrows the outstanding CC work to two things, both
+QUIC-layer not CC-choice: (1) the **reorder/HOL residual** (Tier 1 loss-detection tuning,
+§12.10.2), which no BBR generation solves; and (2) BBRv1 **fairness / >10 % loss cliff**.
+It also *removes* "which BBR?" as a blocker for continuing the broadcast evaluation —
+quinn-BBRv1 is sufficient and best-rounded as measured.
 
 ---
 
@@ -2526,7 +2570,7 @@ the reverse:
 | T2 Transparency (media-aware, local) | Gate 1 | ✅ Done (2026-07-16; `mpegts-pacer` 2026-07-18; `dev` re-run 2026-07-21; PR #2440) | media-aware lane works locally. `mpegts-pacer` grooms the VBR egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations (§6.7). The `dev` re-run (§6.8) confirms #1979 (#2072 + #2066) makes the CNN open-GOP + SCTE-35 feed round-trip deterministically with elementary streams + PMT descriptors intact; PR [#2440](https://github.com/moq-dev/moq/pull/2440) then adds the DVB service layer (SDT/NIT/PMT-PID/TSID/ONID). **Only TDT/TOT + EIT remain unpreserved** |
 | T3 Transparency (opaque, local) | Gate 1 | ✅ Done (2026-07-17) | opaque lane byte-transparent at P1: SI + SCTE-35 + PMT/PCR PID + CBR + PCR conformance preserved (§7); P2 hardware still owed (T7) |
 | T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware (2026-07-17; full-rate re-run 2026-07-22) | **full live SRT chain over the wire, 0 CC** (§8.4); **full ~9.93 Mbps feed home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (§12.9); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
-| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path + impairment matrix + BBR (2026-07-22) | Head-to-head over the real EC2→home path under a granular `netem` sweep (§12.10): under default CUBIC, MoQ collapsed under uniform loss ≥ 2 %, reorder and WAN while SRT held full rate — **but BBR (`delay`, PR #2432) makes MoQ full-rate/0-CC through 10 % loss, 25 % reorder and WAN, matching SRT** (§12.10.1); residual = extreme jitter + SI transparency (pre-#2440). CC switch is non-breaking, no interop impact. **Glass-to-glass latency + overhead still `TBM`** |
+| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path + impairment matrix + 4-way CC (2026-07-23) | Head-to-head over the real EC2→home path under a granular `netem` sweep (§12.10): under default CUBIC, MoQ collapsed under uniform loss ≥ 2 %, reorder and WAN while SRT held full rate — **but BBR (`delay`, PR #2432) makes MoQ full-rate/0-CC through 10 % loss, 25 % reorder and WAN, matching SRT** (§12.10.1). All four CCs compared side-by-side (§12.10.3): **quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker**; the reordering residual is **CC-version-independent** (a QUIC HOL/loss-detection item), SI transparency pre-#2440. CC switch is non-breaking, no interop impact. **Glass-to-glass latency + overhead still `TBM`** |
 | T5 Impairment | Gate 1/3 | ✅ Done (2026-07-17) | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
 | T6 Resilience | Gate 3 | 🟡 Partial (determinism precondition analysed 2026-07-20) | ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). Two-relay failover + subscriber-reconnect + on-hardware hitless drill still owed |
 | T7 Timing (file) | Gate 2 (pre) | ✅ Done (2026-07-22) | media-aware lane + `mpegts-pacer` P1 pass on four clips (§11.4.1): 0 % PCR > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC errors; opaque-lane P1 also shown (§7.5). Hardware (P2) is the remaining gate |

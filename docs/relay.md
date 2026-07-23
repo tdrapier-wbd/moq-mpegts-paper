@@ -146,7 +146,14 @@ Relay resilience is one layer of the end-to-end redundancy described in
   requires no new receiver behaviour.
 - **Degradation behaviour.** Under loss that redundancy cannot mask, QUIC's
   per-stream delivery degrades rather than stalls; the opaque-lane limitation of
-  §3.3 applies.
+  §3.3 applies. **Congestion-control choice is decisive here.** Because MoQ is
+  hop-by-hop QUIC and CC is sender-local, a relay facing a lossy downstream can run
+  **BBR** on that hop (`--server-quic-congestion-control delay`, §7), using the short
+  relay-edge RTT as the retransmit loop rather than an end-to-end window. In testing,
+  the default loss-based CUBIC collapsed under uniform loss/reordering/WAN while BBR
+  held full rate on par with SRT — a per-connection change with no wire/interop impact
+  ([transport](transport.md) §3.1, [test-plan](test-plan.md) §12.10,
+  [evidence](evidence.md) §7).
 
 ## 6. Capacity planning
 
@@ -177,6 +184,13 @@ capacity-planned separately.
 - **Circuit breakers.** A relay that detects a persistently failing upstream or
   downstream path sheds or reroutes the affected subscriptions rather than
   amplifying the failure, and reports the state to observability.
+- **Congestion control.** The relay's QUIC congestion controller is selectable per
+  deployment ([PR #2432](https://github.com/moq-dev/moq/pull/2432)):
+  `--server-quic-congestion-control {loss|delay}` (`loss` = CUBIC, `delay` = BBR).
+  For relays serving lossy last-mile paths, **`delay` (BBR) is the recommended
+  default** — it removed the loss/reorder/WAN throughput collapse in testing (§5,
+  [test-plan](test-plan.md) §12.10) — and, being sender-local, it changes nothing on
+  the wire and preserves interop with any QUIC subscriber.
 
 ## 8. Metrics and SLOs
 

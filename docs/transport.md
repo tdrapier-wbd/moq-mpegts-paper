@@ -82,6 +82,18 @@ invented here:
   Zixi is proprietary. So the fair claim is narrow: MoQ's per-stream model avoids
   serialising an entire multiplex behind one loss, but whether that yields a
   *measurable* advantage over a well-tuned SRT/RIST deployment is unproven (§8).
+- **Congestion control is pluggable and sender-local.** `moq-native` exposes a CC
+  knob ([PR #2432](https://github.com/moq-dev/moq/pull/2432)):
+  `--server/client-quic-congestion-control {loss|delay}`, where `loss` = **CUBIC**
+  (loss-based, the default) and `delay` = **BBR** (BBRv1 on the quinn backend;
+  BBRv2/BBRv3 on the quiche/noq backends). Because CC is per-connection and *not* on
+  the wire, the choice needs no protocol change and preserves relay ⇄ subscriber
+  interop; and because MoQ is hop-by-hop QUIC, BBR can be enabled on just the lossy
+  relay→subscriber hop, with the short relay-edge RTT (not end-to-end) as the
+  retransmit loop. This is decisive in testing: under the default CUBIC, QUIC
+  collapsed under uniform loss, reordering, and a WAN profile, but switching the relay
+  to BBR restored full-rate, byte-complete delivery on par with SRT
+  ([test-plan](test-plan.md) §12.10, [evidence](evidence.md) §7).
 - **One protocol spans contribution and 1:N distribution.** MoQ's relay model
   provides subscription-based fan-out, cluster routing, and caching as part of the
   protocol rather than as external infrastructure. This matches the "trunk that

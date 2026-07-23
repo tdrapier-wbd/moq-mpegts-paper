@@ -107,11 +107,15 @@ whereas the media-aware lane drops SI and renumbers the PMT
 ([test-plan](test-plan.md) §7, with the decisive side-by-side in §7.7).
 
 Two honest caveats on this evidence: it records behaviour *as measured at the
-time*, and upstream has since begun addressing the media-aware import weaknesses
-in main/dev, so this should not be read as a permanent limitation of media-aware
-carriage; and the point it supports is that opaque carriage is a lower-risk path
-*today*, not that media-aware carriage is unviable. (Supports
-[architecture](architecture.md) §4.2.)
+time*, and upstream has since **materially closed the gap** — #2072/#2066 fixed the
+open-GOP import failure, and [#2440](https://github.com/moq-dev/moq/pull/2440) (a draft
+PR) now **preserves the DVB service layer through the media-aware lane** (SDT/NIT,
+service name/type, PMT PID, TSID/ONID), leaving only the dynamic TDT/TOT/EIT tables
+unpreserved ([test-plan](test-plan.md) §7.7). So this should not be read as a permanent
+limitation of media-aware carriage; the point it supports is that opaque carriage is a
+lower-risk path *today* (and #2440 was not yet on the EC2 `main` build at test time),
+not that media-aware carriage is unviable. (Supports [architecture](architecture.md)
+§4.2.)
 
 ## 6. The entitlement substrate exists
 
@@ -125,3 +129,38 @@ and the multi-region cluster mesh (shared subscription/cache state, shortest-pat
 routing) is distributed-systems work the platform must build, not a behaviour the
 base transport supplies. The hooks and semantics are there; the broadcast-grade
 *product* on top of them is not. (Supports [architecture](architecture.md) §10–§11.)
+
+## 7. Under real internet loss, MoQ's resilience is a congestion-control choice — and BBR closes the gap to SRT
+
+A granular head-to-head against SRT over the **real EC2→home internet path**, driven
+by a `netem` impairment matrix (uniform/bursty loss, reordering, jitter, latency,
+bandwidth caps, combined WAN), first looked *catastrophic* for MoQ: under quinn's
+**default CUBIC** controller it collapsed under uniform loss ≥ 2 % (53 % delivered at
+2 %, 13 % at 10 %), 25 % reordering (20 %), and a combined WAN profile (14 %), while SRT
+held full rate throughout ([test-plan](test-plan.md) §12.10). **That first conclusion
+was wrong — the collapse was a default-configuration artefact, not a protocol limit.**
+A recently merged knob ([PR #2432](https://github.com/moq-dev/moq/pull/2432)) exposes
+`--server/client-quic-congestion-control {loss|delay}`; switching the relay to `delay`
+= **BBR** (BBRv1 on the quinn backend) removes the collapse entirely — MoQ is then
+full-rate and byte-complete through 10 % uniform loss, 25 % reordering, and the WAN
+profile, **on par with SRT**. The fix is **sender-local and per-connection**: not on
+the wire, not negotiated, no draft/version change, and it preserves relay ⇄ subscriber
+interop (a BBR sender talks to any QUIC receiver). Because MoQ is hop-by-hop QUIC it can
+even be enabled on just the lossy relay→subscriber hop, using the short relay-edge RTT
+as the retransmit loop. (Supports the graceful-congestion claim in the
+[README](../README.md), directly informs the "SRT advantage too narrow" thesis-risk
+head-to-head, [transport](transport.md) §3.1, and [relay](relay.md) §5.)
+
+The one residual weakness is narrower than it first appears. "Extreme jitter" was the
+last condition where MoQ under BBR still under-delivered — but a controlled test
+isolates the cause as **packet reordering, not delay variation**: true *in-order*
+jitter (`netem slot`, a FIFO that varies timing without letting packets overtake)
+delivers **97 %** at 60 ± 30 ms, whereas *non-ordered* jitter of the same magnitude
+(independent per-packet delay, which reorders) collapses to ~7–13 %. The mechanism is
+QUIC's in-order-stream head-of-line blocking under heavy reordering, so this is a
+**QUIC loss-detection / reorder-threshold tuning item, not a CC or protocol flaw** — and
+terrestrial paths reorder far less than `netem`'s model; unbounded reordering is mainly
+a LEO/mobile-handover concern ([test-plan](test-plan.md) §12.10.1, §9.9). Two honest
+boundaries: this is a single home path, one run per condition, forward-path-only
+impairment; and BBR here is **BBRv1** (quinn) — BBRv2/v3 (quiche/noq backends) and BBR's
+own known trade-offs (fairness, a very-high-loss cliff) remain to be characterised.
