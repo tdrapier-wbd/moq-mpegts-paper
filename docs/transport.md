@@ -81,7 +81,7 @@ invented here:
   is exhausted rather than blocking; RIST is RTP with packet-level retransmission;
   Zixi is proprietary. So the fair claim is narrow: MoQ's per-stream model avoids
   serialising an entire multiplex behind one loss, but whether that yields a
-  *measurable* advantage over a well-tuned SRT/RIST deployment is unproven (§8).
+  *measurable* advantage over a well-tuned SRT/RIST deployment is unproven (§9).
 - **Congestion control is pluggable and sender-local.** `moq-native` exposes a CC
   knob ([PR #2432](https://github.com/moq-dev/moq/pull/2432)):
   `--server/client-quic-congestion-control {loss|delay}`, where `loss` = **CUBIC**
@@ -174,7 +174,7 @@ specifically*:
 - **Latency under loss.** Both can be low-latency on a clean path; under loss,
   TCP's ordered retransmission and congestion response make bounded latency harder
   to hold than QUIC's per-stream model — though whether the difference is
-  *material* against a well-tuned deployment is unproven (§8).
+  *material* against a well-tuned deployment is unproven (§9).
 - **Delivery model.** TSoHTTP is request/response: live fan-out is arranged around
   it (chunked responses, segment polling, cache hierarchies). MoQ's subscription
   model is native publish/subscribe, which maps directly onto dynamic, revocable
@@ -466,7 +466,96 @@ matter at this layer:
 
 ---
 
-## 8. Open questions
+## 8. Transport resilience and recovery
+
+A transport for primary distribution must not only carry the bytes but *recover* —
+survive a relay restart, a dropped session, or a link blip without operator
+intervention. What the shipped `moq-dev` provides here was audited by source
+inspection and measured in drills on the media-aware lane
+([evidence](evidence.md) §8, [test-plan](test-plan.md) §10.5). The result is a
+model that is architecturally right but only *half-wired* today, so it is stated
+with the split the rest of this document uses: confirmed, limited, work-in-progress,
+and worked-around.
+
+The design intent is sound and worth stating first: MoQ endpoints are **thin,
+single-homed, auto-reconnecting clients**, and redundancy lives in the **relay
+mesh** and in **receiver-side hitless selection** (ST 2022-7 at the IRD,
+[architecture](architecture.md) §14.1) — not in fat endpoints that juggle multiple
+relays. That division matches broadcast 1+1 practice. The gaps below are
+implementation maturity against that intent, not a flaw in the intent.
+
+### 8.1 Reconnection behaviour
+
+MoQ clients carry a reconnect loop (`rs/moq-native/src/reconnect.rs`): on session
+close they redial the **same** URL with exponential backoff (initial 1 s, ×2,
+max 30 s, give-up default 5 min), and authorization failures are terminal (no
+retry). A client's local *origin* outlives each QUIC session, so a **publisher
+re-announces its broadcast** and a **subscriber re-subscribes** on every
+reconnect — the announce/subscribe state survives even though the QUIC/MoQ session
+does not (there is no 0-RTT session resume; each reconnect is a fresh session).
+This is **reconnect to the same relay**, not failover: a client accepts exactly one
+`--client-connect` URL (`ClientConfig.connect: Option<Url>`), with no fallback
+list, so switching a client from relay A to relay B is out of scope for the
+transport and belongs to an external supervisor or a doubled chain (§8.4).
+
+### 8.2 Relay-restart behaviour (measured)
+
+A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md)
+§10.5):
+
+- **The publisher recovers.** After the relay comes back, the `moq import ts`
+  reconnect loop redials and re-announces automatically; the import side is resilient
+  to session loss.
+- **The `moq export ts` subscriber does not.** The instant its session drops the
+  exporter process **exits** with `Error: json: dropped` — the transport reconnect
+  loop is alive, but the export *container pipeline* treats the dropped
+  `catalog.json` track as fatal and terminates before it can resume (§8.3). So a
+  relay restart **kills every media-aware subscriber**, and the end-to-end stream
+  does not resume on its own.
+- **Detection is timeout-bound.** A hard-killed (SIGKILL / instance-stop) relay sends
+  no CONNECTION_CLOSE, so clients notice only via the QUIC **idle timeout** (default
+  30 s, `--client-quic-idle-timeout`, which must stay above the ~5 s keep-alive).
+  Recovery time is therefore dominated by *detection*, not by the ~1 s reconnect
+  backoff — a graceful restart that closes the session is noticed at once; an abrupt
+  kill is not.
+
+### 8.3 Exporter lifecycle (the load-bearing gap)
+
+The `moq export ts` crash on session loss is the single most consequential
+transport-resilience gap for primary distribution, because a broadcast subscriber
+must ride out relay maintenance and transient loss. The likely root cause is narrow:
+the export pipeline awaits the catalog once and treats its disappearance as fatal,
+so the dropped `catalog.json` track ends the process even while the reconnect handle
+is still trying to re-establish. It is a **bug in the CLI application layer, not in
+the transport**: the reconnect machinery it needs already exists one layer down. It
+is filed upstream ([moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459)) as the highest-value,
+most-clearly-upstreamable fix; once the exporter re-awaits the catalog across a
+reconnect, relay-restart recovery becomes automatic and bounded rather than a
+process death.
+
+### 8.4 Current limitations and workarounds
+
+- **No client-side relay failover.** Single connect URL; use a doubled chain or an
+  external supervisor that swaps `--client-connect`.
+- **Exporter dies on session loss (§8.3).** Until the fix lands, supervise
+  `moq export ts` (`Restart=always` / wrapper); it rejoins at the live edge in a few
+  seconds (bounded by relaunch + first keyframe, not hitless).
+- **Active/active *source* failover is not delivered today.** Two publishers on one
+  relay collapse the stream (`unroutable`); a two-relay mesh tolerates the pair but
+  does not fail the source over when the active publisher dies, because the standby
+  route is not propagated across the mesh to the relay serving the active source
+  ([relay](relay.md) §4.1, §5.1). The `moq-lite-06` cost/standby routing (#2424) that
+  would *rank* such a standby is opt-in (`--server-version`/`--client-version`) and was
+  tested end-to-end, but it does **not by itself** restore failover — with lite-06
+  negotiated the mesh drill still froze on active-source death, because pricing routes
+  does not help when the standby route is never advertised ([relay](relay.md) §4.1). The
+  honest
+  broadcast-grade path today is therefore the **fully-doubled chain** — dual
+  publishers, dual relays, dual pacers, and **downstream ST 2022-7 / IRD hitless
+  selection** ([architecture](architecture.md) §14.1) — with MoQ responsible for
+  per-leg transport resilience and reach, not for hitless switching.
+
+## 9. Open questions
 
 - Which MoQ draft will the industry converge on, and on what timeline will a
   production implementation of it reach broadcast-required stability? The

@@ -1046,7 +1046,14 @@ of the fallback, not of the default design.
 
 - **Publisher failure** — the redundant publisher's flow already exists in the
 fabric; the egress selects it. With active/active ingest there is no failover
-detection latency on the critical path.
+detection latency on the critical path. *Measured caveat (2026-07-23):* today that
+selection must happen **downstream** (ST 2022-7 / IRD, §14.1), because the relay
+does not itself fail a broadcast over from a dead active source to a hot standby on
+the shipped wire — the standby's route is not propagated across the mesh to the relay
+serving the active source, and `moq-lite-06` cost routing was tested and does not by
+itself close this ([relay](relay.md) §4.1, [evidence](evidence.md) §8). "No
+failover-detection latency" is the property the *doubled-and-downstream-merged* chain
+delivers, not a property of relay-mesh switching yet.
 - **Relay or link failure** — the disjoint second path continues to deliver;
 the fabric re-routes affected subscriptions around the failure using the mesh.
 - **Gateway failure** — the redundant gateway's egress continues; the IRD's ST
@@ -1070,6 +1077,47 @@ satellite — with its terrestrial-network independence — does not have. The
 platform mitigates it with path diversity across providers and with the
 transport-swappable hedge (falling back to a managed transport for the most
 critical always-on routes), but it does not claim to eliminate it. 
+
+### 14.5 Separation of responsibilities: what MoQ owns vs. what stays around it
+
+The redundancy layers above only compose cleanly if each failure domain is owned by
+the layer best able to handle it. The redundancy investigation
+([test-plan](test-plan.md) §10.5, [evidence](evidence.md) §8) makes that division
+concrete, and it is a deliberate architectural position rather than a workaround for
+current gaps:
+
+- **Publisher *input* redundancy stays outside MoQ.** Choosing between primary and
+  backup *source* feeds (SDI/ASI/IP input switching, upstream contribution failover)
+  is a contribution-domain concern with mature tools — a TSDuck input switch
+  (`tsp -I switch`), a hardware/software input selector, or a redundant encoder pair.
+  Putting source-selection logic inside a MoQ publisher would re-implement that
+  ecosystem badly and couple input policy to transport. The publisher's job is to
+  take *one* good input and get it onto the fabric reliably; which input is "good" is
+  decided before MoQ. **Recommendation: keep input failover upstream of the publisher.**
+- **MoQ owns transport resilience and relay routing.** Per-leg QUIC reconnection,
+  keep-alive/idle-timeout tuning, cache/fan-out, announce propagation, and cost/
+  shortest-path route selection across the relay mesh are squarely MoQ's
+  responsibility, and are where MoQ adds value over a point-to-point transport. The
+  drills confirm the transport half works (publisher auto-reconnect, byte-identical
+  fan-out, cluster formation), and they also pin the two gaps that are legitimately
+  MoQ's to close: the exporter's session-loss handling (a client bug, filed upstream)
+  and **standby-route propagation for active/active source failover** (§14.3;
+  [relay](relay.md) §4.1).
+- **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless
+  selection.** Until relay-mesh source failover lands, service continuity is delivered
+  the way broadcasters already trust: **dual publishers → dual relays → dual pacers →
+  ST 2022-7 / IRD hitless selection at the edge** (§14.1). MoQ carries two healthy
+  disjoint legs; the *hitless switch* between them lives at the receiver, which already
+  implements it. This keeps the last-hop failover free of new receiver behaviour and
+  does not block on any unshipped MoQ feature.
+
+The forward-looking nuance: relay-mesh source failover is *desirable* and belongs in
+MoQ (it would let a single-homed subscriber ride out an active-source death without a
+downstream merge), so the platform should help land it upstream (§14.3,
+[relay](relay.md) §4.1) — but it is an **enhancement to the routing layer, not a
+prerequisite for broadcast-grade service today**, which the doubled-and-downstream
+pattern already provides. Input failover, by contrast, should stay outside MoQ
+permanently.
 
 ---
 

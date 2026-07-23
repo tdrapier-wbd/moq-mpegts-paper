@@ -55,6 +55,19 @@ logical rather than physical:
 - **Edge relays** sit closest to endpoints and feed edge gateways. In some
   deployments the edge relay and edge gateway are co-located.
 
+The clustering primitives this rests on are **shipped** in `moq-relay`
+(`rs/moq-relay/src/cluster.rs`): a relay dials peers listed in `cluster.connect`
+(full URLs), optionally discovers them by gossip (`cluster.node` + `cluster.mesh`)
+or an external `cluster.connect_api` list, and prices links with `?cost=N`. Each
+dial is a **bidirectional** session (the relay both publishes local content to the
+peer and subscribes to the peer's announcements), configured peers **reconnect
+forever** with 1 s→300 s backoff, and a stable `cluster.id` keeps a relay's
+hop-chain identity across restarts. This was exercised directly: a two-relay
+anonymous cluster formed over loopback, negotiated `moq-lite-05`, and carried the
+media-aware TS feed end to end to subscribers on the far relay
+([test-plan](test-plan.md) §10.5.2). So the *plumbing* of a mesh is real; what is
+not yet delivered is automatic **source failover** across it (§4.1, §5.1).
+
 Where this fabric is used, relays within a region form a **cluster** that shares
 subscription and cache state; clusters interconnect as a **mesh** to form the
 fabric. That shared state is a property the platform has to implement and
@@ -129,6 +142,51 @@ in the transport/relay layer (efficient, commoditised) while *policy* lives in t
 control plane (changes frequently, must survive a transport swap). Encoding
 rights or sovereignty policy into the relay itself is rejected for both reasons.
 
+### 4.1 Route reselection, standby routing, and the `moq-lite-06` state (measured)
+
+The relay's forwarding core already contains a **multi-source route table**: an
+origin holds every route it knows for a broadcast path and picks a winner by
+`route_order` = (announced-before-offline, then cumulative **cost**, then hop-chain
+length, then a stable hash tie-break), with the losers parked as silent standbys
+(`rs/moq-net/src/model/origin.rs`, `best_route`/`reselect`). When a better route
+attaches or the active source dies, `reselect` promotes the winner and live tracks
+**re-splice at the next group boundary** — a behaviour covered by the unit test
+`test_route_failover`. On paper this is exactly the standby-and-failover mechanism a
+redundant fabric needs.
+
+**What the drills showed, though, is that the shipped default wire does not *feed*
+that table a second live route for the same broadcast** ([test-plan](test-plan.md)
+§10.5.3). Two publishers on one relay do not form a standby pair — the second
+announce makes the path `unroutable` and tears down both. Across a two-relay mesh the
+pair coexists, but when the active publisher dies the carrying relay does **not**
+fail over: announcements are **coalesced to one best route per path**, and the
+split-horizon loop filter (`exclude_hop`) suppresses the return announcement, so the
+relay serving the active source never learns the standby route and has nothing to
+reselect. Route reselection therefore works *within an origin that already holds two
+routes*, but the `moq-lite-05` topology does not put two routes for one broadcast in
+front of the relay that needs them.
+
+**Cost/standby routing (`moq-lite-06`) is necessary but not sufficient — tested.** The
+intended ranking mechanism is explicit cost: `broadcast::Route` carries a cost a
+standby seeds high (a cold transcoder, a warm backup) and that drops to 0 once it
+starts carrying, so a standby is selected only when nothing cheaper exists
+(`rs/moq-net/src/model/broadcast.rs`, `rs/moq-net/src/lite/announce.rs`; landed as
+#2424). It lives in `moq-lite-06-wip`, which is **deliberately excluded from the default
+advertised set and ALPN list** (`rs/moq-net/src/version.rs` — `Versions::all()` and
+`ALPNS` both omit it, with a comment noting it is "otherwise a fully-defined version …
+an opt-in set that includes it negotiates normally") and negotiates **only when both
+peers opt in** via `--server-version` / `--client-version`. Re-running the two-relay
+mesh drill with lite-06 negotiated end-to-end (cluster log:
+`connected version=moq-lite-06-wip`) behaved **identically to `moq-lite-05`**: the pair
+coexisted and then froze permanently on `pubA` death, with relay A's session log
+showing it only ever held its **own** local route — relay B never advertised its
+standby publisher across the cluster link ([test-plan](test-plan.md) §10.5.4). Cost
+routing had nothing to rank, because the missing piece is **standby-route propagation
+across the mesh**, not route pricing. So on `moq-dev @ 5eaf99bc`, cost-weighted
+standby routing is real and negotiable but does **not** by itself deliver active/active
+source failover; the standby-route propagation gap described above is the blocker, and
+hop-based shortest-path routing is what runs by default.
+
 ## 5. Resilience model
 
 Relay resilience is one layer of the end-to-end redundancy described in
@@ -137,7 +195,10 @@ Relay resilience is one layer of the end-to-end redundancy described in
 - **Redundancy patterns.** For contracted content the fabric carries a route over
   two link-disjoint paths so that a single link, relay, or region impairment does
   not interrupt delivery. With active/active ingest, both paths are live and there
-  is no failover-detection latency on the critical path.
+  is no failover-detection latency on the critical path. This is the *target*; the
+  measured state (§5.1) is that the two live paths must be combined **downstream**
+  (ST 2022-7 / IRD), because the relay does not yet perform the hitless switch
+  itself on the shipped wire (§4.1).
 - **Hitless switching lives at the edge, not the relay.** The relay's job is to
   keep both disjoint flows healthy; the *hitless* selection between them is
   performed at the egress as an ST 2022-7 dual-path hand-off to the IRD
@@ -154,6 +215,38 @@ Relay resilience is one layer of the end-to-end redundancy described in
   held full rate on par with SRT — a per-connection change with no wire/interop impact
   ([transport](transport.md) §3.1, [test-plan](test-plan.md) §12.10,
   [evidence](evidence.md) §7).
+
+### 5.1 Measured failover and reconnect behaviour (2026-07-23)
+
+Drills on the media-aware lane ([test-plan](test-plan.md) §10.5,
+[evidence](evidence.md) §8) pin down what the resilience model delivers *today*
+versus what it is designed to deliver, and the two are not yet the same.
+
+- **Confirmed working.** Fan-out to multiple subscribers is byte-identical and
+  continuous (redundant *outputs* are free). A `moq import ts` **publisher survives a
+  relay restart** — its reconnect loop redials and re-announces automatically. A
+  two-relay cluster forms and carries the feed.
+- **Confirmed limitation — no hitless source failover on `moq-lite-05`.** As §4.1
+  details, neither a single-relay duplicate publisher nor a two-relay mesh gives
+  automatic active/active source failover on the shipped wire; the relay keeps the
+  active flow healthy but does not switch to a standby when the active source dies.
+- **Confirmed limitation — the subscriber does not survive session loss.** A relay
+  restart **kills every `moq export ts` subscriber** (`Error: json: dropped`): the
+  transport reconnect loop is alive but the exporter's container pipeline treats the
+  dropped catalog as fatal ([transport](transport.md) §8.3). This is a client-side
+  bug filed upstream, but it means "keep both disjoint flows healthy" is currently
+  undercut at the *edge subscriber*, not at the relay.
+
+The consequence for this document's resilience model is a sharpening, not a reversal:
+the relay's job — **keep the flows healthy and let hitless selection happen at the
+edge** — is the right split, and the drills confirm the relay carries redundant flows
+and reconnects publishers. But **the hitless switch must live downstream (ST 2022-7 /
+IRD, [architecture](architecture.md) §14.1), because relay-mesh source failover is
+not available today**, and the edge subscriber needs external supervision until the
+exporter reconnect bug is fixed. The broadcast-grade posture is therefore the
+fully-doubled chain (dual publishers, dual relays, dual pacers, receiver-side hitless
+selection), with the relay providing reach, caching, fan-out, and per-leg transport
+resilience rather than the switch itself.
 
 ## 6. Capacity planning
 
@@ -229,7 +322,7 @@ and should be treated as hypotheses to validate rather than committed figures.
 
 - How much of MoQ's prioritisation/graceful-degradation advantage is recoverable
   under opaque transport-stream carriage, and does a media-aware secondary lane
-  justify its interop cost to regain it? (Shared with [transport](transport.md) §8.)
+  justify its interop cost to regain it? (Shared with [transport](transport.md) §9.)
 - What cache size and retention best balance start-up latency against
   "how far behind live" for the specific case of live linear feeds?
 - How well does mesh rerouting behave under *correlated* multi-path impairment

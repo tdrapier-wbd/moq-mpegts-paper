@@ -164,3 +164,76 @@ a LEO/mobile-handover concern ([test-plan](test-plan.md) §12.10.1, §9.9). Two 
 boundaries: this is a single home path, one run per condition, forward-path-only
 impairment; and BBR here is **BBRv1** (quinn) — BBRv2/v3 (quiche/noq backends) and BBR's
 own known trade-offs (fairness, a very-high-loss cliff) remain to be characterised.
+
+## 8. Transport resilience is only half-wired, and active/active source failover is not yet reachable
+
+We audited the shipped `moq-dev` (`moq`/`moq-relay` **0.8.7 @ `5eaf99bc`**) for the
+redundancy an active/active broadcast chain needs, combining **source inspection** of
+the Rust crates with **experimental drills** on the media-aware TS lane
+([test-plan](test-plan.md) §10.5). Every conclusion below is tagged with its basis.
+The redundancy model MoQ is built around is sound — thin, single-homed,
+auto-reconnecting endpoints with redundancy living in the relay mesh and hitless
+selection at the receiver — but two load-bearing pieces are not delivered on the
+shipped default wire (`moq-lite-05`).
+
+**Confirmed working.**
+
+- **Redundant *outputs* (fan-out).** Two independent `moq export ts` subscribers
+  produced **byte-identical, continuous captures** of the same broadcast in every
+  drill (*experiment*, [test-plan](test-plan.md) §10.5.2). Fanning one feed to N
+  subscribers → N pacers → N IRDs needs no extra machinery.
+- **Publisher transport reconnect.** `moq import ts` uses a reconnect loop
+  (*source*: `rs/moq-native/src/reconnect.rs`, wired at `rs/moq-cli/src/main.rs`) that
+  redials the same relay with exponential backoff (initial 1 s, ×2, max 30 s; auth
+  errors terminal) and **re-announces the broadcast on every new session**
+  (*experiment*: relay logs repeated `session accepted role=Publisher` after a
+  restart, [test-plan](test-plan.md) §10.5.2).
+- **Two-relay clustering carries the media-aware feed and tolerates a duplicate
+  publisher.** A relay dialling a peer forms a bidirectional cluster session and both
+  publishers of the same broadcast *coexist* without collision (*experiment*,
+  [test-plan](test-plan.md) §10.5.2; *source*: `rs/moq-relay/src/cluster.rs`).
+
+**Confirmed limitations.**
+
+- **The `moq export ts` subscriber does not survive session loss.** The instant its
+  MoQ session drops, the exporter process **exits** (`Error: json: dropped`): the
+  transport reconnect loop is alive, but the export container pipeline treats the
+  dropped `catalog.json` track as fatal (*experiment*: `rec_sub1.log`,
+  [test-plan](test-plan.md) §10.5.3). **A relay restart kills every media-aware
+  subscriber**, so the end-to-end stream does *not* resume automatically. This is a
+  bug, not a design choice, and is filed upstream ([moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459)).
+- **Failure detection on a hard kill is gated by the QUIC idle timeout** (default
+  30 s, `--client-quic-idle-timeout`; must stay above the 5 s keep-alive), so recovery
+  time is dominated by detection, not by the ~1 s reconnect backoff (*experiment*,
+  [test-plan](test-plan.md) §10.5.3).
+- **Naive active/active does not work.** Two publishers on the *same* broadcast at one
+  relay collapse the stream — the second announce makes the path `unroutable` and tears
+  down *both* (*experiment*, §10.5.3). Across a *two-relay mesh* the pair coexists but
+  the relay does **not** fail its source over when the active publisher dies: the
+  standby's route is never propagated back (announce coalescing keeps one best route
+  per path; split-horizon `exclude_hop` suppresses the return route), so there is
+  nothing to reselect (*experiment* §10.5.3; *source*: `rs/moq-net/src/model/origin.rs`
+  — the multi-source splice `best_route`/`reselect`/`test_route_failover` exists but is
+  not fed a second live route on the wire).
+
+**Work-in-progress — tested, and necessary but not sufficient.** The cost/standby
+routing that would *rank* a hot standby as a same-path backup (#2424) lives in
+**`moq-lite-06-wip`** (*source*: `rs/moq-net/src/lite/version.rs`,
+`rs/moq-net/src/lite/announce.rs`, `rs/moq-net/src/model/broadcast.rs`), which is
+deliberately excluded from the default advertised set/ALPN list and negotiates only
+when both peers opt in (*source*: `rs/moq-net/src/version.rs` — `Versions::all()` and
+`ALPNS`). Re-running the two-relay mesh drill with lite-06 negotiated end-to-end
+(`--server-version` + `--client-version`, cluster log `connected version=moq-lite-06-wip`)
+**still froze on active-source death, exactly as on `moq-lite-05`** — relay A only ever
+held its own local route; relay B never advertised its standby publisher across the
+cluster link (*experiment*, §10.5.4). So cost routing is **necessary but not
+sufficient**: the blocker is standby-route propagation across the mesh, not route
+pricing, and active/active source failover is not a capability today on either version.
+
+**Recommended workarounds (buildable now).** Supervise `moq export ts`
+(`Restart=always`) until the exporter fix lands; and achieve service redundancy with a
+fully-doubled chain (dual publishers → dual relays → dual subscribers → dual pacers →
+downstream ST 2022-7 / IRD failover), letting the *receiver* do hitless selection
+(§10.4, [architecture](architecture.md) §14.1) rather than relying on relay-mesh source
+failover. (Supports [transport](transport.md) §8, [relay](relay.md) §5.1, and the
+resilience model in [architecture](architecture.md) §14.)
