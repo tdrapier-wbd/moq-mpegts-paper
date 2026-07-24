@@ -192,16 +192,20 @@ shipped default wire (`moq-lite-05`).
   publisher.** A relay dialling a peer forms a bidirectional cluster session and both
   publishers of the same broadcast *coexist* without collision (*experiment*,
   [test-plan](test-plan.md) §10.5.2; *source*: `rs/moq-relay/src/cluster.rs`).
+- **The `moq export ts` subscriber survives session loss and resumes (fixed by #2469).**
+  *This was a confirmed limitation* — the exporter exited with `Error: json: dropped`
+  the instant its session dropped, because an origin front closed synchronously on
+  source detach. We filed it as
+  [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459); it was fixed in
+  [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger* across an
+  ungraceful source loss; a consuming session lingers for `backoff.timeout + 1 s`).
+  **Verified** (main @ `7c976cd7`, `moq 0.9.1`): under a relay kill+restart both
+  exporters stayed alive, skipped the evicted group instead of dying, reconnected, and
+  resumed byte-identical output ~17 s after the kill (*experiment*: `sizes_r.csv`,
+  [test-plan](test-plan.md) §10.5.3). Recovery is automatic and bounded, not hitless.
 
 **Confirmed limitations.**
 
-- **The `moq export ts` subscriber does not survive session loss.** The instant its
-  MoQ session drops, the exporter process **exits** (`Error: json: dropped`): the
-  transport reconnect loop is alive, but the export container pipeline treats the
-  dropped `catalog.json` track as fatal (*experiment*: `rec_sub1.log`,
-  [test-plan](test-plan.md) §10.5.3). **A relay restart kills every media-aware
-  subscriber**, so the end-to-end stream does *not* resume automatically. This is a
-  bug, not a design choice, and is filed upstream ([moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459)).
 - **Failure detection on a hard kill is gated by the QUIC idle timeout** (default
   30 s, `--client-quic-idle-timeout`; must stay above the 5 s keep-alive), so recovery
   time is dominated by detection, not by the ~1 s reconnect backoff (*experiment*,
@@ -230,8 +234,31 @@ cluster link (*experiment*, §10.5.4). So cost routing is **necessary but not
 sufficient**: the blocker is standby-route propagation across the mesh, not route
 pricing, and active/active source failover is not a capability today on either version.
 
-**Recommended workarounds (buildable now).** Supervise `moq export ts`
-(`Restart=always`) until the exporter fix lands; and achieve service redundancy with a
+**Upstream fix under review — [#2473](https://github.com/moq-dev/moq/pull/2473) (issue
+#2461), reviewed + tested 2026-07-24.** #2473 targets exactly this blocker with per-peer
+announce selection (advertise the best route whose hop chain *excludes* the requesting
+peer), exclusion-aware serving, first-hop content identity, and a `moq --origin` knob for
+declaring a 1+1 pair interchangeable. Its **model/wire unit tests pass** on our build
+(*experiment*: `test_route_failover`, `test_dispatch_excludes_requester`,
+`test_dispatch_all_tainted_unroutable`, `test_publisher_mismatch_parks`). **But the
+end-to-end two-relay drill still does not fail over**: across single-dial, full-mesh, and
+carrying-peer topologies (both publishers sharing `--origin`), relay A never held a second
+route and `sub1` froze permanently on `pubA` death (*experiment*: `cluster_failover.sh` on
+`moq-dev @ baeb69b4` with `main`/#2469 merged in). The per-peer *selection* landed, but the
+standby *announcement* is still never presented to the node serving the active source —
+which is satisfied by its local source and never solicits the peer's standby. Two side
+findings: #2473 **predates #2469** and needs its linger for the splice to survive the
+source loss (merged locally; suite stays green), and a shared-`--origin` local standby
+joining a carrying relay tears down that relay's local subscriber with `Error::Unroutable`
+(`code=30`). Feedback + the drill are drafted for the maintainers
+(`docs/upstream/pr2473-feedback.md`, `docs/upstream/cluster_failover.sh`). So active/active
+source failover remains **not a capability today**, but a targeted fix is in flight and the
+remaining gap is now precisely characterised (standby-announce propagation to the
+active-serving node).
+
+**Recommended workarounds (buildable now).** The exporter session-loss crash is now
+fixed upstream (#2469, verified), so no external subscriber supervisor is needed for
+relay maintenance/transient loss; achieve service redundancy with a
 fully-doubled chain (dual publishers → dual relays → dual subscribers → dual pacers →
 downstream ST 2022-7 / IRD failover), letting the *receiver* do hitless selection
 (§10.4, [architecture](architecture.md) §14.1) rather than relying on relay-mesh source

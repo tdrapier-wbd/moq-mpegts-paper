@@ -506,12 +506,19 @@ A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md
 - **The publisher recovers.** After the relay comes back, the `moq import ts`
   reconnect loop redials and re-announces automatically; the import side is resilient
   to session loss.
-- **The `moq export ts` subscriber does not.** The instant its session drops the
-  exporter process **exits** with `Error: json: dropped` — the transport reconnect
-  loop is alive, but the export *container pipeline* treats the dropped
-  `catalog.json` track as fatal and terminates before it can resume (§8.3). So a
-  relay restart **kills every media-aware subscriber**, and the end-to-end stream
-  does not resume on its own.
+- **The `moq export ts` subscriber now recovers too (fixed by #2469).** *Originally*
+  the exporter process **exited** with `Error: json: dropped` the instant its session
+  dropped — the reconnect loop was alive, but the export container treated the dropped
+  `catalog.json` track as fatal. This was filed as
+  [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459) and **fixed in
+  [#2469](https://github.com/moq-dev/moq/pull/2469)** ("linger a broadcast across an
+  ungraceful source loss", merged 2026-07-24): a consuming session now keeps the
+  broadcast *lingered* for the reconnect window (`Backoff::linger()` =
+  `backoff.timeout + 1 s`, i.e. ~301 s by default), so an ungraceful drop no longer
+  aborts the subscription. **Verified locally** (main @ `7c976cd7`, `moq 0.9.1`): under
+  a relay kill+restart the exporter stayed alive, logged a benign "current group
+  evicted; skipping to next buffered group" instead of dying, reconnected, and
+  **resumed writing automatically** (§8.3).
 - **Detection is timeout-bound.** A hard-killed (SIGKILL / instance-stop) relay sends
   no CONNECTION_CLOSE, so clients notice only via the QUIC **idle timeout** (default
   30 s, `--client-quic-idle-timeout`, which must stay above the ~5 s keep-alive).
@@ -519,27 +526,38 @@ A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md
   backoff — a graceful restart that closes the session is noticed at once; an abrupt
   kill is not.
 
-### 8.3 Exporter lifecycle (the load-bearing gap)
+### 8.3 Exporter lifecycle (resolved: the fix landed and is verified)
 
-The `moq export ts` crash on session loss is the single most consequential
+The `moq export ts` crash on session loss *was* the single most consequential
 transport-resilience gap for primary distribution, because a broadcast subscriber
-must ride out relay maintenance and transient loss. The likely root cause is narrow:
-the export pipeline awaits the catalog once and treats its disappearance as fatal,
-so the dropped `catalog.json` track ends the process even while the reconnect handle
-is still trying to re-establish. It is a **bug in the CLI application layer, not in
-the transport**: the reconnect machinery it needs already exists one layer down. It
-is filed upstream ([moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459)) as the highest-value,
-most-clearly-upstreamable fix; once the exporter re-awaits the catalog across a
-reconnect, relay-restart recovery becomes automatic and bounded rather than a
-process death.
+must ride out relay maintenance and transient loss. The root cause was narrow and, as
+suspected, **not in the transport**: an origin front closed synchronously the instant
+its last source detached, aborting downstream subscriptions with `Dropped` even though
+the reconnect loop was about to re-attach a source seconds later.
+
+[#2469](https://github.com/moq-dev/moq/pull/2469) fixes this by giving a front a
+**linger window**: on an *ungraceful* source loss the path stays announced and a
+re-attaching source splices back into the same broadcast (a clean unannounce still
+tears down immediately). A consuming session derives its window from the reconnect
+loop's own promise (`Backoff::linger()` = `backoff.timeout + 1 s`), and if the loop
+ultimately gives up, its real error surfaces *before* the broadcasts abort — replacing
+the misleading `json: dropped` with the true cause. **Verified on this workstation
+(2026-07-24, main @ `7c976cd7`)** with the relay-restart drill ([test-plan](test-plan.md)
+§10.5.3): both exporters survived a 12 s outage and resumed automatically ~17 s after
+the kill (detection + backoff + re-announce), producing byte-identical redundant
+outputs before and after the gap. Recovery is **automatic and bounded, not hitless** —
+the content gap during the outage is a clean object-boundary skip, which the downstream
+pacer/IRD absorbs via ST 2022-7 / IRD selection, not something the exporter conceals.
 
 ### 8.4 Current limitations and workarounds
 
 - **No client-side relay failover.** Single connect URL; use a doubled chain or an
   external supervisor that swaps `--client-connect`.
-- **Exporter dies on session loss (§8.3).** Until the fix lands, supervise
-  `moq export ts` (`Restart=always` / wrapper); it rejoins at the live edge in a few
-  seconds (bounded by relaunch + first keyframe, not hitless).
+- **Exporter session-loss recovery: fixed (§8.3).** [#2469](https://github.com/moq-dev/moq/pull/2469)
+  makes `moq export ts` linger and resume across a session drop, verified locally, so an
+  external `Restart=always` supervisor is **no longer required** for relay maintenance/
+  transient loss. Recovery is automatic and bounded (detection + backoff + re-announce),
+  not hitless; the content gap is absorbed downstream by ST 2022-7 / IRD.
 - **Active/active *source* failover is not delivered today.** Two publishers on one
   relay collapse the stream (`unroutable`); a two-relay mesh tolerates the pair but
   does not fail the source over when the active publisher dies, because the standby

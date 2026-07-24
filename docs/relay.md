@@ -187,6 +187,24 @@ standby routing is real and negotiable but does **not** by itself deliver active
 source failover; the standby-route propagation gap described above is the blocker, and
 hop-based shortest-path routing is what runs by default.
 
+**Upstream fix in flight — [#2473](https://github.com/moq-dev/moq/pull/2473) (issue
+#2461), reviewed + tested 2026-07-24.** #2473 targets this propagation gap directly: a
+relay now advertises, per peer, the best route whose hop chain *excludes* that peer (so a
+peer inside the serving chain is offered the standby instead of nothing), serves by the
+same exclusion, keys content identity on the publisher's first hop, and adds a
+`moq --origin <id>` knob so a 1+1 pair declares itself interchangeable. Its model/wire
+unit tests pass on our build, **but the end-to-end two-relay drill still did not fail
+over**: across single-dial, full-mesh, and carrying-peer topologies (both publishers
+sharing `--origin`), relay A never held a second route for the broadcast and the
+relay-A subscriber froze permanently on active-source death ([test-plan](test-plan.md)
+§10.5.4). The per-peer *selection* landed; the standby *announcement* is still never
+presented to the node serving the active source (which is satisfied by its local source
+and never solicits the peer's standby). We also found #2473 needs #2469's linger (the
+splice must survive the source loss) and a shared-`--origin` standby joining a carrying
+relay tears down that relay's local subscriber with `Unroutable`; both are written up for
+the maintainers (`docs/upstream/pr2473-feedback.md`). So relay-mesh source failover is a
+tracked, near-term item — not yet a shipped capability.
+
 ## 5. Resilience model
 
 Relay resilience is one layer of the end-to-end redundancy described in
@@ -225,25 +243,25 @@ versus what it is designed to deliver, and the two are not yet the same.
 - **Confirmed working.** Fan-out to multiple subscribers is byte-identical and
   continuous (redundant *outputs* are free). A `moq import ts` **publisher survives a
   relay restart** — its reconnect loop redials and re-announces automatically. A
-  two-relay cluster forms and carries the feed.
+  two-relay cluster forms and carries the feed. **The `moq export ts` subscriber now
+  survives a relay restart too** — fixed by
+  [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger*, verified
+  2026-07-24): it rides out the outage and resumes automatically, bounded not hitless
+  ([transport](transport.md) §8.3).
 - **Confirmed limitation — no hitless source failover on `moq-lite-05`.** As §4.1
   details, neither a single-relay duplicate publisher nor a two-relay mesh gives
   automatic active/active source failover on the shipped wire; the relay keeps the
   active flow healthy but does not switch to a standby when the active source dies.
-- **Confirmed limitation — the subscriber does not survive session loss.** A relay
-  restart **kills every `moq export ts` subscriber** (`Error: json: dropped`): the
-  transport reconnect loop is alive but the exporter's container pipeline treats the
-  dropped catalog as fatal ([transport](transport.md) §8.3). This is a client-side
-  bug filed upstream, but it means "keep both disjoint flows healthy" is currently
-  undercut at the *edge subscriber*, not at the relay.
+  (An upstream fix, [#2473](https://github.com/moq-dev/moq/pull/2473), is under review —
+  see §4.1.)
 
 The consequence for this document's resilience model is a sharpening, not a reversal:
 the relay's job — **keep the flows healthy and let hitless selection happen at the
 edge** — is the right split, and the drills confirm the relay carries redundant flows
-and reconnects publishers. But **the hitless switch must live downstream (ST 2022-7 /
-IRD, [architecture](architecture.md) §14.1), because relay-mesh source failover is
-not available today**, and the edge subscriber needs external supervision until the
-exporter reconnect bug is fixed. The broadcast-grade posture is therefore the
+and reconnects publishers (and, since #2469, the subscriber too). But **the hitless
+switch must live downstream (ST 2022-7 / IRD, [architecture](architecture.md) §14.1),
+because relay-mesh source failover is not available by default today** (pending #2473).
+The broadcast-grade posture is therefore the
 fully-doubled chain (dual publishers, dual relays, dual pacers, receiver-side hitless
 selection), with the relay providing reach, caching, fan-out, and per-leg transport
 resilience rather than the switch itself.

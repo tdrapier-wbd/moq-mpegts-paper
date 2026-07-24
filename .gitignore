@@ -1,5 +1,7 @@
 # Local, machine-specific testing config — never commit
 INSTRUCTIONS.local.md
+docs/upstream/cluster_failover.sh
+docs/upstream/pr2473-feedback.md
 
 # Local environment secrets/overrides
 .env.local
