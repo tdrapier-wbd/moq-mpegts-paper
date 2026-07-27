@@ -59,7 +59,7 @@ Authentication establishes *who*; authorization establishes *what is permitted*.
 
 - **Publish/subscribe permissions.** MoQ exposes an authorization decision at the
   relay at the point of subscription; the platform's path-scoped tokens are checked
-  there ([evidence](evidence.md) §6), so an unauthorised subscription is refused
+  there ([evidence](evidence.md) §5), so an unauthorised subscription is refused
   rather than accepted-then-torn-down.
 - **Path-scoped authorization.** A token grants the narrowest namespace scope that
   satisfies the contract (least privilege; [entitlement](entitlement.md) §3).

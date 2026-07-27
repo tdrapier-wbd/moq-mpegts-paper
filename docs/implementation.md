@@ -117,7 +117,7 @@ The validation pyramid, from cheapest/fastest to most decisive:
    (at the TS-packet payload level, excluding null packets stripped for transport)
    after packaging → objects → reassembly, and service signalling (SDT, PMT PIDs,
    SCTE-35, teletext, continuity counters) must be preserved
-   ([evidence](evidence.md) §1, §5). This establishes the packaging/reassembly
+   ([evidence](evidence.md) §1, §4). This establishes the packaging/reassembly
    contract in the no-loss case; behaviour under object loss (where byte-identity
    necessarily breaks) is a separate concern tested via the redundancy and
    deterministic-grooming path ([architecture](architecture.md) §14.1). These are

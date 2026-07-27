@@ -202,7 +202,7 @@ and *intended default* matters here and is easy to blur. **Media-aware re-muxing
 is the intended default and preferred path**; opaque carriage is the **fallback**.
 But that ordering is a statement of *design direction*, not of what is
 demonstrated: for the specific hardware-IRD use case, the lane actually exercised
-end-to-end is the **opaque** one ([evidence](evidence.md) §1, §5;
+end-to-end is the **opaque** one ([evidence](evidence.md) §1, §4;
 [implementation](implementation.md) §2), while media-aware re-muxing of real
 contribution feeds is still maturing upstream and is not independently validated
 here. Media-aware is preferred because it fits MoQ's track/object model and is
@@ -1046,14 +1046,14 @@ of the fallback, not of the default design.
 
 - **Publisher failure** — the redundant publisher's flow already exists in the
 fabric; the egress selects it. With active/active ingest there is no failover
-detection latency on the critical path. *Measured caveat (2026-07-23):* today that
-selection must happen **downstream** (ST 2022-7 / IRD, §14.1), because the relay
-does not itself fail a broadcast over from a dead active source to a hot standby on
-the shipped wire — the standby's route is not propagated across the mesh to the relay
-serving the active source, and `moq-lite-06` cost routing was tested and does not by
-itself close this ([relay](relay.md) §4.1, [evidence](evidence.md) §8). "No
-failover-detection latency" is the property the *doubled-and-downstream-merged* chain
-delivers, not a property of relay-mesh switching yet.
+detection latency on the critical path. *Measured caveat:* today that selection must
+happen **downstream** (ST 2022-7 / IRD, §14.1), because the relay does not itself fail
+a broadcast over from a dead active source to a hot standby on the shipped wire — the
+standby's route is not propagated across the mesh to the relay serving the active
+source, and `moq-lite-06` cost routing does not by itself close this
+([relay](relay.md) §4.1, [evidence](evidence.md) §7). "No failover-detection latency"
+is the property the *doubled-and-downstream-merged* chain delivers, not a property of
+relay-mesh switching yet.
 - **Relay or link failure** — the disjoint second path continues to deliver;
 the fabric re-routes affected subscriptions around the failure using the mesh.
 - **Gateway failure** — the redundant gateway's egress continues; the IRD's ST
@@ -1082,7 +1082,7 @@ critical always-on routes), but it does not claim to eliminate it.
 
 The redundancy layers above only compose cleanly if each failure domain is owned by
 the layer best able to handle it. The redundancy investigation
-([test-plan](test-plan.md) §10.5, [evidence](evidence.md) §8) makes that division
+([test-plan](test-plan.md) §10.5, [evidence](evidence.md) §7) makes that division
 concrete, and it is a deliberate architectural position rather than a workaround for
 current gaps:
 

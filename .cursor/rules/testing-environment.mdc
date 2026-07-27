@@ -23,3 +23,16 @@ machine-specific details that are deliberately kept out of Git:
 do not copy their raw IPs/paths/fingerprints into tracked files. When environment facts
 change (rebuilds, new commit, new relay address, new clips), update
 `INSTRUCTIONS.local.md` so it stays the single source of truth for local execution.
+
+Repository documentation is a technical paper, not a development log.
+
+Documentation should describe the current understanding of the system rather than the sequence by which that understanding was reached.
+
+When new testing completes:
+
+* Update conclusions, architecture and limitations where necessary.
+* Replace obsolete statements rather than appending corrections.
+* Merge duplicate findings into a single authoritative explanation.
+* Remove superseded observations.
+* Preserve only historical context that materially improves technical understanding.
+* Move experiment logs, commands, commit hashes, timestamps, hypotheses and iterative reasoning into lab-notes.local.md.

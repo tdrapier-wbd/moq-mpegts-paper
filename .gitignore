@@ -1,5 +1,6 @@
 # Local, machine-specific testing config — never commit
 INSTRUCTIONS.local.md
+lab-notes.local.md
 docs/upstream/cluster_failover.sh
 docs/upstream/pr2473-feedback.md
 

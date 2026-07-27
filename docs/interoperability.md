@@ -77,12 +77,12 @@ what the installed base depends on:
 
 The default media-aware lane ([transport](transport.md) §4.1) must preserve or
 faithfully regenerate this signalling; doing so reliably across real contribution
-feeds is exactly the upstream work still in progress ([evidence](evidence.md) §5).
+feeds is exactly the upstream work still in progress ([evidence](evidence.md) §4).
 The **opaque fallback** preserves all of it *verbatim by construction* — the
 MPEG-TS is carried byte-for-byte — which is why it is the safe choice for the
 feeds or endpoints where exact preservation is required and the media-aware path
 cannot yet guarantee it. The verbatim approach is validated by round-trip and
-property tests ([evidence](evidence.md) §1 and §5); its cost — forgoing per-track
+property tests ([evidence](evidence.md) §1 and §4); its cost — forgoing per-track
 prioritisation — is discussed in [transport](transport.md) §4.1 and
 [relay](relay.md) §3.3.
 
@@ -136,7 +136,7 @@ actually arrives, not to an idealised stream:
   broadcast capture with roughly one IDR per 15 s) have historically
   defeated naive keyframe detection that keys only on IDR NAL type, causing
   media-aware import to fail to produce a video rendition and to emit misleading
-  downstream errors ([evidence](evidence.md) §5). This is common for contribution,
+  downstream errors ([evidence](evidence.md) §4). This is common for contribution,
   not an edge case; upstream has begun addressing it in main/dev, though the fix
   is not yet independently validated here.
 - The **opaque lane sidesteps this entire failure class** by carrying the TS
@@ -168,7 +168,7 @@ details (§5), not ingest concerns.
 | ST 2110 essence | No | — | Longer term; heavier integration |
 | Multicast | — | Yes | Prototype; to be validated on hardware |
 | TR 101 290 P1/P2 to hardware IRD | — | Yes | **To be validated on real hardware** |
-| SCTE-35 / teletext / SDT preservation | Yes | Yes | Test-validated in file ([evidence](evidence.md) §5) |
+| SCTE-35 / teletext / SDT preservation | Yes | Yes | Test-validated in file ([evidence](evidence.md) §4) |
 
 ## 9. Testing and acceptance
 
