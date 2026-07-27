@@ -166,44 +166,85 @@ reselect. Route reselection therefore works *within an origin that already holds
 routes*, but the `moq-lite-05` topology does not put two routes for one broadcast in
 front of the relay that needs them.
 
-**Cost/standby routing (`moq-lite-06`) is necessary but not sufficient — tested.** The
-intended ranking mechanism is explicit cost: `broadcast::Route` carries a cost a
-standby seeds high (a cold transcoder, a warm backup) and that drops to 0 once it
-starts carrying, so a standby is selected only when nothing cheaper exists
+**Cost/standby routing (`moq-lite-06`) is necessary but not sufficient.** The intended
+ranking mechanism is explicit cost: `broadcast::Route` carries a cost a standby seeds
+high (a cold transcoder, a warm backup) and that drops to 0 once it starts carrying, so
+a standby is selected only when nothing cheaper exists
 (`rs/moq-net/src/model/broadcast.rs`, `rs/moq-net/src/lite/announce.rs`; landed as
 #2424). It lives in `moq-lite-06-wip`, which is **deliberately excluded from the default
 advertised set and ALPN list** (`rs/moq-net/src/version.rs` — `Versions::all()` and
 `ALPNS` both omit it, with a comment noting it is "otherwise a fully-defined version …
 an opt-in set that includes it negotiates normally") and negotiates **only when both
-peers opt in** via `--server-version` / `--client-version`. Re-running the two-relay
-mesh drill with lite-06 negotiated end-to-end (cluster log:
-`connected version=moq-lite-06-wip`) behaved **identically to `moq-lite-05`**: the pair
-coexisted and then froze permanently on `pubA` death, with relay A's session log
-showing it only ever held its **own** local route — relay B never advertised its
-standby publisher across the cluster link ([test-plan](test-plan.md) §10.5.4). Cost
-routing had nothing to rank, because the missing piece is **standby-route propagation
-across the mesh**, not route pricing. So on `moq-dev @ 5eaf99bc`, cost-weighted
-standby routing is real and negotiable but does **not** by itself deliver active/active
-source failover; the standby-route propagation gap described above is the blocker, and
-hop-based shortest-path routing is what runs by default.
+peers opt in** via `--server-version` / `--client-version`. With lite-06 negotiated
+end-to-end (cluster log: `connected version=moq-lite-06-wip`) the two-relay mesh drill
+behaves **identically to `moq-lite-05`**: the pair coexists and then freezes permanently
+on active-source death, with the active-serving relay only ever holding its **own** local
+route — the peer never advertises its standby publisher across the cluster link
+([test-plan](test-plan.md) §10.5.4). Cost routing has nothing to rank, because the
+missing piece is **standby-route propagation across the mesh**, not route pricing.
+Cost-weighted standby routing is therefore real and negotiable but does **not** by itself
+deliver active/active source failover; the propagation gap is the blocker, and hop-based
+shortest-path routing is what runs by default.
 
-**Upstream fix in flight — [#2473](https://github.com/moq-dev/moq/pull/2473) (issue
-#2461), reviewed + tested 2026-07-24.** #2473 targets this propagation gap directly: a
-relay now advertises, per peer, the best route whose hop chain *excludes* that peer (so a
-peer inside the serving chain is offered the standby instead of nothing), serves by the
-same exclusion, keys content identity on the publisher's first hop, and adds a
-`moq --origin <id>` knob so a 1+1 pair declares itself interchangeable. Its model/wire
-unit tests pass on our build, **but the end-to-end two-relay drill still did not fail
-over**: across single-dial, full-mesh, and carrying-peer topologies (both publishers
-sharing `--origin`), relay A never held a second route for the broadcast and the
-relay-A subscriber froze permanently on active-source death ([test-plan](test-plan.md)
-§10.5.4). The per-peer *selection* landed; the standby *announcement* is still never
-presented to the node serving the active source (which is satisfied by its local source
-and never solicits the peer's standby). We also found #2473 needs #2469's linger (the
-splice must survive the source loss) and a shared-`--origin` standby joining a carrying
-relay tears down that relay's local subscriber with `Unroutable`; both are written up for
-the maintainers (`docs/upstream/pr2473-feedback.md`). So relay-mesh source failover is a
-tracked, near-term item — not yet a shipped capability.
+**Upstream fix under review — [#2473](https://github.com/moq-dev/moq/pull/2473) (issue
+#2461): the mesh half now works end to end.** #2473 targets this propagation gap directly:
+a relay advertises, per peer, the best route whose hop chain *excludes* that peer (so a peer
+inside the serving chain is offered the standby instead of nothing), serves by the same
+exclusion, keys content identity on the publisher's first hop (declared in **SETUP** rather
+than inferred per-`ANNOUNCE`), and adds a `moq --origin <id>` knob so a 1+1 pair declares
+itself interchangeable. **On its current head the two-relay drill passes end to end**
+([test-plan](test-plan.md) §10.5.4). The propagation gap is closed and observable: relay B,
+which advertises *nothing* while it is merely carrying via relay A
+(`no advertisable route for this peer exclude_hop=…`), emits a fresh
+`announce broadcast=red.hang hops=2` to relay A the instant the local standby publisher
+joins — so relay A holds a second route *before* it needs one. When the active publisher is
+killed, relay A reselects onto that standby and its subscriber resumes **30–33 s after the
+kill**, which is one QUIC idle timeout: the mechanism is prompt, the *detection* is what
+costs (§5.1). A relay cannot currently do better, since it has no model of a broadcast's
+expected cadence and so cannot treat silence as failure; upstream is weighing a lower
+default idle timeout (~10 s) as a separate change, and `--server-quic-idle-timeout` moves it
+today.
+
+Three things temper this. The PR is **still open**, so relay-mesh source failover remains a
+near-term item rather than a shipped capability. (Recovery itself is complete and repeatable —
+four of four runs resumed at full rate — once the drill kills the publisher pipeline in one
+pass; our earlier inconsistent sample was an artefact of a kill that let the importer shut down
+cleanly instead.)
+
+The second is that the standby *join* is not transparent. A subscriber on a relay that is only
+*carrying* the broadcast stalls **8–9 s** the instant a redundant publisher attaches locally to
+that relay, then recovers at full rate — on every run. That is a large improvement on the
+pre-fix teardown, but in a 1+1 deployment a standby attaching is a routine event, so redundancy
+presently costs the very viewers it exists to protect a visible outage.
+
+The third is sharper still: **a graceful source exit is not failed over at all.** When the
+active publisher terminates cleanly rather than dying, the relay unannounces immediately — there
+is no timeout to wait out and the standby is already announced — yet the subscriber does not
+switch to it. `moq export ts` instead terminates with `TS track layout changed after PAT/PMT was
+emitted`, the muxer refusing a catalog that lost a track. The failover path therefore covers the
+*harder* failure (host loss) but not the easier and far more common one: SIGTERM to an encoder,
+a container rescheduled, a rolling restart. Both findings were reported upstream; both are
+plausibly the same lazy-track-creation dynamic described below, where a standby creates each
+track only as its demuxer reaches it, so sparse tracks (SCTE-35, teletext) need not exist at the
+moment of the splice.
+
+Our own two findings on this PR are also worth recording accurately, since one of them was
+ours to fix. The first — that the standby route never reaches the relay serving the active
+source — was **an artefact of our drill, not a defect**: announce-interest is unconditional
+across the cluster, and our timeline killed the active publisher 21 s before it graded, i.e.
+inside the 30 s idle timeout, so no build could have passed it. (The baseline conclusion
+above still holds, corroborated by an extended-window control run on `main`, which stays
+frozen for a full 68 s window.) The second — a shared-origin standby joining a carrying
+relay tearing down that relay's subscriber with `Unroutable` — was **real but pre-existing**,
+reproducing on `main` as `json: dropped`, and is fixed here: a standby wins dispatch the
+moment it attaches, which is before a real publisher has created every track, and a
+per-track refusal was being charged as a strike against the whole logical track (leaving the
+name dead for the life of the front). Refusals are now scoped to the track that was refused,
+with fallback to the incumbent. Re-verified here: the far-relay subscriber survives the
+standby's join with **zero `unroutable`**. The drill is adopted upstream as a regression
+test, having found a bug the unit tests missed — a model-level standby accepts a track
+request immediately, whereas a real publisher does not
+(`docs/upstream/pr2473-feedback.md`, `docs/upstream/cluster_failover.sh`).
 
 ## 5. Resilience model
 
@@ -232,12 +273,12 @@ Relay resilience is one layer of the end-to-end redundancy described in
   the default loss-based CUBIC collapsed under uniform loss/reordering/WAN while BBR
   held full rate on par with SRT — a per-connection change with no wire/interop impact
   ([transport](transport.md) §3.1, [test-plan](test-plan.md) §12.10,
-  [evidence](evidence.md) §7).
+  [evidence](evidence.md) §6).
 
-### 5.1 Measured failover and reconnect behaviour (2026-07-23)
+### 5.1 Measured failover and reconnect behaviour
 
 Drills on the media-aware lane ([test-plan](test-plan.md) §10.5,
-[evidence](evidence.md) §8) pin down what the resilience model delivers *today*
+[evidence](evidence.md) §7) pin down what the resilience model delivers *today*
 versus what it is designed to deliver, and the two are not yet the same.
 
 - **Confirmed working.** Fan-out to multiple subscribers is byte-identical and
@@ -245,23 +286,27 @@ versus what it is designed to deliver, and the two are not yet the same.
   relay restart** — its reconnect loop redials and re-announces automatically. A
   two-relay cluster forms and carries the feed. **The `moq export ts` subscriber now
   survives a relay restart too** — fixed by
-  [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger*, verified
-  2026-07-24): it rides out the outage and resumes automatically, bounded not hitless
+  [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger*): it rides out
+  the outage and resumes automatically, bounded not hitless
   ([transport](transport.md) §8.3).
-- **Confirmed limitation — no hitless source failover on `moq-lite-05`.** As §4.1
-  details, neither a single-relay duplicate publisher nor a two-relay mesh gives
-  automatic active/active source failover on the shipped wire; the relay keeps the
-  active flow healthy but does not switch to a standby when the active source dies.
-  (An upstream fix, [#2473](https://github.com/moq-dev/moq/pull/2473), is under review —
-  see §4.1.)
+- **Confirmed limitation — no hitless source failover.** As §4.1 details, neither a
+  single-relay duplicate publisher nor a two-relay mesh gives active/active source
+  failover on the shipped wire; the relay keeps the active flow healthy but does not
+  switch to a standby when the active source dies. [#2473](https://github.com/moq-dev/moq/pull/2473)
+  closes that gap and the mesh drill now passes on its head — but it is **still open**, and
+  even once merged the switch is **bounded by the QUIC idle timeout (30–33 s measured),
+  not hitless**, so it protects against a dead source rather than replacing receiver-side
+  hitless selection. It also does not yet cover a *graceful* source exit, and the standby's
+  arrival costs carrying-relay viewers 8–9 s (see §4.1).
 
 The consequence for this document's resilience model is a sharpening, not a reversal:
 the relay's job — **keep the flows healthy and let hitless selection happen at the
 edge** — is the right split, and the drills confirm the relay carries redundant flows
 and reconnects publishers (and, since #2469, the subscriber too). But **the hitless
-switch must live downstream (ST 2022-7 / IRD, [architecture](architecture.md) §14.1),
-because relay-mesh source failover is not available by default today** (pending #2473).
-The broadcast-grade posture is therefore the
+switch must live downstream (ST 2022-7 / IRD, [architecture](architecture.md) §14.1)**:
+relay-mesh source failover is not available by default today (pending #2473), and once it
+lands it is bounded by failure detection rather than hitless, so it complements
+receiver-side selection instead of replacing it. The broadcast-grade posture is therefore the
 fully-doubled chain (dual publishers, dual relays, dual pacers, receiver-side hitless
 selection), with the relay providing reach, caching, fan-out, and per-leg transport
 resilience rather than the switch itself.

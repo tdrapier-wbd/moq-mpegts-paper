@@ -1,266 +1,240 @@
-# Evidence: What the Prototype Proved (the Credibility Spine)
+# Evidence: What Has Been Built and Measured
 
-Status: working draft
-Scope: the concrete engineering learnings that ground the claims made in the
-[README](../README.md), [vision](vision.md), and [architecture](architecture.md).
-These are not hypotheticals; they are things that were
-built, measured, or filed upstream in two working repositories
-(`moq-publisher-subscriber`, currently private, an engineered opaque MPEG-TS
-lane; and issues/PRs/discussions against `moq-dev`, the upstream MoQ
-implementation).
+Status: working draft.
 
-This document exists so that the rest of the repository can make claims and cite
-evidence for them here, rather than restating the evidence inline. It is the
-*narrative* credibility spine; the *executable* companion — exact methods,
-commands, and measured result tables (baseline TS, both transport lanes, remote
-end-to-end, and network impairment) — lives in [test-plan](test-plan.md), which
-this document cites for the hard numbers. The two are kept separate deliberately:
-this is the "what we learned and why it matters" for readers of the paper; the
-test plan is the "how to reproduce and falsify it" for a sceptical engineer.
+The empirical basis for the claims in the [README](../README.md), [transport](transport.md)
+and [architecture](architecture.md), for the one question this paper asks: *is MoQ a credible
+transport for broadcast primary distribution?* Methods, commands and full result tables are in
+[test-plan](test-plan.md). Everything below is measured at **P1 (file/analyser)**; nothing here
+is a hardware IRD pass, and that gate (§3) is still open.
 
 ---
 
-## 1. The transport is real but unstable — and we architected around it
+## What exists today, and where
 
-We transport live MPEG-TS over MoQ end-to-end, over the public internet, via a
-cloud (AWS EC2) relay, out to broadcast egress — now demonstrated with a live SRT
-contribution feed traversing the whole chain with 0 continuity errors
-([test-plan](test-plan.md) §8). On the IETF path we conform to
-the MSFTS `m2ts` packaging draft (`draft-gregoire-moq-msfts`) and publish an MSF
-catalog. **But** the MoQ wire protocol is moving under us:
+Results come from three code bases, and it matters which produced which.
 
-- We target **draft-14** (`moq-transport` 0.14.2), which was the production Rust
-  transport available when this work was built; it is no longer the only one, and
-  the interop target has since moved to later drafts ([transport](transport.md)
-  §5.1). Drafts 15–18 are, in the working group's words, "almost a
-  completely new protocol": ALPN changes (`moq-00` → `moqt-NN`), control moves to
-  per-request bidirectional streams, seven control messages removed, TLV→TV
-  parameters, new data-plane encoding. A draft-14 and a draft-18 endpoint cannot
-  even agree on an ALPN. Draft-19 now exists.
-- **Strategic mitigation already implemented:** our MPEG-TS/MSFTS application
-  layer (framing, catalog, reassembly) is *independent of the MoQT draft* and is
-  covered byte-for-byte by round-trip and property tests, so a transport upgrade
-  is a thin-glue swap, not a media-layer rewrite. This is the concrete basis for
-  the "transport is swappable" hedge in [transport](transport.md) §5.2.
+- **Upstream `moq-dev` — the media-aware lane** (`moq import ts` → `moq-relay` →
+  `moq export ts`; moq-lite-04 on the wire), which demultiplexes the transport stream into MoQ
+  tracks and re-muxes at the subscriber. This is the **preferred path**
+  ([architecture](architecture.md) §4.2), the lane deployed over the public internet, and the
+  lane most results below were measured on.
+- **[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) (public, ours)** — a
+  transport-agnostic CBR/PCR groomer downstream of any MoQ subscriber; not part of the
+  transport, deliberately (§3).
+- **`moq-publisher-subscriber` (private prototype, ours) — the opaque `m2ts` prototype** (draft-14, MSFTS
+  `m2ts` packaging per `draft-gregoire-moq-msfts`, plus an IRD-facing egress). Its role here is
+  **reference and benchmark**: it shows what byte-for-byte transparency looks like, so the
+  media-aware lane's residual gaps are measured rather than asserted.
 
-**Implication:** the transport is not a place to build a moat; it is a dependency
-to track and abstract. (Supports [vision](vision.md) §6, [transport](transport.md),
-and the transport-stability risk in the [README](../README.md).)
+| Property | Media-aware lane (`moq-dev` + `mpegts-pacer`) | Opaque prototype (reference) |
+|---|---|---|
+| Wire version exercised | moq-lite-04 | `moq-transport` draft-14 |
+| Elementary streams, original PIDs, SCTE-35 | preserved | preserved verbatim |
+| Service layer (SDT/NIT, PMT PID, TSID/ONID) | preserved | preserved verbatim |
+| TDT/TOT, EIT | not currently preserved | preserved verbatim |
+| CBR and PCR cadence | restored downstream by `mpegts-pacer` | CBR preserved, restored downstream by `mpegts-pacer` |
+| IRD egress (RTP/UDP, multicast, FEC, ST 2022-7, de-jitter, start gate, TR 101 290 monitoring) | RTP/UDP multicast by `mpegts-pacer` | implemented (prototype) |
+| Public-internet (EC2) operation | yes | yes |
+| Congestion-control selection | BBR | quinn default (CUBIC) |
 
-## 2. The broadcast-grade edge is work that sensibly sits outside transport core
+---
 
-Our subscriber implements an IRD-facing egress layer: RTP/UDP (PT 33) and raw
-UDP, multicast, SMPTE 2022-1 FEC, ST 2022-7 hitless dual-path, adaptive de-jitter
-pacing, a decoder-safe start gate, and read-only TR 101 290 monitoring. Upstream
-has reasonably scoped an opaque TS lane out of core (#1861: "breaks interop with
-players that don't support TS") and a generic per-transport egress sink out of
-core (#1839: asking for a concrete customer need first). Those are sensible
-boundaries for a general-purpose transport, not a shortcoming: they simply mark
-where broadcast-specific adaptation belongs — at the platform layer rather than in
-the protocol. (Supports [architecture](architecture.md) §4.2 and §7.)
+## 1. The transport works end-to-end, but the wire is moving
 
-## 3. "Broadcast-grade" ≠ "plays in ffplay" — the PCR/IRD problem is inherent
+Live MPEG-TS traverses the whole chain over the public internet — SRT contribution into an AWS
+EC2 host, `moq import ts` → `moq-relay` → a local `moq export ts` — with **0 continuity
+errors** ([test-plan](test-plan.md) §8), and the full ~9.93 Mbps contribution mux comes home
+over QUIC at **9.48 Mbps sustained for four minutes, 0 CC** ([test-plan](test-plan.md) §12.9).
+The deployed cloud path is the media-aware lane.
 
-MoQ delivers objects/groups in bursts, so a reconstructed MPEG-TS has PCR
-*intervals* that no longer track a constant mux rate — the bytes (including the
-PCR values themselves) are intact, but the delivery *cadence* is not. Soft players
-tolerate it; **hardware IRDs lock a PLL to PCR and raise TR 101 290 P1/P2
-alarms.** Measured on the media-aware lane, 13–26% of PCR intervals exceeded the
-40 ms limit depending on source, both on loopback and over the public-internet
-EC2 path ([test-plan](test-plan.md) §6, §8); the opaque lane, fed raw, holds
-0% > 40 ms on file ([test-plan](test-plan.md) §7). To be precise about attribution: this cadence problem is the part that
-is inherent to MoQ's object model (the same way SRT/Zixi/RIST are bursty on the
-wire and groom the TS before hand-off); it is *not* the same as the separate
-PCR/PTS *regeneration* problem the media-aware re-mux path has, which the opaque
-lane sidesteps by carrying the values verbatim. We built the piece that fixes it:
-the public [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) groomer —
-byte-locked CBR, monotonic PCR re-stamp, and PCR re-insertion — which the upstream
-transport does not provide. Fed the bursty media-aware egress it takes 13–26% of
-PCR intervals > 40 ms to **0%**, with **0 `pcrverify` violations at 500 µs**
-([test-plan](test-plan.md) §6.7): the pacer delivers CBR/PCR conformance at P1. The
-measurement above is file-based and therefore *necessary but not
-sufficient*: it confirms the re-stamp arithmetic, but not the real-time pacing
-jitter of a software CBR pacer or PCR_accuracy (±500 ns) at the physical output,
-which only a hardware analyser/IRD on the live egress can confirm — so the
-hardware pass remains the open, load-bearing test. (Supports
+**But the wire protocol is moving.** The opaque prototype pins draft-14; the upstream binary
+speaks moq-lite-04; the interop target has moved on ([transport](transport.md) §5.1). Drafts
+15–18 are, in the working group's words, "almost a completely new protocol" — new ALPN, control
+model, parameter and data-plane encodings — so draft-14 and draft-18 endpoints cannot even
+agree on an ALPN, and draft-19 now exists. The opaque prototype absorbs that by keeping its
+MPEG-TS/MSFTS layer (framing, catalog, reassembly) *independent of the MoQT draft* and covered
+byte-for-byte by round-trip and property tests, making an upgrade thin glue rather than a
+media-layer rewrite ([transport](transport.md) §5.2). The media-aware lane is better placed
+still: its TS↔track mapping is *upstream's* code, so draft churn is absorbed in core. That is
+an argument for the preferred lane on stability grounds alone.
+
+## 2. Broadcast-grade egress belongs above the transport
+
+The IRD-facing egress layer built in the opaque prototype (RTP/UDP PT 33 and raw UDP,
+multicast, SMPTE 2022-1 FEC, ST 2022-7 hitless dual-path, de-jitter pacing, a decoder-safe
+start gate, TR 101 290 monitoring) has no upstream counterpart. Upstream has reasonably scoped
+both an opaque TS lane (#1861: "breaks interop with players that don't support TS") and a
+generic egress sink (#1839) out of core for the time being — a sensible boundary that marks where
+broadcast-specific adaptation belongs. On the preferred lane that layer is re-hosted downstream
+of `moq export ts`, alongside the pacer, rather than being intrinsic to a carriage lane.
+(Supports [architecture](architecture.md) §4.2 and §7.)
+
+## 3. "Broadcast-grade" ≠ "plays in ffplay" — the PCR problem is inherent
+
+MoQ delivers objects in bursts, so a reconstructed transport stream has PCR *intervals* that no
+longer track a constant mux rate: the bytes, PCR values included, are intact; the delivery
+*cadence* is not. Soft players tolerate this; **hardware IRDs lock a PLL to PCR and raise
+TR 101 290 P1/P2 alarms.** On the media-aware lane 13–26 % of PCR intervals exceeded the 40 ms
+limit depending on source, on loopback and over the EC2 path alike ([test-plan](test-plan.md)
+§6, §8); the opaque prototype fed the raw stream holds **0 % > 40 ms**
+([test-plan](test-plan.md) §7), which isolates cadence loss to the re-mux rather than to QUIC.
+Cadence loss is inherent to the object model, and distinct from the PCR/PTS *regeneration* that
+only the media-aware re-mux performs.
+
+The fix is built and public:
+[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, monotonic PCR
+re-stamp, PCR re-insertion, null stuffing, no demux. Fed the bursty media-aware egress it takes
+that 13–26 % to **0 %**, with **0 `pcrverify` violations at 500 µs** and 0 CC errors
+([test-plan](test-plan.md) §6.7, §11.4), so the preferred lane plus a downstream pacer
+is CBR/PCR-conformant at P1. That is *necessary but not sufficient*: file analysis confirms the
+re-stamp arithmetic, not software-pacer jitter or PCR_accuracy (±500 ns) at the physical
+output. **The hardware pass remains the open, load-bearing test.** (Supports
 [architecture](architecture.md) §7.2.)
 
-## 4. Upstream participation
+## 4. Real feeds broke naive media-aware import — and the gaps closed upstream
 
-We file issues upstream (`moq-dev/moq`), (`mondain/msfts`) and are discussing this with a variety of vendors. 
-We track the draft migration. The relationship is collaborative: the aim is to feed broadcast
-requirements upstream and stay aligned with core, not to fork around it. This is
-not aspirational; it is already happening.
+A CNN International capture (open-GOP H.264 signalling recovery-point SEI, roughly one IDR every
+15 s) produced no video rendition through media-aware import, because keyframe detection keyed
+only on the IDR NAL type — and open-GOP is common on contribution feeds, not a niche quirk.
 
-## 5. Real broadcast feeds broke naive media-aware import — and opaque carriage sidesteps it
+Upstream has since closed most of that gap. #2072 (catalog-reservation gating) and #2066
+(recovery-point-SEI detection) make the same feed round-trip deterministically with every
+elementary stream, PID, `stream_type` and PMT descriptor intact, all three SCTE-35 splice PIDs
+included; PR [#2440](https://github.com/moq-dev/moq/pull/2440) threads the DVB service layer
+through the `mpegts` catalog (SDT service name/provider/type, NIT, PMT PID, TSID, ONID). **The
+residual media-aware gap is the dynamic TDT/TOT and EIT tables** ([test-plan](test-plan.md)
+§6.8, §7.7), which the opaque prototype bounds precisely by reproducing the source
+byte-for-byte, those tables included.
 
-Initially, a real CNN International capture (open-GOP H.264 using recovery-point SEI, ~1 IDR
-per 15s) failed to produce a video rendition through the media-aware import path
-as it stood (keyframe detection keyed only on IDR NAL type), which then tripped a
-misleading SCTE-35/no-video export error. This is common for contribution feeds,
-not a niche quirk. **Our opaque m2ts lane carries the TS verbatim** — preserving
-SDT/service identity, PMT PID, SCTE-35, teletext, and continuity counters that a
-media-aware re-mux discarded — so it sidesteps the whole failure class. This is now
-measured end-to-end: on the opaque lane the egress reproduces the source
-byte-for-byte (full PSI/SI, SCTE-35, teletext, TSID/ONID, CBR, 0% PCR > 40 ms),
-whereas the media-aware lane drops SI and renumbers the PMT
-([test-plan](test-plan.md) §7, with the decisive side-by-side in §7.7).
+The same pattern holds beyond the TS mapping: the congestion-control selector (#2432), exporter
+survival across session loss (#2469) and standby-route propagation (#2473) are upstream changes
+rather than local workarounds (§6, §7). Media-aware is the right default partly for this
+reason — its known gaps close in core, on the reference implementation, rather than downstream
+of it.
 
-Two honest caveats on this evidence: it records behaviour *as measured at the
-time*, and upstream has since **materially closed the gap** — #2072/#2066 fixed the
-open-GOP import failure, and [#2440](https://github.com/moq-dev/moq/pull/2440) (a draft
-PR) now **preserves the DVB service layer through the media-aware lane** (SDT/NIT,
-service name/type, PMT PID, TSID/ONID), leaving only the dynamic TDT/TOT/EIT tables
-unpreserved ([test-plan](test-plan.md) §7.7). So this should not be read as a permanent
-limitation of media-aware carriage; the point it supports is that opaque carriage is a
-lower-risk path *today* (and #2440 was not yet on the EC2 `main` build at test time),
-not that media-aware carriage is unviable. (Supports [architecture](architecture.md)
-§4.2.)
+## 5. The entitlement substrate exists
 
-## 6. The entitlement substrate exists
+MoQ's authorization hook at subscription time, with its relay and caching semantics, is a
+credible *substrate* for dynamic, revocable, multi-tenant entitlement. Two boundaries: the
+credential profile enforced there (path-scoped JWTs, mTLS peer identity, `exp` expiry) is a
+deployment choice, not a wire primitive MoQ guarantees across implementations, and the
+multi-region cluster mesh is distributed-systems work the platform must build. (Supports
+[architecture](architecture.md) §10–§11.)
 
-MoQ's authorization hook at subscription time, plus its relay/subscription and
-caching semantics, is a credible *substrate* for **dynamic, revocable,
-multi-tenant entitlement and API-driven provisioning** — the control-plane
-thesis. Two honest boundaries: the credential profile we enforce there
-(path-scoped JWTs, mTLS peer identity, `exp` expiry) is our deployment choice
-layered on that hook, not a wire primitive MoQ guarantees across implementations;
-and the multi-region cluster mesh (shared subscription/cache state, shortest-path
-routing) is distributed-systems work the platform must build, not a behaviour the
-base transport supplies. The hooks and semantics are there; the broadcast-grade
-*product* on top of them is not. (Supports [architecture](architecture.md) §10–§11.)
+## 6. Loss resilience is a congestion-control choice, and BBR closes the gap to SRT
 
-## 7. Under real internet loss, MoQ's resilience is a congestion-control choice — and BBR closes the gap to SRT
+MoQ's loss resilience is set by its QUIC congestion controller, not by the protocol. Under
+quinn's **default loss-based CUBIC**, a head-to-head against SRT over the real EC2→home path
+collapses under uniform loss ≥ 2 % (53 % delivered at 2 %, 13 % at 10 %), 25 % reordering
+(20 %) and a combined WAN profile (14 %), while SRT holds full rate throughout: loss-based CC
+misreads random loss as congestion. Switching to **BBR**
+(`--server/client-quic-congestion-control=delay`, PR
+[#2432](https://github.com/moq-dev/moq/pull/2432); BBRv1 on quinn) removes the collapse
+entirely — full-rate and byte-complete through 10 % loss, 25 % reordering and the WAN profile,
+**on par with SRT** ([test-plan](test-plan.md) §12.10). The change is **sender-local and
+per-connection**: not on the wire, not negotiated, interop preserved, and because MoQ is
+hop-by-hop QUIC it can be enabled on just the lossy relay→subscriber hop. (Supports the
+graceful-congestion claim in the [README](../README.md), [transport](transport.md) §3.1 and
+[relay](relay.md) §5.)
 
-A granular head-to-head against SRT over the **real EC2→home internet path**, driven
-by a `netem` impairment matrix (uniform/bursty loss, reordering, jitter, latency,
-bandwidth caps, combined WAN), first looked *catastrophic* for MoQ: under quinn's
-**default CUBIC** controller it collapsed under uniform loss ≥ 2 % (53 % delivered at
-2 %, 13 % at 10 %), 25 % reordering (20 %), and a combined WAN profile (14 %), while SRT
-held full rate throughout ([test-plan](test-plan.md) §12.10). **That first conclusion
-was wrong — the collapse was a default-configuration artefact, not a protocol limit.**
-A recently merged knob ([PR #2432](https://github.com/moq-dev/moq/pull/2432)) exposes
-`--server/client-quic-congestion-control {loss|delay}`; switching the relay to `delay`
-= **BBR** (BBRv1 on the quinn backend) removes the collapse entirely — MoQ is then
-full-rate and byte-complete through 10 % uniform loss, 25 % reordering, and the WAN
-profile, **on par with SRT**. The fix is **sender-local and per-connection**: not on
-the wire, not negotiated, no draft/version change, and it preserves relay ⇄ subscriber
-interop (a BBR sender talks to any QUIC receiver). Because MoQ is hop-by-hop QUIC it can
-even be enabled on just the lossy relay→subscriber hop, using the short relay-edge RTT
-as the retransmit loop. (Supports the graceful-congestion claim in the
-[README](../README.md), directly informs the "SRT advantage too narrow" thesis-risk
-head-to-head, [transport](transport.md) §3.1, and [relay](relay.md) §5.)
+The residual weakness is **reordering, not delay variation**: in-order jitter (`netem slot`)
+delivers **97 %** at 60 ± 30 ms, while non-ordered jitter of the same magnitude collapses to
+~7–13 % under every controller. That is QUIC in-order-stream head-of-line blocking, a
+loss-detection item rather than a CC or protocol flaw; terrestrial paths reorder far less than
+`netem`'s model, making it largely an emulator artefact, with unbounded reordering mainly a
+LEO/mobile-handover concern ([test-plan](test-plan.md) §12.10, §9.9).
 
-The one residual weakness is narrower than it first appears. "Extreme jitter" was the
-last condition where MoQ under BBR still under-delivered — but a controlled test
-isolates the cause as **packet reordering, not delay variation**: true *in-order*
-jitter (`netem slot`, a FIFO that varies timing without letting packets overtake)
-delivers **97 %** at 60 ± 30 ms, whereas *non-ordered* jitter of the same magnitude
-(independent per-packet delay, which reorders) collapses to ~7–13 %. The mechanism is
-QUIC's in-order-stream head-of-line blocking under heavy reordering, so this is a
-**QUIC loss-detection / reorder-threshold tuning item, not a CC or protocol flaw** — and
-terrestrial paths reorder far less than `netem`'s model; unbounded reordering is mainly
-a LEO/mobile-handover concern ([test-plan](test-plan.md) §12.10.1, §9.9). Two honest
-boundaries: this is a single home path, one run per condition, forward-path-only
-impairment; and BBR here is **BBRv1** (quinn) — BBRv2/v3 (quiche/noq backends) and BBR's
-own known trade-offs (fairness, a very-high-loss cliff) remain to be characterised.
+Two boundaries: this is a single home path with forward-path-only impairment, and an
+over-provisioned matrix measures *loss tolerance* rather than congestion control proper (the
+bufferbloat test under a shaped bottleneck is specified but not run,
+[test-plan](test-plan.md) §12.12). BBR generation is backend-specific — quinn-BBRv1 and
+noq-BBRv3 strongest, quiche-BBRv2 weakest, with v1 fairness and a very-high-loss cliff
+uncharacterised — so quinn-BBRv1 is the pragmatic default today.
 
-## 8. Transport resilience is only half-wired, and active/active source failover is not yet reachable
+## 7. Transport resilience holds; active/active source failover works on the pending fix, bounded by detection
 
-We audited the shipped `moq-dev` (`moq`/`moq-relay` **0.8.7 @ `5eaf99bc`**) for the
-redundancy an active/active broadcast chain needs, combining **source inspection** of
-the Rust crates with **experimental drills** on the media-aware TS lane
-([test-plan](test-plan.md) §10.5). Every conclusion below is tagged with its basis.
-The redundancy model MoQ is built around is sound — thin, single-homed,
-auto-reconnecting endpoints with redundancy living in the relay mesh and hitless
-selection at the receiver — but two load-bearing pieces are not delivered on the
-shipped default wire (`moq-lite-05`).
+The redundancy model MoQ is built around is sound: thin, auto-reconnecting endpoints, redundancy
+in the relay mesh, hitless selection at the receiver. Crate inspection plus drills on the
+media-aware lane ([test-plan](test-plan.md) §10.5) establish what it delivers today.
 
-**Confirmed working.**
+**Working.** Two independent `moq export ts` subscribers produce byte-identical, continuous
+captures of the same broadcast, so fan-out to N subscribers → N pacers → N IRDs needs no extra
+machinery. `moq import ts` redials the same relay with exponential backoff (1 s to 30 s; auth
+errors terminal) and re-announces on every session, and two-relay clustering carries the feed
+while tolerating a duplicate publisher. The exporter survives session loss and resumes
+(fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)): under a relay kill and restart
+both exporters stay alive, skip the evicted group, reconnect and resume byte-identical output
+about 17 s later — automatic and bounded rather than hitless, the gap being a clean
+object-boundary skip that downstream ST 2022-7 / IRD selection absorbs.
 
-- **Redundant *outputs* (fan-out).** Two independent `moq export ts` subscribers
-  produced **byte-identical, continuous captures** of the same broadcast in every
-  drill (*experiment*, [test-plan](test-plan.md) §10.5.2). Fanning one feed to N
-  subscribers → N pacers → N IRDs needs no extra machinery.
-- **Publisher transport reconnect.** `moq import ts` uses a reconnect loop
-  (*source*: `rs/moq-native/src/reconnect.rs`, wired at `rs/moq-cli/src/main.rs`) that
-  redials the same relay with exponential backoff (initial 1 s, ×2, max 30 s; auth
-  errors terminal) and **re-announces the broadcast on every new session**
-  (*experiment*: relay logs repeated `session accepted role=Publisher` after a
-  restart, [test-plan](test-plan.md) §10.5.2).
-- **Two-relay clustering carries the media-aware feed and tolerates a duplicate
-  publisher.** A relay dialling a peer forms a bidirectional cluster session and both
-  publishers of the same broadcast *coexist* without collision (*experiment*,
-  [test-plan](test-plan.md) §10.5.2; *source*: `rs/moq-relay/src/cluster.rs`).
-- **The `moq export ts` subscriber survives session loss and resumes (fixed by #2469).**
-  *This was a confirmed limitation* — the exporter exited with `Error: json: dropped`
-  the instant its session dropped, because an origin front closed synchronously on
-  source detach. We filed it as
-  [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459); it was fixed in
-  [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger* across an
-  ungraceful source loss; a consuming session lingers for `backoff.timeout + 1 s`).
-  **Verified** (main @ `7c976cd7`, `moq 0.9.1`): under a relay kill+restart both
-  exporters stayed alive, skipped the evicted group instead of dying, reconnected, and
-  resumed byte-identical output ~17 s after the kill (*experiment*: `sizes_r.csv`,
-  [test-plan](test-plan.md) §10.5.3). Recovery is automatic and bounded, not hitless.
+**Bounded by detection.** Detection on a hard kill is gated by the QUIC idle timeout (default
+30 s, which must stay above the 5 s keep-alive), so every recovery time below is dominated by
+detection, not by the ~1 s backoff. This is architectural rather than incidental: a relay has no
+model of a broadcast's expected cadence, so it cannot treat silence as failure the way an
+application that knows its own frame rate could — it must wait for the transport to declare the
+peer gone. Upstream is considering a lower default (~10 s) as a separate change.
 
-**Confirmed limitations.**
+**Active/active source failover: works on the pending fix, not yet shipped.** On the shipped
+default two publishers of the *same* broadcast at one relay make the path `unroutable` and tear
+down both, and across a two-relay mesh the pair coexists without the relay failing its source
+over — the standby's route is never propagated back, because a relay advertises one best route
+per path and skips the announce entirely when that chain contains the peer. Cost and standby
+routing (#2424, in the opt-in `moq-lite-06-wip` version) cannot help, since the blocker is route
+*propagation*, not pricing. [#2473](https://github.com/moq-dev/moq/pull/2473) fixes that by
+advertising, per peer, the best route whose hop chain *excludes* the requester, plus a
+`moq --origin <id>` knob by which a 1+1 pair declares itself interchangeable. **On its current
+head the two-relay drill now passes end to end** ([test-plan](test-plan.md) §10.5.4): relay B
+advertises the standby to relay A the instant the standby publisher joins
+(`announce broadcast=… hops=2`), and when the active publisher is killed relay A splices onto
+that standby, with the subscriber resuming **30–33 s after the kill** — i.e. one idle timeout,
+as above; detection dominates and the reselect itself is essentially free. Recovery is at full
+rate and was consistent across four runs once the publisher pipeline is killed atomically
+(below).
 
-- **Failure detection on a hard kill is gated by the QUIC idle timeout** (default
-  30 s, `--client-quic-idle-timeout`; must stay above the 5 s keep-alive), so recovery
-  time is dominated by detection, not by the ~1 s reconnect backoff (*experiment*,
-  [test-plan](test-plan.md) §10.5.3).
-- **Naive active/active does not work.** Two publishers on the *same* broadcast at one
-  relay collapse the stream — the second announce makes the path `unroutable` and tears
-  down *both* (*experiment*, §10.5.3). Across a *two-relay mesh* the pair coexists but
-  the relay does **not** fail its source over when the active publisher dies: the
-  standby's route is never propagated back (announce coalescing keeps one best route
-  per path; split-horizon `exclude_hop` suppresses the return route), so there is
-  nothing to reselect (*experiment* §10.5.3; *source*: `rs/moq-net/src/model/origin.rs`
-  — the multi-source splice `best_route`/`reselect`/`test_route_failover` exists but is
-  not fed a second live route on the wire).
+Three caveats keep this short of a shipped capability. The PR is **still open**. The standby
+*join* is not transparent: a subscriber on a relay that is merely *carrying* the broadcast
+stalls **8–9 s** the instant a redundant publisher attaches locally to that relay, before
+recovering at full rate — consistently, on every run. In a 1+1 deployment a standby attaching
+is a routine event, so redundancy currently costs the very viewers it is meant to protect a
+visible outage. And **graceful** departure of the active source is not handled at all: when the
+publisher exits cleanly rather than being killed, the relay unannounces immediately, and the
+subscriber's `moq export ts` terminates with `TS track layout changed after PAT/PMT was
+emitted: '0.avc3' removed` instead of failing over — despite the standby being announced and no
+timeout to wait out. That is the common production case (SIGTERM to an encoder, a rolling
+restart), so the failover path presently covers the *harder* failure mode but not the easier
+one. Both were reported upstream on the PR.
 
-**Work-in-progress — tested, and necessary but not sufficient.** The cost/standby
-routing that would *rank* a hot standby as a same-path backup (#2424) lives in
-**`moq-lite-06-wip`** (*source*: `rs/moq-net/src/lite/version.rs`,
-`rs/moq-net/src/lite/announce.rs`, `rs/moq-net/src/model/broadcast.rs`), which is
-deliberately excluded from the default advertised set/ALPN list and negotiates only
-when both peers opt in (*source*: `rs/moq-net/src/version.rs` — `Versions::all()` and
-`ALPNS`). Re-running the two-relay mesh drill with lite-06 negotiated end-to-end
-(`--server-version` + `--client-version`, cluster log `connected version=moq-lite-06-wip`)
-**still froze on active-source death, exactly as on `moq-lite-05`** — relay A only ever
-held its own local route; relay B never advertised its standby publisher across the
-cluster link (*experiment*, §10.5.4). So cost routing is **necessary but not
-sufficient**: the blocker is standby-route propagation across the mesh, not route
-pricing, and active/active source failover is not a capability today on either version.
+Two corrections to our own earlier evidence, from the maintainer's review plus re-testing.
+Our first finding — that the standby route never reaches the relay serving the active source —
+was **an artefact of our drill**, not a defect: announce-interest is unconditional across the
+cluster, and our timeline killed the publisher at t=22 and graded at t=43, i.e. 21 s into a
+30 s idle timeout, so *no* build could have passed it. Our second finding — a shared-origin
+standby joining a carrying relay tearing that relay's subscriber down with `Unroutable` — was
+**real but pre-existing** (it reproduces on `main`, surfacing as `json: dropped`) and is now
+fixed: a standby wins dispatch the moment it attaches, before a real publisher has lazily
+created every track, and a per-track refusal was being charged as a strike against the whole
+logical track. Refusals are now scoped per track with fallback to the incumbent. Re-verified
+here: the far-relay subscriber survives the join with **zero `unroutable`**. Notably the drill
+found a genuine bug that the unit tests had missed, because a model-level standby accepts a
+track request immediately whereas a real publisher does not.
 
-**Upstream fix under review — [#2473](https://github.com/moq-dev/moq/pull/2473) (issue
-#2461), reviewed + tested 2026-07-24.** #2473 targets exactly this blocker with per-peer
-announce selection (advertise the best route whose hop chain *excludes* the requesting
-peer), exclusion-aware serving, first-hop content identity, and a `moq --origin` knob for
-declaring a 1+1 pair interchangeable. Its **model/wire unit tests pass** on our build
-(*experiment*: `test_route_failover`, `test_dispatch_excludes_requester`,
-`test_dispatch_all_tainted_unroutable`, `test_publisher_mismatch_parks`). **But the
-end-to-end two-relay drill still does not fail over**: across single-dial, full-mesh, and
-carrying-peer topologies (both publishers sharing `--origin`), relay A never held a second
-route and `sub1` froze permanently on `pubA` death (*experiment*: `cluster_failover.sh` on
-`moq-dev @ baeb69b4` with `main`/#2469 merged in). The per-peer *selection* landed, but the
-standby *announcement* is still never presented to the node serving the active source —
-which is satisfied by its local source and never solicits the peer's standby. Two side
-findings: #2473 **predates #2469** and needs its linger for the splice to survive the
-source loss (merged locally; suite stays green), and a shared-`--origin` local standby
-joining a carrying relay tears down that relay's local subscriber with `Error::Unroutable`
-(`code=30`). Feedback + the drill are drafted for the maintainers
-(`docs/upstream/pr2473-feedback.md`, `docs/upstream/cluster_failover.sh`). So active/active
-source failover remains **not a capability today**, but a targeted fix is in flight and the
-remaining gap is now precisely characterised (standby-announce propagation to the
-active-serving node).
+A third methodological correction, ours again, came out of hardening the drill for upstream: in
+a `tsp | moq import` pipeline the kill must take the whole pipeline down in one pass. Killing
+`tsp` first leaves the importer reading a truncated stream plus EOF, so it shuts its broadcast
+down *cleanly* — which grades the graceful path described above, not a source failure. The two
+paths behave completely differently, and conflating them is what produced our earlier
+inconsistent recovery sample. The corrected drill is upstream as
+[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`), with both the timeline
+and the kill semantics documented in-script, since each of them cost us a wrong conclusion.
 
-**Recommended workarounds (buildable now).** The exporter session-loss crash is now
-fixed upstream (#2469, verified), so no external subscriber supervisor is needed for
-relay maintenance/transient loss; achieve service redundancy with a
-fully-doubled chain (dual publishers → dual relays → dual subscribers → dual pacers →
-downstream ST 2022-7 / IRD failover), letting the *receiver* do hitless selection
-(§10.4, [architecture](architecture.md) §14.1) rather than relying on relay-mesh source
-failover. (Supports [transport](transport.md) §8, [relay](relay.md) §5.1, and the
-resilience model in [architecture](architecture.md) §14.)
+**Posture buildable now.** With the exporter crash fixed, no external subscriber supervisor is
+needed for relay maintenance or transient loss. Service redundancy still comes from a fully
+doubled chain — dual publishers → dual relays → dual subscribers → dual pacers → downstream
+ST 2022-7 / IRD failover — letting the *receiver* do hitless selection. Relay-mesh source
+failover does not change that recommendation even once #2473 lands: at one idle timeout it is
+**bounded, not hitless**, so it protects against a dead source rather than delivering the
+seamless switch a broadcast chain expects — and on the graceful-exit path it does not presently
+protect at all. The two are complementary — the mesh keeps both
+flows healthy and reachable, the receiver makes the hitless decision. (Supports
+[transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)

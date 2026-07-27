@@ -37,7 +37,7 @@ acceptance gates) and draws its empirical baseline from [evidence](evidence.md).
 - [7. Test 3 — MoQ transport transparency (opaque `m2ts` lane, local)](#7-test-3--moq-transport-transparency-opaque-m2ts-lane-local) — ✅ done
 - [8. Test 4 — Remote relay end-to-end + SRT contribution (public internet)](#8-test-4--remote-relay-end-to-end--srt-contribution-public-internet) — ✅ media-aware
 - [9. Test 5 — Network impairment](#9-test-5--network-impairment) — ✅ done (both lanes)
-- [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 transport-resilience drills run (§10.5): publisher + exporter reconnect/resume both ✅ (exporter fixed by #2469, verified 2026-07-24); active/active source failover still not delivered (fix #2473 reviewed/drilled, e2e froze); ST 2022-7 determinism analysed (§10.4); hardware hitless drill owed
+- [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 transport-resilience drills run (§10.5): publisher + exporter reconnect/resume both ✅ (exporter fixed by #2469); active/active source failover not delivered by default, but the **live two-relay drill now passes on fix #2473** (unmerged; 30–33 s = one idle timeout, bounded not hitless; residual gaps: an 8–9 s stall at standby join and no failover on a *graceful* source exit — and our earlier "no failover" was a drill-timeline artefact, §10.5.4; corrected drill contributed as #2545); ST 2022-7 determinism analysed (§10.4); hardware hitless drill owed
 - [11. Test 7 — Timing integrity (the decisive test)](#11-test-7--timing-integrity-the-decisive-test) — **Gate 2, make-or-break**
 - [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path (§12.9) + impairment matrix (§12.10) + CUBIC/BBRv1/BBR2/BBR3 side-by-side (§12.10.3) run; glass-to-glass latency planned
 - [13. Test 9 — System performance and resource utilisation](#13-test-9--system-performance-and-resource-utilisation) — planned
@@ -82,7 +82,7 @@ designed to advance, reconciled with the evidence already recorded in
 | Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC** (§8.4), and the **full ~9.93 Mbps feed pulled home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (T8 clean-path, §12.9); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware), T8 clean-path ✅ |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams + PMT descriptors (reliably on `dev` per issue #1979, §6.8), and PR [#2440](https://github.com/moq-dev/moq/pull/2440) now adds the **DVB service layer — SDT/NIT/PMT-PID/TSID/ONID preserved**, leaving only **TDT/TOT/EIT** and CBR (restored downstream by `mpegts-pacer`, §6.7); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim, incl. TDT/TOT** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
 | Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7, T7 P1 across four clips §11.4.1); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 P1 ✅ |
-| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). Validated across all BBR backends (§12.10.3): quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker at reorder/high-loss. Residual: pathological *reordering* — in-order jitter is fine (~100 %) and no BBR generation fixes it, so it is a QUIC loss-detection/HOL item, not a CC choice (§12.10.3). **Transport-resilience drills run (§10.5):** publisher transport-reconnect ✅; `moq export ts` subscriber reconnect+resume ✅ (fixed by #2469, verified 2026-07-24); active/active source failover not delivered by default ❌ (fix #2473 under review); redundant outputs ✅. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 🟡 |
+| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10). Validated across all BBR backends (§12.10.3): quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker at reorder/high-loss. Residual: pathological *reordering* — in-order jitter is fine (~100 %) and no BBR generation fixes it, so it is a QUIC loss-detection/HOL item, not a CC choice (§12.10.3). **Transport-resilience drills run (§10.5):** publisher transport-reconnect ✅; `moq export ts` subscriber reconnect+resume ✅ (fixed by #2469); active/active source failover not delivered by default ❌ (but the live two-relay drill now **passes** on fix #2473, unmerged — 30–33 s, one idle timeout, bounded not hitless); redundant outputs ✅. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 🟡 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
 
@@ -178,7 +178,9 @@ for T7 and are noted as access-dependent, not assumed.
 ### 4.4 Result-recording conventions
 
 - Every result table records **units**, the **measurement point** (P0/P1/P2), the
-  **tool and version**, the **source clip / capture identity**, and the **date**.
+  **tool and version**, the **source clip / capture identity**, and the **build under
+  test**. (Calendar dates and throwaway commit hashes are development-log detail and are
+  kept out of this document.)
 - Unmeasured cells are `TBM` (to be measured), never blank and never guessed.
 - Each test states its **pass criteria before** results are recorded.
 - Raw captures and analyser exports are the evidence of record; summary tables in
@@ -194,11 +196,10 @@ for T7 and are noted as access-dependent, not assumed.
 Establish the reference. You cannot prove MoQ preserves quality without first
 characterising the source. This runs *before* MoQ touches the stream.
 
-**Status: run 2026-07-16 — reference established.** Four source clips were
-characterised at P0 with TSDuck 3.44-4676 (macOS, Darwin 25.5.0). All four are
-clean, conformant references (0 continuity errors, 0 transport errors, 0 PCR
-discontinuities, 0% of PCR intervals > 40 ms, file-based PCR accuracy < 74 ns).
-Results in §5.5; exact commands in §5.4.
+**Status: reference established.** Four source clips were characterised at P0 with
+TSDuck 3.44-4676 (macOS, Darwin 25.5.0). All four are clean, conformant references
+(0 continuity errors, 0 transport errors, 0 PCR discontinuities, 0 % of PCR intervals
+> 40 ms, file-based PCR accuracy < 74 ns). Results in §5.5; exact commands in §5.4.
 
 ### 5.1 Objective
 
@@ -222,7 +223,7 @@ flowchart LR
 | `CNNiEMEA2.ts` | Real contribution capture (longer) | CNNI EMEA HD (WBD) | H.264 High@L4.0 4:2:0 1080 | 9 min 59 s | 9.95 Mbps |
 
 The two CNN captures are the real contribution-feed class referenced in
-[evidence](evidence.md) §5 (CNN International). The GOP structure (open-GOP /
+[evidence](evidence.md) §4 (CNN International). The GOP structure (open-GOP /
 recovery-point SEI / IDR cadence) was not separately measured in this run and is
 noted as a follow-up (§5.8).
 
@@ -273,7 +274,7 @@ awk -F, 'NR>1{cur=$7; if(prev!=""){d=(cur-prev)/27000; n++; sum+=d;
 tsp -I file <clip> -P continuity -O drop
 ```
 
-### 5.5 Measured reference (P0, 2026-07-16)
+### 5.5 Measured reference (P0)
 
 | Metric (unit) | `testloop_clean` | `testloop` | `CNNiEMEA` | `CNNiEMEA2` |
 |---|---|---|---|---|
@@ -375,7 +376,7 @@ honest.
   jitter could push this clip over, whereas the other three (≤ 100–291 ms) have
   ample margin.
 - **GOP structure not separately measured.** The CNN captures are treated as the
-  open-GOP contribution class per [evidence](evidence.md) §5, but IDR cadence /
+  open-GOP contribution class per [evidence](evidence.md) §4, but IDR cadence /
   recovery-point SEI were not quantified in this run; add an IDR-interval
   measurement when T2's non-ideal-source variant is run.
 - **Raw artifacts** (`analyze` reports, `*_pcr.csv`): not committed (§14); the §5.4
@@ -395,35 +396,31 @@ for the opaque lane and the grooming layer rests on measured facts rather than
 assertion. Its Gate 1 counterpart — the opaque lane that *is*
 broadcast-transparent — is **Test 3 (§7)**, contrasted directly in §7.7.
 
-**Status: media-aware lane works locally; the service-layer gap is now being closed
-upstream.** Milestones (details §6.5–§6.7):
+**Status: media-aware lane works locally; the service-layer gap is largely closed
+upstream.** The lane carries every *elementary* stream (video, all audio incl. AC-3,
+teletext, all SCTE-35 PIDs) at its original PID with 0 CC errors. Two impairments the
+lane originally introduced are now addressed (details §6.5–§6.8):
 
-- **2026-07-16** — all four T1 clips round-trip through `moq-dev` locally
-  (moq-lite-04). Every *elementary* stream (video, all audio incl. AC-3, teletext,
-  all SCTE-35 PIDs) survives, but the lane **drops the DVB service layer**
-  (SDT/NIT/TDT), **renumbers the PMT PID to `0x1000`**, regenerates the TSID, and
-  emits a **non-CBR** egress (13.7–25.5 % of PCR intervals > 40 ms vs 0 % at source).
-- **2026-07-18** — a downstream
-  [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) stage (a
-  transport-agnostic CBR shaper: byte-locks PCR, stuffs nulls, no demux) closes the
-  *timing/CBR* half: **exact CBR**, **0 % PCR intervals > 40 ms** (from 13.6–25.4 %),
-  **0 `pcrverify` violations at 500 µs** (from 104–229), **0 CC errors** (§6.7).
-- **2026-07-21** — re-run on `moq-dev` @ `e3576465` (then the tip of `dev`; since
-  merged, so now on **both `main` and `dev`**) confirms moq issue
-  [#1979](https://github.com/moq-dev/moq/issues/1979)'s catalog-reservation fix
-  (**#2072** + open-GOP detection **#2066**): the CNN open-GOP + triple-SCTE-35 feed
-  round-trips **deterministically**, all elementary streams + PMT descriptors intact.
-  The one thing left was the DVB **service layer** — filed upstream (→ PR #2440).
-- **Forthcoming — PR [#2440](https://github.com/moq-dev/moq/pull/2440)** (open,
-  targeting `main`; reviewed and confirmed working; expected to land). Maps the
-  service layer through the `mpegts` catalog: **SDT (service name/provider/type), NIT, PMT PID,
-  TSID and ONID are now preserved** end-to-end through the media-aware lane. Only the
-  **dynamic time/EPG tables (TDT/TOT and EIT)** remain unpreserved.
+- **Timing / CBR.** The lane emits a bursty, non-CBR egress (13.6–25.4 % of PCR
+  intervals > 40 ms vs 0 % at source). A downstream
+  [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) stage — a
+  transport-agnostic CBR shaper that byte-locks PCR and stuffs nulls without demuxing —
+  restores **exact CBR**, **0 % PCR intervals > 40 ms**, **0 `pcrverify` violations at
+  500 µs**, and **0 CC errors** (§6.7).
+- **DVB service layer.** As shipped, the lane drops the service layer (SDT/NIT/TDT),
+  renumbers the PMT PID to `0x1000`, and regenerates the TSID. Two upstream fixes close
+  most of this: moq issue [#1979](https://github.com/moq-dev/moq/issues/1979)'s
+  catalog-reservation gating (**#2072**) plus open-GOP recovery-point-SEI detection
+  (**#2066**) make the CNN open-GOP + triple-SCTE-35 feed round-trip deterministically
+  with all elementary streams and PMT descriptors intact (§6.8); and PR
+  [#2440](https://github.com/moq-dev/moq/pull/2440) threads the service layer through the
+  `mpegts` catalog, preserving **SDT (service name/provider/type), NIT, PMT PID, TSID and
+  ONID**. Only the **dynamic time/EPG tables (TDT/TOT and EIT)** remain unpreserved.
 
 **Bottom line.** With `mpegts-pacer` (timing/CBR) and PR #2440 (service layer), the
-media-aware lane goes from "media-faithful but not broadcast-transparent" to close
-to broadcast-transparent — the residual gaps are the live TDT/TOT/EIT tables and the
-P2 hardware pass (T7). The opaque lane (§7) remains the byte-for-byte reference.
+media-aware lane is close to broadcast-transparent — the residual gaps are the dynamic
+TDT/TOT/EIT tables and the P2 hardware pass (T7). The opaque lane (§7) remains the
+byte-for-byte reference.
 
 ### 6.1 Objective
 
@@ -444,19 +441,16 @@ flowchart LR
 
 ### 6.3 Environment
 
-- Binaries: `~/moq-dev/target/release/{moq, moq-relay}` (moq-cli / moq-relay).
-  The 2026-07-16 run used build `moq-token-cli-v0.5.34-17-g81ac7020`; the
-  2026-07-21 re-run (§6.8) rebuilt from `github.com/moq-dev/moq` **`dev` @
-  `e3576465`** (`moq-native` 0.18.3) to pick up the #1979 catalog-reservation fix
-  (#2072) and open-GOP recovery-point detection (#2066). Protocol negotiated
-  **moq-lite-04**
-  (moq-lite, the forwards-compatible subset — *not* the draft-14 transport the
-  opaque platform pins, [implementation](implementation.md) §3). Supported by the
-  binary: moq-lite-01…04, moq-transport-14…17.
+- Binaries: `~/moq-dev/target/release/{moq, moq-relay}` (moq-cli / moq-relay), built
+  from `github.com/moq-dev/moq` (`moq-native` 0.18.3), carrying the #1979
+  catalog-reservation fix (#2072) and open-GOP recovery-point detection (#2066).
+  Protocol negotiated **moq-lite-04** (moq-lite, the forwards-compatible subset — *not*
+  the draft-14 transport the opaque platform pins, [implementation](implementation.md)
+  §3). Supported by the binary: moq-lite-01…04, moq-transport-14…17.
 - Relay config: `demo/relay/localhost.toml` (QUIC + HTTP on `[::]:4443`,
   self-signed `localhost`, `[auth] public = ""` → anonymous).
 - Feed pacing: TSDuck `regulate` (real-time, PCR-based). TSDuck 3.44-4676.
-- Downstream groomer (2026-07-18 addendum):
+- Downstream groomer:
   [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0, run via its
   offline `cbr_file` example (`cargo run -p mpegts-pacer --example cbr_file`). A
   deterministic, socket-free CBR shaper: it byte-locks PCR to the output byte
@@ -521,8 +515,8 @@ tsp -I file <name>_out.ts -P pcrextract --pcr --csv -o <name>_pcr.csv -O drop
 # then the §5.4 awk one-liner for PCR interval min/mean/max and % > 40 ms
 ```
 
-**6. Groom the VBR egress to CBR with `mpegts-pacer` (2026-07-18 addendum), then
-re-analyse.** `<name>_out.ts` from step 3 is the media-aware subscriber's raw
+**6. Groom the VBR egress to CBR with `mpegts-pacer`, then re-analyse.**
+`<name>_out.ts` from step 3 is the media-aware subscriber's raw
 (bursty, un-paced) output; `<rate>` is a target mux rate comfortably above the
 clip's content rate (12 / 33 / 12 Mbps for the three clips — ≈ 1.2× source):
 
@@ -561,11 +555,11 @@ represented as tracks.
 the visual-impaired commentary), teletext subtitles, and **every** SCTE-35 splice
 PID — at their **original PID numbers** — with **0 continuity-counter errors** and
 0 transport errors. The real CNN open-GOP feed produced video successfully, i.e.
-the media-aware import weakness in [evidence](evidence.md) §5 appears **resolved
-upstream** (consistent with that section's caveat). The `dev`-branch re-run (§6.8)
-pins this down: it is moq issue [#1979](https://github.com/moq-dev/moq/issues/1979)'s
-catalog-reservation fix (#2072) plus open-GOP recovery-point detection (#2066)
-that make the open-GOP + SCTE-35 round-trip deterministic rather than a race.
+the media-aware import weakness in [evidence](evidence.md) §4 is **resolved
+upstream** (consistent with that section's caveat): moq issue
+[#1979](https://github.com/moq-dev/moq/issues/1979)'s catalog-reservation fix (#2072)
+plus open-GOP recovery-point detection (#2066) make the open-GOP + SCTE-35 round-trip
+deterministic rather than a race (§6.8).
 
 ### 6.6 Results — impairments introduced by the media-aware lane
 
@@ -587,26 +581,24 @@ that make the open-GOP + SCTE-35 round-trip deterministic rather than a race.
 `testloop_clean`'s 25.5% closely matches the ~24% pre-groom figure independently
 measured in [evidence](evidence.md) §3 — two different pipelines, same phenomenon.
 
-**Interpretation.** As measured on the 2026-07-16 build the media-aware lane was
-*media-faithful* (elementary streams, continuity, PCR PID intact) but **not
-broadcast-transparent**: it discarded the DVB service layer, renumbered the PMT,
-and emitted a non-CBR, bursty stream violating TR 101 290 P1 on 13–26 % of
-intervals. Two developments have since closed most of this:
+**Interpretation.** As shipped, the media-aware lane is *media-faithful* (elementary
+streams, continuity, PCR PID intact) but **not broadcast-transparent**: it discards the
+DVB service layer, renumbers the PMT, and emits a non-CBR, bursty stream violating
+TR 101 290 P1 on 13–26 % of intervals. Two developments close most of this:
 
 - the *timing/CBR* half is closed **downstream of any VBR source** by the
   `mpegts-pacer` stage (§6.7); and
 - the *service-layer* half is closed **upstream** by PR
-  [#2440](https://github.com/moq-dev/moq/pull/2440) (reviewed, confirmed working,
-  expected to land): **SDT (service name/provider/type), NIT, PMT PID, TSID and
-  ONID are now preserved** through the media-aware lane, so the "lost / dropped /
-  renumbered" rows above now read "preserved" for everything except the **dynamic
-  TDT/TOT and EIT** tables (§6.8).
+  [#2440](https://github.com/moq-dev/moq/pull/2440): **SDT (service name/provider/type),
+  NIT, PMT PID, TSID and ONID are preserved** through the media-aware lane, so the
+  "lost / dropped / renumbered" rows above read "preserved" for everything except the
+  **dynamic TDT/TOT and EIT** tables (§6.8).
 
 The residual media-aware gaps are therefore narrow — live TDT/TOT/EIT and the wire
 (P2) timing pass (T7) — where before the lane was wholesale non-transparent. The
 opaque lane (§7) remains the byte-for-byte reference that needs none of this.
 
-### 6.7 Results — downstream `mpegts-pacer` grooming closes the P1 timing gap (2026-07-18)
+### 6.7 Results — downstream `mpegts-pacer` grooming closes the P1 timing gap
 
 The media-aware egress (§6.6) is a good stand-in for *any* bursty VBR IP source: a
 MoQ subscriber, an SRT/RIST receiver, or a file replay. Feeding each clip's raw
@@ -659,22 +651,20 @@ independent of the transport lane. The load-bearing caveats are unchanged: it do
 accuracy is arithmetic, not the wire-timing test only a hardware IRD decides (P2 /
 Test 7).
 
-### 6.8 Results — `dev`-branch re-run: what #1979 resolves, and the service-layer gap now closed by PR #2440 (2026-07-21)
+### 6.8 Results — what #1979 resolves, and the service-layer gap closed by PR #2440
 
-After the upstream maintainer closed
-[moq issue #1979](https://github.com/moq-dev/moq/issues/1979) ("catalog
-convergence race locks PSI before the video track resolves") as fixed on `dev`,
-the full pipeline was re-run on that branch to establish empirically **which
-metadata #1979's fix carries end-to-end and which it does not.**
+This section establishes empirically **which metadata the #1979 fix carries end-to-end
+and which it does not.** [moq issue #1979](https://github.com/moq-dev/moq/issues/1979)
+("catalog convergence race locks PSI before the video track resolves") is fixed by two
+changes the round-trip both needs: **#2072** (catalog *reservation gating* — the
+exporter withholds PSI until every PMT-reserved track resolves, so it can no longer lock
+an audio-only layout then abort) and **#2066** (open-GOP *recovery-point-SEI* keyframe
+detection, without which an IDR-less feed's video never resolves and the gate stays
+shut). Both must be present on the same tree.
 
-**Build under test.** `moq-dev` **`e3576465`** (`moq-native` 0.18.3) — then the tip
-of `dev`, since merged to `main`, so this fix now ships on both branches — which
-carries both halves the round-trip needs: **#2072** (catalog *reservation gating* — the exporter withholds PSI until every PMT-reserved track resolves, so it
-can no longer lock an audio-only layout then abort) and **#2066** (open-GOP
-*recovery-point-SEI* keyframe detection, without which an IDR-less feed's video
-never resolves and the gate stays shut). Downstream groomer:
-[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`auto`
-bitrate mode).
+**Build under test.** `moq-dev` (`moq-native` 0.18.3) carrying #2072 and #2066.
+Downstream groomer: [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0
+(`auto` bitrate mode).
 
 **Pipeline (as requested): `ffmpeg` loop → `moq import ts` → `moq-relay` →
 `moq export ts` → `mpegts-pacer`,** all localhost, source `CNNiEMEA2.ts` (the CNN
@@ -690,19 +680,17 @@ ffmpeg -stream_loop -1 -re -i CNNiEMEA2.ts -map 0 -c copy -copy_unknown -f mpegt
 tsp -I file CNNiEMEA2.ts --infinite -P regulate --pcr-synchronous -O file - | moq … import ts
 ```
 
-The subscriber (`moq … export ts`) is started **first** now: on `dev` the
-reservation gate publishes the catalog only once every reserved track has resolved,
-so a waiting subscriber gets one complete snapshot instead of racing an
-audio-only one.
+The subscriber (`moq … export ts`) is started **first**: the reservation gate
+publishes the catalog only once every reserved track has resolved, so a waiting
+subscriber gets one complete snapshot instead of racing an audio-only one.
 
-**Fixed by #1979 (verified end-to-end).** The exporter **no longer aborts** — the
-old `TS track layout changed after PAT/PMT was emitted` / `requires a video track
-for the program clock` failures are gone — and the real open-GOP + SCTE-35 feed
-round-trips deterministically. Every elementary component is carried in **one
-complete PMT**, and (raw-fed) at its **original PID with its original
-`stream_type` and PMT descriptors**:
+**Fixed by #1979.** The exporter **does not abort** — the old `TS track layout changed
+after PAT/PMT was emitted` / `requires a video track for the program clock` failures are
+gone — and the real open-GOP + SCTE-35 feed round-trips deterministically. Every
+elementary component is carried in **one complete PMT**, and (raw-fed) at its **original
+PID with its original `stream_type` and PMT descriptors**:
 
-| Component (raw-fed control) | Source PID / type | `dev` egress PID / type | Descriptors carried verbatim |
+| Component (raw-fed control) | Source PID / type | Egress PID / type | Descriptors carried verbatim |
 |---|---|---|---|
 | Video (AVC) | 0x006F / 0x1B | **0x006F / 0x1B** | AVC video (0x28), Maximum-bitrate (0x0E) |
 | Audio (MP2) | 0x0079 / 0x03 | **0x0079 / 0x03** | ISO-639 language, Audio-stream, Max-bitrate |
@@ -714,21 +702,20 @@ complete PMT**, and (raw-fed) at its **original PID with its original
 So the metadata that `moq import ts` *does* model — the PMT track set,
 per-stream `stream_type`, the ES-level and program-level PMT descriptors
 (ISO-639 language, AC-3, teletext, AVC, max-bitrate, SCTE-35 CUEI registration),
-and native SCTE-35 carriage (`stream_type` 0x86, splice sections intact) — now
-survives the full round-trip reliably, including for the open-GOP feed that
-[evidence](evidence.md) §5 and issue #1979 recorded as failing.
+and native SCTE-35 carriage (`stream_type` 0x86, splice sections intact) — survives
+the full round-trip reliably, including for the open-GOP feed that
+[evidence](evidence.md) §4 and issue #1979 recorded as failing.
 
-**The service-layer gap on `e3576465` — and how PR #2440 closes it.** The
-`e3576465` build's `mpegts` catalog section
-(`rs/moq-mux/src/container/ts/catalog.rs`) modelled *per-PID PMT info + verbatim
-elementary streams only*; it had **no field for service identity or the standalone
-SI tables**, so `moq export ts` rebuilt just PAT + PMT and dropped the DVB service
-layer. This was **not** what #1979 addressed (that was the PSI-convergence race,
-i.e. elementary layout, not the DVB service tables). It was filed separately and
-fixed by PR [#2440](https://github.com/moq-dev/moq/pull/2440), which threads a
-service record through the catalog and rebuilds the SI on export:
+**The service-layer gap — and how PR #2440 closes it.** As shipped, the `mpegts`
+catalog section (`rs/moq-mux/src/container/ts/catalog.rs`) modelled *per-PID PMT info +
+verbatim elementary streams only*; it had **no field for service identity or the
+standalone SI tables**, so `moq export ts` rebuilt just PAT + PMT and dropped the DVB
+service layer. This is **not** what #1979 addressed (that was the PSI-convergence race,
+i.e. elementary layout, not the DVB service tables); it is fixed separately by PR
+[#2440](https://github.com/moq-dev/moq/pull/2440), which threads a service record
+through the catalog and rebuilds the SI on export:
 
-| Metadata field | Source (P0) | `e3576465` egress | With PR #2440 |
+| Metadata field | Source (P0) | As-shipped egress | With PR #2440 |
 |---|---|---|---|
 | SDT (service name / provider) | "CNNI EMEA HD" / "Warner Bros. Discovery" | dropped → (unknown) | **preserved** |
 | SDT service type | 0x19 (Advanced-codec HD TV) | dropped → 0x00 | **preserved** |
@@ -739,11 +726,10 @@ service record through the catalog and rebuilds the SI on export:
 | TDT / TOT (time) | present (0x0014) | dropped | **still dropped** |
 | EIT (event / EPG) | (none in these clips) | n/a | **still dropped** |
 
-PR #2440 was reviewed and confirmed working (this plan does not re-verify it) and
-is expected to land in `dev`/`main`; the figures in the middle column are the
-`e3576465` measurement it supersedes. Only the **dynamic time/EPG tables (TDT/TOT,
-EIT)** remain unpreserved through the media-aware lane — a live-clock/regeneration
-concern deferred by design, not a catalog-mapping gap. The `ffmpeg`-loop feed (A)
+The middle column is the as-shipped media-aware egress; the right column is with
+PR #2440. Only the **dynamic time/EPG tables (TDT/TOT, EIT)** remain unpreserved through
+the media-aware lane — a live-clock/regeneration concern deferred by design, not a
+catalog-mapping gap. The `ffmpeg`-loop feed (A)
 additionally showed two ingest-side artifacts that are ffmpeg's, not the lane's:
 `ffmpeg -c copy` re-muxes the container, renumbering PIDs (PCR → 0x0100) and
 re-labelling SCTE-35 as private `stream_type` 0x06 before the bytes reach
@@ -781,9 +767,9 @@ with no catalog mapping at all.
 This test has two distinct bars:
 
 - **Media-aware lane (this test): transport works locally** — ✅ met. All clips
-  round-trip; all elementary components carry with 0 CC errors; open-GOP feed
-  decodes — and on `dev` (§6.8) the open-GOP + SCTE-35 round-trip is now
-  *deterministic* (moq issue #1979's catalog-reservation fix), not a race.
+  round-trip; all elementary components carry with 0 CC errors; the open-GOP feed
+  decodes and the open-GOP + SCTE-35 round-trip is *deterministic* (moq issue #1979's
+  catalog-reservation fix), not a race (§6.8).
 - **Broadcast transparency (Gate 1):** SI preserved, PMT PID stable, and post-groom
   PCR conformance (≈ 0 % > 40 ms) at P1. On the opaque lane this is fully
   **demonstrated in Test 3 (§7)**. On the media-aware lane it was originally out of
@@ -819,23 +805,19 @@ This test has two distinct bars:
   against clustered elementary streams, not a pacing defect; and the target mux
   rate (≈ 1.2× source) is an operator choice trading stuffing overhead against
   burst headroom.
-- **`dev`-branch cross-branch requirement (§6.8).** The open-GOP round-trip needs
-  **both** #2072 (catalog reservation gating) *and* #2066 (recovery-point-SEI
-  keyframe detection) on the same tree. `dev` @ `e3576465` has both (via a `main`→
-  `dev` merge); on an older `dev` that carried #2072 alone, an IDR-less feed's video
-  rendition never resolves, so the reservation gate stays shut and the catalog never
-  publishes — correct behaviour for an input whose video genuinely never resolves,
-  but a hard "no output" for real broadcast H.264. Pin the commit when reproducing.
-- **Service-layer gap was a missing catalog field — now mapped by PR #2440 (§6.8).**
-  On `e3576465`, `container/ts/catalog.rs` modelled per-PID PMT info + verbatim ES
-  only, so `export ts` could not emit SDT/NIT or preserve PMT-PID/TSID identity. PR
-  [#2440](https://github.com/moq-dev/moq/pull/2440) — filed as the follow-up to
-  moq issue #1979 (which scoped only the elementary-layout race) — threads a
-  service-info record through the catalog and rebuilds those tables on export.
-  Reviewed and confirmed working; expected to land in `dev`/`main`. The **dynamic
-  TDT/TOT and EIT** tables are still not carried (live-clock / EPG regeneration,
-  deferred), so the opaque lane (§7) remains the only path that preserves *those*
-  verbatim.
+- **The open-GOP round-trip requires both fixes on the same tree (§6.8).** It needs
+  **both** #2072 (catalog reservation gating) *and* #2066 (recovery-point-SEI keyframe
+  detection): with #2072 alone, an IDR-less feed's video rendition never resolves, so
+  the reservation gate stays shut and the catalog never publishes — correct behaviour
+  for an input whose video genuinely never resolves, but a hard "no output" for real
+  broadcast H.264.
+- **The service-layer gap was a missing catalog field, mapped by PR #2440 (§6.8).**
+  As shipped, `container/ts/catalog.rs` modelled per-PID PMT info + verbatim ES only, so
+  `export ts` could not emit SDT/NIT or preserve PMT-PID/TSID identity. PR
+  [#2440](https://github.com/moq-dev/moq/pull/2440) threads a service-info record
+  through the catalog and rebuilds those tables on export. The **dynamic TDT/TOT and
+  EIT** tables are still not carried (live-clock / EPG regeneration, deferred), so the
+  opaque lane (§7) remains the only path that preserves *those* verbatim.
 - **Raw artifacts** (`*_out.ts`, `*_paced.ts`, `*_pcr.csv`, logs): not committed
   (§14); the §6.4 commands regenerate them.
 
@@ -852,10 +834,10 @@ answer: is the opaque lane **bit-transparent** to the whole transport stream
 (signalling and all), and does the subscriber's CBR/PCR groomer hold TR 101 290 P1
 timing?
 
-**Status: run 2026-07-17 — opaque lane is byte-transparent; SI + SCTE-35 + PCR
-preserved.** All three representative clips (`testloop_clean`, `testloop` 4:2:2,
-`CNNiEMEA`) round-tripped through the private opaque stack on localhost (draft-14,
-`moq-transport` 0.14.2). Every elementary stream **and** the full PSI/SI
+**Status: opaque lane is byte-transparent; SI + SCTE-35 + PCR preserved.** All three
+representative clips (`testloop_clean`, `testloop` 4:2:2, `CNNiEMEA`) round-trip through
+the private opaque stack on localhost (draft-14, `moq-transport` 0.14.2). Every
+elementary stream **and** the full PSI/SI
 (PAT / CAT / NIT / SDT / TDT-TOT), all SCTE-35 splice PIDs, the PMT PID, the PCR
 PID, the TSID/ONID, and the service name/type survived **verbatim**; **0 CC
 errors**, **0 transport errors**; PCR interval **0 % > 40 ms** and the source
@@ -952,7 +934,7 @@ tsp -I file <clip> -P regulate -P until --seconds 30 -O file - | nc 127.0.0.1 50
 **5. Analyse the egress** (identical to §5.4): `analyze` (services / PIDs / bitrate),
 `continuity` (CC errors), `pcrextract` + the §5.4 awk one-liner (PCR intervals).
 
-### 7.5 Results — the egress reproduces the source (P1, 2026-07-17)
+### 7.5 Results — the egress reproduces the source (P1)
 
 Source identity vs opaque egress, per clip. Every field is **preserved**:
 
@@ -995,9 +977,8 @@ the media-aware lane lacks entirely). Observed across the three runs:
 
 ### 7.7 Test 2 (media-aware) vs Test 3 (opaque) — the decisive contrast
 
-The media-aware column shows the originally-measured behaviour and, where PR
-[#2440](https://github.com/moq-dev/moq/pull/2440) changes it, the new state after
-"→":
+The media-aware column shows the as-shipped behaviour and, where PR
+[#2440](https://github.com/moq-dev/moq/pull/2440) changes it, the state after "→":
 
 | Property | T2 media-aware (`moq-dev`) | T3 opaque (platform) |
 |---|---|---|
@@ -1064,9 +1045,9 @@ contribution chain
 (EC2) → MoQ subscriber (local) → TSDuck/ffplay** (the topology in §4.1 and
 [evidence](evidence.md) §1).
 
-**Status: media-aware end-to-end chain complete (2026-07-17); opaque-remote
-deferred.** SSH inspection established a material fact: **the deployed cloud path is
-the `moq-dev` media-aware lane, not the opaque lane** — the relay is `moq-relay`
+**Status: media-aware end-to-end chain complete; opaque-remote deferred.** SSH
+inspection established a material fact: **the deployed cloud path is the `moq-dev`
+media-aware lane, not the opaque lane** — the relay is `moq-relay`
 (moq-lite-04, UDP 443) and both publishers use `moq import ts` (the loop and the
 SRT-fed live broadcast); the opaque `moq_publisher` is present but its service line
 is commented out (§8.5). So the **full live SRT contribution chain was completed
@@ -1152,7 +1133,7 @@ moq_subscriber --output-protocol tcp --playout-bind 127.0.0.1:5002 --no-pacing \
   --broadcast mpegts --track ts https://34.246.187.61:443/anon
 ```
 
-### 8.4 Results (2026-07-17)
+### 8.4 Results
 
 Three SRT runs were taken. Run 1 (3.5 Mbps) delivered ~3.3 MB then the home uplink
 dropped the SRT link (`code=24`) — the access-link constraint, not the transport.
@@ -1182,12 +1163,12 @@ exactly as local Test 2 predicted. (This EC2 build predates PR #2440, §6.8: the
 SI/PMT/TSID rows above reflect the pre-#2440 media-aware lane; #2440 preserves the
 service layer, leaving only TDT/TOT/EIT.)
 
-> **Later confirmation at full rate (2026-07-22, §12.9).** The run above was
-> SRT-latency/uplink-limited to ~1.66 Mbps. The T8 clean-path run drove the **full
-> ~9.93 Mbps** `CNNiEMEA2.ts` loop through the same media-aware lane and pulled it
-> home over QUIC at **9.48 Mbps sustained for 4 minutes with 0 CC** — i.e. the remote
-> path carries the full contribution rate cleanly; the earlier low Mbps was the
-> source, not the transport. Same media-aware fingerprint (SI stripped, PMT → 0x1000).
+> **Confirmation at full rate (§12.9).** The run above was SRT-latency/uplink-limited
+> to ~1.66 Mbps. The T8 clean-path run drives the **full ~9.93 Mbps** `CNNiEMEA2.ts`
+> loop through the same media-aware lane and pulls it home over QUIC at **9.48 Mbps
+> sustained for 4 minutes with 0 CC** — the remote path carries the full contribution
+> rate cleanly; the low Mbps here was the source, not the transport. Same media-aware
+> fingerprint (SI stripped, PMT → 0x1000).
 
 **On PCR cadence:** the media-aware lane transports whatever PCR spacing the
 encoder produced — it neither adds nor corrects broadcast-grade cadence. The CNN
@@ -1229,10 +1210,10 @@ The big one: does the path survive realistic Internet conditions? This exercises
 the path under controlled latency, loss, jitter, and reordering injected with Linux
 `tc`/`netem`, on both lanes.
 
-**Status: media-aware lane run and measured over the real EC2→home internet path
-(2026-07-17); opaque lane built/deployed on the EC2 and measured on a controlled
-loopback path (2026-07-17, §9.5).** For the media-aware run, impairment was applied
-on the EC2 `ens5` egress, filtered to the QUIC media flow only (UDP sport 443 → the
+**Status: media-aware lane measured over the real EC2→home internet path; opaque lane
+built/deployed on the EC2 and measured on a controlled loopback path (§9.5).** For the
+media-aware run, impairment was applied on the EC2 `ens5` egress, filtered to the QUIC
+media flow only (UDP sport 443 → the
 subscriber's home IP) so the SSH control channel was never impaired. All services
 were restored and every `netem` qdisc removed afterward (§9.8).
 
@@ -1282,7 +1263,7 @@ and PCR-interval statistics. Media-aware used the existing EC2 loop
 (`cnn.international.emea.loop.hang`, `moq export ts --latency-max 5s`); the opaque
 lane used a purpose-built chain (§9.5).
 
-### 9.4 Results — media-aware lane over the real EC2 path (2026-07-17)
+### 9.4 Results — media-aware lane over the real EC2 path
 
 Baseline (no impairment): **9.2–9.4 Mbps, 0 CC discontinuities, 0 transport
 errors**, PCR mean ~31 ms / max ~320 ms, ~12 % of intervals > 40 ms — i.e. the
@@ -1318,7 +1299,7 @@ inherent media-aware burstiness from Test 2, unchanged.
 **Buffer sensitivity:** at 1 % loss, `--latency-max` 500 ms vs 5 s both delivered
 ~8.7–9.2 Mbps with 0 CC — no cliff at this loss level.
 
-### 9.5 Results — opaque lane (2026-07-17)
+### 9.5 Results — opaque lane
 
 The opaque lane is not part of the standing EC2 deployment (§8), so it was built
 and deployed for this test: the `moq-publisher-subscriber` source was compiled on
@@ -1492,16 +1473,16 @@ Failure behaviour of the infrastructure: relay restart/failover and subscriber
 reconnect. Central to the redundant-fabric architecture ([relay](relay.md),
 [architecture](architecture.md) §14) and to Gate 3.
 
-**Status: the transport-resilience drills (relay restart, QUIC reconnect,
-publisher/exporter lifecycle, active/active source failover) were run locally on
-the media-aware lane on 2026-07-23 and are recorded in §10.5.** They establish
-which resilience behaviours are shipped today and which are not; the headline is
-that endpoint *reconnect* is only half-wired (the publisher survives a relay
-restart, the `moq export ts` subscriber does not) and that automatic active/active
-*source* failover is not reachable on the shipped default wire (`moq-lite-05`). The
-ST 2022-7 output-*determinism* precondition was analysed and measured separately on
-the `mpegts-pacer` groomer (2026-07-20, §10.4). The on-hardware hitless ST 2022-7
-drill (§10.6, Gate 3) remains outstanding (`TBM`). The determinism work is recorded
+**Status: transport-resilience drills (relay restart, QUIC reconnect,
+publisher/exporter lifecycle, active/active source failover) run locally on the
+media-aware lane and recorded in §10.5.** They establish which resilience behaviours
+are shipped today and which are not: endpoint *reconnect* is solid — the publisher
+survives a relay restart, and the `moq export ts` subscriber now does too (fixed by
+#2469) — but automatic active/active *source* failover is not reachable on the shipped
+default wire (`moq-lite-05`). The ST 2022-7 output-*determinism* precondition is
+analysed and measured separately on the `mpegts-pacer` groomer (§10.4). The on-hardware
+hitless ST 2022-7 drill (§10.6, Gate 3) remains outstanding (`TBM`). The determinism
+work is recorded
 first because it gates the *hitless* ST 2022-7 claim: a dual-path pair is only
 hitless if the two egress legs are byte-identical and sequence-aligned, and that is
 a property of the groomer, not of the drill.
@@ -1533,7 +1514,7 @@ flowchart LR
   ([architecture](architecture.md) §14.1) — the Gate 3 test.
 - Capture at P1/P2 across the event; timestamp the failure and the recovery.
 
-### 10.4 Findings — ST 2022-7 output determinism (pacer precondition, 2026-07-20)
+### 10.4 Findings — ST 2022-7 output determinism (pacer precondition)
 
 ST 2022-7 reconstructs by matching RTP sequence numbers, so a dual-path pair is
 hitless only if the two egress legs are **byte-identical and sequence-aligned** (it
@@ -1615,25 +1596,24 @@ built):**
    honest fallback is a single groomer duplicated to both NICs, or 1+1 hot-standby
    with a brief switch artefact ([architecture](architecture.md) §14.1).
 
-### 10.5 Transport-resilience drills — relay restart, QUIC reconnect, publisher/exporter lifecycle, active/active source failover (2026-07-23)
+### 10.5 Transport-resilience drills — relay restart, QUIC reconnect, publisher/exporter lifecycle, active/active source failover
 
 These drills separate *transport resilience* (does a client survive a relay
 restart or a dropped session?) from *service redundancy* (does an active/active
 pair fail over without the receiver noticing?). They were run locally on the
 **media-aware lane** to characterise what the shipped `moq-dev` provides before any
-ST 2022-7 hardware drill. Findings are split into **confirmed working**,
-**confirmed limitations**, **work-in-progress**, and **recommended workarounds** so
-they can be acted on directly.
+ST 2022-7 hardware drill. Findings are split into **working**, **limitations**,
+**work-in-progress**, and **recommended workarounds** so they can be acted on directly.
 
-*Environment.* `moq` / `moq-relay` **0.8.7 @ `5eaf99bc`** (`feat/mux-ts-dvb-service-layer`,
-built 2026-07-23), TSDuck 3.44, Darwin 25.5.0, loopback. Source `~/CNNiEMEA2.ts`
-looped via `tsp regulate --pcr-synchronous`. Each drill runs relay(s) + publisher(s)
-+ subscriber(s) + timed kills inside a **single** shell invocation (the local
-background-process constraint of the test harness); scripts and relay configs are
-saved under `~/t6-redundancy/` (`failover.sh`, `cluster_failover.sh`, `reconnect.sh`,
+*Environment.* `moq` / `moq-relay` 0.8.7 (`feat/mux-ts-dvb-service-layer`), TSDuck 3.44,
+Darwin 25.5.0, loopback. Source `~/CNNiEMEA2.ts` looped via
+`tsp regulate --pcr-synchronous`. Each drill runs relay(s) + publisher(s) +
+subscriber(s) + timed kills inside a **single** shell invocation (the local
+background-process constraint of the test harness); scripts and relay configs are saved
+under `~/t6-redundancy/` (`failover.sh`, `cluster_failover.sh`, `reconnect.sh`,
 `relayA.toml`, `relayB.toml`). A one-row-per-second byte sampler on each subscriber
 output makes the failure instant visible. All clients use `--client-quic-gso=false`
-(macOS loopback); the negotiated wire version was **`moq-lite-05`** unless noted.
+(macOS loopback); the negotiated wire version is **`moq-lite-05`** unless noted.
 
 #### 10.5.1 Method (per drill)
 
@@ -1654,75 +1634,48 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
    for the self-signed peer), both subscribers on `relayA`. Kill `pubA`; observe
    whether `relayA` fails its source over to `pubB` across the mesh.
 
-#### 10.5.2 Confirmed working
+#### 10.5.2 Working
 
-- **Redundant outputs (fan-out).** In every drill, **two independent `moq export ts`
-  subscribers produced byte-identical, continuous captures** (e.g. both exactly
-  `24,817,880` bytes in the mesh drill up to the failure instant). Fanning one
-  broadcast out to N subscribers → N pacers → N IRDs works today with no extra
-  machinery. *(Evidence: `sizes.csv` byte samplers, all three scripts.)*
+- **Redundant outputs (fan-out).** Two independent `moq export ts` subscribers produce
+  byte-identical, continuous captures. Fanning one broadcast out to N subscribers →
+  N pacers → N IRDs works today with no extra machinery.
 - **Publisher transport reconnect.** After a relay restart the `moq import ts`
-  publisher's reconnect loop redials the same URL and **re-announces the broadcast
-  automatically** on each new session; the relay logs repeated
-  `session accepted role=Publisher` and `subscribed started … broadcast=rec.hang`.
-  The import side is resilient to session loss. *(Evidence: `rec_pub.log`,
-  `relayR.log`; code: `rs/moq-native/src/reconnect.rs`, wired at
-  `rs/moq-cli/src/main.rs`.)*
-- **The reconnect loop itself exists and backs off.** Session close → reconnect with
-  exponential backoff (initial 1 s, ×2, max 30 s, give-up default 5 min); auth
-  errors are terminal (no retry). Confirmed live: `moq_native::reconnect: session
-  closed, reconnecting … delay=1s`. *(Code: `rs/moq-native/src/reconnect.rs`.)*
+  publisher's reconnect loop redials the same URL and re-announces the broadcast
+  automatically on each new session. The import side is resilient to session loss.
+  *(Code: `rs/moq-native/src/reconnect.rs`, wired at `rs/moq-cli/src/main.rs`.)*
+- **The reconnect loop backs off.** Session close → reconnect with exponential backoff
+  (initial 1 s, ×2, max 30 s, give-up default 5 min); auth errors are terminal (no
+  retry). *(Code: `rs/moq-native/src/reconnect.rs`.)*
 - **A two-relay cluster forms and carries the media-aware TS end to end.** `relayB`
-  dialled `relayA`, negotiated `moq-lite-05`, and both subscribers on `relayA`
-  received the feed — including, once `pubB` joined `relayB`, **two publishers of the
-  same broadcast coexisting without collision** (output kept growing cleanly through
-  the join). *(Evidence: `cluster_failover.sh` run, `relayA.log`/`relayB.log`.)*
-- **`moq export ts` subscriber survives session loss and resumes automatically
-  (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469), re-verified 2026-07-24).**
-  Re-running the relay kill+restart drill on main @ `7c976cd7` (`moq 0.9.1`): both
-  exporters' output grew to `12,733,992` bytes, **froze exactly at the relay kill
-  (t=12)** through the outage, then **resumed at t=29** and ran continuously to
-  ~64.8 MB — byte-identical across both subscribers before and after the gap. Both
-  processes were **still alive at t=70**, there was **no fatal `json: dropped`** (only a
-  benign `moq_mux::container::consumer: current group evicted; skipping to next buffered
-  group`), and the reconnect log shows `session closed, reconnecting` → backoff → a
-  fresh `connected version=moq-lite-05`. The ~17 s gap = idle-timeout detection (6 s
-  here) + reconnect backoff + publisher re-announce; **automatic and bounded, not
-  hitless**. *(Evidence: `sizes_r.csv`, `rec_sub1.log`/`rec_sub2.log`; see also §10.5.3.)*
+  dials `relayA`, negotiates `moq-lite-05`, and both subscribers on `relayA` receive
+  the feed — including two publishers of the same broadcast coexisting on separate
+  relays without collision.
+- **`moq export ts` subscriber survives session loss and resumes automatically**
+  (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)). Across a relay
+  kill+restart, both exporters' output freezes at the relay kill, then resumes once the
+  publisher re-announces on the new session, running continuously thereafter and
+  byte-identical across both subscribers before and after the gap. The gap equals
+  idle-timeout detection + reconnect backoff + publisher re-announce: **automatic and
+  bounded, not hitless**. The content gap is a clean object-boundary skip, absorbed
+  downstream by ST 2022-7 / IRD selection rather than concealed by the exporter.
 
-#### 10.5.3 Confirmed limitations
+#### 10.5.3 Limitations
 
-- **RESOLVED — `moq export ts` no longer dies on session loss.** *This was previously
-  the single biggest transport-resilience gap:* the exporter exited with
-  `Error: json: dropped` the instant its MoQ session dropped (reconnect loop alive, but
-  the export container treated the dropped `catalog.json` as fatal). We filed it as
-  [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459); it was **fixed in
-  [#2469](https://github.com/moq-dev/moq/pull/2469)** (broadcast *linger* across an
-  ungraceful source loss) and **re-verified here** — see the confirmed-working entry in
-  §10.5.2. The end-to-end stream now resumes automatically after a relay restart. The
-  content gap during the outage is a clean object-boundary skip, absorbed downstream by
-  ST 2022-7 / IRD selection rather than concealed by the exporter.
 - **Failure detection on a hard kill is gated by the QUIC idle timeout.** A
   SIGKILL/instance-stop relay sends no close frame, so clients notice only after the
-  idle timeout (**default 30 s**, `--client-quic-idle-timeout`). In the first pass the
-  30 s detection fell *after* the capture window, so nothing appeared to react at all;
-  lowering it made the session-drop detection (and, before #2469, the exporter crash)
-  observable inside the window. **Caveat:** idle timeout must stay **above** the
-  keep-alive interval — a 3 s idle with a 5 s keep-alive made even the *healthy*
-  reconnected publisher flap every ~3 s; the re-verification used
-  `--client-quic-keep-alive 2s --client-quic-idle-timeout 6s`. Recovery time is
+  idle timeout (**default 30 s**, `--client-quic-idle-timeout`). Recovery time is
   therefore dominated by this detection timeout, not by the ~1 s reconnect backoff.
+  **Caveat:** idle timeout must stay **above** the keep-alive interval, or even a
+  healthy reconnected publisher flaps at the keep-alive period.
 - **Naive active/active on one relay collapses the stream.** Two publishers
   announcing the same broadcast to the same relay do **not** form a standby pair —
   the moment the second announces, the relay declares the path `unroutable` and tears
-  down **both** publishers (`Error: moq: unroutable`; publisher-side
-  `track info error … err=unroutable`). Both subscriber outputs froze at exactly
-  `10,543,416` bytes at the join instant. *(Evidence: `failover.sh` run, `relay.log`,
-  `pubA.log`/`pubB.log`.)*
+  down **both** publishers (`Error: moq: unroutable`). Both subscriber outputs freeze
+  at the join instant.
 - **Two-relay mesh tolerates the pair but does NOT fail over on `moq-lite-05`.** With
-  `pubA→relayA` and `pubB→relayB` meshed, both publishers coexisted, but when `pubA`
-  was killed `relayA` did **not** re-splice to `pubB`: the subscribers froze
-  permanently (`24,817,880` bytes). `relayB` never re-announced its *local* `red.hang`
+  `pubA→relayA` and `pubB→relayB` meshed, both publishers coexist, but when `pubA`
+  is killed `relayA` does **not** re-splice to `pubB`: the subscribers freeze
+  permanently. `relayB` never re-announces its *local* `red.hang`
   back to `relayA` — announce coalescing keeps one best route per path and split-horizon
   loop filtering (`exclude_hop`) suppresses the route that would cross back — so
   `relayA` had **no standby route to reselect**. The origin *does* implement
@@ -1730,70 +1683,107 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
   unit test `test_route_failover`), but on the shipped default wire it is not fed a
   second live route for the same broadcast. *(Evidence: `cluster_failover.sh` run.)*
 
-#### 10.5.4 Work-in-progress — `moq-lite-06` tested end-to-end; cost routing does **not** by itself restore failover
+#### 10.5.4 Work-in-progress — cost routing does **not** by itself restore failover
 
-- **`moq-lite-06-wip` is opt-in, not unreachable — and it was tested.** The cost/standby
+- **`moq-lite-06-wip` cost routing is opt-in and, alone, insufficient.** The cost/standby
   machinery (#2424: a standby seeds a high `route.cost`; the winner's cost drops to 0
   when it starts carrying — `rs/moq-net/src/lite/announce.rs`,
   `rs/moq-net/src/model/broadcast.rs`) lives only in `moq-lite-06-wip`, which is
-  **deliberately excluded from the default advertised set/ALPN list** and negotiates
-  **only when both peers opt in** (*source*: `rs/moq-net/src/version.rs` — `Versions::all()`
-  and `ALPNS` both omit it with an explaining comment; it is "otherwise a fully-defined
-  version … an opt-in set that includes it negotiates normally"). An initial attempt
-  that pinned only the *clients* failed the handshake (`failed to read capsule
-  e=UnexpectedEnd`) purely because the default relay wasn't advertising the
-  `moq-lite-06` ALPN — an ALPN mismatch, not a protocol fault.
-- **Re-run with both relays and all clients opted in** (`--server-version` +
-  `--client-version moq-lite-06-wip`; cluster log confirms
-  `connected version=moq-lite-06-wip`), the two-relay mesh drill behaved **exactly as on
-  `moq-lite-05`**: the pair coexisted (output grew to `24,848,148` bytes) and then
-  **froze permanently when `pubA` was killed** — no failover. Relay A's session log shows
-  it only ever held **one** route for the broadcast (local `pubA`; connections =
-  2 subscribers + 1 publisher + the cluster peer), and **relay B never advertised its
-  standby `pubB` across the cluster link**. So cost routing had nothing to rank: the
-  blocker is that a **standby publisher's route is not propagated across the mesh to the
-  node serving the active source**, which cost pricing does not address. `moq-lite-06`
-  cost routing is therefore **necessary-but-not-sufficient** for active/active source
-  failover, not the fix on its own. *(Evidence: `cluster_failover.sh VER=moq-lite-06-wip`
-  run, `relayA.log`/`relayB.log`; source: `rs/moq-net/src/version.rs`,
-  `rs/moq-net/src/lite/version.rs`.)*
-- **Upstream fix [#2473](https://github.com/moq-dev/moq/pull/2473) reviewed and tested
-  (2026-07-24) — the mechanism landed, e2e failover not yet reached.** #2473 (*"fail over
-  across redundant publishers via per-peer route selection"*, addressing #2461) adds:
-  per-peer announce selection (a relay advertises the best route whose hop chain *excludes*
-  the requesting peer, so a peer inside the serving chain gets the standby instead of
-  nothing), exclusion-aware serving, first-hop content identity, and a `moq --origin <id>`
-  knob so a 1+1 pair declares itself interchangeable. **Model/wire unit tests pass** on our
-  build (`test_route_failover`, `test_dispatch_excludes_requester`,
-  `test_dispatch_all_tainted_unroutable`, `test_publisher_mismatch_parks`, plus #2469's
-  linger tests after merging `main`). **But the end-to-end two-relay drill still does not
-  fail over:** across every topology (relay B dials A; full mesh A↔B; and with a subscriber
-  on relay B forcing it to carry `pubA → relayA → relayB` while holding a local `pubB`
-  standby, both publishers sharing `--origin`), **relay A never held a second route** — no
-  remote-hop route, no `reselect` — so `sub1` on relay A froze permanently when `pubA` was
-  killed (`sizes.csv`: flat at `24,844,388` bytes from t=22). The per-peer *selection*
-  landed, but the standby *announcement* is still never presented to the node serving the
-  active source: that node is satisfied by its local source and never solicits the peer's
-  standby (a control test confirms cross-relay *on-demand* forwarding works — a sub on
-  relay B with no local publisher pulls `pubA` across the mesh at full rate, ~21.8 MB/18 s).
-  Two secondary observations: **(a)** #2473 predates #2469 and needs its linger (the
-  failover splice needs the front to survive the active-source loss; without it the
-  exporter also still dies `json: dropped`) — we merged `main` in locally to test, and the
-  suite stays green; and **(b)** with a shared `--origin`, a subscriber on relay B is torn
-  down with `Error::Unroutable` (`code=30`) the moment the local standby `pubB` joins the
-  relay already carrying that broadcast from its peer. Feedback + the drill are drafted for
-  the maintainers ([upstream/pr2473-feedback.md](upstream/pr2473-feedback.md),
-  [upstream/cluster_failover.sh](upstream/cluster_failover.sh)). *(Evidence:
-  `cluster_failover.sh` runs on `moq-dev @ baeb69b4` + merged `main`, `relayA.log`,
-  `sub3.log`; source: `rs/moq-net/src/lite/publisher.rs`, `rs/moq-net/src/model/origin.rs`,
-  `rs/moq-cli/src/args.rs`.)*
+  deliberately excluded from the default advertised set/ALPN list and negotiates only
+  when both peers opt in (`rs/moq-net/src/version.rs`). With both relays and all clients
+  opted in, the two-relay mesh drill behaves **exactly as on `moq-lite-05`**: the pair
+  coexists, then freezes permanently when `pubA` is killed. Relay A only ever holds one
+  route for the broadcast, because relay B never advertises its standby `pubB` across the
+  cluster link — so cost routing has nothing to rank. The blocker is that a **standby
+  publisher's route is not propagated across the mesh to the node serving the active
+  source**, which cost pricing does not address. Cost routing is therefore
+  **necessary-but-not-sufficient** for active/active source failover.
+- **Upstream fix [#2473](https://github.com/moq-dev/moq/pull/2473): the two-relay drill now
+  PASSES end to end (verified on head `cc11cbaf`, `moq 0.9.3-cc11cbaf`, 2026-07-27).**
+  #2473 (*"fail over across redundant publishers via per-peer route selection"*, addressing
+  #2461) adds per-peer announce selection (a relay advertises the best route whose hop chain
+  *excludes* the requesting peer, so a peer inside the serving chain gets the standby instead
+  of nothing), exclusion-aware serving, first-hop content identity declared in SETUP, and a
+  `moq --origin <id>` knob so a 1+1 pair declares itself interchangeable. The model/wire unit
+  tests pass — `excluded_peer_receives_the_standby`,
+  `standby_attach_announces_to_excluded_peer`, `test_standby_join_splices_live_subscriber`,
+  `origin_round_trip`, plus the two new per-track regressions
+  `test_standby_missing_track_keeps_incumbent` and
+  `test_unservable_track_retried_by_a_later_request`. **And the live drill now passes:**
+  - **Failover works.** `sub1` on relay A resumed **30–33 s after `pubA` was killed** and ran
+    to the end of the window (+22.5 MB and +25.3 MB in two full-rate runs). The debug log
+    shows the whole mechanism: relay A announces its local route (`announce
+    broadcast=red.hang hops=1`); while relay B is merely carrying via relay A it correctly
+    advertises nothing (`no advertisable route for this peer exclude_hop=…`); the instant the
+    standby `pubB` joins relay B it emits `announce broadcast=red.hang hops=2` to relay A, so
+    relay A holds the standby **before** it needs it; on detection relay A reselects
+    (`unannounce (filtered route)` → `reannounce`).
+  - **The shared-`--origin` teardown is fixed.** `sub3` on relay B now survives `pubB`'s join
+    (+9.7 MB) with **zero `unroutable`** in any client log, where it previously died with
+    `Error::Unroutable` (`code=30`).
+  - **Recovery latency is one QUIC idle timeout**, i.e. detection-bound, not mechanism-bound
+    (§10.5.3). Lower `--server-quic-idle-timeout` on the relays to shorten it; upstream is
+    weighing a lower default (~10 s) separately.
+  - **Reliability — resolved; the earlier inconsistency was ours.** The 4-run sample that gave
+    3/4 failover (one no-recovery, one resuming at only ~audio rate) was taken with a kill that
+    signalled the `tsp | moq import` pipeline child-by-child. That lets `tsp` die first, so the
+    importer reads a truncated stream plus EOF and shuts its broadcast down *cleanly* — a
+    different code path entirely (see the graceful-departure bullet). With the pipeline
+    SIGKILLed in one pass, **4 of 4 runs failed over at full rate**, resuming at 30, 32, 32 and
+    33 s. Recovery is *complete*, not merely present.
+  - **⚠ New finding — the standby *join* is not transparent.** A subscriber on a relay that is
+    only *carrying* the broadcast stalls **8–9 s** the instant a redundant publisher attaches
+    locally to that relay, then recovers at full rate. Reproduced on every run on `cc11cbaf`.
+    Per-second bytes for `sub3` (relay B; `pubB` joins at t=10): 175 k, 162 k, 90 k, then eight
+    seconds of **zero**, then 13 k, 125 k, 179 k. Far better than the pre-fix teardown, but in a
+    1+1 deployment a standby attaching is routine, so redundancy currently costs the viewers it
+    is meant to protect a visible outage. Not yet diagnosed — either the splice re-requests
+    tracks from scratch or it waits on the new source's first keyframe/catalog.
+  - **⚠ New finding — graceful source departure is not failed over at all.** When the active
+    publisher exits *cleanly* instead of being killed, the relay unannounces immediately (no
+    timeout to wait out) and the subscriber's `moq export ts` **terminates** with
+    `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed`, despite the
+    standby being announced. So the covered case is the *harder* one (host loss); the easier and
+    far more common one — SIGTERM to an encoder, a rolling restart — is uncovered. Adjacent to
+    but distinct from #2469, which fixed the exporter's `json: dropped` on session loss; here the
+    session is healthy and it is the *catalog* changing under the muxer. Both new findings were
+    reported upstream on the PR.
+  *(Source: `rs/moq-net/src/lite/publisher.rs`, `rs/moq-net/src/model/origin.rs`,
+  `rs/moq-net/src/model/broadcast.rs`, `rs/moq-cli/src/args.rs`.)*
+- **⚠ Methodology correction — our first drill could not have passed on any build.** A `kill`
+  on a publisher never sends CONNECTION_CLOSE, so the relay keeps serving the dead source
+  until the **QUIC idle timeout** expires (`DEFAULT_IDLE_TIMEOUT` = **30 s**); the relay logs
+  nothing between the kill and `connection closed err=timed out` 30 s later, and only then can
+  it reselect. Our original timeline killed `pubA` at t=22 and graded at t=43 — **21 s into a
+  30 s timeout**, so the "no failover" result was an artefact of the harness, not of the code.
+  This also retracts our upstream "Finding 1" (that a standby route never reaches the relay
+  serving the active source): announce-interest is in fact unconditional across the cluster.
+  The **baseline** conclusion in §10.5.3–4 nevertheless stands, corroborated by an
+  extended-window control run on `main` that stays frozen for a full 68 s window. The drill
+  now derives its observation window from the detection budget (`IDLE_BUDGET`, default 30 s;
+  `SIDLE` sets `--server-quic-idle-timeout` for a fast variant) and reports the measured
+  resume time rather than a bare PASS/FAIL. **Any future failover drill must grade beyond one
+  idle timeout.**
+- **⚠ Second methodology correction — the kill must be atomic.** Signalling a
+  `tsp | moq import` pipeline child-by-child kills `tsp` first, leaving the importer to read a
+  truncated stream plus EOF; it then shuts the broadcast down cleanly, so the drill grades a
+  *graceful detach* rather than a source failure. The two paths differ completely — one waits
+  out an idle timeout and fails over, the other unannounces at once and kills the subscriber —
+  and conflating them produced our inconsistent recovery sample. **Kill the whole pipeline in
+  one pass (`pkill -KILL -P`), and state which path is being tested.**
+- **Contributed upstream:** the corrected drill is submitted as
+  [#2545](https://github.com/moq-dev/moq/pull/2545) — `just test failover` in the repo's `test/`
+  tree, in the same shape as `just test smoke` and `just test ts`. It generates its own source
+  clip with `ffmpeg` (no private capture), grades failover and standby-join survival, reports
+  the join stall as a measured `WARN`, and documents both methodology traps in-script. It
+  depends on `moq --origin` from #2473, so it exits with a diagnostic on builds without it.
 
 #### 10.5.5 Recommended workarounds (buildable today)
 
 - **Exporter durability:** the crash on session loss is **fixed** ([#2469](https://github.com/moq-dev/moq/pull/2469),
-  verified §10.5.2), so `moq export ts` now rides out a relay restart and resumes on its
-  own — no external supervisor required. Recovery is bounded (detection + backoff +
-  re-announce, ~17 s locally), not hitless; the content gap is absorbed downstream.
+  §10.5.2), so `moq export ts` rides out a relay restart and resumes on its own — no
+  external supervisor required. Recovery is bounded (detection + backoff + re-announce),
+  not hitless; the content gap is absorbed downstream.
 - **Service redundancy:** do **not** rely on relay-mesh source failover today. Run
   the fully-doubled chain — dual publishers → dual relays → dual subscribers → dual
   pacers → downstream ST 2022-7 / IRD failover — and let the **receiver** perform
@@ -1809,11 +1799,13 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
 | Scenario | Recovery time | Stream continuity | Result | Notes |
 |---|---|---|---|---|
 | Relay graceful/abrupt restart — **publisher** | ~1 s after detection; detection = QUIC idle timeout (30 s default, tunable) | resumes (re-announces) | ✅ transport reconnect works | `rs/moq-native/src/reconnect.rs`; §10.5.2 |
-| Relay graceful/abrupt restart — **`moq export ts` subscriber** | ~17 s (idle-timeout detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by [#2469](https://github.com/moq-dev/moq/pull/2469) (verified 2026-07-24) | broadcast *linger*; no supervisor needed; §10.5.2 |
-| End-to-end **stream resumes automatically** after relay restart | ~17 s | **yes** (froze at t=12, resumed at t=29) | ✅ fixed by #2469 (verified 2026-07-24) | byte-identical redundant outputs across the gap; §10.5.2 |
+| Relay graceful/abrupt restart — **`moq export ts` subscriber** | ~17 s (idle-timeout detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by [#2469](https://github.com/moq-dev/moq/pull/2469) | broadcast *linger*; no supervisor needed; §10.5.2 |
+| End-to-end **stream resumes automatically** after relay restart | ~17 s | **yes** | ✅ fixed by #2469 | byte-identical redundant outputs across the gap; §10.5.2 |
 | Active/active — two publishers, **one relay** | n/a | **stream dies at 2nd announce** | ❌ `unroutable`, both torn down | §10.5.3 |
-| Active/active — two publishers, **two-relay mesh** | pair coexists; **no failover** on `pubA` death | froze permanently | ❌ on `moq-lite-05`, `moq-lite-06-wip`, **and PR [#2473](https://github.com/moq-dev/moq/pull/2473)** (+ merged #2469) | standby route never presented to the active-serving relay; #2473 unit tests pass but e2e drill still froze; §10.5.4 |
-| `moq-lite-06` cost/standby routing | — | — | 🟡 WIP; opt-in, negotiates end-to-end, but **necessary-not-sufficient** | tested `--server/--client-version`; mesh still froze — pricing can't rank a route that isn't advertised; §10.5.4 |
+| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one QUIC idle timeout) on PR [#2473](https://github.com/moq-dev/moq/pull/2473); no failover on the shipped default | resumes after detection (PR); froze permanently (default) | ❌ on `moq-lite-05` / `moq-lite-06-wip`; ✅ **on PR #2473 head `cc11cbaf`** (still unmerged) | standby advertised at join (`announce … hops=2`), relay A reselects on detection; recovery **bounded, not hitless**, but complete and 4/4 consistent once the kill is atomic; §10.5.4 |
+| Active/active — active source exits **gracefully** | none — subscriber terminates | fails over to the announced standby | ❌ on PR #2473 head | `moq export ts` dies `TS track layout changed … '0.avc3' removed`; relay unannounces at once, no timeout involved; the common production case (SIGTERM/rolling restart) is uncovered; §10.5.4 |
+| Shared-`--origin` standby joins a **carrying** relay | **8–9 s stall**, then full-rate recovery | far-relay subscriber keeps flowing uninterrupted | 🟡 teardown fixed on PR #2473 (was `Error::Unroutable` code=30), stall remains | pre-existing bug, reproduced on `main` as `json: dropped`; zero `unroutable` after fix, but the join still costs carrying-relay viewers 8–9 s on every run; §10.5.4 |
+| `moq-lite-06` cost/standby routing | — | — | 🟡 WIP; opt-in, negotiates end-to-end, but **necessary-not-sufficient** | mesh still freezes — pricing can't rank a route that isn't advertised; §10.5.4 |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ | §10.5.2 |
 | ST 2022-7 single-path loss (hitless drill) | TBM | **target: hitless** | ⬜ TBM | Gate 3; **precondition** — byte-identical legs (§10.4) — met by a deterministic/offline or duplicate-single groomer, not yet by two independent live pacers |
 
@@ -1829,17 +1821,16 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
   without operator intervention.
 - Subscriber reconnect join latency is bounded and the catch-up behaviour is
   defined (live-edge resync, no unbounded backlog). **Unblocked** by
-  [#2469](https://github.com/moq-dev/moq/pull/2469) (verified §10.5.2): a media-aware
-  subscriber now re-establishes and resumes automatically without an external
-  supervisor; recovery is bounded (detection + backoff + re-announce, ~17 s in the
-  local drill), not hitless.
+  [#2469](https://github.com/moq-dev/moq/pull/2469) (§10.5.2): a media-aware
+  subscriber re-establishes and resumes automatically without an external
+  supervisor; recovery is bounded (detection + backoff + re-announce), not hitless.
 
 ### 10.8 Limitations
 
 - A two-relay lab is not a production relay cluster; shared subscription/cache
   state and shortest-path routing across a real mesh are distributed-systems
   behaviours the platform must build and are out of scope here
-  ([evidence](evidence.md) §6, [relay](relay.md) §6).
+  ([evidence](evidence.md) §5, [relay](relay.md) §6).
 - **The §10.4 determinism result is P1 / code-level, not a hardware 2022-7 drill.**
   It establishes which topologies *can* produce a byte-identical pair; it does not
   replace the on-hardware hitless-switch drill under induced loss (still `TBM`),
@@ -1853,10 +1844,10 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
 Where broadcasters will focus, and the make-or-break gate. File-based timing first
 (cheap), then **hardware TR 101 290 P1/P2 on a real IRD** (Gate 2).
 
-> **Status (2026-07-22):** P1 (file) is **passed** on the media-aware lane +
-> `mpegts-pacer` across four clips — 0 % of PCR intervals > 40 ms, exact CBR, 0
-> `pcrverify` violations at ±500 ns, 0 CC errors (§11.4 / §11.4.1). P2 (hardware
-> IRD) is still `TBM` and remains the load-bearing gate.
+> **Status:** P1 (file) is **passed** on the media-aware lane + `mpegts-pacer`
+> across four clips — 0 % of PCR intervals > 40 ms, exact CBR, 0 `pcrverify`
+> violations at ±500 ns, 0 CC errors (§11.4 / §11.4.1). P2 (hardware IRD) is still
+> `TBM` and remains the load-bearing gate.
 
 ### 11.1 Objective
 
@@ -1897,8 +1888,8 @@ flowchart LR
 
 ### 11.4 Metrics and results table
 
-P1 (file) figures below are the range across four groomed clips measured
-2026-07-22 (§11.4.1); P2 remains the load-bearing open item.
+P1 (file) figures below are the range across four groomed clips (§11.4.1); P2
+remains the load-bearing open item.
 
 | Metric | Unit | Limit | P1 (file) | P2 (hardware) |
 |---|---|---|---|---|
@@ -1924,16 +1915,16 @@ are not exercised by these clips and remain `TBM`.
 **Known baseline (pre-groom, file, P1):** ~24 % of PCR intervals exceeded 40 ms, up
 to 133 ms ([evidence](evidence.md) §3) — the problem grooming exists to solve.
 
-#### 11.4.1 Results — file-based (P1) run, media-aware lane + `mpegts-pacer` (2026-07-22)
+#### 11.4.1 Results — file-based (P1), media-aware lane + `mpegts-pacer`
 
-The full lane was run locally per §11.3 (step 1): `~/CNNiEMEA2.ts` (and the three other T1
+The full lane runs per §11.3 (step 1): `~/CNNiEMEA2.ts` (and the three other T1
 clips) → `tsp regulate` → `moq import ts` → `moq-relay` → `moq export ts` →
-`mpegts-pacer` (`cbr_file`, `auto regenerate`) → TSDuck. Binaries were rebuilt from
-`moq-dev` `feat/mux-ts-dvb-service-layer` **@ `5eaf99bc`** (`moq` 0.8.7, `moq-relay`
-0.13.7, `moq-native` 0.18.3 — the branch carrying #2072/#2066 and the #2440 service
-layer), so the exporter round-trips the CNN open-GOP + triple-SCTE-35 feed
-deterministically and **keeps the PMT PID at 0x0064** (no longer renumbered).
-`mpegts-pacer` 0.1.0; TSDuck 3.44-4676. Per clip, raw media-aware egress → paced:
+`mpegts-pacer` (`cbr_file`, `auto regenerate`) → TSDuck. The build under test is
+`moq-dev` `feat/mux-ts-dvb-service-layer` (`moq` 0.8.7, `moq-relay` 0.13.7,
+`moq-native` 0.18.3 — the branch carrying #2072/#2066 and the #2440 service layer), so
+the exporter round-trips the CNN open-GOP + triple-SCTE-35 feed deterministically and
+**keeps the PMT PID at 0x0064** (no longer renumbered). `mpegts-pacer` 0.1.0; TSDuck
+3.44-4676. Per clip, raw media-aware egress → paced:
 
 | Clip (paced CBR) | Raw egress > 40 ms | Paced > 40 ms | Paced PCR max (ms) | Mux rate (exact CBR) | `pcrverify` > 500 µs | CC err |
 |---|---|---|---|---|---|---|
@@ -1983,18 +1974,17 @@ head-to-head. This is the test that turns "MoQ carries broadcast TS" into "MoQ i
 competitive with SRT for it," and it is the empirical feed for
 [economics](economics.md) §8. Promoted here from the campaign roadmap (§17.3).
 
-**Status: clean-path baseline (§12.9) + full impairment matrix (§12.10) run
-2026-07-22 over the real EC2→home internet path.** Both transports were measured
-head-to-head under a granular `netem` sweep — latency, uniform/bursty loss,
-reordering, jitter, duplication, combined WAN, transient loss-burst recovery, and
-bandwidth constraint — at matched 2 s buffers on a rebuilt EC2 origin (`moq
-0.8.7-5e0e98c1`, latest `main`; security-patched FFmpeg). **Headline (§12.10):** under
-quinn's default CUBIC controller MoQ collapsed under uniform loss ≥ 2 %, reordering and
-WAN, while SRT held full rate — **but switching the relay to BBR (`delay`, PR #2432,
-one non-breaking flag) removes the collapse: MoQ is now full-rate/0-CC through 10 %
-loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10.1). The residual
-gaps are pathological *reordering* (in-order jitter is fine — 97 %; a loss-detection/HOL
-item, not CC) and the media-aware SI-transparency gap.
+**Status: clean-path baseline (§12.9) + full impairment matrix (§12.10) measured
+over the real EC2→home internet path.** Both transports were measured head-to-head
+under a granular `netem` sweep — latency, uniform/bursty loss, reordering, jitter,
+duplication, combined WAN, transient loss-burst recovery, and bandwidth constraint —
+at matched 2 s buffers. **Headline (§12.10):** under quinn's default CUBIC controller
+MoQ collapses under uniform loss ≥ 2 %, reordering and WAN, while SRT holds full rate —
+**but switching the relay to BBR (`delay`, PR #2432, one non-breaking flag) removes the
+collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile,
+on par with SRT** (§12.10.1). The residual gaps are pathological *reordering* (in-order
+jitter is fine — 97 %; a loss-detection/HOL item, not CC) and the media-aware
+SI-transparency gap.
 Only the **glass-to-glass latency** headline (§12.5 rows 1–3) remains `TBM` — it needs
 the burnt-timecode/NTP read rig, and lowering latency was explicitly *not* the objective
 here (robust delivery under degradation was). The
@@ -2218,7 +2208,7 @@ remain `TBM`.
 
 Baseline (no impairment) first, then the T5 conditions (§9.4) applied identically
 to both flows, plus impairments T5 did not cover that a head-to-head warrants. The
-**"run"** column records the level actually swept in the 2026-07-22 run (§12.10);
+**"run"** column records the level actually swept (§12.10);
 impairment was steered onto *only* the two media UDP flows via an SSH-safe
 `prio`+`u32` `netem` lane on the EC2 egress (forward path only — see §12.10).
 **Condition 6 (bandwidth constraint) was swept only *partially*** — Table 4 (§12.10) caps the
@@ -2295,20 +2285,19 @@ Comparative, agreed before the numbers:
 - **Raw artefacts** (`t8_*`, `*_pcr.csv`, pcaps, CPU logs): not committed (§14); the
   §12.4 commands regenerate them.
 
-### 12.9 Results — clean-path (condition 0) delivered-quality run (2026-07-22)
+### 12.9 Results — clean-path (condition 0) delivered quality
 
-Run over the **real public-internet path** EC2 (`34.246.187.61`, eu-west-1) → home,
-looping `~/CNNiEMEA2.ts` (1080i25 H.264, ~9.93 Mbps, 3× SCTE-35) on EC2 for
-several minutes. This measures the *delivered-quality/throughput/transparency*
-head-to-head (matrix condition 0); glass-to-glass **latency** and the impairment
-sweep (§12.6) were **not** run (need the timecode/NTP read rig and `netem` node).
+Measured over the **real public-internet path** EC2 (eu-west-1) → home, looping
+`~/CNNiEMEA2.ts` (1080i25 H.264, ~9.93 Mbps, 3× SCTE-35) on EC2 for several minutes.
+This measures the *delivered-quality/throughput/transparency* head-to-head (matrix
+condition 0); glass-to-glass **latency** and the impairment sweep (§12.6) are covered
+separately (§12.10).
 
-**Pipeline actually used.** MoQ leg: `tsp regulate --pcr-synchronous` (realtime PCR
-pacing of the looped file) → `moq import ts` (media-aware, `t8.bench.hang`) →
-`moq-relay :443/anon` → **home** `moq export ts` over QUIC → `mpegts-pacer`
-(`cbr_file auto regenerate`). SRT leg: `tsp regulate` → SRT listener `:9010` → home
-`tsp -I srt` (byte-faithful carriage). EC2 `moq` @ `/home/ubuntu/moq` (pre-#2440
-build); FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
+**Pipeline.** MoQ leg: `tsp regulate --pcr-synchronous` (realtime PCR pacing of the
+looped file) → `moq import ts` (media-aware, `t8.bench.hang`) → `moq-relay :443/anon` →
+**home** `moq export ts` over QUIC → `mpegts-pacer` (`cbr_file auto regenerate`). SRT
+leg: `tsp regulate` → SRT listener `:9010` → home `tsp -I srt` (byte-faithful carriage).
+The EC2 build here predates #2440; FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
 
 | Result (clean path) | MoQ over QUIC + pacer | SRT (byte-faithful) |
 |---|---|---|
@@ -2327,15 +2316,14 @@ build); FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
    QUIC with **0 CC errors sustained for 4 minutes**; raw TCP on the same path runs
    at 292 Mbps, so the access link has ample headroom.
 2. **`ffmpeg -re` mis-paces MPEG-TS with sparse data streams — a publish-side trap.**
-   The first attempts fed `moq import` with `ffmpeg -stream_loop -1 -re -map 0 -c copy`.
-   FFmpeg's `-re` reader stalled on the SCTE-35/teletext PIDs (their PTS barely
-   advances), collapsing the source to **~1/3 real-time (~2.6 Mbps)** and
-   backpressuring the whole chain — which *looked* like a download problem but was
-   purely the encoder. An EC2-loopback subscriber saw the same ~2.6 Mbps, and feeding
-   `moq import` **without** `-re` drained at **32 Mbps** (one core pegged), proving the
-   cap was `-re`. **Fix: pace the looped file with `tsp regulate --pcr-synchronous`**
-   (paces the muxed TS by PCR, immune to per-ES timestamp quirks) — this restored
-   full-rate delivery. (Method note added to §12.4.)
+   Feeding `moq import` with `ffmpeg -stream_loop -1 -re -map 0 -c copy` stalls the
+   `-re` reader on the SCTE-35/teletext PIDs (their PTS barely advances), collapsing the
+   source to **~1/3 real-time (~2.6 Mbps)** and backpressuring the whole chain — which
+   *looks* like a download problem but is purely the encoder. Feeding `moq import`
+   **without** `-re` drains at **32 Mbps** (one core pegged), confirming the cap is
+   `-re`. **The fix is to pace the looped file with `tsp regulate --pcr-synchronous`**
+   (paces the muxed TS by PCR, immune to per-ES timestamp quirks), which restores
+   full-rate delivery (§12.4).
 3. **Transparency is the real MoQ−SRT difference on this path, not delivery.** SRT is
    a dumb byte pipe: carried byte-faithfully (via `tsp`) it preserves the **original
    SI** (SDT "CNNI EMEA HD"/WBD, service type 0x19), **PMT PID 0x0064**, and the native
@@ -2344,7 +2332,7 @@ build); FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
    PCR — restored to exact CBR and P1 by `mpegts-pacer`, but the *service layer* is
    still lost. The opaque lane (§7) or a #2440 build (§6.8) closes that gap; deploying
    either on EC2 is the opaque-remote follow-up (§8.5).
-4. **A remux in the SRT path is not transparent (confirms §7.3).** Carrying SRT via
+4. **A remux in the SRT path is not transparent (§7.3).** Carrying SRT via
    `ffmpeg -c copy -f mpegts` instead of `tsp` re-muxed the stream — synthetic
    "Service01"/"FFmpeg" SDT and an ~80 ms PCR cadence — so the fair SRT reference must
    avoid FFmpeg in the carriage path (use `tsp -O srt` / `srt-live-transmit`).
@@ -2353,16 +2341,13 @@ build); FFmpeg 8.0.1 (SRT-enabled) and TSDuck 3.44 on the box.
    input for [economics](economics.md) §8 and T9 (§13).
 
 **Still owed for full T8:** glass-to-glass latency (all buffer rungs), protocol
-overhead (tcpdump per flow), and the opaque-lane transparency comparison. The
-impairment matrix (§12.6) is now run — see §12.10.
+overhead (tcpdump per flow), and the opaque-lane transparency comparison.
 
-### 12.10 Results — impairment matrix, MoQ vs SRT head-to-head (2026-07-22)
+### 12.10 Results — impairment matrix, MoQ vs SRT head-to-head
 
-Same real EC2 (`34.246.187.61`, eu-west-1) → home path as §12.9, on the **rebuilt
-origin**: `moq 0.8.7-5e0e98c1` (latest `main`, "fixes a bunch of issues") +
-security-patched FFmpeg `8.0.1-3ubuntu2`. The new build was verified to still
-**strip DVB SI** on the media-aware egress (service "(unknown)", PMT renumbered) —
-i.e. **#2440 is not yet in `main`**, so the transparency gap of §12.9 is unchanged.
+Same real EC2 (eu-west-1) → home path as §12.9. The media-aware egress on this build
+still **strips DVB SI** (service "(unknown)", PMT renumbered) — #2440 is not in this
+`main` build, so the transparency gap of §12.9 is unchanged.
 
 **Rig.** Both legs paced from `~/CNNiEMEA2.ts` by `tsp regulate --pcr-synchronous`
 (§12.9 lesson); MoQ = media-aware `moq import` → relay `:443` → home `moq export ts`;
@@ -2376,8 +2361,7 @@ flatters both ARQ mechanisms equally). Each condition = one **40 s concurrent** 
 of both transports; delivered rate is normalised to each transport's own clean baseline
 (MoQ 9.67, SRT 9.96 Mbps). One run per condition — indicative, not averaged.
 
-> **Scope — what this matrix does and does *not* measure (added 2026-07-23 after the
-> [#2432](https://github.com/moq-dev/moq/pull/2432) review).** The offered load (~10 Mbps CBR)
+> **Scope — what this matrix does and does *not* measure.** The offered load (~10 Mbps CBR)
 > ran on an **over-provisioned path** — raw TCP on the same route sustains ~292 Mbps (§12.9),
 > ~30× the stream. The **loss / reorder / jitter / dup tables** (Table 1) therefore impose **no
 > bottleneck at or below line rate**, so they measure **resilience to *non-congestive*
@@ -2496,17 +2480,16 @@ artefacts; re-measured in isolation and corrected to the values above.)
    by delivered-rate-vs-source, not by CC counters. SRT's degradation (only seen below
    line rate) shows as `RCV-DROPPED` gaps.
 
-### 12.10.1 BBR update — the loss collapse was a congestion-control default, not a MoQ limit (2026-07-22)
+### 12.10.1 Congestion control — the loss collapse is a CUBIC default, not a MoQ limit
 
-The findings above were measured with quinn's **default CUBIC** controller. PR
-[#2432](https://github.com/moq-dev/moq/pull/2432) (merged to `main` 2026-07-21, present
-in the EC2 build `5e0e98c1`) **exposes a congestion-control knob** —
-`--server-quic-congestion-control {loss|delay}` (and the `--client-quic-…` twin). MoQ
-therefore now supports **two CC families**: `loss` = **CUBIC** (loss-based, the quinn
-default) and `delay` = **BBR** (delay/rate-based). The BBR *generation* is backend-specific:
-**BBRv1 on the quinn backend** (what we ran), **BBRv2 on quiche**, **BBRv3 on noq**.
-Re-running the failing conditions with the **relay** switched to `delay` (the relay is the
-sender on the impaired download hop; everything else identical to the CUBIC A/B):
+The findings above were measured with quinn's **default CUBIC** controller. A
+congestion-control knob ([#2432](https://github.com/moq-dev/moq/pull/2432)) —
+`--server-quic-congestion-control {loss|delay}` (and the `--client-quic-…` twin) —
+exposes **two CC families**: `loss` = **CUBIC** (loss-based, the quinn default) and
+`delay` = **BBR** (delay/rate-based). The BBR *generation* is backend-specific: **BBRv1
+on quinn**, **BBRv2 on quiche**, **BBRv3 on noq**. With the **relay** switched to
+`delay` (the relay is the sender on the impaired download hop; everything else identical
+to the CUBIC A/B):
 
 - **The uniform-loss collapse disappears entirely.** loss 2 % **53 % → 100 %**, loss 5 %
   **31 % → 100 %**, loss 10 % **13 % → 100 %** — MoQ now matches SRT's full-rate,
@@ -2539,16 +2522,15 @@ retransmit loop — a structural loss-recovery advantage SRT's single end-to-end
 lacks. Cost: none on the wire; BBR's own known trade-offs (BBRv1 fairness, a loss cliff
 at very high loss) remain to be characterised.
 
-**Bottom line for community feedback (revised).** *The earlier "MoQ collapses under
-loss" result was a **default-configuration** artefact of loss-based CUBIC, not a
-protocol limitation.* With BBR (`delay`, already merged via #2432) MoQ over QUIC is
-**full-rate and byte-complete through 10 % uniform loss, 25 % reordering, and the WAN
-profile — on par with SRT** — while keeping its architectural wins (relay CDN fan-out,
-single transport, [relay](relay.md)). The **residual gaps** are (1) **pathological
-*reordering*** (uncorrelated `netem` jitter) — a QUIC loss-detection/HOL item, not CC;
-*in-order* jitter of the same magnitude is fine (97 %), and (2) **transparency** — the
-media-aware lane still strips DVB SI (#2440 not yet on `main`; the opaque lane, §7, or a
-#2440 build closes it). Net: MoQ is a credible primary-distribution transport once
+**Bottom line.** The "MoQ collapses under loss" result is a **default-configuration**
+artefact of loss-based CUBIC, not a protocol limitation. With BBR (`delay`, #2432) MoQ
+over QUIC is **full-rate and byte-complete through 10 % uniform loss, 25 % reordering,
+and the WAN profile — on par with SRT** — while keeping its architectural wins (relay
+CDN fan-out, single transport, [relay](relay.md)). The **residual gaps** are
+(1) **pathological *reordering*** (uncorrelated `netem` jitter) — a QUIC
+loss-detection/HOL item, not CC; *in-order* jitter of the same magnitude is fine (97 %),
+and (2) **transparency** — the media-aware lane still strips DVB SI (the opaque lane, §7,
+or a #2440 build closes it). MoQ is a credible primary-distribution transport once
 `delay` is the deployed default and the SI item is addressed; none of the fixes are
 protocol-breaking.
 
@@ -2556,13 +2538,13 @@ protocol-breaking.
 
 1. **Make `delay` (BBR) the deployed default** for contribution/distribution relays and
    clients (or document it as required config); re-baseline latency/overhead under BBR.
-2. **Reorder residual — deprioritised (§12.10.4).** We confirmed the "jitter" collapse is pure
-   reordering (in-order jitter via `netem slot` delivers 97 %). But the maintainer's guidance
-   (#2432, 2026-07-24) is *"don't test reordering — it doesn't happen on the internet, otherwise
-   TCP and QUIC would break."* So this is a `netem` artefact, **not** a roadmap driver; kept for
-   the record only. (If a genuine LEO/mobile-handover reordering case ever surfaces, §9.9, it is
-   a QUIC loss-detection/HOL tuning item, not CC.) **Replaced** as the priority by the bufferbloat
-   test (§12.12).
+2. **Reorder residual — deprioritised (§12.10.4).** The "jitter" collapse is pure
+   reordering (in-order jitter via `netem slot` delivers 97 %). Per upstream maintainer
+   guidance (#2432), reordering *"doesn't happen on the internet, otherwise TCP and QUIC
+   would break"* — so this is a `netem` artefact, **not** a roadmap driver; kept for the
+   record only. (If a genuine LEO/mobile-handover reordering case ever surfaces, §9.9, it
+   is a QUIC loss-detection/HOL tuning item, not CC.) The bufferbloat test (§12.12) is the
+   priority instead.
 3. **Re-run the buffer-sensitivity and transient-recovery tests under BBR** (Tables 2–3)
    to confirm recovery is now seamless rather than stall-and-catch-up.
 4. **BBR robustness envelope:** push loss beyond 10 % (20–30 %) and add a bandwidth cap
@@ -2580,18 +2562,18 @@ collapse-regime rows); forward-path-only impairment; matched 2 s buffers; MoQ me
 lane (delivered bytes normalised per-transport). `netem` is an emulator (§9.8), not the
 real congested internet (T4).
 
-### 12.10.3 All BBR generations vs the backends — CUBIC / BBRv1 / BBR2 / BBR3 side by side (2026-07-23)
+### 12.10.3 All BBR generations vs the backends — CUBIC / BBRv1 / BBR2 / BBR3 side by side
 
 MoQ's `delay` knob selects the *BBR family*, but the **generation is fixed by the
 compiled QUIC backend** — BBRv1 on quinn, BBRv2 on quiche, BBRv3 on noq
 ([#1706](https://github.com/moq-dev/moq/pull/1706) made BBR3 the noq default;
-`rs/moq-native/src/quic.rs`). To compare them we built two extra **single-backend**
-`moq-relay` binaries on EC2 — `--no-default-features --features noq` (BBR3) and
-`… --features quiche` (BBR2) — and swapped each in for the standing quinn relay
-(`~/t8run/cc_relay.sh`), leaving the quinn `moq` publisher/subscriber unchanged.
-**Cross-backend interop held cleanly** (quinn clients ↔ noq/quiche relay, all negotiating
-`moq-lite-05`), and every backend delivered full clean-path rate (noq 9.63, quiche 9.28,
-quinn 9.6 Mbps). Full numbers in Table 1. The picture is more nuanced than "BBR fixes it":
+`rs/moq-native/src/quic.rs`). Comparing them uses two extra **single-backend**
+`moq-relay` binaries — `--no-default-features --features noq` (BBR3) and
+`… --features quiche` (BBR2) — swapped in for the standing quinn relay, leaving the
+quinn `moq` publisher/subscriber unchanged. **Cross-backend interop holds cleanly**
+(quinn clients ↔ noq/quiche relay, all negotiating `moq-lite-05`), and every backend
+delivers full clean-path rate (noq 9.63, quiche 9.28, quinn 9.6 Mbps). Full numbers in
+Table 1. The picture is more nuanced than "BBR fixes it":
 
 - **Every BBR generation kills the CUBIC uniform-loss collapse at 2–5 %** (CUBIC 53 / 31 %
   → all BBR ≥ 93 %). That headline result is backend-independent.
@@ -2611,19 +2593,14 @@ quinn 9.6 Mbps). Full numbers in Table 1. The picture is more nuanced than "BBR 
 - **Maturity vs generation trade-off.** The freshest generation is not the safest bet:
   quinn (mature, BBRv1) is the best all-rounder here and is the default/production backend;
   noq (BBR3) matches it and occasionally tolerates reordering better, but is a newer stack;
-  quiche (BBR2) is a mature stack whose BBR2 underperforms on our stress edges. For a
-  broadcast deployment today, **quinn + `delay` (BBRv1) is the pragmatic choice**; BBR3/noq
-  is the one to keep watching (and to re-test as BBRv2/v3 tuning lands upstream).
-  **Caveat (added 2026-07-23):** this ranking is from the *non-congestive* matrix only (see
-  the §12.10 scope note) — it is **provisional** until the bottleneck + bufferbloat test
+  quiche (BBR2) is a mature stack whose BBR2 underperforms on the stress edges. For a
+  broadcast deployment today, **quinn + `delay` (BBRv1) is the pragmatic choice** — and
+  upstream has since made **BBRv1 the default on quinn** ([#2468](https://github.com/moq-dev/moq/pull/2468),
+  §12.10.4). The noq-BBR3 instability seen here is explained by a BBRv3 panic
+  ([noq #768](https://github.com/n0-computer/noq/issues/768)) that has driven noq/iroh back
+  to CUBIC by default (§12.10.4). This ranking is from the *non-congestive* matrix only (see
+  the §12.10 scope note) and is **provisional** until the bottleneck + bufferbloat test
   (§12.12) confirms behaviour under real congestion.
-  **Update (2026-07-24, see §12.10.4):** PR [#2468](https://github.com/moq-dev/moq/pull/2468)
-  has since made **BBRv1 the *default* on quinn** (and BBRv2 on quiche), citing a bufferbloat
-  RTT measurement — so the earlier "quinn BBR is kind of bugged" caution is superseded. Note
-  the reverse move: **noq/iroh reverted to CUBIC by default because their BBRv3 *panics* (noq
-  #768)** — which very likely explains the "unstable" noq-BBR3 rows above (§12.10.4). And the
-  maintainer now advises **dropping the reordering and random-loss conditions as
-  unrepresentative** (§12.10.4), which retires the "reorder/HOL residual" as a roadmap driver.
 
 **Implication for the roadmap.** This narrows the outstanding CC work to two things, both
 QUIC-layer not CC-choice: (1) the **reorder/HOL residual** (Tier 1 loss-detection tuning,
@@ -2633,14 +2610,13 @@ quinn-BBRv1 is sufficient and best-rounded *as measured on the over-provisioned 
 The CC-under-bottleneck question (§12.12) is still open and **gates any default-flip
 recommendation**.
 
-### 12.10.4 Upstream update — the #2468 default flip + maintainer methodology guidance (2026-07-24)
+### 12.10.4 Congestion-control defaults and methodology
 
-Two upstream developments land on this section and are recorded here rather than by silently
-rewriting the historical §12.10.1–.3 numbers (which were correctly measured for what they were).
+Two upstream facts bound how the §12.10.1–.3 numbers should be read.
 
-**(a) PR [#2468](https://github.com/moq-dev/moq/pull/2468) flipped the default congestion
-controller** (merged 2026-07-23, on `main`; **not** in our EC2 build `5e0e98c1`). Unset
-`--*-quic-congestion-control` now resolves per-backend:
+**(a) The default congestion controller is now backend-specific**
+([#2468](https://github.com/moq-dev/moq/pull/2468)). Unset `--*-quic-congestion-control`
+resolves per-backend:
 
 | Backend | Default before #2468 | Default after #2468 |
 |---|---|---|
@@ -2649,26 +2625,22 @@ controller** (merged 2026-07-23, on `main`; **not** in our EC2 build `5e0e98c1`)
 | noq | BBRv3 | **CUBIC** |
 | iroh | BBRv3 | **CUBIC** |
 
-- **noq/iroh reverted to CUBIC because their BBRv3 default *panics*** — a subtract-overflow in
+- **noq/iroh default to CUBIC because their BBRv3 *panics*** — a subtract-overflow in
   `inflight_at_loss` (plain `-` instead of `saturating_sub`; underflows once
   `lost_prev > LOSS_THRESH·inflight_prev`), [noq #768](https://github.com/n0-computer/noq/issues/768).
-  Since #2432 that panicking controller had been the *default* on those backends. `delay` stays
-  selectable there by name but **aborts the process under high loss** until the upstream fix.
-- **This retro-explains our §12.10.3 noq-BBR3 anomalies.** The "unstable" non-ordered-jitter
-  rows (one run 71 %, next 8 %) and the non-monotonic loss-0.5 % dip are most plausibly the
-  #768 panic aborting the noq relay mid-capture — a *crash*, not a CC-quality signal. Any noq
+  `delay` stays selectable there by name but **aborts the process under high loss** until the
+  upstream fix.
+- **This explains the §12.10.3 noq-BBR3 anomalies.** The "unstable" non-ordered-jitter rows
+  (one run 71 %, next 8 %) and the non-monotonic loss-0.5 % dip are most plausibly the #768
+  panic aborting the noq relay mid-capture — a *crash*, not a CC-quality signal. Any noq
   re-test must use a build with the #768 fix.
-- **The maintainer's evidence for defaulting quinn to BBRv1** is exactly the bufferbloat metric
-  we specced in §12.12: **CUBIC p50 RTT ~558 ms vs BBRv1 ~90 ms at equal goodput** under a
-  bloated queue (`just demo cc compare bloat`). This supersedes the earlier "quinn BBR is kind
-  of bugged" caution — BBRv1 is now the shipped quinn default.
-- **Impact on our data:** none of §12.9–§12.11 is invalidated — all ran on the pre-#2468
-  build with CUBIC-by-default on quinn and explicit `delay` for the BBR A/Bs. But **any future
-  run must pin `--*-quic-congestion-control` explicitly**, or the flipped default will confound
-  an unlabelled A/B (see INSTRUCTIONS §7).
+- **The evidence for defaulting quinn to BBRv1** is exactly the bufferbloat metric specced in
+  §12.12: **CUBIC p50 RTT ~558 ms vs BBRv1 ~90 ms at equal goodput** under a bloated queue
+  (`just demo cc compare bloat`).
+- **Pin the controller explicitly.** Any run must pin `--*-quic-congestion-control`, or the
+  backend-specific default will confound an unlabelled A/B (see INSTRUCTIONS §7).
 
-**(b) Maintainer methodology guidance (#2432, 2026-07-24)** — in response to our questions,
-and justified, so we adopt it:
+**(b) Methodology guidance (upstream, #2432).** Adopted because it is justified:
 
 1. **The one meaningful CC test is bufferbloat under a shaped bottleneck**, with a concrete
    profile: **10 Mb/s source, rate-limited to 5 Mb/s, 100 ms base RTT, 500 ms queue depth
@@ -2676,30 +2648,27 @@ and justified, so we adopt it:
    CUBIC fills the queue and sits near **500 ms** (bufferbloat), BBR should hold both high
    throughput and ~100 ms. This replaces the vaguer cap sweep in §12.12 — now specced there.
 2. **Drop reordering entirely.** *"It doesn't happen on the internet, otherwise TCP and QUIC
-   would break."* Our reordering conditions (matrix cond. 4, and the "non-ordered jitter"
+   would break."* The reordering conditions (matrix cond. 4, and the "non-ordered jitter"
    rows) are therefore a **`netem` artefact of low real-world relevance** — retained for the
-   record but **no longer a roadmap driver**. This retires the §12.10.1/§12.10.2 "reorder/HOL
-   residual" as a priority item (it was already scoped as a QUIC loss-detection detail, not CC).
+   record but **not a roadmap driver** (already scoped as a QUIC loss-detection detail, not CC).
 3. **Random loss and jitter "remove signal" — treat with care.** *"The best congestion control
    in the face of random loss is zero congestion control, because backing off during congestion
-   literally does nothing."* i.e. our headline **"CUBIC collapses at 2–10 % random loss, BBR
-   doesn't"** is real but is the *noob trap*: it rewards a controller for **ignoring loss**, not
-   for controlling congestion. Random-loss resilience must **not** be read as a CC-quality
-   metric; the CUBIC-vs-BBR loss table stands only as "loss-signal interpretation," already
-   flagged in the §12.10 scope note.
+   literally does nothing."* The headline **"CUBIC collapses at 2–10 % random loss, BBR
+   doesn't"** is real but is a trap: it rewards a controller for **ignoring loss**, not for
+   controlling congestion. Random-loss resilience must **not** be read as a CC-quality metric;
+   the CUBIC-vs-BBR loss table stands only as "loss-signal interpretation," as flagged in the
+   §12.10 scope note.
 
-**Net effect on the plan.** No numbers change; the framing tightens. The *only* outstanding CC
-test that matters is the bufferbloat/bottleneck run — now specced to the maintainer's exact
-profile in **§12.12** (still TBM). Reordering/random-loss are downgraded to "emulator artefacts,
-not CC evidence." We keep the strong, defensible claim (BBR removes the loss-fragility that
-made MoQ look worse than SRT on degraded paths) and drop the over-claims.
+The *only* outstanding CC test that matters is the bufferbloat/bottleneck run — specced to the
+exact profile above in **§12.12** (still TBM). Reordering/random-loss are emulator artefacts,
+not CC evidence. The defensible claim (BBR removes the loss-fragility that made MoQ look worse
+than SRT on degraded paths) stands.
 
-### 12.11 Third-party BBR relay — dual long-haul (EC2 publish → mgw.edis.mx → home subscribe, 2026-07-23)
+### 12.11 Third-party BBR relay — dual long-haul
 
-Every §12.10.x run used *our* EC2 relay with the publisher co-located on the relay box
-(the upload hop was loopback). This run instead exercises a **third-party public relay
-with two independent long-haul hops** — the first end-to-end test where neither the
-publish nor the subscribe leg is local:
+This run exercises a **third-party public relay with two independent long-haul hops** —
+neither the publish nor the subscribe leg is local, in contrast to the §12.10.x runs
+where the publisher was co-located on the relay box:
 
 ```
 EC2 moq publisher (eu-west-1, EMEA)  ──►  relay mgw.edis.mx  ──►  home moq subscriber (London)
@@ -2758,8 +2727,8 @@ preserve SDT/NIT and the 0x0064 PMT PID.
 
 **Motivation.** §12.10's loss/reorder/jitter matrix is over-provisioned (offered ≪ capacity),
 so it measures non-congestive impairment resilience, **not** congestion control (§12.10 scope
-note, §12.10.4). Per the maintainer's methodology guidance (#2432, 2026-07-24), the **one
-meaningful CC test is bufferbloat under a shaped bottleneck** — random loss / jitter / reordering
+note, §12.10.4). Per upstream methodology guidance (#2432), the **one meaningful CC test is
+bufferbloat under a shaped bottleneck** — random loss / jitter / reordering
 are dropped as unrepresentative or signal-removing (§12.10.4). This section is specced to the
 maintainer's **exact profile** and mirrors the upstream harness `just demo cc compare bloat`
 (the measurement behind the #2468 quinn-BBRv1 default: **CUBIC p50 RTT ~558 ms vs BBRv1 ~90 ms**).
@@ -2784,7 +2753,7 @@ is *blocked* pending the #768 subtract-overflow panic fix** — do not include i
 build exists (its §12.10.3 numbers are suspect for that reason). Pin CC explicitly with
 `--server-quic-congestion-control` on every run so the #2468 default flip can't confound the A/B.
 
-**Rig (planned).** Same EC2 (`34.246.187.61`) → home path and SSH-safe `prio`+`u32` lane
+**Rig (planned).** Same EC2 → home path and SSH-safe `prio`+`u32` lane
 (§12.10), but the shaped band is a **rate limiter with a deep, controlled queue** — not
 `netem loss/reorder`:
 - **Bottleneck + base delay:** `tc … htb rate 5mbit` (or `tbf`) plus `netem delay 50ms` each
@@ -3026,14 +2995,14 @@ the reverse:
 
 | Test | Gate | Status | Blocking gap |
 |---|---|---|---|
-| T1 Baseline | precondition | ✅ Done (2026-07-16) | 4 P0 references characterised (§5.5); GOP-cadence measurement outstanding |
-| T2 Transparency (media-aware, local) | Gate 1 | ✅ Done (2026-07-16; `mpegts-pacer` 2026-07-18; `dev` re-run 2026-07-21; PR #2440) | media-aware lane works locally. `mpegts-pacer` grooms the VBR egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations (§6.7). The `dev` re-run (§6.8) confirms #1979 (#2072 + #2066) makes the CNN open-GOP + SCTE-35 feed round-trip deterministically with elementary streams + PMT descriptors intact; PR [#2440](https://github.com/moq-dev/moq/pull/2440) then adds the DVB service layer (SDT/NIT/PMT-PID/TSID/ONID). **Only TDT/TOT + EIT remain unpreserved** |
-| T3 Transparency (opaque, local) | Gate 1 | ✅ Done (2026-07-17) | opaque lane byte-transparent at P1: SI + SCTE-35 + PMT/PCR PID + CBR + PCR conformance preserved (§7); P2 hardware still owed (T7) |
-| T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware (2026-07-17; full-rate re-run 2026-07-22) | **full live SRT chain over the wire, 0 CC** (§8.4); **full ~9.93 Mbps feed home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (§12.9); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
-| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path + impairment matrix + 4-way CC (2026-07-23) | Head-to-head over the real EC2→home path under a granular `netem` sweep (§12.10): under default CUBIC, MoQ collapsed under uniform loss ≥ 2 %, reorder and WAN while SRT held full rate — **but BBR (`delay`, PR #2432) makes MoQ full-rate/0-CC through 10 % loss, 25 % reorder and WAN, matching SRT** (§12.10.1). All four CCs compared side-by-side (§12.10.3): **quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker**; the reordering residual is **CC-version-independent** (a QUIC HOL/loss-detection item), SI transparency pre-#2440. CC switch is non-breaking, no interop impact. **Glass-to-glass latency + overhead still `TBM`** |
-| T5 Impairment | Gate 1/3 | ✅ Done (2026-07-17) | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
-| T6 Resilience | Gate 3 | 🟡 Partial (transport-resilience drills run 2026-07-23; determinism precondition analysed 2026-07-20) | **Transport-resilience drills (§10.5):** publisher transport-reconnect ✅ and redundant outputs ✅; **`moq export ts` subscriber reconnect+resume** ✅ (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469), verified 2026-07-24); active/active source failover **collapses on one relay** and **does not fail over across a two-relay mesh by default** ❌ — confirmed on both `moq-lite-05` and `moq-lite-06-wip` (cost/standby routing negotiates end-to-end but is necessary-not-sufficient: the standby route is never advertised across the mesh, §10.5.4); an upstream fix ([#2473](https://github.com/moq-dev/moq/pull/2473)) is under review. ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). On-hardware hitless drill still owed |
-| T7 Timing (file) | Gate 2 (pre) | ✅ Done (2026-07-22) | media-aware lane + `mpegts-pacer` P1 pass on four clips (§11.4.1): 0 % PCR > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC errors; opaque-lane P1 also shown (§7.5). Hardware (P2) is the remaining gate |
+| T1 Baseline | precondition | ✅ Done | 4 P0 references characterised (§5.5); GOP-cadence measurement outstanding |
+| T2 Transparency (media-aware, local) | Gate 1 | ✅ Done | media-aware lane works locally. `mpegts-pacer` grooms the VBR egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations (§6.7). #1979 (#2072 + #2066) makes the CNN open-GOP + SCTE-35 feed round-trip deterministically with elementary streams + PMT descriptors intact (§6.8); PR [#2440](https://github.com/moq-dev/moq/pull/2440) adds the DVB service layer (SDT/NIT/PMT-PID/TSID/ONID). **Only TDT/TOT + EIT remain unpreserved** |
+| T3 Transparency (opaque, local) | Gate 1 | ✅ Done | opaque lane byte-transparent at P1: SI + SCTE-35 + PMT/PCR PID + CBR + PCR conformance preserved (§7); P2 hardware still owed (T7) |
+| T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware | **full live SRT chain over the wire, 0 CC** (§8.4); **full ~9.93 Mbps feed home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (§12.9); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
+| T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path + impairment matrix + 4-way CC | Head-to-head over the real EC2→home path under a granular `netem` sweep (§12.10): under default CUBIC, MoQ collapses under uniform loss ≥ 2 %, reorder and WAN while SRT holds full rate — **but BBR (`delay`, PR #2432) makes MoQ full-rate/0-CC through 10 % loss, 25 % reorder and WAN, matching SRT** (§12.10.1). All four CCs compared side-by-side (§12.10.3): **quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker**; the reordering residual is **CC-version-independent** (a QUIC HOL/loss-detection item), SI transparency pre-#2440. CC switch is non-breaking, no interop impact. **Glass-to-glass latency + overhead still `TBM`** |
+| T5 Impairment | Gate 1/3 | ✅ Done | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
+| T6 Resilience | Gate 3 | 🟡 Partial | **Transport-resilience drills (§10.5):** publisher transport-reconnect ✅ and redundant outputs ✅; **`moq export ts` subscriber reconnect+resume** ✅ (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)); active/active source failover **collapses on one relay** and **does not fail over across a two-relay mesh by default** ❌ — on both `moq-lite-05` and `moq-lite-06-wip` (cost/standby routing negotiates end-to-end but is necessary-not-sufficient: the standby route is never advertised across the mesh, §10.5.4); an upstream fix ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that gap and the **live two-relay drill now passes on its head `cc11cbaf`** — failover in **30–33 s (one QUIC idle timeout, bounded not hitless)**, complete and 4/4 consistent once the publisher pipeline is killed atomically, and the shared-`--origin` `Unroutable` teardown fixed — though the PR is still unmerged and two gaps remain: the standby *join* stalls carrying-relay viewers **8–9 s**, and a **graceful** source exit is not failed over at all (the subscriber terminates on the catalog change), §10.5.4. Our earlier "live e2e freezes" result was a **drill-timeline artefact** (graded 21 s into a 30 s idle timeout) and is retracted. ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). On-hardware hitless drill still owed |
+| T7 Timing (file) | Gate 2 (pre) | ✅ Done | media-aware lane + `mpegts-pacer` P1 pass on four clips (§11.4.1): 0 % PCR > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC errors; opaque-lane P1 also shown (§7.5). Hardware (P2) is the remaining gate |
 | T7 Timing (hardware) | **Gate 2** | ❌ Not demonstrated | **hardware IRD access + sustained P1/P2 pass** |
 
 The single most valuable next result is **T7 hardware (Gate 2)**: a sustained

@@ -93,7 +93,7 @@ invented here:
   retransmit loop. This is decisive in testing: under the default CUBIC, QUIC
   collapsed under uniform loss, reordering, and a WAN profile, but switching the relay
   to BBR restored full-rate, byte-complete delivery on par with SRT
-  ([test-plan](test-plan.md) §12.10, [evidence](evidence.md) §7).
+  ([test-plan](test-plan.md) §12.10, [evidence](evidence.md) §6).
 - **One protocol spans contribution and 1:N distribution.** MoQ's relay model
   provides subscription-based fan-out, cluster routing, and caching as part of the
   protocol rather than as external infrastructure. This matches the "trunk that
@@ -112,7 +112,7 @@ invented here:
   on that hook, not wire-format primitives that MoQ itself defines and guarantees
   across implementations. The differentiator is that the transport gives
   authorization a native place to live and enforce; the credential format is our
-  choice. See [evidence](evidence.md) §6 for what has been verified.
+  choice. See [evidence](evidence.md) §5 for what has been verified.
 
 ### 3.2 Where the case is weak
 
@@ -215,7 +215,7 @@ genuinely contested; the trade-offs are set out in full in
   relay and 1:N amplification with per-track prioritisation. But "intended" is the
   operative word: its historical weaknesses for contribution feeds (open-GOP
   keyframe detection, loss of SDT/PMT/SCTE-35/teletext/continuity on re-mux — see
-  [evidence](evidence.md) §5) are being addressed upstream but are *not yet
+  [evidence](evidence.md) §4) are being addressed upstream but are *not yet
   independently validated here*, so for hardware IRDs today it is the target, not
   the proven path.
 - **Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque
@@ -336,7 +336,7 @@ TS into elementary streams and republish them as native MoQ media tracks, which 
 what enables per-track prioritisation and MoQ's relay/amplify benefits. It is the
 default and preferred path (§4.1). Where a specific feed defeats it — historically,
 open-GOP contribution using recovery-point SEI, or a case where service signalling
-must be preserved exactly ([evidence](evidence.md) §5) — the opaque lane is the
+must be preserved exactly ([evidence](evidence.md) §4) — the opaque lane is the
 fallback for that feed. The CBR/null/PCR work in steps 2 and 6 is required either
 way, because both lanes ride the same bursty transport.
 
@@ -435,7 +435,7 @@ At the transport and carriage layer, interoperability has two faces:
   SRT ingest) belongs in [interoperability](interoperability.md).
 
 Known incompatibilities and non-ideal-source behaviour (open-GOP feeds, missing
-IDR frames) are documented in [evidence](evidence.md) §5; the opaque lane exists
+IDR frames) are documented in [evidence](evidence.md) §4; the opaque lane exists
 specifically to be robust to them.
 
 ---
@@ -472,7 +472,7 @@ A transport for primary distribution must not only carry the bytes but *recover*
 survive a relay restart, a dropped session, or a link blip without operator
 intervention. What the shipped `moq-dev` provides here was audited by source
 inspection and measured in drills on the media-aware lane
-([evidence](evidence.md) §8, [test-plan](test-plan.md) §10.5). The result is a
+([evidence](evidence.md) §7, [test-plan](test-plan.md) §10.5). The result is a
 model that is architecturally right but only *half-wired* today, so it is stated
 with the split the rest of this document uses: confirmed, limited, work-in-progress,
 and worked-around.
@@ -506,19 +506,18 @@ A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md
 - **The publisher recovers.** After the relay comes back, the `moq import ts`
   reconnect loop redials and re-announces automatically; the import side is resilient
   to session loss.
-- **The `moq export ts` subscriber now recovers too (fixed by #2469).** *Originally*
-  the exporter process **exited** with `Error: json: dropped` the instant its session
-  dropped — the reconnect loop was alive, but the export container treated the dropped
+- **The `moq export ts` subscriber recovers too (fixed by #2469).** The exporter
+  previously **exited** with `Error: json: dropped` the instant its session dropped —
+  the reconnect loop was alive, but the export container treated the dropped
   `catalog.json` track as fatal. This was filed as
   [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459) and **fixed in
   [#2469](https://github.com/moq-dev/moq/pull/2469)** ("linger a broadcast across an
-  ungraceful source loss", merged 2026-07-24): a consuming session now keeps the
-  broadcast *lingered* for the reconnect window (`Backoff::linger()` =
-  `backoff.timeout + 1 s`, i.e. ~301 s by default), so an ungraceful drop no longer
-  aborts the subscription. **Verified locally** (main @ `7c976cd7`, `moq 0.9.1`): under
-  a relay kill+restart the exporter stayed alive, logged a benign "current group
-  evicted; skipping to next buffered group" instead of dying, reconnected, and
-  **resumed writing automatically** (§8.3).
+  ungraceful source loss"): a consuming session now keeps the broadcast *lingered* for
+  the reconnect window (`Backoff::linger()` = `backoff.timeout + 1 s`, i.e. ~301 s by
+  default), so an ungraceful drop no longer aborts the subscription. Under a relay
+  kill+restart the exporter stays alive, logs a benign "current group evicted; skipping
+  to next buffered group" instead of dying, reconnects, and **resumes writing
+  automatically** (§8.3).
 - **Detection is timeout-bound.** A hard-killed (SIGKILL / instance-stop) relay sends
   no CONNECTION_CLOSE, so clients notice only via the QUIC **idle timeout** (default
   30 s, `--client-quic-idle-timeout`, which must stay above the ~5 s keep-alive).
@@ -526,14 +525,14 @@ A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md
   backoff — a graceful restart that closes the session is noticed at once; an abrupt
   kill is not.
 
-### 8.3 Exporter lifecycle (resolved: the fix landed and is verified)
+### 8.3 Exporter lifecycle (resolved)
 
 The `moq export ts` crash on session loss *was* the single most consequential
 transport-resilience gap for primary distribution, because a broadcast subscriber
-must ride out relay maintenance and transient loss. The root cause was narrow and, as
-suspected, **not in the transport**: an origin front closed synchronously the instant
-its last source detached, aborting downstream subscriptions with `Dropped` even though
-the reconnect loop was about to re-attach a source seconds later.
+must ride out relay maintenance and transient loss. The root cause was narrow and
+**not in the transport**: an origin front closed synchronously the instant its last
+source detached, aborting downstream subscriptions with `Dropped` even though the
+reconnect loop was about to re-attach a source seconds later.
 
 [#2469](https://github.com/moq-dev/moq/pull/2469) fixes this by giving a front a
 **linger window**: on an *ungraceful* source loss the path stays announced and a
@@ -541,13 +540,13 @@ re-attaching source splices back into the same broadcast (a clean unannounce sti
 tears down immediately). A consuming session derives its window from the reconnect
 loop's own promise (`Backoff::linger()` = `backoff.timeout + 1 s`), and if the loop
 ultimately gives up, its real error surfaces *before* the broadcasts abort — replacing
-the misleading `json: dropped` with the true cause. **Verified on this workstation
-(2026-07-24, main @ `7c976cd7`)** with the relay-restart drill ([test-plan](test-plan.md)
-§10.5.3): both exporters survived a 12 s outage and resumed automatically ~17 s after
-the kill (detection + backoff + re-announce), producing byte-identical redundant
-outputs before and after the gap. Recovery is **automatic and bounded, not hitless** —
-the content gap during the outage is a clean object-boundary skip, which the downstream
-pacer/IRD absorbs via ST 2022-7 / IRD selection, not something the exporter conceals.
+the misleading `json: dropped` with the true cause. In the relay-restart drill
+([test-plan](test-plan.md) §10.5.2) both exporters survive a 12 s outage and resume
+automatically ~17 s after the kill (detection + backoff + re-announce), producing
+byte-identical redundant outputs before and after the gap. Recovery is **automatic and
+bounded, not hitless** — the content gap during the outage is a clean object-boundary
+skip, which the downstream pacer/IRD absorbs via ST 2022-7 / IRD selection, not
+something the exporter conceals.
 
 ### 8.4 Current limitations and workarounds
 
@@ -558,16 +557,21 @@ pacer/IRD absorbs via ST 2022-7 / IRD selection, not something the exporter conc
   external `Restart=always` supervisor is **no longer required** for relay maintenance/
   transient loss. Recovery is automatic and bounded (detection + backoff + re-announce),
   not hitless; the content gap is absorbed downstream by ST 2022-7 / IRD.
-- **Active/active *source* failover is not delivered today.** Two publishers on one
-  relay collapse the stream (`unroutable`); a two-relay mesh tolerates the pair but
+- **Active/active *source* failover is not delivered by default today.** Two publishers on
+  one relay collapse the stream (`unroutable`); a two-relay mesh tolerates the pair but
   does not fail the source over when the active publisher dies, because the standby
   route is not propagated across the mesh to the relay serving the active source
   ([relay](relay.md) §4.1, §5.1). The `moq-lite-06` cost/standby routing (#2424) that
-  would *rank* such a standby is opt-in (`--server-version`/`--client-version`) and was
-  tested end-to-end, but it does **not by itself** restore failover — with lite-06
-  negotiated the mesh drill still froze on active-source death, because pricing routes
-  does not help when the standby route is never advertised ([relay](relay.md) §4.1). The
-  honest
+  would *rank* such a standby is opt-in (`--server-version`/`--client-version`), but it
+  does **not by itself** restore failover — with lite-06 negotiated the mesh drill still
+  freezes on active-source death, because pricing routes does not help when the standby
+  route is never advertised ([relay](relay.md) §4.1). An upstream fix
+  ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that propagation gap and the
+  two-relay drill **passes on its current head** — but it is still unmerged, the switch
+  it delivers is bounded by failure detection (**30–33 s**, one QUIC idle timeout) rather
+  than hitless, and it covers only an *ungraceful* source loss: when the active publisher exits
+  cleanly the subscriber terminates instead of switching to the announced standby
+  ([relay](relay.md) §4.1). The honest
   broadcast-grade path today is therefore the **fully-doubled chain** — dual
   publishers, dual relays, dual pacers, and **downstream ST 2022-7 / IRD hitless
   selection** ([architecture](architecture.md) §14.1) — with MoQ responsible for
