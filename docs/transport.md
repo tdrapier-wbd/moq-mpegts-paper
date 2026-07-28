@@ -567,11 +567,10 @@ something the exporter conceals.
   freezes on active-source death, because pricing routes does not help when the standby
   route is never advertised ([relay](relay.md) §4.1). An upstream fix
   ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that propagation gap and the
-  two-relay drill **passes on its current head** — but it is still unmerged, the switch
-  it delivers is bounded by failure detection (**30–33 s**, one QUIC idle timeout) rather
-  than hitless, and it covers only an *ungraceful* source loss: when the active publisher exits
-  cleanly the subscriber terminates instead of switching to the announced standby
-  ([relay](relay.md) §4.1). The honest
+  two-relay drill **passes**; it merged on 2026-07-28. Even so, the switch it delivers is
+  bounded by failure detection (**30–33 s**, one QUIC idle timeout) rather than hitless, and it
+  covers only an *ungraceful* source loss: when the active publisher exits cleanly the subscriber
+  terminates instead of switching to the announced standby ([relay](relay.md) §4.1). The honest
   broadcast-grade path today is therefore the **fully-doubled chain** — dual
   publishers, dual relays, dual pacers, and **downstream ST 2022-7 / IRD hitless
   selection** ([architecture](architecture.md) §14.1) — with MoQ responsible for

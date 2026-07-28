@@ -205,28 +205,29 @@ expected cadence and so cannot treat silence as failure; upstream is weighing a 
 default idle timeout (~10 s) as a separate change, and `--server-quic-idle-timeout` moves it
 today.
 
-Three things temper this. The PR is **still open**, so relay-mesh source failover remains a
-near-term item rather than a shipped capability. (Recovery itself is complete and repeatable —
-four of four runs resumed at full rate — once the drill kills the publisher pipeline in one
-pass; our earlier inconsistent sample was an artefact of a kill that let the importer shut down
-cleanly instead.)
+#2473 **merged** on 2026-07-28 (`b624c7c0`), so this is shipped behaviour on `main`, and the
+hard-kill drill passes there unchanged. Recovery is complete and repeatable — four of four runs
+resumed at full rate — provided the drill kills the publisher pipeline in one pass; our earlier
+inconsistent sample was an artefact of a kill that let the importer shut down cleanly instead.
 
-The second is that the standby *join* is not transparent. A subscriber on a relay that is only
-*carrying* the broadcast stalls **8–9 s** the instant a redundant publisher attaches locally to
-that relay, then recovers at full rate — on every run. That is a large improvement on the
-pre-fix teardown, but in a 1+1 deployment a standby attaching is a routine event, so redundancy
-presently costs the very viewers it exists to protect a visible outage.
+One gap remains, and it is the operationally important one: **a graceful source exit is not
+failed over at all.** When the active publisher terminates cleanly rather than dying, the relay
+does not reselect — it propagates completion. Both media tracks report `subscribe complete`, the
+catalog subscription is `canceled (idle)`, no route change is attempted, and `moq export ts`
+terminates with `TS track layout changed after PAT/PMT was emitted`, its muxer refusing a catalog
+that lost a track. Verified on merged `main` with a source that *ends naturally* and a standby
+announced for 23 s beforehand. The relay cannot distinguish "this source is done, and so is the
+content" from "this source is done, but an interchangeable one exists", so the shared `--origin`
+buys nothing on this path. Quite possibly intended semantics rather than a defect — but it means
+failover covers the *harder* failure (host loss) and not the easier, far more common one: SIGTERM
+to an encoder, a container rescheduled, a rolling restart.
 
-The third is sharper still: **a graceful source exit is not failed over at all.** When the
-active publisher terminates cleanly rather than dying, the relay unannounces immediately — there
-is no timeout to wait out and the standby is already announced — yet the subscriber does not
-switch to it. `moq export ts` instead terminates with `TS track layout changed after PAT/PMT was
-emitted`, the muxer refusing a catalog that lost a track. The failover path therefore covers the
-*harder* failure (host loss) but not the easier and far more common one: SIGTERM to an encoder,
-a container rescheduled, a rolling restart. Both findings were reported upstream; both are
-plausibly the same lazy-track-creation dynamic described below, where a standby creates each
-track only as its demuxer reaches it, so sparse tracks (SCTE-35, teletext) need not exist at the
-moment of the splice.
+We also reported an 8–9 s stall at the standby join and have **since retracted it**. It
+reproduces, but it is our harness: two publishers replaying independent copies of the same file
+from its start are offset by exactly the join delay, so on splice the exporter waits for the new
+source's timestamps to pass the last one it wrote. The stall tracks the join delay one-for-one
+(t=4 → under 2 s; t=10 → 9 s; t=20 → 18 s), and the relay's own switch is immediate. A real 1+1
+pair shares a timestamp-aligned feed.
 
 Our own two findings on this PR are also worth recording accurately, since one of them was
 ours to fix. The first — that the standby route never reaches the relay serving the active
@@ -293,11 +294,10 @@ versus what it is designed to deliver, and the two are not yet the same.
   single-relay duplicate publisher nor a two-relay mesh gives active/active source
   failover on the shipped wire; the relay keeps the active flow healthy but does not
   switch to a standby when the active source dies. [#2473](https://github.com/moq-dev/moq/pull/2473)
-  closes that gap and the mesh drill now passes on its head — but it is **still open**, and
-  even once merged the switch is **bounded by the QUIC idle timeout (30–33 s measured),
-  not hitless**, so it protects against a dead source rather than replacing receiver-side
-  hitless selection. It also does not yet cover a *graceful* source exit, and the standby's
-  arrival costs carrying-relay viewers 8–9 s (see §4.1).
+  closes that gap and the mesh drill passes; it **merged** on 2026-07-28. Even so the switch is
+  **bounded by the QUIC idle timeout (30–33 s measured), not hitless**, so it protects against a
+  dead source rather than replacing receiver-side hitless selection — and it does not cover a
+  *graceful* source exit at all, which is the more common operational case (see §4.1).
 
 The consequence for this document's resilience model is a sharpening, not a reversal:
 the relay's job — **keep the flows healthy and let hitless selection happen at the

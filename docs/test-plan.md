@@ -37,7 +37,7 @@ acceptance gates) and draws its empirical baseline from [evidence](evidence.md).
 - [7. Test 3 — MoQ transport transparency (opaque `m2ts` lane, local)](#7-test-3--moq-transport-transparency-opaque-m2ts-lane-local) — ✅ done
 - [8. Test 4 — Remote relay end-to-end + SRT contribution (public internet)](#8-test-4--remote-relay-end-to-end--srt-contribution-public-internet) — ✅ media-aware
 - [9. Test 5 — Network impairment](#9-test-5--network-impairment) — ✅ done (both lanes)
-- [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 transport-resilience drills run (§10.5): publisher + exporter reconnect/resume both ✅ (exporter fixed by #2469); active/active source failover not delivered by default, but the **live two-relay drill now passes on fix #2473** (unmerged; 30–33 s = one idle timeout, bounded not hitless; residual gaps: an 8–9 s stall at standby join and no failover on a *graceful* source exit — and our earlier "no failover" was a drill-timeline artefact, §10.5.4; corrected drill contributed as #2545); ST 2022-7 determinism analysed (§10.4); hardware hitless drill owed
+- [10. Test 6 — Relay resilience](#10-test-6--relay-resilience) — 🟡 transport-resilience drills run (§10.5): publisher + exporter reconnect/resume both ✅ (exporter fixed by #2469); active/active source failover not delivered by default, but the **live two-relay drill passes on #2473, merged 2026-07-28** (30–33 s = one idle timeout, bounded not hitless; residual gap: no failover on a *graceful* source exit — and both our "no failover" and "standby-join stall" reports were drill artefacts, §10.5.4; corrected drill contributed as #2545); ST 2022-7 determinism analysed (§10.4); hardware hitless drill owed
 - [11. Test 7 — Timing integrity (the decisive test)](#11-test-7--timing-integrity-the-decisive-test) — **Gate 2, make-or-break**
 - [12. Test 8 — SRT vs MoQ comparative benchmark](#12-test-8--srt-vs-moq-comparative-benchmark) — 🟡 clean-path (§12.9) + impairment matrix (§12.10) + CUBIC/BBRv1/BBR2/BBR3 side-by-side (§12.10.3) run; glass-to-glass latency planned
 - [13. Test 9 — System performance and resource utilisation](#13-test-9--system-performance-and-resource-utilisation) — planned
@@ -82,7 +82,7 @@ designed to advance, reconciled with the evidence already recorded in
 | Remote network path | ✅ Proven (media-aware, end-to-end) | EC2 relay reachable over the internet; **full live SRT contribution chain completed over the media-aware lane — 0 CC** (§8.4), and the **full ~9.93 Mbps feed pulled home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (T8 clean-path, §12.9); opaque-remote awaits deploying the opaque publisher on EC2 (not a transport gap) | T4 ✅ (media-aware), T8 clean-path ✅ |
 | MPEG-TS preservation | ✅ Proven (file, local) | **T1 source baseline captured** (§5); media-aware lane carries elementary streams + PMT descriptors (reliably on `dev` per issue #1979, §6.8), and PR [#2440](https://github.com/moq-dev/moq/pull/2440) now adds the **DVB service layer — SDT/NIT/PMT-PID/TSID/ONID preserved**, leaving only **TDT/TOT/EIT** and CBR (restored downstream by `mpegts-pacer`, §6.7); **opaque lane is byte-transparent — SI/SCTE-35/PMT/PCR/CBR preserved verbatim, incl. TDT/TOT** (§7); live/remote source still owed | T1 ✅, T2 ✅, T3 ✅ |
 | Broadcast timing | 🟡 Partial | **T1 P0 baselines clean**; **opaque-lane egress holds 0 % PCR intervals > 40 ms at P1 when fed raw** (§7.5); a downstream **`mpegts-pacer` stage grooms the bursty media-aware egress to exact CBR, 0 % PCR > 40 ms, 0 `pcrverify` violations at P1** (§6.7, T7 P1 across four clips §11.4.1); no live/hardware (P2) pass yet | T1 ✅, T3 ✅, T7 P1 ✅ |
-| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10). Validated across all BBR backends (§12.10.3): quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker at reorder/high-loss. Residual: pathological *reordering* — in-order jitter is fine (~100 %) and no BBR generation fixes it, so it is a QUIC loss-detection/HOL item, not a CC choice (§12.10.3). **Transport-resilience drills run (§10.5):** publisher transport-reconnect ✅; `moq export ts` subscriber reconnect+resume ✅ (fixed by #2469); active/active source failover not delivered by default ❌ (but the live two-relay drill now **passes** on fix #2473, unmerged — 30–33 s, one idle timeout, bounded not hitless); redundant outputs ✅. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 🟡 |
+| Failure behaviour | 🟡 Partial | **T5 impairment (§9) + T8 head-to-head vs SRT under a granular `netem` matrix (§12.10)**: with default CUBIC, QUIC collapsed under uniform loss ≥ 2 %, reordering and WAN while SRT held full rate — **but switching to BBR (`delay`, PR #2432, one non-breaking flag) removes the collapse: MoQ is full-rate/0-CC through 10 % loss, 25 % reordering and the WAN profile, on par with SRT** (§12.10). Validated across all BBR backends (§12.10.3): quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker at reorder/high-loss. Residual: pathological *reordering* — in-order jitter is fine (~100 %) and no BBR generation fixes it, so it is a QUIC loss-detection/HOL item, not a CC choice (§12.10.3). **Transport-resilience drills run (§10.5):** publisher transport-reconnect ✅; `moq export ts` subscriber reconnect+resume ✅ (fixed by #2469); active/active source failover not delivered before #2473 ❌ (the live two-relay drill **passes** on it; merged 2026-07-28 — 30–33 s, one idle timeout, bounded not hitless; a *graceful* source exit is still not failed over); redundant outputs ✅. **ST 2022-7 precondition analysed** (§10.4) | T5 ✅, T8 ✅, T6 🟡 |
 | Operational model | 🟡 Conceptual | Runbooks designed ([operations](operations.md)); live SRT contribution chain now exercised over the internet (§8); still needs impairment/failover measurements | T4 ✅, T5, T6 |
 | Production suitability | ❌ Not demonstrated | Needs the full evidence package below | T1–T7 |
 
@@ -1731,23 +1731,43 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
     different code path entirely (see the graceful-departure bullet). With the pipeline
     SIGKILLed in one pass, **4 of 4 runs failed over at full rate**, resuming at 30, 32, 32 and
     33 s. Recovery is *complete*, not merely present.
-  - **⚠ New finding — the standby *join* is not transparent.** A subscriber on a relay that is
-    only *carrying* the broadcast stalls **8–9 s** the instant a redundant publisher attaches
-    locally to that relay, then recovers at full rate. Reproduced on every run on `cc11cbaf`.
-    Per-second bytes for `sub3` (relay B; `pubB` joins at t=10): 175 k, 162 k, 90 k, then eight
-    seconds of **zero**, then 13 k, 125 k, 179 k. Far better than the pre-fix teardown, but in a
-    1+1 deployment a standby attaching is routine, so redundancy currently costs the viewers it
-    is meant to protect a visible outage. Not yet diagnosed — either the splice re-requests
-    tracks from scratch or it waits on the new source's first keyframe/catalog.
-  - **⚠ New finding — graceful source departure is not failed over at all.** When the active
-    publisher exits *cleanly* instead of being killed, the relay unannounces immediately (no
-    timeout to wait out) and the subscriber's `moq export ts` **terminates** with
-    `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed`, despite the
-    standby being announced. So the covered case is the *harder* one (host loss); the easier and
-    far more common one — SIGTERM to an encoder, a rolling restart — is uncovered. Adjacent to
-    but distinct from #2469, which fixed the exporter's `json: dropped` on session loss; here the
-    session is healthy and it is the *catalog* changing under the muxer. Both new findings were
-    reported upstream on the PR.
+  - **🔻 RETRACTED — the "8–9 s stall at the standby join" was our harness.** We reported that a
+    subscriber on a relay only *carrying* the broadcast froze 8–9 s whenever a redundant
+    publisher attached locally to that relay (per-second bytes for `sub3`, `pubB` joining at
+    t=10: 175 k, 162 k, 90 k, eight seconds of **zero**, then 13 k, 125 k, 179 k). It reproduces
+    on merged `main`, but it is **not a routing defect.** Both publishers replay *independent
+    copies of the same clip from its start*, so the standby's media timeline lags the active
+    one by exactly the join delay; on splice the exporter holds timestamps in the past and emits
+    nothing until the new source passes the last one it wrote. Scaling the join delay is
+    decisive — the stall follows it with slope 1:
+
+    | `pubB` joins at | measured stall |
+    |---|---|
+    | t=4 | < 2 s (below the warn threshold) |
+    | t=10 | 9 s |
+    | t=20 | 18 s |
+
+    The relay's own switch is immediate: relay B's log shows `subscribe started` for all three
+    tracks against the new local source in the same millisecond the standby's session is
+    accepted. **Generalisable rule: a redundancy drill whose sources are started independently
+    measures its own clock skew unless the feeds are timestamp-aligned.** Retracted upstream.
+  - **⚠ Confirmed on merged `main` — graceful source departure is not failed over at all.** When
+    the active publisher exits *cleanly* instead of being killed, the relay does **not** reselect
+    onto the announced standby; it propagates completion. Both media tracks log
+    `subscribe complete`, the catalog subscription is `canceled (idle)`, no route change is
+    attempted, and the subscriber's `moq export ts` **terminates** with
+    `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed`. Re-verified with
+    a clean-room test (`~/t6-redundancy/graceful_exit.sh`) that removes the two confounds of the
+    first observation: `pubA` publishes a **finite** clip so `tsp` reaches EOF and the importer
+    finishes without truncation, and the standby joins at t=2 so the timeline offset above is
+    negligible. `pubA` ends at t=25 with the standby announced since t=2; `sub1` emits **zero
+    bytes for the remaining 24 s**. So the covered case is the *harder* one (host loss); the
+    easier and far more common one — SIGTERM to an encoder, a container rescheduled, a rolling
+    restart — is uncovered, and a shared `--origin` buys nothing on this path. Adjacent to but
+    distinct from #2469, which fixed the exporter's `json: dropped` on session *loss*; here the
+    session is healthy and it is the *catalog* changing under the muxer. Plausibly intended MoQ
+    semantics (a finished broadcast is finished) rather than a defect, but it is the gap that
+    matters most for a 1+1 chain.
   *(Source: `rs/moq-net/src/lite/publisher.rs`, `rs/moq-net/src/model/origin.rs`,
   `rs/moq-net/src/model/broadcast.rs`, `rs/moq-cli/src/args.rs`.)*
 - **⚠ Methodology correction — our first drill could not have passed on any build.** A `kill`
@@ -1802,9 +1822,9 @@ output makes the failure instant visible. All clients use `--client-quic-gso=fal
 | Relay graceful/abrupt restart — **`moq export ts` subscriber** | ~17 s (idle-timeout detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by [#2469](https://github.com/moq-dev/moq/pull/2469) | broadcast *linger*; no supervisor needed; §10.5.2 |
 | End-to-end **stream resumes automatically** after relay restart | ~17 s | **yes** | ✅ fixed by #2469 | byte-identical redundant outputs across the gap; §10.5.2 |
 | Active/active — two publishers, **one relay** | n/a | **stream dies at 2nd announce** | ❌ `unroutable`, both torn down | §10.5.3 |
-| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one QUIC idle timeout) on PR [#2473](https://github.com/moq-dev/moq/pull/2473); no failover on the shipped default | resumes after detection (PR); froze permanently (default) | ❌ on `moq-lite-05` / `moq-lite-06-wip`; ✅ **on PR #2473 head `cc11cbaf`** (still unmerged) | standby advertised at join (`announce … hops=2`), relay A reselects on detection; recovery **bounded, not hitless**, but complete and 4/4 consistent once the kill is atomic; §10.5.4 |
-| Active/active — active source exits **gracefully** | none — subscriber terminates | fails over to the announced standby | ❌ on PR #2473 head | `moq export ts` dies `TS track layout changed … '0.avc3' removed`; relay unannounces at once, no timeout involved; the common production case (SIGTERM/rolling restart) is uncovered; §10.5.4 |
-| Shared-`--origin` standby joins a **carrying** relay | **8–9 s stall**, then full-rate recovery | far-relay subscriber keeps flowing uninterrupted | 🟡 teardown fixed on PR #2473 (was `Error::Unroutable` code=30), stall remains | pre-existing bug, reproduced on `main` as `json: dropped`; zero `unroutable` after fix, but the join still costs carrying-relay viewers 8–9 s on every run; §10.5.4 |
+| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one QUIC idle timeout) | resumes after detection | ✅ on merged `main` (`b624c7c0`, [#2473](https://github.com/moq-dev/moq/pull/2473)); ❌ before it, on `moq-lite-05` / `moq-lite-06-wip` | standby advertised at join (`announce … hops=2`), relay A reselects on detection; recovery **bounded, not hitless**, but complete and 4/4 consistent once the kill is atomic; §10.5.4 |
+| Active/active — active source exits **gracefully** | none — subscriber terminates | fails over to the announced standby | ❌ on merged `main` | no reselect attempted: tracks report `subscribe complete`, catalog `canceled (idle)`, `moq export ts` dies `TS track layout changed … '0.avc3' removed`; standby announced 23 s prior, output frozen 24 s; the common production case (SIGTERM/rolling restart) is uncovered; §10.5.4 |
+| Shared-`--origin` standby joins a **carrying** relay | survives; splice is immediate | far-relay subscriber keeps flowing | ✅ fixed on merged `main` (was `Error::Unroutable` code=30) | pre-existing bug, reproduced on `main` as `json: dropped`; zero `unroutable` after fix. The 8–9 s stall we reported here was **our harness** (unaligned publisher timelines), now retracted; §10.5.4 |
 | `moq-lite-06` cost/standby routing | — | — | 🟡 WIP; opt-in, negotiates end-to-end, but **necessary-not-sufficient** | mesh still freezes — pricing can't rank a route that isn't advertised; §10.5.4 |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ | §10.5.2 |
 | ST 2022-7 single-path loss (hitless drill) | TBM | **target: hitless** | ⬜ TBM | Gate 3; **precondition** — byte-identical legs (§10.4) — met by a deterministic/offline or duplicate-single groomer, not yet by two independent live pacers |
@@ -3001,7 +3021,7 @@ the reverse:
 | T4 Remote + SRT (public internet) | Gate 1/3 | ✅ Done — media-aware | **full live SRT chain over the wire, 0 CC** (§8.4); **full ~9.93 Mbps feed home over QUIC at 9.48 Mbps / 0 CC sustained 4 min** (§12.9); opaque-remote deferred — needs the opaque publisher *deployed* on EC2 (not a transport gap) |
 | T8 SRT vs MoQ benchmark | Comparative | 🟡 Partial — clean-path + impairment matrix + 4-way CC | Head-to-head over the real EC2→home path under a granular `netem` sweep (§12.10): under default CUBIC, MoQ collapses under uniform loss ≥ 2 %, reorder and WAN while SRT holds full rate — **but BBR (`delay`, PR #2432) makes MoQ full-rate/0-CC through 10 % loss, 25 % reorder and WAN, matching SRT** (§12.10.1). All four CCs compared side-by-side (§12.10.3): **quinn-BBRv1 & noq-BBR3 strongest, quiche-BBR2 weaker**; the reordering residual is **CC-version-independent** (a QUIC HOL/loss-detection item), SI transparency pre-#2440. CC switch is non-breaking, no interop impact. **Glass-to-glass latency + overhead still `TBM`** |
 | T5 Impairment | Gate 1/3 | ✅ Done | both lanes over the real EC2 path (§9); envelope characterised (latency/loss absorbed with 0 CC; reordering collapses throughput); small-buffer + hardware envelope still owed |
-| T6 Resilience | Gate 3 | 🟡 Partial | **Transport-resilience drills (§10.5):** publisher transport-reconnect ✅ and redundant outputs ✅; **`moq export ts` subscriber reconnect+resume** ✅ (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)); active/active source failover **collapses on one relay** and **does not fail over across a two-relay mesh by default** ❌ — on both `moq-lite-05` and `moq-lite-06-wip` (cost/standby routing negotiates end-to-end but is necessary-not-sufficient: the standby route is never advertised across the mesh, §10.5.4); an upstream fix ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that gap and the **live two-relay drill now passes on its head `cc11cbaf`** — failover in **30–33 s (one QUIC idle timeout, bounded not hitless)**, complete and 4/4 consistent once the publisher pipeline is killed atomically, and the shared-`--origin` `Unroutable` teardown fixed — though the PR is still unmerged and two gaps remain: the standby *join* stalls carrying-relay viewers **8–9 s**, and a **graceful** source exit is not failed over at all (the subscriber terminates on the catalog change), §10.5.4. Our earlier "live e2e freezes" result was a **drill-timeline artefact** (graded 21 s into a 30 s idle timeout) and is retracted. ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). On-hardware hitless drill still owed |
+| T6 Resilience | Gate 3 | 🟡 Partial | **Transport-resilience drills (§10.5):** publisher transport-reconnect ✅ and redundant outputs ✅; **`moq export ts` subscriber reconnect+resume** ✅ (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)); active/active source failover **collapses on one relay** and **does not fail over across a two-relay mesh by default** ❌ — on both `moq-lite-05` and `moq-lite-06-wip` (cost/standby routing negotiates end-to-end but is necessary-not-sufficient: the standby route is never advertised across the mesh, §10.5.4); an upstream fix ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that gap and the **live two-relay drill now passes on its head `cc11cbaf`** — failover in **30–33 s (one QUIC idle timeout, bounded not hitless)**, complete and 4/4 consistent once the publisher pipeline is killed atomically, and the shared-`--origin` `Unroutable` teardown fixed; **#2473 merged 2026-07-28** (`b624c7c0`). One gap remains: a **graceful** source exit is not failed over at all — no reselect is attempted and the subscriber terminates on the catalog change (§10.5.4). Our reported 8–9 s standby-join stall was **retracted**: unaligned publisher timelines in our own drill. Our earlier "live e2e freezes" result was a **drill-timeline artefact** (graded 21 s into a 30 s idle timeout) and is retracted. ST 2022-7 output-determinism precondition measured (§10.4): single deterministic/offline groom byte-exact reproducible; two independent live pacers not yet byte-identical (roadmap: stream-clocked grooming or duplicate-single). On-hardware hitless drill still owed |
 | T7 Timing (file) | Gate 2 (pre) | ✅ Done | media-aware lane + `mpegts-pacer` P1 pass on four clips (§11.4.1): 0 % PCR > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC errors; opaque-lane P1 also shown (§7.5). Hardware (P2) is the remaining gate |
 | T7 Timing (hardware) | **Gate 2** | ❌ Not demonstrated | **hardware IRD access + sustained P1/P2 pass** |
 
