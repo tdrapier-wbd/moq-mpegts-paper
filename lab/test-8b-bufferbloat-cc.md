@@ -1,8 +1,10 @@
 # T8b — congestion control under a real bottleneck (bufferbloat)
 
-> **NOT YET RUN.** This file is the executable protocol: objective, environment, procedure and
-> pass criteria fixed *before* the numbers are known. Every Results cell is `TBM`. Do not cite it
-> as evidence until it carries measurements.
+> **Condition 6a run (first pass, 2026-07-30).** Headline bufferbloat matrix executed on the
+> namespace rig; conditions 6b (AQM), 6c (adaptive source) and 6d (fairness) are **not yet run**.
+> Results below are a first pass (2–3 replicates per controller); standing RTT is stable across
+> replicates, delivered goodput is noisier. **Not yet promoted to `docs/evidence.md`** — see the
+> regime caveat in Observations before citing.
 
 ## Objective
 
@@ -154,42 +156,44 @@ share; the QUIC estimate is the corroboration.
 
 ## Results
 
-**TBM — not yet run.** Tables below are the intended shape.
+Rig: two network namespaces on the EC2 host (the primary self-contained rig), 5 Mb/s `htb`
+bottleneck, 100 ms base RTT (2 × 50 ms `netem`), 500 ms `bfifo` (312 500 B). Source
+`CNNiEMEA2.ts` (~9.93 Mb/s CBR via `tsp regulate`) — i.e. ~2:1 over-subscription of the cap, a
+non-backing-off broadcast workload. MoQ subscriber `--latency-max 2s`, SRT `--latency 2000`.
+Each backend exercised with the matching relay build (quinn / quiche / noq); the CC family per
+backend is `loss` = CUBIC, `delay` = BBRv1 (quinn) / BBRv2 (quiche) / BBRv3 (noq).
+
+**Calibration (§0).** Idle RTT through the shaped path measured min 100.0 / avg 106.7 ms — at the
+100 ms base. Under load CUBIC drives the queue to ~520–600 ms (base + ~500 ms queue), confirming
+the bottleneck queue is where it is meant to be.
 
 ### 6a — Bufferbloat (headline), 5 Mb/s cap, 100 ms base RTT, 500 ms queue
 
-| Controller | Goodput (Mb/s) | % of cap | Standing RTT p50 | p95 | CC errors |
-|---|---|---|---|---|---|
-| CUBIC (quinn) | TBM | TBM | TBM | TBM | TBM |
-| BBRv1 (quinn) | TBM | TBM | TBM | TBM | TBM |
-| BBRv2 (quiche) | TBM | TBM | TBM | TBM | TBM |
-| BBRv3 (noq) | TBM | TBM | TBM | TBM | TBM |
-| SRT | TBM | TBM | TBM | TBM | TBM |
+Standing RTT p50 (ms) per replicate, delivered goodput as % of the 5 Mb/s cap, 45 s windows
+(one 60 s window each for the first quiche/SRT runs). Base RTT = 100 ms; full bloat ≈ 600 ms.
+
+| Controller (backend) | Standing RTT p50 (replicates) | Goodput (% of cap) | CC errors | Character |
+|---|---|---|---|---|
+| CUBIC (quinn) | 516 / 519 / 520 | 65–81 % | 0 | **stable full bloat** |
+| BBRv1 (quinn) | 226 / **591** / 234 | 45–76 % | 0 | **bimodal** — low-latency 2/3, bloats 1/3 |
+| CUBIC (quiche) | 562 / 566 | 62–63 % | 0 | stable full bloat |
+| BBRv2 (quiche) | 291 / 225 (/ 265) | 67–69 % | 0 | **reliably ~½ CUBIC's RTT** |
+| BBRv3 (noq) | 595 / 597 | **11–13 %** | 0 | **broken** — bloats *and* starves ([noq #768](https://github.com/n0-computer/noq/issues/768)) |
+| SRT | 583 | 90 % | **4279** | most bytes, but bloats and damages the stream |
 
 ### 6b — AQM counterfactual (`fq_codel` / `cake` at the same bottleneck)
 
-| Controller | Queue | Goodput (% of cap) | Standing RTT p50 | Δ vs 6a |
-|---|---|---|---|---|
-| CUBIC | fq_codel | TBM | TBM | TBM |
-| CUBIC | cake | TBM | TBM | TBM |
-| BBRv1 | fq_codel | TBM | TBM | TBM |
+**Not yet run.** Rig supports it (`t8b-netns.sh codel` / `cake`).
 
 ### 6c — Cap below source (CBR vs adaptive)
 
-| Cap | Source | Controller | Goodput (% of cap) | Standing RTT p50 | Failure mode |
-|---|---|---|---|---|---|
-| 5 Mb/s | CBR | TBM | TBM | TBM | TBM |
-| 5 Mb/s | ABR | TBM | TBM | TBM | TBM |
-| 3 Mb/s | CBR | TBM | TBM | TBM | TBM |
-| 3 Mb/s | ABR | TBM | TBM | TBM | TBM |
+**Not yet run — now the priority follow-up.** 6a used a non-backing-off CBR source, which is why no
+controller reaches the 100 ms base and goodput never approaches the cap (see Observations). The
+adaptive-source variant is what makes this comparable to the upstream greedy-flow bufferbloat number.
 
 ### 6d — Fairness (N flows sharing one 5 Mb/s class)
 
-| Controller | N | Per-flow rates | Jain's index | Standing RTT p50 |
-|---|---|---|---|---|
-| BBRv1 | 2 | TBM | TBM | TBM |
-| BBRv1 | 3 | TBM | TBM | TBM |
-| CUBIC | 2 | TBM | TBM | TBM |
+**Not yet run.** Rig supports it (N concurrent imports on one bottleneck class).
 
 ## Pass criteria (agreed in advance)
 
@@ -207,15 +211,59 @@ share; the QUIC estimate is the corroboration.
 
 ## Observations
 
-TBM.
+- **CUBIC bloats, reliably.** Both backends fill the FIFO to ~520–570 ms standing RTT on every
+  replicate — the textbook bufferbloat signature, and the stable reference the other controllers are
+  judged against.
+- **BBR halves standing latency — but the generation and stability matter more than the label.**
+  BBRv2 (quiche) is the *most reliable* latency win here (~225–291 ms, ~½ CUBIC, every run). BBRv1
+  (quinn) is **bimodal**: it hit ~230 ms in two of three runs but bloated to 591 ms in the third —
+  the latency benefit is real but not dependable under this workload. BBRv3 (noq) is unusable: it
+  both bloats *and* collapses goodput to ~12 %, consistent with the known #768 defect.
+- **This complicates, rather than confirms, the "quinn + BBRv1 as the default" recommendation.** In
+  this broadcast-relevant regime the reliable low-latency controller was **quiche BBRv2**, not quinn
+  BBRv1. That does not overturn T8 (whose ranking was about loss/reorder resilience), but the
+  default-controller story cannot simply inherit the upstream greedy-flow result.
+- **Regime caveat — this is not the upstream greedy-flow test.** The upstream ~558 → ~90 ms figure
+  is measured with a *backing-off* flow; a good controller there paces to the bottleneck and keeps
+  the queue near-empty. Our source is a **non-backing-off CBR broadcast mux at ~2:1
+  over-subscription**, so (a) no controller reaches the 100 ms base (best is BBRv2 at ~225 ms, ~125 ms
+  of residual queue) and (b) delivered goodput never approaches the cap because the excess offered
+  rate must be shed somewhere. This characterises the *broadcast* case, which is arguably the more
+  relevant one for this project, but it means the number is **not** a like-for-like reproduction of
+  the #2468 evidence. Condition 6c (adaptive source) is the apples-to-apples comparison and is the
+  priority follow-up.
+- **MoQ and SRT fail differently under the same bottleneck** — the T8 finding, now seen under
+  congestion too. MoQ sheds *whole groups* and emits a syntactically clean TS (0 CC errors, 45–81 %
+  of cap delivered); SRT delivers more bytes (90 %) but its ARQ cannot keep up under sustained
+  over-subscription, so the output carries **4279 CC errors** — a damaged rather than a thinned
+  stream. Neither is strictly better; they trade completeness for integrity in opposite directions.
+- **Goodput is noisy, standing RTT is stable.** Across replicates RTT p50 varied by a few ms within
+  a controller, while goodput swung 20+ points — so the latency conclusions are firmer than the
+  goodput ones on this replicate count.
 
 ## Conclusion
 
-TBM. On completion: promote the validated finding to [`docs/evidence.md`](../docs/evidence.md) §6,
-lift the "non-congestive impairment only" scope caveat from
-[test-8](test-8-srt-vs-moq.md), and update the default-controller recommendation in
-[`docs/transport.md`](../docs/transport.md) §3.1 and [`docs/relay.md`](../docs/relay.md) §5 to rest on
-this measurement rather than upstream's.
+First-pass 6a establishes the rig and the qualitative picture: **CUBIC reliably bloats; BBR can
+roughly halve standing latency but only BBRv2 (quiche) does so dependably here, BBRv1 (quinn) is
+bimodal, and BBRv3 (noq) is broken by #768.** No controller reaches the base RTT with a
+non-backing-off CBR source, and MoQ trades delivered volume for a clean stream where SRT does the
+reverse.
+
+This is **not yet promoted to [`docs/evidence.md`](../docs/evidence.md)** and the
+default-controller recommendation in [`docs/transport.md`](../docs/transport.md) §3.1 /
+[`docs/relay.md`](../docs/relay.md) §5 is **not** changed on the strength of it: the result complicates
+that recommendation and needs (a) condition 6c with an adaptive source for a like-for-like comparison
+with the upstream number, and (b) more replicates for goodput confidence intervals, before it is a
+settled finding. Until then the T8 controller ranking remains scoped to non-congestive impairment,
+with this file the first congestion-regime data point.
+
+## Next steps
+
+- Run **6c (adaptive source)** — the priority: an ABR encoder that backs off to the send-rate
+  estimate, to compare like-for-like with the upstream greedy-flow bufferbloat number.
+- Run **6b (AQM)** — does `fq_codel` / `cake` tame CUBIC's bloat, and does it help the CBR case?
+- Run **6d (fairness)** — BBRv1/BBRv2 inter-flow share before endorsing any default.
+- Add **replicates** (≥ 5) for goodput confidence intervals; RTT is already stable at 2–3.
 
 ## References
 
