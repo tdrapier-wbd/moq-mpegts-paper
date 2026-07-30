@@ -234,8 +234,9 @@ After the CBR pacer: exact CBR **10.955 Mbps** (12.8 % stuffing), PCR mean 18.94
   congestion control. A "100 %" cell means "the source fit in the spare capacity," not "the
   controller behaved well." The only genuinely CC-dependent result is CUBIC misreading random loss —
   loss-signal interpretation, not a CC-quality verdict. Table 4 caps the pipe but only with a bare
-  `netem rate` token bucket, CUBIC vs SRT only. The real CC test (bufferbloat under a shaped
-  bottleneck, all controllers) is [specified but not run](test-8b-bufferbloat-cc.md).
+  `netem rate` token bucket, CUBIC vs SRT only. The congestion-control test proper (shaped bottleneck,
+  all controllers, scored on completeness) has a [first-pass failure-mode result in
+  T8b](test-8b-congestion-control.md) but its provisioned-path conditions are not yet run.
 
 ## Conclusion
 
@@ -246,11 +247,12 @@ item, not CC) and media-aware SI transparency (opaque lane / #2440 closes it). G
 and protocol overhead remain **TBM** (lowering latency was explicitly not the objective here — robust
 delivery under degradation was). Recorded as a permanent finding in
 [`docs/evidence.md`](../docs/evidence.md) §6. This is a comparison, not a gate: the thesis is decided
-by T7 (Gate 2), and the bottleneck/bufferbloat run gates any default-controller recommendation.
+by T7 (Gate 2), and the [T8b](test-8b-congestion-control.md) congestion-control run gates any
+controller recommendation for a permanent fixed-rate trunk.
 
 ## References
 
 - Impairment method reused from: [test-5-network-impairment.md](test-5-network-impairment.md).
-- Bottleneck + bufferbloat CC test (specified, not run): [test-8b-bufferbloat-cc.md](test-8b-bufferbloat-cc.md).
+- Congestion control for a permanent fixed-rate trunk (first-pass C1 run): [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Upstream: [#2432](https://github.com/moq-dev/moq/pull/2432), [#2468](https://github.com/moq-dev/moq/pull/2468), [#1706](https://github.com/moq-dev/moq/pull/1706), [noq #768](https://github.com/n0-computer/noq/issues/768).
 - Findings: [`docs/evidence.md`](../docs/evidence.md) §6; feeds [`docs/economics.md`](../docs/economics.md) §8.

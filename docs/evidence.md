@@ -153,11 +153,13 @@ LEO/mobile-handover concern ([lab: T8](../lab/test-8-srt-vs-moq.md),
 [planned](../lab/planned-experiments.md)).
 
 Two boundaries: this is a single home path with forward-path-only impairment, and an
-over-provisioned matrix measures *loss tolerance* rather than congestion control proper (the
-bufferbloat test under a shaped bottleneck is specified but not run,
-[lab: planned](../lab/planned-experiments.md)). BBR generation is backend-specific — quinn-BBRv1 and
+over-provisioned matrix measures *loss tolerance* rather than congestion control proper (congestion
+control under a shaped bottleneck has only a first-pass, not-yet-validated result,
+[lab: T8b](../lab/test-8b-congestion-control.md)). BBR generation is backend-specific — quinn-BBRv1 and
 noq-BBRv3 strongest, quiche-BBRv2 weakest, with v1 fairness and a very-high-loss cliff
-uncharacterised — so quinn-BBRv1 is the pragmatic default today.
+uncharacterised — so quinn-BBRv1 is the pragmatic default today. The first-pass congestion run
+(T8b) complicates this for a *permanent fixed-rate* trunk — quinn-BBRv1 showed intermittent bloat
+there — but that result is not yet validated and does not change this recommendation.
 
 ## 7. Transport resilience holds; active/active source failover now ships, bounded by detection
 

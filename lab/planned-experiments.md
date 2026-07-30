@@ -24,11 +24,13 @@ pair) is already characterised in [test-6-relay-resilience.md](test-6-relay-resi
 
 ---
 
-## Congestion control under a real bottleneck + bufferbloat (extends T8)
+## Congestion control for a permanent fixed-rate trunk (extends T8)
 
 Promoted to its own protocol with a runnable rig — see
-[test-8b-bufferbloat-cc.md](test-8b-bufferbloat-cc.md). Until it runs, the T8 controller ranking is
-scoped to non-congestive impairment only.
+[test-8b-congestion-control.md](test-8b-congestion-control.md). A first-pass under-provisioned
+failure-mode run (C1) is done; the provisioned-path conditions (transient congestion, coexistence,
+AQM, provisioning margin, soak) are pending. Until those run, the T8 controller ranking is scoped to
+non-congestive impairment only.
 
 ---
 

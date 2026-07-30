@@ -7,6 +7,7 @@ docs/upstream/pr2473-feedback.md
 
 # lab/ is a public engineering notebook, but raw internal digests stay local
 *.local.md
+lab/scripts
 
 # Local environment secrets/overrides
 .env.local
