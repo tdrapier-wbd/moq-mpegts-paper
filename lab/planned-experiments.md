@@ -26,49 +26,9 @@ pair) is already characterised in [test-6-relay-resilience.md](test-6-relay-resi
 
 ## Congestion control under a real bottleneck + bufferbloat (extends T8)
 
-The [T8](test-8-srt-vs-moq.md) loss/reorder/jitter matrix is over-provisioned (offered ≪ capacity),
-so it measures non-congestive impairment resilience, not congestion control. The one meaningful CC
-test is **bufferbloat under a shaped bottleneck**, specified to the upstream maintainer's exact
-profile (mirrors `just demo cc compare bloat`, the measurement behind the #2468 quinn-BBRv1 default:
-CUBIC p50 RTT ~558 ms vs BBRv1 ~90 ms).
-
-**Profile.** 10 Mb/s source → rate-limited to **5 Mb/s**, **100 ms base RTT**, **500 ms queue depth
-before dropping**. A good controller approaches 5 Mb/s delivered with standing RTT near 100 ms; CUBIC
-is expected to fill the queue and sit near ~500 ms; BBR should hold both high goodput and low latency.
-Headline metrics measured *together*: delivered goodput (→ 5 Mb/s, healthy ≈ 90–100 % of cap — not
-100 % of source) and standing RTT under load (100 ms good ↔ 500 ms bloated).
-
-**Controllers:** CUBIC (`loss`), BBRv1 (quinn, now default), BBRv2 (quiche, now default), SRT. BBRv3
-(noq/iroh) is blocked pending the #768 subtract-overflow panic fix. Pin
-`--*-quic-congestion-control` on every run.
-
-**Rig (same EC2 → home path and SSH-safe `prio`+`u32` lane as T8, but the shaped band is a rate
-limiter with a deep, controlled queue — not `netem loss/reorder`):**
-
-- Bottleneck + base delay: `tc … htb rate 5mbit` (or `tbf`) + `netem delay 50ms` each way (→ 100 ms
-  RTT). Report delivered as **% of the 5 Mb/s cap**.
-- Queue depth (the bufferbloat knob): size the leaf queue to ~500 ms at 5 Mb/s (≈ 312 KB ≈ 210 ×
-  1500 B) via `bfifo limit 312500` for the bloated case; then re-run with `fq_codel` / `cake bandwidth
-  5mbit` for the AQM counterfactual.
-- RTT-under-load probe: QUIC RTT estimate from the endpoints and/or an independent `ping` through the
-  shaped band.
-- Source: CBR file replay (`tsp regulate`) exposes goodput + bufferbloat but cannot back off; pair one
-  run with an adaptive/VBR encoder (libx264 ABR chasing the send-rate estimate) for rate-following.
-- Fairness: 2× and 3× concurrent MoQ flows sharing the one 5 Mb/s `htb` class; per-flow share via
-  Jain's index.
-
-| # | Sub-condition | Shaper | What it isolates |
-|---|---|---|---|
-| 6a | Bufferbloat (headline) | `htb 5mbit` + `netem delay 50ms` ×2 + `bfifo` ~500 ms | goodput→5 Mb/s **and** standing RTT (100 ↔ 500 ms) |
-| 6b | AQM counterfactual | `htb 5mbit` + 100 ms RTT + `fq_codel` / `cake 5mbit` | does modern AQM tame CUBIC's bloat? |
-| 6c | Cap below source | `htb {5,3} mbit`, CBR vs adaptive source | failure mode: overflow (CBR) vs back-off (ABR) |
-| 6d | Fairness | `htb 5mbit`, N ∈ {2,3} flows | per-flow share; BBRv1 fairness |
-
-Interpretation criteria (agreed up front): goodput ≈ 90–100 % of cap for a healthy controller; BBR
-holds standing RTT near the 100 ms base while CUBIC bloats toward ~500 ms, and AQM pulls CUBIC back
-down (reproducing the maintainer's ~558 → ~90 ms delta validates the #2468 flip on this path);
-endorse a default only if it shares a bottleneck acceptably (BBRv1 fairness is the thing to watch).
-Until this runs, the T8 controller ranking is scoped to non-congestive impairment only.
+Promoted to its own protocol with a runnable rig — see
+[test-8b-bufferbloat-cc.md](test-8b-bufferbloat-cc.md). Until it runs, the T8 controller ranking is
+scoped to non-congestive impairment only.
 
 ---
 

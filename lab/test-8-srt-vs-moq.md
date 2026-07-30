@@ -235,7 +235,7 @@ After the CBR pacer: exact CBR **10.955 Mbps** (12.8 % stuffing), PCR mean 18.94
   controller behaved well." The only genuinely CC-dependent result is CUBIC misreading random loss —
   loss-signal interpretation, not a CC-quality verdict. Table 4 caps the pipe but only with a bare
   `netem rate` token bucket, CUBIC vs SRT only. The real CC test (bufferbloat under a shaped
-  bottleneck, all controllers) is [specified but not run](planned-experiments.md).
+  bottleneck, all controllers) is [specified but not run](test-8b-bufferbloat-cc.md).
 
 ## Conclusion
 
@@ -251,6 +251,6 @@ by T7 (Gate 2), and the bottleneck/bufferbloat run gates any default-controller 
 ## References
 
 - Impairment method reused from: [test-5-network-impairment.md](test-5-network-impairment.md).
-- Bottleneck + bufferbloat CC test (specified, not run): [planned-experiments.md](planned-experiments.md).
+- Bottleneck + bufferbloat CC test (specified, not run): [test-8b-bufferbloat-cc.md](test-8b-bufferbloat-cc.md).
 - Upstream: [#2432](https://github.com/moq-dev/moq/pull/2432), [#2468](https://github.com/moq-dev/moq/pull/2468), [#1706](https://github.com/moq-dev/moq/pull/1706), [noq #768](https://github.com/n0-computer/noq/issues/768).
 - Findings: [`docs/evidence.md`](../docs/evidence.md) §6; feeds [`docs/economics.md`](../docs/economics.md) §8.

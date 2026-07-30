@@ -104,12 +104,12 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 ## Roadmap — specified but not yet run
 
 Protocols are drafted in [planned-experiments.md](planned-experiments.md); each becomes its own
-per-test file when executed. In priority order:
+per-test file when executed, or earlier where a runnable rig already exists. In priority order:
 
 | # | Test | Purpose | Gate |
 |---|---|---|---|
 | T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
-| CC | Bufferbloat under a shaped bottleneck | The one meaningful congestion-control test (10 Mb/s source, rate-limited, 100 ms RTT, 500 ms queue), all controllers — gates any default-controller recommendation | extends T8 |
+| T8b | [Bufferbloat under a shaped bottleneck](test-8b-bufferbloat-cc.md) | The one meaningful congestion-control test (10 Mb/s source, rate-limited to 5 Mb/s, 100 ms RTT, 500 ms queue), all controllers, goodput **and** standing RTT together — gates any default-controller recommendation. Protocol and rig written ([scripts/](scripts/)); not yet run | extends T8 |
 | T9 | System performance & resource utilisation | Per-role CPU/RSS/fd/thread envelope, fan-out scaling, protocol overhead, and a hours→days soak. Pass: **no leak** (RSS slope ≈ 0 over ≥ 24 h per role; fd/socket/thread counts stable), bounded CPU with a documented fan-out knee, overhead within budget | feeds [operations](../docs/operations.md) & [economics](../docs/economics.md) §8 |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
 | T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
@@ -188,7 +188,7 @@ Source TS (file or live SRT/RTP)
 | Media-aware lane | `moq-dev` `moq` (import/export) + `moq-relay` (public reference impl; moq-lite / moq-transport) |
 | Opaque `m2ts` lane | private `moq_publisher` / `moq_relay` / `moq_subscriber` (draft-14 / MSFTS `m2ts`) |
 | CBR/PCR grooming | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`cbr_file` / `moq_egress` examples) |
-| Network impairment | Linux `tc` / `netem` (optionally `tbf`/`htb` for rate) |
+| Network impairment | Linux `tc` / `netem` (optionally `tbf`/`htb` for rate); shaped-bottleneck rigs in [`scripts/`](scripts/) |
 | Hardware conformance | Hardware IRD + TR 101 290 analyser (P2; access-dependent) |
 
 ### Recurring reproduction commands (P1 analysis)
