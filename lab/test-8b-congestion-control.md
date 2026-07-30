@@ -47,11 +47,14 @@ both endpoints in local network namespaces removes access-link variability and m
 reproducible on any Linux host, so it is the primary rig. The real-path rig is the corroborating
 variant, not the reference.
 
-| Rig | Script | Use |
+The harnesses below are **kept local** (not published) — the invocation details live in
+`INSTRUCTIONS.local.md` §7.
+
+| Rig | Harness | Use |
 |---|---|---|
-| **Namespace (primary)** | [`scripts/t8b-netns.sh`](scripts/t8b-netns.sh) | Two netns joined by veth on one Linux host; bottleneck + queue downstream, base delay both ways. Fully controlled, no shared-host risk. |
-| Real path (corroborating) | [`scripts/t8b-shaper.sh`](scripts/t8b-shaper.sh) | EC2 `<EC2_IP>` → `<subscriber-home-ip>`, shaping `ens5` egress. Media-only `prio`+`u32` lane so SSH stays clean. The real-path RTT adds to the emulated base delay — record both. |
-| RTT probe (both rigs) | [`scripts/t8b-rtt-probe.sh`](scripts/t8b-rtt-probe.sh) | Standing RTT sampled over the same window as the capture — used only as a buffer-headroom check, not as a QoE metric. |
+| **Namespace (primary)** | `t8b-netns.sh` | Two netns joined by veth on one Linux host; bottleneck + queue downstream, base delay both ways. Fully controlled, no shared-host risk. |
+| Real path (corroborating) | `t8b-shaper.sh` | EC2 `<EC2_IP>` → `<subscriber-home-ip>`, shaping `ens5` egress. Media-only `prio`+`u32` lane so SSH stays clean. The real-path RTT adds to the emulated base delay — record both. |
+| RTT probe (both rigs) | `t8b-rtt-probe.sh` | Standing RTT sampled over the same window as the capture — used only as a buffer-headroom check, not as a QoE metric. |
 
 ### Controllers
 
