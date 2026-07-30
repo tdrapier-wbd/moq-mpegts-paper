@@ -90,10 +90,10 @@ invented here:
   the wire, the choice needs no protocol change and preserves relay ⇄ subscriber
   interop; and because MoQ is hop-by-hop QUIC, BBR can be enabled on just the lossy
   relay→subscriber hop, with the short relay-edge RTT (not end-to-end) as the
-  retransmit loop. This is decisive in testing: under the default CUBIC, QUIC
-  collapsed under uniform loss, reordering, and a WAN profile, but switching the relay
-  to BBR restored full-rate, byte-complete delivery on par with SRT
-  ([test-plan](test-plan.md) §12.10, [evidence](evidence.md) §6).
+  retransmit loop. This is decisive: under the default CUBIC, QUIC collapses under
+  uniform loss, reordering, and a WAN profile, but switching the relay to BBR restores
+  full-rate, byte-complete delivery on par with SRT
+  ([lab: T8](../lab/test-8-srt-vs-moq.md), [evidence](evidence.md) §6).
 - **One protocol spans contribution and 1:N distribution.** MoQ's relay model
   provides subscription-based fan-out, cluster routing, and caching as part of the
   protocol rather than as external infrastructure. This matches the "trunk that
@@ -472,7 +472,7 @@ A transport for primary distribution must not only carry the bytes but *recover*
 survive a relay restart, a dropped session, or a link blip without operator
 intervention. What the shipped `moq-dev` provides here was audited by source
 inspection and measured in drills on the media-aware lane
-([evidence](evidence.md) §7, [test-plan](test-plan.md) §10.5). The result is a
+([evidence](evidence.md) §7, [lab: T6](../lab/test-6-relay-resilience.md)). The result is a
 model that is architecturally right but only *half-wired* today, so it is stated
 with the split the rest of this document uses: confirmed, limited, work-in-progress,
 and worked-around.
@@ -498,10 +498,9 @@ This is **reconnect to the same relay**, not failover: a client accepts exactly 
 list, so switching a client from relay A to relay B is out of scope for the
 transport and belongs to an external supervisor or a doubled chain (§8.4).
 
-### 8.2 Relay-restart behaviour (measured)
+### 8.2 Relay-restart behaviour
 
-A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md)
-§10.5):
+A relay restart exercises the two sides asymmetrically ([lab: T6](../lab/test-6-relay-resilience.md)):
 
 - **The publisher recovers.** After the relay comes back, the `moq import ts`
   reconnect loop redials and re-announces automatically; the import side is resilient
@@ -509,8 +508,8 @@ A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md
 - **The `moq export ts` subscriber recovers too (fixed by #2469).** The exporter
   previously **exited** with `Error: json: dropped` the instant its session dropped —
   the reconnect loop was alive, but the export container treated the dropped
-  `catalog.json` track as fatal. This was filed as
-  [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459) and **fixed in
+  `catalog.json` track as fatal. This is
+  [moq-dev/moq#2459](https://github.com/moq-dev/moq/issues/2459), **fixed in
   [#2469](https://github.com/moq-dev/moq/pull/2469)** ("linger a broadcast across an
   ungraceful source loss"): a consuming session now keeps the broadcast *lingered* for
   the reconnect window (`Backoff::linger()` = `backoff.timeout + 1 s`, i.e. ~301 s by
@@ -525,7 +524,7 @@ A relay restart exercises the two sides asymmetrically ([test-plan](test-plan.md
   backoff — a graceful restart that closes the session is noticed at once; an abrupt
   kill is not.
 
-### 8.3 Exporter lifecycle (resolved)
+### 8.3 Exporter lifecycle
 
 The `moq export ts` crash on session loss *was* the single most consequential
 transport-resilience gap for primary distribution, because a broadcast subscriber
@@ -541,7 +540,7 @@ tears down immediately). A consuming session derives its window from the reconne
 loop's own promise (`Backoff::linger()` = `backoff.timeout + 1 s`), and if the loop
 ultimately gives up, its real error surfaces *before* the broadcasts abort — replacing
 the misleading `json: dropped` with the true cause. In the relay-restart drill
-([test-plan](test-plan.md) §10.5.2) both exporters survive a 12 s outage and resume
+([lab: T6](../lab/test-6-relay-resilience.md)) both exporters survive a 12 s outage and resume
 automatically ~17 s after the kill (detection + backoff + re-announce), producing
 byte-identical redundant outputs before and after the gap. Recovery is **automatic and
 bounded, not hitless** — the content gap during the outage is a clean object-boundary
@@ -553,7 +552,7 @@ something the exporter conceals.
 - **No client-side relay failover.** Single connect URL; use a doubled chain or an
   external supervisor that swaps `--client-connect`.
 - **Exporter session-loss recovery: fixed (§8.3).** [#2469](https://github.com/moq-dev/moq/pull/2469)
-  makes `moq export ts` linger and resume across a session drop, verified locally, so an
+  makes `moq export ts` linger and resume across a session drop, so an
   external `Restart=always` supervisor is **no longer required** for relay maintenance/
   transient loss. Recovery is automatic and bounded (detection + backoff + re-announce),
   not hitless; the content gap is absorbed downstream by ST 2022-7 / IRD.
@@ -567,7 +566,7 @@ something the exporter conceals.
   freezes on active-source death, because pricing routes does not help when the standby
   route is never advertised ([relay](relay.md) §4.1). An upstream fix
   ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that propagation gap and the
-  two-relay drill **passes**; it merged on 2026-07-28. Even so, the switch it delivers is
+  two-relay drill **passes** and ships on `main`. Even so, the switch it delivers is
   bounded by failure detection (**30–33 s**, one QUIC idle timeout) rather than hitless, and it
   covers only an *ungraceful* source loss: when the active publisher exits cleanly the subscriber
   terminates instead of switching to the announced standby ([relay](relay.md) §4.1). The honest

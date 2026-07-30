@@ -470,9 +470,9 @@ directly from those bursts has a programme clock reference that is *smooth but
 not byte-accurate*: the PCR values are broadly correct but the inter-PCR timing,
 as seen at the byte level, is not. Software players tolerate this. **Hardware
 IRDs do not**: they lock a phase-locked loop to the PCR and raise TR 101 290
-P1/P2 alarms when the PCR interval drifts. Measured over a representative
-capture, roughly a quarter of PCR intervals exceeded the 40 ms conformance limit
-(with excursions to well over 100 ms).
+P1/P2 alarms when the PCR interval drifts. On the media-aware lane roughly a
+quarter of PCR intervals exceed the 40 ms conformance limit, with excursions well over
+100 ms ([evidence](evidence.md) §3, [lab: T2](../lab/test-2-media-aware-transparency.md)).
 
 It is worth being precise about *what* is at fault, because three distinct things
 are easily conflated. (1) **Delivery cadence:** MoQ hands objects to the edge in
@@ -516,7 +516,7 @@ not just steady-state conformance on a clean capture. This function is not provi
 by the upstream transport; it lives in the platform, realised today by a
 byte-locked CBR groomer (the public `mpegts-pacer` crate) that is file-validated to
 deliver CBR/PCR conformance — 13–26% of PCR intervals > 40 ms taken to 0%, 0
-`pcrverify` violations at 500 µs ([test-plan](test-plan.md) §6.7) — subject to the
+`pcrverify` violations at 500 µs ([lab: T2](../lab/test-2-media-aware-transparency.md)) — subject to the
 hardware caveat below. It is one of the clearest examples of broadcast-grade work
 living in the platform, not the protocol.
 
@@ -1017,7 +1017,7 @@ though not packet-for-packet phase alignment. This determinism *and* rate
 coherence is a hard requirement and an open validation item (§17): any
 non-determinism, including divergent object-loss recovery, breaks the property,
 so the outputs must be verified bit-identical *under loss*, not only in the clean
-case. A first characterisation now exists ([test-plan](test-plan.md) §10.4): the
+case. A first characterisation now exists ([lab: T6](../lab/test-6-relay-resilience.md)): the
 groomer's offline / stream-clocked path is byte-exact reproducible (identical
 SHA-256 run-to-run, on par with FFmpeg CBR and TSDuck `pcradjust`), but its *live*
 real-time path is not yet byte-identical across two independent instances — its
@@ -1046,7 +1046,7 @@ of the fallback, not of the default design.
 
 - **Publisher failure** — the redundant publisher's flow already exists in the
 fabric; the egress selects it. With active/active ingest there is no failover
-detection latency on the critical path. *Measured caveat:* today that selection must
+detection latency on the critical path. *Caveat:* today that selection must
 happen **downstream** (ST 2022-7 / IRD, §14.1), because the relay does not itself fail
 a broadcast over from a dead active source to a hot standby on the shipped wire — the
 standby's route is not propagated across the mesh to the relay serving the active
@@ -1082,7 +1082,7 @@ critical always-on routes), but it does not claim to eliminate it.
 
 The redundancy layers above only compose cleanly if each failure domain is owned by
 the layer best able to handle it. The redundancy investigation
-([test-plan](test-plan.md) §10.5, [evidence](evidence.md) §7) makes that division
+([lab: T6](../lab/test-6-relay-resilience.md), [evidence](evidence.md) §7) makes that division
 concrete, and it is a deliberate architectural position rather than a workaround for
 current gaps:
 

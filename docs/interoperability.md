@@ -116,8 +116,8 @@ intervals exceeding the 40 ms limit before grooming). The edge grooming layer �
 byte-locked CBR, monotonic PCR re-stamp, PCR re-insertion — restores conformant
 timing: measured on file it takes the bursty egress from 13–26% of PCR intervals
 > 40 ms to **0%** with 0 `pcrverify` violations at 500 µs
-([test-plan](test-plan.md) §6.7, [architecture](architecture.md) §7.2), subject to
-the hardware caveat below.
+([lab: T2](../lab/test-2-media-aware-transparency.md), [architecture](architecture.md) §7.2),
+subject to the hardware caveat below.
 
 > Grooming is file-validated and structurally sound, but **must be proven to pass
 > P1/P2 on real hardware IRDs**: file analysis confirms the PCR arithmetic, not
@@ -179,8 +179,8 @@ details (§5), not ingest concerns.
 - **Non-ideal-source robustness.** A suite of real contribution captures
   (open-GOP, discontinuities, mid-stream PID changes) carried end-to-end without
   loss of service.
-- **Redundancy.** Verified hitless ST 2022-7 switching at the egress under induced
-  path failure.
+- **Redundancy.** Hitless ST 2022-7 switching at the egress under induced path
+  failure ([evidence](evidence.md) §7 — precondition characterised; on-hardware pass outstanding).
 
 ## 10. Open questions
 

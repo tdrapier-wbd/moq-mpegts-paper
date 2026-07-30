@@ -25,7 +25,7 @@ Status: working draft. This paper is deliberately critical: the goal is to find 
 
 ## Bottom line up front
 
-MoQ is a credible **transport foundation**. It is open-source, standards-track, and prototypes show it works. The engineering that matters for broadcast is the **broadcast-grade layer above the transport**: IRD-accurate egress and PCR grooming, entitlement and multi-tenant control, redundancy, observability, and interop with the installed base (MPEG-TS, RTP, SRT/Zixi, hardware IRDs). Whether that layer can meet broadcast's trust bar on a best-effort substrate is a real, testable question, and it is *not yet proven*.
+MoQ is a credible **transport foundation**. It is open-source, standards-track, and prototypes show it works: the working prototype carries a full contribution mux end-to-end over a public-internet cloud relay with 0 continuity errors, grooms the bursty egress to exact CBR (0 % of PCR intervals > 40 ms, 0 `pcrverify` violations at ±500 ns on file), and — once the sender is switched to BBR — holds full-rate, byte-complete delivery on par with SRT under loss ([Evidence](docs/evidence.md); campaign record in [lab](lab/README.md)). The engineering that matters for broadcast is the **broadcast-grade layer above the transport**: IRD-accurate egress and PCR grooming, entitlement and multi-tenant control, redundancy, observability, and interop with the installed base (MPEG-TS, RTP, SRT/Zixi, hardware IRDs). Whether that layer can meet broadcast's trust bar on a best-effort substrate is a real, testable question, and it is *not yet proven*.
 
 ---
 
@@ -40,7 +40,7 @@ SRT, Zixi and RIST already move a linear feed reliably from A to B. MoQ's *incre
 - **Native relay and 1:N amplification** (the advantage we put forward first): a single protocol carries a feed from contribution through a relay fabric that fans out point-to-multipoint, with caching, on the QUIC/HTTP-3 substrate CDNs and hyperscalers already run.
 - **Subscription-oriented delivery**, which maps directly onto dynamic, revocable entitlement.
 - **A native authorization point** at subscription (the platform layers path-scoped tokens, mTLS, and expiry on it).
-- **Graceful congestion behaviour** instead of head-of-line blocking (strongest on the default media-aware lane, constrained on the opaque fallback).
+- **Per-stream delivery** — a lost packet stalls only its own object, not the whole multiplex — with **graceful multi-rendition degradation** (strongest on the default media-aware lane, constrained on the opaque fallback). Loss resilience itself is a controller choice, not a free protocol property: QUIC's default CUBIC *collapses* under loss, while BBR restores full-rate delivery *on par with* SRT — parity, not superiority ([Transport](docs/transport.md) §3.1, [Evidence](docs/evidence.md) §6).
 
 These matter most at fan-out scale and heterogeneity — precisely where primary distribution is *least* heterogeneous, so the fit must be tested, not assumed. Developed in [Vision](docs/vision.md) and [Transport](docs/transport.md).
 
@@ -50,7 +50,7 @@ The strongest reasons the thesis fails, each testable rather than rhetorical:
 
 - **The transport isn't stable enough (highest technical risk).** MoQ is pre-standard; recent drafts are "almost a completely new protocol," while broadcasters need 5–10 year stability. *Mitigation:* keep the media and control layers transport-independent (already done — see [Evidence](docs/evidence.md)), so the control plane can run over today's transports if MoQ slips ([Transport](docs/transport.md) §5.2).
 - **MoQ's advantage over SRT/Zixi/RIST is too narrow for *this* job (highest thesis risk).** *Test:* a real head-to-head lab ([Implementation](docs/implementation.md) §6) and a TCO model built on one broadcaster's actual route costs ([Economics](docs/economics.md)).
-- **Hardware IRDs reject groomed MoQ output (potential showstopper).** MoQ's object/burst model yields PCR that hardware IRDs flag on TR 101 290 P1/P2 — inherent, not a bug. Grooming addresses it but must be *proven on real hardware*. *Test (in progress):* a clean P1/P2 pass on real IRDs ([Evidence](docs/evidence.md), [Architecture](docs/architecture.md) §7.2 and §17).
+- **Hardware IRDs reject groomed MoQ output (potential showstopper).** MoQ's object/burst model yields PCR that hardware IRDs flag on TR 101 290 P1/P2 — inherent, not a bug. Grooming addresses it but must be *proven on real hardware*. *Test (not yet run):* a clean P1/P2 pass on real IRDs ([Evidence](docs/evidence.md), [Architecture](docs/architecture.md) §7.2 and §17).
 
 ---
 
@@ -58,13 +58,14 @@ The strongest reasons the thesis fails, each testable rather than rhetorical:
 
 Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for *why MoQ specifically*, [Architecture](docs/architecture.md) for *how it would be engineered*, and [Implementation](docs/implementation.md) for *how to build and test it*. The remaining documents are topic deep-dives.
 
+### The paper (`docs/`) — the design and what we've learned
+
 | Document | Description |
 |----------|-------------|
 | [Vision](docs/vision.md) | Why broadcast primary distribution is changing — industry problem, opportunity, and critical analysis. |
 | [Transport](docs/transport.md) | Why MoQ specifically; QUIC/WebTransport, MPEG-TS/MSFTS carriage, and draft-stability strategy. |
 | [Architecture](docs/architecture.md) | End-to-end reference architecture for a broadcast-grade MoQ distribution platform. |
 | [Implementation](docs/implementation.md) | Components, prerequisites, reference deployment, and the test path to the hardware-IRD proof. |
-| [Test Plan & Results](docs/test-plan.md) | The validation campaign: methodology, pass criteria, and **measured results** — baseline TS characterisation, transport transparency on both lanes, remote end-to-end over the public internet, and network-impairment behaviour, plus the roadmap to the hardware-IRD proof. |
 | [Relay](docs/relay.md) | Relay fabric, routing, fan-out, federation, and resilience. |
 | [Control Plane](docs/control-plane.md) | Provisioning and orchestration. |
 | [Entitlement](docs/entitlement.md) | Dynamic, revocable distribution rights. |
@@ -73,6 +74,12 @@ Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for 
 | [Operations](docs/operations.md) | NOC model, SLOs, monitoring, and runbooks. |
 | [Economics](docs/economics.md) | Cost model and operational comparison. |
 | [Evidence](docs/evidence.md) | What the working prototype proved — the empirical basis for the claims above. |
+
+### The validation campaign (`lab/`) — what was planned and measured
+
+| Document | Description |
+|----------|-------------|
+| [Laboratory Notebook](lab/README.md) | The validation campaign — both the *plan* (objectives, acceptance-gate mapping, and the pass criteria agreed before the numbers) and the *executed* work: exact procedures, commands, and **measured results** per test (baseline TS characterisation, transport transparency on both lanes, remote end-to-end over the public internet, impairment/CC behaviour, and resilience), with the corrections made along the way. |
 
 ---
 

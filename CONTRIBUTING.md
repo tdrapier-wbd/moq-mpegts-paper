@@ -90,12 +90,15 @@ submit — the same standard as any other contribution.
 ## Document map
 
 If you are not sure where a change belongs, the [README](README.md) has the full
-document map. In brief: [`vision`](docs/vision.md) (why), [`transport`](docs/transport.md)
-(why MoQ specifically), [`architecture`](docs/architecture.md) (how, integrative),
-[`implementation`](docs/implementation.md) (build and test),
-[`test-plan`](docs/test-plan.md) (formal validation plan and results), the topic deep-dives
-(`relay`, `control-plane`, `entitlement`, `security`, `interoperability`,
+document map. In brief, the **paper** (`docs/`): [`vision`](docs/vision.md) (why),
+[`transport`](docs/transport.md) (why MoQ specifically), [`architecture`](docs/architecture.md)
+(how, integrative), [`implementation`](docs/implementation.md) (build and test), the topic
+deep-dives (`relay`, `control-plane`, `entitlement`, `security`, `interoperability`,
 `operations`), [`economics`](docs/economics.md) (cost framework), and
 [`evidence`](docs/evidence.md) (what the prototype showed).
+
+The **validation campaign** lives in [`lab/`](lab/README.md) — both the plan (objectives,
+acceptance gates, pass criteria) and the per-test engineering notebook (procedures, commands,
+measured results).
 
 Thank you for helping make this more accurate.

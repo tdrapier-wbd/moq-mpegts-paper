@@ -108,7 +108,7 @@ At a high level, and without reproducing sensitive detail:
 
 The validation pyramid below is the conceptual ordering; the formal, executable
 plan that operationalises it — with per-test methodology, `tc`/`netem` impairment
-profiles, result tables, and pass criteria — is in the [test plan](test-plan.md).
+profiles, result tables, and pass criteria — is in the [laboratory notebook](../lab/README.md).
 
 The validation pyramid, from cheapest/fastest to most decisive:
 

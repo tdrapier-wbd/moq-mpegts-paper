@@ -1,38 +1,63 @@
 ---
-description: Local testing environment — server access, paths, and test baselines
+description: Documentation authority + local testing environment for the MoQ ⇄ MPEG-TS paper
 globs:
 alwaysApply: true
 ---
 
-# Testing environment
+# Working in this repository
 
-Before running, building, or reasoning about any MoQ ⇄ MPEG-TS test in this project,
-**always read `INSTRUCTIONS.local.md` in the project root first.** It holds the raw,
-machine-specific details that are deliberately kept out of Git:
+- **`docs/`** — a *public technical paper*, not a development log: what we've learned, summarised for public consumption.
+- **`lab/`** — the engineering notebook: what happened (test results, experiments, history, detail). Authoritative for the experimental record; results promoted to `docs/evidence.md` are summarised there, not moved out of the lab.
+- `docs/evidence.md` → validated empirical findings
+- `docs/*.md` → design and architecture
+- `README.md` → entry point / document map
 
-- local relay server address/ports and the exact start command (incl. the
-  `--server-quic-gso=false` and `https://` + `--client-tls-fingerprint` gotchas);
-- repository paths, branch/commit under test, and how to locate the freshly-built
-  binaries (the `cargo` target dir is redirected — `~/moq-dev/target/release` is stale);
-- `mpegts-pacer` build + invocation;
-- local test data (`~/*.ts` source clips) and the test-runner scripts (`~/t7-p1/…`);
-- analysis tooling (TSDuck, `compliance.py`) and the measured P1 baselines;
-- the remote EC2 path (IP, ports, SSH target, systemd services).
+When uncertain where something belongs, prefer `lab/` over `docs/`.
 
-`INSTRUCTIONS.local.md` (and any `.env.local`) are git-ignored — do not commit them and
-do not copy their raw IPs/paths/fingerprints into tracked files. When environment facts
-change (rebuilds, new commit, new relay address, new clips), update
-`INSTRUCTIONS.local.md` so it stays the single source of truth for local execution.
+## Documentation authority
 
-Repository documentation is a technical paper, not a development log.
+| Location | Role | Contains | Never contains |
+|---|---|---|---|
+| `lab/` | Chronological engineering notebook. | commands, logs, failures, hypotheses (incl. wrong ones), timings, observations, raw numbers, commit hashes, branch names, temporary conclusions | *(never summarise; never rewrite history — supersede, don't erase)* |
+| `docs/*.md` | The paper: stable engineering conclusions. | design & architecture that reflect current understanding | diary entries, TODOs, branch names, command history other than reproducible recipes |
+| `docs/evidence.md` | Validated empirical findings only. | measurements that are confirmed and current | unvalidated or in-flight results |
+| `STATUS.md` *(git-ignored)* | Current state only — a one-page snapshot. | what is true right now (build under test, open items, what's proven) | history, chronology |
+| `INSTRUCTIONS.local.md` *(git-ignored)* | Reproduction environment + workflow + these editing rules. | paths, addresses/ports, start commands, test data, tooling, and how to operate in the repo | engineering findings / results / status (those go to `lab/`) |
+| `README.md` | Entry point and document map. | — | — |
 
-Documentation should describe the current understanding of the system rather than the sequence by which that understanding was reached.
+`INSTRUCTIONS.local.md`, `STATUS.md`, and any `.env.local` are git-ignored. 
 
-When new testing completes:
+## Before running anything
 
-* Update conclusions, architecture and limitations where necessary.
-* Replace obsolete statements rather than appending corrections.
-* Merge duplicate findings into a single authoritative explanation.
-* Remove superseded observations.
-* Preserve only historical context that materially improves technical understanding.
-* Move experiment logs, commands, commit hashes, timestamps, hypotheses and iterative reasoning into lab-notes.local.md.
+**Always read `INSTRUCTIONS.local.md` first** — it is the single source of truth for local
+execution: the relay address/ports and exact start command (incl. the
+`--server-quic-gso=false` and `https://` + `--client-tls-fingerprint` gotchas); repository
+paths and how to locate the freshly-built binaries (the sandbox `cargo` target rotates each
+session — `~/moq-dev/target/release` is stale); `mpegts-pacer` build + invocation; the local
+`~/*.ts` clips and the `~/t7-p1/…` runner scripts; TSDuck + `compliance.py` and the measured
+P1 baselines; and the remote EC2 path. Keep it current: when environment facts change
+(rebuilds, new commit, new relay address, new clips), update `INSTRUCTIONS.local.md` and/or `STATUS.md`.
+
+## After every engineering session
+
+1. Record EVERYTHING in `lab/` (per-experiment files; raw internal digest in `lab/notebook.local.md`).
+2. Extract only permanent, validated and summarised findings into `docs/evidence.md`.
+3. Update affected design documents with architectural conclusions only.
+4. Update `STATUS.md` to the new current state.
+5. Do NOT place engineering observations in `INSTRUCTIONS.local.md`.
+6. Remove any working notes, temporary observations, diary text, branch names, or command
+   history (other than reproducible recipes) from `docs/`.
+7. If uncertain where something belongs, prefer `lab/` over `docs/`.
+
+## Editing `docs/`
+
+Documentation describes the current understanding of the system, not the sequence by which
+that understanding was reached:
+
+- Update conclusions, architecture, and limitations where necessary.
+- Replace obsolete statements rather than appending corrections.
+- Merge duplicate findings into a single authoritative explanation.
+- Remove superseded observations.
+- Preserve only historical context that materially improves technical understanding.
+- Move experiment logs, commands, commit hashes, timestamps, hypotheses, and iterative
+  reasoning into `lab/`.
