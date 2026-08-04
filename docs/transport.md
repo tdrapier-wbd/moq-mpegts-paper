@@ -556,24 +556,25 @@ something the exporter conceals.
   external `Restart=always` supervisor is **no longer required** for relay maintenance/
   transient loss. Recovery is automatic and bounded (detection + backoff + re-announce),
   not hitless; the content gap is absorbed downstream by ST 2022-7 / IRD.
-- **Active/active *source* failover is not delivered by default today.** Two publishers on
-  one relay collapse the stream (`unroutable`); a two-relay mesh tolerates the pair but
-  does not fail the source over when the active publisher dies, because the standby
-  route is not propagated across the mesh to the relay serving the active source
-  ([relay](relay.md) §4.1, §5.1). The `moq-lite-06` cost/standby routing (#2424) that
-  would *rank* such a standby is opt-in (`--server-version`/`--client-version`), but it
-  does **not by itself** restore failover — with lite-06 negotiated the mesh drill still
-  freezes on active-source death, because pricing routes does not help when the standby
-  route is never advertised ([relay](relay.md) §4.1). An upstream fix
-  ([#2473](https://github.com/moq-dev/moq/pull/2473)) closes that propagation gap and the
-  two-relay drill **passes** and ships on `main`. Even so, the switch it delivers is
-  bounded by failure detection (**30–33 s**, one QUIC idle timeout) rather than hitless, and it
-  covers only an *ungraceful* source loss: when the active publisher exits cleanly the subscriber
-  terminates instead of switching to the announced standby ([relay](relay.md) §4.1). The honest
-  broadcast-grade path today is therefore the **fully-doubled chain** — dual
+- **Active/active *source* failover ships, but as a bounded reselect — not a seamless merge.**
+  Two publishers on one relay used to collapse the stream (`unroutable`);
+  [#2473](https://github.com/moq-dev/moq/pull/2473) (on `main`, release `moq-net 0.2.5`) now
+  propagates the standby route across a two-relay mesh and the drill **passes**
+  ([relay](relay.md) §4.1, §5.1), **provided both publishers carry one source** — an identical
+  PMT/track layout and PTS, declared with a shared `moq --origin <id>` (an explicit promise of
+  identical content; the relay never infers it). A mid-stream standby with offset group numbering
+  still fails over cleanly, because the exporter skips to the new live edge rather than requiring
+  group-number continuity. Even so the switch is bounded by failure detection (**30–33 s**, one
+  QUIC idle timeout; tunable to ~10 s, fragile below that), not hitless — the resumed TS is
+  continuity-clean but carries a PCR/PTS discontinuity across the outage — and it covers only an
+  *ungraceful* loss: on a clean source exit the subscriber terminates instead of switching. A
+  *seamless* relay-side merge is explicitly out of scope upstream (the relay is content-agnostic
+  and will not rewrite timestamps to bridge two broadcasts); a gap-free switch needs wall-clock-
+  aligned encoders or a receiver that reinitialises on the switch. Relay reselect is therefore a
+  bounded nice-to-have; the honest broadcast-grade path stays the **fully-doubled chain** — dual
   publishers, dual relays, dual pacers, and **downstream ST 2022-7 / IRD hitless
-  selection** ([architecture](architecture.md) §14.1) — with MoQ responsible for
-  per-leg transport resilience and reach, not for hitless switching.
+  selection** ([architecture](architecture.md) §14.1) — with MoQ owning per-leg transport
+  resilience and reach, not the hitless switch.
 
 ## 9. Open questions
 

@@ -199,6 +199,33 @@ broadcast's expected cadence and so cannot treat silence as failure, and `--serv
 bounds it today. [#2556](https://github.com/moq-dev/moq/pull/2556) does not move this — it speeds a
 publisher reclaiming its *own* path on reconnect and leaves shared-origin 1+1 standbys alone.
 
+**The binding precondition is a common source, not byte-identical segmentation.** A 1+1 pair works as
+a redundant pair only if both publishers are two views of *one* feed: the moq group sequence number is
+a per-importer counter reset to 0 at its first keyframe (`append_group()` in
+`rs/moq-net/src/model/track.rs`), while track names and PTS come from the source bytes (PMT-derived
+names, PCR/PTS from the TS). Feeding one ingest path into both publishers therefore gives them an
+identical PMT/track layout and a consistent PTS timeline, which is what the reselect needs. Two runs on
+`moq-relay 0.14.3` make the boundary precise ([lab: T6](../lab/test-6-relay-resilience.md)): with the
+source fanned to two co-started importers the two subscribers' outputs are **byte-for-byte identical
+before the kill**, and failover is clean; and — importantly for broadcast, where a publisher always
+joins an already-running feed — a **standby that joins mid-stream** (so its group numbering is
+*offset* from the active's) **still fails over cleanly**, because the exporter navigates by track and
+live edge and simply skips to the standby's live edge rather than demanding group-number continuity
+(it subscribes once and never reinitialises the catalog across the switch). Byte-identical numbering is
+sufficient but not necessary; what a shared source rules out — a divergent track layout or codec across
+the pair — is what would actually make failover impossible.
+
+**"Continuity-clean" is not "hitless."** The resumed output carries **0 TS continuity-counter errors**
+(the exporter's single output mux never resets), so it stays structurally valid and playable; the
+~30 s outage instead appears as a **PCR/PTS discontinuity** — a content hole the media clock jumps
+across (`tsp analyze` reports `pcrleap` on the PCR PID with CC errors at 0). This is
+break-before-make. The window is the QUIC idle timeout and is tunable: at `--server-quic-idle-timeout
+10s` the reselect completes in ~11 s, but tightening toward a few seconds gets fragile (a 5 s idle with
+1 s keep-alive tore healthy sessions down and the switch did not complete). Sub-second / hitless is not
+a relay-reselect property — it requires make-before-break at the *receiver* (ST 2022-7 dual-subscribe),
+which the common-source result above is precisely what makes feasible (§5.1,
+[architecture](architecture.md) §14.1).
+
 One gap remains, and it is the operationally important one: **a graceful source exit is not failed
 over at all.** When the active publisher terminates cleanly rather than dying, the relay does not
 reselect — it propagates completion: both media tracks report `subscribe complete`, the catalog
@@ -264,10 +291,12 @@ versus what it is designed to deliver, and the two are not yet the same.
   single-relay duplicate publisher nor a two-relay mesh gives active/active source
   failover on the shipped wire; the relay keeps the active flow healthy but does not
   switch to a standby when the active source dies. [#2473](https://github.com/moq-dev/moq/pull/2473)
-  closes that gap and the mesh drill passes on `main` (0.2.5). Even so the switch is
-  **bounded by the QUIC idle timeout (~30 s), not hitless**, so it protects against a
-  dead source rather than replacing receiver-side hitless selection — and it does not cover a
-  *graceful* source exit at all, which is the more common operational case (see §4.1).
+  closes that gap and the mesh drill passes on `main` (0.2.5), **provided both publishers share one
+  source** (identical track layout + PTS; a mid-stream standby with offset group numbering still works,
+  §4.1). Even so the switch is **bounded by the QUIC idle timeout (~30 s, tunable to ~10 s), not
+  hitless** — the resumed TS is continuity-clean but carries a PCR/PTS discontinuity across the outage —
+  so it protects against a dead source rather than replacing receiver-side hitless selection, and it
+  does not cover a *graceful* source exit at all, which is the more common operational case (see §4.1).
 
 The consequence for this document's resilience model is a sharpening, not a reversal:
 the relay's job — **keep the flows healthy and let hitless selection happen at the

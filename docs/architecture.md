@@ -972,7 +972,9 @@ flowchart LR
 Redundancy is applied at four layers, mirroring what broadcasters already do
 with ST 2022-7 but extending it end-to-end:
 
-1. **Ingest** — redundant publisher pairs with independent source feeds (§4.4).
+1. **Ingest** — redundant publisher pairs carrying the *same program* over
+  independent contribution paths (§4.4); the legs must be the same content for the
+  downstream merge to be hitless, not two unrelated encodes.
 2. **Path** — the fabric routes a route over two link-disjoint paths, so a
   single link or region impairment does not interrupt delivery.
 3. **Edge** — redundant gateways produce two egress streams.
@@ -1046,14 +1048,14 @@ of the fallback, not of the default design.
 
 - **Publisher failure** — the redundant publisher's flow already exists in the
 fabric; the egress selects it. With active/active ingest there is no failover
-detection latency on the critical path. *Caveat:* today that selection must
-happen **downstream** (ST 2022-7 / IRD, §14.1), because the relay does not itself fail
-a broadcast over from a dead active source to a hot standby on the shipped wire — the
-standby's route is not propagated across the mesh to the relay serving the active
-source, and `moq-lite-06` cost routing does not by itself close this
-([relay](relay.md) §4.1, [evidence](evidence.md) §7). "No failover-detection latency"
-is the property the *doubled-and-downstream-merged* chain delivers, not a property of
-relay-mesh switching yet.
+detection latency on the critical path. *Caveat:* that zero-latency property belongs to
+the *doubled-and-downstream-merged* chain (ST 2022-7 / IRD, §14.1), not to relay-mesh
+switching. The relay *can* now fail a broadcast over from a dead active source to a
+shared-origin standby ([#2473](https://github.com/moq-dev/moq/pull/2473), on `main`;
+[relay](relay.md) §4.1, [evidence](evidence.md) §7), but only as a **bounded reselect** —
+one QUIC idle timeout of detection, ungraceful loss only, and no seamless merge (the
+relay is content-agnostic). Useful as a nice-to-have; the no-stall path stays the
+receiver-side hitless switch.
 - **Relay or link failure** — the disjoint second path continues to deliver;
 the fabric re-routes affected subscriptions around the failure using the mesh.
 - **Gateway failure** — the redundant gateway's egress continues; the IRD's ST
@@ -1094,30 +1096,45 @@ current gaps:
   ecosystem badly and couple input policy to transport. The publisher's job is to
   take *one* good input and get it onto the fabric reliably; which input is "good" is
   decided before MoQ. **Recommendation: keep input failover upstream of the publisher.**
+  - **Constraint the drills add: the two publishers must be fed the *same* source, or they are not a
+    failover pair.** Relay-mesh source failover only splices cleanly when both publishers carry an
+    identical PMT/track layout and a consistent PTS timeline, which a single shared feed guarantees but
+    two independent encodes do not ([relay](relay.md) §4.1, [evidence](evidence.md) §7). The practical
+    topology is therefore **two ingest paths, but one selected path fanned into *both* publishers** so
+    they produce the same broadcast, with the **second path held as source-side failover for both**
+    (the `tsp -I switch`/input-selector decision upstream of the fan-out). A standby publisher joining
+    that shared feed **mid-stream** is fine — an offset in moq group numbering does not break the
+    reselect, since the exporter skips to the new live edge — so the pair need not be started in
+    lock-step. What must not differ is the *content*: distinct encodes with the same broadcast name
+    cannot fail over.
 - **MoQ owns transport resilience and relay routing.** Per-leg QUIC reconnection,
   keep-alive/idle-timeout tuning, cache/fan-out, announce propagation, and cost/
   shortest-path route selection across the relay mesh are squarely MoQ's
   responsibility, and are where MoQ adds value over a point-to-point transport. The
   drills confirm the transport half works (publisher auto-reconnect, byte-identical
-  fan-out, cluster formation), and they also pin the two gaps that are legitimately
-  MoQ's to close: the exporter's session-loss handling (a client bug, filed upstream)
-  and **standby-route propagation for active/active source failover** (§14.3;
-  [relay](relay.md) §4.1).
+  fan-out, cluster formation), and the two gaps they pinned as legitimately MoQ's have
+  since landed upstream: the exporter's session-loss handling
+  ([#2469](https://github.com/moq-dev/moq/pull/2469)) and standby-route propagation for
+  active/active source failover ([#2473](https://github.com/moq-dev/moq/pull/2473), §14.3;
+  [relay](relay.md) §4.1) — the latter as a *bounded* reselect, since a seamless merge is
+  content-agnostic-relay territory it deliberately will not enter.
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless
-  selection.** Until relay-mesh source failover lands, service continuity is delivered
-  the way broadcasters already trust: **dual publishers → dual relays → dual pacers →
+  selection.** Relay-mesh source failover has since landed, but it is bounded (one idle
+  timeout, ungraceful loss only), so service continuity is still delivered the way
+  broadcasters already trust: **dual publishers → dual relays → dual pacers →
   ST 2022-7 / IRD hitless selection at the edge** (§14.1). MoQ carries two healthy
   disjoint legs; the *hitless switch* between them lives at the receiver, which already
   implements it. This keeps the last-hop failover free of new receiver behaviour and
-  does not block on any unshipped MoQ feature.
+  depends on no unshipped MoQ feature.
 
-The forward-looking nuance: relay-mesh source failover is *desirable* and belongs in
-MoQ (it would let a single-homed subscriber ride out an active-source death without a
-downstream merge), so the platform should help land it upstream (§14.3,
-[relay](relay.md) §4.1) — but it is an **enhancement to the routing layer, not a
-prerequisite for broadcast-grade service today**, which the doubled-and-downstream
-pattern already provides. Input failover, by contrast, should stay outside MoQ
-permanently.
+The forward-looking nuance: relay-mesh source failover has landed and is *useful* — it
+lets a single-homed subscriber ride out an *ungraceful* active-source death without a
+downstream merge — but it is a **bounded routing-layer enhancement, not a substitute for
+broadcast-grade service today**: it costs one detection interval, does not cover a
+graceful source exit, and a genuinely seamless merge is out of scope for a
+content-agnostic relay (§14.3, [relay](relay.md) §4.1). The doubled-and-downstream
+pattern remains the no-stall answer. Input failover, by contrast, should stay outside
+MoQ permanently.
 
 ---
 

@@ -161,7 +161,7 @@ uncharacterised — so quinn-BBRv1 is the pragmatic default today. The first-pas
 (T8b) complicates this for a *permanent fixed-rate* trunk — quinn-BBRv1 showed intermittent bloat
 there — but that result is not yet validated and does not change this recommendation.
 
-## 7. Transport resilience holds; active/active source failover now ships, bounded by detection
+## 7. Transport resilience holds; active/active source failover ships only as a bounded reselect
 
 The redundancy model MoQ is built around is sound: thin, auto-reconnecting endpoints, redundancy
 in the relay mesh, hitless selection at the receiver. Crate inspection plus drills on the
@@ -187,7 +187,7 @@ model of a broadcast's expected cadence, so it cannot treat silence as failure t
 application that knows its own frame rate could — it must wait for the transport to declare the
 peer gone. Upstream is considering a lower default (~10 s) as a separate change.
 
-**Active/active source failover: now shipped, bounded by detection.** Before
+**Active/active source failover: a bounded route reselect, not a seamless merge.** Before
 [#2473](https://github.com/moq-dev/moq/pull/2473), two publishers of the *same* broadcast at one
 relay made the path `unroutable` and tore down both, and across a two-relay mesh the pair coexisted
 without the relay failing its source over — the standby's route was never propagated back, because
@@ -195,7 +195,10 @@ a relay advertised one best route per path and skipped the announce entirely whe
 contained the peer. Cost and standby routing (#2424, in the opt-in `moq-lite-06-wip` version) could
 not help, since the blocker was route *propagation*, not pricing. #2473 fixes that by advertising,
 per peer, the best route whose hop chain *excludes* the requester, plus a `moq --origin <id>` knob
-by which a 1+1 pair declares itself interchangeable. It ships on `main` (release `moq-net 0.2.5`).
+by which a 1+1 pair **declares its two feeds interchangeable — an explicit promise of identical
+content, which the relay never infers**: as the maintainer confirms, the relay is content-agnostic
+(the bytes are either the same or different, and it will not rewrite timestamps to bridge two
+broadcasts). It ships on `main` (release `moq-net 0.2.5`).
 
 **The two-relay drill passes end to end** ([lab: T6](../lab/test-6-relay-resilience.md)): relay B advertises
 the standby to relay A the instant the standby publisher joins, and when the active publisher is
@@ -206,6 +209,26 @@ publisher pipeline is killed atomically. A later fix,
 reclaiming *its own* path on reconnect and leaves shared-origin 1+1 standbys unchanged; its recency
 tie-break does not fire here because the active and standby routes differ on cost, so the failover
 time is governed by detection either way.
+
+**The requirement is a common source, not byte-identical segmentation** (single-source study on
+`moq-relay 0.14.3-b87d4e92`, 2026-08-03). A moq group sequence number is a per-importer counter reset
+to 0 at the first keyframe (`append_group()`), while track names and PTS come from the source bytes,
+so two publishers are interchangeable when they are two views of *one* feed. Fed a single source, two
+co-started importers produce **byte-for-byte identical** subscriber output up to the kill, and failover
+is clean. Crucially for broadcast — where a publisher always joins an already-running feed — a standby
+that joins **mid-stream** (its group numbering therefore *offset* from the active's) **still fails over
+cleanly**: the exporter subscribes once, never reinitialises the catalog, and skips to the standby's
+live edge, so byte-identical numbering is sufficient but not necessary. What a shared source rules out
+— a divergent track layout or codec across the pair — is what would actually make failover impossible.
+
+**Continuity-clean, but not hitless.** The resumed capture carries **0 TS continuity-counter errors**
+(the exporter's single output mux never resets), so it is structurally valid; the outage instead
+appears as a **PCR/PTS discontinuity** (`tsp analyze` reports `pcrleap` on the PCR PID at CC=0) — a
+content hole the media clock jumps across, i.e. break-before-make. The window is the QUIC idle timeout
+and is tunable: `--server-quic-idle-timeout 10s` gives an ~11 s reselect, but a 5 s idle (1 s
+keep-alive) is fragile — the switch failed to complete. Sub-second / hitless is not a relay-reselect
+property; it must live at the receiver (ST 2022-7 dual-subscribe over the common source), which the
+identical-broadcast result is exactly what makes feasible.
 
 One caveat remains, and it is the operationally important one: **graceful
 departure of the active source is not failed over at all.** When the active publisher exits
@@ -227,8 +250,12 @@ needed for relay maintenance or transient loss. Service redundancy still comes f
 doubled chain — dual publishers → dual relays → dual subscribers → dual pacers → downstream
 ST 2022-7 / IRD failover — letting the *receiver* do hitless selection. Relay-mesh source
 failover does not change that recommendation now that #2473 has landed: at one idle timeout it is
-**bounded, not hitless**, so it protects against a dead source rather than delivering the
-seamless switch a broadcast chain expects — and on the graceful-exit path it does not presently
-protect at all. The two are complementary — the mesh keeps both
+**bounded, not hitless**, protecting against a dead source rather than delivering the seamless
+switch a broadcast chain expects, and on the graceful-exit path it does not protect at all. A
+*seamless* relay-side merge is explicitly out of scope upstream — the content-agnostic relay will
+not bridge two broadcasts, so a gap-free switch needs either wall-clock-aligned encoders
+(Elemental's approach) or a receiver that reinitialises on the switch. That makes relay reselect a
+**bounded nice-to-have**; the load-bearing resilience stays the doubled chain with the *receiver*
+making the hitless decision. The two are complementary — the mesh keeps both
 flows healthy and reachable, the receiver makes the hitless decision. (Supports
 [transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)

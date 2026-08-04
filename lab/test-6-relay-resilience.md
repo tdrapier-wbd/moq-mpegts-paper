@@ -19,13 +19,15 @@ establish the ST 2022-7 output-determinism precondition for a hitless dual-path 
 - Each drill runs relay(s) + publisher(s) + subscriber(s) + timed kills inside a single shell
   invocation (the local background-process constraint). Scripts and relay configs under
   `~/t6-redundancy/` (`failover.sh`, `cluster_failover.sh`, `reconnect.sh`, `graceful_exit.sh`,
-  `relayA.toml`, `relayB.toml`). A one-row-per-second byte sampler on each subscriber output makes
-  the failure instant visible.
+  `renumber_takeover.sh`, `src_failover.sh`, `relayA.toml`, `relayB.toml`). A one-row-per-second byte
+  sampler on each subscriber output makes the failure instant visible.
 - ST 2022-7 determinism study (2026-07-20): `mpegts-pacer` 0.1.0, TSDuck 3.44-4676, FFmpeg 8.1
   (Darwin 25.5.0).
 - Builds across the campaign: drills on 0.8.7; #2473 verified on head `cc11cbaf` (`moq 0.9.3`,
   2026-07-27); #2473 merged `b624c7c0` (2026-07-28); re-verified on the `moq-net 0.2.5` / `moq-cli
-  0.9.5` release (2026-07-30).
+  0.9.5` release (2026-07-30); re-verified again on current `main` `moq-relay 0.14.3-b87d4e92`
+  (origin/main `ea08e964`, incl. #2556 + #2565) (2026-07-31); single-source common-feed study
+  (`src_failover.sh`) on that same `0.14.3-b87d4e92` build (2026-08-03).
 
 ## Procedure
 
@@ -172,6 +174,114 @@ reproduces unchanged on the 0.2.5 release. Proposed remedies: an announcement `e
 ([#2330](https://github.com/moq-dev/moq/issues/2330)) or the typed announcement lifecycle
 (#2216/#2217); an independent report on #2330 measures the same gap as a multi-second consumer outage.
 
+### Re-verification on current `main` (2026-07-31): #2556/#2565 and the reconnecting-publisher takeover
+
+Prompted by the maintainer closing [#2534](https://github.com/moq-dev/moq/pull/2534) (*"deliver
+groups from a takeover source that restarted its numbering"*) **unmerged**, with *"I think this is
+fixed by #2556 … doing more takeover stuff on the dev branch"*, plus an independent production repro
+on that PR (a `@moq/net` subscriber starved for the broadcast's age after a publisher restart;
+version-bisected clean on v0.14.1 and broken from v0.14.2 — the #2469 linger). Drills re-run on
+`moq-relay 0.14.3-b87d4e92` (origin/main `ea08e964` + #2556 + #2565).
+
+- **Hard-kill 1+1 mesh — unchanged.** `cluster_failover.sh` (`SIDLE=6s`): `sub1` resumed 10 s after
+  the kill, `sub3` survived the standby join, 0 `unroutable`. As on 0.2.5 — #2556 does not alter it,
+  consistent with the analysis above.
+- **Graceful exit — unchanged.** `graceful_exit.sh`: `sub1` frozen from pubA's clean exit for the
+  rest of the window; the exporter dies `TS track layout changed after PAT/PMT was emitted: '0.avc3'
+  removed`. Still uncovered.
+- **Single-relay reconnecting-publisher takeover — new drill (`renumber_takeover.sh`), not clean.**
+  This is the #2534 scenario on the TS path: one relay, a `moq export ts` subscriber, pubA SIGKILLed
+  after ~15 s, pubB rejoining the **same** broadcast ~1 s later as a fresh session (restarted group
+  numbering).
+  - *Fresh identity (no `--origin`):* the exporter **terminates** with `Error: json: dropped` the
+    instant pubB attaches — the takeover replaces rather than splices, dropping the catalog
+    subscription. Reproduced on every run.
+  - *Shared `--origin` (interchangeable source):* the exporter **survives** and delivery **resumes**,
+    but only after a gap of ~the join delay (~17 s frozen for a 15 s pubA, then steady growth to the
+    end). That 1:1-with-join-delay scaling is exactly the independent-copy timeline-offset artifact
+    documented under Corrections below (both publishers replay the same clip from its start), so this
+    drill **cannot** separate it from the #2534 splice-floor starvation — a timeline-aligned rerun
+    (pubB's media clock continued from pubA's, not restarted) is needed to attribute it.
+  - **Bottom line:** #2556 does **not** make the single-relay TS reconnecting-publisher takeover
+    hitless — fresh identity crashes the exporter, shared origin gaps it. The recommended posture (a
+    fully doubled chain with receiver-side ST 2022-7 selection) does not depend on this path, but a
+    naive "publisher reconnects to the same broadcast" is unsafe for a downstream `moq export ts`,
+    and whether the shared-origin residual gap is our clock skew or the #2534 splice-floor is still
+    open.
+
+### Single-source 1+1 failover — the requirement is a common source, not byte-identical numbering (2026-08-03)
+
+Prompted by the maintainer's note on #2545 (*"if you're publishing two separate broadcasts (different
+timestamps, codecs, segments) with the same name then failover is impossible … the application needs
+to reinitialise everything on a switch"*) and by the observation that our earlier drills fed the two
+publishers *independent* copies of one clip. This run rebuilds the rig around **one source feeding
+both publishers**, which is what a real 1+1 pair is: two views of a single feed, not two encodes.
+
+**Why the source matters, from the code.** A publisher's moq group sequence numbers are a per-importer
+counter reset to 0 at its first keyframe (`append_group()` → `max_sequence + 1`, seeded 0, in
+`rs/moq-net/src/model/track.rs`); PTS and track names come from the source bytes (PMT-derived
+`unique_track` names; PCR/PTS from the TS). So two importers emit an *identical* broadcast only if
+they consume the same bytes from the same keyframe. Prediction: co-started publishers align exactly;
+a late/mid-stream joiner is offset in group numbering (its group 0 = the primary's group N).
+
+**Rig** (`src_failover.sh`, two meshed relays 4443/5443, `sub1` on relay A watched for failover,
+`sub3` on relay B; shared `--origin`; hard-kill = SIGKILL the active importer only, source survives):
+
+- **E1 — byte-identical** (`MODE=gtee`): one `tsp regulate` source fanned by `gtee --output-error=warn`
+  into two co-started importers (both open their fifo before the source flows, so both get byte 0).
+  `gtee` keeps feeding the survivor when the killed importer's fifo reader closes (EPIPE, not block).
+- **E2 — mid-stream standby** (`MODE=mcast`): one live multicast feed (`tsp -O ip 239.255.42.99:5000
+  --local-address <en0> --ttl 1`, host-local); `pubB` joins the running feed ~11 s after `pubA`, so
+  its group numbering is offset by construction. This is the production shape (publishers always join
+  an already-running feed).
+
+**Results** (`moq-relay 0.14.3-b87d4e92`, hard kill, default 30 s idle unless noted):
+
+- **E1 proves the broadcasts are identical.** `sub1` (relay A/pubA) and `sub3` (relay B/pubB) grew
+  **byte-for-byte equal every second before the kill** (t=9..14 exactly equal). Kill pubA → `sub1`
+  resumed **~31 s later**, output TS **0 CC errors**, one `current group evicted; skipping to next
+  buffered group`. `gtee` kept feeding pubB throughout (sub3 uninterrupted).
+- **E2 — the mid-stream offset does NOT break failover.** Despite pubB's group numbers being offset,
+  `sub1` still reselected onto pubB and resumed **~30 s after the kill**, TS **0 CC errors**, and the
+  exporter **subscribed once** (`catalog.json`, `0.avc3`, `1.ts`, `2.ts`, `3.ts`, `4.ts`, `0.mp2`,
+  `0.ts`) and **never re-subscribed or reinitialised the catalog** across the switch — a single
+  `current group evicted; skipping to next buffered group error=Hang(Moq(Remote(24)))`.
+- **Mechanism.** The exporter navigates by track name + live edge, not absolute group number: on the
+  reselect it drops the evicted (dead-pubA) group and resumes at pubB's current live edge. So the
+  binding requirement is a **common source** — identical PMT/track layout and a consistent PTS
+  timeline, both guaranteed by one feed — **not** byte-identical segmentation. Exact group-sequence
+  identity is *sufficient* (E1) but not *necessary* (E2).
+
+**"0 CC errors" is not "hitless."** Continuity_counter is a property of the exporter's single output
+mux, which never resets, so it stays clean across the splice and the TS is structurally valid/playable.
+The ~30 s outage instead shows up as a **PCR/PTS discontinuity** — `tsp analyze` reports `pcrleap=3`
+on the video/PCR PID (PID 111) while CC errors stay 0 — i.e. the media clock jumps forward over a
+content hole. Valid TS, but a real gap: **break-before-make**, not make-before-break.
+
+**Can the gap shrink?** The ~30 s is the QUIC idle timeout (a hard kill sends no CONNECTION_CLOSE, so
+the relay serves the dead source until idle expiry). It is tunable via `--server-quic-idle-timeout`
+(with keep-alive kept below it):
+
+| relay idle (`RIDLE`) | reselect after kill | outcome |
+|---|---|---|
+| 30 s (default) | ~30–31 s | ✅ clean |
+| 10 s | ~11 s | ✅ clean |
+| 5 s (keep-alive 1 s) | — | ❌ only the trailing buffered group drained, then stalled; failover did not complete |
+
+So detection is reliably reducible to **~10 s**; a few seconds is fragile (the tight idle/keep-alive
+starts tearing down healthy sessions). **Sub-second / hitless is not reachable by relay reselect**,
+which is inherently detect-then-switch. True hitless needs make-before-break at the *receiver* —
+subscribe to both legs concurrently and switch locally with zero detection delay (ST 2022-7 style).
+The common-source result above is exactly what makes that receiver-side hitless switch feasible: the
+two legs are the same broadcast, so an IRD can merge them. MoQ does not do this dual-carriage natively.
+
+**Bearing on the maintainer's claim.** Confirmed in substance: with a common source the switch is not
+hitless and the consumer does re-anchor to the new live edge. Refined in one respect: byte-identical
+*segmentation* is not required — a mid-stream joiner with offset group numbers still fails over
+cleanly, because the exporter skips to live rather than demanding group-number continuity. What would
+genuinely make failover "impossible" is a divergent **track layout / codec** across the pair (two
+independent encodes), which a single shared source rules out by construction.
+
 ### Corrections (do not rewrite history)
 
 Of the four issues reported on this work, **two were real** and **two were our own harness**:
@@ -223,7 +333,10 @@ builds without it).
 | End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469 |
 | Active/active — two publishers, **one relay** | n/a | **dies at 2nd announce** | ❌ `unroutable`, both torn down |
 | Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ on merged `main` (`b624c7c0`, #2473); ❌ before it |
+| Active/active — **single source** into both publishers, co-started (byte-identical) | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`==`sub3` byte-for-byte pre-kill |
+| Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) | resumes; 0 CC errors; exporter never re-subscribes | ✅ offset does not break failover; skips to live edge |
 | Active/active — active source exits **gracefully** | none — subscriber terminates | no failover | ❌ on merged `main` |
+| Active/active — single-relay **reconnecting** publisher (renumber takeover) | fresh id: none (exporter dies); shared origin: resumes after ~join-delay gap | fresh id: `json: dropped`; shared origin: resumes | 🟡 #2556 doesn't make it clean; shared-origin gap confounded with clock skew |
 | Shared-`--origin` standby joins a **carrying** relay | survives; splice immediate | far-relay subscriber keeps flowing | ✅ fixed on merged `main` (was `Unroutable` code=30) |
 | `moq-lite-06` cost/standby routing | — | — | 🟡 opt-in; **necessary-not-sufficient** |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ |
@@ -234,6 +347,16 @@ builds without it).
 - Endpoint *reconnect* is solid (publisher and, since #2469, the exporter). Active/active *source*
   failover across a mesh now ships (#2473) but is **bounded, not hitless** (one idle timeout), and
   does not cover a graceful source exit at all.
+- The binding precondition for mesh source failover is a **common source** — identical PMT/track
+  layout + consistent PTS — not byte-identical segmentation. A mid-stream/late-joining standby with
+  offset group numbering still fails over cleanly (the exporter skips to the new live edge; it does
+  not require group-number continuity). Enforce one ingest path into both publishers and the pair is
+  interchangeable; keep a second ingest path as *source* redundancy upstream of the publishers.
+- "0 CC errors" means the output TS stays structurally valid across the splice, **not** that the
+  switch is gap-free: the outage is a PCR/PTS discontinuity (a content hole), sized by detection.
+  Detection is reliably tunable to ~10 s via `--server-quic-idle-timeout`; sub-second/hitless is not a
+  relay-reselect property and must live at the receiver (ST 2022-7 dual-subscribe over the common
+  source).
 - Recovery on a hard kill is architecturally detection-bound: a relay has no model of a broadcast's
   expected cadence, so it must wait for the transport to declare the peer gone.
 - **Recommended posture, buildable today:** with the exporter crash fixed, no external subscriber
@@ -255,5 +378,5 @@ finding — including which of our reports were real vs harness artefacts — is
 ## References
 
 - Redundancy model: [`docs/relay.md`](../docs/relay.md) §5–§6; [`docs/architecture.md`](../docs/architecture.md) §14 (ST 2022-7 §14.1); [`docs/transport.md`](../docs/transport.md) §8.
-- Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217.
+- Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217.
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §7.
