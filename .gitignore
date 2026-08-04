@@ -4,6 +4,7 @@ lab-notes.local.md
 STATUS.md
 docs/upstream/cluster_failover.sh
 docs/upstream/pr2473-feedback.md
+docs/upstream/pr2545-feedback.md
 
 # lab/ is a public engineering notebook, but raw internal digests stay local
 *.local.md
