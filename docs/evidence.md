@@ -211,10 +211,16 @@ tie-break does not fire here because the active and standby routes differ on cos
 time is governed by detection either way.
 
 **The requirement is a common source, not byte-identical segmentation** (single-source study on
-`moq-relay 0.14.3-b87d4e92`, 2026-08-03). A moq group sequence number is a per-importer counter reset
+`moq-relay 0.14.3-b87d4e92`, 2026-08-03; re-verified on the **0.14.7 release** — cluster extension
+[#2629](https://github.com/moq-dev/moq/pull/2629), namespace-detach
+[#2616](https://github.com/moq-dev/moq/pull/2616), and resume/route hardening
+[#2666](https://github.com/moq-dev/moq/pull/2666) — 2026-08-05, unchanged). A moq group sequence number
+is a per-importer counter reset
 to 0 at the first keyframe (`append_group()`), while track names and PTS come from the source bytes,
 so two publishers are interchangeable when they are two views of *one* feed. Fed a single source, two
-co-started importers produce **byte-for-byte identical** subscriber output up to the kill, and failover
+co-started importers produce essentially identical subscriber output up to the kill (byte-for-byte on
+0.14.3; on 0.14.7 a constant 4-packet, 752-byte startup preamble differs, with identical per-second
+deltas thereafter — the steady-state content is the same), and failover
 is clean. Crucially for broadcast — where a publisher always joins an already-running feed — a standby
 that joins **mid-stream** (its group numbering therefore *offset* from the active's) **still fails over
 cleanly**: the exporter subscribes once, never reinitialises the catalog, and skips to the standby's
@@ -229,6 +235,24 @@ and is tunable: `--server-quic-idle-timeout 10s` gives an ~11 s reselect, but a 
 keep-alive) is fragile — the switch failed to complete. Sub-second / hitless is not a relay-reselect
 property; it must live at the receiver (ST 2022-7 dual-subscribe over the common source), which the
 identical-broadcast result is exactly what makes feasible.
+
+**Spec vs. implementation, precisely.** The behaviour above is *this implementation's*, not MOQT's
+ceiling. The IETF draft (draft-ietf-moq-transport-19 §9.3) does envisage relay-level *object*
+de-duplication — "Relays … SHOULD attempt to deduplicate Objects before forwarding, subject to
+implementation constraints" — keyed on Full Track Name + Group ID + Object ID (§9.1, first-copy-wins),
+with a mismatched payload for the same identifier making the track *Malformed* and the relay terminating
+downstream subscriptions (§2.4.2). So hitless active/active by relay dedup is the *standard's* model, and
+`moq-dev`/`moq-lite` simply implements the permitted alternative (content-agnostic route selection) rather
+than object dedup. Two caveats keep this from changing the recommendation. First, even spec-conformant
+dedup requires *identical object identifiers*, not merely identical media bytes: a moq group sequence
+number is a per-importer counter reset at the first keyframe, so two independent publishers do not
+naturally share Group/Object IDs, and a dedup relay would not treat offset objects as duplicates —
+conformant dedup therefore needs encoder+publisher determinism down to MoQ object segmentation and
+numbering, the object-layer analogue of ST 2022-7's aligned RTP sequence numbers and a strictly stronger
+bar than "bit-for-bit identical." Second, what is out of scope in *both* spec and implementation is
+bridging two *different* broadcasts (timestamp rewriting) — that is the Malformed case, and the "won't
+merge two broadcasts" the maintainer describes. Receiver-side ST 2022-7 selection over a common source
+therefore remains the robust, buildable-today path, now *reinforced* rather than merely necessitated.
 
 One caveat remains, and it is the operationally important one: **graceful
 departure of the active source is not failed over at all.** When the active publisher exits
@@ -252,8 +276,10 @@ ST 2022-7 / IRD failover — letting the *receiver* do hitless selection. Relay-
 failover does not change that recommendation now that #2473 has landed: at one idle timeout it is
 **bounded, not hitless**, protecting against a dead source rather than delivering the seamless
 switch a broadcast chain expects, and on the graceful-exit path it does not protect at all. A
-*seamless* relay-side merge is explicitly out of scope upstream — the content-agnostic relay will
-not bridge two broadcasts, so a gap-free switch needs either wall-clock-aligned encoders
+*seamless* relay-side merge is out of scope for *this implementation* (the draft specifies object-dedup
+only as a hedged SHOULD, and `moq-lite` takes the route-selection alternative; see the spec cross-check
+above) — the content-agnostic relay will not bridge two broadcasts, so a gap-free switch needs either
+wall-clock-aligned encoders
 (Elemental's approach) or a receiver that reinitialises on the switch. That makes relay reselect a
 **bounded nice-to-have**; the load-bearing resilience stays the doubled chain with the *receiver*
 making the hitless decision. The two are complementary — the mesh keeps both

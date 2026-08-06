@@ -939,81 +939,110 @@ challenge, and it is addressed at every layer rather than at one.
 
 ```mermaid
 flowchart LR
-    subgraph Ingest
+    subgraph Source["Source (playout, outside MoQ)"]
+        S1["Playout A"]
+        S2["Playout B"]
+        SEL["Input failover\n(one program selected)"]
+        S1 --> SEL
+        S2 --> SEL
+    end
+    subgraph Ingest["Ingest (doubled publishers, same program)"]
         P1["Publisher A"]
         P2["Publisher B"]
     end
-    subgraph PathX["Disjoint path X"]
-        RX["Relays (path X)"]
+    subgraph Fabric["MoQ fabric (disjoint paths)"]
+        RX["Relays — path X"]
+        RY["Relays — path Y"]
     end
-    subgraph PathY["Disjoint path Y"]
-        RY["Relays (path Y)"]
+    subgraph EdgeA["Edge gateway A"]
+        SUBA["Subscriber A\n(moq export ts)"]
+        PACA["Pacer A"]
+        SUBA --> PACA
     end
-    subgraph EdgeHA["Edge (redundant gateways)"]
-        G1["Gateway 1"]
-        G2["Gateway 2"]
+    subgraph EdgeB["Edge gateway B"]
+        SUBB["Subscriber B\n(moq export ts)"]
+        PACB["Pacer B"]
+        SUBB --> PACB
     end
-    IRD["IRD (ST 2022-7 dual input)"]
+    IRD1["IRD 1\n(ST 2022-7)"]
+    IRD2["IRD 2\n(ST 2022-7)"]
+    D1["Downstream 1"]
+    D2["Downstream 2"]
 
+    SEL --> P1
+    SEL --> P2
     P1 --> RX
-    P1 --> RY
-    P2 --> RX
     P2 --> RY
-    RX --> G1
-    RX --> G2
-    RY --> G1
-    RY --> G2
-    G1 -->|"path A"| IRD
-    G2 -->|"path B"| IRD
+    RX --> SUBA
+    RY --> SUBB
+    RY -.->|"relay failover"| SUBA
+    RX -.->|"relay failover"| SUBB
+    PACA -->|"leg A"| IRD1
+    PACA -->|"leg A"| IRD2
+    PACB -->|"leg B"| IRD1
+    PACB -->|"leg B"| IRD2
+    IRD1 --> D1
+    IRD2 --> D2
 ```
 
 
 
-Redundancy is applied at four layers, mirroring what broadcasters already do
-with ST 2022-7 but extending it end-to-end:
+Redundancy is applied end to end, mirroring what broadcasters already do with
+ST 2022-7 but extending it back to the source. The hitless 1+1 lives in the
+*delivery* legs, which carry the **same program**; source (playout) redundancy is
+a separate, upstream concern:
 
-1. **Ingest** — redundant publisher pairs carrying the *same program* over
-  independent contribution paths (§4.4); the legs must be the same content for the
-  downstream merge to be hitless, not two unrelated encodes.
-2. **Path** — the fabric routes a route over two link-disjoint paths, so a
-  single link or region impairment does not interrupt delivery.
-3. **Edge** — redundant gateways produce two egress streams.
-4. **Egress** — the two egress streams are delivered as an ST 2022-7 dual-path
-  pair to the IRD, which performs hitless seamless switching using the mechanism
-   it already has.
+1. **Source** — main/backup playout with input failover *upstream of MoQ* (§14.5).
+  This resolves to **one** program; the switch is break-before-make and rare, and its
+  only job is to keep a good program flowing into ingest.
+2. **Ingest** — a doubled publisher pair carries that **one** program onto the
+  fabric. Both legs must carry the *same* content (§14.5, [evidence](evidence.md) §7):
+  that is what lets the downstream pair be merged hitlessly — two unrelated encodes
+  cannot be.
+3. **Path** — the fabric carries each leg over a link-disjoint path. If a relay or
+  path fails, the surviving leg keeps flowing and the IRD rides it; a subscriber can
+  *also* re-home to the other path's relay (**subscriber-side relay failover**, the axis
+  that matters most here — today supervisor-assisted, since MoQ has no native
+  client-side relay failover yet, [transport](transport.md) §8.4).
+4. **Edge** — each leg's **subscriber** (`moq export ts`) feeds a **pacer** that
+  grooms the delivered MoQ objects into a packet-identical, rate-coherent RTP egress.
+  (The "edge gateway" of §7 is exactly this subscriber+pacer pairing.) The pacer
+  *enables* ST 2022-7 by producing an aligned egress; it does not itself switch.
+5. **Merge / egress** — two **IRDs**, each taking **both** legs, perform the
+  ST 2022-7 hitless switch. This is where the failover actually happens and where
+  "no visible stall" is delivered; each IRD feeds a downstream path, so the receiver
+  is doubled too.
 
-Crucially, the layers are cross-connected rather than paired into two isolated
-pipelines: as the diagram shows, either publisher can feed either path, and
-either path can feed either gateway. This means the loss of any single
-component — one publisher, one path, or one gateway — still leaves a complete
-publisher→path→gateway route intact, rather than depending on a specific pairing
-surviving. It is a mesh, not two parallel chains.
-
-The design principle is that redundancy is *end-to-end and hitless where it
-matters most (the last hop to the IRD)*, using the IRD's existing ST 2022-7
-capability so that the final failover requires no new receiver behaviour.
+The redundancy is therefore two same-program legs **merged at the receiver**, not a
+full ingest-side mesh. Cross-connection is placed where it does work: each IRD takes
+both legs (the always-on ST 2022-7 dual input), and each subscriber can re-home to the
+other path's relay. We deliberately **do not** rely on relay-side source reselect
+between the two publishers — that is a bounded nice-to-have (§14.3,
+[relay](relay.md) §4.1), not the mechanism that keeps the service up. The hitless
+decision lives at the IRD, using its existing ST 2022-7 capability, so the final
+failover requires no new receiver behaviour.
 
 **Making the ST 2022-7 pair actually hitless.** ST 2022-7 reconstructs by
 matching RTP sequence numbers, so the two egress streams must be
 *packet-identical with aligned sequence numbers* (it tolerates differential path
-delay, but not differing packet content). Two gateways grooming and pacing
+delay, but not differing packet content). Two pacers grooming
 independently would produce non-identical output — different null placement, PCR
-re-stamping, and RTP sequencing — and the merge would fail. Since the gateways
+re-stamping, and RTP sequencing — and the IRD merge would fail. Since the pacers
 cannot be locked together in real time, the property is achieved the other way
 round: **grooming is specified as a deterministic function of the delivered MoQ
-objects.** Both gateways subscribe to the same track and receive the same bytes;
-if null re-insertion, PCR re-stamp, and RTP sequencing are all keyed to the
+objects.** Both legs deliver the same bytes to their pacer (the §14.5 common-source
+requirement); if null re-insertion, PCR re-stamp, and RTP sequencing are all keyed to the
 reconstructed stream (byte position in the CBR reconstruction, object/group
 identity, and control-plane-supplied parameters — target mux rate, PCR PID, SSRC,
 sequence-number seed) rather than to local wall-clock or arrival jitter, the two
-gateways independently compute a byte-identical, sequence-aligned egress with no
-inter-gateway link.
+pacers independently compute a byte-identical, sequence-aligned egress — which the
+two IRDs then merge hitlessly — with no inter-pacer link.
 
 Identity is necessary but not sufficient: ST 2022-7 has a bounded skew/buffer
 window, so the streams must also arrive within it at a *coherent output rate*.
 Two gateways pacing from free-running local oscillators can drift apart; if that
 drift or the differential path delay exceeds the merge window, protection fails
-even with content-identical packets. The gateways therefore need a disciplined
+even with content-identical packets. The pacers therefore need a disciplined
 common egress rate (locked to a shared reference or the source-derived CBR rate),
 though not packet-for-packet phase alignment. This determinism *and* rate
 coherence is a hard requirement and an open validation item (§17): any
@@ -1046,20 +1075,24 @@ of the fallback, not of the default design.
 
 ### 14.3 Failure scenarios and responses
 
-- **Publisher failure** — the redundant publisher's flow already exists in the
-fabric; the egress selects it. With active/active ingest there is no failover
-detection latency on the critical path. *Caveat:* that zero-latency property belongs to
-the *doubled-and-downstream-merged* chain (ST 2022-7 / IRD, §14.1), not to relay-mesh
-switching. The relay *can* now fail a broadcast over from a dead active source to a
-shared-origin standby ([#2473](https://github.com/moq-dev/moq/pull/2473), on `main`;
-[relay](relay.md) §4.1, [evidence](evidence.md) §7), but only as a **bounded reselect** —
-one QUIC idle timeout of detection, ungraceful loss only, and no seamless merge (the
-relay is content-agnostic). Useful as a nice-to-have; the no-stall path stays the
-receiver-side hitless switch.
-- **Relay or link failure** — the disjoint second path continues to deliver;
-the fabric re-routes affected subscriptions around the failure using the mesh.
-- **Gateway failure** — the redundant gateway's egress continues; the IRD's ST
-2022-7 switch handles the last-hop transition hitlessly.
+- **Source (playout) failure** — upstream input failover selects the backup
+playout (§14.5); the switch is break-before-make at the source and rare. Both
+delivery legs then carry the new program, and nothing downstream re-initialises.
+- **Publisher failure** — the other leg's publisher keeps its path flowing, so the
+IRD rides that surviving leg with no visible transition; with active/active ingest
+there is no failover-detection latency on the critical path. The relay *can also*
+reselect a dead active source onto a shared-origin standby
+([#2473](https://github.com/moq-dev/moq/pull/2473), on `main`; [relay](relay.md) §4.1,
+[evidence](evidence.md) §7), but only as a **bounded reselect** — one QUIC idle timeout
+of detection, ungraceful loss only, no seamless merge. Useful, not load-bearing; the
+no-stall path is the IRD.
+- **Relay or link failure** — the surviving leg keeps flowing and the IRD rides it
+hitlessly; the affected subscriber can additionally re-home to another relay
+(supervisor-assisted today, [transport](transport.md) §8.4).
+- **Edge (subscriber / pacer) failure** — the redundant leg's egress continues; the
+IRD's ST 2022-7 merge covers the loss hitlessly.
+- **IRD failure** — the second IRD (also dual-input) keeps delivering to its
+downstream path; doubling the receiver removes the last single point.
 - **Regional failure** — routes are re-homed to another region by the routing
 engine; edge gateways in the failed region are replaced by gateways in a
 neighbouring region, at the cost of added path latency.
@@ -1116,8 +1149,9 @@ current gaps:
   since landed upstream: the exporter's session-loss handling
   ([#2469](https://github.com/moq-dev/moq/pull/2469)) and standby-route propagation for
   active/active source failover ([#2473](https://github.com/moq-dev/moq/pull/2473), §14.3;
-  [relay](relay.md) §4.1) — the latter as a *bounded* reselect, since a seamless merge is
-  content-agnostic-relay territory it deliberately will not enter.
+  [relay](relay.md) §4.1) — the latter as a *bounded* reselect, since this implementation's
+  content-agnostic relay does route selection rather than the object-level dedup the IETF draft
+  specifies as a hedged SHOULD (§9.3; [relay](relay.md) §4.1, [evidence](evidence.md) §7).
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless
   selection.** Relay-mesh source failover has since landed, but it is bounded (one idle
   timeout, ungraceful loss only), so service continuity is still delivered the way
@@ -1131,9 +1165,11 @@ The forward-looking nuance: relay-mesh source failover has landed and is *useful
 lets a single-homed subscriber ride out an *ungraceful* active-source death without a
 downstream merge — but it is a **bounded routing-layer enhancement, not a substitute for
 broadcast-grade service today**: it costs one detection interval, does not cover a
-graceful source exit, and a genuinely seamless merge is out of scope for a
-content-agnostic relay (§14.3, [relay](relay.md) §4.1). The doubled-and-downstream
-pattern remains the no-stall answer. Input failover, by contrast, should stay outside
+graceful source exit, and a genuinely seamless merge is out of scope for *this*
+content-agnostic-relay implementation — the IETF draft does specify object-level dedup (§9.3, a
+hedged SHOULD), but conformant dedup needs identical object *numbering* across the pair, not just
+identical bytes, which is at least as hard as the receiver-side alignment ([relay](relay.md) §4.1,
+[evidence](evidence.md) §7). The doubled-and-downstream pattern remains the no-stall answer. Input failover, by contrast, should stay outside
 MoQ permanently.
 
 ---

@@ -185,7 +185,10 @@ deliver active/active source failover; the propagation gap is the blocker, and h
 shortest-path routing is what runs by default.
 
 **[#2473](https://github.com/moq-dev/moq/pull/2473) (issue #2461) closes the propagation gap and
-ships on `main` (release `moq-net 0.2.5`).** It advertises, per peer, the best route whose hop chain
+ships on `main` (first released `moq-net 0.2.5`; re-verified on the 0.14.7 release, 2026-08-05, where
+[#2629](https://github.com/moq-dev/moq/pull/2629) generalised this same routing policy to the IETF
+draft-17+ path and [#2666](https://github.com/moq-dev/moq/pull/2666) hardened the resume path —
+behaviour unchanged).** It advertises, per peer, the best route whose hop chain
 *excludes* that peer (so a peer inside the serving chain is offered the standby instead of nothing),
 serves by the same exclusion, keys content identity on the publisher's first hop (declared in
 **SETUP** rather than inferred per-`ANNOUNCE`), and adds a `moq --origin <id>` knob so a 1+1 pair
@@ -198,6 +201,21 @@ timeout**. The mechanism is prompt; **detection dominates** (§5.1): a relay has
 broadcast's expected cadence and so cannot treat silence as failure, and `--server-quic-idle-timeout`
 bounds it today. [#2556](https://github.com/moq-dev/moq/pull/2556) does not move this — it speeds a
 publisher reclaiming its *own* path on reconnect and leaves shared-origin 1+1 standbys alone.
+
+**This route-selection model is an implementation choice, not MOQT's ceiling.** The IETF draft
+(draft-ietf-moq-transport-19 §9.3) says relays *"SHOULD attempt to deduplicate Objects before
+forwarding, subject to implementation constraints,"* keyed on Full Track Name + Group ID + Object ID
+(§9.1, first-copy-wins; a mismatched payload for the same identifier makes the track *Malformed* and the
+relay terminates downstream, §2.4.2). So the standard *does* specify the object-level, ST 2022-7-style
+dedup that yields a hitless active/active merge — `moq-dev`/`moq-lite` takes the permitted alternative
+(content-agnostic route selection + a `--origin` interchangeability declaration; the relay never inspects
+object bytes). The alternative is also the pragmatic one: spec-conformant dedup needs the two publishers
+to emit *identical object identifiers*, not merely identical bytes, and moq group sequence numbers are
+per-importer counters (below), so independent publishers do not naturally share IDs. Aligning MoQ object
+numbering across a pair is the object-layer analogue of ST 2022-7's aligned RTP sequence numbers, which is
+why the load-bearing redundancy stays at the receiver (§5). What is out of scope in *both* the spec and
+this implementation is bridging two *genuinely different* broadcasts (timestamp rewriting) — that is the
+Malformed case.
 
 **The binding precondition is a common source, not byte-identical segmentation.** A 1+1 pair works as
 a redundant pair only if both publishers are two views of *one* feed: the moq group sequence number is

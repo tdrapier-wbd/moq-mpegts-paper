@@ -27,7 +27,12 @@ establish the ST 2022-7 output-determinism precondition for a hitless dual-path 
   2026-07-27); #2473 merged `b624c7c0` (2026-07-28); re-verified on the `moq-net 0.2.5` / `moq-cli
   0.9.5` release (2026-07-30); re-verified again on current `main` `moq-relay 0.14.3-b87d4e92`
   (origin/main `ea08e964`, incl. #2556 + #2565) (2026-07-31); single-source common-feed study
-  (`src_failover.sh`) on that same `0.14.3-b87d4e92` build (2026-08-03).
+  (`src_failover.sh`) on that same `0.14.3-b87d4e92` build (2026-08-03); re-verified on the
+  **0.14.7 release** (`moq-relay` 0.14.7 / `moq-cli` 0.9.7 / `moq-net` 0.2.8, origin/main `525d74ef`
+  = release #2602, drill tip `722f38f7`; incl. #2629 cluster ext + #2616/#2654/#2659/#2664 detach +
+  #2666 resume/route hardening) (2026-08-05). *(The binary cosmetically self-reports `0.14.3` — a
+  stale `--version` string source — but is built from the 0.14.7 release commit; the crate versions
+  in-tree are 0.14.7 / 0.9.7 / 0.2.8.)*
 
 ## Procedure
 
@@ -282,6 +287,119 @@ cleanly, because the exporter skips to live rather than demanding group-number c
 genuinely make failover "impossible" is a divergent **track layout / codec** across the pair (two
 independent encodes), which a single shared source rules out by construction.
 
+### Re-verification on the 0.14.7 release (2026-08-05): cluster extension + detach/resume hardening
+
+Prompted by a dense ~36 h of upstream merges that touch the exact routing/resume/detach paths these
+drills exercise, re-run on the **0.14.7 release** (`moq-relay` 0.14.7 / `moq-cli` 0.9.7 / `moq-net`
+0.2.8, origin/main `525d74ef`; drill tip `722f38f7`). The relevant PRs:
+
+- **#2629 — MoQ Cluster extension over moq-transport.** Generalises the mesh machinery #2473 gave
+  moq-lite (append own Hop ID, discard a path already containing our Hop ID = loop prevention,
+  saturating link cost, advertise `0` while actively carrying then restore after a grace period, serve
+  by per-peer exclusion) to the IETF draft-17+ path, and **consolidates the policy into one place**
+  (`advertisable_routes` / `outgoing_cost` / `COST_LINGER` in `model/broadcast.rs`, called by both the
+  lite and IETF publishers). Link cost is now **per-direction** (paid-egress model). Also fixed a
+  pathless-advertisement interchangeability bug that "tore down the source a client was resolving a
+  track through," and a reflected-replacement leaving a superseded route attached.
+- **#2616 / #2654 / #2659 — namespace detach semantics.** An abnormally-lost namespace stream now
+  detaches **abruptly**, holding the front open for the origin's linger (moq-relay gives its cluster
+  origin a 5 s window) so a source re-attaching within the window splices back — the mesh analogue of
+  the #2469 exporter linger. #2659 also fixed a bug live on `main`: on IETF v14-16 a routine
+  `PUBLISH_NAMESPACE_DONE` decoded as `UnexpectedMessage` and closed the **whole session**.
+- **#2664 — v14/v15 namespace lookup keyed by direction.** In a mesh where two relays advertise the
+  same path to each other, a terminal message could tear down the wrong stream. IETF v14/15 only.
+- **#2666 — origin resume/route hardening.** Fixes that touch our resume path directly: an
+  empty-segment failover no longer turns a live-edge subscription into a **full-history backfill**; a
+  standby joining a live front before it has created every track **no longer kills the incumbent's
+  subscription** (the refuser is ruled out of that one track only); unbounded segment accumulation is
+  pruned; a stranded logical track on takeover failure is aborted; fetch gained failover.
+
+**All five drill outcomes are unchanged from 0.14.3** — no regression from the cluster/detach/resume
+rewrite (build cosmetically self-reports `0.14.3`, but is the 0.14.7 release commit; see Setup):
+
+- **E1 (`src_failover.sh MODE=gtee`, byte-identical co-started):** failover PASS, `sub1` resumed
+  **~34 s** after the hard kill (one idle timeout), **0 CC errors**, single `current group evicted;
+  skipping to next buffered group`. *New minor artefact:* `sub1` and `sub3` are **no longer
+  byte-for-byte identical** pre-kill — a **constant 752-byte (= exactly 4 TS packets) startup offset**,
+  with **identical per-second deltas** thereafter. So the steady-state content is still identical; only
+  the initial emission differs by a 4-packet preamble on one leg (plausibly the catalog/codec split
+  #2636 or the origin-model changes). The earlier "byte-for-byte identical" claim now needs that
+  caveat.
+- **E2 (`MODE=mcast`, standby joins mid-stream at t=11, kill t=25):** failover PASS, `sub1` resumed
+  **~34 s** after the kill, **0 CC errors**, live-edge skip; resume is a buffered-group drain, **not a
+  full-history backfill** (the #2666 live-edge fix holds). Both subscribers recovered; `sub3` logged
+  transient `subscribe error … code=13` on every track at the kill instant, then reselected. The
+  incumbent was **never torn down by the partially-joined standby** — the case #2666 specifically
+  hardens, and it stayed clean.
+- **Mesh hard-kill (`cluster_failover.sh`, 30 s idle):** CHECK 1 (failover) PASS, `sub1` reselected
+  **~29 s** after the kill; CHECK 2 (standby-join survival) PASS; **0 `unroutable`**.
+- **Mesh, `SIDLE=10s`:** reselect in **~14 s** (tunable window holds; was ~11 s), standby survives, 0
+  `unroutable`.
+- **Graceful exit (`graceful_exit.sh`):** **still FAIL** — `sub1` froze at pubA's clean exit (t=25)
+  and the exporter died `TS track layout changed after PAT/PMT was emitted: '0.aac' removed`. Unchanged;
+  the spec fix is moq-lite-06 **broadcast epochs / ended-broadcasts**
+  ([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), not yet on the wire.
+
+Not run: a dedicated **relay↔relay transient-blip** drill to exercise #2616's abrupt-detach-with-linger
+splice-back. It can't be isolated cleanly in this single-host loopback rig without peer-link fault
+injection, and upstream covers it with mutation-checked tests
+(`a_lost_namespace_stream_leaves_the_linger_window_open`, `the_last_owner_out_decides_the_detach`). Left
+as a future harness item (loopback `netem` on the cluster-peer connection).
+
+### Spec cross-check (draft-ietf-moq-transport-19, 2026-08-05): the standard specifies relay object-dedup that this implementation does not
+
+Prompted by reviewing an external briefing (Quortex, "Running Multiple Sources over Media over QUIC")
+that describes MOQT active-active as *relays de-duplicate bit-for-bit-identical sources at the object
+level, ST 2022-7 style*. Our drills describe `moq-dev`/`moq-lite` doing **content-agnostic route
+selection**, so before feeding that back we checked the claim against the current IETF draft
+(**draft-ietf-moq-transport-19**, July 2026, the live version). The briefing is faithful to the draft;
+the divergence is **implementation**, not spec:
+
+- **§9.3 Multiple Publishers.** *"Relays MUST handle Objects for the same Track from multiple
+  publishers and forward them to matching Established subscriptions. The Relay SHOULD attempt to
+  deduplicate Objects before forwarding, subject to implementation constraints."* So relay object-dedup
+  is the standard's model — a **SHOULD**, hedged by "implementation constraints."
+- **§9.1 Caching Relays.** Dedup is keyed on **Full Track Name + Group ID + Object ID**; on a collision
+  a relay *"MAY ignore subsequently received Objects"* (first-copy-wins, the ST 2022-7 analogue). A
+  duplicate object with a *different* Forwarding Preference, Subgroup ID, Priority **or Payload** →
+  the track is **Malformed**.
+- **§2.4.2 Malformed Tracks.** On a Malformed track a relay *"MUST immediately terminate downstream
+  subscriptions with PUBLISH_DONE"*. So the briefing's "two sources that disagree → treated as broken,
+  data dropped, receivers disconnected" is **also** spec-accurate.
+- **Make-before-break** is in the draft too (the network-migration text): the relay subscribes to both
+  sessions and *"will attempt to deduplicate Objects received on both subscriptions … the subscriptions
+  downstream from the relay do not observe this change."*
+
+Two things separate that from what we measured, and both matter:
+
+1. **`moq-dev`/`moq-lite` implements the permitted *alternative*, not object-dedup.** Its multi-source
+   model is per-peer route selection + a `moq --origin` interchangeability declaration
+   (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`); the relay never inspects object bytes and
+   never de-duplicates at the object level. That is a legitimate reading of "SHOULD … subject to
+   implementation constraints," but it means the **content-agnostic route-selection + break-before-make
+   reselect** we characterise is *this implementation's* behaviour, **not** MOQT's ceiling. `moq-lite` is
+   also a simplified variant, not the draft verbatim; the maintainer's "content-agnostic, won't bridge
+   two broadcasts" is a (core-author) design stance that diverges from the §9.3 SHOULD.
+2. **Even spec-conformant dedup needs identical object *identifiers*, not just identical media bytes.**
+   Dedup keys on Group ID + Object ID (§9.1), and a MoQ group sequence number is a **per-importer counter
+   reset to 0 at the first keyframe** (`append_group()`, `rs/moq-net/src/model/track.rs`) — so two
+   independent publishers of one feed do **not** naturally share IDs (our E2 mid-stream joiner is offset
+   by construction). A dedup relay would not recognise offset objects as duplicates. Spec dedup therefore
+   demands encoder+publisher determinism down to **object segmentation and numbering** — the object-layer
+   analogue of ST 2022-7's aligned RTP sequence numbers, and a strictly *stronger* bar than "bit-for-bit
+   identical output." This is the same determinism wall the ST 2022-7 precondition study hit (two
+   independent live pacers are not byte-identical; §"ST 2022-7 output-determinism precondition").
+
+**Bearing on our conclusions.** Unchanged in substance — receiver-side ST 2022-7 selection over a common
+source remains the robust, buildable-today posture, and it is *reinforced* by point 2 (aligning MoQ
+object numbering across two publishers is at least as hard as the RTP-sequence alignment ST 2022-7 needs).
+What changes is **framing**: "a seamless relay-side merge is out of scope" is true of *this
+implementation*, not of the standard, which specifies object-dedup as a SHOULD. The genuinely
+out-of-scope case in *both* spec and implementation is bridging two *different* broadcasts (timestamp
+rewriting) — that is Malformed under §9.1, and is the "won't merge two broadcasts" the maintainer means.
+Docs corrected accordingly ([evidence](../docs/evidence.md) §7, [relay](../docs/relay.md) §4.1/§5.1,
+[transport](../docs/transport.md) §8.4, [architecture](../docs/architecture.md) §14.3/§14.5).
+
 ### Corrections (do not rewrite history)
 
 Of the four issues reported on this work, **two were real** and **two were our own harness**:
@@ -333,7 +451,7 @@ builds without it).
 | End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469 |
 | Active/active — two publishers, **one relay** | n/a | **dies at 2nd announce** | ❌ `unroutable`, both torn down |
 | Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ on merged `main` (`b624c7c0`, #2473); ❌ before it |
-| Active/active — **single source** into both publishers, co-started (byte-identical) | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`==`sub3` byte-for-byte pre-kill |
+| Active/active — **single source** into both publishers, co-started (byte-identical) | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`==`sub3` byte-for-byte pre-kill on 0.14.3; on **0.14.7** a constant 4-packet (752 B) startup offset, identical deltas after |
 | Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) | resumes; 0 CC errors; exporter never re-subscribes | ✅ offset does not break failover; skips to live edge |
 | Active/active — active source exits **gracefully** | none — subscriber terminates | no failover | ❌ on merged `main` |
 | Active/active — single-relay **reconnecting** publisher (renumber takeover) | fresh id: none (exporter dies); shared origin: resumes after ~join-delay gap | fresh id: `json: dropped`; shared origin: resumes | 🟡 #2556 doesn't make it clean; shared-origin gap confounded with clock skew |
@@ -346,7 +464,12 @@ builds without it).
 
 - Endpoint *reconnect* is solid (publisher and, since #2469, the exporter). Active/active *source*
   failover across a mesh now ships (#2473) but is **bounded, not hitless** (one idle timeout), and
-  does not cover a graceful source exit at all.
+  does not cover a graceful source exit at all. **All of this re-verified on the 0.14.7 release**
+  (2026-08-05) after the cluster-extension (#2629) + detach (#2616/#2654/#2659/#2664) + resume-hardening
+  (#2666) merges: no regression, and the resume path our mid-stream-standby drill exercises is now the
+  hardened one (#2666 keeps the incumbent when a partially-joined standby refuses a track, and stops an
+  empty-segment failover from backfilling the whole history). The one visible change is cosmetic: two
+  co-started exporters now differ by a 4-packet startup preamble rather than being byte-identical.
 - The binding precondition for mesh source failover is a **common source** — identical PMT/track
   layout + consistent PTS — not byte-identical segmentation. A mid-stream/late-joining standby with
   offset group numbering still fails over cleanly (the exporter skips to the new live edge; it does
@@ -378,5 +501,5 @@ finding — including which of our reports were real vs harness artefacts — is
 ## References
 
 - Redundancy model: [`docs/relay.md`](../docs/relay.md) §5–§6; [`docs/architecture.md`](../docs/architecture.md) §14 (ST 2022-7 §14.1); [`docs/transport.md`](../docs/transport.md) §8.
-- Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217.
+- Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. 0.14.7 re-verification: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §7.
