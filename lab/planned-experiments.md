@@ -73,6 +73,16 @@ correlated with the T5 reordering finding (a handover that also reorders is the 
 
 ## System performance & resource utilisation (T9)
 
+Now has its own file with the executed memory-stability work and the outstanding protocol —
+[test-9-performance.md](test-9-performance.md). **Status (2026-08-07):** the memory question is
+answered for two builds. The deployed `0.13.7` relay was **OOM-killed** after 6 d 18 h at a 3.2 GB
+peak, growing a linear **~21 MB/hour** (three independent measurements agree) with *zero* subscribers
+attached — so the 2026-08-06 "plateau" reading was wrong. Controlled probes on the **0.14.8** release
+do **not** reproduce it: publisher-only idle RSS is flat/declining over 15 min where the old rate
+predicts clear growth, and 40 churned sessions oscillate within a band rather than compounding. Still
+outstanding: the ≥ 24 h soak (what converts "not reproduced" into "no leak"), the fan-out and bitrate
+sweeps, protocol overhead, and a bounded-cache (`--cache-*`) control alongside the unbounded default.
+
 Per role (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope
 and its scaling, and prove stability over long runs. The priority dimension is a **hours→days soak**
 to detect memory leaks / unbounded growth — a resource leak is a production blocker, not a

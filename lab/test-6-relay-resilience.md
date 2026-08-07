@@ -32,7 +32,9 @@ establish the ST 2022-7 output-determinism precondition for a hitless dual-path 
   = release #2602, drill tip `722f38f7`; incl. #2629 cluster ext + #2616/#2654/#2659/#2664 detach +
   #2666 resume/route hardening) (2026-08-05). *(The binary cosmetically self-reports `0.14.3` — a
   stale `--version` string source — but is built from the 0.14.7 release commit; the crate versions
-  in-tree are 0.14.7 / 0.9.7 / 0.2.8.)*
+  in-tree are 0.14.7 / 0.9.7 / 0.2.8.)* Re-verified on `main` `a6dd44a6` (#2647, #2615) (2026-08-06)
+  and on the **0.14.8 release** (`moq-relay` 0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9, origin/main
+  `c8b11b10` = release #2672, incl. [#2701](https://github.com/moq-dev/moq/pull/2701)) (2026-08-07).
 
 ## Procedure
 
@@ -400,7 +402,61 @@ rewriting) — that is Malformed under §9.1, and is the "won't merge two broadc
 Docs corrected accordingly ([evidence](../docs/evidence.md) §7, [relay](../docs/relay.md) §4.1/§5.1,
 [transport](../docs/transport.md) §8.4, [architecture](../docs/architecture.md) §14.3/§14.5).
 
-### Corrections (do not rewrite history)
+### Reconnect + retention re-verify on 2026-08-06 `main` (#2647, #2615)
+
+Two merges landed the day after the 0.14.7 re-verification that touch paths these drills exercise;
+re-checked on `main` `a6dd44a6` (drill tip `b4faac10`; the binary again cosmetically self-reports an
+older `--version`):
+
+- **[#2647](https://github.com/moq-dev/moq/pull/2647) — fail-fast retries (time-bounded jittered
+  backoff).** Reconnect ceiling drops 30 s → 5 s and the loop is bounded by a ~10 s budget instead of
+  the old 5-minute loop. `reconnect.sh` (kill relay t=12, restart t=24, `--client-quic-idle-timeout
+  6s`): both exporters survived, skipped the evicted group (`current group evicted; skipping to next
+  buffered group error=Hang(Moq(Dropped))` — the resume path, not the fatal `json: dropped`), and
+  **`sub1` resumed at t=28 — 4 s after the relay returned**, versus the whole-outage ~16-17 s (which is
+  dominated by the fixed 12 s relay-down window). The reconnect log shows the new policy directly:
+  capped jittered backoff waits of **0.637 s then 1.51 s**. Separately, `export ts` against a **dead**
+  relay now **gives up** — `ERROR reconnect timed out after 10s: connect timed out after 30s` — instead
+  of retrying for 5 minutes; wall-clock to the error is **bounded by the QUIC connect timeout** (≈ 30 s
+  at the 30 s default, ≈ 17 s at `--client-quic-idle-timeout 8s`), so the 10 s budget stops the endless
+  loop while the actual detection time is tunable via the connect/idle timeout. Net: worst-case
+  re-attach tightened from ≤ 30 s to ≤ 5 s, and dead-relay detection from 5 min to tens of seconds —
+  the axis that matters for supervisor-driven subscriber re-home.
+- **[#2615](https://github.com/moq-dev/moq/pull/2615) — 30 s media-track retention + `moq import
+  --latency-max`.** The `--latency-max` knob is present on `moq import`. The 30 s retention does **not**
+  change live-edge follow: on resume the exporter skipped to the newest group (the reconnect above
+  drained **+5.6 MB ≈ a few seconds**, not a 30 s / ~37 MB history replay), because the subscription's
+  own `latency_max` still defaults to 0. No effect on our failover behaviour; retention is a relay-side
+  *ceiling*, not a playout change.
+
+### Takeover re-verify on the 0.14.8 release (#2701) — conclusions unchanged (2026-08-07)
+
+[#2701](https://github.com/moq-dev/moq/pull/2701) changes the takeover path itself, so the two drills
+that exercise it were re-run on the **0.14.8 release** (origin/main `c8b11b10` = release #2672):
+
+- **Mesh failover (`cluster_failover.sh`) — PASS, unchanged.** `sub1` resumed at t=53, **31 s after
+  the kill** (one default 30 s idle timeout), `sub3` survived pubB's join, and **zero `unroutable`
+  errors reached either subscriber**. `relayA`'s own log still shows a transient burst of
+  `track info error … err=unroutable` for all seven tracks at the moment of the kill; it is internal
+  to the reselect and never surfaces downstream.
+- **Graceful exit (`graceful_exit.sh`) — FAIL, unchanged.** A clean source exit still terminates the
+  subscriber (`Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed`) instead of
+  reselecting onto the announced standby.
+
+What #2701 fixes is a different failure mode from anything these drills grade, and it is worth
+recording because it is the most serious relay defect seen in this campaign. `serve_track` cleared its
+`dead` set on every successful takeover, which un-skipped a *closing but still attached* source; the
+reselect then dispatched the corpse, the corpse failed instantly, and the fallback re-selected the
+healthy standby — all resolving synchronously, so the task **spun inside a single poll** and pinned a
+tokio worker. With as many spinning tasks as workers the process goes dark: no logs, no health
+endpoint, no accepts, 100 % CPU, and no path back to a good state. Upstream attributes the 2026-08-06
+moq.pro relay-fleet wedge (three regions, 8+ hours) to it, triggered by **cluster peer session
+churn** — i.e. by running exactly the clustered topology this project recommends. It was present in
+every build we tested and signed off, including the 0.14.7 release. Our drills never hit it because
+provoking it needs a specific wake ordering, which is why upstream's deterministic
+`test_active_corpse_does_not_livelock_takeover` is the right net for it and a timed drill is not.
+Operational consequence: a clustered relay needs **liveness** monitoring (does it still accept and
+serve?), not just a process-alive check, because this failure keeps the process alive and unresponsive.
 
 Of the four issues reported on this work, **two were real** and **two were our own harness**:
 

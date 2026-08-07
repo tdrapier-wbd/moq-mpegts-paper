@@ -172,13 +172,28 @@ artefacts, and the corrected drill contributed upstream as
 
 **Working.** Two independent `moq export ts` subscribers produce byte-identical, continuous
 captures of the same broadcast, so fan-out to N subscribers → N pacers → N IRDs needs no extra
-machinery. `moq import ts` redials the same relay with exponential backoff (1 s to 30 s; auth
-errors terminal) and re-announces on every session, and two-relay clustering carries the feed
+machinery. `moq import ts` redials the same relay with jittered exponential backoff and
+re-announces on every session, and two-relay clustering carries the feed
 while tolerating a duplicate publisher. The exporter survives session loss and resumes
 (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)): under a relay kill and restart
 both exporters stay alive, skip the evicted group, reconnect and resume byte-identical output
 about 17 s later — automatic and bounded rather than hitless, the gap being a clean
 object-boundary skip that downstream ST 2022-7 / IRD selection absorbs.
+[#2647](https://github.com/moq-dev/moq/pull/2647) (re-verified on `main` `a6dd44a6`, 2026-08-06)
+tightens this: the reconnect backoff ceiling drops 30 s → 5 s and the retry loop is now
+time-bounded (~10 s give-up) rather than the old 5-minute loop, so on a relay restart the
+exporter re-attaches within one ~5 s poll of the relay returning (measured ~4 s), and a *dead*
+relay now surfaces an error in tens of seconds (bounded by the connect timeout, hence tunable)
+instead of retrying silently — the axis that matters for supervisor-driven subscriber re-home
+([transport](transport.md) §8.4). [#2615](https://github.com/moq-dev/moq/pull/2615)'s new 30 s
+media-track retention (and `moq import --latency-max`) does **not** change this: the subscription
+still follows the live edge, so resume skips to the newest group rather than replaying retained
+history (verified — the resume drained a few seconds, not 30 s). Re-verified again on the **0.14.8
+release** (2026-08-07), which carries [#2701](https://github.com/moq-dev/moq/pull/2701) — a fix for a
+takeover **livelock** that could spin every relay worker inside a single poll and leave the process
+alive but serving nothing, triggered by cluster peer churn. It changes none of the measurements here,
+but it was latent in every build this section reports on, and it is the reason relay monitoring has to
+test liveness rather than process existence ([operations](operations.md) §3).
 
 **Bounded by detection.** Detection on a hard kill is gated by the QUIC idle timeout (default
 30 s, which must stay above the 5 s keep-alive), so every recovery time below is dominated by
@@ -261,13 +276,18 @@ completion. Both media tracks report `subscribe complete`, the catalog subscript
 `canceled (idle)`, no route change is attempted, and the subscriber's `moq export ts` terminates
 with `TS track layout changed after PAT/PMT was emitted`. The relay cannot distinguish "this source
 is done, and so is the content" from "this source is done, but an interchangeable one exists", so a
-shared `--origin` buys nothing here. This is plausibly intended MoQ semantics rather than a defect,
-but it means the failover path covers the *harder* failure mode (host loss) and not the easier, far
-more common one: SIGTERM to an encoder, a container rescheduled, a rolling restart. No merged code
-addresses it; the only proposed remedies are an announcement `epoch`
-([#2330](https://github.com/moq-dev/moq/issues/2330)) or the typed announcement lifecycle
-(#2216/#2217), both of which would give a consumer the one bit it needs to tell a replaced producer
-from a route change.
+shared `--origin` buys nothing here. This is now confirmed to be **intended semantics rather than a
+defect**: upstream's model tests assert it directly, requiring that a clean finish leave *no*
+lingering broadcast to splice into, on the reading that a source which finishes has declared its
+content over. The consequence for broadcast is unchanged and awkward — the failover path covers the
+*harder* failure mode (host loss) and not the easier, far more common one: SIGTERM to an encoder, a
+container rescheduled, a rolling restart. The remedy is a *semantic* one, giving a consumer the bit
+that separates "this source finished" from "this content is over". That work is now consolidated in
+[#2610](https://github.com/moq-dev/moq/issues/2610) (which supersedes the earlier announcement-epoch
+issue #2330): a publisher-minted, strictly increasing **epoch** per path, where equal non-zero epochs
+splice and a higher epoch takes over, plus an explicit `Ended` flag distinguishing live from complete
+content. That is precisely the missing bit, so it is the upstream thread worth tracking — but it is
+specified, not shipped.
 
 **Posture buildable now.** With the exporter crash fixed, no external subscriber supervisor is
 needed for relay maintenance or transient loss. Service redundancy still comes from a fully

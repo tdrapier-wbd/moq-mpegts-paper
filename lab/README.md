@@ -110,7 +110,7 @@ per-test file when executed, or earlier where a runnable rig already exists. In 
 |---|---|---|---|
 | T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
 | T8b | [Congestion control for a permanent fixed-rate trunk](test-8b-congestion-control.md) | Congestion-control behaviour for a fixed-rate VBR feed judged on **completeness/reconstructability**, not latency. **C1 (under-provisioned failure mode) run (first pass):** CUBIC reliably bloats but stays clean; BBRv2 (quiche) stable + complete; BBRv1 (quinn) bimodal (unsuitable for a permanent feed as-is); BBRv3 broken (#768); MoQ thins where SRT damages. Reported on [#2432](https://github.com/moq-dev/moq/pull/2432). C2–C6 (provisioned-path contention, soak) pending | extends T8 |
-| T9 | System performance & resource utilisation | Per-role CPU/RSS/fd/thread envelope, fan-out scaling, protocol overhead, and a hours→days soak. Pass: **no leak** (RSS slope ≈ 0 over ≥ 24 h per role; fd/socket/thread counts stable), bounded CPU with a documented fan-out knee, overhead within budget | feeds [operations](../docs/operations.md) & [economics](../docs/economics.md) §8 |
+| T9 | [System performance & resource utilisation](test-9-performance.md) | Per-role CPU/RSS/fd/thread envelope, fan-out scaling, protocol overhead, and a hours→days soak. Pass: **no leak** (RSS slope ≈ 0 over ≥ 24 h per role; fd/socket/thread counts stable), bounded CPU with a documented fan-out knee, overhead within budget. **Partially run (2026-08-07).** Leak confirmed on the deployed `0.13.7` relay — OOM-killed after 6 d 18 h at a 3.2 GB peak, ~21 MB/hour with *no* subscribers — and **not reproduced on 0.14.8**. Fan-out to N = 25 shows **no knee**: CPU linear at ~0.57 %/Mbps (≈ one core per 175 Mbps), RSS sublinear (71 → 122 MB), full 9.9 Mbps delivered per subscriber at 25×. Outstanding: ≥ 24 h soak, protocol overhead, bitrate sweep, Linux/real-path repeat. | feeds [operations](../docs/operations.md) & [economics](../docs/economics.md) §8 |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
 | T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
 | T3/T4+ | Opaque lane over the wire | Deploy the opaque publisher on EC2 to run opaque transparency over a real path (T3/T4 are currently localhost/file-fed on the opaque lane) | supports Gate 1 & 3 |
@@ -133,6 +133,10 @@ provenance table in `notebook.local.md`).
 - **2026-07-27** — T6 #2473 re-review (`cc11cbaf`), live two-relay drill passes.
 - **2026-07-28** — #2473 merged (`b624c7c0`).
 - **2026-07-30** — T6 re-verify on the `moq-net 0.2.5` / `moq-cli 0.9.5` release.
+- **2026-08-03** — T6 single-source common-feed study (`src_failover.sh`) on `0.14.3-b87d4e92`.
+- **2026-08-05** — T6 re-verify on the 0.14.7 release (cluster ext #2629, detach #2616/#2654/#2659/#2664, resume hardening #2666); conclusions unchanged.
+- **2026-08-06** — T6 reconnect/retention re-verify on `main` `a6dd44a6` (#2647 fail-fast retries, #2615 media retention); T9 preliminary EC2 observation (standing relay ~3.2 GB RSS plateau), controlled T9 deferred.
+- **2026-08-07** — T6 takeover re-verify on the 0.14.8 release (#2701 takeover livelock); conclusions unchanged. T9: the EC2 relay was **OOM-killed** overnight, converting the "plateau" into a confirmed ~21 MB/hour leak on `0.13.7`, not reproduced on 0.14.8; fan-out envelope measured to N = 25 (no knee). Two multi-track failover unit tests written against `moq-net`.
 
 ## Cross-cutting limitations (stated up front)
 
