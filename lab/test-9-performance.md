@@ -92,14 +92,17 @@ Three controlled probes on the 0.14.8 release, sized so that the EC2 rate would 
 
 | Probe | Condition | RSS behaviour | Verdict |
 |---|---|---|---|
-| `leak_probe.sh` | 2 publishers, **0 subscribers** (the EC2 condition), 15 min | 14.25 → 15.39 → 14.42 → **12.98 MB**, CPU 0.0 | flat/declining; EC2 rate predicts ~19.5 MB |
+| `leak_probe.sh` | 2 publishers, **0 subscribers** (the EC2 condition), **60 min** | 15.39 → **12.98 MB** over the 300-3000 s window; **slope −2.68 MB/h** | no growth; EC2 rate predicts **+15.8 MB** |
 | `t9_soak.sh` phase A | 1 publisher + 1 steady subscriber, 4 min | ramps to ~95 MB and holds (±6 MB) | bounded working set |
 | `session_leak.sh` | 40 connect/disconnect subscriber sessions in 4 rounds | 100 → 151 → 162 → 181 → **149 MB** | oscillates and returns; no staircase |
 
 The idle probe is the decisive one, because it replicates the exact EC2 condition — publishers
 attached, nothing consuming — and because its baseline is rock steady (CPU 0.0, no media actually
 flowing, since the relay only pulls a track once something subscribes). Against that quiet baseline a
-21 MB/h leak would be unmissable; instead RSS *fell*.
+21 MB/h leak would be unmissable: RSS held at **13.0 MB for 35 consecutive minutes** without moving,
+where the old rate predicts a climb past 30 MB. (It then fell to 4.4 MB near the end as the OS
+reclaimed pages under pressure from a concurrent test — reclaim, not signal, which is why the slope is
+fitted over the flat window rather than the whole hour.)
 
 The session probe is worth reading carefully, because at first glance round 1 looks like the ~3.5
 MB/session the EC2 arithmetic suggests: +50.7 MB retained after ten completed sessions (5.07
@@ -108,9 +111,10 @@ MB/session). But it does not compound. Retained-per-session **decays** across ro
 working set being re-used, not memory lost per session. Throughout every probe, **fds held at 17 and
 threads at 12**.
 
-**The honest limit of this result.** Ten- to sixty-minute runs cannot exclude a ~20 MB/h leak in the
-*churn* regime, where the band is ±30 MB. What they do establish is that the specific 0.13.7 failure
-mode — steady linear growth in the idle, publisher-only regime — does not occur on 0.14.8. Between the
+**The honest limit of this result.** These runs cannot exclude a ~20 MB/h leak in the *churn* regime,
+where the band is ±30 MB and an hour of drift hides inside it. What they do establish is that the
+specific 0.13.7 failure mode — steady linear growth in the idle, publisher-only regime — does not
+occur on 0.14.8, and that is the regime the EC2 relay died in. Between the
 two builds sit the cache and resume rewrites ([#2615](https://github.com/moq-dev/moq/pull/2615) media
 retention and pool bounds, [#2657](https://github.com/moq-dev/moq/pull/2657)
 `--cache-latency-default`, [#2666](https://github.com/moq-dev/moq/pull/2666), which explicitly pruned
