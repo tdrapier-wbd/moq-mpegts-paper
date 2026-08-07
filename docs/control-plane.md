@@ -76,7 +76,7 @@ Decoupled from transport mechanics, this policy dictates topology paths based on
 * **Link exclusion:** Dynamically route around links reporting elevated packet loss or latency jitter.
 
 ### 5.3 Failover policy
-Governs redundant path strategies. For high-value contracted content, the policy enforces the instantiation of two completely link-disjoint paths across the relay fabric (Active/Active dual publication), enabling seamless, hitless deduplication at the egress edge gateway.
+Governs redundant path strategies. For high-value contracted content, the policy enforces the instantiation of two completely link-disjoint paths across the relay fabric (Active/Active dual publication), both fed from a common source so the two legs stay interchangeable. The hitless selection between them happens at the *receiver* (ST 2022-7 at the IRD), not by deduplication in the fabric: the relay is content-agnostic and its own source failover is bounded by failure detection rather than seamless ([evidence](evidence.md) §7).
 
 ### 5.4 Compliance policy
 Automates compliance tracking by forcing the logging of every routing modification and authorization grant to an immutable ledger for audit review.

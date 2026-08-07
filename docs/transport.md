@@ -558,26 +558,22 @@ something the exporter conceals.
   not hitless; the content gap is absorbed downstream by ST 2022-7 / IRD.
 - **Active/active *source* failover ships, but as a bounded reselect — not a seamless merge.**
   Two publishers on one relay used to collapse the stream (`unroutable`);
-  [#2473](https://github.com/moq-dev/moq/pull/2473) (on `main`, first released `moq-net 0.2.5`;
-  re-verified on the 0.14.7 release, 2026-08-05, no change) now
-  propagates the standby route across a two-relay mesh and the drill **passes**
-  ([relay](relay.md) §4.1, §5.1), **provided both publishers carry one source** — an identical
-  PMT/track layout and PTS, declared with a shared `moq --origin <id>` (an explicit promise of
-  identical content; the relay never infers it). A mid-stream standby with offset group numbering
-  still fails over cleanly, because the exporter skips to the new live edge rather than requiring
-  group-number continuity. Even so the switch is bounded by failure detection (**30–33 s**, one
-  QUIC idle timeout; tunable to ~10 s, fragile below that), not hitless — the resumed TS is
-  continuity-clean but carries a PCR/PTS discontinuity across the outage — and it covers only an
-  *ungraceful* loss: on a clean source exit the subscriber terminates instead of switching. A
-  *seamless* relay-side merge is out of scope for *this implementation*, not for MOQT: the draft
-  (draft-ietf-moq-transport-19 §9.3) specifies relay object-dedup as a hedged SHOULD, and `moq-lite`
-  takes the route-selection alternative (the relay is content-agnostic and will not rewrite timestamps to
-  bridge two broadcasts). Even where implemented, dedup keys on identical Group/Object IDs, not just
-  identical bytes ([relay](relay.md) §4.1, [evidence](evidence.md) §7), so a gap-free switch still needs
-  wall-clock-aligned encoders (numbered in lock-step) or a receiver that reinitialises on the switch. Relay reselect is therefore a
-  bounded nice-to-have; the honest broadcast-grade path stays the **fully-doubled chain** — dual
-  publishers, dual relays, dual pacers, and **downstream ST 2022-7 / IRD hitless
-  selection** ([architecture](architecture.md) §14.1) — with MoQ owning per-leg transport
+  [#2473](https://github.com/moq-dev/moq/pull/2473) now propagates the standby route across a
+  two-relay mesh and the drill **passes** ([relay](relay.md) §4.1, §5.1), **provided both publishers
+  carry one source** — an identical PMT/track layout and PTS, declared with a shared `moq --origin
+  <id>` (an explicit promise of identical content; the relay never infers it). A mid-stream standby
+  with offset group numbering still fails over cleanly, because the exporter skips to the new live
+  edge rather than requiring group-number continuity. Even so the switch is bounded by failure
+  detection (**30–33 s**, one QUIC idle timeout; tunable to ~10 s, fragile below that), not hitless:
+  the resumed TS is continuity-clean but carries a PCR/PTS discontinuity across the outage. And it
+  covers only an *ungraceful* loss, since on a clean source exit the subscriber terminates instead of
+  switching. A *seamless* relay-side merge is out of scope for this implementation but not for MOQT,
+  whose draft specifies relay object-dedup as a hedged SHOULD keyed on identical object identifiers
+  rather than identical bytes ([evidence](evidence.md) §7). A gap-free switch therefore still needs
+  wall-clock-aligned encoders numbered in lock-step, or a receiver that reinitialises across the
+  switch. Relay reselect is a bounded nice-to-have; the broadcast-grade path stays the
+  **fully-doubled chain** — dual publishers, dual relays, dual pacers, and **downstream ST 2022-7 /
+  IRD hitless selection** ([architecture](architecture.md) §14.1) — with MoQ owning per-leg transport
   resilience and reach, not the hitless switch.
 
 ## 9. Open questions

@@ -163,145 +163,102 @@ there — but that result is not yet validated and does not change this recommen
 
 ## 7. Transport resilience holds; active/active source failover ships only as a bounded reselect
 
-The redundancy model MoQ is built around is sound: thin, auto-reconnecting endpoints, redundancy
-in the relay mesh, hitless selection at the receiver. Crate inspection plus drills on the
-media-aware lane ([lab: T6](../lab/test-6-relay-resilience.md)) establish what it delivers today; the
-full drill history — including two of the four original findings later retracted as harness
-artefacts, and the corrected drill contributed upstream as
-[#2545](https://github.com/moq-dev/moq/pull/2545) — is preserved in the notebook.
+MoQ's redundancy model is sound: thin, auto-reconnecting endpoints, redundancy in the relay mesh,
+and hitless selection left to the receiver. Drills on the media-aware lane
+([lab: T6](../lab/test-6-relay-resilience.md)) establish what it delivers today; the notebook holds
+the drill history and the per-release re-verification record.
 
-**Working.** Two independent `moq export ts` subscribers produce byte-identical, continuous
+**What works.** Two independent `moq export ts` subscribers produce byte-identical, continuous
 captures of the same broadcast, so fan-out to N subscribers → N pacers → N IRDs needs no extra
-machinery. `moq import ts` redials the same relay with jittered exponential backoff and
-re-announces on every session, and two-relay clustering carries the feed
-while tolerating a duplicate publisher. The exporter survives session loss and resumes
-(fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)): under a relay kill and restart
-both exporters stay alive, skip the evicted group, reconnect and resume byte-identical output
-about 17 s later — automatic and bounded rather than hitless, the gap being a clean
-object-boundary skip that downstream ST 2022-7 / IRD selection absorbs.
-[#2647](https://github.com/moq-dev/moq/pull/2647) (re-verified on `main` `a6dd44a6`, 2026-08-06)
-tightens this: the reconnect backoff ceiling drops 30 s → 5 s and the retry loop is now
-time-bounded (~10 s give-up) rather than the old 5-minute loop, so on a relay restart the
-exporter re-attaches within one ~5 s poll of the relay returning (measured ~4 s), and a *dead*
-relay now surfaces an error in tens of seconds (bounded by the connect timeout, hence tunable)
-instead of retrying silently — the axis that matters for supervisor-driven subscriber re-home
-([transport](transport.md) §8.4). [#2615](https://github.com/moq-dev/moq/pull/2615)'s new 30 s
-media-track retention (and `moq import --latency-max`) does **not** change this: the subscription
-still follows the live edge, so resume skips to the newest group rather than replaying retained
-history (verified — the resume drained a few seconds, not 30 s). Re-verified again on the **0.14.8
-release** (2026-08-07), which carries [#2701](https://github.com/moq-dev/moq/pull/2701) — a fix for a
-takeover **livelock** that could spin every relay worker inside a single poll and leave the process
-alive but serving nothing, triggered by cluster peer churn. It changes none of the measurements here,
-but it was latent in every build this section reports on, and it is the reason relay monitoring has to
-test liveness rather than process existence ([operations](operations.md) §3).
+machinery. The importer redials its relay with jittered backoff and re-announces on every session,
+and two-relay clustering carries the feed while tolerating a duplicate publisher. The exporter
+survives a relay kill and restart ([#2469](https://github.com/moq-dev/moq/pull/2469)): both
+exporters stay alive, skip the evicted group, and resume byte-identical output automatically. The
+gap is a clean object-boundary skip that downstream ST 2022-7 / IRD selection absorbs.
+[#2647](https://github.com/moq-dev/moq/pull/2647) tightened the reconnect further, so the exporter
+re-attaches within a few seconds of the relay returning, and a genuinely *dead* relay now surfaces
+an error in tens of seconds instead of retrying silently. That second axis is the one that matters
+for a supervisor deciding to re-home a subscriber ([transport](transport.md) §8.4).
 
-**Bounded by detection.** Detection on a hard kill is gated by the QUIC idle timeout (default
-30 s, which must stay above the 5 s keep-alive), so every recovery time below is dominated by
-detection, not by the ~1 s backoff. This is architectural rather than incidental: a relay has no
-model of a broadcast's expected cadence, so it cannot treat silence as failure the way an
-application that knows its own frame rate could — it must wait for the transport to declare the
-peer gone. Upstream is considering a lower default (~10 s) as a separate change.
+One operational caveat surfaced along the way: a takeover **livelock**, fixed in
+[#2701](https://github.com/moq-dev/moq/pull/2701), could spin every relay worker and leave the
+process alive but serving nothing. It changes none of the measurements here, but it is why relay
+monitoring has to test liveness rather than process existence ([operations](operations.md) §3).
 
-**Active/active source failover: a bounded route reselect, not a seamless merge.** Before
-[#2473](https://github.com/moq-dev/moq/pull/2473), two publishers of the *same* broadcast at one
-relay made the path `unroutable` and tore down both, and across a two-relay mesh the pair coexisted
-without the relay failing its source over — the standby's route was never propagated back, because
-a relay advertised one best route per path and skipped the announce entirely when that chain
-contained the peer. Cost and standby routing (#2424, in the opt-in `moq-lite-06-wip` version) could
-not help, since the blocker was route *propagation*, not pricing. #2473 fixes that by advertising,
-per peer, the best route whose hop chain *excludes* the requester, plus a `moq --origin <id>` knob
-by which a 1+1 pair **declares its two feeds interchangeable — an explicit promise of identical
-content, which the relay never infers**: as the maintainer confirms, the relay is content-agnostic
-(the bytes are either the same or different, and it will not rewrite timestamps to bridge two
-broadcasts). It ships on `main` (release `moq-net 0.2.5`).
+**Everything is bounded by detection, not by recovery.** On a hard kill, nothing downstream learns
+of the failure until the QUIC **idle timeout** expires (default 30 s, which must stay above the 5 s
+keep-alive). Every recovery time below is therefore dominated by that wait, not by the ~1 s
+reconnect. The reason is architectural rather than incidental: a relay has no model of a
+broadcast's expected cadence, so it cannot treat silence as failure the way an application that
+knows its own frame rate could. It has to wait for the transport to declare the peer gone. Upstream
+is open to a lower default (~10 s) as a separate change.
 
-**The two-relay drill passes end to end** ([lab: T6](../lab/test-6-relay-resilience.md)): relay B advertises
-the standby to relay A the instant the standby publisher joins, and when the active publisher is
-killed relay A splices onto that standby, with the subscriber resuming **~30–33 s after the kill** —
-one idle timeout; detection dominates and the reselect itself is essentially free, provided the
-publisher pipeline is killed atomically. A later fix,
-[#2556](https://github.com/moq-dev/moq/pull/2556), targets the distinct case of a publisher
-reclaiming *its own* path on reconnect and leaves shared-origin 1+1 standbys unchanged; its recency
-tie-break does not fire here because the active and standby routes differ on cost, so the failover
-time is governed by detection either way.
+**Active/active source failover is a bounded route reselect, not a seamless merge.**
+[#2473](https://github.com/moq-dev/moq/pull/2473) made a 1+1 pair usable at all: a relay now
+advertises, per peer, the best route whose hop chain *excludes* the requester, and a `moq --origin
+<id>` flag lets the two publishers **declare their feeds interchangeable**. That promise has to be
+explicit because the relay never infers it: the relay is content-agnostic, and it will not rewrite
+timestamps to bridge two broadcasts. Before #2473 the standby's route was simply never propagated
+back across a mesh, so the pair coexisted with no failover at all.
 
-**The requirement is a common source, not byte-identical segmentation** (single-source study on
-`moq-relay 0.14.3-b87d4e92`, 2026-08-03; re-verified on the **0.14.7 release** — cluster extension
-[#2629](https://github.com/moq-dev/moq/pull/2629), namespace-detach
-[#2616](https://github.com/moq-dev/moq/pull/2616), and resume/route hardening
-[#2666](https://github.com/moq-dev/moq/pull/2666) — 2026-08-05, unchanged). A moq group sequence number
-is a per-importer counter reset
-to 0 at the first keyframe (`append_group()`), while track names and PTS come from the source bytes,
-so two publishers are interchangeable when they are two views of *one* feed. Fed a single source, two
-co-started importers produce essentially identical subscriber output up to the kill (byte-for-byte on
-0.14.3; on 0.14.7 a constant 4-packet, 752-byte startup preamble differs, with identical per-second
-deltas thereafter — the steady-state content is the same), and failover
-is clean. Crucially for broadcast — where a publisher always joins an already-running feed — a standby
-that joins **mid-stream** (its group numbering therefore *offset* from the active's) **still fails over
-cleanly**: the exporter subscribes once, never reinitialises the catalog, and skips to the standby's
-live edge, so byte-identical numbering is sufficient but not necessary. What a shared source rules out
-— a divergent track layout or codec across the pair — is what would actually make failover impossible.
+The two-relay drill now passes end to end ([lab: T6](../lab/test-6-relay-resilience.md)). The
+standby is advertised the instant its publisher joins, and when the active publisher is killed the
+relay splices onto it, with the subscriber resuming **one idle timeout later** (~30–33 s at the
+default, ~11 s with the timeout at 10 s). The reselect itself is essentially free; detection is the
+whole cost.
 
-**Continuity-clean, but not hitless.** The resumed capture carries **0 TS continuity-counter errors**
-(the exporter's single output mux never resets), so it is structurally valid; the outage instead
-appears as a **PCR/PTS discontinuity** (`tsp analyze` reports `pcrleap` on the PCR PID at CC=0) — a
-content hole the media clock jumps across, i.e. break-before-make. The window is the QUIC idle timeout
-and is tunable: `--server-quic-idle-timeout 10s` gives an ~11 s reselect, but a 5 s idle (1 s
-keep-alive) is fragile — the switch failed to complete. Sub-second / hitless is not a relay-reselect
-property; it must live at the receiver (ST 2022-7 dual-subscribe over the common source), which the
-identical-broadcast result is exactly what makes feasible.
+**The requirement is a common source, not byte-identical segmentation.** MoQ numbers groups with a
+per-publisher counter that resets at the first keyframe, while track names and timestamps come from
+the source bytes. Two publishers are therefore interchangeable when they are two views of *one*
+feed. Fed a single source, two co-started publishers produce equivalent subscriber output up to the
+kill, and failover is clean. Crucially for broadcast, where a publisher always joins an
+already-running feed, a standby that joins **mid-stream** (so its group numbering is *offset* from
+the active's) **still fails over cleanly**: the subscriber subscribes once, never reinitialises its
+catalog, and skips to the standby's live edge. Identical numbering is sufficient but not necessary.
+What a shared source rules out is a divergent track layout or codec across the pair, which is what
+would genuinely make failover impossible.
 
-**Spec vs. implementation, precisely.** The behaviour above is *this implementation's*, not MOQT's
-ceiling. The IETF draft (draft-ietf-moq-transport-19 §9.3) does envisage relay-level *object*
-de-duplication — "Relays … SHOULD attempt to deduplicate Objects before forwarding, subject to
-implementation constraints" — keyed on Full Track Name + Group ID + Object ID (§9.1, first-copy-wins),
-with a mismatched payload for the same identifier making the track *Malformed* and the relay terminating
-downstream subscriptions (§2.4.2). So hitless active/active by relay dedup is the *standard's* model, and
-`moq-dev`/`moq-lite` simply implements the permitted alternative (content-agnostic route selection) rather
-than object dedup. Two caveats keep this from changing the recommendation. First, even spec-conformant
-dedup requires *identical object identifiers*, not merely identical media bytes: a moq group sequence
-number is a per-importer counter reset at the first keyframe, so two independent publishers do not
-naturally share Group/Object IDs, and a dedup relay would not treat offset objects as duplicates —
-conformant dedup therefore needs encoder+publisher determinism down to MoQ object segmentation and
-numbering, the object-layer analogue of ST 2022-7's aligned RTP sequence numbers and a strictly stronger
-bar than "bit-for-bit identical." Second, what is out of scope in *both* spec and implementation is
-bridging two *different* broadcasts (timestamp rewriting) — that is the Malformed case, and the "won't
-merge two broadcasts" the maintainer describes. Receiver-side ST 2022-7 selection over a common source
-therefore remains the robust, buildable-today path, now *reinforced* rather than merely necessitated.
+**Continuity-clean, but not hitless.** The resumed capture carries **0 TS continuity-counter
+errors**, because the subscriber's single output mux never resets, so the file is structurally
+valid. The outage appears instead as a **PCR/PTS discontinuity**: a content hole that the media
+clock jumps across, i.e. break-before-make. The window is the idle timeout and is tunable, though a
+5 s setting proved too aggressive for the switch to complete. Sub-second switching is not a
+relay-reselect property at all. It has to live at the receiver (ST 2022-7 dual-subscribe over the
+common source), and the common-source result is exactly what makes that feasible.
 
-One caveat remains, and it is the operationally important one: **graceful
-departure of the active source is not failed over at all.** When the active publisher exits
-cleanly rather than dying, the relay does not reselect onto the standby — it propagates
-completion. Both media tracks report `subscribe complete`, the catalog subscription is
-`canceled (idle)`, no route change is attempted, and the subscriber's `moq export ts` terminates
-with `TS track layout changed after PAT/PMT was emitted`. The relay cannot distinguish "this source
-is done, and so is the content" from "this source is done, but an interchangeable one exists", so a
-shared `--origin` buys nothing here. This is now confirmed to be **intended semantics rather than a
-defect**: upstream's model tests assert it directly, requiring that a clean finish leave *no*
-lingering broadcast to splice into, on the reading that a source which finishes has declared its
-content over. The consequence for broadcast is unchanged and awkward — the failover path covers the
-*harder* failure mode (host loss) and not the easier, far more common one: SIGTERM to an encoder, a
-container rescheduled, a rolling restart. The remedy is a *semantic* one, giving a consumer the bit
-that separates "this source finished" from "this content is over". That work is now consolidated in
-[#2610](https://github.com/moq-dev/moq/issues/2610) (which supersedes the earlier announcement-epoch
-issue #2330): a publisher-minted, strictly increasing **epoch** per path, where equal non-zero epochs
-splice and a higher epoch takes over, plus an explicit `Ended` flag distinguishing live from complete
-content. That is precisely the missing bit, so it is the upstream thread worth tracking — but it is
-specified, not shipped.
+**This is an implementation choice, not MoQ's ceiling.** The IETF draft does envisage relays
+de-duplicating *objects* from redundant sources, so hitless active/active is the standard's model;
+`moq-dev` implements the permitted alternative, content-agnostic route selection. Two things keep
+that from changing the recommendation. First, the draft hedges dedup as a SHOULD and keys it on
+identical object *identifiers*, not identical media bytes. Two independent publishers do not
+naturally share those identifiers, so conformant dedup would demand determinism down to object
+segmentation and numbering: the object-layer analogue of ST 2022-7's aligned RTP sequence numbers,
+and a stricter bar than "bit-for-bit identical". Second, bridging two genuinely *different*
+broadcasts is out of scope in the spec and the implementation alike. Receiver-side selection over a
+common source therefore remains the robust, buildable-today path
+([lab: T6](../lab/test-6-relay-resilience.md) holds the clause-level spec cross-check).
+
+**The operationally important gap: a graceful exit is not failed over at all.** When the active
+publisher shuts down cleanly rather than dying, the relay propagates completion instead of
+reselecting onto the standby, and the subscriber terminates. The relay cannot distinguish "this
+source is done, and so is the content" from "this source is done, but an interchangeable one
+exists", so a shared `--origin` buys nothing here. This is **intended semantics rather than a
+defect**: upstream's model tests assert it directly, on the reading that a source which finishes has
+declared its content over. The consequence for broadcast is awkward all the same, because the
+failover path covers the *harder* failure mode (host loss) and not the easier, far more common one:
+a SIGTERM to an encoder, a container rescheduled, a rolling restart. The remedy is semantic, giving
+a consumer the bit that separates "this source finished" from "this content is over", and it is
+specified in [#2610](https://github.com/moq-dev/moq/issues/2610) as a publisher-minted epoch plus an
+explicit `Ended` flag. Specified, not shipped, and the upstream thread worth tracking.
 
 **Posture buildable now.** With the exporter crash fixed, no external subscriber supervisor is
-needed for relay maintenance or transient loss. Service redundancy still comes from a fully
-doubled chain — dual publishers → dual relays → dual subscribers → dual pacers → downstream
-ST 2022-7 / IRD failover — letting the *receiver* do hitless selection. Relay-mesh source
-failover does not change that recommendation now that #2473 has landed: at one idle timeout it is
-**bounded, not hitless**, protecting against a dead source rather than delivering the seamless
-switch a broadcast chain expects, and on the graceful-exit path it does not protect at all. A
-*seamless* relay-side merge is out of scope for *this implementation* (the draft specifies object-dedup
-only as a hedged SHOULD, and `moq-lite` takes the route-selection alternative; see the spec cross-check
-above) — the content-agnostic relay will not bridge two broadcasts, so a gap-free switch needs either
-wall-clock-aligned encoders
-(Elemental's approach) or a receiver that reinitialises on the switch. That makes relay reselect a
-**bounded nice-to-have**; the load-bearing resilience stays the doubled chain with the *receiver*
-making the hitless decision. The two are complementary — the mesh keeps both
-flows healthy and reachable, the receiver makes the hitless decision. (Supports
+needed for relay maintenance or transient loss. Service redundancy still comes from a fully doubled
+chain (dual publishers → dual relays → dual subscribers → dual pacers → downstream ST 2022-7 / IRD
+failover), letting the *receiver* make the hitless decision. Relay-mesh source failover does not
+change that recommendation: at one idle timeout it is **bounded, not hitless**, and on the
+graceful-exit path it does not protect at all. A gap-free switch would need either wall-clock-aligned
+encoders (Elemental's approach) or a receiver that reinitialises across the switch. That makes relay
+reselect a **bounded nice-to-have**, complementary to the real mechanism rather than a substitute
+for it: the mesh keeps both flows healthy and reachable, and the receiver does the switching.
+(Supports
 [transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)

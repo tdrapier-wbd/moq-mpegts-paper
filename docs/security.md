@@ -51,7 +51,7 @@ they are deployment choices, not wire-format guarantees of the transport
 - **Management-plane callers** authenticate to the control-plane API via the
   tenant's identity system — **OIDC/federated SSO** for humans, scoped API
   credentials or workload identity for automation ([control-plane](control-plane.md)
-  §8.1). These credentials are entirely separate from data-plane credentials.
+  §8). These credentials are entirely separate from data-plane credentials.
 
 ## 3. Authorization
 
@@ -73,7 +73,7 @@ Authentication establishes *who*; authorization establishes *what is permitted*.
 
 - **Key lifecycle.** Token-signing private keys and mTLS CA/identity material are
   generated, stored, and used inside HSMs or a cloud KMS
-  ([control-plane](control-plane.md) §8.2). Relays and gateways hold only the
+  ([control-plane](control-plane.md) §8). Relays and gateways hold only the
   *public* keys needed to verify JWT signatures locally at the subscription edge;
   they never hold long-lived signing private keys.
 - **Rotation.** Signing keys and certificates are rotated on a defined schedule
@@ -120,7 +120,7 @@ Authentication establishes *who*; authorization establishes *what is permitted*.
   detection of anomalous reuse.
 - **DDoS and flooding.** Public-facing control-plane endpoints sit behind
   rate-limiting and DDoS protection; critical infrastructure nodes prefer private
-  peering or IP allow-listing ([control-plane](control-plane.md) §8.3). At the
+  peering or IP allow-listing ([control-plane](control-plane.md) §8). At the
   data plane, admission control and per-tenant quotas ([relay](relay.md) §7) bound
   the impact of subscription floods.
 - **Token abuse.** A leaked token is bounded by its scope and TTL and can be

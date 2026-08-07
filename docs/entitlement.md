@@ -6,7 +6,7 @@ an endpoint to receive a channel. This is the deep-dive companion to
 [architecture](architecture.md) §11; it develops the grant model, token design,
 lifecycle, and failure behaviour. Identity and cryptography are covered in
 [security](security.md); the API that issues and revokes grants is in
-[control-plane](control-plane.md) §3.2.
+[control-plane](control-plane.md) §3.
 
 ---
 
@@ -51,7 +51,7 @@ receivers.
 
 An entitlement is realised as a short-lived, path-scoped token (JWT) that the
 endpoint presents when subscribing and that the relay validates locally against a
-public key ([control-plane](control-plane.md) §8.2). Local validation is
+public key ([control-plane](control-plane.md) §8). Local validation is
 important: it means enforcement does not require a round-trip to the control plane
 on every subscription, which is what allows the data plane to keep running during
 a control-plane outage (§7).
@@ -83,7 +83,7 @@ stateDiagram-v2
 ```
 
 - **Provision grant.** The control plane issues a token in response to an
-  authorised API call ([control-plane](control-plane.md) §3.2); the endpoint
+  authorised API call ([control-plane](control-plane.md) §3); the endpoint
   subscribes and delivery begins.
 - **Refresh/renew.** Before expiry, the endpoint requests a new token. A refusal
   to refresh *is* a revocation (§5), which is what makes the backstop work.

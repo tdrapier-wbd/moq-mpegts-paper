@@ -54,6 +54,24 @@ The strongest reasons the thesis fails, each testable rather than rhetorical:
 
 ---
 
+## MoQ in broadcast terms
+
+The documents below use MoQ's vocabulary. This is the whole of it, in the nearest broadcast equivalent:
+
+| MoQ term | What it means here |
+|---|---|
+| **Broadcast** | One named feed, roughly a service or channel. Note it does not mean "broadcast" in the RF sense. |
+| **Track** | One elementary stream inside that feed: video, an audio pair, or data such as SCTE-35. |
+| **Group** | A self-contained run of a track that starts at a keyframe, and the point a new subscriber can join at. The closest analogue is a GOP. |
+| **Object** | The individual unit of delivery within a group, roughly a frame's worth of bytes. Loss stalls one object rather than the whole multiplex. |
+| **Catalog** | The manifest saying which tracks exist and how they are coded. The closest analogue is PAT/PMT. |
+| **Announce** | How a publisher advertises that a feed exists, so relays learn where to route it from. |
+| **Origin** (`--origin <id>`) | An identifier by which two publishers declare they carry interchangeable content, i.e. a 1+1 pair. |
+| **Route reselect** | A relay switching from a failed publisher to a standby carrying the same feed. |
+| **Publisher / subscriber** | The sending and receiving endpoints. In this paper they are `moq import ts` and `moq export ts`, which convert between MPEG-TS and MoQ tracks. |
+
+---
+
 ## Repository
 
 Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for *why MoQ specifically*, [Architecture](docs/architecture.md) for *how it would be engineered*, and [Implementation](docs/implementation.md) for *how to build and test it*. The remaining documents are topic deep-dives.
