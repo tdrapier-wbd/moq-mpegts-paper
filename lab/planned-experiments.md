@@ -79,9 +79,16 @@ answered for two builds. The deployed `0.13.7` relay was **OOM-killed** after 6 
 peak, growing a linear **~21 MB/hour** (three independent measurements agree) with *zero* subscribers
 attached — so the 2026-08-06 "plateau" reading was wrong. Controlled probes on the **0.14.8** release
 do **not** reproduce it: publisher-only idle RSS is flat/declining over 15 min where the old rate
-predicts clear growth, and 40 churned sessions oscillate within a band rather than compounding. Still
-outstanding: the ≥ 24 h soak (what converts "not reproduced" into "no leak"), the fan-out and bitrate
-sweeps, protocol overhead, and a bounded-cache (`--cache-*`) control alongside the unbounded default.
+predicts clear growth, and 40 churned sessions oscillate within a band rather than compounding.
+
+The **envelope work is now done on Linux** (EC2 moved to the 0.14.8/0.9.7 release binaries): fan-out
+past N = 25 with CPU attributed per process, the 2/10/27 Mbps bitrate sweep, the bounded-cache
+control, and `tcpdump` protocol overhead. Headlines: relay cost tracks *session count* rather than
+bitrate (~1.1 Gbps per core at 10 Mbps, and cost per Mbps falling as bitrate rises), the observed
+fan-out knee is the 2-core host saturating rather than the relay, wire overhead is ~1.12x the source
+TS rate, and `--cache-capacity` is free. Still outstanding: the ≥ 24 h soak verdict (**running**, the
+one thing that converts "not reproduced" into "no leak"), a cross-machine fan-out to find the relay's
+own knee, overhead under loss versus SRT, and the groomer/pacer envelope.
 
 Per role (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope
 and its scaling, and prove stability over long runs. The priority dimension is a **hours→days soak**

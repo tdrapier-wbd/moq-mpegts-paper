@@ -13,6 +13,10 @@ companion to the economic risk raised in the [README](../README.md).
 > specific deployment). What follows is the *structure* of the comparison and the
 > *questions* a real model must answer, so that anyone with access to real inputs
 > can populate it. The headline conclusions below are directional, not numeric.
+> Measured *engineering* capacity figures — CPU per session, bandwidth overhead — are a
+> different matter: they are our own lab results, carry no commercial sensitivity, and are
+> included in §3.1 because a cost framework with no capacity constants cannot be populated
+> at all.
 
 ---
 
@@ -72,9 +76,10 @@ model, independent of the actual rates:
 
 The challenger's TCO must sum at least the following, per route and in aggregate:
 
-- **Compute / relay cost.** Relay fabric compute, scaling with forwarded
-  bandwidth and connection count ([relay](relay.md) §6). Shared across tenants,
-  which is where multi-tenant leverage helps (§4).
+- **Compute / relay cost.** Relay fabric compute, scaling primarily with
+  *connection count* and only weakly with forwarded bandwidth
+  ([relay](relay.md) §6; measured in §3.1). Shared across tenants, which is where
+  multi-tenant leverage helps (§4).
 - **Egress / network cost.** Data transfer out of cloud/CDN networks. **This is
   the line most likely to dominate and to swing the entire comparison.** Because
   primary distribution is always-on and high-bitrate, egress-priced networks can
@@ -89,6 +94,66 @@ The challenger's TCO must sum at least the following, per route and in aggregate
 - **Integration and grooming.** The edge/interop work that makes output
   IRD-acceptable ([interoperability](interoperability.md), [architecture](architecture.md)
   §7). One-time and ongoing.
+
+### 3.1 Measured relay compute and carriage overhead
+
+Two of the inputs above no longer need to be assumed. Test 9
+([test-9-performance](../lab/test-9-performance.md)) measures them directly, on Linux
+(2 vCPU) with the current relay release, MPEG-TS at 2 / 10 / 27 Mbps and fan-out to 85
+concurrent subscribers.
+
+**Relay CPU scales with session count, not with bitrate.** Cost per subscriber session
+rises far more slowly than the bitrate it carries:
+
+| Per-stream bitrate | CPU per subscriber session | Sessions per core | Egress per core |
+|---|---:|---:|---:|
+| 2 Mbps | 0.34 % | ~300 | ~0.6 Gbps |
+| 10 Mbps | 0.85 % | ~120 | ~1.2 Gbps |
+| 27 Mbps | 1.18 % | ~85 | ~2.1 Gbps |
+
+Nearly fourteen times the bitrate costs about three and a half times the CPU, so cost per
+delivered Mbps *falls* as bitrate rises. Three consequences for the model:
+
+- **Compute is not the constraint, and egress dominance is now a measured conclusion
+  rather than an assumption.** One core forwards on the order of a gigabit; the compute
+  line is small beside the egress line it accompanies.
+- **Primary distribution is the favourable regime for relay compute.** Contribution-grade
+  high-bitrate feeds are the *cheapest per Mbps* to relay, so moving up-market in bitrate
+  improves the compute economics instead of degrading them. This cuts against the
+  intuition that high-bitrate always-on feeds are the expensive case — they are, but on
+  the egress line, not the compute line.
+- **Capacity planning is linear and predictable.** CPU rose linearly with session count
+  with no knee until the host itself saturated, and memory is not a sizing constraint
+  (roughly a fixed tens-of-MB working set plus ~2 MB per session; bounding the cache
+  explicitly cost nothing measurable, so it is free insurance rather than a cost trade).
+
+The "sessions per core" column extrapolates to full core occupancy and is a ceiling, not a
+sizing target; practical sizing needs headroom for churn, retransmission, and the failover
+transients in [architecture](architecture.md) §14.
+
+**Carriage overhead is a multiplier of roughly 1.12 on the dominant line.** Measured IP
+wire bytes against the source TS rate came to ~12 % at both 10 and 27 Mbps, plus well
+under 1 % on the return path for acknowledgements. Because egress is the line most likely
+to dominate (§3, §6), this multiplier applies directly to it — and a 1+1 redundant path
+carries it twice.
+
+This is also the clearest place where MoQ is structurally *worse* than the most directly
+comparable baseline. SRT's framing over a datagram of seven TS packets costs a few
+percent, so MoQ consumes materially more bandwidth for the same service, on exactly the
+line that dominates the comparison. That belongs in the model explicitly rather than being
+netted off against MoQ's compute efficiency, which sits on the line that does not dominate.
+
+**Host configuration is a first-order cost lever.** The same relay version measured around
+six times more CPU per Mbps on macOS loopback with UDP GSO disabled than on Linux with GSO
+enabled. Whatever the split between operating system and offload, relay compute is
+sensitive to kernel and offload configuration by a larger factor than any plausible code
+optimisation, so host tuning is a model input, not an implementation detail.
+
+**Caveats.** These are loopback measurements with subscriber processes co-resident with the
+relay: no WAN packet handling, no NIC or cross-machine cost, and no congestion control
+working against real loss. Treat the *shapes* — linear in sessions, sublinear in memory,
+falling cost per Mbps as bitrate rises, ~1.12x carriage — as the result and the absolute
+constants as indicative. A real path with loss and retransmission costs more on both lines.
 
 ## 4. Value drivers (beyond unit cost)
 
@@ -120,7 +185,10 @@ The comparison inverts across scenarios, which is the central insight:
   *today*, so the challenger's case here rests on the horizon over which incumbent
   capacity is retired and egress pricing falls, and on the substrate, operational,
   and reach advantages, more than on day-one sticker price. The elasticity
-  advantage is worth little here; the rest of the case carries it.
+  advantage is worth little here; the rest of the case carries it. The measured compute
+  profile (§3.1) sharpens rather than softens this: high-bitrate always-on feeds are the
+  *cheap* case for relay compute and the *expensive* case for egress, so the trunk
+  scenario turns almost entirely on the egress line and its ~1.12x multiplier.
 - **Event / occasional / short-window feeds.** Challenger-favoured. No committed
   capacity, fast provisioning, and pay-for-use align with the demand shape; the
   incumbent's fixed-cost model is poorly suited.
@@ -135,7 +203,10 @@ must show how the conclusion moves as each varies:
 
 - **Bandwidth / egress cost.** The dominant sensitivity. The break-even is likely
   set here more than anywhere else; the model should show the egress price at
-  which the challenger reaches parity for each scenario.
+  which the challenger reaches parity for each scenario. Apply the measured ~1.12x
+  carriage multiplier (§3.1) to the MoQ side, and hold the baseline to its own
+  measured overhead — comparing MoQ wire bytes against a *nominal* TS rate
+  flatters the challenger on precisely the line that decides the outcome.
 - **Redundancy level.** End-to-end disjoint-path redundancy roughly doubles
   transport/egress cost ([architecture](architecture.md) §14). The comparison must
   hold redundancy *equivalent* on both sides, or it is meaningless.
@@ -161,7 +232,9 @@ To move any conclusion here from "directional" to "established," the model needs
   reach, and the *depreciated marginal* cost of the incumbent path they would
   displace (not list price).
 - **Measured egress and compute cost** for an equivalent-redundancy MoQ path on a
-  real provider.
+  real provider. The *engineering* half of this is now done (§3.1: sessions per core,
+  memory per session, carriage multiplier); what remains is to price it on a real
+  provider and to repeat the capacity measurements over a WAN path rather than loopback.
 - **A fully-loaded operational cost** for both sides to the same SLA
   ([operations](operations.md) §10).
 - **Third-party validation** of the reliability equivalence that the whole
@@ -191,3 +264,10 @@ Framework only — thresholds are set per deployment and per buyer:
   capacity is retired and egress pricing falls?
 - How much of the "operational saving" hypothesis (§4) is real once the cost of
   running an immature platform to a broadcast SLA is included?
+- Does the ~1.12x carriage overhead (§3.1) hold over a real WAN path once retransmission
+  under loss is included, and how does it compare against the same measurement taken on
+  an SRT path? This is the sharpest quantified disadvantage the model carries, so it is
+  worth measuring rather than estimating.
+- Does the measured compute profile survive a real path? Loopback removes NIC, WAN packet
+  handling, and congestion-control work; if per-session CPU rises materially over a real
+  path, the "compute is not the constraint" conclusion needs revisiting.

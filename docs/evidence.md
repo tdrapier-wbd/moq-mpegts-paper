@@ -262,3 +262,43 @@ reselect a **bounded nice-to-have**, complementary to the real mechanism rather 
 for it: the mesh keeps both flows healthy and reachable, and the receiver does the switching.
 (Supports
 [transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)
+
+## 8. Relay compute is cheap and predictable; bandwidth overhead is the real cost
+
+The operational envelope is now measured rather than assumed
+([lab: T9](../lab/test-9-performance.md)), on Linux with the current release, MPEG-TS at 2-27 Mbps
+and fan-out to 85 concurrent subscribers.
+
+**Relay cost tracks session count, not bitrate.** A subscriber session costs ~0.34 % / 0.85 % /
+1.18 % of a core at 2 / 10 / 27 Mbps, so nearly fourteen times the bitrate costs about three and a
+half times the CPU. Cost per Mbps therefore *falls* as bitrate rises, and one core carries roughly a
+gigabit — about 110-120 sessions at 10 Mbps. Fan-out is linear with no relay knee, and memory scales
+sublinearly (tens of MB fixed plus ~2 MB per session), so memory is not a sizing constraint. For
+capacity planning, count sessions rather than gigabits, and note that contribution-grade high-bitrate
+feeds are the *cheapest per Mbps* to relay — the expensive part of an always-on high-bitrate service
+is egress, not compute.
+
+**Host configuration outweighs anything else measured.** The same relay version cost ~6x more CPU per
+Mbps on macOS loopback with UDP GSO disabled than on Linux with it enabled. Relay compute is more
+sensitive to kernel and offload configuration than to any plausible code change, which makes host
+tuning a first-order deployment decision rather than an implementation detail.
+
+**Carriage costs about 1.12x the source TS rate on the wire**, essentially independent of bitrate: a
+9.95 Mbps service needs ~11.2 Mbps of IP capacity and a 27.5 Mbps service ~30.8 Mbps, plus well under
+1 % on the return path for acknowledgements. Against the *delivered* payload the figure is ~17-18 %,
+the difference being the source's null packets, which MoQ strips rather than carries. This is the one
+place the measurements show MoQ structurally *worse* than the closest comparable baseline: SRT's
+framing costs a few percent, so MoQ consumes materially more bandwidth for the same service — on
+precisely the line most likely to dominate a cost comparison
+([economics](economics.md) §3.1).
+
+**Bounding the relay cache is free.** With `--cache-capacity` set, CPU was identical and RSS differed
+by under 1.5 MB, because a healthy working set sits far below any sensible bound. Given that an
+unbounded relay on an older release grew ~21 MB/hour to an OOM kill, there is no reason to run one
+unbounded ([operations](operations.md) §3).
+
+One measurement caveat applies throughout: these are loopback rigs with subscribers co-resident with
+the relay, so they price neither the NIC nor congestion control doing real work — and the Linux sweep
+showed why that matters, since co-located subscribers cost 2.4x the relay and the observed fan-out
+knee was the *host* saturating, not the relay. Treat the shapes as the result and the constants as
+indicative. The ≥ 24 h stability verdict is still outstanding.
