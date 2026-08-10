@@ -96,12 +96,15 @@ The platform must be observable in two languages simultaneously
   never wants history. Set an explicit bound on every deployed relay; it is measured
   to cost nothing (identical CPU, resident memory within 1.5 MB).
 
-  **Do not assume a cache bound is sufficient on its own.** Current builds grow
-  roughly 27 MB/hour under four sustained subscribers, and the growth is far too
-  small to be cached payload — so a payload-counting cap may not bind it. Until that
-  is settled, size relay hosts for at least a day of growth, alarm on the RSS trend,
-  and treat a scheduled drain-and-restart as a legitimate control
-  ([lab T9](../lab/test-9-performance.md)).
+  **A cache bound is not sufficient, and this is measured, not assumed.** Current
+  builds grow roughly 27 MB/hour under four sustained subscribers, and capping the
+  cache at 32 MiB does not change that rate — the relay runs to more than twice the
+  cap above its baseline with no inflection where the cap should bind. The growth is
+  not cached payload, so a payload-counting budget cannot evict it. Set the bound
+  anyway (it is free, and it protects against the cache filling for other reasons),
+  but size relay hosts for at least a day of growth, alarm on the memory trend rather
+  than only on an absolute threshold, and treat a scheduled drain-and-restart as a
+  first-class control until there is a fix ([lab T9](../lab/test-9-performance.md)).
 
 ## 4. Runbooks
 

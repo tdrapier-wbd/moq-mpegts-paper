@@ -7,10 +7,13 @@ soaks plus a controlled build A/B run (2026-08-10). The **publisher and subscrib
 holding the workload fixed and varying only the binary, both 0.14.8 and 0.14.9 grow **linearly at
 ~27 MB/h with four subscribers**, with no decay across 2.5 h — about 650 MB/day. It is therefore not a
 0.14.9 regression, and soak #1's flat 26 h was a property of its lighter workload. With **no**
-subscriber attached the relay is flat, so the growth tracks served load. Whether the documented cache
-knobs bound it is the live question: a 256 MiB capacity leg grew at the same rate but never filled its
-budget, so a decisive 32 MiB leg is running. The 0.13.7 no-subscriber OOM leak remains a separate,
-fixed defect. Fan-out envelope, bitrate sweep and protocol overhead are all measured on Linux.
+subscriber attached the relay is flat, so the growth tracks served load. **`--cache-capacity` does not
+bound it**: at a 32 MiB cap the relay ran more than twice the cap past its baseline with no inflection,
+at the same ~27 MB/h — the growth is not cached payload, so the byte-budget control cannot evict it.
+Four legs across two builds and three cache settings all read ~27 MB/h. An N = 0/1/2/4/8 sweep is
+running to establish whether the cost is per-subscriber or per-group before this goes upstream. The
+0.13.7 no-subscriber OOM leak remains a separate, fixed defect. Fan-out envelope, bitrate sweep and
+protocol overhead are all measured on Linux.
 
 ## Objective
 
@@ -534,9 +537,34 @@ that the soak alone permitted. Extrapolated, +27 MB/h is 650 MB/day.
 uncapped — but RSS only reached 131 MB, and `--cache-capacity` counts *payload bytes*, not process
 RSS. A 256 MiB (268 MB) payload budget was nowhere near full, so the cap was never engaged. That leg
 cannot distinguish "the cap does not bind this" from "the cap was not reached". `~/t9/relay_cap2.sh`
-(queued 2026-08-10 15:55 UTC) repeats it at **32 MiB**, which must engage within about an hour at the
-measured rate. A plateau near base+cap means legitimate cache fill, bounded as documented; continued
-linear growth well past base+cap means the growth is not the group cache at all.
+repeated it at 32 MiB, small enough to engage within the hour.
+
+### The cache is not what grows: 32 MiB cap changes nothing (2026-08-10)
+
+The relay confirmed the setting at startup — `cache capacity set capacity=33554432` — and then ignored
+it, in the sense that mattered:
+
+| Window | RSS | Slope |
+|---|---|---:|
+| 0–30 min | 54.5 → 76.1 MB | +34.86 MB/h |
+| 30–60 min | 74.6 → 91.2 MB | +29.22 MB/h |
+| 60–90 min | 89.2 → 101.7 MB | +29.69 MB/h |
+| 90–120 min | 103.6 → 114.4 MB | +28.98 MB/h |
+| 120–150 min | 118.2 → 128.3 MB | +28.94 MB/h |
+| **Total, past warm-up** | **54.5 → 128.3 MB (peak 133.7)** | **+27.15 MB/h** |
+
+A 32 MiB payload budget on a 54.5 MB baseline should plateau RSS somewhere near 88 MB. The relay
+crossed 88 MB at around the 55-minute mark and carried straight on to 128 MB — **more than twice the
+cap above baseline — with no inflection whatsoever at the crossing**. The slope after the crossing
+(+29.69, +28.98, +28.94) is indistinguishable from the slope before it, and from the uncapped legs
+(+27.14, +27.74). Four legs, two builds, three cache settings, one answer: ~27 MB/h. Subscriber count
+held at 4 for all 300 samples and the relay logged no errors.
+
+This is the result the 0.6 % arithmetic predicted. **The growth is not cached payload, and the
+documented byte-budget control does not bound it.** `--cache-capacity` can only evict what the pool
+accounts for, and whatever is growing here is not registered with the pool. That makes this a leak
+rather than a tuning question, and it makes "set a cache bound" an insufficient answer both for
+operators and as an upstream response.
 
 ### What the source says the knobs actually do
 
@@ -559,7 +587,26 @@ history accumulating under an unbounded window, growth would be three orders of 
 roughly one key-frame-aligned group per second, 27 MB/h works out at ~7.5 kB retained per group —
 which looks far more like per-group bookkeeping that is never released than like cached payload. If
 that is right, `--cache-capacity` will *not* bound it, because the pool only accounts payload. The
-32 MiB leg tests exactly this.
+32 MiB leg tested exactly this, and confirmed it.
+
+### Next: is it per-subscriber or per-group? (`nsweep.sh`, launched 2026-08-10 22:06 UTC)
+
+Everything so far says "a leak, ~27 MB/h at N=4". That is a symptom, not a report. The sweep runs
+N = 0, 1, 2, 4, 8 subscribers for 90 minutes each against a fresh relay, and reads the answer off the
+shape:
+
+- **rate proportional to N** → per-session state, and the fix is in session teardown;
+- **rate flat in N for N ≥ 1** → per-group ingest bookkeeping never released, and N only decides how
+  fast groups are pulled through;
+- **N = 0 flat** → the control, consistent with the standing relay's 7 h at 224 MB.
+
+It also enables `--internal-listen` with `--stats-enabled=true` and scrapes `moq_relay_groups_total`
+and `moq_relay_bytes_total`, so growth can be divided by groups and bytes *actually transferred*
+rather than inferred from the nominal source bitrate — which converts "~7.5 kB per group" from an
+estimate into a measurement. Note that `--stats-enabled` is off by default and gates the traffic
+counters entirely; with only `--internal-listen` the `/metrics` endpoint serves accept-listener series
+and nothing else, which is a trap worth remembering. Enabling stats does add a stats broadcast, but it
+is constant across all five legs, so the N-dependence stays clean.
 
 **Representativeness limit of the publisher figure:** a video-only source exercises the import path
 without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than

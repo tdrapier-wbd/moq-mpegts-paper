@@ -96,18 +96,23 @@ and 0.14.9 grow linearly at ~27 MB/h under four steady subscribers**, no decay, 
 regression; soak #1's flat 26 h was its lighter workload. The relay **fails** the stability criterion.
 Still outstanding, in priority order:
 
-1. **Does any documented cache knob bound it?** The 256 MiB capacity leg was inconclusive — the budget
-   counts payload bytes and never filled. `relay_cap2.sh` at 32 MiB is the decisive capacity test. If
-   capacity does not bind it, test **`--cache-duration`** (the age ceiling, which clamps the
-   publisher's advertised retention window) — and note the arithmetic says the growth is ~0.6 % of
-   carried bytes, i.e. bookkeeping rather than payload, so a payload-counting cap plausibly will not
-   bind it.
-2. **Characterise it for an upstream report.** Retained memory per served session at fixed N, then
-   N = 1/2/4/8 to establish whether the rate is per-subscriber or per-group. Per-group would point at
-   group bookkeeping never released; per-subscriber at per-session state. Either makes a precise
-   report; the current data alone is a symptom.
-3. **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping).
-4. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
+**`--cache-capacity` does not bound it** — answered 2026-08-10. At a 32 MiB cap the relay still grew
++27.15 MB/h and ran to more than twice the cap above baseline with no inflection, so the growth sits
+outside the accounted cache pool. This is a leak, not a tuning question. Remaining, in priority order:
+
+1. **Per-subscriber or per-group?** `nsweep.sh` (N = 0/1/2/4/8, 90 min each, launched 22:06 UTC) with
+   `/metrics` scraping so kB-per-group is measured rather than inferred. Rate ∝ N points at session
+   state and a teardown fix; rate flat in N points at per-group bookkeeping never released. This is
+   the last thing needed before an upstream report — the current data is a clean symptom but does not
+   localise the cause, and would invite "set a cache bound" as a reply.
+2. **Then report it.** Include: both builds, all three cache settings, the N-shape, kB-per-group, the
+   N = 0 flat control, and the fact that memory is not returned when subscribers leave. Follow the
+   #2729 pattern — a reproducer script and a located mechanism, not just a curve.
+3. **`--cache-duration` as a mitigation check.** Not expected to bind either (it bounds retained
+   history, which is not what is growing), but worth one leg so the report can say both documented
+   knobs were tried.
+4. **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping).
+5. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
 
 ### Evidence checklist for the audio-resync upstream report

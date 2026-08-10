@@ -310,21 +310,27 @@ appeared flat for 26 hours simply carried a lighter load. With no subscriber att
 flat, so what grows tracks *served load* rather than uptime, and it is not returned when the
 subscribers leave.
 
-Two things sharpen this into a practical concern rather than a curiosity. First, the growth is far too
-small to be cached media — the relay retains roughly 0.6 % of the bytes it carries, where retained
-history would be three orders of magnitude larger — which suggests per-group bookkeeping that is never
-released rather than a cache filling as designed. Second, the relay's documented memory controls may
-not bind it: `--cache-capacity` is specified as a soft target that counts *payload* bytes, so if the
-growth is not payload, capping payload will not stop it. A test at a cache bound small enough to
-engage is running to settle that.
+Two things sharpen this into a practical concern rather than a curiosity, and both are now measured
+rather than suspected. First, the growth is far too small to be cached media: the relay retains
+roughly 0.6 % of the bytes it carries, where retained history would be three orders of magnitude
+larger. Second, and decisively, **the relay's documented memory bound does not stop it.** Re-run with
+the group cache capped at 32 MiB — a bound small enough that it must engage within the hour — the
+relay ran to more than twice that cap above its baseline at the same ~27 MB/hour, with no change of
+slope at the point where the cap should have taken hold. `--cache-capacity` can only evict memory the
+cache pool accounts for, and whatever is growing here is not accounted there.
+
+That moves this from a tuning question to a defect. Across two consecutive releases and three cache
+settings the answer is the same ~27 MB/hour, and the one control an operator is told to reach for has
+no effect on it.
 
 The severe historical defect is genuinely gone — an older release grew ~21 MB/hour *with no
 subscribers at all* to an out-of-memory kill after six days, and neither current build reproduces that
 idle behaviour. But it would be wrong to read that as long-run relay memory stability. What replaces
-it is a smaller, load-dependent growth that is nonetheless larger in absolute terms under real
-subscriber load, and whose mitigation is not yet confirmed. **Until it is, a production relay needs
-explicit memory bounds, supervision that restarts on an RSS trend, and headroom sized for at least a
-day of growth per relay.**
+it is a load-dependent growth that is larger in absolute terms under real subscriber load, and that
+the documented cache bound does not contain. **Until there is a fix, a production relay needs
+supervision that restarts on a memory trend, headroom sized for at least a day of growth, and a
+planned drain-and-restart cycle — cache tuning alone is not a mitigation.** This is being
+characterised for an upstream report rather than left as a deployment workaround.
 
 **Bounding the relay cache is free.** With `--cache-capacity` set, CPU was identical and RSS differed
 by under 1.5 MB, because a healthy working set sits far below any sensible bound. The cache is
