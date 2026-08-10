@@ -104,7 +104,18 @@ it a `SUBSCRIBE_NAMESPACE`.** Its own relay does exactly that, so the chain comp
 MOQT relay does — in MOQT a publisher is expected to announce proactively on connect, and a relay has
 no reason to interrogate a session that has claimed nothing. So `moq import ts` connects, negotiates,
 and then **encodes not one control message for the rest of its life**, which is precisely what the logs
-show against imquic, moqx and Cloudflare:
+show against imquic, moqx and Cloudflare.
+
+Two checks were run before reporting this, because both were assumptions worth breaking:
+
+- **Is it downstream demand propagating?** No. With **no subscriber connected at all**, `moq-relay`
+  still sends `SUBSCRIBE_NAMESPACE` and the publisher still announces (3 protocol lines, same order).
+  The relay interrogates every publisher session unconditionally, so the announce is gated purely on
+  being asked.
+- **Is the silence a logging artefact?** No. With `RUST_LOG=moq_net=trace` the publisher log against
+  imquic contains exactly one `moq_net::client` line, while the *subscriber* in the same run logs
+  `moq_net::ietf::message` and `moq_net::ietf::subscriber` normally. Same environment, same process
+  tree — the publisher genuinely emits nothing.
 
 | Relay | Publisher control messages sent | Subscriber |
 |---|---|---|
@@ -206,6 +217,12 @@ argument for the media-level profile proposed in #32.
 - [x] Local and public `moq-dev` validation
 - [x] Sweep across all registered public relays
 - [x] Proposal posted to [#32](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-5239364972)
+- [x] Root cause reported upstream as [moq-dev/moq#2730](https://github.com/moq-dev/moq/issues/2730),
+      framed as an interop hazard rather than a bug since the behaviour is conformant
+- [x] Findings posted back to [#32](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-5240521275),
+      including two harness-level suggestions: a control-plane test for zero-field
+      `SUBSCRIBE_NAMESPACE` handling (data for moq-wg#1457), and recording the transport actually used
+      alongside the negotiated draft
 - [x] Isolate the cross-implementation failure — empty-prefix `SUBSCRIBE_NAMESPACE`, confirmed by a
       same-relay version A/B
 - [ ] Establish whether an empty `SUBSCRIBE_NAMESPACE` prefix is legal in draft-14, then report to
