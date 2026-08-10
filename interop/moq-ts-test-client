@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# moq-ts-test-client - media-level interop test client for moq-interop-runner.
+#
+# Conforms to docs/TEST-CLIENT-INTERFACE.md: RELAY_URL/TESTCASE/TLS_DISABLE_VERIFY/VERBOSE,
+# TAP version 14 on stdout, exit 0 pass / 1 fail / 127 unsupported.
+#
+# Drives both the publisher and subscriber roles against one relay, as `announce-subscribe`
+# already does. A synthetic MPEG-TS fixture goes in one side and is validated coming out the
+# other, using continuity counters and PSI as the oracle so no player or decoder is needed.
+set -uo pipefail
+
+VERSION=0.1.0
+HERE=$(cd "$(dirname "$0")" && pwd)
+MOQ=${MOQ:-$(command -v moq || true)}
+FIXTURE=${FIXTURE:-$HERE/fixture.ts}
+WORKDIR=${WORKDIR:-$(mktemp -d)}
+
+RELAY_URL=${RELAY_URL:-https://localhost:4443}
+TESTCASE=${TESTCASE:-}
+TLS_DISABLE_VERIFY=${TLS_DISABLE_VERIFY:-}
+VERBOSE=${VERBOSE:-}
+FINGERPRINT=${MOQ_TLS_FINGERPRINT:-}
+QUIC_GSO=${MOQ_QUIC_GSO:-false}   # GSO stalls on macOS loopback; harmless to disable elsewhere
+
+ALL_TESTS="ts-carriage-integrity ts-late-subscriber"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -r|--relay) RELAY_URL=$2; shift 2 ;;
+    -t|--test) TESTCASE=$2; shift 2 ;;
+    -l|--list) echo "$ALL_TESTS" | tr ' ' '\n'; exit 0 ;;
+    -v|--verbose) VERBOSE=1; shift ;;
+    --tls-disable-verify) TLS_DISABLE_VERIFY=1; shift ;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+log() { [ -n "$VERBOSE" ] && echo "# $*" >&2; return 0; }
+die_unsupported() { echo "Bail out! $1"; exit 127; }
+# BSD date has no %N, so shell out for millisecond resolution rather than guess.
+now_ms() { python3 -c 'import time;print(int(time.time()*1000))'; }
+
+[ -n "$MOQ" ] && [ -x "$MOQ" ] || die_unsupported "moq binary not found (set MOQ=/path/to/moq)"
+command -v tsp >/dev/null || die_unsupported "tsp (TSDuck) not found"
+[ -s "$FIXTURE" ] || die_unsupported "fixture not found at $FIXTURE (run make-fixture.sh)"
+
+TESTS=${TESTCASE:-$ALL_TESTS}
+for t in $TESTS; do
+  case " $ALL_TESTS " in *" $t "*) ;; *) die_unsupported "unsupported test: $t" ;; esac
+done
+
+# --- moq client arguments shared by both roles ---------------------------------------------------
+moq_args=(--client-connect "$RELAY_URL" "--client-quic-gso=$QUIC_GSO")
+[ -n "$TLS_DISABLE_VERIFY" ] && moq_args+=(--client-tls-disable-verify)
+[ -n "$FINGERPRINT" ] && moq_args+=(--client-tls-fingerprint "$FINGERPRINT")
+
+# setsid isolates the publisher pipeline into its own process group so it can be torn down whole.
+# It is a util-linux tool and absent on macOS, where killing the child process group is enough.
+SETSID=$(command -v setsid || true)
+
+PIDS=()
+cleanup() { for p in ${PIDS[@]+"${PIDS[@]}"}; do kill -9 "$p" 2>/dev/null; done; }
+trap cleanup EXIT INT TERM
+
+start_subscriber() { # <broadcast> <outfile>
+  "$MOQ" "${moq_args[@]}" --broadcast "$1" export ts >"$2" 2>"$WORKDIR/sub.err" &
+  PIDS+=($!); echo $!
+}
+
+start_publisher() { # <broadcast>
+  # tsp regulate --pcr-synchronous paces the file to its own PCR, i.e. as a live source would
+  # arrive. Feeding the file unpaced would test a burst, not a stream.
+  local quoted; quoted=$(printf '%q ' "${moq_args[@]}")
+  $SETSID bash -c "tsp -I file $(printf '%q' "$FIXTURE") -P regulate --pcr-synchronous -O file - \
+    | $(printf '%q' "$MOQ") $quoted --broadcast $(printf '%q' "$1") import ts" \
+    >"$WORKDIR/pub.log" 2>&1 &
+  PIDS+=($!); echo $!
+}
+
+stop() { # <pid>
+  pkill -9 -P "$1" 2>/dev/null
+  kill -9 "$1" 2>/dev/null
+  wait "$1" 2>/dev/null
+}
+
+# Emit TAP subtests plus a YAML diagnostic block from validate-ts.sh output.
+emit_result() { # <n> <name> <validator-output> <duration_ms> <extra-yaml>
+  local n=$1 name=$2 out=$3 ms=$4 extra=${5:-}
+  local status; status=$(echo "$out" | grep '^RESULT ' | awk '{print $2}')
+  echo "    1..$(echo "$out" | grep -c '^CHECK ')"
+  local i=0
+  while read -r _ cname cstatus cdetail; do
+    i=$((i + 1))
+    case "$cstatus" in
+      pass) echo "    ok $i - $cname ($cdetail)" ;;
+      info) echo "    ok $i - $cname # SKIP $cdetail" ;;
+      *)    echo "    not ok $i - $cname ($cdetail)" ;;
+    esac
+  done < <(echo "$out" | grep '^CHECK ')
+  if [ "$status" = pass ]; then echo "ok $n - $name"; else echo "not ok $n - $name"; fi
+  echo "  ---"
+  echo "  duration_ms: $ms"
+  [ -n "$extra" ] && echo "$extra"
+  echo "  ..."
+  [ "$status" = pass ] || return 1
+  return 0
+}
+
+# --- test: ts-carriage-integrity ------------------------------------------------------------
+# A subscriber present for the whole broadcast should receive a transport stream that is
+# structurally whole: continuity clean, PSI intact, same elementary streams as the source.
+run_ts_carriage_integrity() {
+  local bcast="interop-ts-$RANDOM$RANDOM.hang" out="$WORKDIR/carriage.ts"
+  local t0; t0=$(now_ms)
+  log "carriage: broadcast=$bcast"
+
+  # Subscriber first: the catalog is published once tracks resolve, so a subscriber that joins
+  # after the publisher can miss the beginning.
+  local sub; sub=$(start_subscriber "$bcast" "$out")
+  sleep 2
+  local pub; pub=$(start_publisher "$bcast")
+
+  local waited=0
+  while kill -0 "$pub" 2>/dev/null && [ "$waited" -lt "$((FIXTURE_SECONDS + 15))" ]; do
+    sleep 1; waited=$((waited + 1))
+  done
+  sleep 3
+  stop "$pub"; stop "$sub"
+
+  local t1; t1=$(now_ms)
+  local v; v=$("$HERE/validate-ts.sh" "$out" --reference "$FIXTURE" 2>&1)
+  [ -n "$VERBOSE" ] && echo "$v" | sed 's/^/# /' >&2
+  emit_result "$1" ts-carriage-integrity "$v" "$((t1 - t0))" \
+"  publisher_broadcast: $bcast
+  received_bytes: $(wc -c <"$out" | tr -d ' ')"
+}
+
+# --- test: ts-late-subscriber ---------------------------------------------------------------
+# A subscriber joining mid-broadcast should get a stream that is independently decodable from the
+# join point: continuity clean from the join, PSI present without waiting for a new session.
+run_ts_late_subscriber() {
+  local bcast="interop-ts-late-$RANDOM$RANDOM.hang" out="$WORKDIR/late.ts"
+  local t0; t0=$(now_ms)
+  log "late: broadcast=$bcast"
+
+  local pub; pub=$(start_publisher "$bcast")
+  sleep "$LATE_JOIN_SECONDS"
+  local sub; sub=$(start_subscriber "$bcast" "$out")
+
+  local waited=0
+  while kill -0 "$pub" 2>/dev/null && [ "$waited" -lt "$((FIXTURE_SECONDS + 15))" ]; do
+    sleep 1; waited=$((waited + 1))
+  done
+  sleep 3
+  stop "$pub"; stop "$sub"
+
+  local t1; t1=$(now_ms)
+  # No --reference: a late joiner is not expected to receive the whole fixture, so stream
+  # inventory is compared only for presence, not for completeness.
+  local v; v=$("$HERE/validate-ts.sh" "$out" 2>&1)
+  [ -n "$VERBOSE" ] && echo "$v" | sed 's/^/# /' >&2
+  emit_result "$1" ts-late-subscriber "$v" "$((t1 - t0))" \
+"  publisher_broadcast: $bcast
+  join_after_s: $LATE_JOIN_SECONDS
+  received_bytes: $(wc -c <"$out" | tr -d ' ')"
+}
+
+# --- run -----------------------------------------------------------------------------------------
+FIXTURE_SECONDS=${FIXTURE_SECONDS:-$(tsp -I file "$FIXTURE" -P analyze --normalized -O drop 2>/dev/null \
+  | grep '^ts:' | tr ':' '\n' | grep '^duration=' | cut -d= -f2 | cut -d. -f1)}
+FIXTURE_SECONDS=${FIXTURE_SECONDS:-20}
+LATE_JOIN_SECONDS=${LATE_JOIN_SECONDS:-8}
+
+echo "TAP version 14"
+echo "# moq-ts-test-client v$VERSION"
+echo "# Relay: $RELAY_URL"
+echo "# Fixture: $(basename "$FIXTURE") ($(wc -c <"$FIXTURE" | tr -d ' ') bytes, ${FIXTURE_SECONDS}s)"
+echo "# moq: $("$MOQ" --version 2>/dev/null | head -1)"
+echo "1..$(echo "$TESTS" | wc -w | tr -d ' ')"
+
+rc=0
+n=0
+for t in $TESTS; do
+  n=$((n + 1))
+  case "$t" in
+    ts-carriage-integrity) run_ts_carriage_integrity "$n" || rc=1 ;;
+    ts-late-subscriber)    run_ts_late_subscriber "$n" || rc=1 ;;
+  esac
+done
+
+exit "$rc"

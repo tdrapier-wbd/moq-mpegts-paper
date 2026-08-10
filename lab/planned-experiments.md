@@ -159,6 +159,21 @@ Three other MoQ implementations now matter to this project
 is a load-bearing assumption that has only ever been tested against `moq-dev` peers. Three experiments,
 in ascending cost:
 
+> **First results, 2026-08-10 — see [test-11-interop](test-11-interop.md).** A harness-shaped test
+> client now exists (`interop/`), and T11a has been partly run: a TS round trip is continuity-clean
+> through `moq-dev` locally and through the public `cdn.moq.dev` relay, and returns **no data** through
+> all eight other registered public relays. Root cause isolated for the five that establish a session:
+> **`moq-dev`'s IETF publisher withholds `PUBLISH_NAMESPACE` until the peer sends it a
+> `SUBSCRIBE_NAMESPACE`.** Its own relay does that; no third-party MOQT relay does, because in MOQT a
+> publisher announces proactively — so `moq import ts` connects and then encodes not one control
+> message. A second issue sits behind it: discovery uses an *empty* `SUBSCRIBE_NAMESPACE` prefix, which
+> moxygen rejects (error 16) and the others silently ignore. Forcing `--client-version
+> moq-transport-14` against a local relay passes cleanly, so the IETF path carries media fine. **This
+> settles the preannounce/demand-driven question flagged in T11b below: `moq-dev` is firmly
+> demand-driven.** quiche-moq, libquicr and moqtail fail earlier at connection/SETUP, undiagnosed. The
+> Cloudflare leg still needs a provisioned scope and tokens; the anonymous attempt was expected to fail
+> and did.
+
 **T11a — `moq-dev` client against a Cloudflare relay.** *Runnable now.* Cloudflare's managed relays
 are provisioned by API and free during the beta; they serve MOQT drafts 14 and 16, and `moq-dev`
 offers 14–19 by ALPN, so negotiation should succeed. Provision a relay, obtain publish and subscribe
