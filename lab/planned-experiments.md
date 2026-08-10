@@ -91,16 +91,23 @@ fan-out knee is the 2-core host saturating rather than the relay, wire overhead 
 TS rate, and `--cache-capacity` is free.
 
 **The second soak (2026-08-09) passed the publisher and subscriber roles** (+0.03 and +0.15 MB/h) and
-**re-opened the relay**: on 0.14.9 under a heavier session load it climbed 106 → 226 MB, decaying to
-+1.57 MB/h rather than to zero, and did not release when the sessions left. Still outstanding, in
-priority order:
+**re-opened the relay**. The controlled A/B (2026-08-10) then settled the build question: **both 0.14.8
+and 0.14.9 grow linearly at ~27 MB/h under four steady subscribers**, no decay, ~650 MB/day. Not a
+regression; soak #1's flat 26 h was its lighter workload. The relay **fails** the stability criterion.
+Still outstanding, in priority order:
 
-1. **Separate "0.14.9 regression" from "working set that ratchets with served load"** — `relay_ab.sh`
-   holds the workload fixed and varies only the binary. If both builds climb, characterise the ratchet
-   (retained memory per served session at fixed N, then N=8/16) and re-run with `--cache-capacity` to
-   see whether the governor bounds it. If only 0.14.9 climbs, it is an upstream report.
-2. **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping).
-3. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
+1. **Does any documented cache knob bound it?** The 256 MiB capacity leg was inconclusive — the budget
+   counts payload bytes and never filled. `relay_cap2.sh` at 32 MiB is the decisive capacity test. If
+   capacity does not bind it, test **`--cache-duration`** (the age ceiling, which clamps the
+   publisher's advertised retention window) — and note the arithmetic says the growth is ~0.6 % of
+   carried bytes, i.e. bookkeeping rather than payload, so a payload-counting cap plausibly will not
+   bind it.
+2. **Characterise it for an upstream report.** Retained memory per served session at fixed N, then
+   N = 1/2/4/8 to establish whether the rate is per-subscriber or per-group. Per-group would point at
+   group bookkeeping never released; per-subscriber at per-session state. Either makes a precise
+   report; the current data alone is a symptom.
+3. **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping).
+4. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
 
 ### Evidence checklist for the audio-resync upstream report

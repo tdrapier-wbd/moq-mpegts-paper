@@ -296,25 +296,35 @@ framing costs a few percent, so MoQ consumes materially more bandwidth for the s
 precisely the line most likely to dominate a cost comparison
 ([economics](economics.md) §3.1).
 
-**Publishers and subscribers are stable over a day and a half; the relay is not yet settled.** Two
-26.5-hour soaks were run. The publisher and subscriber processes held memory flat (+0.03 and
-+0.15 MB/hour, against run-to-run noise several times larger), with descriptors unchanged and no
-restarts — those roles pass. The relay is the open one. On one build and workload it held memory
-perfectly flat for 26 hours, including four hours of subscribers joining and leaving every two
-minutes. On a newer build carrying more concurrent sessions it climbed from 106 to 226 MB, at a rate
-that decayed steadily but settled at roughly 1.5 MB/hour rather than zero, and it did not hand the
-memory back when those sessions left. With no subscriber attached it is flat, so whatever grows tracks
-*served load*, not uptime. A controlled comparison holding the workload fixed and varying only the
-build is running to separate a regression from a working set that ratchets upward with each session
-served.
+**Publishers and subscribers are stable over a day and a half. The relay is not, under sustained
+subscriber load.** Two 26.5-hour soaks plus a controlled build comparison were run. The publisher and
+subscriber processes held memory flat (+0.03 and +0.15 MB/hour, against run-to-run noise several times
+larger), with descriptors unchanged and no restarts — those roles pass.
 
-The distinction matters commercially, so it is worth being precise about what is and is not
-established. The severe historical defect is gone: an older release grew ~21 MB/hour to an
-out-of-memory kill after six days, and neither current build reproduces anything like it. What remains
-is an order of magnitude smaller and may yet prove to be normal cache behaviour. But at ~1.5 MB/hour
-an unbounded relay would still exhaust a small host over a few months, which is precisely the regime
-where **bounding the cache stops being hygiene and becomes the mitigation** — and it is measured free
-(below). Long-run relay memory stability is therefore *not yet* something this evidence base asserts.
+The relay does not. Holding the workload fixed — one publisher, four steady subscribers, a private
+relay with no prior history — and varying only the binary, two consecutive releases both grew
+**linearly at about 27 MB/hour, with no decay across two and a half hours**. Five successive
+half-hourly windows on the older build read between +25 and +28 MB/hour. That is roughly 650 MB a day,
+and it is not a regression in the newer build: the two agree to within 2 %. An earlier soak that
+appeared flat for 26 hours simply carried a lighter load. With no subscriber attached the relay is
+flat, so what grows tracks *served load* rather than uptime, and it is not returned when the
+subscribers leave.
+
+Two things sharpen this into a practical concern rather than a curiosity. First, the growth is far too
+small to be cached media — the relay retains roughly 0.6 % of the bytes it carries, where retained
+history would be three orders of magnitude larger — which suggests per-group bookkeeping that is never
+released rather than a cache filling as designed. Second, the relay's documented memory controls may
+not bind it: `--cache-capacity` is specified as a soft target that counts *payload* bytes, so if the
+growth is not payload, capping payload will not stop it. A test at a cache bound small enough to
+engage is running to settle that.
+
+The severe historical defect is genuinely gone — an older release grew ~21 MB/hour *with no
+subscribers at all* to an out-of-memory kill after six days, and neither current build reproduces that
+idle behaviour. But it would be wrong to read that as long-run relay memory stability. What replaces
+it is a smaller, load-dependent growth that is nonetheless larger in absolute terms under real
+subscriber load, and whose mitigation is not yet confirmed. **Until it is, a production relay needs
+explicit memory bounds, supervision that restarts on an RSS trend, and headroom sized for at least a
+day of growth per relay.**
 
 **Bounding the relay cache is free.** With `--cache-capacity` set, CPU was identical and RSS differed
 by under 1.5 MB, because a healthy working set sits far below any sensible bound. The cache is

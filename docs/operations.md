@@ -85,12 +85,23 @@ The platform must be observable in two languages simultaneously
   threshold) alongside CPU pinned at a whole-core multiple.
 - **Bound relay memory explicitly.** `moq-relay`'s group cache is **unbounded by
   default**; only each track's own retention window (5 s by default) limits it.
-  Set `--cache-capacity` (or `--cache-headroom` for the governor that yields memory
-  back to the system) on every deployed relay rather than relying on the default.
-  This is measured to cost nothing — identical CPU, resident memory within 1.5 MB —
-  so it is insurance rather than a trade-off. Given the slow load-dependent growth
-  measured on current builds, treat it as **required configuration, not a
-  nice-to-have** ([lab T9](../lab/test-9-performance.md)).
+  With no flags set, the group cache pool is unbounded *and* has no age ceiling: the
+  only thing bounding relay memory is each publisher's own advertised retention
+  window, which is not the operator's to control. Three knobs exist and they are not
+  interchangeable. `--cache-capacity` is a soft target that counts **payload bytes,
+  not process memory**. `--cache-headroom` runs a governor that yields memory back
+  when the system needs it. `--cache-duration` caps how long non-latest groups are
+  retained and *clamps down* a publisher asking for more — for a live broadcast relay
+  this is usually the right one, because primary distribution wants the live edge and
+  never wants history. Set an explicit bound on every deployed relay; it is measured
+  to cost nothing (identical CPU, resident memory within 1.5 MB).
+
+  **Do not assume a cache bound is sufficient on its own.** Current builds grow
+  roughly 27 MB/hour under four sustained subscribers, and the growth is far too
+  small to be cached payload — so a payload-counting cap may not bind it. Until that
+  is settled, size relay hosts for at least a day of growth, alarm on the RSS trend,
+  and treat a scheduled drain-and-restart as a legitimate control
+  ([lab T9](../lab/test-9-performance.md)).
 
 ## 4. Runbooks
 

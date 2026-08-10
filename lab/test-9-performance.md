@@ -2,13 +2,15 @@
 
 **Pyramid (§6):** operational envelope. **Gate (§7):** feeds [operations](../docs/operations.md) and
 [economics](../docs/economics.md) §3.1 and §8 (not a fidelity/resilience gate). **State:** two ≥ 24 h
-soaks run (2026-08-10). The **publisher and subscriber roles pass** (+0.03 and +0.15 MB/h). The
-**relay is now the open question rather than the settled one**: it held 102.1 MB flat for 26 h on
-0.14.8 under a lighter load, but climbed 106 → 226 MB on 0.14.9 under a heavier one, decaying to
-+1.57 MB/h but not to zero, and did not release when sessions left. A controlled build A/B is running
-to separate "0.14.9 regression" from "working set that ratchets with served load". The 0.13.7
-OOM-kill leak remains not reproduced on either build. The fan-out envelope, bitrate sweep,
-bounded-cache control and protocol overhead are all measured on Linux.
+soaks plus a controlled build A/B run (2026-08-10). The **publisher and subscriber roles pass**
+(+0.03 and +0.15 MB/h). The **relay fails the stability criterion under sustained subscriber load**:
+holding the workload fixed and varying only the binary, both 0.14.8 and 0.14.9 grow **linearly at
+~27 MB/h with four subscribers**, with no decay across 2.5 h — about 650 MB/day. It is therefore not a
+0.14.9 regression, and soak #1's flat 26 h was a property of its lighter workload. With **no**
+subscriber attached the relay is flat, so the growth tracks served load. Whether the documented cache
+knobs bound it is the live question: a 256 MiB capacity leg grew at the same rate but never filled its
+budget, so a decisive 32 MiB leg is running. The 0.13.7 no-subscriber OOM leak remains a separate,
+fixed defect. Fan-out envelope, bitrate sweep and protocol overhead are all measured on Linux.
 
 ## Objective
 
@@ -340,9 +342,13 @@ Three details worth reading past the headline:
   window is 5 s per track should behave exactly like this.
 - **fds and threads never moved** — 11 and 3 for 26.5 h across every phase, including the churn.
 
-**This closes the leak question.** The 0.13.7 behaviour is a fixed historical defect, not a live risk,
-and there is nothing to report upstream. The operational advice to bound the cache explicitly still
-stands, but as cheap insurance (it is measured free, above) rather than as mitigation for a known bug.
+**This closes the *0.13.7* leak question, and nothing wider.** The specific 0.13.7 behaviour — ~21 MB/h
+with **no subscribers at all**, ending in an OOM kill after six days — is a fixed historical defect and
+does not reproduce. *(Superseded in scope by the A/B below: the conclusion drawn here at the time —
+that there was nothing to report upstream and that bounding the cache was merely cheap insurance —
+did not survive a heavier workload. This run's 3 subscribers with churn were not enough load to
+surface the ~27 MB/h growth that four steady subscribers produce. The flat result is real; the
+generalisation from it was wrong.)*
 
 **What this run does *not* establish is the publisher role**, for the reason recorded below: its
 publishers restarted every ~10 minutes at the clip wrap, so the publisher column contains gaps and no
@@ -483,6 +489,11 @@ But the decay **does not reach zero**: the last three and a half hours still add
 annualises to about 13.8 GB and would exhaust this 3.8 GB box in roughly three months. That is not
 dismissible as settling.
 
+> **Read the A/B section below before drawing conclusions from this curve.** Under a controlled
+> workload the growth is *linear at ~27 MB/h on both builds*, so the deceleration seen here is a
+> property of this particular run — a long-lived standing relay carrying a mix of subscribed and
+> unsubscribed broadcasts — and not the general shape.
+
 Two further observations sharpen it, and they pull in opposite directions:
 
 - **It did not release.** When the soak's publisher and two subscribers exited, relay RSS went 226 →
@@ -494,19 +505,61 @@ Two further observations sharpen it, and they pull in opposite directions:
   something subscribes, so this says the growth tracks *served* load rather than uptime — consistent
   with either a working set that ratchets up per served session, or a slow leak charged to serving.
 
-**Why this is not yet a verdict, and what would make it one.** The comparison that suggests a
-regression is soak #1 (0.14.8) holding **102.1 MB flat for 26 h** against soak #2 (0.14.9) climbing to
-226 MB. But the two runs differ in *three* ways at once — build, one extra broadcast, and two extra
-steady subscribers — so the build is only one candidate. The fan-out data says an extra broadcast plus
-two sessions should cost roughly 40 MB, not 124 MB, which leaves an unexplained gap, but that
-arithmetic is from a different rig. `~/t9/relay_ab.sh` (launched 2026-08-10 09:03 UTC) resolves it by
-holding the workload fixed and varying only the binary: the same video-only publisher and four
-subscribers against a **private** relay — no standing-service history and no session churn from the
-looping publisher — for 2.5 h on 0.14.8 and then 2.5 h on 0.14.9, sampling every 30 s. If both builds
-climb, this is load-dependent working-set behaviour and soak #1 simply ran a lighter workload; if only
-0.14.9 climbs, it is a regression and reportable, with
-[#2718](https://github.com/moq-dev/moq/pull/2718) (announcement-cursor registration per relay peer,
-the one 0.14.9 change touching route/announce state) the first place to look.
+### Controlled A/B: not a regression, and linear (2026-08-10)
+
+`~/t9/relay_ab.sh` held the workload fixed and varied only the binary — the same video-only publisher
+and four steady subscribers against a **private** relay (no standing-service history, no session churn
+from the looping publisher), 2.5 h per build, sampled every 30 s. A third leg repeated it on 0.14.9
+with `--cache-capacity 256MiB`.
+
+| Leg | RSS over the run | Slope past 30 min warm-up |
+|---|---|---:|
+| 0.14.8, default cache | 34.1 → 101.5 MB (2.49 h) | **+27.14 MB/h** |
+| 0.14.9, default cache | 54.8 → 142.7 MB (2.49 h) | **+27.74 MB/h** |
+| 0.14.9, `--cache-capacity 256MiB` | 54.6 → 129.9 MB (1.78 h) | **+28.43 MB/h** |
+
+Three conclusions, in order of confidence.
+
+**It is not a 0.14.9 regression.** The two builds grow at the same rate to within 2 %, which is inside
+run-to-run noise. Soak #1's flat 102.1 MB was a property of its *workload*, not its build. One real
+build difference does show up, but in the baseline rather than the slope: both 0.14.9 legs start at
+~54.7 MB against 0.14.8's 34.1 MB, so 0.14.9 carries roughly 20 MB more fixed overhead.
+
+**The growth is linear, not a settling working set.** Five consecutive 30-minute windows on 0.14.8 read
++25.43, +27.05, +27.64, +26.80 and +28.13 MB/h — no decay whatsoever over 2.5 hours. That is a much
+cleaner signature than soak #2's decaying curve, and it retires the "working set converging" reading
+that the soak alone permitted. Extrapolated, +27 MB/h is 650 MB/day.
+
+**The 256 MiB cap leg proves less than it appears to, and this matters.** It grew at the same rate as
+uncapped — but RSS only reached 131 MB, and `--cache-capacity` counts *payload bytes*, not process
+RSS. A 256 MiB (268 MB) payload budget was nowhere near full, so the cap was never engaged. That leg
+cannot distinguish "the cap does not bind this" from "the cap was not reached". `~/t9/relay_cap2.sh`
+(queued 2026-08-10 15:55 UTC) repeats it at **32 MiB**, which must engage within about an hour at the
+measured rate. A plateau near base+cap means legitimate cache fill, bounded as documented; continued
+linear growth well past base+cap means the growth is not the group cache at all.
+
+### What the source says the knobs actually do
+
+Worth reading `rs/moq-relay/src/cache.rs` before drawing operational conclusions, because it changes
+the advice this project has been giving:
+
+- With no flags the pool is unbounded **and** the age ceiling is `Duration::MAX`. The only thing
+  bounding relay memory by default is *each track's own advertised retention window* — a property of
+  the publisher, not the relay.
+- `--cache-capacity` is explicitly "a target that usage converges toward as tracks write, **not a hard
+  limit**", and it counts payload bytes rather than RSS.
+- `--cache-duration` is the age ceiling, and it *clamps down* a publisher advertising a longer window.
+  For a live broadcast relay this is arguably the more appropriate knob than `capacity`: primary
+  distribution wants the live edge, not history, and bounding by age bounds the thing that actually
+  accumulates.
+
+**An arithmetic check that points away from the payload cache.** The source is 9.4 Mbps ≈ 4,230 MB/h
+of media. The relay grows at 27 MB/h, so it retains about **0.6 %** of what it carries. If this were
+history accumulating under an unbounded window, growth would be three orders of magnitude larger. At
+roughly one key-frame-aligned group per second, 27 MB/h works out at ~7.5 kB retained per group —
+which looks far more like per-group bookkeeping that is never released than like cached payload. If
+that is right, `--cache-capacity` will *not* bound it, because the pool only accounts payload. The
+32 MiB leg tests exactly this.
 
 **Representativeness limit of the publisher figure:** a video-only source exercises the import path
 without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than
