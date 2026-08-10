@@ -170,7 +170,182 @@ details (§5), not ingest concerns.
 | TR 101 290 P1/P2 to hardware IRD | — | Yes | **To be validated on real hardware** |
 | SCTE-35 / teletext / SDT preservation | Yes | Yes | Test-validated in file ([evidence](evidence.md) §4) |
 
-## 9. Testing and acceptance
+## 9. The implementation landscape
+
+Until mid-2026 this paper could treat "MPEG-TS over MoQ" as a single-implementation question. That
+is no longer true: there is now a dedicated MPEG-TS-over-MoQ effort with its own working-group
+format, a second independent publisher, and a production relay from a major CDN. That changes the
+argument from "can this be made to work?" to "which parts of it are converging, and where does an
+operator still have to choose?" This section maps the field. *Assessed from repositories, drafts and
+public documentation only — nothing here has been tested.* It crosses the scope line drawn in §1,
+because draft-version interop nominally belongs in [transport](transport.md), but an implementation
+is more useful assessed whole than split in two.
+
+### 9.1 A terminology note: "transparent", not "opaque"
+
+This paper has used **opaque lane** for carrying the transport stream through MoQ untouched. The
+MPEG-TS-over-MoQ work uses **transparent passthrough** for the same idea. Both names describe the
+same property from opposite ends: *opaque* says the transport cannot see into the payload,
+*transparent* says the payload arrives unaltered. The industry term is settling on **transparent**,
+and it is the better word — it names the guarantee the broadcaster is buying rather than the
+limitation the transport is accepting. This paper keeps "opaque lane" for continuity with the
+experiments and earlier sections, but the two are interchangeable and external material should be
+read accordingly.
+
+### 9.2 Who is building what
+
+| | `moq-dev` | `moq2ts` / `moqxr` | Cloudflare `moq-rs` | This project |
+|---|---|---|---|---|
+| Lane | media-aware (+ opaque prototype) | **transparent TS** | none — transport only | **transparent TS** + grooming |
+| Scope | publisher, relay, subscriber | **publisher only** | protocol library, **relay**, sample clients | publisher + egress + pacer |
+| Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
+| Format standing | no IETF draft | **adopted WG format** + individual draft | N/A | internal |
+| Wire versions | moq-lite 03–06, **MOQT 14–19** | MOQT 16, 18 (example: 14/17) | MOQT **14 and 16**, 18 in progress | inherits `moq-dev` |
+| Transport stack | Rust (quinn / quiche / noq) | C++20, picoquic/picotls | Rust | Rust |
+| Source failover | route reselection via `--origin` | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
+| Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
+
+Two structural facts fall out of that table and matter more than any individual feature.
+
+**No one else does the broadcast-specific layer.** `moq2ts` is publisher-only; Cloudflare is
+transport-and-relay only. Neither carries PCR-accurate egress, CBR grooming, TR 101 290 conformance
+or IRD-facing output. The layer this paper argues is the hard part remains unclaimed, which is
+evidence for the thesis rather than against it.
+
+**Transparent carriage is no longer a single-vendor idea.** With an adopted working-group format
+(MSF) and more than one implementer, the profile question in [transport](transport.md) §9 moves from
+"will anyone else do this?" to "will it be adopted widely enough?".
+
+### 9.3 `moq2ts` / `moqxr`: the transparent publisher
+
+Media object payloads are concatenations of whole 188-byte TS or 192-byte M2TS source packets with no
+private wrapper, sync-byte validated. It targets `draft-gregoire-moq-msfts` layered on
+[`draft-ietf-moq-msf-01`](https://datatracker.ietf.org/doc/draft-ietf-moq-msf/), the MOQT Streaming
+Format — an **adopted MoQ working-group document**. The catalog declares `packaging: "m2ts"` with
+TS-specific fields (packet size, packets per object, programme number, PMT/PCR PIDs, random-access
+flag) and carries PAT/PMT as Base64 initialisation data in source-packet form. Groups are key-frame
+aligned; SRT ingest drops oldest whole packets rather than stalling.
+
+Two choices stand out. It selects **one programme out of an MPTS**, keeping PAT, that programme's
+PMT, PCR PID and elementary PIDs while discarding other programmes **and null packets**. And it
+publishes a `.timeline` **side track** mapping media presentation time to Unix wall-clock
+milliseconds as `[mediaTimeMs, [groupId, objectId], wallclockMs]`, without modifying the TS payload.
+
+Compared with the two lanes this project has built:
+
+| | `moq-dev` media-aware | `moq2ts` transparent | This project's opaque lane |
+|---|---|---|---|
+| Unit of carriage | one track per elementary stream | whole TS packets in objects | whole TS packets in objects |
+| PSI/SI | reconstructed on export (#2440) | selected programme's PAT/PMT | preserved verbatim, incl. TDT/TOT |
+| Null packets / CBR stuffing | stripped | **stripped** | preserved |
+| Multi-programme TS | demuxed | **one programme only** | carried verbatim |
+| Wall-clock correlation | none in-band | `mediatimeline` side track | PCR/CBR restored downstream |
+
+The most useful correction to our own framing: **transparent does not automatically mean verbatim.**
+`moq2ts` strips nulls just as the media-aware lane does, so it also needs downstream re-pacing to
+restore CBR and cannot be assumed to hold a TR 101 290-conformant bitrate on its own. Being
+SPTS-out-of-MPTS, it does not answer the multi-programme question either. Where it is ahead of us is
+**standards posture**, and its side-track approach to wall clock is a cleaner answer to timing
+correlation than anything currently in this architecture.
+
+### 9.4 Cloudflare `moq-rs`, and the argument for a format-blind transport
+
+[`cloudflare/moq-rs`](https://github.com/cloudflare/moq-rs) is the IETF-aligned Rust implementation —
+originally Luke Curley's code, maintained as an IETF fork by Mike English, now by Cloudflare. It ships
+`moq-transport` (protocol library), `moq-relay-ietf` (production relay with subscription
+deduplication and caching), `moq-api` (origin discovery and relay coordination) and sample clients.
+Relays are **provisioned by API or dashboard** as isolated scopes with separately scoped publish and
+subscribe tokens, and the provisioning model is itself being standardised as an Internet-Draft so
+that several CDNs can share it — which is directly relevant to
+[control-plane](control-plane.md) and [entitlement](entitlement.md), where this paper has assumed
+such a mechanism would have to be built rather than adopted.
+
+The architecturally interesting point is what it deliberately omits. `moq-transport` is described as
+**media-agnostic**: it carries namespaces, tracks, groups and objects and has no catalog or container
+opinion at all. It does not implement `hang`. The argument for that separation, which this project
+should take seriously:
+
+- **Any streaming format can ride it** — MSF, MSFTS, CMSF, `hang`, or raw TS. The transport does not
+  have to be revised when a media format changes.
+- **The transport can standardise on its own timeline**, decoupled from format churn. Relays need not
+  be upgraded when catalogs evolve.
+- **Relays stay simple**, which is exactly what a transparent TS lane wants: a relay that cannot
+  misinterpret the payload cannot corrupt it.
+
+The counter-argument is equally real, and is presumably why a media-aware stack exists at all. A
+relay that understands the media can behave intelligently under pressure: prioritise tracks, drop
+non-key-frame groups first, evict cache by media semantics. MoQ's congestion response *is* dropping
+groups, so a format-blind relay thins less intelligently than an aware one. And an agnostic transport
+with N incompatible formats above it delivers no end-to-end interoperability at all — a single
+reference format is what makes an ecosystem work in practice.
+
+**Our position.** For primary distribution the split favours a format-blind relay with format-aware
+endpoints. Broadcast semantics — PCR, exact CBR, PSI/SI, TR 101 290 — cannot be expressed in a
+generic catalog anyway, so a relay's media awareness buys us little while its inability to alter the
+payload buys us a great deal. The cost is real and already recorded: we forgo relay-side graceful
+degradation, which [transport](transport.md) §9 lists as an open question for the opaque lane. That
+trade is the right way round for contribution-grade carriage and the wrong way round for consumer ABR
+— which is a reasonable summary of why both stacks exist.
+
+One further Cloudflare detail matters for [architecture](architecture.md) §14. Its relay documents
+that **if the publisher disconnects, subscribers receive an error and do not recover, even if a new
+publisher reuses the path**. There is no source takeover. The route reselection this project has been
+testing (`moq --origin`, bounded by the QUIC idle timeout) is a `moq-dev` capability, not a property
+of MoQ relays generally. Any 1+1 design that assumes relay-side source failover is therefore
+implementation-locked, which strengthens the case already made for **receiver-side dual-subscribe**
+as the primary redundancy mechanism.
+
+### 9.5 What can actually be tested, and when
+
+The `moq2ts` release is publisher-only, so the full test suite cannot be pointed at it yet — there is
+no subscriber to capture an egress from and no way to close the loop. Two things are testable now,
+and a third when they ship a subscriber.
+
+- **Now, and cheap: does a `moq-dev` client negotiate with a Cloudflare relay?** `moq-dev` offers
+  MOQT drafts 14–19 by ALPN; Cloudflare serves 14 and 16. If they negotiate, this project can carry
+  its own lane over a third-party production relay, which tests relay neutrality against real
+  infrastructure rather than a lab peer. Relays are free during the beta.
+- **Now: does a `moq2ts` broadcast traverse a `moq-dev` relay?** Publisher-only is sufficient for
+  this, since the question is whether the relay forwards objects whose catalog it cannot parse.
+  Confirming traversal without a subscriber requires observing the relay's forwarding behaviour
+  rather than decoding the output, which is a weaker but still meaningful result.
+- **When a `moq2ts` subscriber exists: run the full suite against it.** T1–T3 transparency, T7 timing
+  integrity and TR 101 290 conformance, measured on their implementation and contrasted with ours.
+  That is the comparison that would actually settle which lane preserves what, and it is worth
+  planning for now.
+
+The natural framework for the first two is the community
+[`moq-interop-runner`](https://github.com/englishm/moq-interop-runner), already referenced in this
+project's index. It currently exercises the protocol handshake only and deliberately stops short of
+media-layer concerns. Contributing a **broadcast profile** to it — TS carriage fidelity, PSI/SI
+survival, PCR integrity across a relay — would extend an existing shared harness rather than build a
+private one, and would give the transparent-TS profile a neutral conformance target. That is probably
+the single highest-leverage contribution this project could make to the wider ecosystem.
+
+### 9.6 Interoperability boundaries, as currently understood
+
+- **Transport versions overlap and are not the obstacle.** `moq-dev` 14–19, `moqxr` 16/18,
+  Cloudflare 14/16.
+- **Relays should be format-blind**, so cross-format traversal is expected to work. Cloudflare's is
+  explicitly media-agnostic; `moq-dev`'s routes without parsing catalogs.
+- **Endpoints will not interoperate across formats.** `moq export ts` reads `hang`, not MSF/MSFTS. A
+  subscriber must be built for the format it consumes; this is a format choice, not a defect.
+- **Relay behaviour diverges in ways that bite.** `moqxr`
+  [PR #21](https://github.com/mondain/moqxr/pull/21) reports relays splitting into two camps on track
+  preannounce: some accept an early `PUBLISH`, answer `PUBLISH_OK` and never forward a `SUBSCRIBE`
+  upstream, while others resolve the namespace only once a subscriber appears — where an early
+  `PUBLISH` can disturb namespace registration so that every later `SUBSCRIBE` is rejected. Cloudflare
+  is in the first camp (draft-16 `PUBLISH` is a headline feature); `moq-dev` is demand-driven and in
+  the second. `moqxr` resolved it by making preannounce opt-in and default-off. **Relay neutrality is
+  therefore a property to verify per relay, not to assume.**
+
+That same PR independently reproduces a finding of ours: a publisher with no subscriber attached dies
+at ~32 s to the default QUIC idle timeout, fixed with a 5 s keepalive. It matches the ~30 s bound
+measured here ([evidence](evidence.md) §7) from an entirely different stack, which is useful
+corroboration that the idle timeout is a first-order operational constraint rather than an artefact of
+one implementation.
+
+## 10. Testing and acceptance
 
 - **Round-trip fidelity.** Byte-level preservation of SDT/PMT/PIDs/SCTE-35/
   teletext/continuity across carriage ([evidence](evidence.md) §1).
@@ -182,7 +357,7 @@ details (§5), not ingest concerns.
 - **Redundancy.** Hitless ST 2022-7 switching at the egress under induced path
   failure ([evidence](evidence.md) §7 — precondition characterised; on-hardware pass outstanding).
 
-## 10. Open questions
+## 11. Open questions
 
 - Does groomed MoQ output pass TR 101 290 P1/P2 on the range of hardware IRDs in
   real use, not just one model? (The central open question of the whole thesis;
@@ -191,4 +366,10 @@ details (§5), not ingest concerns.
   entitlement differs per service — carry verbatim and filter at egress, or
   demux earlier?
 - What is the correct behaviour on source-side discontinuities and PID changes:
-  pass through transparently, or normalise, and at which layer?
+  pass through transparently, or normalise, and at which layer? (Partly answered
+  upstream today, and wrongly: an audio elementary stream losing frame sync aborts
+  the whole publisher, while video resynchronises — see
+  [lab T9](../lab/test-9-performance.md).)
+- Does a `moq2ts` MSFTS broadcast traverse a `moq-dev` relay (§9)? Relay neutrality
+  is a load-bearing assumption of this architecture and is currently untested
+  across implementations.

@@ -238,7 +238,7 @@ To move any conclusion here from "directional" to "established," the model needs
 - **A fully-loaded operational cost** for both sides to the same SLA
   ([operations](operations.md) §10).
 - **Third-party validation** of the reliability equivalence that the whole
-  comparison presupposes ([interoperability](interoperability.md) §9).
+  comparison presupposes ([interoperability](interoperability.md) §10).
 
 ## 9. Decision thresholds
 

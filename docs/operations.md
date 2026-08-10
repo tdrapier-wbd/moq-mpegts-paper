@@ -76,16 +76,21 @@ The platform must be observable in two languages simultaneously
   takeover livelock that pinned every worker thread inside one poll, leaving the
   process alive at 100 % CPU with no logs, no health endpoint and no accepts for
   hours ([#2701](https://github.com/moq-dev/moq/pull/2701), triggered by cluster
-  peer churn); and unbounded memory growth ending in an OOM kill. Neither is caught
-  by a liveness check that only asks whether the process exists. Probe the relay the
-  way a client would — complete a session and read a byte — and alarm on **RSS
-  trend** (a steady climb over hours, not just a threshold) alongside CPU pinned at
-  a whole-core multiple.
+  peer churn); and unbounded memory growth ending in an OOM kill. The severe form of
+  the memory failure belonged to an older release, but current builds still show slow
+  load-dependent growth under measurement, so this is a live concern rather than a
+  historical one. Neither mode is caught by a liveness check that only asks whether
+  the process exists. Probe the relay the way a client would — complete a session and
+  read a byte — and alarm on **RSS trend** (a steady climb over hours, not just a
+  threshold) alongside CPU pinned at a whole-core multiple.
 - **Bound relay memory explicitly.** `moq-relay`'s group cache is **unbounded by
   default**; only each track's own retention window (5 s by default) limits it.
   Set `--cache-capacity` (or `--cache-headroom` for the governor that yields memory
-  back to the system) on every deployed relay rather than relying on the default
-  ([lab T9](../lab/test-9-performance.md)).
+  back to the system) on every deployed relay rather than relying on the default.
+  This is measured to cost nothing — identical CPU, resident memory within 1.5 MB —
+  so it is insurance rather than a trade-off. Given the slow load-dependent growth
+  measured on current builds, treat it as **required configuration, not a
+  nice-to-have** ([lab T9](../lab/test-9-performance.md)).
 
 ## 4. Runbooks
 

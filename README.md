@@ -134,16 +134,34 @@ LinkedIn: https://www.linkedin.com/in/tdrapier/
 
 ## References
 
-- MOQ-dev implementation: https://github.com/moq-dev/moq
-- MPEG-TS VBR to CBR Pacer : https://github.com/tdrapier-wbd/mpegts-pacer
-- OpenMOQ: https://openmoq.org/
+A comparison of the implementations below — what each covers, where they
+interoperate, and where they do not — is in
+[Interoperability](docs/interoperability.md) §9.
+
+**Implementations**
+
+- MOQ-dev (media-aware lane; publisher, relay, subscriber): https://github.com/moq-dev/moq
+- Cloudflare `moq-rs` (IETF-aligned transport library + production relay, media-agnostic): https://github.com/cloudflare/moq-rs
+- Cloudflare MoQ relay service and provisioning API: https://developers.cloudflare.com/moq/
+- `moq2ts` (transparent MPEG-TS publisher): https://github.com/mondain/moq2ts
+- `moqxr` / OpenMOQ Publisher (the transport SDK beneath it): https://github.com/mondain/moqxr
+- MPEG-TS VBR to CBR Pacer: https://github.com/tdrapier-wbd/mpegts-pacer
+
+**Standards and formats**
+
 - IETF MOQ working group: https://datatracker.ietf.org/group/moq/about/
-- MOQ Transport IETF working group working area https://github.com/moq-wg/moq-transport
-- MSFTS: https://github.com/mondain/msfts
+- MOQ Transport working area: https://github.com/moq-wg/moq-transport
+- MOQT Streaming Format (MSF), adopted WG draft: https://datatracker.ietf.org/doc/draft-ietf-moq-msf/
+- CMSF (CMAF profile of MSF): https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/
+- MSFTS (MPEG-TS profile): https://github.com/mondain/msfts
+- OpenMOQ: https://openmoq.org/
+
+**Testing and background**
+
+- MOQ Interop Runner: https://github.com/englishm/moq-interop-runner
 - MPEG-TS over MOQ: https://edis.mx/insights/mpeg-ts-over-moq.html
 - MPEG-TS over MOQ — PCR: https://edis.mx/insights/mpeg-ts-over-moq-pcr.html
 - MPEG-TS over MOQ — pacing: https://edis.mx/insights/mpeg-ts-over-moq-pacing.html
-- MOQ Interop Runner: https://github.com/englishm/moq-interop-runner
 
 ---
 

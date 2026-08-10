@@ -168,7 +168,7 @@ not touch the tested media layer or the grooming logic.
   publishing one worth the effort as a credibility artifact?
 - How is the hardware-IRD test matrix defined (which IRD models, which analyser
   settings) so that a P1/P2 pass is credible across the installed base rather than
-  on a single decoder ([interoperability](interoperability.md) §10)?
+  on a single decoder ([interoperability](interoperability.md) §11)?
 - Which parts of the grooming pipeline, if any, should be contributed upstream or
   open-sourced, versus kept private (the recurring open question from the
   [README](../README.md))?

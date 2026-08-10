@@ -73,22 +73,57 @@ correlated with the T5 reordering finding (a handover that also reorders is the 
 
 ## System performance & resource utilisation (T9)
 
-Now has its own file with the executed memory-stability work and the outstanding protocol —
-[test-9-performance.md](test-9-performance.md). **Status (2026-08-07):** the memory question is
-answered for two builds. The deployed `0.13.7` relay was **OOM-killed** after 6 d 18 h at a 3.2 GB
-peak, growing a linear **~21 MB/hour** (three independent measurements agree) with *zero* subscribers
-attached — so the 2026-08-06 "plateau" reading was wrong. Controlled probes on the **0.14.8** release
-do **not** reproduce it: publisher-only idle RSS is flat/declining over 15 min where the old rate
-predicts clear growth, and 40 churned sessions oscillate within a band rather than compounding.
+Now has its own file with the executed work and the outstanding protocol —
+[test-9-performance.md](test-9-performance.md). **Status (2026-08-08): the memory question is closed
+for the relay.** The 26.5 h soak completed with an RSS slope of **−0.63 MB/h** over its steady phase
+and **flat to sampling resolution** through 4 h of subscriber churn, no restarts, fds and threads
+unmoved — against a 0.13.7 rate that would have predicted +557 MB. The history: the deployed `0.13.7`
+relay was **OOM-killed** after 6 d 18 h at a 3.2 GB peak, growing a linear ~21 MB/hour with *zero*
+subscribers attached, and controlled probes on 0.14.8 did not reproduce it. The soak converts that
+"not reproduced" into "no leak", so nothing goes upstream.
 
-The **envelope work is now done on Linux** (EC2 moved to the 0.14.8/0.9.7 release binaries): fan-out
+The **envelope work is now done on Linux** (measured on the 0.14.8/0.9.7 release binaries; the box has
+since moved to 0.14.9/0.9.9): fan-out
 past N = 25 with CPU attributed per process, the 2/10/27 Mbps bitrate sweep, the bounded-cache
 control, and `tcpdump` protocol overhead. Headlines: relay cost tracks *session count* rather than
 bitrate (~1.1 Gbps per core at 10 Mbps, and cost per Mbps falling as bitrate rises), the observed
 fan-out knee is the 2-core host saturating rather than the relay, wire overhead is ~1.12x the source
-TS rate, and `--cache-capacity` is free. Still outstanding: the ≥ 24 h soak verdict (**running**, the
-one thing that converts "not reproduced" into "no leak"), a cross-machine fan-out to find the relay's
-own knee, overhead under loss versus SRT, and the groomer/pacer envelope.
+TS rate, and `--cache-capacity` is free.
+
+**The second soak (2026-08-09) passed the publisher and subscriber roles** (+0.03 and +0.15 MB/h) and
+**re-opened the relay**: on 0.14.9 under a heavier session load it climbed 106 → 226 MB, decaying to
++1.57 MB/h rather than to zero, and did not release when the sessions left. Still outstanding, in
+priority order:
+
+1. **Separate "0.14.9 regression" from "working set that ratchets with served load"** — `relay_ab.sh`
+   holds the workload fixed and varies only the binary. If both builds climb, characterise the ratchet
+   (retained memory per served session at fixed N, then N=8/16) and re-run with `--cache-capacity` to
+   see whether the governor bounds it. If only 0.14.9 climbs, it is an upstream report.
+2. **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping).
+3. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
+   groomer/pacer envelope.
+
+### Evidence checklist for the audio-resync upstream report
+
+The looped-source publisher crash is now localised: **any** audio elementary stream losing frame sync
+aborts `moq import` outright (MP2 and AC-3 both, one flipped bit is enough, no timeline discontinuity
+required), while the video path resynchronises through the same corruption. Root cause is a single
+propagating `?` in the legacy-audio PES loop, in a demuxer that already resyncs at the container layer
+and structurally in video. Draft issue in `docs/upstream/audio-resync-issue.local.md`. Remaining before
+posting:
+
+- [x] Deterministic minimal reproducer with no timeline jump (unit level, `moq-mux` 0.9.4).
+- [x] Root cause located and contrasted with the paths that do resync.
+- [x] Generality across codecs (MP2, AC-3; video-only survives).
+- [ ] End-to-end on real content: bit-flip one MP2 frame header mid-file (not a loop), capture the
+      exit, with a corrupted-video-NAL control on the same file.
+- [ ] Blast radius as measured: confirm video and SCTE-35 tracks die with the audio, and what the
+      subscriber sees.
+- [ ] Regression test in repo style asserting the *fixed* behaviour, ready to follow the issue.
+
+A rig consequence that constrains any future long publisher run: looping a normal broadcast TS cannot
+produce a long-lived publisher until this is fixed. A video-only remux is the workaround, at the cost
+of not exercising the audio, SCTE-35 or teletext paths.
 
 Per role (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope
 and its scaling, and prove stability over long runs. The priority dimension is a **hours→days soak**
@@ -114,6 +149,48 @@ one relay broadcast, recording relay CPU/RSS/fd at each N (the fan-out knee). Ov
 statistically ≈ 0 over the soak for every role; fd/socket/thread counts stable and return to baseline
 after join/leave and relay-reconnect churn; bounded CPU with headroom; per-core throughput and
 fan-out knee documented. Pair the soak with the T7 ≥ 24 h PLL-lock soak.
+
+---
+
+## Cross-implementation interop (T11 — new, 2026-08-10)
+
+Three other MoQ implementations now matter to this project
+([interoperability](../docs/interoperability.md) §9), and "a MoQ relay is a neutral transport fabric"
+is a load-bearing assumption that has only ever been tested against `moq-dev` peers. Three experiments,
+in ascending cost:
+
+**T11a — `moq-dev` client against a Cloudflare relay.** *Runnable now.* Cloudflare's managed relays
+are provisioned by API and free during the beta; they serve MOQT drafts 14 and 16, and `moq-dev`
+offers 14–19 by ALPN, so negotiation should succeed. Provision a relay, obtain publish and subscribe
+tokens, and run the standard `moq import ts` → `moq export ts` round trip across it. Record: the
+negotiated draft, whether the `hang` catalog survives a relay that has no catalog concept, round-trip
+fidelity against the T1 baseline, and added latency. **This is the strongest available test of relay
+neutrality** because it uses real third-party production infrastructure rather than a lab peer. Note
+their relay treats publisher disconnect as terminal, so do not expect any source-failover behaviour —
+verifying *that* is itself a result worth recording against [architecture](../docs/architecture.md)
+§14.
+
+**T11b — a `moq2ts` broadcast through a `moq-dev` relay.** *Runnable now, weaker result.* `moq2ts` is
+publisher-only, so there is no MSFTS subscriber to close the loop; the question is only whether the
+relay forwards objects whose catalog it cannot parse. Observe the relay's forwarding and announce
+behaviour rather than decoding output. Watch specifically for the preannounce split documented in
+`moqxr` PR #21: `moq-dev` is demand-driven, so run with their default (preannounce off) and then with
+it on, to find out which camp `moq-dev` is in and whether an early `PUBLISH` poisons namespace
+registration.
+
+**T11c — the full suite against a `moq2ts` subscriber.** *Blocked until they publish one.* When it
+exists, run T1–T3 transparency, T7 timing integrity and TR 101 290 conformance against their
+implementation and contrast with ours. This is the comparison that would actually settle which lane
+preserves what — particularly whether their null-stripping and SPTS-from-MPTS behaviour costs
+conformance in the same places ours does, and whether the `mediatimeline` side track is a better
+answer to wall-clock correlation than downstream PCR regeneration. Plan the matrix now so the run is
+ready when the subscriber lands.
+
+**Ecosystem contribution to consider alongside these:** a **broadcast profile** for the community
+[`moq-interop-runner`](https://github.com/englishm/moq-interop-runner) — TS carriage fidelity, PSI/SI
+survival, PCR integrity across a relay. The harness already exists and deliberately stops at the
+protocol handshake, so this extends shared infrastructure rather than building a private rig, and
+gives the transparent-TS profile a neutral conformance target.
 
 ---
 

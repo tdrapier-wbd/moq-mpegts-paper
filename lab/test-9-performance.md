@@ -1,10 +1,14 @@
 # Test 9 — System performance & resource utilisation
 
 **Pyramid (§6):** operational envelope. **Gate (§7):** feeds [operations](../docs/operations.md) and
-[economics](../docs/economics.md) §3.1 and §8 (not a fidelity/resilience gate). **State:** largely run
-(2026-08-07) — memory stability is answered for two builds; the **fan-out envelope, the bitrate
-sweep, the bounded-cache control and protocol overhead are all measured on Linux**; the ≥ 24 h
-multi-role soak is **running** and is the last open item.
+[economics](../docs/economics.md) §3.1 and §8 (not a fidelity/resilience gate). **State:** two ≥ 24 h
+soaks run (2026-08-10). The **publisher and subscriber roles pass** (+0.03 and +0.15 MB/h). The
+**relay is now the open question rather than the settled one**: it held 102.1 MB flat for 26 h on
+0.14.8 under a lighter load, but climbed 106 → 226 MB on 0.14.9 under a heavier one, decaying to
++1.57 MB/h but not to zero, and did not release when sessions left. A controlled build A/B is running
+to separate "0.14.9 regression" from "working set that ratchets with served load". The 0.13.7
+OOM-kill leak remains not reproduced on either build. The fan-out envelope, bitrate sweep,
+bounded-cache control and protocol overhead are all measured on Linux.
 
 ## Objective
 
@@ -28,9 +32,13 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
   controlled rig. **On 2026-08-07 the box was moved to the current stable release** (the official
   `moq-relay` 0.14.8 and `moq-cli` 0.9.7 Linux binaries rather than a local build), and the
   standing relay, SRT receiver and both publishers were restored on it. All the Linux measurements
-  below are on that build. Note this also changed the standing relay's QUIC backend from quiche to
-  quinn, because the deployed binary had been overwritten with a quiche build during T8 and the
-  official release binary is the default (quinn) one.
+  below are on that build, **including the completed soak**. Note this also changed the standing
+  relay's QUIC backend from quiche to quinn, because the deployed binary had been overwritten with a
+  quiche build during T8 and the official release binary is the default (quinn) one. **On 2026-08-08,
+  after the soak finished, the box was moved again to `moq-relay` 0.14.9 / `moq-cli` 0.9.9 in
+  `~/bin-0.14.9`** (services repointed, all restored). The 0.14.8 → 0.14.9 delta contains nothing
+  touching relay memory (it is a clustering announce fix, a JS/mux batch and CI), so the soak verdict
+  below carries over; the second soak runs on 0.14.9.
 - **Local (controlled probes)** on the **0.14.8 release** (`moq-relay` 0.14.8 / `moq-cli` 0.9.8 /
   `moq-net` 0.2.9, origin/main `c8b11b10` = release #2672), Darwin 25.5.0. Rigs in `~/t6-redundancy/`:
   `t9_soak.sh` (phased steady / subscriber-churn / publisher-churn), `leak_probe.sh` (publishers with
@@ -38,11 +46,14 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
 - **EC2 rigs** in `~/t9/` on the box: `fanout_ec2.sh` (fan-out envelope), `fanout_cpu_ec2.sh` (the
   same sweep with CPU attributed to relay / subscribers / whole box), `bitrate_cache_ec2.sh` (bitrate
   sweep and the bounded-cache control), `overhead_ec2.sh` (`tcpdump` wire-vs-payload),
-  `soak_ec2.sh` + `soak_report.sh` (the phased soak and its per-role slope fit).
+  `soak_ec2.sh` + `soak_report.sh` (the phased soak and its per-role slope fit), and
+  `soak2_ec2.sh` + `soak2_report.sh` (the publisher-role soak).
 - **Source:** `~/CNNiEMEA2.ts` looped via `tsp regulate --pcr-synchronous` (≈ 9.93 Mbps). For the
   bitrate sweep, `t9_2mbps.ts` and `t9_27mbps.ts` were encoded on the box from that clip
-  (verified at 2.000 and 27.500 Mbps). Note `ffmpeg` needs `-nostdin` when invoked inside a
-  heredoc-fed remote shell, or it consumes the rest of the script as input.
+  (verified at 2.000 and 27.500 Mbps). For the publisher-role soak, `t9_loop_vidonly.ts` — the same
+  clip remuxed to **video only**, which is the one variant that survives a loop wrap (below). Note
+  `ffmpeg` needs `-nostdin` when invoked inside a heredoc-fed remote shell, or it consumes the rest
+  of the script as input.
 - macOS lacks `pidstat`/`/proc`, so local sampling is `ps`/`lsof`; `/proc` and `journalctl` are used
   on EC2.
 
@@ -300,7 +311,208 @@ same service. Since bandwidth is the line most likely to dominate a cost compari
 recorded as a real disadvantage rather than netted off against MoQ's compute efficiency
 ([economics](../docs/economics.md) §3.1).
 
-## ≥ 24 h multi-role soak: running (launched 2026-08-07 13:29 UTC)
+## ≥ 24 h soak: the relay passes (2026-08-08)
+
+**Verdict: no leak on 0.14.8.** The run completed its full 26.49 h (1,580 samples, 2026-08-07 13:29 →
+2026-08-08 16:00 UTC) with **zero relay restarts**, which is the first thing to check — an OOM kill
+and systemd restart would otherwise show up as a flat slope. Slopes fitted past a 1 h warm-up:
+
+| Phase | Duration | Relay RSS | **Relay slope** | Threads / fds | Restarts |
+|---|---:|---|---:|---|---:|
+| 1 — steady | 18.98 h | 115.3 → 102.1 MB (range 102.1–116.2) | **−0.63 MB/h** | 3 / 11 | 0 |
+| 2 — subscriber churn | 3.99 h | 102.1 MB (min = max) | **+0.00 MB/h** | 3 / 11 | 0 |
+| 3 — steady again | 2.48 h | 102.1 MB (min = max) | **+0.00 MB/h** | 3 / 11 | 0 |
+
+The margin is wide enough that the result does not turn on the fit. At the 0.13.7 rate of ~21 MB/h,
+26.5 h predicts **+557 MB**; the measured phase-1 slope is *negative*, and the total excursion across
+the whole run is 14 MB — a working set breathing, not a trend. Relay CPU averaged **2.85 % of one core**
+over the run and `MemAvailable` never fell below 3,002 MB of 3,811.
+
+Three details worth reading past the headline:
+
+- **Churn does not ratchet.** Phase 2 subjected the relay to a subscriber join/leave every 120 s for
+  four hours, and relay RSS did not move at all — min and max both 102.1 MB, to the 0.1 MB resolution
+  sampled. Phase 3 then rejoined the phase-1 level with no step, so nothing was retained across the
+  churn. This is the specific concern the earlier session probe could only bound at ±30 MB over an
+  hour; four hours resolves it.
+- **The negative phase-1 slope is reclaim, not shrinkage.** RSS settles from 115 MB to a 102 MB floor
+  over the first hours and then sits on it. A relay whose cache is unbounded but whose retention
+  window is 5 s per track should behave exactly like this.
+- **fds and threads never moved** — 11 and 3 for 26.5 h across every phase, including the churn.
+
+**This closes the leak question.** The 0.13.7 behaviour is a fixed historical defect, not a live risk,
+and there is nothing to report upstream. The operational advice to bound the cache explicitly still
+stands, but as cheap insurance (it is measured free, above) rather than as mitigation for a known bug.
+
+**What this run does *not* establish is the publisher role**, for the reason recorded below: its
+publishers restarted every ~10 minutes at the clip wrap, so the publisher column contains gaps and no
+slope can be fitted through it. The subscriber aggregate is likewise not a clean per-role slope
+because the set size changes with churn (phase slopes −0.04 / −0.69 / +0.19 MB/h are all ≈ 0, but the
+denominator moves). A second soak addresses the publisher directly.
+
+## Any audio stream losing frame sync kills `moq import` (2026-08-08)
+
+Chasing a non-wrapping source for the publisher soak turned the earlier "MP2 frame sync" annoyance
+into a sharper and more general finding. Three loop variants of the same clip were run through
+`tsp -I file --infinite | moq import ts` across the ~601 s wrap:
+
+| Loop variant | Result at the wrap |
+|---|---|
+| Full: H.264 + MP2 + AC3 + 3× SCTE-35 + teletext | **died** — `Error: missing MP2 frame sync` |
+| H.264 + AC3 | **died** — `Error: missing AC-3 sync word` |
+| H.264 video only | **survived**, ran on past 800 s |
+
+So it is not an MP2 parser bug. **Every audio codec tried aborts the whole process when its
+elementary stream loses frame sync, while the video path resynchronises through the very same
+discontinuity.** That asymmetry is the finding: video is treated as resynchronisable and audio as
+fatal.
+
+For primary distribution that is the wrong way round to fail. A contribution feed does glitch, and a
+publisher that exits on a momentary audio defect converts a few damaged frames into a full session
+teardown, reconnect, and the ~4 s re-attach measured in T6.
+
+The practical consequence for the rig: `t9_loop_vidonly.ts` is a source that loops indefinitely
+without restarting the publisher.
+
+### Confirmed with no timeline jump, and the root cause located (2026-08-10)
+
+The one objection to reporting this was that a looped file jumps its timeline *backwards*, which a
+real feed never does. **That objection is now dead.** A unit-level reproducer against `moq-mux`
+0.9.4 — one valid MP2 frame, then a second frame with its sync word changed from `0xFF` to `0xFE`,
+same PID, monotonic PTS, no loop and no timeline discontinuity of any kind — returns:
+
+```
+PROBE: one damaged header kills the whole import: missing MP2 frame sync
+```
+
+A single flipped bit is sufficient. `Import::decode` returns `Err`, and because `moq import`
+propagates that, the process exits and every track in the broadcast goes with it.
+
+The mechanism is a single line. In the legacy-audio PES loop
+(`rs/moq-mux/src/container/ts/import.rs`, the `while offset + min_header_len <= data.len()` loop):
+
+```rust
+let header = (self.descriptor.parse)(&data[offset..])?;
+```
+
+The `?` propagates a header-parse failure straight out of the demuxer. There is no attempt to scan
+forward for the next sync word, so a lost sync is unrecoverable by construction rather than by
+policy. What makes this look like an oversight rather than a decision is that **the same codebase
+already resynchronises everywhere else**:
+
+- The **TS container layer** resyncs byte-wise and has three tests pinning it —
+  `import_resyncs_after_byte_misalignment`, `resyncs_past_false_sync_byte`,
+  `resyncs_across_chunk_boundaries`.
+- The **video path** resyncs structurally: Annex-B parsing scans for start codes
+  (`find_start_code` / `after_start_code`), so a damaged NAL is skipped rather than fatal. This is
+  exactly why the video-only loop survives.
+
+Legacy audio is the one layer that treats a lost sync as fatal. The module's own doc comment says
+malformed input is *"rejected, never mis-described"* — and resyncing to the next valid frame honours
+that principle exactly. Rejecting the damaged frame is right; killing the session is the part that
+does not follow.
+
+**View: this is reportable, and it is a strong report rather than a marginal one.** The evidence is a
+deterministic minimal reproducer, a one-line root cause, a documented design principle the current
+behaviour contradicts, and two in-repo precedents for the correct behaviour. There is also a close
+precedent for it being accepted: [#2265](https://github.com/moq-dev/moq/issues/2265) ("one bad frame
+fatally crashes the process") was treated as a bug and fixed.
+
+**What is still missing before posting** — see the checklist in
+[planned-experiments](planned-experiments.md) (T9 follow-ups):
+
+1. **End-to-end on real content.** Bit-flip one MP2 frame header mid-file in `CNNiEMEA2.ts` (no loop),
+   feed it through `moq import`, and capture the exit. Same file with a video NAL corrupted instead as
+   the control. This is the broadcast-credible artifact; the unit test is the precise one.
+2. **Blast radius, stated as measured.** Confirm the video and SCTE-35 tracks die with the audio, and
+   that a subscriber sees the session drop rather than an audio-only gap.
+3. **The design question**, which is why this should open as an **issue, not a PR**: resync policy is a
+   choice, not a mechanical fix. How far should the parser scan before giving up? Should the skipped
+   interval be signalled (a gap the exporter can reflect) or silently dropped? Should the track abort
+   while the session survives, which is a middle option the current code structure already supports via
+   `legacy::Import::abort`? Upstream's own guidance ([#2722](https://github.com/moq-dev/moq/pull/2722))
+   recommends opening an issue first when the solution needs brainstorming, and this qualifies.
+4. **A regression test in repo style**, which `Root Cause First` requires of any fix. The probe above is
+   the seed but is written to assert the *broken* behaviour; the shipped version must assert the fixed
+   behaviour (frame A and frame C both delivered, damaged frame B dropped).
+
+Contribution mechanics, checked against the current `CONTRIBUTING.md`: this targets **`main`**, not
+`dev` — the branch split is strictly about breaking a published API, and the guide explicitly places
+"changing what a component does with input it *already* takes (e.g. recognizing a media pattern it used
+to mishandle)" and "a parser accepting a broader set of inputs it previously rejected" on `main`.
+Any GitHub prose needs the model-attribution marker.
+
+## Publisher-role soak: publisher passes, but the relay raises a new question (2026-08-09)
+
+`~/t9/soak2_ec2.sh` on **0.14.9**, 26.49 h (1,589 samples, 2026-08-08 20:24 → 2026-08-09 22:55 UTC),
+steady throughout: a dedicated video-only loop publisher (which survives wraps) plus two steady
+subscribers, against the standing relay. **Zero publisher respawns for the whole run** — the
+video-only source did what it was chosen to do, so there is finally a continuous publisher to fit.
+
+| Role | RSS over the run | **Slope (past 1 h warm-up)** | Verdict |
+|---|---|---:|---|
+| Publisher | 81.5 → 84.9 MB (min 81.5, max 92.3) | **+0.029 MB/h** | **pass** |
+| Subscribers (2) | 164 → 190 MB | +0.610 MB/h overall, **+0.15 MB/h** in the final 8 h | pass |
+| Relay | 105.7 → **226.0 MB** | **+3.200 MB/h** | **not a pass — see below** |
+
+**The publisher role passes cleanly.** +0.029 MB/h is flat to any reasonable standard: extrapolated
+over a year it is 254 MB, and the run's own peak-to-floor excursion (10.8 MB) is far larger than the
+trend. It is also insensitive to the fit window — re-fitting past a 2 h warm-up gives +0.024 MB/h.
+File descriptors held at 10 throughout, and CPU averaged 24.55 % of a core, matching the file-paced
+figure measured independently below.
+
+**One publisher caveat worth following up: thread count grew 22 → 86.** It decelerated (79 by 2 h,
+83 by 14 h, 86 by 26 h) and never destabilised anything, so it reads like a work-stealing pool
+converging rather than a leak. But it did not visibly stop, and threads are the one resource here that
+only ever went up. A longer run, or a look at what the pool is sized against, would settle it.
+
+### The relay result, which needs care
+
+Read as a single linear fit, +3.2 MB/h looks alarming. It is not linear, and the shape matters:
+
+| Window | Relay RSS | Slope |
+|---|---|---:|
+| 0–6 h | 77 → 176 MB | +16.47 MB/h |
+| 6–12 h | 177 → 195 MB | +2.83 MB/h |
+| 12–18 h | 195 → 211 MB | +2.49 MB/h |
+| 18–26.5 h | 212 → 226 MB | +1.84 MB/h |
+| 23–26.5 h (tail) | 221 → 226 MB | **+1.57 MB/h** |
+
+So it is a decaying curve, and a straight line through it overstates the end state by roughly double.
+But the decay **does not reach zero**: the last three and a half hours still add 1.57 MB/h, which
+annualises to about 13.8 GB and would exhaust this 3.8 GB box in roughly three months. That is not
+dismissible as settling.
+
+Two further observations sharpen it, and they pull in opposite directions:
+
+- **It did not release.** When the soak's publisher and two subscribers exited, relay RSS went 226 →
+  224 MB over the following 11 hours. Memory acquired while serving was not returned. On its own this
+  is weak evidence — allocators routinely keep pages — but it rules out "transient per-session
+  buffers".
+- **With no subscribers it is genuinely flat.** A 90-minute sampler on the same standing relay
+  (`~/t9/relay_now.sh`) measured **+0.000 MB/h at 218.8 MB**. The relay only pulls a track when
+  something subscribes, so this says the growth tracks *served* load rather than uptime — consistent
+  with either a working set that ratchets up per served session, or a slow leak charged to serving.
+
+**Why this is not yet a verdict, and what would make it one.** The comparison that suggests a
+regression is soak #1 (0.14.8) holding **102.1 MB flat for 26 h** against soak #2 (0.14.9) climbing to
+226 MB. But the two runs differ in *three* ways at once — build, one extra broadcast, and two extra
+steady subscribers — so the build is only one candidate. The fan-out data says an extra broadcast plus
+two sessions should cost roughly 40 MB, not 124 MB, which leaves an unexplained gap, but that
+arithmetic is from a different rig. `~/t9/relay_ab.sh` (launched 2026-08-10 09:03 UTC) resolves it by
+holding the workload fixed and varying only the binary: the same video-only publisher and four
+subscribers against a **private** relay — no standing-service history and no session churn from the
+looping publisher — for 2.5 h on 0.14.8 and then 2.5 h on 0.14.9, sampling every 30 s. If both builds
+climb, this is load-dependent working-set behaviour and soak #1 simply ran a lighter workload; if only
+0.14.9 climbs, it is a regression and reportable, with
+[#2718](https://github.com/moq-dev/moq/pull/2718) (announcement-cursor registration per relay peer,
+the one 0.14.9 change touching route/announce state) the first place to look.
+
+**Representativeness limit of the publisher figure:** a video-only source exercises the import path
+without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than
+its full-feed behaviour. Closing that gap needs the audio-resync fix below, not a rig change.
+
+## The first soak as launched (2026-08-07 13:29 UTC)
 
 `~/t9/soak_ec2.sh`, phased over 26.5 h, against the **standing** relay rather than a private one, so
 what is under test is the real deployment in the role the 0.13.7 relay died in. Deliberately run
@@ -325,33 +537,23 @@ churn cycles and then held flat, which is the behaviour the 4 h churn phase is m
 the first version of the sampler resolved the publisher to its `/bin/sh` wrapper (1.9 MB) instead of
 the `moq` process (38 MB), which would have produced a meaningless publisher slope.
 
-**Known limitation of this run: there is no long-lived publisher to fit a slope against.** The
-looped-file publishers die at every clip wrap (below), so the publisher role restarts roughly every
-ten minutes and systemd replaces it. The relay slope — the decisive measurement, and the role that
-actually failed on 0.13.7 — is unaffected, and the restarts are arguably a *better* test of it than a
-quiet publisher would be: they reproduce the ~one-session-per-ten-minutes churn the leaking relay saw
-(52 sessions in 9 hours). But a slow publisher-side leak is not excluded by this run. An attempt to
-add a non-wrapping synthetic publisher was abandoned because it cost too much CPU to run alongside
-the soak (below).
+**Why this run has no publisher slope:** its looped-file publishers die at every clip wrap (above), so
+the publisher role restarted roughly every ten minutes and systemd replaced it. That does not weaken
+the relay verdict — if anything it strengthens it, because the restarts reproduce the
+~one-session-per-ten-minutes churn the leaking 0.13.7 relay actually saw (52 sessions in 9 hours), and
+the relay still did not grow. An attempt to add a non-wrapping synthetic publisher alongside was
+abandoned because live `lavfi` encoding cost too much CPU (below); the video-only remux found later
+solved it properly.
 
 Also note the first ~15 minutes of the CSV are perturbed by the experiments that were still finishing
 on the box (relay RSS briefly reached 124 MB). Fit past a generous warm-up — `WARMUP=3600` rather
 than the default 900 — when analysing.
 
-## Two publisher-side observations from building the soak (2026-08-07)
+## Publisher-side CPU on a trickle-fed live source (2026-08-07)
 
-Neither was the object of the test, both are worth following up, and one of them is a plausible
-upstream report.
-
-**`moq import` aborts the process on a source discontinuity.** Every looped-file publisher on the box
-dies at the clip boundary with `Error: missing MP2 frame sync`, taking the whole `ffmpeg | moq import`
-pipeline with it (`status=1/FAILURE`, then a systemd restart). This is the same failure recorded as a
-T8 gotcha, seen here as a *recurring* production behaviour rather than a one-off: it fires reliably
-every ~600 s, i.e. once per wrap of the 600 s clip. It is a rig annoyance for a soak, but the
-broadcast reading is less comfortable — a real contribution feed does glitch, and a publisher that
-exits rather than resynchronising turns a momentary source defect into a full session teardown and
-reconnect. Worth confirming against a deliberate mid-stream discontinuity before reporting, since a
-looped file is an artificial discontinuity (the timeline jumps backwards, which a real feed does not).
+The other publisher-side observation from building the soak. (The first — `moq import` aborting on a
+discontinuity — is now superseded by the three-variant result above, which localises it to the audio
+parsers.)
 
 **`moq import` costs ~3x more CPU on a trickle-fed live source than on a file-paced one, apparently
 independent of bitrate.** Trying to build a publisher that never wraps, two live `lavfi` sources were
@@ -394,9 +596,13 @@ that `dmesg` did not surface).
 
 ## Still outstanding
 
-- **The ≥ 24 h soak verdict**, once the run above completes (~2026-08-08 16:00 UTC). This is the
-  last item standing between T9 and a pass. Pair a future repeat with the T7 ≥ 24 h PLL-lock soak so
-  one run yields both verdicts.
+- **Resolve the relay growth on 0.14.9** — the top open item, and the only one that could still make
+  T9 fail its own pass criterion. `relay_ab.sh` answers the build question; if both builds climb, the
+  follow-on is to characterise the ratchet (per-session retained memory at fixed N, then N=8/16) and
+  to re-run with `--cache-capacity` set, which would show whether the governor bounds it. Pair a future
+  repeat with the T7 ≥ 24 h PLL-lock soak so one run yields both verdicts.
+- **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping). Cheap to check:
+  a longer run plus what the pool is sized against.
 - **Fan-out over a real path**, relay and subscribers on separate hosts. Both sweeps so far are
   loopback, and the Linux sweep showed why that matters: co-located subscribers cost 2.4x the relay,
   so the rig's knee is the host's. A cross-machine run would price the NIC and the network stack
@@ -406,9 +612,10 @@ that `dmesg` did not surface).
   loss, and how it compares to the same measurement on SRT (T8 has the rig for this).
 - **Per-role envelope for the groomer/pacer**, which the objective asks for and none of these runs
   covers.
-- **A publisher-role slope**, which this soak cannot give (see the limitation above). Needs either a
-  source long enough not to wrap inside the run, or the discontinuity-robustness question below
-  resolved.
+- **Confirm the audio-sync abort against a *deliberate* mid-stream corruption** — a bit-flipped audio
+  frame header with no timeline jump — which is the one control that would make it an upstream report.
+  The video path surviving the same wrap already removes most of the "it is only an artificial
+  loop discontinuity" objection.
 - **Isolate the live-source `moq import` CPU cost** (~3x the file-paced case, bitrate-independent).
   Profile it and re-test with the live source staged through a file; if it holds up, it is an upstream
   report, and it affects the normal live contribution topology.

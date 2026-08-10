@@ -260,7 +260,11 @@ graceful-exit path it does not protect at all. A gap-free switch would need eith
 encoders (Elemental's approach) or a receiver that reinitialises across the switch. That makes relay
 reselect a **bounded nice-to-have**, complementary to the real mechanism rather than a substitute
 for it: the mesh keeps both flows healthy and reachable, and the receiver does the switching.
-(Supports
+Upstream reached the same conclusion independently and said so plainly when closing our drill: *"if
+you really want redundancy, you would do active-active. Don't wait for the QUIC idle timeout; always
+pull both broadcasts and splice them"*
+([#2545](https://github.com/moq-dev/moq/pull/2545), 2026-08-07). Dual-subscribe-and-splice at the
+receiver is therefore the intended posture, not a workaround for a missing relay feature. (Supports
 [transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)
 
 ## 8. Relay compute is cheap and predictable; bandwidth overhead is the real cost
@@ -292,13 +296,33 @@ framing costs a few percent, so MoQ consumes materially more bandwidth for the s
 precisely the line most likely to dominate a cost comparison
 ([economics](economics.md) §3.1).
 
+**Publishers and subscribers are stable over a day and a half; the relay is not yet settled.** Two
+26.5-hour soaks were run. The publisher and subscriber processes held memory flat (+0.03 and
++0.15 MB/hour, against run-to-run noise several times larger), with descriptors unchanged and no
+restarts — those roles pass. The relay is the open one. On one build and workload it held memory
+perfectly flat for 26 hours, including four hours of subscribers joining and leaving every two
+minutes. On a newer build carrying more concurrent sessions it climbed from 106 to 226 MB, at a rate
+that decayed steadily but settled at roughly 1.5 MB/hour rather than zero, and it did not hand the
+memory back when those sessions left. With no subscriber attached it is flat, so whatever grows tracks
+*served load*, not uptime. A controlled comparison holding the workload fixed and varying only the
+build is running to separate a regression from a working set that ratchets upward with each session
+served.
+
+The distinction matters commercially, so it is worth being precise about what is and is not
+established. The severe historical defect is gone: an older release grew ~21 MB/hour to an
+out-of-memory kill after six days, and neither current build reproduces anything like it. What remains
+is an order of magnitude smaller and may yet prove to be normal cache behaviour. But at ~1.5 MB/hour
+an unbounded relay would still exhaust a small host over a few months, which is precisely the regime
+where **bounding the cache stops being hygiene and becomes the mitigation** — and it is measured free
+(below). Long-run relay memory stability is therefore *not yet* something this evidence base asserts.
+
 **Bounding the relay cache is free.** With `--cache-capacity` set, CPU was identical and RSS differed
-by under 1.5 MB, because a healthy working set sits far below any sensible bound. Given that an
-unbounded relay on an older release grew ~21 MB/hour to an OOM kill, there is no reason to run one
-unbounded ([operations](operations.md) §3).
+by under 1.5 MB, because a healthy working set sits far below any sensible bound. The cache is
+unbounded unless configured, so bound it anyway: it costs nothing and it caps the blast radius of any
+future regression ([operations](operations.md) §3).
 
 One measurement caveat applies throughout: these are loopback rigs with subscribers co-resident with
 the relay, so they price neither the NIC nor congestion control doing real work — and the Linux sweep
 showed why that matters, since co-located subscribers cost 2.4x the relay and the observed fan-out
 knee was the *host* saturating, not the relay. Treat the shapes as the result and the constants as
-indicative. The ≥ 24 h stability verdict is still outstanding.
+indicative.

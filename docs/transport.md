@@ -366,9 +366,13 @@ Two qualifications that registry makes visible are worth stating honestly, becau
 against an overly bleak reading. First, a draft-14-only endpoint and a draft-18-only
 endpoint genuinely cannot negotiate a common ALPN — the hard-partition case is
 real. But second, an increasing number of implementations (moxygen, moq-dev,
-imquic, and others — now including Rust transports at draft-16–18) negotiate
-several drafts from a single build, so the ecosystem is trending toward
-multi-draft implementations that bridge the gap rather than a static partition.
+imquic, and others) negotiate several drafts from a single build, so the ecosystem
+is trending toward multi-draft implementations that bridge the gap rather than a
+static partition. `moq-dev` is now at the wide end of that trend, carrying
+**draft-14 through draft-19** in one binary; the independent `moqxr` publisher
+(§9, [interoperability](interoperability.md) §9) covers draft-16 and draft-18. A
+pair like that has three drafts in common, which is the practical reason to expect
+cross-implementation interop to be limited by media profile rather than by ALPN.
 The platform's own draft-14 pin, not the protocol's fragmentation as such, is
 what currently places it at the older end of that range.
 
@@ -584,7 +588,11 @@ something the exporter conceals.
   (currently targeting draft-18) is the best running indicator of where that
   convergence is heading and when the platform's draft-14 pin should move.
 - Will the MSFTS `m2ts` profile be adopted widely enough to give real media-layer
-  interoperability, or will opaque TS carriage remain a minority profile?
+  interoperability, or will opaque TS carriage remain a minority profile? A second,
+  independent implementation now exists (`moq2ts`/`moqxr`, August 2026), built on the
+  adopted working-group MSF format — which moves this from "one vendor's profile" to
+  "a profile with more than one implementer", though not yet to adoption
+  ([interoperability](interoperability.md) §9).
 - How much of MoQ's graceful-degradation advantage is recoverable under opaque TS
   carriage, and is a media-aware secondary lane worth the interop cost to regain
   it?
