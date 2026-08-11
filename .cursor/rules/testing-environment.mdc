@@ -7,9 +7,12 @@ alwaysApply: true
 # Working in this repository
 
 - **`docs/`** — a *public technical paper*, not a development log: what we've learned, summarised for public consumption.
-- **`lab/`** — the engineering notebook: what happened (test results, experiments, history, detail). Authoritative for the experimental record; results promoted to `docs/evidence.md` are summarised there, not moved out of the lab.
+- **`lab/`** — the *public* engineering notebook: the campaign plan and, per experiment, the objective, environment, procedure and **measured results**. Authoritative for the experimental record; results promoted to `docs/evidence.md` are summarised there, not moved out of the lab.
+- **`lab/*.local.md`** *(git-ignored)* — the internal digest: raw chronology, dated runs, throwaway commit hashes, superseded hypotheses, sensitive infrastructure detail.
+- **`interop/`** *(public)* — the media-level interop test client contributed to `moq-interop-runner`, with its fixture generator and oracle.
 - `docs/evidence.md` → validated empirical findings
 - `docs/*.md` → design and architecture
+- `docs/upstream/` → drafts of issues/PR feedback for upstream projects (`*.local.md` here are unpublished drafts)
 - `README.md` → entry point / document map
 
 When uncertain where something belongs, prefer `lab/` over `docs/`.
@@ -18,14 +21,32 @@ When uncertain where something belongs, prefer `lab/` over `docs/`.
 
 | Location | Role | Contains | Never contains |
 |---|---|---|---|
-| `lab/` | Chronological engineering notebook. | commands, logs, failures, hypotheses (incl. wrong ones), timings, observations, raw numbers, commit hashes, branch names, temporary conclusions | *(never summarise; never rewrite history — supersede, don't erase)* |
+| `lab/*.md` *(public)* | Per-experiment engineering record. | objective, environment, procedure, exact commands, measured results, observations, conclusions, pass criteria fixed in advance | dated run-by-run chronology, "re-verified on…" sections, throwaway commit hashes, real IPs/paths (use `<EC2_IP>` placeholders) |
+| `lab/*.local.md` *(git-ignored)* | Internal digest. | the chronology, per-run provenance, superseded hypotheses, sensitive infra | — |
 | `docs/*.md` | The paper: stable engineering conclusions. | design & architecture that reflect current understanding | diary entries, TODOs, branch names, command history other than reproducible recipes |
 | `docs/evidence.md` | Validated empirical findings only. | measurements that are confirmed and current | unvalidated or in-flight results |
 | `STATUS.md` *(git-ignored)* | Current state only — a one-page snapshot. | what is true right now (build under test, open items, what's proven) | history, chronology |
 | `INSTRUCTIONS.local.md` *(git-ignored)* | Reproduction environment + workflow + these editing rules. | paths, addresses/ports, start commands, test data, tooling, and how to operate in the repo | engineering findings / results / status (those go to `lab/`) |
 | `README.md` | Entry point and document map. | — | — |
 
-`INSTRUCTIONS.local.md`, `STATUS.md`, and any `.env.local` are git-ignored. 
+`INSTRUCTIONS.local.md`, `STATUS.md`, any `lab/*.local.md`, and any `.env.local` are git-ignored.
+
+## Corrections: keep the correction, drop the blow-by-blow
+
+Being wrong and saying so is a feature of this repository — but a *record* of a correction is not the
+same as a *diary* of one. Both `docs/` and `lab/` state current understanding:
+
+- **Fix the stale claim where it is made.** Never leave a heading, table cell or sentence asserting
+  something a later section contradicts. A reader must not have to reach the bottom of a file to learn
+  that the top of it is wrong.
+- **Where a correction carries a transferable lesson, keep it once**, in a `## Corrections` section
+  near the end of the experiment file, stating what was believed, what is true, and the method rule it
+  yields. One entry per correction, not a narrative.
+- **Do not preserve the sequence.** No dated "re-verification" sections, no "first pass / then we
+  re-ran", no superseded readings kept alongside current ones. That material goes to
+  `lab/notebook.local.md`.
+- **A re-run that changes nothing is not a finding.** Record only that the current build is the one
+  under test, plus anything that actually moved.
 
 ## Before running anything
 
@@ -34,30 +55,39 @@ execution: the relay address/ports and exact start command (incl. the
 `--server-quic-gso=false` and `https://` + `--client-tls-fingerprint` gotchas); repository
 paths and how to locate the freshly-built binaries (the sandbox `cargo` target rotates each
 session — `~/moq-dev/target/release` is stale); `mpegts-pacer` build + invocation; the local
-`~/*.ts` clips and the `~/t7-p1/…` runner scripts; TSDuck + `compliance.py` and the measured
-P1 baselines; and the remote EC2 path. Keep it current: when environment facts change
-(rebuilds, new commit, new relay address, new clips), update `INSTRUCTIONS.local.md` and/or `STATUS.md`.
+`~/*.ts` clips; the per-experiment runner scripts (`~/t6-redundancy/`, `~/t7-p1/`, `~/t8/` +
+`~/t8run/`, `~/t8b/`, `~/t9/`); TSDuck + `compliance.py` and the measured P1 baselines; and the
+remote EC2 path. Keep it current: when environment facts change (rebuilds, new commit, new relay
+address, new clips), update `INSTRUCTIONS.local.md` and/or `STATUS.md`.
 
 ## After every engineering session
 
-1. Record EVERYTHING in `lab/` (per-experiment files; raw internal digest in `lab/notebook.local.md`).
-2. Extract only permanent, validated and summarised findings into `docs/evidence.md`.
-3. Update affected design documents with architectural conclusions only.
-4. Update `STATUS.md` to the new current state.
-5. Do NOT place engineering observations in `INSTRUCTIONS.local.md`.
-6. Remove any working notes, temporary observations, diary text, branch names, or command
+1. Record the raw chronology — dated runs, provenance, hypotheses, log excerpts — in
+   `lab/notebook.local.md`.
+2. Fold the *outcome* into the per-experiment `lab/*.md` file, stating current understanding: update
+   the results and state block in place, and do not append a new dated section.
+3. Extract only permanent, validated and summarised findings into `docs/evidence.md`.
+4. Update affected design documents with architectural conclusions only.
+5. Update `STATUS.md` to the new current state.
+6. Do NOT place engineering observations in `INSTRUCTIONS.local.md`.
+7. Remove any working notes, temporary observations, diary text, branch names, or command
    history (other than reproducible recipes) from `docs/`.
-7. If uncertain where something belongs, prefer `lab/` over `docs/`.
+8. If uncertain where something belongs, prefer `lab/` over `docs/`.
 
-## Editing `docs/`
+## Editing `docs/` and `lab/`
 
-Documentation describes the current understanding of the system, not the sequence by which
-that understanding was reached:
+Both describe the current understanding of the system, not the sequence by which that
+understanding was reached. `lab/` keeps the procedures and the numbers that `docs/` summarises;
+neither keeps the narrative.
 
 - Update conclusions, architecture, and limitations where necessary.
 - Replace obsolete statements rather than appending corrections.
 - Merge duplicate findings into a single authoritative explanation.
 - Remove superseded observations.
 - Preserve only historical context that materially improves technical understanding.
-- Move experiment logs, commands, commit hashes, timestamps, hypotheses, and iterative
-  reasoning into `lab/`.
+- Move experiment logs, dated runs, throwaway commit hashes, timestamps, hypotheses, and iterative
+  reasoning into `lab/notebook.local.md`.
+
+**Before finishing, re-read what you changed as a first-time reader.** The common failure is a file
+whose newest section is correct while its heading, summary or table still asserts the thing that was
+just disproved.

@@ -2,7 +2,7 @@
 
 **Pyramid (§6):** transport neutrality. **Gate (§7):** feeds
 [interoperability](../docs/interoperability.md) §9 and the "a MoQ relay is a neutral transport fabric"
-assumption in [architecture](../docs/architecture.md). **State:** T11a partly run (2026-08-10). A
+assumption in [architecture](../docs/architecture.md). **State:** T11a partly run. A
 media-level test client exists and passes against `moq-dev` locally and over the public internet;
 **eight other registered public relays return no data**. Root cause isolated for the five that
 establish a session: **`moq-dev`'s IETF publisher withholds `PUBLISH_NAMESPACE` until the peer sends it
@@ -14,8 +14,8 @@ layer, and are not yet diagnosed. T11b and T11c not started.
 
 ## Objective
 
-"A MoQ relay is a neutral transport fabric" is load-bearing for this project, and until now it had only
-ever been tested against `moq-dev` peers. T11 tests it against everyone else's.
+"A MoQ relay is a neutral transport fabric" is load-bearing for this project, and every other test in
+this campaign exercises it only against `moq-dev` peers. T11 tests it against everyone else's.
 
 The secondary objective is a contribution: the work is shaped as a test client for
 [`moq-interop-runner`](https://github.com/englishm/moq-interop-runner) rather than a private rig, in
@@ -43,7 +43,7 @@ client, because **the `moq` CLI has no opaque byte-carriage mode** — every `Im
 `ExportSink` is media-aware. That is a finding in itself and is the main gap between this proof of
 concept and a transparent-carriage test.
 
-## Results — 2026-08-10, `moq` 0.9.8-9698cd93
+## Results — `moq` 0.9.8
 
 | Relay | Endpoint | Result |
 |---|---|---|
@@ -106,7 +106,7 @@ no reason to interrogate a session that has claimed nothing. So `moq import ts` 
 and then **encodes not one control message for the rest of its life**, which is precisely what the logs
 show against imquic, moqx and Cloudflare.
 
-Two checks were run before reporting this, because both were assumptions worth breaking:
+Two checks rule out the obvious alternative explanations:
 
 - **Is it downstream demand propagating?** No. With **no subscriber connected at all**, `moq-relay`
   still sends `SUBSCRIBE_NAMESPACE` and the publisher still announces (3 protocol lines, same order).
@@ -165,8 +165,8 @@ their own diagnosis.
 
 ### Is any of this a spec violation? Mostly no — and that matters
 
-Checked against draft-17 and draft-19 before reporting anything, because "interop hazard" and
-"protocol violation" warrant very different reports.
+Checked against draft-17 and draft-19, because "interop hazard" and "protocol violation" warrant very
+different reports.
 
 **The demand-driven publisher is legal.** draft-17 §6.2: *"A publisher **MAY** send PUBLISH_NAMESPACE
 messages to any subscriber… If a publisher is authoritative for a given namespace… it **MUST** send a
@@ -225,8 +225,9 @@ argument for the media-level profile proposed in #32.
       alongside the negotiated draft
 - [x] Isolate the cross-implementation failure — empty-prefix `SUBSCRIBE_NAMESPACE`, confirmed by a
       same-relay version A/B
-- [ ] Establish whether an empty `SUBSCRIBE_NAMESPACE` prefix is legal in draft-14, then report to
-      whichever side is wrong (`moq-dev` for sending it, or moxygen for rejecting it)
+- [ ] Contribute the empty-prefix data point to [moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457),
+      which is where it belongs: the draft is internally inconsistent, so neither `moq-dev` (sending)
+      nor moxygen (rejecting) is the party to report against
 - [ ] Raise the 200 ms QUIC→WebSocket fallback timer separately
 - [ ] Cloudflare leg properly: provision a scope, obtain publish/subscribe tokens, rerun
 - [ ] Dockerfile and `implementations.json` wiring, once #32 settles the format-axis question

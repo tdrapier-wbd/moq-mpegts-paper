@@ -67,18 +67,39 @@ Contributions are held to the same standard as the existing text. Please:
   ([`docs/architecture.md`](docs/architecture.md)) is the integrative overview;
   the topic documents are the deep dives. Add detail in the right place and link
   to it rather than restating it.
+- **Write the current state, not the sequence that produced it.** Both the paper and the
+  notebook describe what is understood now. When something changes, replace the stale
+  statement where it is made rather than appending a correction after it, and merge repeated
+  discussions of the same point into one authoritative explanation. Where a correction carries
+  a lesson worth keeping, the per-test file records it once in a `Corrections` section — the
+  correction survives, the blow-by-blow does not.
 - **Use Mermaid for diagrams** so they render in the repository and stay
   diff-friendly.
 
 ## Confidentiality
 
 This is a public repository. **Do not contribute commercially sensitive or
-confidential information** — including but not limited to specific route costs,
-transponder or egress pricing, customer names or pricing, vendor contract terms,
-or private implementation internals. The economics document
-([`docs/economics.md`](docs/economics.md)) is deliberately a framework with no
-figures for exactly this reason; keep it that way. If a point can only be made
-with confidential data, describe the *method* and leave the numbers out.
+confidential information** — including but not limited to a specific route's cost,
+transponder or fibre lease rates, any incumbent's actual or depreciated route cost,
+customer names or pricing, vendor contract or discount terms, or private
+implementation internals.
+
+**Published list prices are a different matter and are welcome.** Provider tariffs,
+marketplace software rates, reserved-capacity tiers and surveyed market prices are
+public and verifiable, and the economics document
+([`docs/economics.md`](docs/economics.md) §4) models the always-on case openly with
+them. When contributing such a figure, cite the source and the date it was
+retrieved, prefer a machine-readable price list over a rendered page, and keep the
+working in [`lab/cost-model.md`](lab/cost-model.md) so it stays auditable.
+
+If a point can only be made with confidential data, describe the *method* and leave
+the numbers out — or, better, express the result as a threshold derived from public
+figures, as §4.4 does for the satellite comparison.
+
+The same applies to infrastructure detail in the notebook. `lab/` is public, so commands and
+procedures there use placeholders — `<EC2_IP>`, `<subscriber-home-ip>` — rather than real
+addresses, paths, credentials or TLS fingerprints. If you contribute a procedure, keep that
+convention.
 
 ## A note on AI assistance
 
@@ -99,6 +120,11 @@ deep-dives (`relay`, `control-plane`, `entitlement`, `security`, `interoperabili
 
 The **validation campaign** lives in [`lab/`](lab/README.md) — both the plan (objectives,
 acceptance gates, pass criteria) and the per-test engineering notebook (procedures, commands,
-measured results).
+measured results). Code this project contributes back to the ecosystem lives in
+[`interop/`](interop/README.md); the CBR groomer is the separate
+[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) crate.
+
+A correction to a *measured result* is best raised as an Issue with the counter-measurement, since
+changing a number usually means re-running something rather than editing prose.
 
 Thank you for helping make this more accurate.

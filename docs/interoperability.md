@@ -176,10 +176,10 @@ Until mid-2026 this paper could treat "MPEG-TS over MoQ" as a single-implementat
 is no longer true: there is now a dedicated MPEG-TS-over-MoQ effort with its own working-group
 format, a second independent publisher, and a production relay from a major CDN. That changes the
 argument from "can this be made to work?" to "which parts of it are converging, and where does an
-operator still have to choose?" This section maps the field. *Assessed from repositories, drafts and
-public documentation only — nothing here has been tested.* It crosses the scope line drawn in §1,
-because draft-version interop nominally belongs in [transport](transport.md), but an implementation
-is more useful assessed whole than split in two.
+operator still have to choose?" This section maps the field. *The survey in §9.2–§9.5 is assessed
+from repositories, drafts and public documentation only; §9.6 is measured against running relays.*
+It crosses the scope line drawn in §1, because draft-version interop nominally belongs in
+[transport](transport.md), but an implementation is more useful assessed whole than split in two.
 
 ### 9.1 A terminology note: "transparent", not "opaque"
 
@@ -241,7 +241,7 @@ Compared with the two lanes this project has built:
 | Multi-programme TS | demuxed | **one programme only** | carried verbatim |
 | Wall-clock correlation | none in-band | `mediatimeline` side track | PCR/CBR restored downstream |
 
-The most useful correction to our own framing: **transparent does not automatically mean verbatim.**
+The key distinction the comparison draws out: **transparent does not automatically mean verbatim.**
 `moq2ts` strips nulls just as the media-aware lane does, so it also needs downstream re-pacing to
 restore CBR and cannot be assumed to hold a TR 101 290-conformant bitrate on its own. Being
 SPTS-out-of-MPTS, it does not answer the multi-programme question either. Where it is ahead of us is
@@ -301,10 +301,8 @@ The `moq2ts` release is publisher-only, so the full test suite cannot be pointed
 no subscriber to capture an egress from and no way to close the loop. Two things are testable now,
 and a third when they ship a subscriber.
 
-- **Now, and cheap: does a `moq-dev` client negotiate with a Cloudflare relay?** `moq-dev` offers
-  MOQT drafts 14–19 by ALPN; Cloudflare serves 14 and 16. If they negotiate, this project can carry
-  its own lane over a third-party production relay, which tests relay neutrality against real
-  infrastructure rather than a lab peer. Relays are free during the beta.
+- **Does a `moq-dev` client carry its lane over a third-party relay?** Run, and the answer is no —
+  see §9.6. Version negotiation was never the obstacle; the announce convention is.
 - **Now: does a `moq2ts` broadcast traverse a `moq-dev` relay?** Publisher-only is sufficient for
   this, since the question is whether the relay forwards objects whose catalog it cannot parse.
   Confirming traversal without a subscriber requires observing the relay's forwarding behaviour
@@ -322,22 +320,89 @@ survival, PCR integrity across a relay — would extend an existing shared harne
 private one, and would give the transparent-TS profile a neutral conformance target. That is probably
 the single highest-leverage contribution this project could make to the wider ecosystem.
 
-### 9.6 Interoperability boundaries, as currently understood
+### 9.6 Measured: relay neutrality does not hold across implementations today
 
-- **Transport versions overlap and are not the obstacle.** `moq-dev` 14–19, `moqxr` 16/18,
-  Cloudflare 14/16.
-- **Relays should be format-blind**, so cross-format traversal is expected to work. Cloudflare's is
-  explicitly media-agnostic; `moq-dev`'s routes without parsing catalogs.
+Everything above is a desk survey. This is what happened when the project's own lane was pointed at
+every registered public MoQ relay ([lab: T11](../lab/test-11-interop.md)). The test carries a
+20-second MPEG-TS fixture through a relay and checks continuity counters and PSI/SI at egress — an
+oracle that needs no decoder, because a transport stream checks itself.
+
+The result is stark. Against `moq-dev`'s own relay it passes, locally and over the public internet,
+with a byte-identical egress in both cases and a late subscriber joining mid-stream cleanly.
+**Against all eight other public relays — Meta, Google, Cisco, Nokia, Meetecho, Cloudflare, OzU and
+openmoq — no media flows at all.**
+
+The cause is not the one this paper expected. Draft-version negotiation, the thing §9.6 previously
+listed as the obvious hazard, works better than advertised: `moq-transport-19` was negotiated
+against two relays, above the ceiling `moq-dev`'s own help text claims. The blocker is a convention
+above the version. **`moq-dev`'s publisher is demand-driven: it withholds its `PUBLISH_NAMESPACE`
+announcement until the peer explicitly asks for it with a `SUBSCRIBE_NAMESPACE`.** Its own relay
+interrogates every publisher session unconditionally, so the chain completes and everything works.
+No third-party relay does that, because in MOQT a publisher is expected to announce proactively on
+connect and a relay has no reason to interrogate a session that has claimed nothing. So the
+publisher connects, negotiates a modern draft, reports no error — and then emits not one control
+message for the rest of its life. Instrumenting both ends confirms the silence is real rather than a
+logging artefact, and that it is not downstream demand propagating: with no subscriber attached at
+all, `moq-dev`'s relay still asks and its publisher still announces.
+
+**Neither implementation is doing anything wrong, which is what makes this important.** The draft
+says a publisher *MAY* announce proactively and *MUST* answer a namespace subscription; announcing
+unprompted is permitted, not required. `moq-dev` is therefore fully conformant and simultaneously
+unable to interoperate with any relay that does not interrogate publishers — the normal case. A
+second, independent issue sits behind it: `moq-dev` opens discovery with an *empty* namespace prefix,
+which one relay rejects outright, and the draft is internally inconsistent about whether that is
+legal ([moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457)). Both are
+interop hazards produced by underspecification, not bugs, and the first is now reported upstream as
+[moq-dev/moq#2730](https://github.com/moq-dev/moq/issues/2730).
+
+Three relays fail earlier still, at connection or SETUP, and are undiagnosed. So the eight failures
+are at least four distinct causes, not one.
+
+Two conclusions follow, and they pull in opposite directions.
+
+**The transport substrate is sound; the ecosystem around it is not yet joined up.** Forcing the same
+media test over `moq-transport-14` against a local relay passes cleanly, so the IETF path carries
+broadcast MPEG-TS perfectly well. Nothing here indicts MoQ as an architecture, and nothing here is
+hard to fix — the blocking behaviour is a client-side default. But "a MoQ relay is a neutral
+transport fabric", which [architecture](architecture.md) treats as load-bearing, is **an assumption
+this project can no longer make on the evidence**. It holds within one implementation. Across
+implementations, today, it does not hold at all. For a broadcaster the practical reading is that
+multi-vendor relay portability — the property that makes an Internet-native trunk route
+substitutable, and therefore the property that underwrites the economic argument — is unproven and
+currently absent, even though the protocol permits it.
+
+**The conformance gap this exposes is worse than the failure itself.** The community interop matrix
+is control-plane only. Against the relay above, a `setup-only` check reports green while not a single
+media byte crosses. An entire class of failure is invisible to the test everyone reads, which is the
+strongest available argument for the media-level profile proposed in §9.5 and now offered upstream as
+a working test client ([`interop/`](../interop/README.md)).
+
+One incidental finding is worth an operator's attention: the client abandons QUIC for a WebSocket
+fallback on a fixed 200 ms timer, so **any relay more than about 100 ms away is silently carried over
+TCP** — head-of-line blocking included. That is a confound for interop measurement, since the
+transport under test is not the one you think it is, and a genuine concern for long-haul broadcast
+carriage.
+
+### 9.7 Interoperability boundaries, as currently understood
+
+- **Transport versions overlap and are not the obstacle** — measured, not assumed (§9.6). `moq-dev`
+  14–19, `moqxr` 16/18, Cloudflare 14/16, and negotiation succeeds in practice across vendors.
+- **Relays are format-blind, and that is not sufficient.** Cloudflare's is explicitly media-agnostic;
+  `moq-dev`'s routes without parsing catalogs. Cross-format traversal should therefore work — but
+  §9.6 shows media failing to flow for reasons that never reach the payload, so format-blindness
+  buys nothing on its own.
 - **Endpoints will not interoperate across formats.** `moq export ts` reads `hang`, not MSF/MSFTS. A
   subscriber must be built for the format it consumes; this is a format choice, not a defect.
-- **Relay behaviour diverges in ways that bite.** `moqxr`
-  [PR #21](https://github.com/mondain/moqxr/pull/21) reports relays splitting into two camps on track
-  preannounce: some accept an early `PUBLISH`, answer `PUBLISH_OK` and never forward a `SUBSCRIBE`
-  upstream, while others resolve the namespace only once a subscriber appears — where an early
-  `PUBLISH` can disturb namespace registration so that every later `SUBSCRIBE` is rejected. Cloudflare
-  is in the first camp (draft-16 `PUBLISH` is a headline feature); `moq-dev` is demand-driven and in
-  the second. `moqxr` resolved it by making preannounce opt-in and default-off. **Relay neutrality is
-  therefore a property to verify per relay, not to assume.**
+- **The announce convention, not the wire version, is what breaks interop.** Relays split into two
+  camps on track preannounce: some accept an early `PUBLISH` and answer `PUBLISH_OK`, while others
+  resolve a namespace only once a subscriber appears. Cloudflare is in the first camp (draft-16
+  `PUBLISH` is a headline feature); `moq-dev` is firmly in the second, which §9.6 measures as the
+  blocking cause of every "connects but no media" failure. `moqxr`
+  [PR #21](https://github.com/mondain/moqxr/pull/21) independently reports the same split from the
+  other side, including the case where an early `PUBLISH` disturbs namespace registration so that
+  every later `SUBSCRIBE` is rejected; it resolved this by making preannounce opt-in and
+  default-off. **Relay neutrality is a property to verify per pairing, not to assume** — and on
+  current evidence it fails for every pairing outside a single implementation.
 
 That same PR independently reproduces a finding of ours: a publisher with no subscriber attached dies
 at ~32 s to the default QUIC idle timeout, fixed with a 5 s keepalive. It matches the ~30 s bound

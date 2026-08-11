@@ -18,7 +18,7 @@ Status: working draft. This paper is deliberately critical: the goal is to find 
 
 **It is not:**
 - A claim that MoQ is production-ready today. The wire protocol is pre-standard and unstable (see [Transport](docs/transport.md)).
-- A claim that Internet-native distribution is *already* economically superior, today, to a depreciated satellite transponder or an existing IP contract for always-on trunk routes. The analysis argues the trunk case is achievable over the horizon on which incumbent capacity retires and egress pricing falls — and stronger still for dynamic routes — but it is route-specific and not yet proven with numbers (see [Economics](docs/economics.md)).
+- A claim that Internet-native distribution is *already* economically superior, today, to a depreciated satellite transponder or an existing IP contract for always-on trunk routes. The always-on case is now modelled numerically at public list prices, and the result is that **cost is decided by commercial egress terms rather than by transport engineering**: egress is ~90 % of the bill, the MoQ-versus-SRT difference is ~8 % of it, and published egress sits two to three orders of magnitude above the surveyed price of IP transit. What remains unproven is the comparison against one broadcaster's *actual, depreciated* route cost at *negotiated* rates (see [Economics](docs/economics.md)).
 - A product pitch or a business plan.
 
 ---
@@ -26,6 +26,8 @@ Status: working draft. This paper is deliberately critical: the goal is to find 
 ## Bottom line up front
 
 MoQ is a credible **transport foundation**. It is open-source, standards-track, and prototypes show it works: the working prototype carries a full contribution mux end-to-end over a public-internet cloud relay with 0 continuity errors, grooms the bursty egress to exact CBR (0 % of PCR intervals > 40 ms, 0 `pcrverify` violations at ±500 ns on file), and — once the sender is switched to BBR — holds full-rate, byte-complete delivery on par with SRT under loss ([Evidence](docs/evidence.md); campaign record in [lab](lab/README.md)). The engineering that matters for broadcast is the **broadcast-grade layer above the transport**: IRD-accurate egress and PCR grooming, entitlement and multi-tenant control, redundancy, observability, and interop with the installed base (MPEG-TS, RTP, SRT/Zixi, hardware IRDs). Whether that layer can meet broadcast's trust bar on a best-effort substrate is a real, testable question, and it is *not yet proven*.
+
+The implementations are also not yet operationally mature, which is a separate risk from the protocol being pre-standard. Publisher and subscriber processes hold memory flat over a day and a half, but the relay grows about 27 MB/hour under sustained subscriber load across two consecutive releases — and the documented cache bound does not contain it, so cache tuning is not a mitigation ([Evidence](docs/evidence.md) §8). Nothing about that is architectural, and it is being characterised for an upstream report rather than treated as a deployment workaround; but a transport whose reference relay needs a planned restart cycle is not yet one a broadcaster would put an always-on trunk route on.
 
 ---
 
@@ -49,7 +51,7 @@ These matter most at fan-out scale and heterogeneity — precisely where primary
 The strongest reasons the thesis fails, each testable rather than rhetorical:
 
 - **The transport isn't stable enough (highest technical risk).** MoQ is pre-standard; recent drafts are "almost a completely new protocol," while broadcasters need 5–10 year stability. *Mitigation:* keep the media and control layers transport-independent (already done — see [Evidence](docs/evidence.md)), so the control plane can run over today's transports if MoQ slips ([Transport](docs/transport.md) §5.2).
-- **MoQ's advantage over SRT/Zixi/RIST is too narrow for *this* job (highest thesis risk).** *Test:* a real head-to-head lab ([Implementation](docs/implementation.md) §6) and a TCO model built on one broadcaster's actual route costs ([Economics](docs/economics.md)).
+- **MoQ's advantage over SRT/Zixi/RIST is too narrow for *this* job (highest thesis risk).** *Test:* a real head-to-head lab ([Implementation](docs/implementation.md) §6) and a TCO model built on one broadcaster's actual route costs ([Economics](docs/economics.md)). The list-price model already argues the narrow case: on the line that carries ~90 % of the cost, MoQ is ~8 % *worse* than SRT, and its efficiency advantage sits on the line that barely registers.
 - **Hardware IRDs reject groomed MoQ output (potential showstopper).** MoQ's object/burst model yields PCR that hardware IRDs flag on TR 101 290 P1/P2 — inherent, not a bug. Grooming addresses it but must be *proven on real hardware*. *Test (not yet run):* a clean P1/P2 pass on real IRDs ([Evidence](docs/evidence.md), [Architecture](docs/architecture.md) §7.2 and §17).
 
 ---
@@ -90,14 +92,22 @@ Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for 
 | [Security](docs/security.md) | Identity, authentication, and threat model. |
 | [Interoperability](docs/interoperability.md) | IRDs, MPEG-TS, RTP, ST 2022-7, SRT, Zixi. |
 | [Operations](docs/operations.md) | NOC model, SLOs, monitoring, and runbooks. |
-| [Economics](docs/economics.md) | Cost model and operational comparison. |
+| [Economics](docs/economics.md) | Cost framework, and a first numeric model of the always-on case at public list prices — MoQ against SRT, managed services and satellite. |
 | [Evidence](docs/evidence.md) | What the working prototype proved — the empirical basis for the claims above. |
 
 ### The validation campaign (`lab/`) — what was planned and measured
 
 | Document | Description |
 |----------|-------------|
-| [Laboratory Notebook](lab/README.md) | The validation campaign — both the *plan* (objectives, acceptance-gate mapping, and the pass criteria agreed before the numbers) and the *executed* work: exact procedures, commands, and **measured results** per test (baseline TS characterisation, transport transparency on both lanes, remote end-to-end over the public internet, impairment/CC behaviour, and resilience), with the corrections made along the way. |
+| [Laboratory Notebook](lab/README.md) | The validation campaign — both the *plan* (objectives, acceptance-gate mapping, and the pass criteria agreed before the numbers) and the *executed* work: exact procedures, commands, and **measured results** per test (baseline TS characterisation, transport transparency on both lanes, remote end-to-end over the public internet, impairment and congestion-control behaviour, resilience, resource envelope, and cross-implementation interop). Where a result was later corrected, the per-test file states the current finding and records what the earlier reading got wrong. |
+
+### Code (`interop/`) — what this project contributes back
+
+| Component | Description |
+|----------|-------------|
+| [Media-level interop test client](interop/README.md) | A test client for the community [MOQ Interop Runner](https://github.com/englishm/moq-interop-runner), carrying an MPEG-TS fixture through a relay and validating what comes out — continuity counters make the fixture check itself, so no decoder or frame capture is needed. Offered in support of [runner #32](https://github.com/englishm/moq-interop-runner/issues/32) as an argument that media-level interop can be tested automatically. |
+
+The CBR grooming component is a separate public crate, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer).
 
 ---
 
@@ -112,9 +122,12 @@ propose a change, and for the editorial and confidentiality conventions.
 
 ## Open questions
 
-- What is the real TCO delta versus one broadcaster's actual routes? ([Economics](docs/economics.md))
+- What is the real TCO delta versus one broadcaster's actual routes, at negotiated rather than list rates? ([Economics](docs/economics.md))
+- Why does published cloud egress sit two to three orders of magnitude above the surveyed price of IP transit, and does anything force that gap to close? The always-on trunk case lives entirely inside that spread. ([Economics](docs/economics.md) §4.2)
 - Does groomed MoQ output pass TR 101 290 P1/P2 on real hardware IRDs? ([Evidence](docs/evidence.md))
 - Where does the groomer (PCR-accuracy work) ultimately live — upstream or downstream — and if downstream, open/interoperable or closed/licensed? ([Architecture](docs/architecture.md) §17)
+- Can a relay hold memory flat under sustained fan-out for weeks, not hours? ([Evidence](docs/evidence.md) §8)
+- Can a broadcast feed traverse a relay somebody else operates? Measured today it cannot — carriage works within one implementation and fails against all eight other public relays, which makes "commodity relay" an aspiration rather than a property. ([Evidence](docs/evidence.md) §9, [Interoperability](docs/interoperability.md) §9.6)
 
 ---
 

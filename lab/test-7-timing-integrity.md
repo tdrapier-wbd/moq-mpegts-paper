@@ -14,7 +14,7 @@ wire (P2) on a real hardware IRD. P2 is the make-or-break gate (Gate 2).
 - Build under test: `moq-dev` `feat/mux-ts-dvb-service-layer` (`moq` 0.8.7, `moq-relay` 0.13.7,
   `moq-native` 0.18.3 — carrying #2072/#2066 and the #2440 service layer), so the exporter
   round-trips the CNN open-GOP + triple-SCTE-35 feed deterministically and **keeps the PMT PID at
-  0x0064** (no longer renumbered). `mpegts-pacer` 0.1.0; TSDuck 3.44-4676. P1 run 2026-07-22.
+  0x0064** (no longer renumbered). `mpegts-pacer` 0.1.0; TSDuck 3.44.
 
 ## Procedure
 

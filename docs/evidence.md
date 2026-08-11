@@ -6,8 +6,7 @@ The empirical basis for the claims in the [README](../README.md), [transport](tr
 and [architecture](architecture.md), for the one question this paper asks: *is MoQ a credible
 transport for broadcast primary distribution?* The plan (objectives, gates, pass criteria) and the
 executed procedures, commands and full result tables are in the laboratory notebook
-([`lab/`](../lab/README.md)). Everything below is measured at
-**P1 (file/analyser)**; nothing here
+([`lab/`](../lab/README.md)). Everything below is measured at **P1 (file/analyser)**; nothing here
 is a hardware IRD pass, and that gate (§3) is still open.
 
 ---
@@ -154,19 +153,19 @@ LEO/mobile-handover concern ([lab: T8](../lab/test-8-srt-vs-moq.md),
 
 Two boundaries: this is a single home path with forward-path-only impairment, and an
 over-provisioned matrix measures *loss tolerance* rather than congestion control proper (congestion
-control under a shaped bottleneck has only a first-pass, not-yet-validated result,
+control under a shaped bottleneck is characterised only in the under-provisioned failure case,
 [lab: T8b](../lab/test-8b-congestion-control.md)). BBR generation is backend-specific — quinn-BBRv1 and
 noq-BBRv3 strongest, quiche-BBRv2 weakest, with v1 fairness and a very-high-loss cliff
-uncharacterised — so quinn-BBRv1 is the pragmatic default today. The first-pass congestion run
-(T8b) complicates this for a *permanent fixed-rate* trunk — quinn-BBRv1 showed intermittent bloat
-there — but that result is not yet validated and does not change this recommendation.
+uncharacterised — so quinn-BBRv1 is the pragmatic default today. That recommendation is scoped to
+non-congestive impairment: under a shaped bottleneck quinn-BBRv1 shows intermittent bloat, which would
+matter for a *permanent fixed-rate* trunk, but the provisioned-path conditions that would settle it
+are unrun.
 
 ## 7. Transport resilience holds; active/active source failover ships only as a bounded reselect
 
 MoQ's redundancy model is sound: thin, auto-reconnecting endpoints, redundancy in the relay mesh,
 and hitless selection left to the receiver. Drills on the media-aware lane
-([lab: T6](../lab/test-6-relay-resilience.md)) establish what it delivers today; the notebook holds
-the drill history and the per-release re-verification record.
+([lab: T6](../lab/test-6-relay-resilience.md)) establish what it delivers today.
 
 **What works.** Two independent `moq export ts` subscribers produce byte-identical, continuous
 captures of the same broadcast, so fan-out to N subscribers → N pacers → N IRDs needs no extra
@@ -263,7 +262,7 @@ for it: the mesh keeps both flows healthy and reachable, and the receiver does t
 Upstream reached the same conclusion independently and said so plainly when closing our drill: *"if
 you really want redundancy, you would do active-active. Don't wait for the QUIC idle timeout; always
 pull both broadcasts and splice them"*
-([#2545](https://github.com/moq-dev/moq/pull/2545), 2026-08-07). Dual-subscribe-and-splice at the
+([#2545](https://github.com/moq-dev/moq/pull/2545)). Dual-subscribe-and-splice at the
 receiver is therefore the intended posture, not a workaround for a missing relay feature. (Supports
 [transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)
 
@@ -342,3 +341,45 @@ the relay, so they price neither the NIC nor congestion control doing real work 
 showed why that matters, since co-located subscribers cost 2.4x the relay and the observed fan-out
 knee was the *host* saturating, not the relay. Treat the shapes as the result and the constants as
 indicative.
+
+---
+
+## 9. Relay neutrality holds within one implementation and fails across all others
+
+Every result above was measured against `moq-dev` peers. That makes "a MoQ relay is a neutral
+transport fabric" — load-bearing in [architecture](architecture.md), and the basis for treating relay
+capacity as a substitutable commodity in [economics](economics.md) — an assumption this campaign had
+never actually tested. Testing it required a media-level check rather than a handshake, so the
+fixture is a 20-second transport stream and the oracle is its own continuity counters and PSI/SI:
+a TS validates itself, with no decoder, player or frame capture ([lab: T11](../lab/test-11-interop.md);
+the client is public in [`interop/`](../interop/README.md)).
+
+**The lane passes against `moq-dev`'s relay locally and over the public internet, with byte-identical
+egress in both cases, and returns no media whatsoever through all eight other registered public
+relays** — Meta, Google, Cisco, Nokia, Meetecho, Cloudflare, OzU and openmoq.
+
+Draft-version incompatibility, the expected culprit, is not the cause: negotiation succeeds widely,
+reaching `moq-transport-19` against two relays. The blocking cause is a convention above the version.
+**`moq-dev`'s publisher withholds its namespace announcement until a peer explicitly asks for it, and
+only `moq-dev`'s own relay asks.** Every other relay expects a publisher to announce on connect, so
+the publisher negotiates, reports no error, and then sends no control message at all. Both behaviours
+are permitted by the draft — announcing unprompted is a MAY — so this is underspecification surfacing
+as an interop hazard rather than a defect in anyone's code, and it is reported upstream on that basis
+([moq-dev/moq#2730](https://github.com/moq-dev/moq/issues/2730)). Forcing the same media test over an
+IETF draft against a local relay passes cleanly, which confirms the transport itself carries broadcast
+MPEG-TS correctly; three further relays fail earlier, at connection or SETUP, and are undiagnosed.
+
+For this paper's thesis the finding cuts two ways and both should be stated plainly. Nothing here
+indicts MoQ as an architecture — the substrate works, and the blocking behaviour is a client-side
+default that is straightforward to change. But **multi-vendor relay portability is currently absent in
+practice**, and that property is precisely what makes an Internet-native trunk route substitutable
+between providers, which is what the economic argument assumes. Until a broadcast feed demonstrably
+traverses a relay someone else operates, relay neutrality should be treated as an aspiration of the
+protocol rather than a property of the ecosystem, and any deployment design that assumes portability
+between vendors is unsupported by evidence.
+
+A secondary result matters for how such claims get tested at all. The community interop matrix is
+control-plane only, so a `setup-only` check reports success against relays through which not one media
+byte flows — an entire class of failure is invisible to the test the ecosystem reads. That is the
+argument for a media-level interop profile ([interoperability](interoperability.md) §9.5), which this
+project has contributed rather than merely proposed.

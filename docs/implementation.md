@@ -142,7 +142,7 @@ The validation pyramid, from cheapest/fastest to most decisive:
 6. **Redundancy drill.** Induce path failure and confirm hitless ST 2022-7
    switching at the IRD ([architecture](architecture.md) §14).
 7. **Comparative lab (optional but recommended).** Head-to-head against SRT under matched conditions, feeding the economic model
-   ([economics](economics.md) §8).
+   ([economics](economics.md) §9).
 
 ## 7. Acceptance gates
 

@@ -9,9 +9,11 @@ an external engineer can follow the experiments and reproduce them. It is the ex
 
 It is deliberately distinct from the rest of the repository:
 
-- **`lab/` (here) — "this is what happened," plus the plan behind it.** The chronological engineering
-  record: experiments, commands, measured numbers, and the corrections made along the way (preserved,
-  not rewritten), together with the pass criteria fixed in advance.
+- **`lab/` (here) — "this is what we measured," plus the plan behind it.** The engineering record:
+  objectives, environments, exact procedures, measured numbers and conclusions, together with the
+  pass criteria fixed in advance. Where a result was later corrected, the per-test file states the
+  current finding and records that the earlier reading was wrong and why — the correction is kept,
+  the blow-by-blow is not.
 - **`docs/` — "this is what we've learned."** The paper: [`docs/evidence.md`](../docs/evidence.md) is
   the validated-findings summary; the topic docs (`architecture.md`, `transport.md`, `relay.md`, …)
   are the design and architecture conclusions. Where an observation here has become a permanent
@@ -44,7 +46,9 @@ The thesis fails if any of the following holds and cannot be remedied:
   (SRT/Zixi/RIST) it would replace, at matched conditions.
 
 This campaign does not attempt to prove economic superiority; that is a separate, route-specific
-exercise ([economics](../docs/economics.md)).
+exercise ([economics](../docs/economics.md)). Its desk working — where the measured capacity
+constants meet public list prices — is kept here as an analysis rather than an experiment
+([cost-model.md](cost-model.md)).
 
 **Ordering.** Run cheap-and-decisive first: T1 (reference) → T2 (media-aware fidelity) → T3 (opaque
 fidelity, Gate 1) → T7 file-based, then T7 hardware (Gate 2, make-or-break) → T4/T5/T6 (real path,
@@ -66,7 +70,10 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T5 | Network impairment (both lanes) | 2 (E2E under loss/jitter) | supports Gate 1 & 3 | complete | [test-5-network-impairment.md](test-5-network-impairment.md) |
 | T6 | Relay resilience & active/active source failover | 6 (redundancy drill) | Gate 3 — resilience | partial | [test-6-relay-resilience.md](test-6-relay-resilience.md) |
 | T7 | Timing integrity (TR 101 290) | 3 (file), 4 (**hardware**) | **Gate 2 — make-or-break** | P1 complete; P2 open | [test-7-timing-integrity.md](test-7-timing-integrity.md) |
-| T8 | SRT vs MoQ comparative benchmark | 7 (comparative lab) | feeds [economics](../docs/economics.md) §8 | partial | [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) |
+| T8 | SRT vs MoQ comparative benchmark | 7 (comparative lab) | feeds [economics](../docs/economics.md) §4, §9 | partial | [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) |
+| T8b | Congestion control for a permanent fixed-rate trunk | 7 (comparative lab) | extends T8 | C1 run; C2–C6 open | [test-8b-congestion-control.md](test-8b-congestion-control.md) |
+| T9 | System performance & resource utilisation | 5 (scale/soak) | feeds [operations](../docs/operations.md), [economics](../docs/economics.md) §3.1, §4, §9 | partial — publisher and subscriber pass, relay fails | [test-9-performance.md](test-9-performance.md) |
+| T11 | Cross-implementation interop | 7 (comparative lab) | transport neutrality | T11a partial; T11b open | [test-11-interop.md](test-11-interop.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -99,47 +106,35 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 - **T8 — SRT vs MoQ (comparative, not pass/fail).** Latency competitive if MoQ + pacer glass-to-glass
   is within a stated margin of SRT at matched buffer; loss recovery competitive if recovery and
   delivered-rate curves are within a stated margin and the failure mode is no worse; egress quality at
-  least matches (P1); overhead/CPU recorded as economic inputs. Feeds [economics](../docs/economics.md) §8.
+  least matches (P1); overhead/CPU recorded as economic inputs. Feeds [economics](../docs/economics.md) §4 and §9.
+
+T8b, T9 and T11 were specified after this list was fixed; their pass criteria are stated the same way,
+in advance, at the top of their own files.
+
+### Desk analyses
+
+Work that produces numbers without touching the rig. Kept separate from the experiment table
+because there is nothing to reproduce on a host and no acceptance gate to map onto — but it is
+still working, with inputs, arithmetic and limitations recorded the same way.
+
+| Analysis | Purpose | State | File |
+|---|---|---|---|
+| Always-on cost model (v1) | Price the T9/T8 capacity constants at public list rates: MoQ vs SRT vs MediaConnect vs Cloudflare vs DIY, 1 channel and a transponder's worth, 1+1 | complete, list prices only | [cost-model.md](cost-model.md), rerun with `python3 lab/cost-model.py` |
+
+Unlike the rig work, this one is reproducible by anyone with Python: every rate is a constant at the
+top of the script, so re-pricing against a different tariff or a negotiated rate is a one-line edit.
 
 ## Roadmap — specified but not yet run
 
 Protocols are drafted in [planned-experiments.md](planned-experiments.md); each becomes its own
-per-test file when executed, or earlier where a runnable rig already exists. In priority order:
+per-test file when executed. In priority order:
 
 | # | Test | Purpose | Gate |
 |---|---|---|---|
 | T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
-| T8b | [Congestion control for a permanent fixed-rate trunk](test-8b-congestion-control.md) | Congestion-control behaviour for a fixed-rate VBR feed judged on **completeness/reconstructability**, not latency. **C1 (under-provisioned failure mode) run (first pass):** CUBIC reliably bloats but stays clean; BBRv2 (quiche) stable + complete; BBRv1 (quinn) bimodal (unsuitable for a permanent feed as-is); BBRv3 broken (#768); MoQ thins where SRT damages. Reported on [#2432](https://github.com/moq-dev/moq/pull/2432). C2–C6 (provisioned-path contention, soak) pending | extends T8 |
-| T9 | [System performance & resource utilisation](test-9-performance.md) | Per-role CPU/RSS/fd/thread envelope, fan-out scaling, protocol overhead, and a hours→days soak. Pass: **no leak** (RSS slope ≈ 0 over ≥ 24 h per role; fd/socket/thread counts stable), bounded CPU with a documented fan-out knee, overhead within budget. **Two soaks run (2026-08-10); publisher and subscriber pass, relay unresolved.** Soak #1 (0.14.8): relay slope **−0.63 MB/h** steady and **flat through 4 h of subscriber churn**, no restarts — confirming the severe `0.13.7` leak (OOM-killed after 6 d 18 h at a 3.2 GB peak, ~21 MB/hour with *no* subscribers) is fixed. Soak #2 (0.14.9): **publisher +0.03 MB/h and subscribers +0.15 MB/h — both pass**, but the relay climbed 106 → 226 MB and did not release when sessions left. The controlled A/B settled it: **both builds grow linearly at ~27 MB/h under four steady subscribers** (0.14.8 +27.14, 0.14.9 +27.74, no decay across 2.5 h), so it is **not a regression** and soak #1's flat 26 h was its lighter workload. ~650 MB/day. Flat with no subscriber, so it tracks *served load*. The relay therefore **fails** the stability criterion; whether the cache knobs bound it is under test. On Linux: relay costs **~0.85 % of a core per 10 Mbps session (~1.1 Gbps/core)**, ~6x better than the macOS/GSO-off figure; cost per Mbps **falls** with bitrate (0.167/0.090/0.049 % per Mbps at 2/10/27 Mbps), so cost tracks session count not bitrate; the observed fan-out knee at N ≈ 55-70 is the **2-core host** saturating, not the relay (co-located subscribers cost 2.4x the relay); wire overhead **~1.12x the source TS rate**; `--cache-capacity` costs nothing measurable. Outstanding: **resolve the 0.14.9 relay growth** (top item), publisher thread growth (22 → 86), cross-machine fan-out, overhead under loss, pacer envelope. | feeds [operations](../docs/operations.md) & [economics](../docs/economics.md) §3.1, §8 |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
-| T11 | [Cross-implementation interop](test-11-interop.md) | Tests the "a MoQ relay is a neutral transport fabric" assumption against implementations other than `moq-dev`. Built as a media-level test client for [`moq-interop-runner`](https://github.com/englishm/moq-interop-runner) (see [`interop/`](../interop/README.md)) rather than a private rig, in support of their [#32](https://github.com/englishm/moq-interop-runner/issues/32). **T11a partly run (2026-08-10):** a TS round trip is continuity-clean through `moq-dev` locally *and* through the public `cdn.moq.dev`, but returns **no data through all eight other registered public relays**. Root cause isolated for the five that establish a session: **`moq-dev`'s IETF publisher withholds `PUBLISH_NAMESPACE` until the peer sends it a `SUBSCRIBE_NAMESPACE`** — its own relay does, no third-party MOQT relay does (in MOQT a publisher announces proactively), so `moq import ts` connects and then encodes not one control message. A second issue sits behind it: discovery uses an *empty* `SUBSCRIBE_NAMESPACE` prefix, which moxygen rejects (error 16) and imquic/moqx/Cloudflare never answer. Forcing MOQT-14 on a local relay passes cleanly, so the IETF path itself is sound — this is a client convention, not a relay defect. quiche-moq, libquicr and moqtail fail earlier at connection/SETUP and are undiagnosed. Notable: the interop matrix is control-plane only today, so `setup-only` reports green on a relay through which no media flows | transport neutrality |
 | T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
 | T3/T4+ | Opaque lane over the wire | Deploy the opaque publisher on EC2 to run opaque transparency over a real path (T3/T4 are currently localhost/file-fed on the opaque lane) | supports Gate 1 & 3 |
-
-## Rough chronology
-
-Dates are as recorded at the time; builds under test are pinned per experiment (see also the
-provenance table in `notebook.local.md`).
-
-- **2026-07-16** — T2 first media-aware run (`moq-token-cli` build, moq-lite-04): elementary
-  streams survive, DVB service layer dropped, PMT renumbered.
-- **2026-07-17** — T5 opaque-lane impairment, built and run on EC2 loopback.
-- **2026-07-18** — `mpegts-pacer` P1 grooming three-clip run.
-- **2026-07-20** — ST 2022-7 output-determinism study (T6 precondition).
-- **2026-07-21** — T2 `dev` re-run @ `e3576465` confirming the #1979 fix (#2072 + #2066).
-- **2026-07-22** — T1 P0 baseline (4 clips); T4 remote SRT chain; T7 P1 four-clip run; T8
-  clean-path + start of the impairment matrix.
-- **2026-07-23** — T8 four-way CC comparison; third-party BBR relay dual long-haul.
-- **2026-07-24** — T6 #2473 first review; #2468 CC-default flip noted.
-- **2026-07-27** — T6 #2473 re-review (`cc11cbaf`), live two-relay drill passes.
-- **2026-07-28** — #2473 merged (`b624c7c0`).
-- **2026-07-30** — T6 re-verify on the `moq-net 0.2.5` / `moq-cli 0.9.5` release.
-- **2026-08-03** — T6 single-source common-feed study (`src_failover.sh`) on `0.14.3-b87d4e92`.
-- **2026-08-05** — T6 re-verify on the 0.14.7 release (cluster ext #2629, detach #2616/#2654/#2659/#2664, resume hardening #2666); conclusions unchanged.
-- **2026-08-06** — T6 reconnect/retention re-verify on `main` `a6dd44a6` (#2647 fail-fast retries, #2615 media retention); T9 preliminary EC2 observation (standing relay ~3.2 GB RSS plateau), controlled T9 deferred.
-- **2026-08-07** — T6 takeover re-verify on the 0.14.8 release (#2701 takeover livelock); conclusions unchanged. T9: the EC2 relay was **OOM-killed** overnight, converting the "plateau" into a confirmed ~21 MB/hour leak on `0.13.7`, not reproduced on 0.14.8; fan-out envelope measured to N = 25 (no knee). Two multi-track failover unit tests written against `moq-net`.
-- **2026-08-08** — T9: the 26.5 h soak **passes** on 0.14.8 (relay slope ≈ 0, flat through churn, no restarts), closing the leak question. The looped-source publisher crash localised to the **audio** parsers (MP2 and AC3 both abort; video-only survives), and a publisher-role soak launched on 0.14.9 using a video-only loop. EC2 moved 0.14.8 → 0.14.9. Upstream: our unit tests merged as [#2713](https://github.com/moq-dev/moq/pull/2713); [#2704](https://github.com/moq-dev/moq/pull/2704) removes the #2469 linger on the `dev` branch — a future T6 re-test trigger.
-- **2026-08-10** — T9 soak #2: **publisher and subscriber roles pass**, but the relay grew 106 → 226 MB on 0.14.9. The controlled A/B then showed **both builds growing linearly at ~27 MB/h** under four steady subscribers — not a regression, and soak #1's flat 26 h was its lighter workload. The relay **fails** the stability criterion and the paper's claim was walked back. The 32 MiB cache-capacity leg then showed the documented bound **does not contain it** — same +27.15 MB/h, running to more than twice the cap above baseline with no inflection — so this is a leak outside the accounted cache pool, not a tuning question. An N = 0/1/2/4/8 sweep is running to establish per-subscriber vs per-group before it goes upstream. The audio-sync abort **localised to one propagating `?`** and reproduced with a single flipped bit and no timeline jump — now reportable, drafted as an issue. Reviewed [`moq2ts`/`moqxr`](https://github.com/mondain/moq2ts/pull/2), the first outside opaque-TS-over-MoQ publisher: transport drafts overlap with `moq-dev`, so relay-level interop looks plausible ([interoperability](../docs/interoperability.md) §9).
 
 ## Cross-cutting limitations (stated up front)
 

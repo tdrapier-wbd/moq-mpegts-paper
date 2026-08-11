@@ -27,8 +27,7 @@ single-transport CDN) SRT lacks.
   B ∈ {250 ms, 500 ms, 1 s, 2 s} is defined for the (still-owed) latency runs.
 - **Clock discipline:** for absolute glass-to-glass latency, both ends NTP-synced (`chrony`); the
   relative MoQ − SRT delta does not need NTP (same burnt-in timecode, same local clock).
-- Runs 2026-07-22 (clean path + start of matrix) and 2026-07-23 (four-way CC comparison; third-party
-  long-haul). The EC2 build predates PR #2440, so the MoQ egress strips DVB SI throughout.
+- The EC2 build predates PR #2440, so the MoQ egress strips DVB SI throughout.
 
 **Two deliberate asymmetries** (recorded, not hidden): the MoQ path traverses a relay hop (the point
 of the architecture) whereas SRT is point-to-point; and the deployed EC2 publisher is the media-aware
@@ -178,8 +177,12 @@ backend delivers full clean-path rate (noq 9.63, quiche 9.28, quinn 9.6 Mbps).
   default/production backend; noq-BBR3's instability here is explained by a BBRv3 panic
   ([noq #768](https://github.com/n0-computer/noq/issues/768)) — a subtract-overflow in
   `inflight_at_loss` that aborts the process under high loss and has driven noq/iroh back to CUBIC by
-  default. For a broadcast deployment today, **quinn + `delay` (BBRv1)** is the pragmatic choice;
-  upstream has since made **BBRv1 the default on quinn** ([#2468](https://github.com/moq-dev/moq/pull/2468)).
+  default. Under the *non-congestive* impairment this matrix applies, **quinn + `delay` (BBRv1)** is
+  the pragmatic choice, and upstream has since made **BBRv1 the default on quinn**
+  ([#2468](https://github.com/moq-dev/moq/pull/2468)). Note this recommendation does not carry over to
+  a congested path: under a shaped bottleneck quinn-BBRv1 is bimodal, and
+  [T8b](test-8b-congestion-control.md) pins **BBRv2 on quiche** for a permanent fixed-rate trunk. The
+  two are scoped to different failure regimes rather than in conflict.
 
 ### Congestion-control defaults & methodology (bounding how these numbers read)
 
@@ -194,7 +197,7 @@ backend delivers full clean-path rate (noq 9.63, quiche 9.28, quinn 9.6 Mbps).
   *"the best congestion control in the face of random loss is zero congestion control"* — so the
   CUBIC-collapse/BBR-robust result is **loss-signal interpretation**, not a CC-quality metric.
 
-### Third-party BBR relay — dual long-haul (2026-07-23)
+### Third-party BBR relay — dual long-haul
 
 Neither leg is local: EC2 publisher (eu-west-1, EMEA, RTT ≈ 174 ms) → relay `mgw.edis.mx`
 (`<EDIS_IP>`, Mexico, BBR) → home subscriber (London, RTT ≈ 190 ms). Relay `https://mgw.edis.mx/test`,
@@ -235,8 +238,8 @@ After the CBR pacer: exact CBR **10.955 Mbps** (12.8 % stuffing), PCR mean 18.94
   controller behaved well." The only genuinely CC-dependent result is CUBIC misreading random loss —
   loss-signal interpretation, not a CC-quality verdict. Table 4 caps the pipe but only with a bare
   `netem rate` token bucket, CUBIC vs SRT only. The congestion-control test proper (shaped bottleneck,
-  all controllers, scored on completeness) has a [first-pass failure-mode result in
-  T8b](test-8b-congestion-control.md) but its provisioned-path conditions are not yet run.
+  all controllers, scored on completeness) has an [under-provisioned failure-mode result in
+  T8b](test-8b-congestion-control.md); its provisioned-path conditions are not yet run.
 
 ## Conclusion
 
@@ -253,6 +256,6 @@ controller recommendation for a permanent fixed-rate trunk.
 ## References
 
 - Impairment method reused from: [test-5-network-impairment.md](test-5-network-impairment.md).
-- Congestion control for a permanent fixed-rate trunk (first-pass C1 run): [test-8b-congestion-control.md](test-8b-congestion-control.md).
+- Congestion control for a permanent fixed-rate trunk (C1 run): [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Upstream: [#2432](https://github.com/moq-dev/moq/pull/2432), [#2468](https://github.com/moq-dev/moq/pull/2468), [#1706](https://github.com/moq-dev/moq/pull/1706), [noq #768](https://github.com/n0-computer/noq/issues/768).
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §6; feeds [`docs/economics.md`](../docs/economics.md) §8.
+- Findings: [`docs/evidence.md`](../docs/evidence.md) §6; feeds [`docs/economics.md`](../docs/economics.md) §4 and §9.

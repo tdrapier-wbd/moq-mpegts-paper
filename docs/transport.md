@@ -456,7 +456,7 @@ matter at this layer:
 - **Delivery behaviour under loss/jitter.** Bounded, stable latency and graceful
   degradation under representative public-Internet conditions, characterised in a
   head-to-head lab against SRT/Zixi/RIST ([implementation](implementation.md) §6,
-  [economics](economics.md) §8).
+  [economics](economics.md) §9).
 - **Downstream conformance after grooming.** A clean TR 101 290 P1/P2 pass on real
   hardware IRDs. This is the make-or-break acceptance criterion for the whole
   thesis; it is a property of transport-plus-grooming, not transport alone, and it

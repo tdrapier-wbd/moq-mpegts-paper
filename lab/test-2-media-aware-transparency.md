@@ -24,10 +24,10 @@ the direct contrast is in T3.
   untouched.
 - All localhost. macOS loopback gotchas apply (see `lab/README.md`).
 
-Chronology of builds exercised: first media-aware run 2026-07-16 (early `moq-token-cli` build,
-moq-lite-04) showed the raw behaviour; the #1979 fix was confirmed on the `dev` tree @ `e3576465`
-(2026-07-21); the DVB service-layer behaviour was measured against PR
-[#2440](https://github.com/moq-dev/moq/pull/2440).
+Two upstream changes separate the as-shipped behaviour recorded below from the current one: the #1979
+catalog-reservation fix (#2072, with open-GOP recovery-point detection #2066), and the DVB
+service-layer preservation in PR [#2440](https://github.com/moq-dev/moq/pull/2440). Results are
+labelled by which side of those they sit on.
 
 ## Procedure
 

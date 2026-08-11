@@ -1252,7 +1252,7 @@ The load-bearing decisions and the trade-offs they carry:
 | Media-aware re-muxing as default/preferred; opaque TS carriage as fallback (§4.2) | Media-aware is MoQ-native and enables relay/amplify with per-track prioritisation; opaque preserves signalling verbatim for feeds/IRDs media-aware cannot yet serve | Opaque fallback forgoes per-track prioritisation and selective subscription; some media-aware feed handling still maturing |
 | Transport-independent media/control layers (§4.3, §9) | Survives MoQ draft churn; transport commoditises                 | Extra abstraction; cannot exploit every transport-specific feature |
 | Grooming at the edge, not the publisher (§7.2)        | Absorbs whole-path jitter where determinism is required          | CPU/timing-heavy edge; per-flow real-time obligation               |
-| Dumb-and-fast relays (§5.4)                           | Keeps the commodity layer commodity; value moves up-stack        | Intelligence and cost concentrate at edge and control plane        |
+| Dumb-and-fast relays (§5.4)                           | Keeps the commodity layer commodity; value moves up-stack        | Intelligence and cost concentrate at edge and control plane; relays are not yet interchangeable *between* implementations (§17) |
 | Out-of-band, non-fate-sharing control plane (§9.2)    | Data plane survives control-plane outages                        | Revocation needs a token backstop, not just a live signal          |
 | Short tokens + fast-path revocation (§11.2)           | Bounds worst-case revocation independent of control-plane health | Steady-state renewal overhead                                      |
 | Shared data plane, isolated control (§13.2)           | Enables shared-infrastructure economics                          | Cross-tenant congestion coupling, bounded by quotas                |
@@ -1279,6 +1279,14 @@ near-term platform is deliberately single-operator.
 - **Correlated-failure behaviour.** The residual risk of simultaneous impairment
 across disjoint Internet paths (§14.4) is not yet characterised in production,
 which is why a hybrid backstop is recommended for the highest-assurance routes.
+- **Relay portability between implementations.** This architecture treats the relay
+as a commodity layer (§5.4), which presumes a feed can be carried over a relay
+somebody else operates. Measured against every public relay, it currently cannot:
+carriage succeeds only within a single implementation, blocked by an announce
+convention rather than by anything architectural ([evidence](evidence.md) §9,
+[interoperability](interoperability.md) §9.6). The protocol permits portability and
+the fix is a client-side default, but until it is demonstrated, "commodity relay"
+is an aspiration and vendor lock-in is the realistic near-term position.
 - **Economics at always-on trunk scale.** As the vision notes, the cost case is
 route-specific and strongest for dynamic/long-tail routes; it is not
 established for always-on trunk routes against depreciated incumbent capacity.

@@ -1,10 +1,10 @@
 # T8b — congestion control for a permanent fixed-rate trunk
 
-> **First pass run (2026-07-30):** one under-provisioned *failure-mode* condition (C1) executed on the
-> namespace rig; the provisioned-path conditions (C2–C6) are **not yet run**. Results are a first pass
-> (2–3 replicates per controller). **Not yet promoted to `docs/evidence.md`.** The upstream
-> discussion this test came from — and where the first-pass numbers were reported — is
-> [moq #2432](https://github.com/moq-dev/moq/pull/2432).
+> **State:** one under-provisioned *failure-mode* condition (C1) is executed on the namespace rig, at
+> 2–3 replicates per controller; the provisioned-path conditions (C2–C6) are **not yet run**. The
+> controller ranking below is therefore indicative and scoped to the under-provisioned case, which is
+> why it is **not promoted to `docs/evidence.md`**. The upstream discussion this test came from, and
+> where these numbers were reported, is [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
 
@@ -197,9 +197,9 @@ permanent trunk.
   maintainer's own "quinn BBR is kind of bugged" note (asked upstream on #2432).
 - **BBRv3 (noq) is out** — it both bloats and collapses delivery to ~12 %, the #768 overflow biting
   under sustained pressure. A controller that can abort the relay is an outage by definition here.
-- **The controller to pin (first pass) is BBRv2 on quiche** — stable, complete, no aborts. We do not
-  need it to be the upstream default; we need it to be a supported choice we can run continuously
-  (the open question to the maintainer on #2432).
+- **The controller to pin is BBRv2 on quiche** — stable, complete, no aborts. It does not need to be
+  the upstream default; it needs to be a supported choice that can be run continuously (the open
+  question to the maintainer on #2432).
 - **MoQ and SRT fail in opposite directions** — the T8 finding, now under congestion too. MoQ sheds
   *whole groups* and emits a syntactically clean TS (0 CC, 45–81 % delivered) — thinned but
   reconstructable. SRT keeps 90 % of the bytes but its ARQ cannot hold under sustained
@@ -225,7 +225,7 @@ For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not a
 
 ## Conclusion
 
-First-pass C1 establishes the rig and the qualitative picture under an (deliberate) under-provisioned
+C1 establishes the rig and the qualitative picture under a deliberately under-provisioned
 cap: **CUBIC reliably bloats but stays clean; BBRv2 (quiche) is the stable, complete performer; BBRv1
 (quinn) is bimodal and therefore unsuitable for a permanent feed as it stands; BBRv3 (noq) is broken
 by #768; and MoQ thins where SRT damages.** The controller to pin today is **BBRv2 on quiche**,

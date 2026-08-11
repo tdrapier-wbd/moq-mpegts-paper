@@ -7,9 +7,9 @@ separate *transport resilience* (does a client survive a relay restart / dropped
 *service redundancy* (does an active/active pair fail over without the receiver noticing?), and
 establish the ST 2022-7 output-determinism precondition for a hitless dual-path pair.
 
-> This experiment reached several wrong conclusions along the way; per lab discipline those are
-> preserved here alongside the corrections rather than erased. Two of the four issues we reported
-> were real; two were our own harness (see Corrections).
+> Of the four issues this experiment reported upstream, **two were real defects and two were
+> artefacts of our own harness**. Both artefacts, and the method rules that follow from them, are
+> recorded under [Corrections](#corrections) — they are the most transferable output of this drill.
 
 ## Environment
 
@@ -21,20 +21,13 @@ establish the ST 2022-7 output-determinism precondition for a hitless dual-path 
   `~/t6-redundancy/` (`failover.sh`, `cluster_failover.sh`, `reconnect.sh`, `graceful_exit.sh`,
   `renumber_takeover.sh`, `src_failover.sh`, `relayA.toml`, `relayB.toml`). A one-row-per-second byte
   sampler on each subscriber output makes the failure instant visible.
-- ST 2022-7 determinism study (2026-07-20): `mpegts-pacer` 0.1.0, TSDuck 3.44-4676, FFmpeg 8.1
-  (Darwin 25.5.0).
-- Builds across the campaign: drills on 0.8.7; #2473 verified on head `cc11cbaf` (`moq 0.9.3`,
-  2026-07-27); #2473 merged `b624c7c0` (2026-07-28); re-verified on the `moq-net 0.2.5` / `moq-cli
-  0.9.5` release (2026-07-30); re-verified again on current `main` `moq-relay 0.14.3-b87d4e92`
-  (origin/main `ea08e964`, incl. #2556 + #2565) (2026-07-31); single-source common-feed study
-  (`src_failover.sh`) on that same `0.14.3-b87d4e92` build (2026-08-03); re-verified on the
-  **0.14.7 release** (`moq-relay` 0.14.7 / `moq-cli` 0.9.7 / `moq-net` 0.2.8, origin/main `525d74ef`
-  = release #2602, drill tip `722f38f7`; incl. #2629 cluster ext + #2616/#2654/#2659/#2664 detach +
-  #2666 resume/route hardening) (2026-08-05). *(The binary cosmetically self-reports `0.14.3` — a
-  stale `--version` string source — but is built from the 0.14.7 release commit; the crate versions
-  in-tree are 0.14.7 / 0.9.7 / 0.2.8.)* Re-verified on `main` `a6dd44a6` (#2647, #2615) (2026-08-06)
-  and on the **0.14.8 release** (`moq-relay` 0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9, origin/main
-  `c8b11b10` = release #2672, incl. [#2701](https://github.com/moq-dev/moq/pull/2701)) (2026-08-07).
+- ST 2022-7 determinism study: `mpegts-pacer` 0.1.0, TSDuck 3.44, FFmpeg 8.1 (Darwin 25.5.0).
+- **Builds.** The drill outcomes below are the current state on the **0.14.8 release** (`moq-relay`
+  0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9). The same drills were run on each intervening release
+  from 0.8.7 onward as the routing, detach and resume paths were rewritten upstream; the outcomes did
+  not change, and the two places where a *result* moved are called out where they occur (the 4-packet
+  startup offset, and the reconnect ceiling). Note some release binaries cosmetically self-report an
+  older `--version` string than the release they are built from; trust the in-tree crate versions.
 
 ## Procedure
 
@@ -64,7 +57,7 @@ is negligible); `pubA` ends at t=25 with the standby announced since t=2.
 
 ## Results
 
-### ST 2022-7 output-determinism precondition (§10.4)
+### ST 2022-7 output-determinism precondition
 
 ST 2022-7 reconstructs by matching RTP sequence numbers, so a dual-path pair is hitless only if the
 two egress legs are **byte-identical and sequence-aligned**. Method: offline `cbr_file`
@@ -117,55 +110,55 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   keep-alive period.
 - **Naive active/active on one relay collapses the stream.** Two publishers announcing the same
   broadcast to one relay do not form a standby pair — the moment the second announces, the relay
-  declares the path `unroutable` and tears down **both** (`Error: moq: unroutable`).
-- **Two-relay mesh tolerated the pair but did NOT fail over on `moq-lite-05`** (pre-#2473). With
-  `pubA→relayA` / `pubB→relayB` meshed, both coexist, but killing `pubA` left `relayA` unable to
-  re-splice: `relayB` never re-announced its local `red.hang` back to `relayA` (announce coalescing
-  keeps one best route per path; split-horizon `exclude_hop` suppressed the return route), so
-  `relayA` had **no standby route to reselect**. The origin implements multi-source splice
-  (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`, unit test `test_route_failover`) but was
-  not fed a second live route.
-- **`moq-lite-06-wip` cost routing is opt-in and, alone, insufficient.** With both relays and all
-  clients opted in (#2424: a standby seeds a high `route.cost`; the winner's cost drops to 0 when it
-  carries), the mesh drill behaved **exactly as on `moq-lite-05`** — pricing has nothing to rank
-  because the standby route is never advertised across the mesh. Cost routing is
-  **necessary-but-not-sufficient**.
+  declares the path `unroutable` and tears down **both** (`Error: moq: unroutable`). A 1+1 pair needs
+  two relays and a shared `--origin`.
 
-### Upstream fix #2473 — the two-relay drill now passes (2026-07-27 → merged 2026-07-28)
+**Why the mesh needed a routing fix, which #2473 supplied.** Before that fix a two-relay mesh
+tolerated the pair but did **not** fail over: with `pubA→relayA` / `pubB→relayB` meshed, both coexist,
+but killing `pubA` left `relayA` unable to re-splice, because `relayB` never re-announced its local
+`red.hang` back to `relayA` (announce coalescing keeps one best route per path; split-horizon
+`exclude_hop` suppressed the return route). `relayA` had **no standby route to reselect**. The origin
+already implemented multi-source splice (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`,
+unit test `test_route_failover`); it was simply never fed a second live route. This also explains why
+`moq-lite-06` cost routing is **necessary but not sufficient** on its own: with both relays and all
+clients opted in (#2424 — a standby seeds a high `route.cost`, the winner's drops to 0 while it
+carries), the mesh drill behaved exactly as before, because pricing has nothing to rank when the
+standby route is never advertised.
+
+### Mesh source failover works, bounded by detection
 
 [#2473](https://github.com/moq-dev/moq/pull/2473) (*"fail over across redundant publishers via
-per-peer route selection"*, addressing #2461) adds per-peer announce selection (a relay advertises
-the best route whose hop chain *excludes* the requesting peer), exclusion-aware serving, first-hop
-content identity in SETUP, and a `moq --origin <id>` knob so a 1+1 pair declares itself
-interchangeable. Model/wire unit tests pass (`excluded_peer_receives_the_standby`,
-`standby_attach_announces_to_excluded_peer`, `test_standby_join_splices_live_subscriber`,
-`origin_round_trip`, plus per-track regressions `test_standby_missing_track_keeps_incumbent`,
-`test_unservable_track_retried_by_a_later_request`). Live drill (head `cc11cbaf`, `moq 0.9.3`):
+per-peer route selection"*, addressing #2461) is what makes the two-relay drill pass. It adds per-peer
+announce selection (a relay advertises the best route whose hop chain *excludes* the requesting peer),
+exclusion-aware serving, first-hop content identity in SETUP, and a `moq --origin <id>` knob so a 1+1
+pair declares itself interchangeable. Model/wire unit tests pass
+(`excluded_peer_receives_the_standby`, `standby_attach_announces_to_excluded_peer`,
+`test_standby_join_splices_live_subscriber`, `origin_round_trip`, plus per-track regressions
+`test_standby_missing_track_keeps_incumbent`, `test_unservable_track_retried_by_a_later_request`).
 
-- **Failover works.** `sub1` on relay A resumed **30–33 s after `pubA` was killed** and ran to the
-  end of the window (+22.5 MB and +25.3 MB in two full-rate runs). The debug log shows the whole
-  mechanism: relay A announces its local route (`announce broadcast=red.hang hops=1`); while relay B
-  is merely carrying via relay A it correctly advertises nothing (`no advertisable route for this
-  peer exclude_hop=…`); the instant standby `pubB` joins relay B it emits `announce broadcast=red.hang
-  hops=2` to relay A, so relay A holds the standby **before** it needs it; on detection relay A
-  reselects (`unannounce (filtered route)` → `reannounce`).
-- **The shared-`--origin` teardown is fixed.** `sub3` on relay B now survives `pubB`'s join (+9.7 MB)
-  with **zero `unroutable`** in any client log, where it previously died with `Error::Unroutable`
-  (`code=30`).
+- **Failover works.** `sub1` on relay A resumes **~30 s after `pubA` is killed** and runs to the end
+  of the window. The debug log shows the whole mechanism: relay A announces its local route
+  (`announce broadcast=red.hang hops=1`); while relay B is merely carrying via relay A it correctly
+  advertises nothing (`no advertisable route for this peer exclude_hop=…`); the instant standby `pubB`
+  joins relay B it emits `announce broadcast=red.hang hops=2` to relay A, so relay A holds the standby
+  **before** it needs it; on detection relay A reselects (`unannounce (filtered route)` →
+  `reannounce`).
+- **The shared-`--origin` teardown is fixed.** `sub3` on relay B survives `pubB`'s join with **zero
+  `unroutable`** in any client log, where it previously died with `Error::Unroutable` (`code=30`).
 - **Recovery latency is one QUIC idle timeout** — detection-bound, not mechanism-bound. Lower
-  `--server-quic-idle-timeout` to shorten it; upstream is weighing a lower default (~10 s).
+  `--server-quic-idle-timeout` to shorten it.
 - **Reliability:** with the pipeline SIGKILLed in one pass, **4 of 4 runs failed over at full rate**,
-  resuming at 30, 32, 32 and 33 s. Recovery is *complete*, not merely present.
+  resuming at 30, 32, 32 and 33 s. Recovery is *complete*, not merely present. Repeat runs across
+  every subsequent release land in the same 29–34 s band.
 
-Re-verified on the **0.2.5 release** (`moq-net 0.2.5` / `moq-cli 0.9.5`, 2026-07-30): three runs
-resumed at 30, 31 and 33 s — unchanged. The intervening fix
-[#2556](https://github.com/moq-dev/moq/pull/2556) (*"prefer the newest route so a reconnect takes
-over immediately"*) does not touch this case: it addresses a publisher reclaiming *its own* path on
-reconnect and states outright that shared-origin 1+1 standbys are unaffected. Its same-origin recency
-tie-break cannot fire here because the active (local, `hops=1`) and standby (mesh, `hops=2`) routes
-differ on cost, so cost decides before recency.
+One adjacent fix that does *not* touch this case, since it is easy to assume it would:
+[#2556](https://github.com/moq-dev/moq/pull/2556) (*"prefer the newest route so a reconnect takes over
+immediately"*) addresses a publisher reclaiming *its own* path on reconnect, and states outright that
+shared-origin 1+1 standbys are unaffected. Its same-origin recency tie-break cannot fire here because
+the active (local, `hops=1`) and standby (mesh, `hops=2`) routes differ on cost, so cost decides
+before recency.
 
-### Confirmed gap — graceful source departure is not failed over at all
+### Graceful source departure is not failed over at all
 
 When the active publisher exits *cleanly* instead of being killed, the relay does **not** reselect
 onto the announced standby; it propagates completion. Both media tracks log `subscribe complete`, the
@@ -176,53 +169,47 @@ removed`. Verified with `graceful_exit.sh` (finite clip, standby announced 23 s 
 and far more common one — SIGTERM to an encoder, a container rescheduled, a rolling restart — is
 uncovered, and a shared `--origin` buys nothing here. Adjacent to but distinct from #2469 (which
 fixed the exporter's `json: dropped` on session *loss*; here the session is healthy and it is the
-*catalog* changing under the muxer). Plausibly intended MoQ semantics rather than a defect. Still
-reproduces unchanged on the 0.2.5 release. Proposed remedies: an announcement `epoch`
+*catalog* changing under the muxer). Plausibly intended MoQ semantics rather than a defect, and it
+persists across every release tested. Proposed remedies: an announcement `epoch`
 ([#2330](https://github.com/moq-dev/moq/issues/2330)) or the typed announcement lifecycle
 (#2216/#2217); an independent report on #2330 measures the same gap as a multi-second consumer outage.
+The spec-level fix is moq-lite-06 **broadcast epochs / ended-broadcasts**
+([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), which is not yet on the wire.
 
-### Re-verification on current `main` (2026-07-31): #2556/#2565 and the reconnecting-publisher takeover
+### Single-relay reconnecting-publisher takeover is not clean
 
-Prompted by the maintainer closing [#2534](https://github.com/moq-dev/moq/pull/2534) (*"deliver
-groups from a takeover source that restarted its numbering"*) **unmerged**, with *"I think this is
-fixed by #2556 … doing more takeover stuff on the dev branch"*, plus an independent production repro
-on that PR (a `@moq/net` subscriber starved for the broadcast's age after a publisher restart;
-version-bisected clean on v0.14.1 and broken from v0.14.2 — the #2469 linger). Drills re-run on
-`moq-relay 0.14.3-b87d4e92` (origin/main `ea08e964` + #2556 + #2565).
+The scenario of [#2534](https://github.com/moq-dev/moq/pull/2534) (*"deliver groups from a takeover
+source that restarted its numbering"*, closed unmerged as *"fixed by #2556"*) on the TS path, drilled
+with `renumber_takeover.sh`: one relay, a `moq export ts` subscriber, pubA SIGKILLed after ~15 s, pubB
+rejoining the **same** broadcast ~1 s later as a fresh session with restarted group numbering. The
+same PR carries an independent production report — a `@moq/net` subscriber starved for the
+broadcast's age after a publisher restart, bisected clean on v0.14.1 and broken from v0.14.2 (the
+#2469 linger).
 
-- **Hard-kill 1+1 mesh — unchanged.** `cluster_failover.sh` (`SIDLE=6s`): `sub1` resumed 10 s after
-  the kill, `sub3` survived the standby join, 0 `unroutable`. As on 0.2.5 — #2556 does not alter it,
-  consistent with the analysis above.
-- **Graceful exit — unchanged.** `graceful_exit.sh`: `sub1` frozen from pubA's clean exit for the
-  rest of the window; the exporter dies `TS track layout changed after PAT/PMT was emitted: '0.avc3'
-  removed`. Still uncovered.
-- **Single-relay reconnecting-publisher takeover — new drill (`renumber_takeover.sh`), not clean.**
-  This is the #2534 scenario on the TS path: one relay, a `moq export ts` subscriber, pubA SIGKILLed
-  after ~15 s, pubB rejoining the **same** broadcast ~1 s later as a fresh session (restarted group
-  numbering).
-  - *Fresh identity (no `--origin`):* the exporter **terminates** with `Error: json: dropped` the
-    instant pubB attaches — the takeover replaces rather than splices, dropping the catalog
-    subscription. Reproduced on every run.
-  - *Shared `--origin` (interchangeable source):* the exporter **survives** and delivery **resumes**,
-    but only after a gap of ~the join delay (~17 s frozen for a 15 s pubA, then steady growth to the
-    end). That 1:1-with-join-delay scaling is exactly the independent-copy timeline-offset artifact
-    documented under Corrections below (both publishers replay the same clip from its start), so this
-    drill **cannot** separate it from the #2534 splice-floor starvation — a timeline-aligned rerun
-    (pubB's media clock continued from pubA's, not restarted) is needed to attribute it.
-  - **Bottom line:** #2556 does **not** make the single-relay TS reconnecting-publisher takeover
-    hitless — fresh identity crashes the exporter, shared origin gaps it. The recommended posture (a
-    fully doubled chain with receiver-side ST 2022-7 selection) does not depend on this path, but a
-    naive "publisher reconnects to the same broadcast" is unsafe for a downstream `moq export ts`,
-    and whether the shared-origin residual gap is our clock skew or the #2534 splice-floor is still
-    open.
+- *Fresh identity (no `--origin`):* the exporter **terminates** with `Error: json: dropped` the
+  instant pubB attaches — the takeover replaces rather than splices, dropping the catalog
+  subscription. Reproduced on every run.
+- *Shared `--origin` (interchangeable source):* the exporter **survives** and delivery **resumes**,
+  but only after a gap of ~the join delay (~17 s frozen for a 15 s pubA, then steady growth to the
+  end). That 1:1-with-join-delay scaling is exactly the independent-copy timeline-offset artefact
+  documented under [Corrections](#corrections) (both publishers replay the same clip from its start),
+  so this drill **cannot** separate it from the #2534 splice-floor starvation — a timeline-aligned
+  rerun (pubB's media clock continued from pubA's, not restarted) is needed to attribute it.
 
-### Single-source 1+1 failover — the requirement is a common source, not byte-identical numbering (2026-08-03)
+**Bottom line:** #2556 does **not** make the single-relay TS reconnecting-publisher takeover hitless —
+fresh identity crashes the exporter, shared origin gaps it. The recommended posture (a fully doubled
+chain with receiver-side ST 2022-7 selection) does not depend on this path, but a naive "publisher
+reconnects to the same broadcast" is unsafe for a downstream `moq export ts`, and whether the
+shared-origin residual gap is our clock skew or the #2534 splice-floor is still open.
 
-Prompted by the maintainer's note on #2545 (*"if you're publishing two separate broadcasts (different
+### Single-source 1+1 failover — the requirement is a common source, not byte-identical numbering
+
+The maintainer's position on #2545 is that *"if you're publishing two separate broadcasts (different
 timestamps, codecs, segments) with the same name then failover is impossible … the application needs
-to reinitialise everything on a switch"*) and by the observation that our earlier drills fed the two
-publishers *independent* copies of one clip. This run rebuilds the rig around **one source feeding
-both publishers**, which is what a real 1+1 pair is: two views of a single feed, not two encodes.
+to reinitialise everything on a switch"*. Testing that requires a rig built around **one source
+feeding both publishers**, which is what a real 1+1 pair is — two views of a single feed, not two
+encodes. (A drill that feeds the two publishers *independent copies* of a clip measures its own clock
+skew instead; see [Corrections](#corrections).)
 
 **Why the source matters, from the code.** A publisher's moq group sequence numbers are a per-importer
 counter reset to 0 at its first keyframe (`append_group()` → `max_sequence + 1`, seeded 0, in
@@ -242,12 +229,16 @@ a late/mid-stream joiner is offset in group numbering (its group 0 = the primary
   its group numbering is offset by construction. This is the production shape (publishers always join
   an already-running feed).
 
-**Results** (`moq-relay 0.14.3-b87d4e92`, hard kill, default 30 s idle unless noted):
+**Results** (hard kill, default 30 s idle unless noted):
 
-- **E1 proves the broadcasts are identical.** `sub1` (relay A/pubA) and `sub3` (relay B/pubB) grew
-  **byte-for-byte equal every second before the kill** (t=9..14 exactly equal). Kill pubA → `sub1`
-  resumed **~31 s later**, output TS **0 CC errors**, one `current group evicted; skipping to next
-  buffered group`. `gtee` kept feeding pubB throughout (sub3 uninterrupted).
+- **E1 proves the broadcasts are identical in content.** `sub1` (relay A/pubA) and `sub3` (relay
+  B/pubB) grow with **identical per-second deltas** before the kill, separated only by a **constant
+  752-byte (= exactly 4 TS packets) startup offset** on one leg — so steady-state content is
+  byte-identical and only the initial emission differs by a 4-packet preamble. (On builds before the
+  codec/track split [#2636](https://github.com/moq-dev/moq/pull/2636) and the origin-model changes,
+  the two legs were byte-for-byte equal including the preamble.) Kill pubA → `sub1` resumed **~31 s
+  later**, output TS **0 CC errors**, one `current group evicted; skipping to next buffered group`.
+  `gtee` kept feeding pubB throughout (sub3 uninterrupted).
 - **E2 — the mid-stream offset does NOT break failover.** Despite pubB's group numbers being offset,
   `sub1` still reselected onto pubB and resumed **~30 s after the kill**, TS **0 CC errors**, and the
   exporter **subscribed once** (`catalog.json`, `0.avc3`, `1.ts`, `2.ts`, `3.ts`, `4.ts`, `0.mp2`,
@@ -289,11 +280,12 @@ cleanly, because the exporter skips to live rather than demanding group-number c
 genuinely make failover "impossible" is a divergent **track layout / codec** across the pair (two
 independent encodes), which a single shared source rules out by construction.
 
-### Re-verification on the 0.14.7 release (2026-08-05): cluster extension + detach/resume hardening
+### What the cluster/detach/resume rewrite changed
 
-Prompted by a dense ~36 h of upstream merges that touch the exact routing/resume/detach paths these
-drills exercise, re-run on the **0.14.7 release** (`moq-relay` 0.14.7 / `moq-cli` 0.9.7 / `moq-net`
-0.2.8, origin/main `525d74ef`; drill tip `722f38f7`). The relevant PRs:
+A dense sequence of upstream merges rewrote the exact routing, resume and detach paths these drills
+exercise. **No drill outcome changed**, which is the main thing to record — but the machinery beneath
+them did, and the resume path the mid-stream-standby drill exercises is now the hardened one. The
+relevant PRs:
 
 - **#2629 — MoQ Cluster extension over moq-transport.** Generalises the mesh machinery #2473 gave
   moq-lite (append own Hop ID, discard a path already containing our Hop ID = loop prevention,
@@ -316,46 +308,29 @@ drills exercise, re-run on the **0.14.7 release** (`moq-relay` 0.14.7 / `moq-cli
   subscription** (the refuser is ruled out of that one track only); unbounded segment accumulation is
   pruned; a stranded logical track on takeover failure is aborted; fetch gained failover.
 
-**All five drill outcomes are unchanged from 0.14.3** — no regression from the cluster/detach/resume
-rewrite (build cosmetically self-reports `0.14.3`, but is the 0.14.7 release commit; see Setup):
+Two effects of this work are visible in the drills:
 
-- **E1 (`src_failover.sh MODE=gtee`, byte-identical co-started):** failover PASS, `sub1` resumed
-  **~34 s** after the hard kill (one idle timeout), **0 CC errors**, single `current group evicted;
-  skipping to next buffered group`. *New minor artefact:* `sub1` and `sub3` are **no longer
-  byte-for-byte identical** pre-kill — a **constant 752-byte (= exactly 4 TS packets) startup offset**,
-  with **identical per-second deltas** thereafter. So the steady-state content is still identical; only
-  the initial emission differs by a 4-packet preamble on one leg (plausibly the catalog/codec split
-  #2636 or the origin-model changes). The earlier "byte-for-byte identical" claim now needs that
-  caveat.
-- **E2 (`MODE=mcast`, standby joins mid-stream at t=11, kill t=25):** failover PASS, `sub1` resumed
-  **~34 s** after the kill, **0 CC errors**, live-edge skip; resume is a buffered-group drain, **not a
-  full-history backfill** (the #2666 live-edge fix holds). Both subscribers recovered; `sub3` logged
-  transient `subscribe error … code=13` on every track at the kill instant, then reselected. The
-  incumbent was **never torn down by the partially-joined standby** — the case #2666 specifically
-  hardens, and it stayed clean.
-- **Mesh hard-kill (`cluster_failover.sh`, 30 s idle):** CHECK 1 (failover) PASS, `sub1` reselected
-  **~29 s** after the kill; CHECK 2 (standby-join survival) PASS; **0 `unroutable`**.
-- **Mesh, `SIDLE=10s`:** reselect in **~14 s** (tunable window holds; was ~11 s), standby survives, 0
-  `unroutable`.
-- **Graceful exit (`graceful_exit.sh`):** **still FAIL** — `sub1` froze at pubA's clean exit (t=25)
-  and the exporter died `TS track layout changed after PAT/PMT was emitted: '0.aac' removed`. Unchanged;
-  the spec fix is moq-lite-06 **broadcast epochs / ended-broadcasts**
-  ([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), not yet on the wire.
+- **The resume path is hardened where it matters to us.** E2 (standby joining mid-stream) resumes as a
+  buffered-group drain, **not a full-history backfill** — the #2666 live-edge fix holding. The
+  incumbent is **never torn down by the partially-joined standby**, the case #2666 specifically
+  hardens. `sub3` logs a transient `subscribe error … code=13` on every track at the kill instant,
+  then reselects.
+- **Two co-started exporters are no longer byte-identical from the first packet**, differing by the
+  4-packet startup preamble described under E1 above. Steady-state content is unaffected.
 
-Not run: a dedicated **relay↔relay transient-blip** drill to exercise #2616's abrupt-detach-with-linger
-splice-back. It can't be isolated cleanly in this single-host loopback rig without peer-link fault
+Not drilled: a dedicated **relay↔relay transient-blip** to exercise #2616's abrupt-detach-with-linger
+splice-back. It cannot be isolated cleanly in this single-host loopback rig without peer-link fault
 injection, and upstream covers it with mutation-checked tests
 (`a_lost_namespace_stream_leaves_the_linger_window_open`, `the_last_owner_out_decides_the_detach`). Left
 as a future harness item (loopback `netem` on the cluster-peer connection).
 
-### Spec cross-check (draft-ietf-moq-transport-19, 2026-08-05): the standard specifies relay object-dedup that this implementation does not
+### Spec cross-check: the standard specifies relay object-dedup that this implementation does not
 
-Prompted by reviewing an external briefing (Quortex, "Running Multiple Sources over Media over QUIC")
-that describes MOQT active-active as *relays de-duplicate bit-for-bit-identical sources at the object
-level, ST 2022-7 style*. Our drills describe `moq-dev`/`moq-lite` doing **content-agnostic route
-selection**, so before feeding that back we checked the claim against the current IETF draft
-(**draft-ietf-moq-transport-19**, July 2026, the live version). The briefing is faithful to the draft;
-the divergence is **implementation**, not spec:
+An external briefing (Quortex, "Running Multiple Sources over Media over QUIC") describes MOQT
+active-active as *relays de-duplicate bit-for-bit-identical sources at the object level, ST 2022-7
+style*, whereas these drills show `moq-dev`/`moq-lite` doing **content-agnostic route selection**.
+Checked against **draft-ietf-moq-transport-19**, the briefing is faithful to the draft; the divergence
+is **implementation**, not spec:
 
 - **§9.3 Multiple Publishers.** *"Relays MUST handle Objects for the same Track from multiple
   publishers and forward them to matching Established subscriptions. The Relay SHOULD attempt to
@@ -402,18 +377,14 @@ rewriting) — that is Malformed under §9.1, and is the "won't merge two broadc
 Docs corrected accordingly ([evidence](../docs/evidence.md) §7, [relay](../docs/relay.md) §4.1/§5.1,
 [transport](../docs/transport.md) §8.4, [architecture](../docs/architecture.md) §14.3/§14.5).
 
-### Reconnect + retention re-verify on 2026-08-06 `main` (#2647, #2615)
-
-Two merges landed the day after the 0.14.7 re-verification that touch paths these drills exercise;
-re-checked on `main` `a6dd44a6` (drill tip `b4faac10`; the binary again cosmetically self-reports an
-older `--version`):
+### Reconnect latency and media retention
 
 - **[#2647](https://github.com/moq-dev/moq/pull/2647) — fail-fast retries (time-bounded jittered
   backoff).** Reconnect ceiling drops 30 s → 5 s and the loop is bounded by a ~10 s budget instead of
   the old 5-minute loop. `reconnect.sh` (kill relay t=12, restart t=24, `--client-quic-idle-timeout
-  6s`): both exporters survived, skipped the evicted group (`current group evicted; skipping to next
+  6s`): both exporters survive, skip the evicted group (`current group evicted; skipping to next
   buffered group error=Hang(Moq(Dropped))` — the resume path, not the fatal `json: dropped`), and
-  **`sub1` resumed at t=28 — 4 s after the relay returned**, versus the whole-outage ~16-17 s (which is
+  **`sub1` resumes 4 s after the relay returns**, versus the whole-outage ~16-17 s (which is
   dominated by the fixed 12 s relay-down window). The reconnect log shows the new policy directly:
   capped jittered backoff waits of **0.637 s then 1.51 s**. Separately, `export ts` against a **dead**
   relay now **gives up** — `ERROR reconnect timed out after 10s: connect timed out after 30s` — instead
@@ -429,74 +400,22 @@ older `--version`):
   own `latency_max` still defaults to 0. No effect on our failover behaviour; retention is a relay-side
   *ceiling*, not a playout change.
 
-### Takeover re-verify on the 0.14.8 release (#2701) — conclusions unchanged (2026-08-07)
+### The #2701 takeover livelock — the most serious relay defect seen in this campaign
 
-[#2701](https://github.com/moq-dev/moq/pull/2701) changes the takeover path itself, so the two drills
-that exercise it were re-run on the **0.14.8 release** (origin/main `c8b11b10` = release #2672):
-
-- **Mesh failover (`cluster_failover.sh`) — PASS, unchanged.** `sub1` resumed at t=53, **31 s after
-  the kill** (one default 30 s idle timeout), `sub3` survived pubB's join, and **zero `unroutable`
-  errors reached either subscriber**. `relayA`'s own log still shows a transient burst of
-  `track info error … err=unroutable` for all seven tracks at the moment of the kill; it is internal
-  to the reselect and never surfaces downstream.
-- **Graceful exit (`graceful_exit.sh`) — FAIL, unchanged.** A clean source exit still terminates the
-  subscriber (`Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed`) instead of
-  reselecting onto the announced standby.
-
-What #2701 fixes is a different failure mode from anything these drills grade, and it is worth
-recording because it is the most serious relay defect seen in this campaign. `serve_track` cleared its
+This is a different failure mode from anything these drills grade, and it is recorded because of its
+severity and its operational consequence. `serve_track` cleared its
 `dead` set on every successful takeover, which un-skipped a *closing but still attached* source; the
 reselect then dispatched the corpse, the corpse failed instantly, and the fallback re-selected the
 healthy standby — all resolving synchronously, so the task **spun inside a single poll** and pinned a
 tokio worker. With as many spinning tasks as workers the process goes dark: no logs, no health
-endpoint, no accepts, 100 % CPU, and no path back to a good state. Upstream attributes the 2026-08-06
-moq.pro relay-fleet wedge (three regions, 8+ hours) to it, triggered by **cluster peer session
-churn** — i.e. by running exactly the clustered topology this project recommends. It was present in
-every build we tested and signed off, including the 0.14.7 release. Our drills never hit it because
+endpoint, no accepts, 100 % CPU, and no path back to a good state. Upstream attributes a production
+relay-fleet wedge (three regions, 8+ hours) to it, triggered by **cluster peer session churn** — i.e.
+by running exactly the clustered topology this project recommends. It was present in every build
+drilled and signed off here, including the 0.14.7 release. These drills never hit it because
 provoking it needs a specific wake ordering, which is why upstream's deterministic
 `test_active_corpse_does_not_livelock_takeover` is the right net for it and a timed drill is not.
 Operational consequence: a clustered relay needs **liveness** monitoring (does it still accept and
 serve?), not just a process-alive check, because this failure keeps the process alive and unresponsive.
-
-Of the four issues reported on this work, **two were real** and **two were our own harness**:
-
-- **Real — the shared-`--origin` `Unroutable` teardown** (finding 2). A shared-origin standby joining
-  a carrying relay tore that relay's subscriber down. Real but pre-existing (reproduces on `main` as
-  `json: dropped`); now fixed — a standby wins dispatch the moment it attaches, before a real
-  publisher has lazily created every track, and a per-track refusal was being charged as a strike
-  against the whole logical track. Refusals are now scoped per track with fallback to the incumbent.
-  Re-verified: far-relay subscriber survives with zero `unroutable`. The drill found a genuine bug the
-  unit tests missed, because a model-level standby accepts a track request immediately whereas a real
-  publisher does not.
-- **Real — the exporter's fatal `json: dropped`** on session loss, fixed by #2469 (above).
-- **🔻 Retracted — "the standby route never reaches the relay serving the active source"** (finding 1)
-  was an artefact of our drill, not a defect: announce-interest is unconditional across the cluster.
-  Our timeline killed the publisher at t=22 and graded at t=43 — **21 s into a 30 s idle timeout** —
-  so *no* build could have passed it. (The baseline "no failover on `moq-lite-05`" conclusion
-  nevertheless stands, corroborated by an extended-window control that stayed frozen for a full 68 s.)
-- **🔻 Retracted — the "8–9 s stall at the standby join"** was our harness too. We reported that a
-  subscriber on a relay merely *carrying* the broadcast froze 8–9 s whenever a redundant publisher
-  attached locally (`sub3`, `pubB` joining at t=10: 175 k, 162 k, 90 k, eight seconds of zero, then
-  13 k, 125 k, 179 k). It reproduces on merged `main` but is not a routing defect: our two publishers
-  replay *independent copies of the same clip from its start*, so the standby's media timeline lags
-  the active one by exactly the join delay, and on splice the exporter is handed timestamps in the
-  past and emits nothing until the new source overtakes. The stall tracks the join delay with slope 1:
-
-  | `pubB` joins at | measured stall |
-  |---|---|
-  | t=4 | < 2 s (below the warn threshold) |
-  | t=10 | 9 s |
-  | t=20 | 18 s |
-
-  The relay's own switch is immediate (relay B logs `subscribe started` for all three tracks in the
-  same millisecond the standby connects). **Generalisable rule: any redundancy test whose sources are
-  started independently measures its own clock skew unless the feeds are timestamp-aligned.**
-
-The corrected drill (both the timeline and kill semantics, documented in-script) is contributed
-upstream as [#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`): it generates its
-own `ffmpeg` source clip (no private capture), grades failover and standby-join survival, reports the
-join stall as a measured `WARN`, and depends on `moq --origin` from #2473 (exits with a diagnostic on
-builds without it).
 
 ### Results table
 
@@ -506,8 +425,8 @@ builds without it).
 | Relay restart — **`moq export ts` subscriber** | ~17 s (detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by #2469 |
 | End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469 |
 | Active/active — two publishers, **one relay** | n/a | **dies at 2nd announce** | ❌ `unroutable`, both torn down |
-| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ on merged `main` (`b624c7c0`, #2473); ❌ before it |
-| Active/active — **single source** into both publishers, co-started (byte-identical) | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`==`sub3` byte-for-byte pre-kill on 0.14.3; on **0.14.7** a constant 4-packet (752 B) startup offset, identical deltas after |
+| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ since #2473; ❌ before it |
+| Active/active — **single source** into both publishers, co-started | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`/`sub3` identical per-second deltas pre-kill, separated by a constant 4-packet (752 B) startup offset |
 | Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) | resumes; 0 CC errors; exporter never re-subscribes | ✅ offset does not break failover; skips to live edge |
 | Active/active — active source exits **gracefully** | none — subscriber terminates | no failover | ❌ on merged `main` |
 | Active/active — single-relay **reconnecting** publisher (renumber takeover) | fresh id: none (exporter dies); shared origin: resumes after ~join-delay gap | fresh id: `json: dropped`; shared origin: resumes | 🟡 #2556 doesn't make it clean; shared-origin gap confounded with clock skew |
@@ -516,16 +435,61 @@ builds without it).
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ |
 | ST 2022-7 single-path loss (hitless drill) | TBM | target: hitless | ⬜ Gate 3; precondition met by a deterministic/offline or duplicate-single groomer, not by two independent live pacers |
 
+## Corrections
+
+Four issues were reported upstream from this work. **Two were real defects; two were artefacts of our
+own harness.** The artefacts are the more useful record, because each yields a method rule that any
+redundancy drill needs.
+
+**Real — the shared-`--origin` `Unroutable` teardown.** A shared-origin standby joining a carrying
+relay tore that relay's subscriber down. Real but pre-existing (it reproduces as `json: dropped`), and
+now fixed: a standby wins dispatch the moment it attaches, *before* a real publisher has lazily created
+every track, and a per-track refusal was being charged as a strike against the whole logical track.
+Refusals are now scoped per track with fallback to the incumbent. The drill found a genuine bug the
+unit tests missed, because a model-level standby accepts a track request immediately whereas a real
+publisher does not.
+
+**Real — the exporter's fatal `json: dropped`** on session loss, fixed by #2469.
+
+**Retracted — "the standby route never reaches the relay serving the active source".** This was an
+artefact of the drill, not a defect: announce-interest is unconditional across the cluster. The drill
+killed the publisher at t=22 and graded at t=43 — **21 s into a 30 s idle timeout** — so *no* build
+could have passed it. (The baseline "no failover on `moq-lite-05`" conclusion nevertheless stands,
+corroborated by an extended-window control that stayed frozen for a full 68 s.) *Rule: grade beyond
+one full idle timeout, or the drill measures the timeout rather than the mechanism.*
+
+**Retracted — the "8–9 s stall at the standby join".** The reported symptom was that a subscriber on a
+relay merely *carrying* the broadcast froze 8–9 s whenever a redundant publisher attached locally. It
+does reproduce, but it is not a routing defect: two publishers replaying *independent copies of the
+same clip from its start* leave the standby's media timeline lagging the active one by exactly the
+join delay, so on splice the exporter is handed timestamps in the past and emits nothing until the new
+source overtakes. The stall tracks the join delay with slope 1:
+
+| `pubB` joins at | measured stall |
+|---|---|
+| t=4 | < 2 s (below the warn threshold) |
+| t=10 | 9 s |
+| t=20 | 18 s |
+
+The relay's own switch is immediate (relay B logs `subscribe started` for all three tracks in the same
+millisecond the standby connects). *Rule: any redundancy test whose sources are started independently
+measures its own clock skew unless the feeds are timestamp-aligned.*
+
+Both rules are baked into the drill contributed upstream as
+[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`), which generates its own
+`ffmpeg` source clip (no private capture), grades failover and standby-join survival, reports the join
+stall as a measured `WARN`, and depends on `moq --origin` from #2473 (exiting with a diagnostic on
+builds without it).
+
 ## Observations
 
 - Endpoint *reconnect* is solid (publisher and, since #2469, the exporter). Active/active *source*
-  failover across a mesh now ships (#2473) but is **bounded, not hitless** (one idle timeout), and
-  does not cover a graceful source exit at all. **All of this re-verified on the 0.14.7 release**
-  (2026-08-05) after the cluster-extension (#2629) + detach (#2616/#2654/#2659/#2664) + resume-hardening
-  (#2666) merges: no regression, and the resume path our mid-stream-standby drill exercises is now the
-  hardened one (#2666 keeps the incumbent when a partially-joined standby refuses a track, and stops an
-  empty-segment failover from backfilling the whole history). The one visible change is cosmetic: two
-  co-started exporters now differ by a 4-packet startup preamble rather than being byte-identical.
+  failover across a mesh ships (#2473) but is **bounded, not hitless** (one idle timeout), and does
+  not cover a graceful source exit at all. This survived the cluster-extension (#2629), detach
+  (#2616/#2654/#2659/#2664) and resume-hardening (#2666) rewrite without regression, and the resume
+  path the mid-stream-standby drill exercises is now the hardened one (#2666 keeps the incumbent when
+  a partially-joined standby refuses a track, and stops an empty-segment failover from backfilling the
+  whole history).
 - The binding precondition for mesh source failover is a **common source** — identical PMT/track
   layout + consistent PTS — not byte-identical segmentation. A mid-stream/late-joining standby with
   offset group numbering still fails over cleanly (the exporter skips to the new live edge; it does
@@ -557,5 +521,5 @@ finding — including which of our reports were real vs harness artefacts — is
 ## References
 
 - Redundancy model: [`docs/relay.md`](../docs/relay.md) §5–§6; [`docs/architecture.md`](../docs/architecture.md) §14 (ST 2022-7 §14.1); [`docs/transport.md`](../docs/transport.md) §8.
-- Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. 0.14.7 re-verification: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
+- Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. Cluster/detach/resume rewrite: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §7.

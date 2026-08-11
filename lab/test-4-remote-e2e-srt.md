@@ -22,7 +22,7 @@ whole chain to a conformant local egress — the bridge between "works on localh
   - `moq-publisher.service` → `ffmpeg -i "srt://0.0.0.0:9000?mode=listener&latency=6000…" -c copy -f
     mpegts - | moq … import ts --broadcast cnn.international.emea.live.hang`
 - Local: `moq-dev` `moq` client; SRT-capable FFmpeg is the local `~/FFmpeg` build (not OS FFmpeg);
-  TSDuck 3.44-4676. Run 2026-07-22.
+  TSDuck 3.44.
 - TLS verification disabled (`--client-tls-disable-verify`) for the relay's self-signed cert — a lab
   convenience, not a production posture.
 

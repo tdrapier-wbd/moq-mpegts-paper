@@ -13,7 +13,7 @@ metric actually reveals damage* on each lane, since the two fail very differentl
   egress, filtered to the QUIC media flow only (UDP sport 443 → the subscriber's home IP), so the SSH
   control channel is never impaired. Media-aware lane uses the standing EC2 loop
   (`cnn.international.emea.loop.hang`, `moq export ts --latency-max 5s`).
-- **Opaque lane built/deployed on the EC2 and measured on a controlled loopback path** (2026-07-17).
+- **Opaque lane built/deployed on the EC2 and measured on a controlled loopback path.**
   The `moq-publisher-subscriber` source was compiled on EC2 (`aws-lc-rs` backend, `moq-transport`
   0.14.2; a 4 GB swap file added to survive the build on the 2-vCPU host, ~8 min). An opaque
   `moq_relay` + `moq_publisher` fed a PCR-paced infinite loop of `~/CNNiEMEA2.ts`.
