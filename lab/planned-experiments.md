@@ -78,25 +78,27 @@ correlated with the T5 reordering finding (a handover that also reorders is the 
 
 The executed work — soaks, fan-out envelope, bitrate sweep, protocol overhead and the relay memory
 finding — has its own file: [test-9-performance.md](test-9-performance.md). Publisher and subscriber
-roles pass the stability criterion; the relay does not, growing linearly under steady subscriber load
-in a way `--cache-capacity` demonstrably does not bound (`--cache-duration` is still untested — see
-item 3). What remains, in priority order:
+roles pass the stability criterion; the relay does not. The leak is now fully characterised: **~9 KiB
+retained per ingested group, flat in subscriber count, causally confirmed by a matched GOP pair, and
+bounded by neither documented cache control.** What remains, in priority order:
 
 1. ~~**Per-subscriber or per-group?**~~ **Answered.** The slope is flat in N (+28.70 / +27.86 / +28.00
-   / +28.13 MB/h for N = 1/2/4/8) while ingested groups hold at 3,200/h, giving **~8.8 kB per ingested
-   group**. Per-session state is fixed at +3.22 MB per subscriber and does not accumulate; egress was
-   N × ingress at every leg, so send backlog is excluded across the sweep rather than just at N = 1.
-2. **Confirm it causally, then report.** `gopx.sh` runs two matched re-encodes at an identical
-   9.3 Mbps differing only in GOP (3,220 vs 6,440 groups/h): per-group predicts the slope doubles to
-   ~57 MB/h, per-byte predicts no change. A `--cache-duration 5s` leg runs alongside so the report can
-   say both documented knobs were tried. **Post only if the prediction holds** — if it does not, the
-   per-group reading is wrong and the draft
-   (`docs/upstream/relay-memory-growth-issue.local.md`) needs rewriting first.
-3. **`--cache-duration` as a mitigation check.** Not expected to bind either (it bounds retained
-   history, which is not what is growing), but worth one leg so the report can say both documented
-   knobs were tried.
-4. **The publisher thread count**, which grows and decelerates without settling.
-5. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
+   / +28.13 MB/h for N = 1/2/4/8) while ingested groups hold at 3,200/h. Per-session state is fixed at
+   +3.22 MB per subscriber and does not accumulate; egress was N × ingress at every leg, so send
+   backlog is excluded across the sweep rather than just at N = 1.
+2. ~~**Confirm it causally, then report.**~~ **Confirmed.** The matched GOP pair (identical content,
+   encoder and 9.3 Mbps; only `-g` differs) doubled the slope when group rate doubled — +31.22 →
+   +62.30 MB/h, ratio 1.995 against 2.000, kB/group equal to three significant figures. The
+   registered prediction held. `--cache-duration 5s` left the rate unchanged at +27.00 MB/h, so
+   **both documented knobs are excluded**. The draft
+   (`docs/upstream/relay-memory-growth-issue.local.md`) is complete and ready to post.
+3. **Characterise the allocation site**, if upstream wants more than the black-box shape. The release
+   binaries are not built with a profiling allocator, so this needs a local rebuild with one before a
+   heap profile can name the retained structure. Worth offering rather than promising.
+4. **Re-test after any fix**, using `gop14` as the sensitive case — at 6,445 groups/h it shows a
+   regression in half the time.
+5. **The publisher thread count**, which grows and decelerates without settling.
+6. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
 
 ### Evidence checklist for the audio-resync upstream report

@@ -11,12 +11,16 @@ bound it**: at a 32 MiB cap the relay ran more than twice the cap past its basel
 at the same ~27 MB/h — the growth is not cached payload, so the byte-budget control cannot evict it.
 **The N = 0/1/2/4/8 sweep localises it: the slope is flat in N** (+28.70 / +27.86 / +28.00 /
 +28.13 MB/h from one to eight subscribers) while ingested groups hold at 3,200/h, giving
-**~8.8 kB retained per ingested group, independent of subscriber count**. Per-session state is real
+**~9 KiB retained per ingested group, independent of subscriber count**. Per-session state is real
 but fixed (+3.22 MB per subscriber at join, not accumulating), and egress equals N × ingress at every
-leg, so send backlog is excluded. Eight legs now agree. A causal check (same bitrate, double the group
-rate) and the remaining `--cache-duration` knob are in flight; an upstream issue is drafted. The
-0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out envelope, bitrate sweep and
-protocol overhead are all measured on Linux.
+leg, so send backlog is excluded. **A controlled GOP pair then confirmed causation**: at identical
+bitrate and content, doubling the group rate doubled the leak (+31.22 → +62.30 MB/h, ratio 1.995
+against a group-rate ratio of 2.000, kB/group agreeing to three significant figures).
+**Neither documented memory control binds it** — `--cache-duration 5s` grew +27.00 MB/h, unchanged.
+Eleven legs now agree, and because shorter groups mean lower latency, **the defect scales with how
+aggressively latency is tuned**: ~62 MB/h (1.5 GB/day) at a 0.56 s GOP. The 0.13.7 no-subscriber OOM
+leak is a separate, fixed defect. Fan-out envelope, bitrate sweep and protocol overhead are all
+measured on Linux.
 
 ## Objective
 
@@ -690,10 +694,12 @@ between consecutive windows within a single leg. Fan-out is free, in the sense t
 **Ingested groups are constant at 3,200/h** (measured 3,199 / 3,200 / 3,200 / 3,200, recovered as
 total ÷ (N+1) and confirmed against the per-role byte counters). Dividing one constant by the other:
 
-> **~8.8 kB retained per ingested group**, independent of how many subscribers consume it.
+> **~9.0 KiB retained per ingested group**, independent of how many subscribers consume it.
+>
+> (9.19 / 8.92 / 8.96 / 9.00 KiB at N = 1/2/4/8; mean 9.02.)
 
 That is the number the earlier arithmetic estimated at ~7.5 kB from the nominal bitrate, now measured
-from the relay's own counters. It is also ~0.7 % of a group's ~1.24 MB of payload, so the relay is not
+from the relay's own counters. It is also ~0.7 % of a group's ~1.3 MB of payload, so the relay is not
 retaining groups — it is retaining something small and per-group, once per ingest, for the lifetime of
 the process rather than the lifetime of the group.
 
@@ -709,27 +715,50 @@ serves. Egress was exactly N × ingress at every leg (5,973.7 MB in / 5,973.7 ou
 box will carry, so nothing is queuing undelivered and this is not the per-subscription backlog of
 upstream [#2733](https://github.com/moq-dev/moq/issues/2733).
 
-#### Making it causal, and finishing the knobs (`gopx.sh`, in flight)
+#### Causal confirmation: double the group rate, double the leak (`gopx.sh`)
 
-"8.8 kB per ingested group" is still a correlation: across the sweep, group rate never varied. Three
-90-minute legs at N = 4 close that, and finish testing the documented controls:
+"~9 KiB per ingested group" was still a correlation — across the sweep, group rate never varied.
+`gop28` and `gop14` are re-encodes of the same content with identical settings (`libx264 -preset
+veryfast -b:v 9M -sc_threshold 0`, both verified at 9.3 Mbps) differing only in `-g`, so **group rate
+is the single variable**. The prediction was registered before the run: per-group doubles the slope,
+per-byte leaves it unchanged.
 
-| Leg | Source | Cache | Groups/h | Predicted slope if per-group |
-|---|---|---|---:|---:|
-| `dur5` | original | `--cache-duration 5s` | 3,200 | ~28 MB/h (knob does not bind) |
-| `gop28` | matched re-encode | default | 3,220 | ~28 MB/h |
-| `gop14` | matched re-encode | default | 6,440 | **~57 MB/h** |
+| Leg | Groups/h | Predicted | **Measured** | kB per group |
+|---|---:|---:|---:|---:|
+| `gop28` | 3,222 | ~31 MB/h | **+31.22 MB/h** | 9.92 KiB |
+| `gop14` | 6,445 | ~62 MB/h | **+62.30 MB/h** | 9.90 KiB |
 
-`gop28` and `gop14` are re-encodes of the same content with identical settings — `libx264 -preset
-veryfast -b:v 9M -sc_threshold 0`, verified at **9.3 Mbps each** — differing only in `-g`. Group rate
-is the single variable. If the cost is per group the slope doubles; if it is per byte, both legs sit
-at ~28 MB/h. That is a prediction made before the run, which is worth more in a bug report than
-another correlation.
+**The ratio is 1.995 against a group-rate ratio of 2.000, and kB-per-group agrees to three
+significant figures across the pair.** Identical bitrate, identical content, identical encoder — only
+the group count differs, and the leak follows it exactly. The cost is *caused* by ingesting a group,
+not by carrying bytes.
 
-`dur5` covers the remaining documented knob. `--cache-duration` is the *age* ceiling and it clamps a
-publisher's advertised retention window, so a 5 s ceiling would crush any mechanism based on retained
-history. It is not expected to bind — the growth is ~0.7 % of payload, so history is not what is
-accumulating — but testing it lets the upstream report say both knobs were tried rather than one.
+Both legs are linear within themselves (`gop28` +33.89 then +30.64; `gop14` +62.12 then +60.21), and
+subscriber count held at 4 for all 180 samples of each.
+
+The per-group constant is a property of the content, not a universal: the original source gives
+8.6–9.2 KiB/group across five legs against 9.9 KiB for the re-encodes, which differ in frames per
+group and structure. What is invariant is that *within* a source, the leak is exactly proportional to
+groups ingested.
+
+#### `--cache-duration` does not bound it either
+
+The `dur5` leg ran the original source with `--cache-duration 5s`, confirmed at startup
+(`cache duration ceiling set duration=5s`). It grew **+27.00 MB/h — 8.64 KiB/group — indistinguishable
+from the same source uncapped.** A five-second age ceiling on retained history changes nothing,
+which is what the 0.7 %-of-payload arithmetic predicted: history is not what accumulates.
+
+**Both documented memory controls have now been tested and neither binds this.** `--cache-capacity`
+bounds payload bytes and the growth is not payload; `--cache-duration` bounds retained history and the
+growth is not history. There is no configuration an operator can set to stop it.
+
+#### The operational sting: low latency leaks faster
+
+Group cadence is how MoQ trades latency. Shorter groups mean a tighter live edge — and, on these
+numbers, proportionally faster leakage. At ~9.9 KiB/group the same 9.3 Mbps channel costs about
+**18 MB/h at a 2 s GOP, 31 MB/h at 1.1 s, and 62 MB/h at 0.56 s** — 1.5 GB/day for the
+low-latency configuration. The defect therefore penalises precisely the operating point MoQ is chosen
+for, and a deployment tuned for latency needs proportionally more headroom or more frequent recycling.
 
 **Representativeness limit of the publisher figure:** a video-only source exercises the import path
 without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than

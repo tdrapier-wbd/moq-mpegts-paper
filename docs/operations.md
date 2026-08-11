@@ -91,25 +91,31 @@ The platform must be observable in two languages simultaneously
   interchangeable. `--cache-capacity` is a soft target that counts **payload bytes,
   not process memory**. `--cache-headroom` runs a governor that yields memory back
   when the system needs it. `--cache-duration` caps how long non-latest groups are
-  retained and *clamps down* a publisher asking for more — for a live broadcast relay
-  this is usually the right one, because primary distribution wants the live edge and
-  never wants history. Set an explicit bound on every deployed relay; it is measured
-  to cost nothing (identical CPU, resident memory within 1.5 MB).
+  retained and *clamps down* a publisher asking for more. Set an explicit bound on
+  every deployed relay; it is measured to cost nothing (identical CPU, resident memory
+  within 1.5 MB), and it protects against the cache filling for other reasons.
 
-  **A cache bound is not sufficient, and this is measured, not assumed.** The growth
-  is **per ingested group — about 8.8 kB each — and flat in subscriber count**, so it
-  tracks how long a relay has been carrying a channel rather than how many viewers it
-  serves. Size for programme hours, not audience; a lightly-watched relay leaks at the
-  same rate as a busy one. (Per-session state is separate and well-behaved: a fixed
-  ~3.2 MB per subscriber at join, which does not accumulate.) Current
-  builds grow roughly 27 MB/hour under four sustained subscribers, and capping the
-  cache at 32 MiB does not change that rate — the relay runs to more than twice the
-  cap above its baseline with no inflection where the cap should bind. The growth is
-  not cached payload, so a payload-counting budget cannot evict it. Set the bound
-  anyway (it is free, and it protects against the cache filling for other reasons),
-  but size relay hosts for at least a day of growth, alarm on the memory trend rather
-  than only on an absolute threshold, and treat a scheduled drain-and-restart as a
-  first-class control until there is a fix ([lab T9](../lab/test-9-performance.md)).
+  **But no cache bound will stop the current leak, and both knobs have been tested.**
+  Capping capacity at 32 MiB left the rate unchanged, with the relay running to more
+  than twice the cap above its baseline and no inflection where the cap should bind;
+  an age ceiling of `--cache-duration 5s` likewise left it unchanged. The growth is
+  neither cached payload nor retained history, so neither control can evict it. There
+  is no configuration that fixes this — plan around it.
+
+  Three facts should drive that planning. The growth is **per ingested group, about
+  9 KiB each, and flat in subscriber count**, so it tracks how long a relay has carried
+  a channel rather than how many viewers it serves: **size for programme hours, not
+  audience**, because a lightly-watched relay leaks at the same rate as a busy one.
+  Per-session state is separate and well-behaved — a fixed ~3.2 MB per subscriber at
+  join that does not accumulate — so fan-out is not the problem. And because group
+  cadence is how latency is traded, **the lower the latency target, the faster the
+  leak**: roughly 18 MB/hour at a two-second group against 62 MB/hour (1.5 GB/day) at
+  a half-second one, for the same 9.3 Mbps channel.
+
+  Until there is a fix: size hosts for at least a day of growth at the group rate you
+  actually run, alarm on the memory *trend* rather than an absolute threshold, and
+  treat a scheduled drain-and-restart as a first-class control
+  ([lab T9](../lab/test-9-performance.md)).
 
 ## 4. Runbooks
 

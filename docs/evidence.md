@@ -325,7 +325,7 @@ no effect on it.
 **Where the cost actually falls is now measured, and it is not where fan-out lives.** Sweeping
 subscriber count from one to eight leaves the growth rate untouched — 28.70, 27.86, 28.00 and
 28.13 MB/hour — while the relay's own counters show it ingesting a constant 3,200 groups per hour and
-serving exactly N times that. Dividing the two constants gives **about 8.8 kB retained for every group
+serving exactly N times that. Dividing the two constants gives **about 9 KiB retained for every group
 the relay ingests, regardless of how many subscribers consume it**. Eight times the audience costs
 nothing extra in growth.
 
@@ -335,6 +335,24 @@ economics in [economics](economics.md) §4 stand. The leak scales with *content 
 of programming carried, not with audience — so it is indifferent to how many viewers a relay serves
 and proportional to how long it has been carrying a channel. For always-on primary distribution that
 is the worse of the two shapes, because the load that drives it never stops.
+
+**This is causation, not correlation, and it was confirmed by prediction.** Two re-encodes of the same
+content at an identical 9.3 Mbps, differing only in how often a key frame starts a new group, make
+group rate the single variable. Doubling it was predicted to double the leak, and did: 31.22 against
+62.30 MB/hour, a ratio of 1.995 where the group rate ratio is 2.000, with the retained-bytes-per-group
+figure agreeing to three significant figures across the pair.
+
+That result carries an unwelcome implication. Group cadence is the knob MoQ uses to trade latency:
+shorter groups mean a tighter live edge. So the leak is proportional to how aggressively a deployment
+is tuned for the very property MoQ is chosen for. The same channel costs roughly 18 MB/hour at a
+two-second group and 62 MB/hour — 1.5 GB a day — at a half-second one. **The lower the latency target,
+the faster the relay leaks.**
+
+**Neither documented control stops it.** `--cache-capacity` bounds payload bytes and this is not
+payload; `--cache-duration`, the age ceiling on retained history, was tested at five seconds and left
+the rate unchanged at 27 MB/hour. There is no setting an operator can apply. That is what makes this a
+defect to be fixed upstream rather than a deployment parameter to be tuned, and it is now filed as
+such.
 
 The severe historical defect is genuinely gone — an older release grew ~21 MB/hour *with no
 subscribers at all* to an out-of-memory kill after six days, and neither current build reproduces that
