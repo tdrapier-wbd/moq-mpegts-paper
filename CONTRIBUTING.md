@@ -94,7 +94,16 @@ working in [`lab/cost-model.md`](lab/cost-model.md) so it stays auditable.
 
 If a point can only be made with confidential data, describe the *method* and leave
 the numbers out — or, better, express the result as a threshold derived from public
-figures, as §4.4 does for the satellite comparison.
+figures, as §4.7 does for the satellite comparison.
+
+**Third-party reports of what somebody pays are not published prices**, and the model
+excludes them. A rate belongs in the paper only if it is on a public price page, derived
+in the open from one that is, or measured here. Where the argument needs a figure that is
+none of those — a discount percentage, an unannounced service rate, a facilities cost —
+model it explicitly and label it *hypothetical*, *assumed* or *illustrative* at every
+point it appears, including inside table headers and chart rows, so that no reader
+arriving mid-document can mistake it for a rate that is obtainable. Never let a modelled
+rate imply that anyone has been offered or has achieved it.
 
 The same applies to infrastructure detail in the notebook. `lab/` is public, so commands and
 procedures there use placeholders — `<EC2_IP>`, `<subscriber-home-ip>` — rather than real

@@ -159,7 +159,12 @@ a persistent TCP connection — and its strengths are real:
   any MoQ implementation today, a genuine advantage given MoQ's pre-standard state
   (§5).
 - **Proven fan-out.** HTTP caching and CDN distribution scale to very large
-  audiences and are well understood operationally.
+  audiences and are well understood operationally. The advantage is maturity and
+  availability rather than cost structure: an edge cache fetches a segment once and
+  serves N receivers over N unicast connections, which is topologically what a MoQ
+  relay does, so neither breaks the linearity of last-mile delivery
+  ([economics](economics.md) §4.7). What HTTP has today is a dozen suppliers selling
+  that fan-out at commodity rates; MoQ has one.
 
 The architectural differences that favour MoQ for *primary distribution
 specifically*:

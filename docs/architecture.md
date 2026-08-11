@@ -348,6 +348,15 @@ infrastructure, which is exactly the layer the vision argues will commoditise.
 The broadcast-grade intelligence lives at the edge (§7) and in the control plane
 (§9), not in the relay.
 
+That is an economic position as much as an architectural one. A relay that stays
+cache-shaped is one a CDN can operate as an extension of what it already runs, which
+is the mechanism by which relay capacity could reach commodity pricing
+([economics](economics.md) §4.9); a relay that accumulates broadcast-specific
+intelligence becomes a media server, which is the shape that has kept every
+incumbent IP transport in premium per-stream pricing. Complexity pushed into the
+relay is therefore paid for twice — once in engineering, once in forgoing the
+cheapest delivery market available.
+
 ---
 
 

@@ -18,7 +18,7 @@ Status: working draft. This paper is deliberately critical: the goal is to find 
 
 **It is not:**
 - A claim that MoQ is production-ready today. The wire protocol is pre-standard and unstable (see [Transport](docs/transport.md)).
-- A claim that Internet-native distribution is *already* economically superior, today, to a depreciated satellite transponder or an existing IP contract for always-on trunk routes. The always-on case is now modelled numerically at public list prices, and the result is that **cost is decided by commercial egress terms rather than by transport engineering**: egress is ~90 % of the bill, the MoQ-versus-SRT difference is ~8 % of it, and published egress sits two to three orders of magnitude above the surveyed price of IP transit. What remains unproven is the comparison against one broadcaster's *actual, depreciated* route cost at *negotiated* rates (see [Economics](docs/economics.md)).
+- A claim that Internet-native distribution is *already* economically superior, today, to a depreciated satellite transponder or an existing IP contract for always-on trunk routes. The always-on case is now modelled numerically at public list prices, and the result is that **cost is decided by commercial terms rather than by transport engineering**: egress is ~90 % of the bill, the MoQ-versus-SRT difference is ~8 % of it, and published cloud egress sits an order of magnitude above what the same delivery costs to buy on a commodity CDN or to run on owned infrastructure. The corollary is that *which market the delivery is bought in* decides the outcome, and the two cheapest routes — commodity CDN delivery at published rates, and self-hosted infrastructure costed all-in — land in the same band, which puts a transponder's worth of channels to several hundred destinations in contention rather than out of reach. What remains unproven is the comparison against one broadcaster's *actual, depreciated* route cost at *negotiated* rates (see [Economics](docs/economics.md)).
 - A product pitch or a business plan.
 
 ---
@@ -39,7 +39,8 @@ Traditional primary distribution — satellite, leased fibre, MPLS — succeeds 
 
 SRT, Zixi and RIST already move a linear feed reliably from A to B. MoQ's *incremental* advantage on that narrow job is real but narrow; what distinguishes it is architectural, not raw performance:
 
-- **Native relay and 1:N amplification** (the advantage we put forward first): a single protocol carries a feed from contribution through a relay fabric that fans out point-to-multipoint, with caching, on the QUIC/HTTP-3 substrate CDNs and hyperscalers already run.
+- **Native relay and 1:N amplification** (the advantage we put forward first): a single protocol carries a feed from contribution through a relay fabric that fans out point-to-multipoint, with caching, on the QUIC/HTTP-3 substrate CDNs and hyperscalers already run. The economic value of that fan-out is narrower than it sounds — it removes duplicated backhaul and uplink, not last-mile egress, which stays linear in destinations for every transport including this one ([Economics](docs/economics.md) §4.8).
+- **A shape a commodity delivery market can sell** — the strongest economic argument here, and a claim about markets rather than a measurement. A MoQ relay *is* a cache, so relaying maps onto machinery CDNs already run at scale; SRT has no object model or native relay, so fanning it out means a stateful media gateway per stream per destination. That is why no CDN sells SRT relay as a commodity product and one already sells MoQ relay, and why MoQ is the first sub-second broadcast-grade transport whose price could follow commodity delivery down rather than sitting at hyperscaler rates ([Economics](docs/economics.md) §4.9).
 - **Subscription-oriented delivery**, which maps directly onto dynamic, revocable entitlement.
 - **A native authorization point** at subscription (the platform layers path-scoped tokens, mTLS, and expiry on it).
 - **Per-stream delivery** — a lost packet stalls only its own object, not the whole multiplex — with **graceful multi-rendition degradation** (strongest on the default media-aware lane, constrained on the opaque fallback). Loss resilience itself is a controller choice, not a free protocol property: QUIC's default CUBIC *collapses* under loss, while BBR restores full-rate delivery *on par with* SRT — parity, not superiority ([Transport](docs/transport.md) §3.1, [Evidence](docs/evidence.md) §6).
@@ -92,7 +93,7 @@ Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for 
 | [Security](docs/security.md) | Identity, authentication, and threat model. |
 | [Interoperability](docs/interoperability.md) | IRDs, MPEG-TS, RTP, ST 2022-7, SRT, Zixi. |
 | [Operations](docs/operations.md) | NOC model, SLOs, monitoring, and runbooks. |
-| [Economics](docs/economics.md) | Cost framework, and a first numeric model of the always-on case at public list prices — MoQ against SRT, managed services and satellite. |
+| [Economics](docs/economics.md) | Cost framework, and a numeric model of the always-on case at published rates — MoQ against SRT, managed services, commodity CDN delivery and satellite. |
 | [Evidence](docs/evidence.md) | What the working prototype proved — the empirical basis for the claims above. |
 
 ### The validation campaign (`lab/`) — what was planned and measured
@@ -123,7 +124,7 @@ propose a change, and for the editorial and confidentiality conventions.
 ## Open questions
 
 - What is the real TCO delta versus one broadcaster's actual routes, at negotiated rather than list rates? ([Economics](docs/economics.md))
-- Why does published cloud egress sit two to three orders of magnitude above the surveyed price of IP transit, and does anything force that gap to close? The always-on trunk case lives entirely inside that spread. ([Economics](docs/economics.md) §4.2)
+- Why does published cloud egress sit roughly an order of magnitude above commodity CDN delivery and above the all-in cost of running delivery yourself, and does anything force that gap to close? The always-on trunk case lives entirely inside that spread. ([Economics](docs/economics.md) §4.2)
 - Does groomed MoQ output pass TR 101 290 P1/P2 on real hardware IRDs? ([Evidence](docs/evidence.md))
 - Where does the groomer (PCR-accuracy work) ultimately live — upstream or downstream — and if downstream, open/interoperable or closed/licensed? ([Architecture](docs/architecture.md) §17)
 - Can a relay hold memory flat under sustained fan-out for weeks, not hours? ([Evidence](docs/evidence.md) §8)

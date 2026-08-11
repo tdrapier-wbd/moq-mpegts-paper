@@ -290,7 +290,11 @@ per-leg transport resilience rather than the switch itself.
 - **Fan-out model.** Because a track is carried into a region once and fanned out
   locally, per-region egress scales with local subscriber count while inter-region
   bandwidth scales with the number of *distinct tracks* crossing the boundary, not
-  the number of subscribers. This is the property that makes 1:N economical.
+  the number of subscribers. This is what makes 1:N economical, and the asymmetry
+  in that sentence is the whole of it: the saving is on the *inter-region* line,
+  while last-mile egress remains linear in subscribers and is the line that
+  dominates a real bill ([economics](economics.md) §4.8). Size regional capacity
+  for local subscriber count and backhaul for distinct tracks.
 - **Hotspot mitigation.** A single popular track in a region is served from the
   regional cache/flow; hotspots are mitigated by adding edge relays and by cache
   fan-out within a cluster rather than by re-originating from the publisher.
