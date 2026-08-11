@@ -17,6 +17,7 @@ leg, so send backlog is excluded. **A controlled GOP pair then confirmed causati
 bitrate and content, doubling the group rate doubled the leak (+31.22 → +62.30 MB/h, ratio 1.995
 against a group-rate ratio of 2.000, kB/group agreeing to three significant figures).
 **Neither documented memory control binds it** — `--cache-duration 5s` grew +27.00 MB/h, unchanged.
+Reported as [#2745](https://github.com/moq-dev/moq/issues/2745).
 Eleven legs now agree, and because shorter groups mean lower latency, **the defect scales with how
 aggressively latency is tuned**: ~62 MB/h (1.5 GB/day) at a 0.56 s GOP. The 0.13.7 no-subscriber OOM
 leak is a separate, fixed defect. Fan-out envelope, bitrate sweep and protocol overhead are all

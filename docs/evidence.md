@@ -351,8 +351,8 @@ the faster the relay leaks.**
 **Neither documented control stops it.** `--cache-capacity` bounds payload bytes and this is not
 payload; `--cache-duration`, the age ceiling on retained history, was tested at five seconds and left
 the rate unchanged at 27 MB/hour. There is no setting an operator can apply. That is what makes this a
-defect to be fixed upstream rather than a deployment parameter to be tuned, and it is now filed as
-such.
+defect to be fixed upstream rather than a deployment parameter to be tuned, and it is filed as
+[moq-dev/moq#2745](https://github.com/moq-dev/moq/issues/2745).
 
 The severe historical defect is genuinely gone — an older release grew ~21 MB/hour *with no
 subscribers at all* to an out-of-memory kill after six days, and neither current build reproduces that

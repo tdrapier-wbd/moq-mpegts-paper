@@ -90,8 +90,8 @@ bounded by neither documented cache control.** What remains, in priority order:
    encoder and 9.3 Mbps; only `-g` differs) doubled the slope when group rate doubled — +31.22 →
    +62.30 MB/h, ratio 1.995 against 2.000, kB/group equal to three significant figures. The
    registered prediction held. `--cache-duration 5s` left the rate unchanged at +27.00 MB/h, so
-   **both documented knobs are excluded**. The draft
-   (`docs/upstream/relay-memory-growth-issue.local.md`) is complete and ready to post.
+   **both documented knobs are excluded**. Reported upstream as
+   [#2745](https://github.com/moq-dev/moq/issues/2745).
 3. **Characterise the allocation site**, if upstream wants more than the black-box shape. The release
    binaries are not built with a profiling allocator, so this needs a local rebuild with one before a
    heap profile can name the retained structure. Worth offering rather than promising.
