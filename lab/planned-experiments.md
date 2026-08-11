@@ -82,18 +82,16 @@ roles pass the stability criterion; the relay does not, growing linearly under s
 in a way `--cache-capacity` demonstrably does not bound (`--cache-duration` is still untested — see
 item 3). What remains, in priority order:
 
-1. **Per-subscriber or per-group?** An N = 0/1/2/4/8 sweep (90 min each) with `/metrics` scraping so
-   kB-per-group is measured rather than inferred. Rate ∝ N points at session state and a teardown fix;
-   rate flat in N points at per-group bookkeeping never released. **N = 0 is done** — flat at
-   +0.00 MB/h, and notably with *zero bytes ingested*, because media pull is demand-driven; legs
-   1/2/4/8 relaunched 2026-08-11 08:06 UTC after a harness self-kill. This is the last thing needed
-   before an upstream report: the current data is a clean symptom but does not localise the cause, and
-   would invite "set a cache bound" as a reply.
-2. **Then report it.** Draft written (`docs/upstream/relay-memory-growth-issue.local.md`), holding for
-   the N-shape. It already carries both builds, all three cache settings, the N = 0 control, a
-   reproducer, and the exclusions: not a regression, not payload cache, not idle, and not send backlog
-   — egress equals ingress to the byte, which pre-empts the reading that this is the queue described in
-   upstream #2733. Follow the #2729 pattern: evidence plus a located mechanism, not just a curve.
+1. ~~**Per-subscriber or per-group?**~~ **Answered.** The slope is flat in N (+28.70 / +27.86 / +28.00
+   / +28.13 MB/h for N = 1/2/4/8) while ingested groups hold at 3,200/h, giving **~8.8 kB per ingested
+   group**. Per-session state is fixed at +3.22 MB per subscriber and does not accumulate; egress was
+   N × ingress at every leg, so send backlog is excluded across the sweep rather than just at N = 1.
+2. **Confirm it causally, then report.** `gopx.sh` runs two matched re-encodes at an identical
+   9.3 Mbps differing only in GOP (3,220 vs 6,440 groups/h): per-group predicts the slope doubles to
+   ~57 MB/h, per-byte predicts no change. A `--cache-duration 5s` leg runs alongside so the report can
+   say both documented knobs were tried. **Post only if the prediction holds** — if it does not, the
+   per-group reading is wrong and the draft
+   (`docs/upstream/relay-memory-growth-issue.local.md`) needs rewriting first.
 3. **`--cache-duration` as a mitigation check.** Not expected to bind either (it bounds retained
    history, which is not what is growing), but worth one leg so the report can say both documented
    knobs were tried.

@@ -96,7 +96,12 @@ The platform must be observable in two languages simultaneously
   never wants history. Set an explicit bound on every deployed relay; it is measured
   to cost nothing (identical CPU, resident memory within 1.5 MB).
 
-  **A cache bound is not sufficient, and this is measured, not assumed.** Current
+  **A cache bound is not sufficient, and this is measured, not assumed.** The growth
+  is **per ingested group — about 8.8 kB each — and flat in subscriber count**, so it
+  tracks how long a relay has been carrying a channel rather than how many viewers it
+  serves. Size for programme hours, not audience; a lightly-watched relay leaks at the
+  same rate as a busy one. (Per-session state is separate and well-behaved: a fixed
+  ~3.2 MB per subscriber at join, which does not accumulate.) Current
   builds grow roughly 27 MB/hour under four sustained subscribers, and capping the
   cache at 32 MiB does not change that rate — the relay runs to more than twice the
   cap above its baseline with no inflection where the cap should bind. The growth is

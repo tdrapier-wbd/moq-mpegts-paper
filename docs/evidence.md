@@ -322,6 +322,20 @@ That moves this from a tuning question to a defect. Across two consecutive relea
 settings the answer is the same ~27 MB/hour, and the one control an operator is told to reach for has
 no effect on it.
 
+**Where the cost actually falls is now measured, and it is not where fan-out lives.** Sweeping
+subscriber count from one to eight leaves the growth rate untouched — 28.70, 27.86, 28.00 and
+28.13 MB/hour — while the relay's own counters show it ingesting a constant 3,200 groups per hour and
+serving exactly N times that. Dividing the two constants gives **about 8.8 kB retained for every group
+the relay ingests, regardless of how many subscribers consume it**. Eight times the audience costs
+nothing extra in growth.
+
+That matters commercially in both directions. Per-subscriber state is real but *bounded*: each session
+adds a fixed 3.2 MB at join and then stops, so fan-out itself is well-behaved and the relay-density
+economics in [economics](economics.md) §4 stand. The leak scales with *content ingested* — with hours
+of programming carried, not with audience — so it is indifferent to how many viewers a relay serves
+and proportional to how long it has been carrying a channel. For always-on primary distribution that
+is the worse of the two shapes, because the load that drives it never stops.
+
 The severe historical defect is genuinely gone — an older release grew ~21 MB/hour *with no
 subscribers at all* to an out-of-memory kill after six days, and neither current build reproduces that
 idle behaviour. But it would be wrong to read that as long-run relay memory stability. What replaces

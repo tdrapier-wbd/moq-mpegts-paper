@@ -9,8 +9,12 @@ with no decay across 2.5 h — about 650 MB/day. It is therefore not a 0.14.9 re
 subscriber attached the relay is flat, so the growth tracks served load. **`--cache-capacity` does not
 bound it**: at a 32 MiB cap the relay ran more than twice the cap past its baseline with no inflection,
 at the same ~27 MB/h — the growth is not cached payload, so the byte-budget control cannot evict it.
-Four legs across two builds and three cache settings all read ~27 MB/h. An N = 0/1/2/4/8 sweep is
-specified to establish whether the cost is per-subscriber or per-group before this goes upstream. The
+**The N = 0/1/2/4/8 sweep localises it: the slope is flat in N** (+28.70 / +27.86 / +28.00 /
++28.13 MB/h from one to eight subscribers) while ingested groups hold at 3,200/h, giving
+**~8.8 kB retained per ingested group, independent of subscriber count**. Per-session state is real
+but fixed (+3.22 MB per subscriber at join, not accumulating), and egress equals N × ingress at every
+leg, so send backlog is excluded. Eight legs now agree. A causal check (same bitrate, double the group
+rate) and the remaining `--cache-duration` knob are in flight; an upstream issue is drafted. The
 0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out envelope, bitrate sweep and
 protocol overhead are all measured on Linux.
 
@@ -618,14 +622,13 @@ which looks far more like per-group bookkeeping that is never released than like
 that is right, `--cache-capacity` will *not* bound it, because the pool only accounts payload. The
 32 MiB leg tested exactly this, and confirmed it.
 
-### Open: is it per-subscriber or per-group?
+### Answered: the cost is per ingested group, not per subscriber
 
-*Run record: N = 0 completed 2026-08-10 23:37 UTC, then the runner killed itself — its cleanup
+*Run record: N = 0 completed first, then the runner killed itself — its cleanup
 `pkill -f "t9.nsweep"` used an unescaped dot, which also matches its own path `t9/nsweep.sh`. Pattern
-tightened to `t9\.nsweep\.n[0-9]+\.hang` and verified both ways (does not match the runner path, does
-match a broadcast command line); legs 1/2/4/8 relaunched 2026-08-11 08:06 UTC, ETA ~14:10 UTC.*
+tightened to `t9\.nsweep\.n[0-9]+\.hang` and verified both ways; legs 1/2/4/8 re-run to completion.*
 
-Everything so far says "a leak, ~27 MB/h at N=4". That is a symptom, not a report. The specified sweep
+Everything up to here said "a leak, ~27 MB/h at N=4". That is a symptom, not a report. The sweep
 (`nsweep.sh`) runs N = 0, 1, 2, 4, 8 subscribers for 90 minutes each against a fresh relay, and reads
 the answer off the shape:
 
@@ -667,6 +670,66 @@ It also sharpens the discriminator for the remaining legs. With N subscribers th
 source once and fans it out N times, so ingest groups are constant in N while egress groups scale with
 N. A rate proportional to N therefore localises the cost to the egress/per-session side; a rate flat
 in N for N ≥ 1 localises it to per-group ingest bookkeeping.
+
+#### Result: flat in N
+
+| N | baseline RSS | slope past warm-up | groups/h (total) | **groups/h ingested** | egress/ingress |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 19.6 MB | **+0.00 MB/h** | 0 | 0 | — |
+| 1 | 46.7 MB | **+28.70 MB/h** | 6,398 | 3,199 | 1.00 |
+| 2 | 50.5 MB | **+27.86 MB/h** | 9,601 | 3,200 | 2.00 |
+| 4 | 57.1 MB | **+28.00 MB/h** | 15,998 | 3,200 | 4.00 |
+| 8 | 69.4 MB | **+28.13 MB/h** | 28,797 | 3,200 | 8.00 |
+
+Subscriber counts held for all 180 samples of every leg and the relay logged no errors.
+
+**The slope does not move.** Eight times the subscribers, eight times the egress, and the growth rate
+is unchanged at ~28 MB/h — a spread of 0.84 MB/h across the four legs, smaller than the variation
+between consecutive windows within a single leg. Fan-out is free, in the sense that matters here.
+
+**Ingested groups are constant at 3,200/h** (measured 3,199 / 3,200 / 3,200 / 3,200, recovered as
+total ÷ (N+1) and confirmed against the per-role byte counters). Dividing one constant by the other:
+
+> **~8.8 kB retained per ingested group**, independent of how many subscribers consume it.
+
+That is the number the earlier arithmetic estimated at ~7.5 kB from the nominal bitrate, now measured
+from the relay's own counters. It is also ~0.7 % of a group's ~1.24 MB of payload, so the relay is not
+retaining groups — it is retaining something small and per-group, once per ingest, for the lifetime of
+the process rather than the lifetime of the group.
+
+**Two separate costs, only one of which grows.** Baseline RSS rises cleanly with subscriber count —
+fitting the four baselines gives **43.9 MB + 3.22 MB per subscriber** — so a session does carry real
+per-connection state. But that cost is *fixed*: it is paid once at join and does not accumulate. The
+growth is entirely on the ingest side.
+
+**Backlog is now excluded at every N, not just N=1.** The relay's own role labels are from its point
+of view: `role="subscriber"` counts what it pulls from the publisher, `role="publisher"` what it
+serves. Egress was exactly N × ingress at every leg (5,973.7 MB in / 5,973.7 out at N=1; 5,989.8 in /
+47,850.8 out at N=8, a ratio of 7.99). Every subscriber received every byte, at the highest load the
+box will carry, so nothing is queuing undelivered and this is not the per-subscription backlog of
+upstream [#2733](https://github.com/moq-dev/moq/issues/2733).
+
+#### Making it causal, and finishing the knobs (`gopx.sh`, in flight)
+
+"8.8 kB per ingested group" is still a correlation: across the sweep, group rate never varied. Three
+90-minute legs at N = 4 close that, and finish testing the documented controls:
+
+| Leg | Source | Cache | Groups/h | Predicted slope if per-group |
+|---|---|---|---:|---:|
+| `dur5` | original | `--cache-duration 5s` | 3,200 | ~28 MB/h (knob does not bind) |
+| `gop28` | matched re-encode | default | 3,220 | ~28 MB/h |
+| `gop14` | matched re-encode | default | 6,440 | **~57 MB/h** |
+
+`gop28` and `gop14` are re-encodes of the same content with identical settings — `libx264 -preset
+veryfast -b:v 9M -sc_threshold 0`, verified at **9.3 Mbps each** — differing only in `-g`. Group rate
+is the single variable. If the cost is per group the slope doubles; if it is per byte, both legs sit
+at ~28 MB/h. That is a prediction made before the run, which is worth more in a bug report than
+another correlation.
+
+`dur5` covers the remaining documented knob. `--cache-duration` is the *age* ceiling and it clamps a
+publisher's advertised retention window, so a 5 s ceiling would crush any mechanism based on retained
+history. It is not expected to bind — the growth is ~0.7 % of payload, so history is not what is
+accumulating — but testing it lets the upstream report say both knobs were tried rather than one.
 
 **Representativeness limit of the publisher figure:** a video-only source exercises the import path
 without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than
