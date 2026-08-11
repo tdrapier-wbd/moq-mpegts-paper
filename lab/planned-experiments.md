@@ -1,8 +1,11 @@
 # Specified but not yet executed
 
-These protocols were designed as part of the campaign but have **not been run**. They are recorded
-here so an external engineer can execute them reproducibly; no results exist yet. Placeholders
-`<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from `INSTRUCTIONS.local.md`.
+These protocols were designed as part of the campaign and are recorded here so an external engineer
+can execute them reproducibly. Most have **not been run**. Where an experiment has since been partly
+executed it has its own per-test file, and the entry below is reduced to the protocol for the
+*remaining* conditions plus a pointer — the measured results live in the per-test file, not here.
+Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
+`INSTRUCTIONS.local.md`.
 
 ---
 
@@ -27,7 +30,7 @@ pair) is already characterised in [test-6-relay-resilience.md](test-6-relay-resi
 ## Congestion control for a permanent fixed-rate trunk (extends T8)
 
 Promoted to its own protocol with a runnable rig — see
-[test-8b-congestion-control.md](test-8b-congestion-control.md). A first-pass under-provisioned
+[test-8b-congestion-control.md](test-8b-congestion-control.md). The under-provisioned
 failure-mode run (C1) is done; the provisioned-path conditions (transient congestion, coexistence,
 AQM, provisioning margin, soak) are pending. Until those run, the T8 controller ranking is scoped to
 non-congestive impairment only.
@@ -73,56 +76,36 @@ correlated with the T5 reordering finding (a handover that also reorders is the 
 
 ## System performance & resource utilisation (T9)
 
-Now has its own file with the executed work and the outstanding protocol —
-[test-9-performance.md](test-9-performance.md). **Status (2026-08-08): the memory question is closed
-for the relay.** The 26.5 h soak completed with an RSS slope of **−0.63 MB/h** over its steady phase
-and **flat to sampling resolution** through 4 h of subscriber churn, no restarts, fds and threads
-unmoved — against a 0.13.7 rate that would have predicted +557 MB. The history: the deployed `0.13.7`
-relay was **OOM-killed** after 6 d 18 h at a 3.2 GB peak, growing a linear ~21 MB/hour with *zero*
-subscribers attached, and controlled probes on 0.14.8 did not reproduce it. The soak converts that
-"not reproduced" into "no leak", so nothing goes upstream.
+The executed work — soaks, fan-out envelope, bitrate sweep, protocol overhead and the relay memory
+finding — has its own file: [test-9-performance.md](test-9-performance.md). Publisher and subscriber
+roles pass the stability criterion; the relay does not, growing linearly under steady subscriber load
+in a way `--cache-capacity` demonstrably does not bound (`--cache-duration` is still untested — see
+item 3). What remains, in priority order:
 
-The **envelope work is now done on Linux** (measured on the 0.14.8/0.9.7 release binaries; the box has
-since moved to 0.14.9/0.9.9): fan-out
-past N = 25 with CPU attributed per process, the 2/10/27 Mbps bitrate sweep, the bounded-cache
-control, and `tcpdump` protocol overhead. Headlines: relay cost tracks *session count* rather than
-bitrate (~1.1 Gbps per core at 10 Mbps, and cost per Mbps falling as bitrate rises), the observed
-fan-out knee is the 2-core host saturating rather than the relay, wire overhead is ~1.12x the source
-TS rate, and `--cache-capacity` is free.
-
-**The second soak (2026-08-09) passed the publisher and subscriber roles** (+0.03 and +0.15 MB/h) and
-**re-opened the relay**. The controlled A/B (2026-08-10) then settled the build question: **both 0.14.8
-and 0.14.9 grow linearly at ~27 MB/h under four steady subscribers**, no decay, ~650 MB/day. Not a
-regression; soak #1's flat 26 h was its lighter workload. The relay **fails** the stability criterion.
-Still outstanding, in priority order:
-
-**`--cache-capacity` does not bound it** — answered 2026-08-10. At a 32 MiB cap the relay still grew
-+27.15 MB/h and ran to more than twice the cap above baseline with no inflection, so the growth sits
-outside the accounted cache pool. This is a leak, not a tuning question. Remaining, in priority order:
-
-1. **Per-subscriber or per-group?** `nsweep.sh` (N = 0/1/2/4/8, 90 min each, launched 22:06 UTC) with
-   `/metrics` scraping so kB-per-group is measured rather than inferred. Rate ∝ N points at session
-   state and a teardown fix; rate flat in N points at per-group bookkeeping never released. This is
-   the last thing needed before an upstream report — the current data is a clean symptom but does not
-   localise the cause, and would invite "set a cache bound" as a reply.
-2. **Then report it.** Include: both builds, all three cache settings, the N-shape, kB-per-group, the
-   N = 0 flat control, and the fact that memory is not returned when subscribers leave. Follow the
-   #2729 pattern — a reproducer script and a located mechanism, not just a curve.
+1. **Per-subscriber or per-group?** An N = 0/1/2/4/8 sweep (90 min each) with `/metrics` scraping so
+   kB-per-group is measured rather than inferred. Rate ∝ N points at session state and a teardown fix;
+   rate flat in N points at per-group bookkeeping never released. **N = 0 is done** — flat at
+   +0.00 MB/h, and notably with *zero bytes ingested*, because media pull is demand-driven; legs
+   1/2/4/8 relaunched 2026-08-11 08:06 UTC after a harness self-kill. This is the last thing needed
+   before an upstream report: the current data is a clean symptom but does not localise the cause, and
+   would invite "set a cache bound" as a reply.
+2. **Then report it.** Draft written (`docs/upstream/relay-memory-growth-issue.local.md`), holding for
+   the N-shape. It already carries both builds, all three cache settings, the N = 0 control, a
+   reproducer, and the exclusions: not a regression, not payload cache, not idle, and not send backlog
+   — egress equals ingress to the byte, which pre-empts the reading that this is the queue described in
+   upstream #2733. Follow the #2729 pattern: evidence plus a located mechanism, not just a curve.
 3. **`--cache-duration` as a mitigation check.** Not expected to bind either (it bounds retained
    history, which is not what is growing), but worth one leg so the report can say both documented
    knobs were tried.
-4. **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping).
+4. **The publisher thread count**, which grows and decelerates without settling.
 5. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
 
 ### Evidence checklist for the audio-resync upstream report
 
-The looped-source publisher crash is now localised: **any** audio elementary stream losing frame sync
-aborts `moq import` outright (MP2 and AC-3 both, one flipped bit is enough, no timeline discontinuity
-required), while the video path resynchronises through the same corruption. Root cause is a single
-propagating `?` in the legacy-audio PES loop, in a demuxer that already resyncs at the container layer
-and structurally in video. Draft issue in `docs/upstream/audio-resync-issue.local.md`. Remaining before
-posting:
+Any audio elementary stream losing frame sync aborts `moq import` outright, while the video path
+resynchronises through the same corruption; the mechanism is located in
+[test-9-performance.md](test-9-performance.md). Remaining before posting:
 
 - [x] Deterministic minimal reproducer with no timeline jump (unit level, `moq-mux` 0.9.4).
 - [x] Root cause located and contrasted with the paths that do resync.
@@ -137,11 +120,11 @@ A rig consequence that constrains any future long publisher run: looping a norma
 produce a long-lived publisher until this is fixed. A video-only remux is the workaround, at the cost
 of not exercising the audio, SCTE-35 or teletext paths.
 
-Per role (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope
-and its scaling, and prove stability over long runs. The priority dimension is a **hours→days soak**
-to detect memory leaks / unbounded growth — a resource leak is a production blocker, not a
-characterisation note. Run on the Linux EC2 host so `pidstat`/`/proc` are available; pin builds and
-record them.
+**Standing method** (used for the executed conditions, and for the remaining ones). Per role
+(publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope and its
+scaling, and prove stability over long runs. The priority dimension is a **hours→days soak** to detect
+memory leaks / unbounded growth — a resource leak is a production blocker, not a characterisation
+note. Run on the Linux EC2 host so `pidstat`/`/proc` are available; pin builds and record them.
 
 ```bash
 # steady-state per role (fixed 10 Mbps CNNiEMEA2 loop), ≥ 300 s after warm-up
@@ -164,27 +147,13 @@ fan-out knee documented. Pair the soak with the T7 ≥ 24 h PLL-lock soak.
 
 ---
 
-## Cross-implementation interop (T11 — new, 2026-08-10)
+## Cross-implementation interop (T11)
 
 Three other MoQ implementations now matter to this project
 ([interoperability](../docs/interoperability.md) §9), and "a MoQ relay is a neutral transport fabric"
 is a load-bearing assumption that has only ever been tested against `moq-dev` peers. Three experiments,
-in ascending cost:
-
-> **First results, 2026-08-10 — see [test-11-interop](test-11-interop.md).** A harness-shaped test
-> client now exists (`interop/`), and T11a has been partly run: a TS round trip is continuity-clean
-> through `moq-dev` locally and through the public `cdn.moq.dev` relay, and returns **no data** through
-> all eight other registered public relays. Root cause isolated for the five that establish a session:
-> **`moq-dev`'s IETF publisher withholds `PUBLISH_NAMESPACE` until the peer sends it a
-> `SUBSCRIBE_NAMESPACE`.** Its own relay does that; no third-party MOQT relay does, because in MOQT a
-> publisher announces proactively — so `moq import ts` connects and then encodes not one control
-> message. A second issue sits behind it: discovery uses an *empty* `SUBSCRIBE_NAMESPACE` prefix, which
-> moxygen rejects (error 16) and the others silently ignore. Forcing `--client-version
-> moq-transport-14` against a local relay passes cleanly, so the IETF path carries media fine. **This
-> settles the preannounce/demand-driven question flagged in T11b below: `moq-dev` is firmly
-> demand-driven.** quiche-moq, libquicr and moqtail fail earlier at connection/SETUP, undiagnosed. The
-> Cloudflare leg still needs a provisioned scope and tokens; the anonymous attempt was expected to fail
-> and did.
+in ascending cost. T11a is partly executed — the harness, the relay matrix and the isolated root cause
+are in [test-11-interop.md](test-11-interop.md); the remaining legs are specified below.
 
 **T11a — `moq-dev` client against a Cloudflare relay.** *Runnable now.* Cloudflare's managed relays
 are provisioned by API and free during the beta; they serve MOQT drafts 14 and 16, and `moq-dev`
@@ -200,9 +169,9 @@ verifying *that* is itself a result worth recording against [architecture](../do
 **T11b — a `moq2ts` broadcast through a `moq-dev` relay.** *Runnable now, weaker result.* `moq2ts` is
 publisher-only, so there is no MSFTS subscriber to close the loop; the question is only whether the
 relay forwards objects whose catalog it cannot parse. Observe the relay's forwarding and announce
-behaviour rather than decoding output. Watch specifically for the preannounce split documented in
-`moqxr` PR #21: `moq-dev` is demand-driven, so run with their default (preannounce off) and then with
-it on, to find out which camp `moq-dev` is in and whether an early `PUBLISH` poisons namespace
+behaviour rather than decoding output. `moq-dev` is demand-driven (T11a), so the open part of the
+preannounce split documented in `moqxr` PR #21 is the other direction: run with their default
+(preannounce off) and then with it on, to establish whether an early `PUBLISH` poisons namespace
 registration.
 
 **T11c — the full suite against a `moq2ts` subscriber.** *Blocked until they publish one.* When it

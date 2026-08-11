@@ -1,18 +1,17 @@
 # Test 9 — System performance & resource utilisation
 
 **Pyramid (§6):** operational envelope. **Gate (§7):** feeds [operations](../docs/operations.md) and
-[economics](../docs/economics.md) §3.1 and §8 (not a fidelity/resilience gate). **State:** two ≥ 24 h
-soaks plus a controlled build A/B run (2026-08-10). The **publisher and subscriber roles pass**
-(+0.03 and +0.15 MB/h). The **relay fails the stability criterion under sustained subscriber load**:
-holding the workload fixed and varying only the binary, both 0.14.8 and 0.14.9 grow **linearly at
-~27 MB/h with four subscribers**, with no decay across 2.5 h — about 650 MB/day. It is therefore not a
-0.14.9 regression, and soak #1's flat 26 h was a property of its lighter workload. With **no**
+[economics](../docs/economics.md) §3.1, §4 and §9 (not a fidelity/resilience gate). **State:** two ≥ 24 h
+soaks plus a controlled build A/B. The **publisher and subscriber roles pass** (+0.03 and +0.15 MB/h).
+The **relay fails the stability criterion under sustained subscriber load**: holding the workload fixed
+and varying only the binary, both 0.14.8 and 0.14.9 grow **linearly at ~27 MB/h with four subscribers**,
+with no decay across 2.5 h — about 650 MB/day. It is therefore not a 0.14.9 regression. With **no**
 subscriber attached the relay is flat, so the growth tracks served load. **`--cache-capacity` does not
 bound it**: at a 32 MiB cap the relay ran more than twice the cap past its baseline with no inflection,
 at the same ~27 MB/h — the growth is not cached payload, so the byte-budget control cannot evict it.
 Four legs across two builds and three cache settings all read ~27 MB/h. An N = 0/1/2/4/8 sweep is
-running to establish whether the cost is per-subscriber or per-group before this goes upstream. The
-0.13.7 no-subscriber OOM leak remains a separate, fixed defect. Fan-out envelope, bitrate sweep and
+specified to establish whether the cost is per-subscriber or per-group before this goes upstream. The
+0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out envelope, bitrate sweep and
 protocol overhead are all measured on Linux.
 
 ## Objective
@@ -31,21 +30,16 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
 
 ## Environment
 
-- **EC2 relay box** (`<EC2_IP>`, eu-west-1, 2 vCPU / 3.8 GB, **no swap**). The leak below was
-  observed here on the *deployed* build `moq 0.8.7 / moq-relay 0.13.7 @ 5e0e98c1`, with two
-  standing publishers and a default (unbounded) cache — a production-like standing service, not a
-  controlled rig. **On 2026-08-07 the box was moved to the current stable release** (the official
-  `moq-relay` 0.14.8 and `moq-cli` 0.9.7 Linux binaries rather than a local build), and the
-  standing relay, SRT receiver and both publishers were restored on it. All the Linux measurements
-  below are on that build, **including the completed soak**. Note this also changed the standing
-  relay's QUIC backend from quiche to quinn, because the deployed binary had been overwritten with a
-  quiche build during T8 and the official release binary is the default (quinn) one. **On 2026-08-08,
-  after the soak finished, the box was moved again to `moq-relay` 0.14.9 / `moq-cli` 0.9.9 in
-  `~/bin-0.14.9`** (services repointed, all restored). The 0.14.8 → 0.14.9 delta contains nothing
-  touching relay memory (it is a clustering announce fix, a JS/mux batch and CI), so the soak verdict
-  below carries over; the second soak runs on 0.14.9.
+- **EC2 relay box** (`<EC2_IP>`, eu-west-1, 2 vCPU / 3.8 GB, **no swap**), running the standing relay,
+  SRT receiver and two publishers — a production-like standing service, not a controlled rig. Three
+  relay builds appear below and each result names the one it was measured on: the historical
+  `moq-relay` 0.13.7 (the OOM leak), and the `moq-relay` 0.14.8 / 0.14.9 official Linux release
+  binaries (everything else). The 0.14.8 → 0.14.9 delta contains nothing touching relay memory (a
+  clustering announce fix, a JS/mux batch and CI), which the A/B below confirms empirically. Note the
+  move to the official release binaries also changed the standing relay's QUIC backend from quiche to
+  quinn, the deployed binary having been overwritten with a quiche build during T8.
 - **Local (controlled probes)** on the **0.14.8 release** (`moq-relay` 0.14.8 / `moq-cli` 0.9.8 /
-  `moq-net` 0.2.9, origin/main `c8b11b10` = release #2672), Darwin 25.5.0. Rigs in `~/t6-redundancy/`:
+  `moq-net` 0.2.9), Darwin 25.5.0. Rigs in `~/t6-redundancy/`:
   `t9_soak.sh` (phased steady / subscriber-churn / publisher-churn), `leak_probe.sh` (publishers with
   **no** subscriber — the EC2 condition), `session_leak.sh` (retained memory per completed session).
 - **EC2 rigs** in `~/t9/` on the box: `fanout_ec2.sh` (fan-out envelope), `fanout_cpu_ec2.sh` (the
@@ -76,10 +70,12 @@ distinction is what turned the observation below from a shrug into a finding. Op
 relay memory explicitly (`--cache-capacity`, or `--cache-headroom` for the governor) in any
 deployment regardless.
 
-## Confirmed: the deployed 0.13.7 relay leaks ~21 MB/hour to an OOM kill
+## The 0.13.7 relay leaked ~21 MB/hour to an OOM kill (fixed, and distinct from the growth below)
 
-**Correction to the 2026-08-06 entry below: the "flat plateau, no OOM" reading was wrong.** It was not
-a plateau; it was a relay approaching the cliff. Roughly nine hours later the kernel killed it:
+This is a separate defect from the under-load growth documented later, and it is fixed: on 0.13.7 the
+relay grew steadily with **no subscribers attached at all**, which is not the regime the current builds
+fail in. The standing relay was found at VmRSS ≈ 3.2 GB — ~84 % of the 3.8 GB box, with only 3 threads
+and 10 fds — and roughly nine hours later the kernel killed it:
 
 ```
 Aug 07 01:00:57 systemd[1]: moq-relay.service: The kernel OOM killer killed some processes in this unit.
@@ -114,10 +110,11 @@ happened.
 - **Not high session churn**, though sessions are the one thing that did accumulate: 52 sessions in
   9 hours, which works out at ~3.5 MB per session if the growth is charged to them.
 
-## Not reproduced on 0.14.8 (2026-08-07)
+### Not reproduced on 0.14.8 in the same regime
 
-Three controlled probes on the 0.14.8 release, sized so that the EC2 rate would be plainly visible.
-**None reproduces it.**
+Three controlled probes on the 0.14.8 release, sized so that the 0.13.7 rate would be plainly visible.
+**None reproduces it.** (This is specifically about the *idle, publisher-only* regime; 0.14.x does grow
+under sustained subscriber load, which is a different mechanism — see the relay-memory section below.)
 
 | Probe | Condition | RSS behaviour | Verdict |
 |---|---|---|---|
@@ -151,16 +148,16 @@ unbounded segment accumulation), any of which is a plausible fix. Confirming the
 the ≥ 24 h soak below.
 
 **Not reported upstream.** A leak that only reproduces on 0.13.7 — nine releases and two cache
-rewrites behind `main` — is not actionable for maintainers; the evidence is recorded here instead. It
-would become reportable if the ≥ 24 h soak on a current build shows a non-zero slope.
+rewrites behind `main` — is not actionable for maintainers; the evidence is recorded here instead.
+The separate under-load growth on current builds *is* reportable, and is tracked as such below.
 
-## Fan-out envelope on 0.14.8, macOS loopback (2026-08-07)
+## Fan-out envelope on macOS loopback: the host-configuration contrast
 
-> **Superseded for absolute values by the Linux sweep below.** The *shape* recorded here (linear in
-> egress, sublinear in memory, no thinning with N) held up on Linux. The absolute CPU constant did
-> not: it is ~6x too pessimistic, because macOS loopback requires `--client-quic-gso=false` and
-> so pays a syscall per packet. Kept per lab discipline, and because the 6x gap is itself the
-> finding that host configuration dominates relay CPU.
+> **Indicative for shape, not for absolute values** — the Linux sweep below is the reference. The
+> *shape* recorded here (linear in egress, sublinear in memory, no thinning with N) holds on Linux;
+> the absolute CPU constant is ~6x too pessimistic, because macOS loopback requires
+> `--client-quic-gso=false` and so pays a syscall per packet. That 6x gap is itself the finding: host
+> configuration dominates relay CPU.
 
 `fanout.sh`: one relay, one ~9.9 Mbps publisher, N subscribers on the *same* broadcast. CPU is a
 delta of cumulative CPU time over a fixed 20 s window (not `ps -o %cpu`, which on macOS is a decaying
@@ -190,7 +187,7 @@ Caveats: loopback (no real network stack cost, no TLS-over-WAN, no congestion co
 work), a single broadcast, and macOS. Treat the *shape* (linear in egress, sublinear in memory) as the
 result and the absolute constants as indicative.
 
-## Fan-out on Linux: the knee is the host, not the relay (2026-08-07)
+## Fan-out on Linux: the knee is the host, not the relay
 
 `~/t9/fanout_ec2.sh` on the EC2 box (2 vCPU, 0.14.8, one ~9.9 Mbps publisher, N subscribers on one
 broadcast, all loopback). Linux gives `/proc`, so CPU is an exact `utime+stime` delta over a fixed
@@ -239,7 +236,7 @@ Two numbers to carry forward:
 Relay memory again scaled sublinearly and modestly: 35.9 MB at N = 1 to 130.3 MB at N = 55, a
 marginal ~1.7 MB per subscriber. Memory is not the fan-out constraint on either platform.
 
-## Bitrate sweep: cost per Mbps falls sharply as bitrate rises (2026-08-07)
+## Bitrate sweep: cost per Mbps falls sharply as bitrate rises
 
 `~/t9/bitrate_cache_ec2.sh`, N held at 10 subscribers so the box stays far from saturation, over
 three sources: a 2 Mbps and a 27.5 Mbps clip encoded on the box from the standard CNN clip, plus the
@@ -265,9 +262,9 @@ feed is egress, not compute ([economics](../docs/economics.md) §3.1).
 The 0.090 %/Mbps at 10 Mbps agrees with the fan-out sweep's 0.089 %/Mbps derived at N = 55, from a
 completely different rig and subscriber count, which is a useful cross-check on both.
 
-## Bounded cache costs nothing measurable (2026-08-07)
+## Bounded cache costs nothing measurable
 
-Same rig, re-run with `--cache-capacity 256MiB` against the unbounded default:
+Same rig, with `--cache-capacity 256MiB` against the unbounded default:
 
 | Case | Aggregate | Relay CPU | Relay RSS |
 |---|---:|---:|---:|
@@ -279,11 +276,11 @@ Same rig, re-run with `--cache-capacity 256MiB` against the unbounded default:
 CPU is identical to the resolution measured and RSS differs by under 1.5 MB. That is the expected
 result rather than a surprise — a healthy relay's working set is a few seconds of media per track,
 far below a 256 MiB target, so the bound never binds and the governor never has to evict. The
-operational point is what matters: **bounding the cache is free insurance, not a performance
-trade-off**, so there is no reason to run a production relay unbounded (see the 0.13.7 OOM kill
-above for the cost of doing so).
+operational point is what matters: **bounding the cache is free**, so there is no performance reason to
+run a production relay unbounded. Note the limit of that advice: bounding the cache costs nothing, but
+it also does not bound the under-load growth documented below, which sits outside the accounted pool.
 
-## Protocol overhead: ~1.12x the source TS rate on the wire (2026-08-07)
+## Protocol overhead: ~1.12x the source TS rate on the wire
 
 `~/t9/overhead_ec2.sh`: one publisher, one subscriber, `tcpdump` on the subscriber's UDP flow for a
 20 s window, against the TS bytes that subscriber actually wrote in the same window.
@@ -316,11 +313,46 @@ same service. Since bandwidth is the line most likely to dominate a cost compari
 recorded as a real disadvantage rather than netted off against MoQ's compute efficiency
 ([economics](../docs/economics.md) §3.1).
 
-## ≥ 24 h soak: the relay passes (2026-08-08)
+## Soak method
 
-**Verdict: no leak on 0.14.8.** The run completed its full 26.49 h (1,580 samples, 2026-08-07 13:29 →
-2026-08-08 16:00 UTC) with **zero relay restarts**, which is the first thing to check — an OOM kill
-and systemd restart would otherwise show up as a flat slope. Slopes fitted past a 1 h warm-up:
+`~/t9/soak_ec2.sh`, phased over 26.5 h, against the **standing** relay rather than a private one, so
+what is under test is the real deployment in the role the 0.13.7 relay died in. Deliberately run
+with the **default unbounded cache**: bounding it would mask exactly the failure being looked for.
+
+- **Phase 1, 0-20 h — steady.** Standing publishers plus three steady subscribers. This is the
+  decisive window: a long quiet stretch is what converts "not reproduced in an hour" into a slope.
+- **Phase 2, 20-24 h — subscriber churn** every 120 s, to test whether RSS, fds and threads return
+  to baseline after join/leave rather than ratcheting.
+- **Phase 3, 24-26.5 h — steady again.** If churn retained memory, RSS rejoins the phase-1 trend at
+  a step rather than on it.
+
+Sampling every 60 s to `~/t9/soak.csv`: RSS, cumulative CPU, threads and fds for the relay, the
+publisher and the subscriber set, plus `MemAvailable` and the relay's systemd restart count (so an
+OOM kill and restart cannot be mistaken for a flat slope). `~/t9/soak_report.sh` fits a per-role,
+per-phase slope past a warm-up cut-off. Soak #2 (`soak2_ec2.sh`) runs the same sampling steadily,
+substituting a video-only loop publisher so the publisher role has a continuous series.
+
+Baseline at launch: relay 72.8 MB / 3 threads / 11 fds, publisher 40.4 MB, 3 subscribers,
+3.1 GB available. Two rig details matter when reproducing it: the sampler must resolve the publisher's
+`moq` process rather than its `/bin/sh` wrapper, or the publisher slope is meaningless; and the first
+~15 minutes of the CSV are perturbed by other work on the box, so fit past a generous warm-up
+(`WARMUP=3600` rather than the default 900).
+
+**Why soak #1 has no publisher slope:** its looped-file publishers die at every clip wrap, so the
+publisher role restarted roughly every ten minutes and systemd replaced it. That does not weaken the
+relay reading — if anything it strengthens it, because the restarts reproduce the
+~one-session-per-ten-minutes churn the leaking 0.13.7 relay actually saw (52 sessions in 9 hours), and
+the relay still did not grow. A non-wrapping synthetic publisher was ruled out because live `lavfi`
+encoding costs too much CPU (below); the video-only remux is the workable answer.
+
+## Soak #1 — flat on 0.14.8 under a light subscriber load
+
+**This run is flat, and its scope is narrower than it first appears.** Three steady subscribers plus
+churn is not enough load to surface the ~27 MB/h growth that four steady subscribers produce (see the
+relay-memory section below), so the flat result is real but does not generalise to a loaded relay. What
+it does close is the *0.13.7* failure mode. The run completed its full 26.49 h (1,580 samples) with
+**zero relay restarts**, which is the first thing to check — an OOM kill and systemd restart would
+otherwise show up as a flat slope. Slopes fitted past a 1 h warm-up:
 
 | Phase | Duration | Relay RSS | **Relay slope** | Threads / fds | Restarts |
 |---|---:|---|---:|---|---:|
@@ -347,11 +379,7 @@ Three details worth reading past the headline:
 
 **This closes the *0.13.7* leak question, and nothing wider.** The specific 0.13.7 behaviour — ~21 MB/h
 with **no subscribers at all**, ending in an OOM kill after six days — is a fixed historical defect and
-does not reproduce. *(Superseded in scope by the A/B below: the conclusion drawn here at the time —
-that there was nothing to report upstream and that bounding the cache was merely cheap insurance —
-did not survive a heavier workload. This run's 3 subscribers with churn were not enough load to
-surface the ~27 MB/h growth that four steady subscribers produce. The flat result is real; the
-generalisation from it was wrong.)*
+does not reproduce.
 
 **What this run does *not* establish is the publisher role**, for the reason recorded below: its
 publishers restarted every ~10 minutes at the clip wrap, so the publisher column contains gaps and no
@@ -359,11 +387,10 @@ slope can be fitted through it. The subscriber aggregate is likewise not a clean
 because the set size changes with churn (phase slopes −0.04 / −0.69 / +0.19 MB/h are all ≈ 0, but the
 denominator moves). A second soak addresses the publisher directly.
 
-## Any audio stream losing frame sync kills `moq import` (2026-08-08)
+## Any audio stream losing frame sync kills `moq import`
 
-Chasing a non-wrapping source for the publisher soak turned the earlier "MP2 frame sync" annoyance
-into a sharper and more general finding. Three loop variants of the same clip were run through
-`tsp -I file --infinite | moq import ts` across the ~601 s wrap:
+Three loop variants of the same clip were run through `tsp -I file --infinite | moq import ts` across
+the ~601 s wrap:
 
 | Loop variant | Result at the wrap |
 |---|---|
@@ -383,12 +410,12 @@ teardown, reconnect, and the ~4 s re-attach measured in T6.
 The practical consequence for the rig: `t9_loop_vidonly.ts` is a source that loops indefinitely
 without restarting the publisher.
 
-### Confirmed with no timeline jump, and the root cause located (2026-08-10)
+### It is not a loop artefact: the root cause, with no timeline jump
 
-The one objection to reporting this was that a looped file jumps its timeline *backwards*, which a
-real feed never does. **That objection is now dead.** A unit-level reproducer against `moq-mux`
-0.9.4 — one valid MP2 frame, then a second frame with its sync word changed from `0xFF` to `0xFE`,
-same PID, monotonic PTS, no loop and no timeline discontinuity of any kind — returns:
+A looped file jumps its timeline *backwards*, which a real feed never does — so the loop rig alone
+cannot support the finding. A unit-level reproducer against `moq-mux` 0.9.4 removes that objection:
+one valid MP2 frame, then a second frame with its sync word changed from `0xFF` to `0xFE`, same PID,
+monotonic PTS, no loop and no timeline discontinuity of any kind, returns:
 
 ```
 PROBE: one damaged header kills the whole import: missing MP2 frame sync
@@ -451,12 +478,12 @@ Contribution mechanics, checked against the current `CONTRIBUTING.md`: this targ
 to mishandle)" and "a parser accepting a broader set of inputs it previously rejected" on `main`.
 Any GitHub prose needs the model-attribution marker.
 
-## Publisher-role soak: publisher passes, but the relay raises a new question (2026-08-09)
+## Soak #2 — publisher and subscriber roles pass
 
-`~/t9/soak2_ec2.sh` on **0.14.9**, 26.49 h (1,589 samples, 2026-08-08 20:24 → 2026-08-09 22:55 UTC),
-steady throughout: a dedicated video-only loop publisher (which survives wraps) plus two steady
-subscribers, against the standing relay. **Zero publisher respawns for the whole run** — the
-video-only source did what it was chosen to do, so there is finally a continuous publisher to fit.
+`~/t9/soak2_ec2.sh` on **0.14.9**, 26.49 h (1,589 samples), steady throughout: a dedicated video-only
+loop publisher (which survives wraps) plus two steady subscribers, against the standing relay. **Zero
+publisher respawns for the whole run**, so the publisher role has a continuous series to fit — which
+soak #1 did not.
 
 | Role | RSS over the run | **Slope (past 1 h warm-up)** | Verdict |
 |---|---|---:|---|
@@ -475,9 +502,15 @@ figure measured independently below.
 converging rather than a leak. But it did not visibly stop, and threads are the one resource here that
 only ever went up. A longer run, or a look at what the pool is sized against, would settle it.
 
-### The relay result, which needs care
+## Relay memory: the one failing role
 
-Read as a single linear fit, +3.2 MB/h looks alarming. It is not linear, and the shape matters:
+The relay grows under sustained subscriber load, at a rate neither documented cache knob bounds. The
+controlled A/B is the authoritative measurement; the standing-relay soak below is the observation that
+prompted it, and its decaying shape is a property of that particular deployment rather than the general
+behaviour.
+
+**As observed on the standing relay during soak #2.** Read as a single linear fit, +3.2 MB/h overstates
+the end state by roughly double, because on this relay the curve decays:
 
 | Window | Relay RSS | Slope |
 |---|---|---:|
@@ -487,15 +520,11 @@ Read as a single linear fit, +3.2 MB/h looks alarming. It is not linear, and the
 | 18–26.5 h | 212 → 226 MB | +1.84 MB/h |
 | 23–26.5 h (tail) | 221 → 226 MB | **+1.57 MB/h** |
 
-So it is a decaying curve, and a straight line through it overstates the end state by roughly double.
-But the decay **does not reach zero**: the last three and a half hours still add 1.57 MB/h, which
+The decay **does not reach zero**: the last three and a half hours still add 1.57 MB/h, which
 annualises to about 13.8 GB and would exhaust this 3.8 GB box in roughly three months. That is not
-dismissible as settling.
-
-> **Read the A/B section below before drawing conclusions from this curve.** Under a controlled
-> workload the growth is *linear at ~27 MB/h on both builds*, so the deceleration seen here is a
-> property of this particular run — a long-lived standing relay carrying a mix of subscribed and
-> unsubscribed broadcasts — and not the general shape.
+dismissible as settling. The deceleration is specific to this run — a long-lived standing relay
+carrying a mix of subscribed and unsubscribed broadcasts — and does not appear under a controlled
+workload, where the growth is strictly linear.
 
 Two further observations sharpen it, and they pull in opposite directions:
 
@@ -508,7 +537,7 @@ Two further observations sharpen it, and they pull in opposite directions:
   something subscribes, so this says the growth tracks *served* load rather than uptime — consistent
   with either a working set that ratchets up per served session, or a slow leak charged to serving.
 
-### Controlled A/B: not a regression, and linear (2026-08-10)
+### Controlled A/B: not a regression, and linear
 
 `~/t9/relay_ab.sh` held the workload fixed and varied only the binary — the same video-only publisher
 and four steady subscribers against a **private** relay (no standing-service history, no session churn
@@ -536,10 +565,10 @@ that the soak alone permitted. Extrapolated, +27 MB/h is 650 MB/day.
 **The 256 MiB cap leg proves less than it appears to, and this matters.** It grew at the same rate as
 uncapped — but RSS only reached 131 MB, and `--cache-capacity` counts *payload bytes*, not process
 RSS. A 256 MiB (268 MB) payload budget was nowhere near full, so the cap was never engaged. That leg
-cannot distinguish "the cap does not bind this" from "the cap was not reached". `~/t9/relay_cap2.sh`
-repeated it at 32 MiB, small enough to engage within the hour.
+cannot distinguish "the cap does not bind this" from "the cap was not reached", which is why
+`~/t9/relay_cap2.sh` repeats it at 32 MiB, small enough to engage within the hour.
 
-### The cache is not what grows: 32 MiB cap changes nothing (2026-08-10)
+### The cache is not what grows: a 32 MiB cap changes nothing
 
 The relay confirmed the setting at startup — `cache capacity set capacity=33554432` — and then ignored
 it, in the sense that mattered:
@@ -589,11 +618,16 @@ which looks far more like per-group bookkeeping that is never released than like
 that is right, `--cache-capacity` will *not* bound it, because the pool only accounts payload. The
 32 MiB leg tested exactly this, and confirmed it.
 
-### Next: is it per-subscriber or per-group? (`nsweep.sh`, launched 2026-08-10 22:06 UTC)
+### Open: is it per-subscriber or per-group?
 
-Everything so far says "a leak, ~27 MB/h at N=4". That is a symptom, not a report. The sweep runs
-N = 0, 1, 2, 4, 8 subscribers for 90 minutes each against a fresh relay, and reads the answer off the
-shape:
+*Run record: N = 0 completed 2026-08-10 23:37 UTC, then the runner killed itself — its cleanup
+`pkill -f "t9.nsweep"` used an unescaped dot, which also matches its own path `t9/nsweep.sh`. Pattern
+tightened to `t9\.nsweep\.n[0-9]+\.hang` and verified both ways (does not match the runner path, does
+match a broadcast command line); legs 1/2/4/8 relaunched 2026-08-11 08:06 UTC, ETA ~14:10 UTC.*
+
+Everything so far says "a leak, ~27 MB/h at N=4". That is a symptom, not a report. The specified sweep
+(`nsweep.sh`) runs N = 0, 1, 2, 4, 8 subscribers for 90 minutes each against a fresh relay, and reads
+the answer off the shape:
 
 - **rate proportional to N** → per-session state, and the fix is in session teardown;
 - **rate flat in N for N ≥ 1** → per-group ingest bookkeeping never released, and N only decides how
@@ -608,55 +642,40 @@ counters entirely; with only `--internal-listen` the `/metrics` endpoint serves 
 and nothing else, which is a trap worth remembering. Enabling stats does add a stats broadcast, but it
 is constant across all five legs, so the N-dependence stays clean.
 
+#### N = 0 control: the relay ingests nothing without a subscriber
+
+The control leg ran 90 minutes with the publisher connected and the source live, and the relay held
+**19.6 → 19.7 MB, +0.00 MB/h** — flat to the resolution of the measurement across all three windows
+(+0.02, +0.01, +0.00). No idle or timer-driven growth exists.
+
+But the counters show the control is weaker than intended, in an interesting way. After 90 minutes
+`moq_relay_bytes_total`, `groups_total` and `frames_total` were **all still exactly 0**, for both the
+publisher and subscriber roles, with one session opened. The publisher was genuinely running — `tsp`
+was logging PCR cycling warnings throughout — so the source was live and connected, and the relay
+pulled **not one byte** of it.
+
+So the relay's *media* path is demand-driven end to end: it accepts the session and, as
+[interoperability](../docs/interoperability.md) §9.7 records, it interrogates the publisher and the
+publisher announces — but no track is actually subscribed upstream until something downstream wants
+it. This leg therefore proves "no traffic, no growth" rather than "publisher load, no growth", which
+is a weaker statement than planned. It is still the right control for the leak question (it rules out
+a clock-driven leak), and it independently explains two earlier observations: the standing relay
+sitting flat at 224 MB for seven hours with no subscribers, and soak #1 growing less than soak #2
+under a lighter subscriber load. **What the relay retains tracks bytes it actually moves.**
+
+It also sharpens the discriminator for the remaining legs. With N subscribers the relay ingests the
+source once and fans it out N times, so ingest groups are constant in N while egress groups scale with
+N. A rate proportional to N therefore localises the cost to the egress/per-session side; a rate flat
+in N for N ≥ 1 localises it to per-group ingest bookkeeping.
+
 **Representativeness limit of the publisher figure:** a video-only source exercises the import path
 without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than
 its full-feed behaviour. Closing that gap needs the audio-resync fix below, not a rig change.
 
-## The first soak as launched (2026-08-07 13:29 UTC)
-
-`~/t9/soak_ec2.sh`, phased over 26.5 h, against the **standing** relay rather than a private one, so
-what is under test is the real deployment in the role the 0.13.7 relay died in. Deliberately run
-with the **default unbounded cache**: bounding it would mask exactly the failure being looked for.
-
-- **Phase 1, 0-20 h — steady.** Standing publishers plus three steady subscribers. This is the
-  decisive window: a long quiet stretch is what converts "not reproduced in an hour" into a slope.
-- **Phase 2, 20-24 h — subscriber churn** every 120 s, to test whether RSS, fds and threads return
-  to baseline after join/leave rather than ratcheting.
-- **Phase 3, 24-26.5 h — steady again.** If churn retained memory, RSS rejoins the phase-1 trend at
-  a step rather than on it.
-
-Sampling every 60 s to `~/t9/soak.csv`: RSS, cumulative CPU, threads and fds for the relay, the
-publisher and the subscriber set, plus `MemAvailable` and the relay's systemd restart count (so an
-OOM kill and restart cannot be mistaken for a flat slope). `~/t9/soak_report.sh` fits a per-role,
-per-phase slope past a warm-up cut-off.
-
-Baseline at launch: relay 72.8 MB / 3 threads / 11 fds, publisher 40.4 MB, 3 subscribers,
-3.1 GB available. A phased 3-minute dry run first verified all three phases, the CSV shape, and
-subscriber teardown. Two details worth recording from that dry run: RSS rose 54 → 60 MB across a few
-churn cycles and then held flat, which is the behaviour the 4 h churn phase is meant to resolve; and
-the first version of the sampler resolved the publisher to its `/bin/sh` wrapper (1.9 MB) instead of
-the `moq` process (38 MB), which would have produced a meaningless publisher slope.
-
-**Why this run has no publisher slope:** its looped-file publishers die at every clip wrap (above), so
-the publisher role restarted roughly every ten minutes and systemd replaced it. That does not weaken
-the relay verdict — if anything it strengthens it, because the restarts reproduce the
-~one-session-per-ten-minutes churn the leaking 0.13.7 relay actually saw (52 sessions in 9 hours), and
-the relay still did not grow. An attempt to add a non-wrapping synthetic publisher alongside was
-abandoned because live `lavfi` encoding cost too much CPU (below); the video-only remux found later
-solved it properly.
-
-Also note the first ~15 minutes of the CSV are perturbed by the experiments that were still finishing
-on the box (relay RSS briefly reached 124 MB). Fit past a generous warm-up — `WARMUP=3600` rather
-than the default 900 — when analysing.
-
-## Publisher-side CPU on a trickle-fed live source (2026-08-07)
-
-The other publisher-side observation from building the soak. (The first — `moq import` aborting on a
-discontinuity — is now superseded by the three-variant result above, which localises it to the audio
-parsers.)
+## Publisher-side CPU on a trickle-fed live source
 
 **`moq import` costs ~3x more CPU on a trickle-fed live source than on a file-paced one, apparently
-independent of bitrate.** Trying to build a publisher that never wraps, two live `lavfi` sources were
+independent of bitrate.** Building a publisher that never wraps, two live `lavfi` sources were
 measured:
 
 | Source into `moq import` | Bitrate | `moq import` CPU |
@@ -675,34 +694,36 @@ and a control with the same live source written to a file first) before it is wo
 but it is recorded because it was reproducible on the first two attempts and it defeated the intended
 soak design.
 
-## Preliminary observation as recorded (2026-08-06) — superseded, kept per lab discipline
+## Corrections
 
-While assessing the box for T9, the standing `moq-relay` (build `0.13.7`, ~6 days uptime, two standing
-publishers) was found at **VmRSS ≈ 3.2 GB** — ~84 % of the 3.8 GB box, with only 3 threads and 10 fds.
-It was read at the time as an observation rather than a finding, on three grounds:
+Four readings in this experiment were wrong and were corrected by later measurement. They are recorded
+because each carries a method lesson that changed how the rest of the campaign was run.
 
-- **"Flat, not climbing."** Sampled over ~20 s it held at 3,208 MB (3208624 → 3208508 → 3208308 kB) and
-  `dmesg` showed no OOM-kills, so it was read as a **plateau** — a default cache pool filling toward
-  system memory. *This was the error: a 20 s window cannot distinguish a plateau from 21 MB/h, and the
-  process was in fact ~9 hours from being OOM-killed.* The `dmesg` check was accurate but premature.
-- **Old build, unknown history** — 0.13.7 predates the cache/retention work, so it could not be
-  attributed to current code. *This part held up, and is now the leading explanation.*
-- **It blocked the controlled test there** — ~116 MB free and no swap left no room for a fan-out sweep
-  without risking the standing service. *Still true; the controlled probes were run locally instead.*
-
-The lesson recorded: **sample a suspected leak over minutes, not seconds, and check `journalctl`/
-systemd accounting rather than `dmesg` alone** (systemd logged both the OOM kill and the 3.2 GB peak
-that `dmesg` did not surface).
+- **A 3.2 GB relay read as a settled "plateau."** Sampled over ~20 s it looked flat and `dmesg` showed
+  no OOM kills. A 20 s window cannot distinguish a plateau from 21 MB/h, and the process was in fact
+  ~9 hours from being killed. *Lesson: sample a suspected leak over minutes, not seconds, and check
+  `journalctl`/systemd accounting rather than `dmesg` alone — systemd logged both the OOM kill and the
+  3.2 GB peak that `dmesg` never surfaced.*
+- **Soak #1's flat 26 h read as "no leak, nothing to report upstream."** The flat result is real, but
+  it was generalised past its workload: three subscribers with churn does not load the relay enough to
+  surface the ~27 MB/h that four steady subscribers produce. *Lesson: a null result is only as strong
+  as the load that produced it; state the regime with the verdict.*
+- **A "+680 MB/hour" relay slope from an early phased run.** The regression was fitted through the
+  initial ramp, so it measured a relay settling to its ~95 MB working set. *Lesson: fit only past
+  warm-up.*
+- **The 256 MiB cache-cap leg read as "the cap does not bind this."** `--cache-capacity` counts payload
+  bytes and the budget was never approached, so the leg could not distinguish that from "the cap was
+  never engaged". Re-running at 32 MiB — small enough to engage — gave the real answer. *Lesson: a
+  control only controls if the knob under test actually operates in the range tested.*
 
 ## Still outstanding
 
-- **Resolve the relay growth on 0.14.9** — the top open item, and the only one that could still make
-  T9 fail its own pass criterion. `relay_ab.sh` answers the build question; if both builds climb, the
-  follow-on is to characterise the ratchet (per-session retained memory at fixed N, then N=8/16) and
-  to re-run with `--cache-capacity` set, which would show whether the governor bounds it. Pair a future
+- **Localise the relay growth** — the top open item, and the reason T9 fails its own pass criterion for
+  the relay role. The build and cache-bound questions are answered; what remains is the N-sweep that
+  separates per-session state from per-group bookkeeping, and then the upstream report. Pair a future
   repeat with the T7 ≥ 24 h PLL-lock soak so one run yields both verdicts.
-- **The publisher thread count** (22 → 86 over 26 h, decelerating but not stopping). Cheap to check:
-  a longer run plus what the pool is sized against.
+- **The publisher thread count**, which grows and decelerates without settling. Cheap to check: a
+  longer run plus what the pool is sized against.
 - **Fan-out over a real path**, relay and subscribers on separate hosts. Both sweeps so far are
   loopback, and the Linux sweep showed why that matters: co-located subscribers cost 2.4x the relay,
   so the rig's knee is the host's. A cross-machine run would price the NIC and the network stack
@@ -712,10 +733,10 @@ that `dmesg` did not surface).
   loss, and how it compares to the same measurement on SRT (T8 has the rig for this).
 - **Per-role envelope for the groomer/pacer**, which the objective asks for and none of these runs
   covers.
-- **Confirm the audio-sync abort against a *deliberate* mid-stream corruption** — a bit-flipped audio
-  frame header with no timeline jump — which is the one control that would make it an upstream report.
-  The video path surviving the same wrap already removes most of the "it is only an artificial
-  loop discontinuity" objection.
+- **The audio-sync abort on real content** — a bit-flipped MP2 frame header mid-file, with a corrupted
+  video NAL on the same file as the control, plus the blast radius as measured. The unit reproducer
+  already establishes the mechanism; this is the broadcast-credible artefact for the upstream issue
+  (checklist in [planned-experiments](planned-experiments.md)).
 - **Isolate the live-source `moq import` CPU cost** (~3x the file-paced case, bitrate-independent).
   Profile it and re-test with the live source staged through a file; if it holds up, it is an upstream
   report, and it affects the normal live contribution topology.
@@ -727,9 +748,8 @@ awk '{n++;x=$1;y=$2;sx+=x;sy+=y;sxy+=x*y;sxx+=x*x}
   END{b=(n*sxy-sx*sy)/(n*sxx-sx*sx); printf "RSS slope = %.4f MB/hour\n", b*3600/1024}' soak_<role>.log
 ```
 
-> **Fitting caveat learned here:** fit the slope only over samples *past* warm-up. A regression through
-> the initial ramp (RSS reaching its working set in the first minute) manufactures a huge fake slope —
-> an early phased run reported "+680 MB/hour" for a relay that was simply settling to ~95 MB.
+> **Fit the slope only over samples *past* warm-up.** A regression through the initial ramp, while RSS
+> is still reaching its working set, manufactures a large fake slope (see Corrections).
 
 ## References
 
