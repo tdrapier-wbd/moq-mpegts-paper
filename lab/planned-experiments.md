@@ -23,7 +23,56 @@ verdicts. Exercise the boundaries a groomer must handle beyond steady state:
 
 Where access exists, corroborate with a second analyser (Elecard / R&S MTS4EA / Tektronix MTS / Ateme
 Titan). The output-determinism *precondition* (which groomer topologies can produce a byte-identical
-pair) is already characterised in [test-6-relay-resilience.md](test-6-relay-resilience.md).
+pair) is characterised offline in [test-6-relay-resilience.md](test-6-relay-resilience.md), and the
+dual-leg hand-off it enables is already graded in software by
+[T12](test-12-dual-path-handoff.md) — including the divergent-loss case, where a single groomer
+duplicated onto two paths stays mergeable at 1 % and 3 % loss. The hardware drill therefore starts
+from a known-good sender pattern, and its open question is whether a real IRD's merge engine agrees
+with T12's reference receiver.
+
+---
+
+## Dual-path 1+1: remaining conditions (T12)
+
+**All four arms have been run** — protocol, measured results and limitations are in
+[test-12-dual-path-handoff.md](test-12-dual-path-handoff.md), rigs in
+[`scripts/t12-*`](scripts/). In short: two ungroomed legs merge exactly but are not TR 101
+290-presentable; two *arrival-clocked* groomers cannot be merged at all, structurally rather than
+through re-stamped PCR; one groomer duplicated onto two paths is hitless but protects the last hop
+only; and two *stream-clocked* groomers are byte-identical and hitless across path failures and the
+death of a publisher, relay or exporter alike. What remains below is what those results left open.
+
+**Restart one leg of a live pair.** Stream clocking removed the defect that made this look like a
+start-order problem: a leg that mutes and returns now rejoins its partner's numbering exactly
+(deficit 0) and resumes carrying programme, and a leg that joins 20 s late puts the same programme
+in the same slots under the same numbers. It joins in phase too, a median 10 ms from its partner at
+equal sequence numbers. One thing stops the pair being byte-identical afterwards, and it is not in
+the groomer: **the exporter's continuity counters**. `moq export ts` numbers each PID from its own
+process state, so two exporters that did not start together are offset by a constant — measured at
++2 on video and +8 on PSI, unchanging across a run. Masking that one field lifts a recovered leg from
+68.6 % to 98.2 % agreement and a late-joining leg from 0.09 % to 97.1 %. Filed as
+[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779); the test once it lands is the same
+two cells, expecting 100 %.
+
+That test needs a grader the current one is not. `t12-merge-oracle.py` recovers the sequence offset
+between the legs by voting on payload identity and derives skew from that offset, so it cannot grade
+a pair that differs in any field: on the join cell it voted on 15 datagrams out of 23 175 and
+reported a spurious offset and a spurious 12 s skew, which cost two false hypotheses before
+[`t12-seqskew.py`](scripts/t12-seqskew.py) measured the phase without a correlator. Either give the
+oracle a masked-compare mode or fix the exporter first.
+
+**Two-host and meshed variants.** Both T12 legs ran on one host, sharing a clock, which flatters the
+rate coherence [architecture](../docs/architecture.md) §14.1 requires of two gateways on free-running
+oscillators; and both traversed the same physical path, so T12 graded the hand-off, not path
+diversity. This matters more now than it did: arm D's identity claim rests on two groomers agreeing
+about stream position, and on one host they agree about wall time as well. Repeat the arm C and arm D
+cells across two hosts, and optionally with relay B dialling relay A as a cluster peer
+(`~/t6-redundancy/relayA.toml`/`relayB.toml`), to check that relay reselect neither helps nor
+interferes once the receiver is doing the switching.
+
+**Also unaddressed by T12:** SMPTE 2022-1 FEC; a full 10 Mbps mux rather than 2 Mbps on a 2-vCPU box;
+a carrier rate matched to the content rate, to resolve whether the 1.4 % PCR-interval floor measured
+there is an artefact of 55–60 % stuffing; and any hardware IRD merge, which is Gate 2.
 
 ---
 
@@ -139,11 +188,24 @@ awk '{n++;x=$1;y=$2;sx+=x;sy+=y;sxy+=x*y;sxx+=x*x}
 ```
 
 Sweeps: bitrate ~2 / 10 / 27 Mbps (reuse the T1 clips); fan-out N ∈ {1,5,10,25,50} subscribers against
-one relay broadcast, recording relay CPU/RSS/fd at each N (the fan-out knee). Overhead: per hop,
-`tcpdump` a fixed window and compare wire bytes to TS payload. Pass criteria: RSS growth slope
-statistically ≈ 0 over the soak for every role; fd/socket/thread counts stable and return to baseline
-after join/leave and relay-reconnect churn; bounded CPU with headroom; per-core throughput and
+one relay broadcast, recording relay CPU/RSS/fd at each N (the fan-out knee). Pass criteria: RSS growth
+slope statistically ≈ 0 over the soak for every role; fd/socket/thread counts stable and return to
+baseline after join/leave and relay-reconnect churn; bounded CPU with headroom; per-core throughput and
 fan-out knee documented. Pair the soak with the T7 ≥ 24 h PLL-lock soak.
+
+**Overhead, re-specified.** Per hop, `tcpdump` a fixed window and compare wire bytes to TS payload —
+but the first pass produced a number with nothing to read it against, so three things are now fixed in
+advance. *State the budget*: QUIC's per-packet cost is ~64 B (IP + UDP + short header + AEAD tag +
+`STREAM` header), so 5.5 % at a 1200 B datagram and 4.5 % at 1500 B, against SRT's 3.3 %; pass is
+within a point or two of that, and anything above is an implementation gap to localise, not a protocol
+property. *State three denominators separately* — elementary-stream bytes, delivered TS, source TS —
+because they differ by the stuffing and TS-header volumes and only the first prices the protocol.
+*Control the transport*: pin `--{client,server}-quic-mtu-discovery` on both ends (it defaults **off**,
+overriding quinn), run **off loopback** so the UDP datagram-size histogram is readable, and use a
+window long enough that a subscriber's join-time cache backlog cannot inflate the wire side. Cover both
+carriage lanes, since they carry different byte volumes, and repeat under loss alongside the same
+measurement on SRT ([T9](test-9-performance.md) for the decomposition, [T8](test-8-srt-vs-moq.md) for
+the rig).
 
 ---
 

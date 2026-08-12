@@ -91,9 +91,15 @@ The fix is built and public:
 re-stamp, PCR re-insertion, null stuffing, no demux. Fed the bursty media-aware egress it takes
 that 13–26 % to **0 %**, with **0 `pcrverify` violations at 500 µs** and 0 CC errors
 ([lab: T2](../lab/test-2-media-aware-transparency.md), [T7](../lab/test-7-timing-integrity.md)), so the preferred lane plus a downstream pacer
-is CBR/PCR-conformant at P1. That is *necessary but not sufficient*: file analysis confirms the
-re-stamp arithmetic, not software-pacer jitter or PCR_accuracy (±500 ns) at the physical
-output. **The hardware pass remains the open, load-bearing test.** (Supports
+is CBR/PCR-conformant at P1. Tightening the check to the TR 101 290 PCR_accuracy limit of ±500 ns
+does not change the verdict on a groomed output — 0 of 2 598 PCRs outside it, against 1 523 of 1 524
+for the same feed delivered ungroomed, which is the sharpest statement yet of what the pacer is for
+([lab: T12](../lab/test-12-dual-path-handoff.md)). Two qualifications keep this honest. The 0 %
+interval result is measured at a carrier rate matched to the content; running a 4 Mbps carrier for a
+1.9 Mbps feed leaves 1.4 % of intervals above 40 ms even with a clean source, and whether that is
+inherent to heavy stuffing or a groomer defect is unresolved. And all of it is *necessary but not
+sufficient*: file analysis confirms the re-stamp arithmetic, not software-pacer jitter at the
+physical output. **The hardware pass remains the open, load-bearing test.** (Supports
 [architecture](architecture.md) §7.2.)
 
 ## 4. Real feeds broke naive media-aware import — and the gaps closed upstream
@@ -161,7 +167,7 @@ non-congestive impairment: under a shaped bottleneck quinn-BBRv1 shows intermitt
 matter for a *permanent fixed-rate* trunk, but the provisioned-path conditions that would settle it
 are unrun.
 
-## 7. Transport resilience holds; active/active source failover ships only as a bounded reselect
+## 7. Transport resilience holds; source failover is bounded, and the receiver-side 1+1 splice now has numbers
 
 MoQ's redundancy model is sound: thin, auto-reconnecting endpoints, redundancy in the relay mesh,
 and hitless selection left to the receiver. Drills on the media-aware lane
@@ -252,8 +258,9 @@ explicit `Ended` flag. Specified, not shipped, and the upstream thread worth tra
 
 **Posture buildable now.** With the exporter crash fixed, no external subscriber supervisor is
 needed for relay maintenance or transient loss. Service redundancy still comes from a fully doubled
-chain (dual publishers → dual relays → dual subscribers → dual pacers → downstream ST 2022-7 / IRD
-failover), letting the *receiver* make the hitless decision. Relay-mesh source failover does not
+chain (dual publishers → dual relays → dual subscribers → downstream ST 2022-7 / IRD failover),
+letting the *receiver* make the hitless decision — with the caveat measured below, that the
+*grooming* stage of that chain cannot simply be doubled. Relay-mesh source failover does not
 change that recommendation: at one idle timeout it is **bounded, not hitless**, and on the
 graceful-exit path it does not protect at all. A gap-free switch would need either wall-clock-aligned
 encoders (Elemental's approach) or a receiver that reinitialises across the switch. That makes relay
@@ -266,7 +273,95 @@ pull both broadcasts and splice them"*
 receiver is therefore the intended posture, not a workaround for a missing relay feature. (Supports
 [transport](transport.md) §8, [relay](relay.md) §5.1, and [architecture](architecture.md) §14.)
 
-## 8. Relay compute is cheap and predictable; bandwidth overhead is the real cost
+**That posture works, and it is hitless — measured end to end at the receiver.** Two concurrently
+live delivery legs carrying one programme, terminated by a reference ST 2022-7 receiver, lose
+**zero** TS packets across a total blackout of one leg, 1 % and 3 % path loss, and differential delay
+to 200 ms ([lab: T12](../lab/test-12-dual-path-handoff.md)). The graceful-exit gap above disappears
+entirely: a `SIGTERM` to publisher A, which terminates a single-leg subscriber outright, is invisible
+at a merged output — the surviving leg covers 5 339 datagrams and continuity is unbroken. Measured
+skew tracks injected delay to within 60 µs, so the merge buffer a pair demands is simply its path
+delta. This is the first redundancy result in the campaign denominated in lost packets rather than
+seconds to recovery.
+
+**How the egress is produced decides whether the pair merges, and only one topology gives both
+identity and full-chain protection.** The two legs must be packet-identical with aligned RTP
+sequence numbers:
+
+| Egress topology | Mergeable? | IRD-presentable? | Protects |
+|---|---|---|---|
+| Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1 523 of 1 524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
+| One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | yes | nothing mergeable; input-select still works on it |
+| One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | yes — CBR, every PCR within ±500 ns | **the last hop only** |
+| One *stream-clocked* groomer per leg | **yes** — 100 %, byte-identical on every datagram | yes — CBR | **the whole chain**, including publisher, relay and exporter death |
+
+The middle row fails **structurally, not through re-stamped PCR**: across 400 sampled conflicting
+datagrams, none differs only in the PCR field, 39.5 % do not agree on PID order and 28.2 % carry a
+different number of null packets. Each groomer strips the arriving nulls and chooses its own
+content/stuffing interleave against its own emit clock, so two groomers produce different transports
+rather than the same transport differently stamped, and no receiver can patch that.
+
+The last row is the fix, and it is now built and measured. Placing every packet on the absolute
+output slot its source PCR implies at the locked mux rate — and deriving the emitted PCR, the RTP
+sequence number and the RTP timestamp from that slot — makes what a leg sends a function of the
+stream rather than of when its process started or when the OS ran its timer. Two such groomers,
+sharing no process, no clock and no messages, emit identical bytes under identical numbers, and the
+pair stays hitless through a publisher `SIGKILL` or `SIGTERM`, a relay kill and an exporter kill —
+none of which the groom-once topology can survive, because it has only one of each.
+
+**A groomer must stop when its content stops, and only the groomer can.** Asked only to hold a rate,
+a groomer holds it against a dead source: when a groomed leg's publisher is killed the leg keeps
+emitting a byte-perfect constant-bitrate carrier — full rate, valid TS, PCRs present and accurate —
+containing **no programme packets at all**, for as long as it is left running. Every failure signal a
+1+1 receiver keys on is then absent: no loss, no continuity errors, no silence, and an input-select
+policy performs **zero** switches at every threshold from 50 to 500 ms, while a sequence merge
+prefers the dead leg over its live partner. The information the receiver needs has been destroyed
+upstream of it, so no receiver-side policy recovers it.
+
+The groomer therefore has to detect the silence itself and mute: `mpegts-pacer` treats content
+silence past a grace period (1 s here) as absence rather than jitter, stops emitting while holding
+its output byte clock, and stops minting the PCR that made the dead carrier look conformant. With
+that in place the same four upstream failures — publisher `SIGKILL`, publisher `SIGTERM`, relay kill
+and egress kill — each produce a leg that stops with its content (zero carrier after the last
+programme packet) and exactly **one** input-select switch at every threshold, costing 1–3 continuity
+errors. This does not arise on the ungroomed leg, which stops when its content stops.
+
+Monitoring must still test for programme content rather than packet arrival
+([operations](operations.md) §3): muting is what a *correctly configured* groomer does, and a leg
+groomed by anything else — or with the grace period disabled — carries the same dead carrier.
+
+**Stopping is not the same as coming back, and what a returning leg still lacks is one byte.**
+An arrival-clocked leg whose delivery is interrupted and restored resumes at the next RTP sequence
+number it would have sent, while its partner has advanced by the whole outage: 8 756 datagrams
+behind after a 23 s interruption, because RTP numbering counts datagrams *sent* rather than position
+in the stream. A stream-clocked leg returns from the same injection with a numbering deficit of
+**zero** and 5 526 of its next 5 658 datagrams carrying programme — it rejoins both the numbering and
+the schedule.
+
+What it does not do is become byte-identical again, and the reason is not the groomer. Masking one
+field lifts the recovered leg from 68.6 % to **98.2 %** agreement, and a leg that joined 20 s late
+from 0.09 % to **97.1 %**: that field is the continuity counter, which `moq export ts` numbers from
+its own process state, leaving two exporters that did not start together permanently offset by a
+constant (+2 on the video PID, +8 on PSI, unchanging over a 60 s run). Each leg is internally
+continuous — 0 continuity errors on either — so the divergence appears only when a receiver compares
+them. **Independent restart of one leg of a groomed pair therefore waits on the exporter, not the
+edge** ([moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779)).
+
+**One further constraint on operating a pair.** Failure detection cannot be faster than the leg's
+own burstiness: an ungroomed leg has inter-datagram gaps to 242 ms, so a silence threshold below
+~250 ms mistakes normal delivery for failure (413–446 spurious switches at 50 ms), while a groomed
+leg's gaps stay at 3.8–4.3 ms clean and 8.3–8.4 ms under 3 % loss, so a 50 ms threshold is safe — the
+pacer is what makes prompt failover detection possible, quite apart from its TR 101 290 role. And a
+leg that joins late joins *in phase*: a stream-clocked leg brought up 20 s after its partner sends
+each shared sequence number a median of **10 ms** from it, and varying the groomer's release latency
+between 500 ms and 2 s moves that by tens of milliseconds, not seconds. Phase is therefore not the
+obstacle to independent restart; the continuity counter above is the whole of it.
+
+Two scope limits. The receiver is a reference implementation of the selection rules, not a hardware
+IRD's merge engine, so this can disprove mergeability but cannot substitute for the Gate 2
+conformance run; and both legs ran on one host over loopback, so skew was injected rather than
+natural and path diversity is untested.
+
+## 8. Relay compute is cheap and predictable; bandwidth is the cost line, and its overhead is not intrinsic
 
 The operational envelope is now measured rather than assumed
 ([lab: T9](../lab/test-9-performance.md)), on Linux with the current release, MPEG-TS at 2-27 Mbps
@@ -289,11 +384,38 @@ tuning a first-order deployment decision rather than an implementation detail.
 **Carriage costs about 1.12x the source TS rate on the wire**, essentially independent of bitrate: a
 9.95 Mbps service needs ~11.2 Mbps of IP capacity and a 27.5 Mbps service ~30.8 Mbps, plus well under
 1 % on the return path for acknowledgements. Against the *delivered* payload the figure is ~17-18 %,
-the difference being the source's null packets, which MoQ strips rather than carries. This is the one
-place the measurements show MoQ structurally *worse* than the closest comparable baseline: SRT's
-framing costs a few percent, so MoQ consumes materially more bandwidth for the same service — on
-precisely the line most likely to dominate a cost comparison
-([economics](economics.md) §3.1).
+the difference being the source's null packets, which MoQ strips rather than carries. Measured on the
+media-aware lane; the opaque lane's carriage cost is unmeasured.
+
+**That is roughly three times what the protocol is entitled to charge, so it is an implementation gap
+rather than a property of MoQ.** Priced from the protocol, a QUIC packet spends ~64 bytes on IP, UDP,
+its own header, the AEAD tag and stream framing — 5.5 % of a 1200-byte datagram, 4.5 % at a 1500-byte
+path MTU, against SRT's 3.3 % for seven TS packets in 1360 bytes. **The irreducible QUIC-versus-SRT
+penalty is therefore ~1.2 points, almost all of it the 16-byte authentication tag QUIC mandates and
+SRT does not.** Every MoQ and hang header on top of that — a group header, a frame timestamp and
+length, and a second copy of the timestamp inside the hang container — costs under one point on a
+contribution-grade feed, because the bytes are dominated by ~31 kB video access units. Floor and
+framing together account for at most ~6.3 % where ~21 % is implied, leaving roughly 1.2 Mbps on a
+9.5 Mbps feed unattributed to any header. Two contributors are confirmed and neither is large enough:
+MTU discovery is defaulted **off** in `moq-native`, overriding the QUIC stack's own default and pinning
+every measurement to QUIC's 1200-byte minimum, and the TS importer opens a new QUIC stream per audio
+access unit. The residual is unexplained; a datagram-size distribution captured on a real path would
+locate it, which makes this a tractable engineering item rather than an open puzzle
+([lab: T9](../lab/test-9-performance.md)).
+
+**Set against a like-for-like baseline the floor is *below* SRT, because MoQ need not carry
+stuffing.** Delivering the same 9.95 Mbps service costs SRT 10.27 Mbps of IP, since a byte pipe has no
+way to decline the 453 kbps of nulls; MoQ at its floor needs ~9.8 Mbps. The saving scales with
+stuffing ratio and becomes large where carriers run loose — 1.9 Mbps of content in a 4 Mbps carrier
+costs SRT 4.13 Mbps against ~2.0 Mbps. This is a real structural advantage rather than an accounting
+artefact, because the architecture already regenerates stuffing at the edge for TR 101 290 reasons
+([architecture](architecture.md) §7). It is bankable on a 1+1 pair as well, which it was not while
+each groomer chose its own stuffing: §7 above shows that two groomers whose stuffing is a
+deterministic function of stream position produce byte-identical legs while each regenerating its
+own nulls ([architecture](architecture.md) §14.1). Stripping still breaks byte-verbatim carriage,
+which is a separate decision. Bandwidth remains the line most likely to
+dominate a cost comparison ([economics](economics.md) §3.1) — but it is now the transport's
+highest-value optimisation rather than a constant to accept.
 
 **Publishers and subscribers are stable over a day and a half. The relay is not, under sustained
 subscriber load.** Two 26.5-hour soaks plus a controlled build comparison were run. The publisher and

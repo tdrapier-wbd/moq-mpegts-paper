@@ -433,7 +433,7 @@ serve?), not just a process-alive check, because this failure keeps the process 
 | Shared-`--origin` standby joins a **carrying** relay | survives; splice immediate | far-relay subscriber keeps flowing | ✅ fixed on merged `main` (was `Unroutable` code=30) |
 | `moq-lite-06` cost/standby routing | — | — | 🟡 opt-in; **necessary-not-sufficient** |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ |
-| ST 2022-7 single-path loss (hitless drill) | TBM | target: hitless | ⬜ Gate 3; precondition met by a deterministic/offline or duplicate-single groomer, not by two independent live pacers |
+| ST 2022-7 single-path loss (hitless drill) | **0 lost packets** at the merged output | **hitless** — blackout, 1 %/3 % loss and up to 200 ms skew all covered | ✅ measured in [T12](test-12-dual-path-handoff.md) against a reference receiver, both for one groomer duplicated onto both paths and for two independent stream-clocked pacers; the on-hardware merge is Gate 2 |
 
 ## Corrections
 
@@ -504,19 +504,28 @@ builds without it).
   expected cadence, so it must wait for the transport to declare the peer gone.
 - **Recommended posture, buildable today:** with the exporter crash fixed, no external subscriber
   supervisor is needed for relay maintenance/transient loss. Service redundancy still comes from a
-  fully doubled chain — dual publishers → dual relays → dual subscribers → dual pacers → downstream
-  ST 2022-7 / IRD failover — letting the *receiver* do hitless selection. Relay-mesh source failover
+  fully doubled chain — dual publishers → dual relays → dual subscribers → downstream ST 2022-7 /
+  IRD failover — letting the *receiver* do hitless selection, and that now includes the grooming
+  stage: [T12](test-12-dual-path-handoff.md) measured two independent groomers producing
+  byte-identical legs, provided each keys placement to stream position rather than to its own emit
+  clock. Two groomers keyed to their own emit clocks do not merge at all. Relay-mesh source failover
   does not change that recommendation now that #2473 has landed. Where quick reconnect matters, lower
   `--client-quic-idle-timeout` (keeping it above the keep-alive).
 
 ## Conclusion
 
 Transport resilience holds; active/active source failover now ships, bounded by detection, with a
-residual graceful-exit gap. The ST 2022-7 determinism precondition is characterised (single
-deterministic/offline groom is byte-exact reproducible; two independent live pacers are not yet). The
-on-hardware hitless ST 2022-7 drill under loss (Gate 3) remains outstanding. The full validated
-finding — including which of our reports were real vs harness artefacts — is recorded in
-[`docs/evidence.md`](../docs/evidence.md) §7.
+residual graceful-exit gap. The ST 2022-7 determinism precondition is characterised here (a single
+deterministic/offline groom is byte-exact reproducible; two independent live pacers were not, at the
+time this was measured — see below). Every
+failover number in *this* file is a single-leg recovery time, so it is break-before-make by
+construction; the dual-leg drill it points to has since run as
+[T12](test-12-dual-path-handoff.md), which grades two concurrently live legs at a receiver and finds
+the switch hitless — including the graceful exit that has no single-leg answer. T12 also closes the
+determinism question for two live pacers, and the answer turns on whose clock chooses the slot: keyed
+to their own emit instants they diverge structurally rather than through PCR re-stamping, and keyed
+to stream position they are byte-identical. The full validated finding — including which of our reports were real vs
+harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §7.
 
 ## References
 

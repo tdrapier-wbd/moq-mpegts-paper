@@ -74,6 +74,7 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T8b | Congestion control for a permanent fixed-rate trunk | 7 (comparative lab) | extends T8 | C1 run; C2–C6 open | [test-8b-congestion-control.md](test-8b-congestion-control.md) |
 | T9 | System performance & resource utilisation | 5 (scale/soak) | feeds [operations](../docs/operations.md), [economics](../docs/economics.md) §3.1, §4, §9 | partial — publisher and subscriber pass, relay fails | [test-9-performance.md](test-9-performance.md) |
 | T11 | Cross-implementation interop | 7 (comparative lab) | transport neutrality | T11a partial; T11b open | [test-11-interop.md](test-11-interop.md) |
+| T12 | End-to-end 1+1 dual-path delivery and hand-off | 6 (redundancy drill) | Gate 3 — resilience; de-risks Gate 2 | complete for a co-started pair, arms A–D, incl. leg failure and recovery; independent restart of one leg blocked upstream | [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -97,7 +98,12 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 - **T6 — Relay resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under
   single-path loss (the two egress legs byte-identical and sequence-aligned); relay-failover recovery
   is bounded and documented, re-establishing without operator intervention; subscriber-reconnect join
-  latency is bounded with defined catch-up behaviour.
+  latency is bounded with defined catch-up behaviour. T6 met the second and third of those and
+  characterised the determinism *precondition* for the first offline; **[T12](test-12-dual-path-handoff.md)
+  then met the first at a receiver** — 0 lost packets under blackout, 1 %/3 % loss and up to 200 ms
+  differential delay — for a pair the receiver can merge, which now includes two independently
+  groomed chains provided each groomer is stream-clocked, and with it protection of the publisher,
+  relay and exporter rather than the last hop alone.
 - **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real
   hardware IRD, on the live wire (P2), sustained** (target ≥ 24 h), including ST 2022-7 behaviour
   under loss, with the T-STD buffer model confirmed valid under drift/discontinuity. Until this
@@ -132,6 +138,7 @@ per-test file when executed. In priority order:
 | # | Test | Purpose | Gate |
 |---|---|---|---|
 | T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
+| T12/E | Restart one leg of a live pair | Stream clocking (T12 arm D) made two independently groomed chains byte-identical, and got a recovered or late-joining leg back onto its partner's numbering, slots and phase. What remains is byte-identity on independent restart, blocked by `moq export ts` numbering continuity counters per process — which also needs a grader that can score a pair that is not byte-identical. Plus a two-host variant, where the legs no longer share a clock | Gate 3 — completes the 1+1 story |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
 | T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
 | T3/T4+ | Opaque lane over the wire | Deploy the opaque publisher on EC2 to run opaque transparency over a real path (T3/T4 are currently localhost/file-fed on the opaque lane) | supports Gate 1 & 3 |
@@ -145,6 +152,11 @@ per-test file when executed. In priority order:
   opaque lane over the wire awaits deploying the opaque publisher on EC2.
 - **No production relay cluster.** T6 is a two-relay lab, not a federated mesh
   ([relay](../docs/relay.md) §6).
+- **The 1+1 measurement is a software receiver on one host.** [T12](test-12-dual-path-handoff.md)
+  runs two concurrently live legs into a receiver that selects between them, which is the form a
+  head-end expects at a hand-off — but the receiver is a reference implementation of the selection
+  rules rather than a hardware IRD's merge engine, and both legs share a host and a clock, so skew is
+  injected rather than natural and path diversity is untested.
 - **`netem` is an emulator.** T5/T8 complement but do not replace the real public-internet EC2 path.
 - **Draft-14 pin.** The opaque lane and T3 are against a pinned, now-behind draft (`moq-transport`
   0.14.2); migration to later drafts is a tracked dependency and its own re-test
@@ -218,6 +230,9 @@ awk -F, 'NR>1{cur=$7; if(prev!=""){d=(cur-prev)/27000; n++; sum+=d;
 - Unmeasured quantities are `TBM` (to be measured) — never blank, never guessed.
 - Raw captures and analyser exports are the evidence of record; they are large binaries and are not
   committed. The commands above regenerate them from the source clips.
+- Where an experiment produces a result table too large to read inline, the full table is committed as
+  CSV in [`results/`](results/) and the per-test file summarises it. The runnable rigs themselves are
+  kept local (`lab/scripts/`, git-ignored) and are described in the per-test files.
 
 ### macOS loopback gotchas (local runs)
 

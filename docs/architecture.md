@@ -464,7 +464,11 @@ each configured egress it performs, in order:
 5. **Read-only TR 101 290 monitoring** of its own output, feeding observability.
 6. **Deterministic output** when the gateway is one half of an ST 2022-7 pair, so
   that a peer gateway grooming the same objects produces a bit-identical,
-  sequence-aligned stream the IRD can merge hitlessly (§14.1).
+  sequence-aligned stream the IRD can merge hitlessly (§14.1). This holds when
+  placement is keyed to stream position rather than to the groomer's own emit
+  clock, and is measured for a co-started pair across every path and upstream
+  failure ([evidence](evidence.md) §7). A leg that *joins* a pair separately is
+  the open case, and what blocks it is upstream of the gateway.
 
 
 
@@ -548,9 +552,10 @@ Internet's variability exactly where determinism is required (principle 4, §2).
 > live egress can confirm — a file that looks clean can still fail on a decoder
 > if output pacing jitters. A clean TR 101 290 P1/P2 pass on hardware decoders is
 > therefore the single most important validation for this entire architecture, and
-> it must include the ST 2022-7 determinism of §14.1 under loss. Until that
-> evidence exists, the grooming design is "structurally sound and file-validated,"
-> not "proven broadcast-acceptable."
+> it must include the ST 2022-7 determinism of §14.1 under loss — the software half
+> of which is now measured, including under 1 % and 3 % loss, leaving the hardware
+> merge as the open part. Until that evidence exists, the grooming design is
+> "structurally sound and file-validated," not "proven broadcast-acceptable."
 
 
 
@@ -1057,17 +1062,67 @@ though not packet-for-packet phase alignment. This determinism *and* rate
 coherence is a hard requirement and an open validation item (§17): any
 non-determinism, including divergent object-loss recovery, breaks the property,
 so the outputs must be verified bit-identical *under loss*, not only in the clean
-case. A first characterisation now exists ([lab: T6](../lab/test-6-relay-resilience.md)): the
-groomer's offline / stream-clocked path is byte-exact reproducible (identical
-SHA-256 run-to-run, on par with FFmpeg CBR and TSDuck `pcradjust`), but its *live*
-real-time path is not yet byte-identical across two independent instances — its
-content/null placement is gated on wall-clock emit time, so tens of microseconds of
-scheduling jitter diverge the two legs. The downstream two-pacer placement therefore
-needs the live path made stream-clocked (emission and RTP framing keyed to stream
-position, not the real clock); a single groomer duplicated onto both paths already
-satisfies identity today. Where deterministic grooming cannot be guaranteed for a
+case. The determinism half is now measured; the rate-coherence half is not. Offline,
+the groomer's stream-clocked path is byte-exact reproducible (identical SHA-256
+run-to-run, on par with FFmpeg CBR and TSDuck `pcradjust`,
+[lab: T6](../lab/test-6-relay-resilience.md)). End to end at a receiver, a pair
+produced by **one groomer duplicated onto both paths is hitless** — zero lost packets
+under leg blackout, 1 % and 3 % loss, and differential delay to 200 ms — and so is a
+pair produced by **two independent stream-clocked groomers**, which is the topology
+this section was written to justify: 100 % alignment, byte-identical on every datagram,
+across leg blackout, loss, differential delay *and* every upstream-chain failure
+([lab: T12](../lab/test-12-dual-path-handoff.md)). Oscillator drift between two
+gateways remains untested: those measurements ran both legs on one host, so the pair
+shared a clock and the rate-coherence requirement above was flattered, not exercised.
+
+What decides it is whose clock chooses the slot. Two groomers keyed to their own emit
+instants do not merge at all — 30–53 % alignment — and they fail worse than a timing
+mismatch: of 400 sampled conflicting datagrams, **none** differs only in the PCR field,
+39.5 % disagree on PID order and 28.2 % carry a different number of nulls. Each strips
+the arriving nulls and picks its own content/stuffing interleave against its own emit
+clock, so the two legs are different transports rather than one transport stamped
+twice, and no receiver-side tolerance can rescue them. Keying placement to the stream
+instead — the packet's slot is a function of its source PCR at the locked mux rate, and
+the emitted PCR, RTP sequence number and RTP timestamp are functions of that slot —
+covers stuffing placement and null numbering along with PCR and framing, which is why
+it produces one transport from two processes that share nothing.
+
+That change has a second, unrelated payoff worth naming here because it shares the same
+prerequisite: **it is what would let the platform stop carrying null stuffing over the
+WAN at all.** Stuffing exists to hold a constant carrier rate for the receiver, and §7.2
+already regenerates it at the edge, so carrying it across the fabric is waste that a byte
+pipe such as SRT cannot avoid and MoQ need not pay — worth several percent of the
+bandwidth bill on a well-filled carrier and roughly half of it on a loosely-filled one
+([evidence](evidence.md) §8, [economics](economics.md) §3.1). That saving used to be
+unbankable on a redundant pair for exactly the reason above — stripping made each
+groomer choose its own stuffing, and independently-chosen stuffing is what made the legs
+unmergeable. Stream-derived stuffing removes the objection and unlocks the saving
+together. **Two independently groomed chains are now the topology to build**: unlike
+groom-once-and-duplicate, which is equally hitless but has a single publisher, relay and
+exporter behind it, a stream-clocked pair protects the whole chain and survives a
+publisher, relay or exporter dying with nothing lost at the receiver. Two ungroomed legs
+also merge exactly, which was worth knowing — it isolated the obstacle to the groomer
+rather than to MoQ delivery — but an ungroomed leg is not a transport an IRD will lock
+to ([evidence](evidence.md) §3). Where deterministic grooming cannot be guaranteed for a
 feed, the honest fallback is 1+1 hot-standby with a brief switch artefact, not a
 claimed-hitless pair.
+
+One operating constraint survives, and it has moved to a different component. Under
+arrival clocking a pair had to be **co-started**, because a leg brought up 20 s late
+landed 3 542 datagrams out of alignment, and a leg that merely stopped and returned came
+back misnumbered by the length of its own outage — its RTP sequence counted datagrams
+sent, so a silence cost it numbers instead of consuming them. Stream clocking removes
+both: a leg that mutes and returns rejoins its partner's numbering exactly and resumes
+carrying programme, and a leg that joins 20 s late puts the same programme in the same
+slots under the same numbers, within ~10 ms of its partner. What stops those two cases
+short of byte-identity is not the groomer but `moq export ts`, which numbers continuity
+counters from its own process state, so two exporters that did not start together are
+permanently offset by a constant (+2 on video in the measured run) in one byte of every
+packet. Independent restart of a
+leg therefore waits on an upstream fix ([moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779)),
+not on the edge. And grooming, which is what
+makes a leg presentable, is also what makes a *dead* leg look alive unless the groomer
+stops with its content: see §14.3.
 
 ### 14.2 Graceful degradation
 
@@ -1083,6 +1138,14 @@ degradation away in exchange for verbatim carriage. This is an honest limitation
 of the fallback, not of the default design.
 
 ### 14.3 Failure scenarios and responses
+
+Every response below assumes the two legs are actually mergeable, which §14.1 shows is
+a property of the egress topology rather than a given. Where a response says the IRD
+rides the surviving leg hitlessly, that is measured for a pair the receiver can merge:
+two stream-clocked groomers on independent chains, or one groomer duplicated onto both
+paths — the latter having no independent upstream chain to protect, so the upstream
+responses below do not apply to it ([lab: T12](../lab/test-12-dual-path-handoff.md)).
+Two *arrival-clocked* groomers are not a pair at all.
 
 - **Source (playout) failure** — upstream input failover selects the backup
 playout (§14.5); the switch is break-before-make at the source and rare. Both
@@ -1100,6 +1163,28 @@ hitlessly; the affected subscriber can additionally re-home to another relay
 (supervisor-assisted today, [transport](transport.md) §8.4).
 - **Edge (subscriber / pacer) failure** — the redundant leg's egress continues; the
 IRD's ST 2022-7 merge covers the loss hitlessly.
+- **Content loss behind a healthy groomer** — the failure mode this list originally
+missed, and the one the receiver cannot be made responsible for. A groomer asked only
+to hold a rate holds it against a dead source: byte-perfect CBR carrier, correct PCRs
+included, no programme packets in it, for as long as it is left running. Loss,
+continuity and silence all read healthy; an input-select receiver performs zero
+switches at any threshold, and a sequence merge prefers the dead leg to its live
+partner. The signal has been destroyed upstream of the receiver, so **the groomer must
+detect the silence and mute** — stop emitting while holding its output byte clock, and
+stop minting the PCR that makes the carrier look conformant. With that in place each
+upstream failure above produces a leg that stops with its content and exactly one
+input-select switch at any threshold ([lab: T12](../lab/test-12-dual-path-handoff.md)).
+Monitoring still keys on **programme content** rather than packet arrival, because a
+mute is a configured behaviour and a leg groomed by something else will not do it — and
+the content check has to discount the groomer's own adaptation-field-only PCR
+insertions, which otherwise register as content ([operations](operations.md) §3).
+- **A leg that returns** — a recovered leg is not a restored pair. A groomer that mutes
+and resumes comes back at the next RTP sequence number it would have sent, so it is
+behind its partner by the whole outage (8 756 datagrams after 23 s) and no constant
+offset reconciles them. Until numbering derives from stream position rather than
+datagrams sent (§14.1), a recovered leg re-enters as an unaligned stream that only
+input failover can use, and the pair runs unprotected until both legs are restarted
+together.
 - **IRD failure** — the second IRD (also dual-input) keeps delivering to its
 downstream path; doubling the receiver removes the last single point.
 - **Regional failure** — routes are re-homed to another region by the routing
@@ -1164,11 +1249,19 @@ current gaps:
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless
   selection.** Relay-mesh source failover has since landed, but it is bounded (one idle
   timeout, ungraceful loss only), so service continuity is still delivered the way
-  broadcasters already trust: **dual publishers → dual relays → dual pacers →
+  broadcasters already trust: **dual publishers → dual relays → dual subscribers →
   ST 2022-7 / IRD hitless selection at the edge** (§14.1). MoQ carries two healthy
   disjoint legs; the *hitless switch* between them lives at the receiver, which already
   implements it. This keeps the last-hop failover free of new receiver behaviour and
-  depends on no unshipped MoQ feature.
+  depends on no unshipped MoQ feature. A **dual-pacer** edge, one groomer per leg, is
+  the natural reading of this bullet, and it now works: with placement keyed to stream
+  position the two legs are byte-identical and the pair rides out the death of a
+  publisher, a relay or an exporter with nothing lost at the receiver
+  ([lab: T12](../lab/test-12-dual-path-handoff.md), §14.1). The residual constraint is
+  narrower than the old one and sits upstream: a leg that restarts *alone* rejoins the
+  numbering and the programme but not byte-identity, because `moq export ts` numbers
+  continuity counters per process. Planned maintenance on one leg of a live pair
+  therefore still means taking the pair down and bringing it back together.
 
 The forward-looking nuance: relay-mesh source failover has landed and is *useful* — it
 lets a single-homed subscriber ride out an *ungraceful* active-source death without a

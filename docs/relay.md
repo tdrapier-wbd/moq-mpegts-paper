@@ -279,8 +279,12 @@ subscriber. The **hitless switch still has to live downstream** (ST 2022-7 / IRD
 [architecture](architecture.md) §14.1), because relay-mesh source failover is bounded by failure
 detection and blind to a graceful exit. It complements receiver-side selection instead of replacing
 it. The broadcast-grade posture is therefore the fully-doubled chain (dual publishers, dual relays,
-dual pacers, receiver-side hitless selection), with the relay providing reach, caching, fan-out, and
-per-leg transport resilience rather than the switch itself.
+dual subscribers, receiver-side hitless selection), with the relay providing reach, caching, fan-out,
+and per-leg transport resilience rather than the switch itself. The chain now doubles cleanly through
+the groomer as well, provided each groomer keys placement to stream position rather than to its own
+emit clock ([evidence](evidence.md) §7) — a fact about the edge topology that changes nothing about
+the relay's role, except that killing a relay in a doubled chain is now measured to cost the receiver
+nothing at all.
 
 ## 6. Capacity planning
 

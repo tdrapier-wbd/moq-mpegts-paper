@@ -164,7 +164,7 @@ details (§5), not ingest concerns.
 | SRT | Yes | — | Prototype |
 | RTP/UDP MPEG-TS | Yes | Yes | Prototype |
 | SMPTE 2022-1 FEC | — | Yes | Prototype; to be validated on hardware |
-| ST 2022-7 dual-path | — | Yes | Prototype; to be validated on hardware |
+| ST 2022-7 dual-path | — | Yes | Hitless against a reference receiver, either from one groomer duplicated onto both paths or from two independent *stream-clocked* groomers, which also protects the chain behind them ([evidence](evidence.md) §7); a pair from two arrival-clocked groomers does not merge; to be validated on hardware |
 | ST 2110 essence | No | — | Longer term; heavier integration |
 | Multicast | — | Yes | Prototype; to be validated on hardware |
 | TR 101 290 P1/P2 to hardware IRD | — | Yes | **To be validated on real hardware** |
@@ -420,7 +420,14 @@ one implementation.
   (open-GOP, discontinuities, mid-stream PID changes) carried end-to-end without
   loss of service.
 - **Redundancy.** Hitless ST 2022-7 switching at the egress under induced path
-  failure ([evidence](evidence.md) §7 — precondition characterised; on-hardware pass outstanding).
+  failure — **passes against a reference receiver** (zero lost packets under leg
+  blackout, 1 % and 3 % loss, and differential delay to 200 ms), both for a pair
+  produced by one groomer duplicated onto both paths and for two independent
+  stream-clocked groomers; the on-hardware pass is outstanding, and a pair from two
+  *arrival*-clocked groomers is not mergeable at all
+  ([evidence](evidence.md) §7). Acceptance should therefore state which egress
+  topology is being accepted, and confirm the receiver's differential-delay window
+  covers the pair's measured skew.
 
 ## 11. Open questions
 

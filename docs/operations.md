@@ -65,6 +65,34 @@ The platform must be observable in two languages simultaneously
 - **Broadcast-specific probes (broadcast domain).** TR 101 290 P1/P2 status, PCR
   interval statistics, continuity-counter integrity, service presence, and ST
   2022-7 path health — measured read-only at the egress gateway.
+- **Programme content, not carrier presence.** The single most important probe on a
+  groomed leg, and the least obvious. A groomer asked only to hold a rate will hold it
+  against a dead upstream: byte-perfect constant-bitrate carrier — correct rate, valid
+  transport stream, PCRs present and accurate — containing no programme packets at all,
+  for as long as it is left running. Loss, continuity, bitrate and silence checks all
+  report healthy, and a receiver selecting on packet arrival will hold a dead leg
+  indefinitely ([evidence](evidence.md) §7). Two things follow, and both are needed:
+  - **Configure the groomer to stop.** `mpegts-pacer` treats content silence past a
+    grace period as absence rather than jitter and mutes: it stops emitting, holds its
+    output byte clock, and stops inserting PCR. Set the grace period above the feed's
+    worst legitimate delivery gap and well below the failover budget — 1 s is the
+    default and what the measurements use. This is what turns an undetectable failure
+    into a leg that visibly stops, and nothing at the receiver substitutes for it.
+  - **Alarm on the absence of programme packets** regardless, counting only packets that
+    are neither null **nor adaptation-field-only**, since the groomer's own PCR
+    insertions are neither null nor content. The mute is a configured behaviour of one
+    groomer; a leg groomed by other equipment, or with detection disabled, still
+    presents the dead carrier.
+
+  On an *ungroomed* leg neither applies: the carrier stops with the content.
+- **A leg that comes back is not yet a pair that came back.** A stream-clocked leg that
+  mutes and resumes re-enters on its partner's numbering and carrying programme again,
+  which an arrival-clocked one does not — but the two legs are still not byte-identical,
+  because the exporter behind the returning leg renumbers continuity counters from its
+  own process state ([evidence](evidence.md) §7). Alarm on a pair that is live-live but
+  no longer merging: every per-leg indicator reads green while the protection is gone.
+  Until the upstream fix lands, treat leg recovery as restoring *input-failover*
+  redundancy only, and restore the merge by restarting both legs together.
 - **Alert thresholds and routing.** Broadcast-domain alarms (a P1/P2 excursion)
   are routed to the NOC with the same severity discipline as a satellite feed
   alarm; systems-domain alerts (a saturating relay) are routed to platform
@@ -127,7 +155,13 @@ The core runbooks map to the operational workflows in
   as the "channel in minutes" metric ([architecture](architecture.md) §15.1).
 - **Failover/failback.** Shift to the redundant disjoint path, confirm the IRD's
   ST 2022-7 switch was hitless, service the drained element, restore. The IRD
-  should observe nothing ([architecture](architecture.md) §15.3).
+  should observe nothing ([architecture](architecture.md) §15.3). Two constraints
+  from measurement ([evidence](evidence.md) §7): the pair must have been **started
+  together**, because a leg that joins or restarts alone comes back on the right
+  numbering carrying the right programme but not byte-identical to its partner — so
+  restoring the drained element means restarting *both* legs unless the merge is being
+  run in input-select mode; and the leg being drained must be confirmed dead by
+  **content**, not by carrier, or the receiver will keep selecting it.
 - **Entitlement incidents.** Emergency disable / revoke under time pressure; the
   runbook must be simple enough to execute correctly under stress
   ([entitlement](entitlement.md) §9).
