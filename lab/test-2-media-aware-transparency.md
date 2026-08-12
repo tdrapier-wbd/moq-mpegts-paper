@@ -156,7 +156,50 @@ a service record through the catalog and rebuilds the SI on export:
 | Original Network Id | present | not preserved | **preserved** |
 | PMT PID | 0x0064 | renumbered → 0x1000 | **preserved (0x0064)** |
 | TDT / TOT (time) | present (0x0014) | dropped | **still dropped** |
-| EIT (event / EPG) | (none in these clips) | n/a | **still dropped** |
+| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | **still dropped** |
+
+### EIT: measured on a synthetic fixture, and what carrying it would cost
+
+No capture held here carries EIT, so the claim that the lane drops it rested on reading the import
+gate rather than on a measurement. [`make-eit-fixture.sh`](scripts/make-eit-fixture.sh) closes that
+by injecting a twelve-event EPG onto PID 0x0012 of `CNNiEMEA2.ts` with `tsp -P eitinject`, anchored
+to the clip's own TDT epoch so the present event is genuinely current. The EIT packets are taken
+from the clip's null stuffing, so the fixture is the same 9,945,951 bps CBR stream as the source
+with 0 CC errors, and the two variants (`pf`, `full`) differ only in whether EIT schedule is
+generated alongside p/f.
+
+Round-tripped by [`eit-roundtrip.sh`](scripts/eit-roundtrip.sh) through a local relay on `main`
+@ `9698cd93` (post-#2440), 45 s capture:
+
+| Table | PID | Source packets | Egress packets |
+|---|---|---:|---:|
+| NIT | 0x0010 | 119 | 5 |
+| SDT | 0x0011 | 574 | 21 |
+| EIT | 0x0012 | 1,153 | **0** |
+| TDT/TOT | 0x0014 | 40 | **0** |
+
+The egress carries PAT, NIT, SDT/BAT, PMT, video, both audio tracks, teletext and all three SCTE-35
+PIDs — and nothing on 0x0012 or 0x0014. NIT and SDT survive at the catalog's repetition cadence
+rather than the source's, which is #2440 working as designed.
+
+The same fixture prices the fix, because #2440 dedupes SI sections by identity and only takes the
+catalog write lock when the bytes change. What matters is therefore the *revision* rate, not the
+repetition rate:
+
+| Table | Sections transmitted | Distinct | Mean distinct section |
+|---|---:|---:|---:|
+| NIT | 119 | 1 | — |
+| SDT | 574 | 1 | — |
+| EIT p/f actual | 592 | **4** | 77 B |
+| EIT schedule actual | 420 | **8** | 129 B |
+| TDT/TOT | 40 | **40** | — |
+
+EIT would cost 12 catalog updates and ~1.3 kB of catalog state over ten minutes — the same order as
+SDT and NIT, because it repeats byte-identically between event transitions. TDT/TOT is the opposite
+and is why the two tables need different answers: every section is new content, so each one is a
+republish, for a table that says nothing but "now" and that an exporter can mint more accurately
+than it can relay. The scaling caveat is that distinct-section count grows with events × services:
+p/f is bounded at two sections per service, schedule is not.
 
 Paced `CNNiEMEA2` egress (raw-fed → `auto` regenerate): **10.999 Mbps exact CBR**; PCR > 40 ms
 9.08 % → **0 %** (max 320 → 31.9 ms); `pcrverify` > 500 µs → **0/2286**, max |jitter| 6 µs; null
@@ -175,8 +218,10 @@ is the faithful measure.
   intact) but **not broadcast-transparent**: it dropped the DVB service layer, renumbered the PMT,
   and emitted non-CBR bursty egress violating TR 101 290 P1 on 13–26 % of intervals.
 - The timing/CBR half is closed downstream of *any* VBR source by `mpegts-pacer`; the service-layer
-  half is closed upstream by #2440. Together they leave only the **dynamic TDT/TOT and EIT** tables
-  unpreserved.
+  half is closed upstream by #2440. Together they leave only **TDT/TOT and EIT** unpreserved, and
+  those two are not one gap: EIT revises rarely enough to fit #2440's catalog carriage at ~12
+  updates per ten minutes, while TDT/TOT is new content in every section and belongs at the
+  exporter's clock rather than in the catalog.
 - The open-GOP round-trip requires **both** #2072 and #2066 on the same tree: with #2072 alone an
   IDR-less feed's video never resolves, so the reservation gate stays shut and the catalog never
   publishes.

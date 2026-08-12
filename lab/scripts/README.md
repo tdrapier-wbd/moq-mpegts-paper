@@ -27,6 +27,15 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`t12-join-diagnostic.sh`](t12-join-diagnostic.sh) | A single stream-clocked leg joining a broadcast already in progress, run to read the groomer's own counters (`start_backlog`, `resyncs`, `dropped`) rather than to grade a pair. |
 | [`ts-corrupt-header.py`](ts-corrupt-header.py) | Flips exactly one bit in one MP2, AC-3 or H.264 frame header of a real transport stream, located by walking the PID's PES payload rather than by offset. The damage artefact for demuxer-robustness arms. |
 | [`moq-import-survival.sh`](moq-import-survival.sh) | Relay, subscriber and importer in one invocation; reports whether `moq import ts` survived a source, with its exit status. Run once per binary for a before/after on a demuxer fix. |
+| [`make-eit-fixture.sh`](make-eit-fixture.sh) + [`eit-epg.xml`](eit-epg.xml) | Injects a synthetic EPG onto PID 0x0012 of a clip that has none, so the lane's EIT handling can be measured rather than inferred. `pf` gives p/f only; `full` adds schedule, which is the shape that prices catalog carriage. EIT packets come from the clip's existing stuffing, so the mux rate is unchanged. |
+| [`eit-roundtrip.sh`](eit-roundtrip.sh) | Publishes an EIT-bearing fixture through a local relay and censuses which SI PIDs survive at the exporter. The measurement behind [T2](../test-2-media-aware-transparency.md)'s EIT row. |
+
+**Count distinct SI sections, not transmitted ones.** `moq-mux` dedupes SI by section identity and
+only takes the catalog write lock when the bytes change, so a table's transmitted rate says nothing
+about what carrying it would cost. On the EIT fixture the two differ by two orders of magnitude
+(1,012 sections, 12 distinct). `tsp -P tables --pid <pid> --all-sections --log-hexa-line | sort -u`
+is the whole method, and it is what separates EIT — which repeats byte-identically — from TDT/TOT,
+where every section is new.
 
 **Which comparison to trust.** `t12-merge-oracle.py` recovers the legs' sequence offset by voting on
 payload identity and derives skew by pairing datagrams through that offset, so on a pair that differs

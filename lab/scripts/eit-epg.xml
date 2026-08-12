@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic EPG for the EIT fixture (make-eit-fixture.sh).
+
+  Times are anchored to the reference clip's own TDT epoch, 2026-06-19 07:54:42 UTC, so
+  the present event is genuinely "now" for a receiver decoding the clip from its start.
+  Change both together or the p/f table will be empty at t=0.
+
+  `eitinject` ignores the EIT structure here and re-derives p/f and schedule from the
+  event list, so one EIT element carrying every event is the intended input shape.
+  The service triplet must match the clip: original_network_id 0, transport_stream_id 0,
+  service_id 1 (CNNI EMEA HD).
+-->
+<tsduck>
+  <EIT type="pf" actual="true" version="1" current="true"
+       service_id="1" transport_stream_id="0" original_network_id="0">
+
+    <!-- Present: started before the clip's TDT epoch, still running at it. -->
+    <event event_id="1001" start_time="2026-06-19 07:00:00" duration="01:00:00"
+           running_status="running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>CNN Newsroom</event_name>
+        <text>International news, business and weather.</text>
+      </short_event_descriptor>
+    </event>
+
+    <!-- Following. -->
+    <event event_id="1002" start_time="2026-06-19 08:00:00" duration="00:30:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>World Sport</event_name>
+        <text>The day in sport.</text>
+      </short_event_descriptor>
+    </event>
+
+    <!-- Schedule: enough events to span several 3-hour segments and force a
+         multi-section EIT schedule subtable, which is the shape that stresses a
+         catalog-carriage model. -->
+    <event event_id="1003" start_time="2026-06-19 08:30:00" duration="00:30:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>Connect the World</event_name>
+        <text>News and analysis from the region.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1004" start_time="2026-06-19 09:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>Amanpour</event_name>
+        <text>Interviews with newsmakers.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1005" start_time="2026-06-19 10:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>CNN This Morning</event_name>
+        <text>The stories shaping the day.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1006" start_time="2026-06-19 11:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>Quest Means Business</event_name>
+        <text>Markets, companies and the people who run them.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1007" start_time="2026-06-19 12:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>CNN Newsroom</event_name>
+        <text>International news, business and weather.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1008" start_time="2026-06-19 13:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>The Lead</event_name>
+        <text>Politics, world affairs and popular culture.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1009" start_time="2026-06-19 14:00:00" duration="02:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>CNN Documentary</event_name>
+        <text>Long-form reporting.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1010" start_time="2026-06-19 16:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>Erin Burnett OutFront</event_name>
+        <text>The day's top stories.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1011" start_time="2026-06-19 17:00:00" duration="01:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>Anderson Cooper 360</event_name>
+        <text>News and interviews.</text>
+      </short_event_descriptor>
+    </event>
+    <event event_id="1012" start_time="2026-06-19 18:00:00" duration="06:00:00"
+           running_status="not-running" CA_mode="false">
+      <short_event_descriptor language_code="eng">
+        <event_name>CNN Overnight</event_name>
+        <text>Rolling international news.</text>
+      </short_event_descriptor>
+    </event>
+  </EIT>
+</tsduck>
