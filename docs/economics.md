@@ -136,7 +136,7 @@ MoQ reaches decoder firmware (costs waiting). Until the third arrives, an edge g
 handing the existing estate an IRD-acceptable stream is a permanent line in the model,
 not a transitional one.
 
-### 3.1 Measured relay compute and carriage overhead
+### 3.1 Relay compute and carriage overhead, measured and decomposed
 
 Two of the inputs above no longer need to be assumed. Test 9
 ([test-9-performance](../lab/test-9-performance.md)) measures them on Linux (2 vCPU)
@@ -163,11 +163,37 @@ occupancy, not a sizing target.
 **Carriage overhead is a multiplier of roughly 1.12 on the dominant line** — measured
 IP wire bytes against the source TS rate, ~12 % at both 10 and 27 Mbps, plus under 1 %
 of return-path acknowledgements. It applies directly to egress, and a 1+1 path carries
-it twice. This is the clearest place where MoQ is structurally *worse* than the most
-comparable baseline: SRT's framing over a datagram of seven TS packets costs a few
-percent. **Why the gap is that large is not understood, and closing it is an open
-action (§9)** — the extra bytes are in QUIC, stream and object framing rather than in
-the media, which makes the penalty plausibly tunable rather than intrinsic.
+it twice. Against SRT's ~3.3 % that is the largest bandwidth penalty in this paper, and
+because bandwidth is the deciding line it is used as the model input (§4.1).
+
+**But it is about three times the protocol's own floor, so it is an implementation gap
+and not a property of MoQ.** A QUIC packet spends ~64 bytes on IP, UDP, its own header,
+the mandatory authentication tag and stream framing: 5.5 % of a 1200-byte datagram,
+4.5 % at a 1500-byte path MTU, against SRT's 3.3 % for seven TS packets in 1360 bytes.
+**The irreducible penalty against SRT is therefore about 1.2 points**, nearly all of it
+the 16-byte AEAD tag QUIC requires and SRT does not. Every MoQ and container header on
+top of that costs under one point on a contribution feed, whose bytes are dominated by
+~31 kB video access units. Floor plus framing accounts for at most ~6.3 % where ~21 % is
+implied, so roughly 1.2 Mbps on a 9.5 Mbps feed is unattributed. Two causes are
+confirmed and neither is big enough — MTU discovery is defaulted off, pinning the
+measurement to QUIC's 1200-byte minimum, and the TS importer opens a QUIC stream per
+audio access unit — and the residual is unexplained, though a single datagram-size
+capture on a real path would locate it
+([lab: T9](../lab/test-9-performance.md), [evidence](evidence.md) §8).
+
+**Held like-for-like the floor is *below* the baseline, which reverses the conclusion.**
+Delivering the same 9.95 Mbps service costs SRT 10.27 Mbps of IP because a byte pipe
+cannot decline the source's 453 kbps of null stuffing; MoQ at its floor needs ~9.8 Mbps,
+since it strips stuffing the edge groomer regenerates anyway
+([architecture](architecture.md) §7). The advantage grows with stuffing ratio: 1.9 Mbps
+of content in a 4 Mbps carrier costs SRT 4.13 Mbps against ~2.0 Mbps. **Not carrying
+stuffing is a structural bandwidth advantage over every byte-pipe protocol, and on
+loosely-filled carriers it is worth more than the entire framing question.** What stops
+it being modelled today is that it is derived rather than measured. The 1+1 objection
+has gone: a groomer whose stuffing is a function of stream position produces
+byte-identical legs while each regenerates its own nulls, which is measured
+([evidence](evidence.md) §7, [architecture](architecture.md) §14.1). §4 therefore keeps
+the measured 1.12x and treats the floor as upside, not as a forecast.
 
 **Not all of that compute headroom is purchasable.** Cloud instances are sold with a
 *sustained* network allowance well below their headline "up to" figure, which is burst
@@ -178,8 +204,9 @@ of the same size sustains 3 Gbps and restores it for roughly 20 % more. Relay si
 an instance-family decision before it is a core-count decision.
 
 **Caveats.** Loopback, with subscribers co-resident with the relay: no WAN packet
-handling, no NIC cost, no congestion control against real loss. Treat the *shapes* as
-the result and the constants as indicative.
+handling, no NIC cost, no congestion control against real loss, and the carriage figure
+additionally measured on one lane with the path MTU pinned at QUIC's minimum. Treat the
+*shapes* as the result and the constants as indicative.
 
 ## 4. The cost model, at published rates
 
@@ -196,7 +223,10 @@ this the pessimistic case for a usage-priced substrate. **Two bitrate profiles**
 **Active/active 1+1 throughout**, so every transport figure is doubled
 ([architecture](architecture.md) §14), held identical on both sides of every
 comparison. **Carriage multipliers** of 1.12x for MoQ (measured, §3.1) and 1.033x for
-SRT (derived from its framing of seven TS packets per datagram), both clean-path.
+SRT (derived from its framing of seven TS packets per datagram), both clean-path. The
+MoQ figure is measured with the path pinned at QUIC's 1200-byte minimum MTU and sits
+~3x above the protocol's floor of ~0.99x (§3.1), so it is the pessimistic input and
+every MoQ line below should be read as an upper bound on this component.
 **Regions** Ireland, N. Virginia or Oregon, which share egress rates. **Excluded**:
 staffing, tooling, integration, receive-side equipment and satellite uplink — a
 transport-line comparison only, and §3 is explicit that the excluded lines can dominate
@@ -638,7 +668,7 @@ destination count moves it by three orders of magnitude:
 
 | Transport             | Wire multiplier    | Latency        | Fan-out topology                                     | Standardisation |
 | --------------------- | ------------------ | -------------- | ---------------------------------------------------- | --------------- |
-| MoQ                   | 1.12 *(measured)*  | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations |
+| MoQ                   | 1.12 *(measured; ~0.99 at the protocol floor, §3.1)* | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations |
 | SRT                   | 1.033 *(derived)*  | sub-second     | no native fan-out; N origin sessions or a re-origination tier | published spec, open source |
 | Zixi                  | ~1.03 *(estimated)*| sub-second     | broadcaster fans out; last mile is N unicast copies  | proprietary, per-GB licence |
 | TS over HTTP/1.1      | ~1.05 *(estimated)*| seconds        | cache fans out; last mile is N unicast copies        | **no agreed standard — vendor-specific in practice** |
@@ -820,7 +850,12 @@ on-call engineer costs more than the entire modelled transport line, which is th
 strongest argument here against reading §4 as a business case.
 - **Like-for-like carriage.** Apply the ~1.12x multiplier (§3.1) to the MoQ side and
 hold the baseline to its own overhead; comparing MoQ wire bytes against a *nominal* TS
-rate flatters the challenger on the deciding line.
+rate flatters the challenger on the deciding line. The discipline cuts the other way
+too, and by more: the multiplier is measured ~3x above the protocol's floor, and at that
+floor MoQ needs *less* IP capacity than SRT for the same service because it declines to
+carry null stuffing. So this line is the model's largest two-sided sensitivity — an
+implementation defect currently costs ~8 % against the baseline, where the protocol
+would win by ~4 %, and on a loosely-filled carrier by considerably more.
 
 ## 8. Commercial packaging options
 
@@ -872,11 +907,24 @@ because reserved bandwidth is product-specific.
 
 **Engineering, with a direct economic payoff.**
 
-- **Why is MoQ's carriage overhead ~12 % where SRT's is ~3 %, and can it be reduced?**
-The extra bytes are framing rather than media, so the penalty is plausibly tunable, and
-it sits on the deciding line — the highest-value optimisation available to the
-transport rather than a constant to accept. Needs measuring back-to-back on a real WAN
-path with retransmission included, since MoQ's figure is measured and SRT's is derived.
+- **Where are the ~10 points of carriage overhead that no header accounts for?** This
+replaces the older and vaguer "why is MoQ's overhead ~12 % where SRT's is ~3 %": the
+protocol floor is 5.5 % at the deployed MTU and every MoQ and container header adds under
+one point, so the question is now a specific byte hunt rather than an open puzzle (§3.1).
+Three cheap steps, in order: histogram UDP datagram sizes on a non-loopback path, which
+tests the underfill hypothesis in one capture; A/B the MTU-discovery flag, which is
+defaulted off and worth ~1 point; attribute wire bytes per track. It sits on the deciding
+line, which makes it the highest-value optimisation available to the transport.
+- **What does the opaque lane cost to carry, and can null stripping be banked?** The
+measured figure is the media-aware lane; the lane this paper prefers for hardware IRDs has
+never been measured. Derived, stripping stuffing puts MoQ *below* SRT — decisively so on
+loosely-filled carriers — which would turn the deciding line from a penalty into an
+advantage. Two prerequisites: a measurement, and the deterministic groomer that makes
+stripping safe on a 1+1 pair ([architecture](architecture.md) §14.1).
+- **What is the overhead under loss, and how does SRT actually measure?** Every figure on
+both sides is clean-path, and SRT's is framing arithmetic rather than a measurement.
+Retransmission is charged differently by the two protocols, so the commercial comparison
+needs both measured back-to-back on the same degraded path.
 - **What does SRT actually cost to fan out?** Serving many destinations over a
 point-to-point protocol needs either N origin sessions or a re-origination tier, and
 neither is free, so a per-datagram framing comparison flatters SRT at exactly the

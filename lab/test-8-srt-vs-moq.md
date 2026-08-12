@@ -248,7 +248,11 @@ non-breaking change moves QUIC from "loss-fragile" to "SRT-comparable" on degrad
 keeping MoQ's architectural wins. Residual gaps: pathological *reordering* (a QUIC loss-detection/HOL
 item, not CC) and media-aware SI transparency (opaque lane / #2440 closes it). Glass-to-glass latency
 and protocol overhead remain **TBM** (lowering latency was explicitly not the objective here — robust
-delivery under degradation was). Recorded as a permanent finding in
+delivery under degradation was). **The back-to-back wire-byte comparison belongs here and this rig can
+run it**: [T9](test-9-performance.md) measures MoQ's carriage at 1.12x the source TS rate against an
+analytic floor of ~0.99x and derives SRT's 1.033x from framing arithmetic, so neither side of the
+deciding line is yet a measurement of both protocols on one path — least of all under loss, where each
+charges retransmission differently. Recorded as a permanent finding in
 [`docs/evidence.md`](../docs/evidence.md) §6. This is a comparison, not a gate: the thesis is decided
 by T7 (Gate 2), and the [T8b](test-8b-congestion-control.md) congestion-control run gates any
 controller recommendation for a permanent fixed-rate trunk.

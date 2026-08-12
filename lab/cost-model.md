@@ -41,7 +41,7 @@ disclosed or needed.
 | Bitrate profiles | 10 Mbps and 25 Mbps TS | arbitrary but representative; 10 Mbps now, 25 Mbps aspirational |
 | Redundancy | active/active 1+1, both legs always live | [architecture](../docs/architecture.md) §14; two full-rate copies at all times |
 | Regions | EU (Ireland), US East (N. Virginia), US West (Oregon) | egress rates are identical across all three |
-| MoQ carriage multiplier | **1.12x** source TS rate on the wire | T9 measured (10 and 27 Mbps both ~12 %) |
+| MoQ carriage multiplier | **1.12x** source TS rate on the wire | T9 measured (10 and 27 Mbps both ~12 %), media-aware lane, path pinned at QUIC's 1200 B minimum MTU. **An upper bound: ~3x the protocol's own floor of ~0.99x**, the excess being unattributed implementation overhead ([T9](test-9-performance.md)) |
 | SRT carriage multiplier | **1.033x** | *derived, not measured*: 7 × 188 B TS + 16 B SRT + 8 B UDP + 20 B IPv4 = 1,360 / 1,316 |
 | MoQ ingest CPU | 0.34 core per 10 Mbps feed | T8, `moq import ts` on 2-vCPU EC2 |
 | SRT ingest CPU | ~0.01 core per feed | T8, `tsp regulate` + SRT carriage |
@@ -356,13 +356,18 @@ that dominates. At AWS list:
 | 8 channels, 4 destinations, 10 Mbps | 10,170 | 6.1 % |
 | 8 channels, 16 destinations, 10 Mbps | 40,679 | 7.6 % |
 
-Percentages fall below 8.4 % only because the extra volume lands in cheaper tiers. This is a real
-and permanent tax, roughly the same size as the difference between two providers' list prices — so
-it matters, but it is not decisive. It is smaller than the reserved-versus-on-demand gap and an
-order of magnitude smaller than the gap between supplier categories in §4, which is the model's
-central point: **an 8 % carriage penalty is not worth optimising against a 45× procurement
-decision.** Reducing it is still worth doing, since it is permanent and applies to every byte, but
-it cannot decide the trunk case either way.
+Percentages fall below 8.4 % only because the extra volume lands in cheaper tiers. The penalty is
+real and it applies to every byte, but it is **not permanent**: it is ~3x the protocol's own floor,
+and at that floor MoQ needs *less* wire than SRT for the same service, because it declines to carry
+null stuffing a byte pipe cannot refuse ([T9](test-9-performance.md)). So the same line is worth
+−8 % or +4 % depending on whether the implementation gap closes, and considerably more than +4 % on
+a loosely-filled carrier.
+
+Either way it is not decisive. It is roughly the size of the difference between two providers' list
+prices, smaller than the reserved-versus-on-demand gap, and an order of magnitude smaller than the
+gap between supplier categories in §4 — which is the model's central point: **an 8 % carriage
+penalty is not worth optimising against a 45× procurement decision.** Closing it is worth doing
+because it is cheap and applies to every byte, not because it can decide the trunk case.
 
 ## 10. Egress price sensitivity, and what the transit floor is not
 
@@ -458,6 +463,12 @@ anywhere in this model.
   "MoQ costs roughly 8 % more wire on a clean path," pending the measured back-to-back run.
 - **Both carriage figures are clean-path.** Under loss, retransmission raises the wire rate on both
   sides, and the ratio between them is unmeasured.
+- **MoQ's 1.12x is the pessimistic end of a wide band, and the model does not price the other end.**
+  It is measured on the media-aware lane with the path pinned at QUIC's 1200-byte minimum MTU, ~3x
+  the protocol's floor; and the two lanes carry different byte volumes, since the media-aware lane
+  strips stuffing while the opaque lane can carry it verbatim. Modelling the floor would put MoQ
+  below SRT on this line, so the input is deliberately conservative — but a reader should not treat
+  1.12x as a property of the protocol.
 - **The GiB/GB convention shifts AWS figures by 7.4 %.** AWS's binary tier boundaries imply GiB
   billing and that is what is modelled; a decimal-GB reading raises every AWS number by 7.4 %.
 - **The 100 GB/month AWS free tier is applied per scenario**, whereas it is per account. Worth up

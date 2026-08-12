@@ -140,7 +140,12 @@ The validation pyramid, from cheapest/fastest to most decisive:
    confirm the opaque lane's robustness ([interoperability](interoperability.md)
    §7).
 6. **Redundancy drill.** Induce path failure and confirm hitless ST 2022-7
-   switching at the IRD ([architecture](architecture.md) §14).
+   switching at the IRD ([architecture](architecture.md) §14). The software half is
+   done — a reference receiver loses nothing across leg blackout, path loss and
+   differential delay — so the drill's remaining job is the hardware merge, and
+   choosing which egress topology to accept, since only a duplicated single groomer
+   currently yields a pair that is both groomed and mergeable
+   ([evidence](evidence.md) §7).
 7. **Comparative lab (optional but recommended).** Head-to-head against SRT under matched conditions, feeding the economic model
    ([economics](economics.md) §9).
 
@@ -150,7 +155,8 @@ The validation pyramid, from cheapest/fastest to most decisive:
   5). Cheap, do first.
 - **Gate 2 — hardware conformance:** TR 101 290 P1/P2 pass on real IRDs (step 4).
   **Make-or-break;** if this fails, fix grooming before anything else.
-- **Gate 3 — resilience:** hitless redundancy drill passes (step 6).
+- **Gate 3 — resilience:** hitless redundancy drill passes (step 6). Passed in
+  software against a reference receiver; the on-hardware merge remains open.
 
 ## 8. Version and migration considerations
 
