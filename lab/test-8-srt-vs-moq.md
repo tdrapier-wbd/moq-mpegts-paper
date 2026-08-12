@@ -247,12 +247,13 @@ Delivered-quality and resilience are measured; the CUBIC→BBR delta is the head
 non-breaking change moves QUIC from "loss-fragile" to "SRT-comparable" on degraded paths, while
 keeping MoQ's architectural wins. Residual gaps: pathological *reordering* (a QUIC loss-detection/HOL
 item, not CC) and media-aware SI transparency (opaque lane / #2440 closes it). Glass-to-glass latency
-and protocol overhead remain **TBM** (lowering latency was explicitly not the objective here — robust
-delivery under degradation was). **The back-to-back wire-byte comparison belongs here and this rig can
-run it**: [T9](test-9-performance.md) measures MoQ's carriage at 1.12x the source TS rate against an
-analytic floor of ~0.99x and derives SRT's 1.033x from framing arithmetic, so neither side of the
-deciding line is yet a measurement of both protocols on one path — least of all under loss, where each
-charges retransmission differently. Recorded as a permanent finding in
+remains **TBM** (lowering latency was explicitly not the objective here — robust delivery under
+degradation was). **The back-to-back wire-byte comparison has since been run, in
+[T9](test-9-performance.md) rather than here**: both protocols carrying the same clip over one path
+put MoQ's media-aware lane at 0.982x the source TS rate against SRT's 1.037x, and at 1 % forward loss
+both rose by about the loss rate with the ranking unchanged. What this rig is still the right host for
+is loss above 1 %, where each protocol charges retransmission differently and T9's inference from
+shaper counters stops being good enough. Recorded as a permanent finding in
 [`docs/evidence.md`](../docs/evidence.md) §6. This is a comparison, not a gate: the thesis is decided
 by T7 (Gate 2), and the [T8b](test-8b-congestion-control.md) congestion-control run gates any
 controller recommendation for a permanent fixed-rate trunk.

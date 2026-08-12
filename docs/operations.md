@@ -105,12 +105,13 @@ The platform must be observable in two languages simultaneously
   process alive at 100 % CPU with no logs, no health endpoint and no accepts for
   hours ([#2701](https://github.com/moq-dev/moq/pull/2701), triggered by cluster
   peer churn); and unbounded memory growth ending in an OOM kill. The severe form of
-  the memory failure belonged to an older release, but current builds still show slow
-  load-dependent growth under measurement, so this is a live concern rather than a
-  historical one. Neither mode is caught by a liveness check that only asks whether
-  the process exists. Probe the relay the way a client would — complete a session and
-  read a byte — and alarm on **RSS trend** (a steady climb over hours, not just a
-  threshold) alongside CPU pinned at a whole-core multiple.
+  the memory failure belonged to an older release; current builds show a bounded
+  load-dependent growth that levels off (next point), which an RSS-trend alarm must be
+  tuned not to mistake for the real thing. Neither mode is caught by a liveness check
+  that only asks whether the process exists. Probe the relay the way a client would —
+  complete a session and read a byte — and alarm on **RSS trend** (a climb that
+  continues past the first few hours of a connection, not just a threshold) alongside
+  CPU pinned at a whole-core multiple.
 - **Bound relay memory explicitly.** `moq-relay`'s group cache is **unbounded by
   default**; only each track's own retention window (5 s by default) limits it.
   With no flags set, the group cache pool is unbounded *and* has no age ceiling: the
@@ -123,26 +124,35 @@ The platform must be observable in two languages simultaneously
   every deployed relay; it is measured to cost nothing (identical CPU, resident memory
   within 1.5 MB), and it protects against the cache filling for other reasons.
 
-  **But no cache bound will stop the current leak, and both knobs have been tested.**
+  **But no cache bound will stop the current growth, and both knobs have been tested.**
   Capping capacity at 32 MiB left the rate unchanged, with the relay running to more
   than twice the cap above its baseline and no inflection where the cap should bind;
-  an age ceiling of `--cache-duration 5s` likewise left it unchanged. The growth is
-  neither cached payload nor retained history, so neither control can evict it. There
-  is no configuration that fixes this — plan around it.
+  an age ceiling of `--cache-duration 5s` likewise left it unchanged. Neither can help,
+  because the memory is not the relay's to evict: it is held by the QUIC library
+  beneath it.
+- **Budget the per-connection QUIC stream overhead, and cap it if you need to.**
+  `quinn-proto` keeps a slot for every stream a peer may open and recycles a freed
+  stream's reassembly buffer rather than releasing it. MoQ opens a stream per group,
+  so a relay accumulates roughly **9 KiB for every group it ingests** —
+  ~27–31 MB/hour on a 9.3 Mbps channel — until every slot is occupied, at which point
+  it stops. `moq-relay` allows 10,000 streams per connection, putting the ceiling at
+  **roughly 100 MB above baseline per publisher connection**, reached over the first
+  few hours ([moq-dev/moq#2745](https://github.com/moq-dev/moq/issues/2745)).
 
-  Three facts should drive that planning. The growth is **per ingested group, about
-  9 KiB each, and flat in subscriber count**, so it tracks how long a relay has carried
-  a channel rather than how many viewers it serves: **size for programme hours, not
-  audience**, because a lightly-watched relay leaks at the same rate as a busy one.
-  Per-session state is separate and well-behaved — a fixed ~3.2 MB per subscriber at
-  join that does not accumulate — so fan-out is not the problem. And because group
-  cadence is how latency is traded, **the lower the latency target, the faster the
-  leak**: roughly 18 MB/hour at a two-second group against 62 MB/hour (1.5 GB/day) at
-  a half-second one, for the same 9.3 Mbps channel.
+  What this means in practice. **Size for publisher connections, not audience** — the
+  overhead is flat in subscriber count, so a lightly-watched relay pays the same as a
+  busy one, while per-session state is separate and well-behaved (a fixed ~3.2 MB per
+  subscriber at join that does not accumulate). Expect a relay's resident memory to
+  climb for the first few hours after a publisher connects and then level off; alarm
+  on a trend that is *still* climbing well past that, which is the signature of a real
+  problem rather than this one. A lower latency target reaches the same ceiling sooner
+  rather than settling higher, so it changes the shape of the curve and not the budget.
 
-  Until there is a fix: size hosts for at least a day of growth at the group rate you
-  actually run, alarm on the memory *trend* rather than an absolute threshold, and
-  treat a scheduled drain-and-restart as a first-class control
+  `--server-quic-max-streams` is the one control that binds it, cutting the ceiling
+  proportionally — 1,024 streams gives roughly a tenth. It costs concurrent-stream
+  headroom on busy connections, so treat it as a memory-constrained-host lever rather
+  than a default. No released QUIC library version fixes this, so plan for the
+  overhead rather than waiting for it to go away
   ([lab T9](../lab/test-9-performance.md)).
 
 ## 4. Runbooks

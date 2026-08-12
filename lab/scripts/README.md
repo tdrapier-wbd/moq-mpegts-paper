@@ -10,6 +10,10 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`t8b-netns.sh`](t8b-netns.sh) | Self-contained contention rig: two network namespaces on one Linux host, bottleneck + deep queue downstream, base delay both ways. The primary rig for [T8b](../test-8b-congestion-control.md). |
 | [`t8b-shaper.sh`](t8b-shaper.sh) | Shaped bottleneck on a real interface, applied to the media flows only via a `prio`+`u32` lane so SSH on a shared host is untouched. The corroborating real-path rig. |
 | [`t8b-rtt-probe.sh`](t8b-rtt-probe.sh) | Standing-RTT sampler and percentile summary. For a fixed-rate feed, RTT is a buffer-headroom check (does queuing threaten `--latency-max`?), sampled over the same window as the capture. |
+| [`t9-overhead-wan.sh`](t9-overhead-wan.sh) | Carriage overhead over a real path: origin relay and publisher remote, subscriber local, capture on the origin's egress. Legs for the deployed default, path MTU discovery, a GSO control, a video-only source, and SRT carrying the same clip over the same path. The rig for [T9](../test-9-performance.md)'s carriage figures. |
+| [`t9-overhead-wan-cap.sh`](t9-overhead-wan-cap.sh) | The capture half, run on the origin: UDP datagram-size distribution and byte totals for both directions, as rates over the pcap's own span. |
+| [`t9-overhead-lo.sh`](t9-overhead-lo.sh) | The same accounting with relay, publisher and subscriber on one host. Useful as a control; costs about a point of accuracy against a real path. |
+| [`t9-netem-lane.sh`](t9-netem-lane.sh) | Impairment for the overhead legs, shaping only the two measured flows. Resolves the destination from the origin's view of the connection at setup time, and reports the shaper's own passed/dropped counters. |
 | [`t12-dual-leg.sh`](t12-dual-leg.sh) | One source, two complete delivery legs (publisher → relay → subscriber → RTP/UDP egress), one capture of both. Four egress arms and a timed injection per run. The rig for [T12](../test-12-dual-path-handoff.md). |
 | [`t12-merge-oracle.py`](t12-merge-oracle.py) | The receiver. Reconstructs from one capture what an ST 2022-7 sequence merge and an IRD-style input-select would have produced, and reports alignment yield, loss at the merged output, switch behaviour and leg skew. |
 | [`t12-grade.sh`](t12-grade.sh) | Grades one captured run — oracle plus a TSDuck verdict on each reconstruction — into two CSVs. Reads only the capture, so a campaign can be re-graded when the oracle changes. |
@@ -21,6 +25,8 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`t12-resume.py`](t12-resume.py) | For a leg that stopped and came back: how far its numbering drifted from its partner's across the outage, measured without needing payload identity. |
 | [`t12-placement.py`](t12-placement.py) | Strips stuffing and asks where one leg's programme sits in its partner's output. |
 | [`t12-join-diagnostic.sh`](t12-join-diagnostic.sh) | A single stream-clocked leg joining a broadcast already in progress, run to read the groomer's own counters (`start_backlog`, `resyncs`, `dropped`) rather than to grade a pair. |
+| [`ts-corrupt-header.py`](ts-corrupt-header.py) | Flips exactly one bit in one MP2, AC-3 or H.264 frame header of a real transport stream, located by walking the PID's PES payload rather than by offset. The damage artefact for demuxer-robustness arms. |
+| [`moq-import-survival.sh`](moq-import-survival.sh) | Relay, subscriber and importer in one invocation; reports whether `moq import ts` survived a source, with its exit status. Run once per binary for a before/after on a demuxer fix. |
 
 **Which comparison to trust.** `t12-merge-oracle.py` recovers the legs' sequence offset by voting on
 payload identity and derives skew by pairing datagrams through that offset, so on a pair that differs
@@ -40,7 +46,28 @@ that a saturating flow (a loss-based CUBIC run doubles as one) drives it to base
 
 **On a shared host,** `t8b-shaper.sh` arms a watchdog (default 90 min) that tears the lane down on
 its own, and `clear` removes it immediately. A shaped lane left behind is a trap for the next
-person to use the box. `t12-dual-leg.sh` arms the same kind of watchdog on its per-leg lane.
+person to use the box. `t12-dual-leg.sh` and `t9-netem-lane.sh` arm the same kind of watchdog.
+
+**Three rules the overhead rigs exist to enforce**, each learned by getting it wrong:
+
+- **Run off loopback and with `--server-quic-gso=false`.** On loopback the kernel coalesces sends into
+  multi-kB segments, so a capture shows neither real datagrams nor a countable number of IP headers.
+- **Never compare byte totals from two separately started windows.** Each side must reduce to a rate
+  over a span it measures itself — the capture over the pcap's own first-to-last packet time, the
+  payload over its own timer. A ~15 % window mismatch is indistinguishable from a ~15 % protocol
+  overhead, and was mistaken for one.
+- **Verify that an impairment reached the flow, and know where the capture tap sits relative to the
+  shaper.** `t9-netem-lane.sh verify` prints passed/dropped counts for exactly that reason: a lane
+  pinned to a stale address shapes nothing and the run then reads as "loss made no difference". On
+  Linux the egress tap is *downstream* of the qdisc, so a capture on the sending host cannot see
+  retransmitted bytes that the shaper then dropped; recover the sender's push rate from the counters.
+
+**A demuxer-robustness arm proves nothing without its opposite arm.** `ts-corrupt-header.py` finds its
+target by matching a sync pattern, and those patterns occur by chance inside compressed payload — so an
+arm that survives may mean the parser recovered, or may mean the damaged byte was never a frame header.
+Always run the same file against a build known to fail, and treat "survived on both" as inconclusive
+rather than as a pass. The same applies to a looping source: a wrap is only fatal when it splits a
+frame, which depends on where the clip was cut.
 
 **The T12 rig grades itself before it grades MoQ.** Every run reports whether either leg was empty,
 what the pacer dropped, and whether a relay failed to bind; a leaked relay from a previous run is

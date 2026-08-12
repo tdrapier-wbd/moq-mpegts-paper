@@ -238,23 +238,24 @@ unless a specific feed or endpoint forces the fallback," not a free choice betwe
 equals.
 
 **The lanes also differ in wire cost, and the difference is not where intuition puts
-it.** Only the media-aware lane has been measured, at 1.12x the source TS rate
-([evidence](evidence.md) §8) — about three times what the protocol itself charges, the
-excess being unattributed implementation overhead rather than framing. Priced from the
-protocol, either lane pays ~5.5 % at QUIC's 1200-byte default datagram and ~4.5 % at a
-1500-byte path MTU, against ~3.3 % for SRT's seven-TS-packets-per-datagram framing; the
-~1.2-point residual is almost entirely QUIC's mandatory authentication tag. What decides
-the comparison is therefore not framing but **whether null stuffing crosses the WAN**.
-A byte pipe must carry it; MoQ need not, because the edge groomer regenerates CBR
-stuffing anyway ([architecture](architecture.md) §7). Stripping it puts MoQ below SRT on
-bandwidth, decisively so on loosely-filled carriers, which is the largest bandwidth lever
-in this architecture and applies to both lanes. It is not free: stripping forgoes
-byte-verbatim carriage, which is precisely what the opaque lane exists to promise, and
-independently-stuffing groomers produce legs a receiver cannot merge
-([evidence](evidence.md) §7). So the choice is three-way rather than two-way — verbatim,
-stripped-and-regroomed, or media-aware — and the bandwidth case for stripping waits on a
-groomer that derives stuffing from stream position ([architecture](architecture.md)
-§14.1).
+it.** Only the media-aware lane has been measured, at 0.982x the source TS rate against
+SRT's 1.037x on the same path ([evidence](evidence.md) §8). Priced from the protocol,
+either lane pays ~5.5 % at QUIC's 1200-byte default datagram and ~4.5 % at a 1500-byte
+path MTU, against ~3.3 % for SRT's seven-TS-packets-per-datagram framing; the ~1.2-point
+residual is almost entirely QUIC's mandatory authentication tag. What decides the
+comparison is therefore not framing but **whether null stuffing crosses the WAN**. A byte
+pipe must carry it; MoQ need not, because the edge groomer regenerates CBR stuffing anyway
+([architecture](architecture.md) §7). That is what puts the measured media-aware lane
+*below* SRT, decisively so on loosely-filled carriers, and it is the largest bandwidth
+lever in this architecture. It is not free: stripping forgoes byte-verbatim carriage, which
+is precisely what the opaque lane exists to promise. The 1+1 objection has gone, since a
+groomer that derives stuffing from stream position produces mergeable legs while
+regenerating its own nulls ([evidence](evidence.md) §7,
+[architecture](architecture.md) §14.1). So the choice is three-way rather than two-way —
+verbatim, stripped-and-regroomed, or media-aware — and it is now a fidelity decision with a
+known price rather than a bandwidth gamble. **The opaque lane's own carriage cost remains
+unmeasured**, which is the gap worth closing next on this line, since it is the lane the
+architecture prefers for hardware receivers.
 
 **T-STD (buffer-model) conformance is a muxing property, distinct from PCR pacing.**
 The MPEG-2 Systems T-STD (Transport Stream System Target Decoder) is the reference
@@ -624,10 +625,11 @@ something the exporter conceals.
   carriage, and is a media-aware secondary lane worth the interop cost to regain
   it?
 - What does the opaque lane cost on the wire, and is verbatim carriage worth its
-  bandwidth? Only the media-aware lane is measured (§4.1). The question is not really
-  MoQ-versus-SRT framing, which is a ~1.2-point difference, but whether a feed's null
-  stuffing should cross the WAN at all — a decision that trades bandwidth against the
-  byte-verbatim guarantee and against 1+1 mergeability.
+  bandwidth? Only the media-aware lane is measured (§4.1), where carriage comes out
+  *below* SRT. The question is not MoQ-versus-SRT framing, which is a ~1.2-point
+  difference, but whether a feed's null stuffing should cross the WAN at all — now a
+  priced decision, trading a measured ~5 % of bandwidth against the byte-verbatim
+  guarantee.
 - Does the per-stream, subscription-based model deliver a measurable reliability advantage
   over well-run SRT/Zixi/RIST on real routes, or is the advantage swamped by the
   grooming and redundancy layers that all approaches require?

@@ -14,8 +14,12 @@ GIB = 1 << 30
 GB = 10**9
 
 # ---------------------------------------------------------------- measured constants
-MOQ_CARRIAGE = 1.12              # T9: IP wire bytes / source TS rate
-SRT_CARRIAGE = 1360 / 1316       # derived: 7x188 TS + 16 SRT + 8 UDP + 20 IPv4
+MOQ_CARRIAGE = 0.982             # T9: IP wire bytes / source TS rate, measured on a WAN path.
+                                 # Below 1.0 because the media-aware lane strips the source's
+                                 # null stuffing (4.57% of this clip) and the edge groomer
+                                 # regenerates it. 0.973 with path MTU discovery enabled.
+SRT_CARRIAGE = 1.037             # T9: measured on the same path, same clip. Matches the framing
+                                 # arithmetic 1360/1316 = 1.0334 (7x188 TS + 16 SRT + 8 UDP + 20 IPv4).
 MOQ_IMPORT_CORES_AT_10 = 0.34    # T8: `moq import ts`, 2-vCPU EC2
 SRT_CARRIAGE_CORES_AT_10 = 0.01  # T8: `tsp regulate` + SRT carriage
 RELAY_CORE_PER_SESSION = {10: 0.00865, 25: 0.01175}   # T9 bitrate sweep (25 uses the 27 Mbps point)
@@ -210,7 +214,7 @@ log_bars([
 
 # ================================================================ 2. carriage
 print("\n=== 2. Wire rate after carriage overhead and 1+1 ===\n")
-print(f"{'TS profile':<14}{'MoQ wire':>12}{'SRT wire':>12}{'MoQ 1+1':>12}{'SRT 1+1':>12}{'MoQ penalty':>14}")
+print(f"{'TS profile':<14}{'MoQ wire':>12}{'SRT wire':>12}{'MoQ 1+1':>12}{'SRT 1+1':>12}{'MoQ vs SRT':>14}")
 rule(76)
 for ts in (10, 25):
     m, s = ts * MOQ_CARRIAGE, ts * SRT_CARRIAGE
@@ -380,7 +384,8 @@ for itype, spec in EC2.items():
     binds = "network" if spec["net_baseline_gbps"] < cpu_gbps else "cores"
     print(f"{itype:<14}{spec['vcpu']:>6}{spec['net_baseline_gbps']:>9.3f} G"
           f"{cpu_gbps:>12.2f} G{spec['net_baseline_gbps']:>12.2f} G{binds:>10}")
-print("\nSessions purchasable per instance at 10 Mbps of MoQ wire rate (11.2 Mbps each):")
+print(f"\nSessions purchasable per instance at 10 Mbps of MoQ wire rate "
+      f"({10 * MOQ_CARRIAGE:.1f} Mbps each):")
 for itype, spec in EC2.items():
     by_cpu = spec["vcpu"] / RELAY_CORE_PER_SESSION[10]
     by_net = spec["net_baseline_gbps"] * 1000 / (10 * MOQ_CARRIAGE)
@@ -450,8 +455,9 @@ for dests in (2, 4, 8, 16):
 print(f"\nThe origin uplink also carries {CHANNELS * 2} streams once rather than once per receiver,")
 print("which is a contribution-link sizing saving rather than a cloud invoice line.")
 
-print("\n=== 8. What the 1.12x vs 1.033x carriage difference costs ===\n")
-print(f"{'Scenario':<44}{'Extra $/yr':>13}{'Extra %':>10}")
+print(f"\n=== 8. What the {MOQ_CARRIAGE}x vs {SRT_CARRIAGE}x carriage difference costs ===\n")
+print("Negative = MoQ cheaper, because it does not carry the source's null stuffing.")
+print(f"{'Scenario':<44}{'Delta $/yr':>13}{'Delta %':>10}")
 rule(67)
 for label, chans, dests, ts in [("1 channel, 1 destination, 10 Mbps", 1, 1, 10),
                                 ("1 channel, 1 destination, 25 Mbps", 1, 1, 25),

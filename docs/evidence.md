@@ -118,11 +118,31 @@ residual media-aware gap is the dynamic TDT/TOT and EIT tables**
 which the opaque prototype bounds precisely by reproducing the source
 byte-for-byte, those tables included.
 
+**A second real-feed defect, of a more serious kind, closed the same way.** Until recently a single
+damaged byte in an MP2, AC-3 or E-AC-3 frame header terminated the publisher outright and took every
+other track — video, teletext, all three SCTE-35 PIDs — with it, while the video path resynchronised
+through the identical corruption. That is the wrong way round for a contribution feed, where a
+momentary bit error should cost a few milliseconds of audio rather than a session teardown and a
+reconnect. It surfaced here as a looping test source accumulating 216 publisher restarts, one per wrap;
+a one-byte reproducer then showed no discontinuity was needed at all. Reported and fixed within two
+days ([#2729](https://github.com/moq-dev/moq/issues/2729),
+[#2751](https://github.com/moq-dev/moq/pull/2751)), and verified here against both builds: the same
+damaged capture that killed the previous release now costs **exactly one 24 ms audio frame**, with
+every other track intact and nothing spurious emitted. The fix also reached a defect we had not found —
+AAC frames split across a PES boundary were never reassembled at all, so a legal mux could kill a
+broadcast with no corruption involved.
+
+One residual, which is a gap rather than a fault: **a recovered stream is signalled nowhere**. There is
+no continuity error, no discontinuity indicator, no log line and no counter — the audio timeline simply
+steps over the hole. A feed quietly losing frames is therefore indistinguishable from a healthy one,
+which is a real loss of diagnostic signal in exchange for the robustness
+([lab: T9](../lab/test-9-performance.md)).
+
 The same pattern holds beyond the TS mapping: the congestion-control selector (#2432), exporter
 survival across session loss (#2469) and standby-route propagation (#2473) are upstream changes
 rather than local workarounds (§6, §7). Media-aware is the right default partly for this
 reason — its known gaps close in core, on the reference implementation, rather than downstream
-of it.
+of it, and the two-day turnaround on the audio abort is the strongest evidence yet for that claim.
 
 ## 5. The entitlement substrate exists
 
@@ -361,7 +381,7 @@ IRD's merge engine, so this can disprove mergeability but cannot substitute for 
 conformance run; and both legs ran on one host over loopback, so skew was injected rather than
 natural and path diversity is untested.
 
-## 8. Relay compute is cheap and predictable; bandwidth is the cost line, and its overhead is not intrinsic
+## 8. Relay compute is cheap and predictable; carriage costs less than SRT, not more
 
 The operational envelope is now measured rather than assumed
 ([lab: T9](../lab/test-9-performance.md)), on Linux with the current release, MPEG-TS at 2-27 Mbps
@@ -381,55 +401,55 @@ Mbps on macOS loopback with UDP GSO disabled than on Linux with it enabled. Rela
 sensitive to kernel and offload configuration than to any plausible code change, which makes host
 tuning a first-order deployment decision rather than an implementation detail.
 
-**Carriage costs about 1.12x the source TS rate on the wire**, essentially independent of bitrate: a
-9.95 Mbps service needs ~11.2 Mbps of IP capacity and a 27.5 Mbps service ~30.8 Mbps, plus well under
-1 % on the return path for acknowledgements. Against the *delivered* payload the figure is ~17-18 %,
-the difference being the source's null packets, which MoQ strips rather than carries. Measured on the
-media-aware lane; the opaque lane's carriage cost is unmeasured.
+**Carriage on the media-aware lane costs 0.982x the source TS rate on the wire, against SRT's 1.037x
+for the same clip over the same path — MoQ delivers the service in 5.3 % less bandwidth.** Turning on
+path MTU discovery, a flag that exists and is off by default, takes it to 0.973x and 6.2 %. A
+9.95 Mbps service therefore needs ~9.8 Mbps of IP capacity rather than the ~11.2 Mbps previously
+recorded here, and the earlier figure was a measurement artefact rather than a property of the protocol
+([lab: T9](../lab/test-9-performance.md) Corrections).
 
-**That is roughly three times what the protocol is entitled to charge, so it is an implementation gap
-rather than a property of MoQ.** Priced from the protocol, a QUIC packet spends ~64 bytes on IP, UDP,
-its own header, the AEAD tag and stream framing — 5.5 % of a 1200-byte datagram, 4.5 % at a 1500-byte
-path MTU, against SRT's 3.3 % for seven TS packets in 1360 bytes. **The irreducible QUIC-versus-SRT
-penalty is therefore ~1.2 points, almost all of it the 16-byte authentication tag QUIC mandates and
-SRT does not.** Every MoQ and hang header on top of that — a group header, a frame timestamp and
-length, and a second copy of the timestamp inside the hang container — costs under one point on a
-contribution-grade feed, because the bytes are dominated by ~31 kB video access units. Floor and
-framing together account for at most ~6.3 % where ~21 % is implied, leaving roughly 1.2 Mbps on a
-9.5 Mbps feed unattributed to any header. Two contributors are confirmed and neither is large enough:
-MTU discovery is defaulted **off** in `moq-native`, overriding the QUIC stack's own default and pinning
-every measurement to QUIC's 1200-byte minimum, and the TS importer opens a new QUIC stream per audio
-access unit. The residual is unexplained; a datagram-size distribution captured on a real path would
-locate it, which makes this a tractable engineering item rather than an open puzzle
-([lab: T9](../lab/test-9-performance.md)).
+**MoQ wins because it declines to carry null stuffing, and that is worth more than everything QUIC
+charges.** The reference clip is 4.57 % nulls. SRT, a byte pipe, has no way to refuse them; the
+media-aware lane strips them on import and the downstream groomer regenerates them from stream
+position, which the architecture does anyway for TR 101 290 reasons
+([architecture](architecture.md) §7). Against the *delivered* payload MoQ's overhead is +2.79 %, and it
+decomposes exactly: 2.54 points are IP and UDP headers, and 0.25 is every QUIC, moq-lite and hang
+header combined. Priced from the protocol, a QUIC packet spends ~64 bytes on IP, UDP, its own header,
+the AEAD tag and stream framing — 5.5 % of a 1200-byte datagram against SRT's 3.3 % for seven TS
+packets in 1360 bytes, so **the irreducible QUIC-versus-SRT penalty is ~1.2 points, almost all of it
+the 16-byte authentication tag QUIC mandates and SRT does not.** Null stripping repays that several
+times over.
 
-**Set against a like-for-like baseline the floor is *below* SRT, because MoQ need not carry
-stuffing.** Delivering the same 9.95 Mbps service costs SRT 10.27 Mbps of IP, since a byte pipe has no
-way to decline the 453 kbps of nulls; MoQ at its floor needs ~9.8 Mbps. The saving scales with
-stuffing ratio and becomes large where carriers run loose — 1.9 Mbps of content in a 4 Mbps carrier
-costs SRT 4.13 Mbps against ~2.0 Mbps. This is a real structural advantage rather than an accounting
-artefact, because the architecture already regenerates stuffing at the edge for TR 101 290 reasons
-([architecture](architecture.md) §7). It is bankable on a 1+1 pair as well, which it was not while
-each groomer chose its own stuffing: §7 above shows that two groomers whose stuffing is a
-deterministic function of stream position produce byte-identical legs while each regenerating its
-own nulls ([architecture](architecture.md) §14.1). Stripping still breaks byte-verbatim carriage,
-which is a separate decision. Bandwidth remains the line most likely to
-dominate a cost comparison ([economics](economics.md) §3.1) — but it is now the transport's
-highest-value optimisation rather than a constant to accept.
+**The saving scales with the stuffing ratio, so it is much larger where carriers run loose:** 1.9 Mbps
+of content in a 4 Mbps carrier costs SRT 4.13 Mbps of IP against roughly half that on the media-aware
+lane. It is bankable on a 1+1 pair as well, which it was not while each groomer chose its own stuffing:
+§7 above shows that two groomers whose stuffing is a deterministic function of stream position produce
+byte-identical legs while each regenerating its own nulls ([architecture](architecture.md) §14.1).
+What stripping still costs is byte-verbatim carriage, which is a separate decision.
 
-**Publishers and subscribers are stable over a day and a half. The relay is not, under sustained
-subscriber load.** Two 26.5-hour soaks plus a controlled build comparison were run. The publisher and
-subscriber processes held memory flat (+0.03 and +0.15 MB/hour, against run-to-run noise several times
-larger), with descriptors unchanged and no restarts — those roles pass.
+**The debits, so the advantage is not overstated.** MoQ's return path is eight times SRT's (1.16 % of
+the forward rate against 0.13 %), which does not reverse the result — including both directions MoQ is
+4.3 % cheaper. The measurement is one 9.95 Mbps clip on one clean path, and the advantage's size
+depends on the source's stuffing ratio, so a tightly packed carrier would narrow it towards the
+1.2-point AEAD floor. Under 1 % forward loss both protocols' overhead rose by about the loss rate and
+the ranking held. Everything above is the media-aware lane; **the opaque lane's carriage cost is still
+unmeasured**, and derivation puts it near SRT if it carries stuffing verbatim and near the media-aware
+lane if it does not. Bandwidth remains the line most likely to dominate a cost comparison
+([economics](economics.md) §3.1) — it is simply no longer the line on which MoQ loses.
 
-The relay does not. Holding the workload fixed — one publisher, four steady subscribers, a private
-relay with no prior history — and varying only the binary, two consecutive releases both grew
-**linearly at about 27 MB/hour, with no decay across two and a half hours**. Five successive
-half-hourly windows on the older build read between +25 and +28 MB/hour. That is roughly 650 MB a day,
-and it is not a regression in the newer build: the two agree to within 2 %. An earlier soak that
-appeared flat for 26 hours simply carried a lighter load. With no subscriber attached the relay is
-flat, so what grows tracks *served load* rather than uptime, and it is not returned when the
-subscribers leave.
+**Publishers and subscribers are stable over a day and a half. The relay retains memory per unit of
+content carried — bounded, but not by anything an operator can configure.** Two 26.5-hour soaks plus a
+controlled build comparison were run. The publisher and subscriber processes held memory flat (+0.03
+and +0.15 MB/hour, against run-to-run noise several times larger), with descriptors unchanged and no
+restarts — those roles pass.
+
+The relay grows. Holding the workload fixed — one publisher, four steady subscribers, a private relay
+with no prior history — and varying only the binary, two consecutive releases both grew **at about
+27 MB/hour, with no decay across two and a half hours**. Five successive half-hourly windows on the
+older build read between +25 and +28 MB/hour. It is not a regression in the newer build: the two agree
+to within 2 %. An earlier soak that appeared flat for 26 hours simply carried a lighter load. With no
+subscriber attached the relay is flat, so what grows tracks *served load* rather than uptime, and it
+is not returned when the subscribers leave.
 
 Two things sharpen this into a practical concern rather than a curiosity, and both are now measured
 rather than suspected. First, the growth is far too small to be cached media: the relay retains
@@ -453,10 +473,10 @@ nothing extra in growth.
 
 That matters commercially in both directions. Per-subscriber state is real but *bounded*: each session
 adds a fixed 3.2 MB at join and then stops, so fan-out itself is well-behaved and the relay-density
-economics in [economics](economics.md) §4 stand. The leak scales with *content ingested* — with hours
-of programming carried, not with audience — so it is indifferent to how many viewers a relay serves
-and proportional to how long it has been carrying a channel. For always-on primary distribution that
-is the worse of the two shapes, because the load that drives it never stops.
+economics in [economics](economics.md) §4 stand. The growth scales instead with *content ingested* —
+with hours of programming carried, not with audience — so it is indifferent to how many viewers a relay
+serves. For always-on primary distribution that would be the worse of the two shapes, since the load
+driving it never stops; the ceiling established below is what saves it.
 
 **This is causation, not correlation, and it was confirmed by prediction.** Two re-encodes of the same
 content at an identical 9.3 Mbps, differing only in how often a key frame starts a new group, make
@@ -464,26 +484,45 @@ group rate the single variable. Doubling it was predicted to double the leak, an
 62.30 MB/hour, a ratio of 1.995 where the group rate ratio is 2.000, with the retained-bytes-per-group
 figure agreeing to three significant figures across the pair.
 
-That result carries an unwelcome implication. Group cadence is the knob MoQ uses to trade latency:
-shorter groups mean a tighter live edge. So the leak is proportional to how aggressively a deployment
-is tuned for the very property MoQ is chosen for. The same channel costs roughly 18 MB/hour at a
-two-second group and 62 MB/hour — 1.5 GB a day — at a half-second one. **The lower the latency target,
-the faster the relay leaks.**
+Group cadence is also the knob MoQ uses to trade latency, so the growth *rate* is proportional to how
+aggressively a deployment is tuned for the property MoQ is chosen for: roughly 18 MB/hour at a
+two-second group against 62 MB/hour at a half-second one. As the root cause below shows, this changes
+how quickly the ceiling arrives rather than how high it is.
 
 **Neither documented control stops it.** `--cache-capacity` bounds payload bytes and this is not
 payload; `--cache-duration`, the age ceiling on retained history, was tested at five seconds and left
-the rate unchanged at 27 MB/hour. There is no setting an operator can apply. That is what makes this a
-defect to be fixed upstream rather than a deployment parameter to be tuned, and it is filed as
-[moq-dev/moq#2745](https://github.com/moq-dev/moq/issues/2745).
+the rate unchanged at 27 MB/hour. There is no setting an operator can apply to the cache. It was filed
+as [moq-dev/moq#2745](https://github.com/moq-dev/moq/issues/2745).
 
-The severe historical defect is genuinely gone — an older release grew ~21 MB/hour *with no
-subscribers at all* to an out-of-memory kill after six days, and neither current build reproduces that
-idle behaviour. But it would be wrong to read that as long-run relay memory stability. What replaces
-it is a load-dependent growth that is larger in absolute terms under real subscriber load, and that
-the documented cache bound does not contain. **Until there is a fix, a production relay needs
-supervision that restarts on a memory trend, headroom sized for at least a day of growth, and a
-planned drain-and-restart cycle — cache tuning alone is not a mitigation.** This is being
-characterised for an upstream report rather than left as a deployment workaround.
+**The root cause is a QUIC library, not MoQ — and it bounds the growth.** The maintainer reproduced
+and root-caused the report within a day, and the answer sits a layer below the protocol. `quinn-proto`
+keeps a slot for every stream a peer may open, and when a received stream is freed it recycles the
+stream's state *including its reassembly buffer*, cleared but not released. MoQ opens a QUIC stream
+per group, so every group the relay ingests permanently converts one empty slot into an occupied one.
+That explains every property measured above without any of them being about MoQ: only streams the peer
+opens consume slots, so egress — which the relay opens itself — costs nothing and the growth is flat in
+audience; and a cache control cannot evict memory held by the transport library beneath it.
+
+It also supplies the ceiling. Growth stops once every slot is occupied, which for `moq-relay`'s limit
+of 10,000 streams per connection is **about 99 MB above baseline per publisher connection**, reached
+after roughly 10,000 groups — around three hours at the rate tested. **Every leg in this campaign was
+shorter than that**, which is why the growth looked unbounded, and the earlier reading here of "650 MB
+a day, indefinitely" was an extrapolation past the range the measurements covered. It was also the
+wrong way round on latency: a shorter group reaches the same ceiling sooner rather than climbing
+higher, because what is retained is set by frame size and slot count, not by group duration. Two
+results previously recorded as anomalies now fit — a soak whose growth visibly decayed towards the end,
+and a long-running relay that sat flat at 224 MB for hours, had both simply filled their slots.
+
+This changes the operational conclusion materially. The severe historical defect is genuinely gone — an
+older release grew ~21 MB/hour *with no subscribers at all* to an out-of-memory kill after six days,
+and neither current build reproduces that. What replaces it is not an unbounded leak but a **bounded
+per-connection overhead of order 100 MB, arriving over the first few hours of a connection's life**.
+A relay is therefore sizeable rather than fragile: budget the ceiling per publisher connection, and
+scheduled restarts are prudence, not a necessity. The one lever that does work is the stream limit
+itself — `--server-quic-max-streams` caps the ceiling proportionally, at the cost of concurrent-stream
+headroom on busy connections. There is no released version of the QUIC library that fixes this, so the
+overhead should be planned for rather than waited out. Confirmation of the plateau on our own rig is
+in flight.
 
 **Bounding the relay cache is free.** With `--cache-capacity` set, CPU was identical and RSS differed
 by under 1.5 MB, because a healthy working set sits far below any sensible bound. The cache is

@@ -1091,8 +1091,9 @@ That change has a second, unrelated payoff worth naming here because it shares t
 prerequisite: **it is what would let the platform stop carrying null stuffing over the
 WAN at all.** Stuffing exists to hold a constant carrier rate for the receiver, and §7.2
 already regenerates it at the edge, so carrying it across the fabric is waste that a byte
-pipe such as SRT cannot avoid and MoQ need not pay — worth several percent of the
-bandwidth bill on a well-filled carrier and roughly half of it on a loosely-filled one
+pipe such as SRT cannot avoid and MoQ need not pay. It is measured rather than argued: on
+the media-aware lane it is what takes carriage to **5.3 % below SRT on the same path**, and
+roughly half the bandwidth bill on a loosely-filled carrier
 ([evidence](evidence.md) §8, [economics](economics.md) §3.1). That saving used to be
 unbankable on a redundant pair for exactly the reason above — stripping made each
 groomer choose its own stuffing, and independently-chosen stuffing is what made the legs

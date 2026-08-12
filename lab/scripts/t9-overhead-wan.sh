@@ -13,8 +13,11 @@
 #   vidonly  GSO off, MTU discovery off, video-only source      — isolates the ~100 streams/s
 #                                                                 the importer opens for audio,
 #                                                                 teletext and SCTE-35 sections
+#   srt      SRT carrying the same clip over the same path      — the comparison, measured
+#                                                                 rather than derived from
+#                                                                 framing arithmetic
 #
-# usage: t9-overhead-wan.sh [leg ...]      (default: all four)
+# usage: t9-overhead-wan.sh [leg ...]      (default: the four MoQ legs)
 set -uo pipefail
 
 ORIGIN=${ORIGIN:?set ORIGIN to user@host of the origin box}
@@ -41,6 +44,7 @@ cleanup() {
 	[ -n "$SUB_PID" ] && kill -9 "$SUB_PID" 2>/dev/null
 	remote <<-'EOF' || true
 		pkill -9 -f 't9\.wan\.[a-z]+\.hang' 2>/dev/null
+		pkill -9 -f 'O srt --listener 0.0.0.0:9010' 2>/dev/null
 		sudo pkill -9 -f 'tcpdump.*t9_oh_' 2>/dev/null
 		bash ~/t8run/cc_relay.sh off
 	EOF
@@ -118,15 +122,70 @@ run_leg() {
 	grep -v '^ ' "$OUT/$leg.cap.txt"
 }
 
-for leg in "${@:-base mtu gso vidonly}"; do
-	case $leg in
-	base)    run_leg base    "--server-quic-gso=false" "" "$SRC_FULL" ;;
-	mtu)     run_leg mtu     "--server-quic-gso=false --server-quic-mtu-discovery=true" \
-	                         "--client-quic-mtu-discovery=true" "$SRC_FULL" ;;
-	gso)     run_leg gso     "" "" "$SRC_FULL" ;;
-	vidonly) run_leg vidonly "--server-quic-gso=false" "" "$SRC_VID" ;;
-	*) echo "unknown leg: $leg" ;;
-	esac
-done
+# SRT over the same path, same clip, same accounting. SRT carries the source verbatim,
+# so its delivered rate should come back at the source rate while MoQ's comes back
+# null-stripped — the difference is the whole of MoQ's bandwidth advantage.
+run_srt() {
+	local port=${SRT_PORT:-9010}
+	local ts="$OUT/srt.ts"
 
-echo; echo "all legs done; per-leg output in $OUT/*.cap.txt"
+	echo; echo "================ leg srt ================"
+	remote <<-EOF
+		pkill -9 -f 'O srt --listener 0.0.0.0:$port' 2>/dev/null; sleep 1
+		setsid bash -c "tsp -I file '$SRC_FULL' --infinite -P regulate --pcr-synchronous \
+		  -O srt --listener 0.0.0.0:$port" >/tmp/t9wan_srt.log 2>&1 </dev/null & disown
+		sleep 2; echo "srt listener launched"
+	EOF
+
+	rm -f "$ts"
+	tsp -I srt --caller "$TLS_NAME:$port" -O file "$ts" >"$OUT/srt.sub.log" 2>&1 &
+	SUB_PID=$!
+
+	sleep "$SETTLE"
+	remote <<-EOF >"$OUT/srt.cap.txt" 2>&1 &
+		bash ~/t9/t9-overhead-wan-cap.sh $SUB_IP $port $WINDOW srt
+	EOF
+	local cap_pid=$!
+
+	local s0 s1 t0 t1
+	sleep 3
+	s0=$(stat -f%z "$ts" 2>/dev/null || echo 0); t0=$(date +%s.%N)
+	sleep $((WINDOW - 5))
+	s1=$(stat -f%z "$ts" 2>/dev/null || echo 0); t1=$(date +%s.%N)
+	wait "$cap_pid"
+
+	kill -9 "$SUB_PID" 2>/dev/null; SUB_PID=""
+	remote <<-EOF
+		pkill -9 -f 'O srt --listener 0.0.0.0:$port' 2>/dev/null
+	EOF
+
+	if [ "$s0" -eq 0 ] || [ "$s1" -le "$s0" ]; then
+		echo "LEG srt FAILED: no TS received"; tail -5 "$OUT/srt.sub.log"; return 1
+	fi
+	{
+		echo "TS_BYTES_DELIVERED $((s1 - s0))"
+		awk -v b=$((s1 - s0)) -v a="$t0" -v z="$t1" \
+			'BEGIN { printf "TS_SAMPLE_S %.3f\nTS_DELIVERED_MBPS %.4f\n", z - a, b * 8 / (z - a) / 1e6 }'
+	} >>"$OUT/srt.cap.txt"
+	grep -v '^ ' "$OUT/srt.cap.txt"
+}
+
+# Everything runs from main() so the whole file is parsed before any of it executes.
+# A script that backgrounds jobs while bash is still reading it incrementally can have
+# its file offset advanced by the child, and the parent then resumes mid-line.
+main() {
+	local leg
+	for leg in "${@:-base mtu gso vidonly}"; do
+		case $leg in
+		base)    run_leg base    "--server-quic-gso=false" "" "$SRC_FULL" ;;
+		mtu)     run_leg mtu     "--server-quic-gso=false --server-quic-mtu-discovery=true" "--client-quic-mtu-discovery=true" "$SRC_FULL" ;;
+		gso)     run_leg gso     "" "" "$SRC_FULL" ;;
+		vidonly) run_leg vidonly "--server-quic-gso=false" "" "$SRC_VID" ;;
+		srt)     run_srt ;;
+		*) echo "unknown leg: $leg" ;;
+		esac
+	done
+	echo; echo "all legs done; per-leg output in $OUT/*.cap.txt"
+}
+
+main "$@"

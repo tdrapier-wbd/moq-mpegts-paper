@@ -160,40 +160,43 @@ with session count without a knee until the host saturated and memory is not a s
 constraint, so capacity planning is linear; "sessions per core" is a ceiling at full
 occupancy, not a sizing target.
 
-**Carriage overhead is a multiplier of roughly 1.12 on the dominant line** — measured
-IP wire bytes against the source TS rate, ~12 % at both 10 and 27 Mbps, plus under 1 %
-of return-path acknowledgements. It applies directly to egress, and a 1+1 path carries
-it twice. Against SRT's ~3.3 % that is the largest bandwidth penalty in this paper, and
-because bandwidth is the deciding line it is used as the model input (§4.1).
+**Carriage overhead is a multiplier of 0.98 on the dominant line, and SRT's is 1.04** —
+IP wire bytes against the source TS rate, both measured on the same WAN path with the
+same clip. MoQ delivers the service in **5.3 % less bandwidth than SRT**, or 6.2 % less
+with path MTU discovery enabled, a flag that exists and is off by default. It applies
+directly to egress, and a 1+1 path carries it twice, so the sign of this line matters
+more than its size. An earlier version of this document put MoQ at 1.12x and priced a
+carriage penalty from it; that figure was an artefact of the measuring rig, not a
+property of the protocol ([lab: T9](../lab/test-9-performance.md) Corrections).
 
-**But it is about three times the protocol's own floor, so it is an implementation gap
-and not a property of MoQ.** A QUIC packet spends ~64 bytes on IP, UDP, its own header,
-the mandatory authentication tag and stream framing: 5.5 % of a 1200-byte datagram,
-4.5 % at a 1500-byte path MTU, against SRT's 3.3 % for seven TS packets in 1360 bytes.
-**The irreducible penalty against SRT is therefore about 1.2 points**, nearly all of it
-the 16-byte AEAD tag QUIC requires and SRT does not. Every MoQ and container header on
-top of that costs under one point on a contribution feed, whose bytes are dominated by
-~31 kB video access units. Floor plus framing accounts for at most ~6.3 % where ~21 % is
-implied, so roughly 1.2 Mbps on a 9.5 Mbps feed is unattributed. Two causes are
-confirmed and neither is big enough — MTU discovery is defaulted off, pinning the
-measurement to QUIC's 1200-byte minimum, and the TS importer opens a QUIC stream per
-audio access unit — and the residual is unexplained, though a single datagram-size
-capture on a real path would locate it
-([lab: T9](../lab/test-9-performance.md), [evidence](evidence.md) §8).
+**MoQ wins because it declines to carry null stuffing.** The reference clip is 4.57 %
+nulls, which a byte pipe cannot refuse and the media-aware lane strips on import, the
+edge groomer regenerating them from stream position as it does anyway
+([architecture](architecture.md) §7). Against the delivered payload MoQ costs +2.79 %,
+of which 2.54 points are IP and UDP headers and 0.25 is every QUIC, moq-lite and
+container header combined. Priced from the protocol, a QUIC packet spends ~64 bytes on
+IP, UDP, its own header, the mandatory authentication tag and stream framing: 5.5 % of a
+1200-byte datagram against SRT's 3.3 % for seven TS packets in 1360 bytes, so **the
+irreducible penalty against SRT is about 1.2 points**, nearly all of it the 16-byte AEAD
+tag QUIC requires and SRT does not. Not carrying stuffing repays that several times
+over.
 
-**Held like-for-like the floor is *below* the baseline, which reverses the conclusion.**
-Delivering the same 9.95 Mbps service costs SRT 10.27 Mbps of IP because a byte pipe
-cannot decline the source's 453 kbps of null stuffing; MoQ at its floor needs ~9.8 Mbps,
-since it strips stuffing the edge groomer regenerates anyway
-([architecture](architecture.md) §7). The advantage grows with stuffing ratio: 1.9 Mbps
-of content in a 4 Mbps carrier costs SRT 4.13 Mbps against ~2.0 Mbps. **Not carrying
-stuffing is a structural bandwidth advantage over every byte-pipe protocol, and on
-loosely-filled carriers it is worth more than the entire framing question.** What stops
-it being modelled today is that it is derived rather than measured. The 1+1 objection
-has gone: a groomer whose stuffing is a function of stream position produces
-byte-identical legs while each regenerates its own nulls, which is measured
-([evidence](evidence.md) §7, [architecture](architecture.md) §14.1). §4 therefore keeps
-the measured 1.12x and treats the floor as upside, not as a forecast.
+**The advantage grows with stuffing ratio**, so it is largest exactly where broadcast
+carriers run loose: 1.9 Mbps of content in a 4 Mbps carrier costs SRT 4.13 Mbps against
+roughly half that. **Not carrying stuffing is a structural bandwidth advantage over
+every byte-pipe protocol.** The 1+1 objection has gone: a groomer whose stuffing is a
+function of stream position produces byte-identical legs while each regenerates its own
+nulls, which is measured ([evidence](evidence.md) §7,
+[architecture](architecture.md) §14.1).
+
+**The debits, so §4 does not over-claim.** MoQ's return path is eight times SRT's —
+1.16 % of the forward rate against 0.13 % — which leaves it 4.3 % cheaper counting both
+directions rather than 5.3 %. The measurement is one clip on one clean path, so the
+size of the advantage travels with the source's stuffing ratio; a tightly packed carrier
+would narrow it towards the 1.2-point AEAD floor, which is why §4 treats this input as a
+wash rather than banking 5 % on egress. Under 1 % forward loss both protocols'
+overhead rose by about the loss rate and the ranking held. The opaque lane remains
+unmeasured ([lab: T9](../lab/test-9-performance.md), [evidence](evidence.md) §8).
 
 **Not all of that compute headroom is purchasable.** Cloud instances are sold with a
 *sustained* network allowance well below their headline "up to" figure, which is burst
@@ -222,11 +225,12 @@ this the pessimistic case for a usage-priced substrate. **Two bitrate profiles**
 25 Mbps, round numbers bracketing plausible primary-distribution rates.
 **Active/active 1+1 throughout**, so every transport figure is doubled
 ([architecture](architecture.md) §14), held identical on both sides of every
-comparison. **Carriage multipliers** of 1.12x for MoQ (measured, §3.1) and 1.033x for
-SRT (derived from its framing of seven TS packets per datagram), both clean-path. The
-MoQ figure is measured with the path pinned at QUIC's 1200-byte minimum MTU and sits
-~3x above the protocol's floor of ~0.99x (§3.1), so it is the pessimistic input and
-every MoQ line below should be read as an upper bound on this component.
+comparison. **Carriage multipliers** of 0.982x for MoQ and 1.037x for SRT, both measured
+on the same path with the same clip and both clean-path (§3.1). Both are specific to a
+source carrying 4.57 % null stuffing: a tightly packed carrier would converge the two to
+within ~1.2 points, and a loosely filled one would widen the gap sharply, so the sensible
+reading of this input is that **carriage is a wash or a small MoQ advantage**, not that
+MoQ banks 5 % on egress in every case.
 **Regions** Ireland, N. Virginia or Oregon, which share egress rates. **Excluded**:
 staffing, tooling, integration, receive-side equipment and satellite uplink — a
 transport-line comparison only, and §3 is explicit that the excluded lines can dominate
@@ -350,26 +354,26 @@ multiplex of §4.7:
 
 | *Hypothetical* discount off first-tier list | Effective $/GB | Marginal $/destination-year | Destinations to parity per $1M/yr of incumbent cost |
 | ----------------- | -------------- | --------------------------- | --------------------------------------------------- |
-| list              | 0.0900         | 59,200                      | 17                                                  |
-| 5 %               | 0.0855         | 56,200                      | 18                                                  |
-| 10 %              | 0.0810         | 53,300                      | 19                                                  |
-| 15 %              | 0.0765         | 50,300                      | 20                                                  |
-| 20 %              | 0.0720         | 47,400                      | 21                                                  |
-| 25 %              | 0.0675         | 44,400                      | 23                                                  |
-| 30 %              | 0.0630         | 41,400                      | 24                                                  |
-| 35 %              | 0.0585         | 38,500                      | 26                                                  |
-| 40 %              | 0.0540         | 35,500                      | 28                                                  |
-| 45 %              | 0.0495         | 32,600                      | 31                                                  |
-| 50 %              | 0.0450         | 29,600                      | 34                                                  |
-| 55 %              | 0.0405         | 26,600                      | 38                                                  |
-| 60 %              | 0.0360         | 23,700                      | 42                                                  |
-| 65 %              | 0.0315         | 20,700                      | 48                                                  |
-| 70 %              | 0.0270         | 17,800                      | 56                                                  |
-| 75 %              | 0.0225         | 14,800                      | 68                                                  |
-| 80 %              | 0.0180         | 11,800                      | 84                                                  |
-| 85 %              | 0.0135         | 8,900                       | 113                                                 |
-| 90 %              | 0.0090         | 5,900                       | 169                                                 |
-| 95 %              | 0.0045         | 3,000                       | 338                                                 |
+| list              | 0.0900         | 51,900                      | 19                                                  |
+| 5 %               | 0.0855         | 49,300                      | 20                                                  |
+| 10 %              | 0.0810         | 46,700                      | 21                                                  |
+| 15 %              | 0.0765         | 44,100                      | 23                                                  |
+| 20 %              | 0.0720         | 41,500                      | 24                                                  |
+| 25 %              | 0.0675         | 38,900                      | 26                                                  |
+| 30 %              | 0.0630         | 36,300                      | 28                                                  |
+| 35 %              | 0.0585         | 33,700                      | 30                                                  |
+| 40 %              | 0.0540         | 31,100                      | 32                                                  |
+| 45 %              | 0.0495         | 28,600                      | 35                                                  |
+| 50 %              | 0.0450         | 26,000                      | 39                                                  |
+| 55 %              | 0.0405         | 23,400                      | 43                                                  |
+| 60 %              | 0.0360         | 20,800                      | 48                                                  |
+| 65 %              | 0.0315         | 18,200                      | 55                                                  |
+| 70 %              | 0.0270         | 15,600                      | 64                                                  |
+| 75 %              | 0.0225         | 13,000                      | 77                                                  |
+| 80 %              | 0.0180         | 10,400                      | 96                                                  |
+| 85 %              | 0.0135         | 7,800                       | 128                                                 |
+| 90 %              | 0.0090         | 5,200                       | 193                                                 |
+| 95 %              | 0.0045         | 2,600                       | 385                                                 |
 
 
 Three things follow, and the third is the important one.
@@ -381,11 +385,11 @@ roughly an 80 % enterprise discount, so expect to reach that floor by one route 
 other, not by stacking both.
 
 **Procurement outweighs every engineering decision in this paper.** A 50 % discount
-halves the dominant line; MoQ's entire carriage penalty against SRT is 8 % of it
-(§4.8). Effort should be allocated accordingly.
+halves the dominant line; the entire measured carriage difference between MoQ and SRT is
+5 % of it, in MoQ's favour (§4.8). Effort should be allocated accordingly.
 
 **But discounting alone cannot win the fan-out argument.** Even a 95 % discount — far
-beyond anything plausible — moves parity only from about 17 destinations to about 338.
+beyond anything plausible — moves parity only from about 19 destinations to about 385.
 Two orders of magnitude of commercial leverage buy one order of magnitude of
 destinations, and the curve stays linear throughout. **Negotiation changes which routes
 are viable; it does not change the shape of the problem.**
@@ -394,7 +398,7 @@ That is an argument for a different *supplier*, not against the fan-out case. Th
 figures are per $1M a year of incumbent cost and measured against cloud first-tier list,
 the most pessimistic starting point available: §4.7 runs the same arithmetic from the
 deepest published *committed* rate and from commodity delivery, where parity starts near
-83 and 283 destinations rather than 17 — reached by buying in a cheaper market rather
+95 and 323 destinations rather than 19 — reached by buying in a cheaper market rather
 than by negotiating harder in an expensive one. **Buying power decides how far a
 broadcaster gets inside the cloud; supplier choice decides whether it needed to be
 inside the cloud at all.**
@@ -403,7 +407,7 @@ One arithmetic caution, because the same percentage appears in both places and d
 mean the same thing. This ladder discounts *first-tier* list and ignores volume tiering,
 which is the pessimistic reading; §4.7's "70 % private" column discounts the **tiered**
 bill an operator at that scale would actually face, which is already near the deepest
-band. The same nominal 70 % therefore reaches parity at 56 destinations here and 101
+band. The same nominal 70 % therefore reaches parity at 64 destinations here and 115
 there. Neither is wrong — they are discounts off different starting points, and the gap
 between them is itself a reminder that a headline discount percentage means nothing
 without the rate card it is applied to.
@@ -417,12 +421,12 @@ hardware — none of it metered per GB — so the egress line changes character 
 merely shrinking.
 
 The size of that change needs stating carefully, because the headline transit rate
-overstates it. Surveyed transit alone prices 2.9 Gbps at roughly $2,400 a year against
-$573,000 at list egress, but transit is a port and a BGP session, not a delivery service.
+overstates it. Surveyed transit alone prices 2.5 Gbps at roughly $2,100 a year against
+$509,000 at list egress, but transit is a port and a BGP session, not a delivery service.
 Loaded with a second transit provider for diversity, colocation, power, cross-connects
 and amortised hardware, an illustrative point of presence delivers at **$0.001–0.004 per
 GB depending on how full the port runs** ([lab: cost model](../lab/cost-model.md) §10.1),
-which puts that same 2.9 Gbps between $25,000 and $40,000 a year. **That is roughly an
+which puts that same 2.5 Gbps between $22,000 and $35,000 a year. **That is roughly an
 order of magnitude below list egress, not the two or three the raw transit rate implies**
 — and the honest comparison, since nobody delivers video from a bare transit port.
 
@@ -459,19 +463,19 @@ delivered 1+1 to one off-cloud destination:
 
 | Category | Option                                            | 10 Mbps     | 25 Mbps       |
 | -------- | -------------------------------------------------- | ----------- | ------------- |
-| **Self-hosted** *(marginal transit only)* | MoQ on owned infrastructure       | ~19         | ~47           |
-| | SRT on owned infrastructure                                  | ~17         | ~43           |
-| **Cloud** | MoQ, self-built on EC2                                      | 8,300       | 19,000        |
-| | — of which egress                                            | 7,300       | 18,000        |
+| **Self-hosted** *(marginal transit only)* | MoQ on owned infrastructure       | ~16         | ~41           |
+| | SRT on owned infrastructure                                  | ~17         | ~44           |
+| **Cloud** | MoQ, self-built on EC2                                      | 7,400       | 16,800        |
+| | — of which egress                                            | 6,400       | 15,800        |
 | | — of which compute                                           | 1,000       | 1,000         |
-| | SRT, self-built on EC2, same footprint                       | 7,700       | 17,600        |
-| | MoQ, self-built on Azure transit routing / GCP standard tier | 6,800–7,000 | 15,600–16,100 |
-| **Vendor / managed** | Zixi Broadcaster licence + self-built on EC2      | 11,800      | 27,800        |
-| | AWS Elemental MediaConnect, on-demand egress                 | 9,500       | 19,400        |
-| | AWS Elemental MediaConnect, cheapest reserved mix            | 9,500       | 13,400        |
-| | MoQ on Cloudflare's relay, announced rate                    | 4,400       | 11,000        |
-| | **MoQ relay on a commodity CDN @ $0.010/GB** *(assumed)*      | **880**     | **2,210**     |
-| | **MoQ relay on a commodity CDN @ $0.005/GB** *(assumed)*      | **440**     | **1,100**     |
+| | SRT, self-built on EC2, same footprint                       | 7,700       | 17,700        |
+| | MoQ, self-built on Azure transit routing / GCP standard tier | 5,900–6,100 | 14,000–14,300 |
+| **Vendor / managed** | Zixi Broadcaster licence + self-built on EC2      | 11,800      | 27,900        |
+| | AWS Elemental MediaConnect, on-demand egress                 | 9,500       | 19,500        |
+| | AWS Elemental MediaConnect, cheapest reserved mix            | 9,500       | 13,500        |
+| | MoQ on Cloudflare's relay, announced rate                    | 3,900       | 9,700         |
+| | **MoQ relay on a commodity CDN @ $0.010/GB** *(assumed)*      | **770**     | **1,940**     |
+| | **MoQ relay on a commodity CDN @ $0.005/GB** *(assumed)*      | **390**     | **970**       |
 
 
 The same figures at 10 Mbps, on a log axis:
@@ -481,17 +485,17 @@ The same figures at 10 Mbps, on a log axis:
                                                 |-----------|-----------|-----------|-----------|
 SELF-HOSTED (marginal transit only; excludes ports, facilities, staff, control plane)
   SRT self-hosted on owned infrastructure       ###  17
-  MoQ self-hosted on owned infrastructure       ###  19
+  MoQ self-hosted on owned infrastructure       ###  16
 CLOUD (own software on rented compute, metered egress)
-  MoQ, DIY on Azure transit routing             ##################################  6,968
-  SRT, DIY on EC2                               ###################################  7,725
-  MoQ, DIY on EC2                               ###################################  8,297
+  MoQ, DIY on Azure transit routing             #################################  6,098
+  SRT, DIY on EC2                               ###################################  7,749
+  MoQ, DIY on EC2                               ##################################  7,385
 VENDOR / MANAGED SERVICE
-  MoQ relay on CDN @ $0.005/GB (assumed)        ####################  442
-  MoQ relay on CDN @ $0.010/GB (assumed)        #######################  883
-  MoQ on Cloudflare, announced rate             ################################  4,415
-  MediaConnect (SRT), cheapest reserved         ####################################  9,524
-  Zixi Broadcaster on EC2                       #####################################  11,799
+  MoQ relay on CDN @ $0.005/GB (assumed)        ###################  387
+  MoQ relay on CDN @ $0.010/GB (assumed)        #######################  774
+  MoQ on Cloudflare, announced rate             ###############################  3,871
+  MediaConnect (SRT), cheapest reserved         ####################################  9,548
+  Zixi Broadcaster on EC2                       #####################################  11,837
                                                 |-----------|-----------|-----------|-----------|
 ```
 
@@ -507,14 +511,14 @@ transport's carriage multiplier × 8,760 hours) priced through that option's rat
 from §4.2, **plus** any fixed per-flow or licence fee, **plus** compute where the row
 is self-built. Taking the Zixi row at 10 Mbps as the worked example:
 
-- Wire rate 10 × 2 × 1.033 = **20.66 Mbps**, which is 75,843 GiB a year.
-- AWS egress, first tier $0.09/GiB, less the 100 GB/month free allowance = **$6,725**.
+- Wire rate 10 × 2 × 1.037 = **20.74 Mbps**, which is 76,107 GiB a year.
+- AWS egress, first tier $0.09/GiB, less the 100 GB/month free allowance = **$6,748**.
 - Zixi Broadcaster licence, AWS Marketplace list, $0.05 per GB of transport traffic on
-  81,442 GB = **$4,072**. The licence is charged *on top of* the cloud's own egress,
+  81,726 GB = **$4,086**. The licence is charged *on top of* the cloud's own egress,
   which is why this row is the most expensive in the table.
 - Compute, two 1-year all-upfront reserved `c6gn.large` instances (one per leg),
   Ireland, $502 each = **$1,004**.
-- Total **$11,801**.
+- Total **$11,837**.
 
 Other rows differ only in which of those four terms apply. MediaConnect adds a flow
 fee of $0.16 per hour per flow ($1,402 a flow-year, two flows for 1+1) and carries no
@@ -525,18 +529,18 @@ self-built rows differ only in rate card and carriage multiplier.
 
 **The two self-hosted rows are marginal costs, not fully-loaded ones, and the difference
 is large enough to change the conclusion.** With egress unmetered the only *marginal*
-per-channel cost is transit: 22.4 Mbps of MoQ wire at surveyed 10 GigE rates is about
-$19 a year, against $7,300 on metered cloud egress. That 380-fold ratio is real but it
+per-channel cost is transit: 19.6 Mbps of MoQ wire at surveyed 10 GigE rates is about
+$16 a year, against $6,400 on metered cloud egress. That 390-fold ratio is real but it
 compares a delivery service against a bare port, and quoting it unqualified would be the
 most misleading number in this paper.
 
 Loaded properly — ports, cross-connects, facilities, hardware and transit diversity, at
 the illustrative rates in [lab: cost model](../lab/cost-model.md) §10.1 — the same
-channel costs **$80 to $200 a year depending on port utilisation, so 35 to 90 times less
-than cloud egress rather than 380.** Still the largest single saving available anywhere
+channel costs **$70 to $180 a year depending on port utilisation, so 35 to 90 times less
+than cloud egress rather than 390.** Still the largest single saving available anywhere
 in this document, and still an order of magnitude better than any rate that can be
 bought; just not the two or three orders the marginal row suggests. At one channel the
-fixed base *is* the entire cost and the $19 is meaningless: the row describes a slope,
+fixed base *is* the entire cost and the $16 is meaningless: the row describes a slope,
 and becomes a level only above the utilisation threshold in §4.4.
 
 **They also exclude a control plane, which none of the managed rows do.** Provisioning,
@@ -544,13 +548,13 @@ entitlement, orchestration and monitoring arrive inside a managed service's pric
 must be built or licensed for a self-hosted deployment (§3). **No figure is offered
 because none can be responsibly assumed** — it turns on build-versus-buy and on terms
 nobody publishes — but at low channel counts it is plausibly the largest single line in a
-self-hosted build, and it is why these rows are not a 380-fold saving on the total.
+self-hosted build, and it is why these rows are not a 390-fold saving on the total.
 
-**Egress is 88 % of the self-built bill at 10 Mbps and 95 % at 25 Mbps**, against
+**Egress is 86 % of the self-built bill at 10 Mbps and 94 % at 25 Mbps**, against
 about a thousand dollars a year of compute. §3.1's "compute is not the constraint" now
-has a price attached, and the corollary is uncomfortable: *the line MoQ is good at is
-the line that does not matter, and the line it is 8 % worse at is the line that decides
-the outcome.* Compute is a floor rather than a slope here — two instances run two legs
+has a price attached, and both transports land within a few hundred dollars of each other
+on the line that decides the outcome — MoQ marginally the cheaper, for declining to carry
+stuffing. Compute is a floor rather than a slope here — two instances run two legs
 regardless of load — which is why the 10 and 25 Mbps compute figures are identical.
 
 ### 4.6 Fan-out: one channel to N destinations
@@ -561,27 +565,27 @@ list egress plus the fixed instance pair:
 
 | Destinations | Aggregate wire | Annual total | Per destination |
 | -----------: | -------------- | -----------: | --------------: |
-| 1            | 22 Mbps        | 8,300        | 8,300           |
-| 2            | 45 Mbps        | 15,500       | 7,800           |
-| 4            | 90 Mbps        | 29,500       | 7,400           |
-| 8            | 179 Mbps       | 56,800       | 7,100           |
-| 16           | 358 Mbps       | 102,900      | 6,400           |
-| 32           | 717 Mbps       | 179,200      | 5,600           |
-| 64           | 1.4 Gbps       | 310,800      | 4,900           |
-| 128          | 2.9 Gbps       | 573,900      | 4,500           |
-| 256          | 5.7 Gbps       | 1,100,200    | 4,300           |
-| 512          | 11.5 Gbps      | 2,152,800    | 4,200           |
-| 1024         | 22.9 Gbps      | 4,258,100    | 4,200           |
+| 1            | 20 Mbps        | 7,400        | 7,400           |
+| 2            | 39 Mbps        | 13,800       | 6,900           |
+| 4            | 79 Mbps        | 26,000       | 6,500           |
+| 8            | 157 Mbps       | 50,500       | 6,300           |
+| 16           | 314 Mbps       | 91,500       | 5,700           |
+| 32           | 628 Mbps       | 163,000      | 5,100           |
+| 64           | 1.3 Gbps       | 278,300      | 4,300           |
+| 128          | 2.5 Gbps       | 509,100      | 4,000           |
+| 256          | 5.0 Gbps       | 970,500      | 3,800           |
+| 512          | 10.1 Gbps      | 1,893,400    | 3,700           |
+| 1024         | 20.1 Gbps      | 3,739,300    | 3,700           |
 
 
 **Unicast has no fan-out economy at the last hop, so one-to-many is one-to-one
 repeated.** Per-destination cost falls by half across a thousandfold scale-up and then
 stops, asymptoting at the deepest volume tier — and all of that improvement comes from
 volume bands and from amortising the fixed instance pair, none of it from the transport.
-A single channel to a thousand sites is $4.3M a year at cloud list.
+A single channel to a thousand sites is $3.7M a year at cloud list.
 
 The linearity is structural and survives every price regime; the *level* does not. The
-same thousand destinations cost roughly $450,000 on commodity CDN delivery at $0.005/GB
+same thousand destinations cost roughly $400,000 on commodity CDN delivery at $0.005/GB
 and are a transit and port bill self-hosted (§4.4). Read this table for the shape, and
 §4.7 for what the shape costs once bought in the right market.
 
@@ -607,18 +611,18 @@ services, 1+1, at 10 Mbps, annual USD:
 
 | Destinations | Aggregate wire | Cloud, MediaConnect reserved *(published)* | Cloud, tiered list less 70 % *(hypothetical)* | CDN relay @ $0.010/GB *(assumed)* | CDN relay @ $0.005/GB *(assumed)* |
 | -----------: | -------------- | ---------------------------: | ------------------: | --------------------: | --------------------: |
-| 1            | 179 Mbps       | 52,200                       | 16,700              | 7,100                 | 3,500                 |
-| 2            | 358 Mbps       | 79,100                       | 30,500              | 14,100                | 7,100                 |
-| 4            | 717 Mbps       | 107,600                      | 53,400              | 28,300                | 14,100                |
-| 8            | 1.4 Gbps       | 122,700                      | 92,900              | 56,500                | 28,300                |
-| 16           | 2.9 Gbps       | 222,900                      | 171,900             | 113,000               | 56,500                |
-| 32           | 5.7 Gbps       | 445,800                      | 329,800             | 226,100               | 113,000               |
-| 64           | 11.5 Gbps      | 811,800                      | 645,600             | 452,100               | 226,100               |
-| 128          | 22.9 Gbps      | 1,590,100                    | 1,277,100           | 904,200               | 452,100               |
-| 256          | 45.9 Gbps      | 3,155,200                    | 2,540,300           | 1,808,400             | 904,200               |
-| 512          | 91.8 Gbps      | 6,297,300                    | 5,066,600           | 3,616,800             | 1,808,400             |
-| 1024         | 183.5 Gbps     | 12,494,300                   | 10,119,200          | 7,233,600             | 3,616,800             |
-| *per destination, at scale* | | *12,000*                     | *9,900*             | *7,100*               | *3,500*               |
+| 1            | 157 Mbps       | 52,400                       | 14,900              | 6,200                 | 3,100                 |
+| 2            | 314 Mbps       | 79,100                       | 27,100              | 12,400                | 6,200                 |
+| 4            | 628 Mbps       | 108,400                      | 48,600              | 24,800                | 12,400                |
+| 8            | 1.3 Gbps       | 122,700                      | 83,200              | 49,500                | 24,800                |
+| 16           | 2.5 Gbps       | 222,900                      | 152,400             | 99,100                | 49,500                |
+| 32           | 5.0 Gbps       | 445,800                      | 290,900             | 198,200               | 99,100                |
+| 64           | 10.1 Gbps      | 816,300                      | 567,700             | 396,400               | 198,200               |
+| 128          | 20.1 Gbps      | 1,610,100                    | 1,121,500           | 792,800               | 396,400               |
+| 256          | 40.2 Gbps      | 3,155,200                    | 2,229,000           | 1,585,600             | 792,800               |
+| 512          | 80.4 Gbps      | 6,297,300                    | 4,444,000           | 3,171,200             | 1,585,600             |
+| 1024         | 160.9 Gbps     | 12,551,000                   | 8,874,100           | 6,342,300             | 3,171,200             |
+| *per destination, at scale* | | *10,500*                     | *8,700*             | *6,200*               | *3,100*               |
 
 
 All columns are **delivery cost only** — no relay compute, which §4.5 puts in the low
@@ -633,19 +637,19 @@ not quotes**: no CDN has published a MoQ relay tariff except Cloudflare, at $0.0
 these model a CDN-operated relay at a modest premium over the *published* commodity CDN
 delivery rates in §4.2 under committed volume — the rate an established delivery market
 would be expected to reach, not one anyone currently offers. All columns assume capacity
-can be bought at proportional rates at all, which at 183 Gbps is itself a question.
+can be bought at proportional rates at all, which at 161 Gbps is itself a question.
 
 **Parity is the incumbent's annual space-segment cost divided by the per-destination
-figure.** Per $1M a year of incumbent cost that is about **83 destinations** at the
-published committed cloud rate, **101** at a hypothetical 70 % private cloud rate,
-**142** at an assumed $0.010/GB CDN relay and **283** at $0.005/GB. That $1M is a **normaliser, not
+figure.** Per $1M a year of incumbent cost that is about **95 destinations** at the
+published committed cloud rate, **115** at a hypothetical 70 % private cloud rate,
+**162** at an assumed $0.010/GB CDN relay and **323** at $0.005/GB. That $1M is a **normaliser, not
 an estimate** — no transponder rate is asserted anywhere here, and real space-segment
 cost varies widely with orbital slot, capacity, term and how far the lease is already
 depreciated. Substitute a real figure; the arithmetic is linear.
 
 **Self-hosting is not a column here, though §4.4 argues it is the largest lever.** At the
 illustrative all-in rates in [lab: cost model](../lab/cost-model.md) §10.1 the multiplex
-costs around $1,100 per destination-year, which would put parity near 950 destinations —
+costs around $970 per destination-year, which would put parity near 1,000 destinations —
 the only option on the ladder that approaches the top of the range. It is left out of the
 table because that figure would not survive the reach problem: serving several hundred
 sites from owned infrastructure means points of presence near all of them, and the
@@ -653,7 +657,7 @@ build-up prices one. The number belongs in the text as an indication of where th
 structural ceiling sits, not in a column implying it can be bought.
 
 So the reclamation conclusion is bounded, and the bound is wider than a cloud-only model
-suggests. **Up to roughly 80 destinations the IP path is arguable on published cloud
+suggests. **Up to roughly 95 destinations the IP path is arguable on published cloud
 rates alone; commodity CDN economics move that into the high hundreds; a thousand
 destinations is out of reach of everything here that can actually be purchased today.**
 The ceiling moves a long way with procurement and with buying delivery from the market
@@ -663,13 +667,17 @@ disappears.
 
 **The transport choice barely registers.** Every option lands within a few percent of
 the same wire volume, so the choice among them moves this table by single digits while
-destination count moves it by three orders of magnitude:
+destination count moves it by three orders of magnitude. MoQ is the cheapest row on this
+column, because it is the only one that can decline to carry null stuffing — but the
+margin is a few percent and it travels with the source's stuffing ratio, which is why
+this is a footnote to the destination-count result rather than a reason to choose a
+transport:
 
 
 | Transport             | Wire multiplier    | Latency        | Fan-out topology                                     | Standardisation |
 | --------------------- | ------------------ | -------------- | ---------------------------------------------------- | --------------- |
-| MoQ                   | 1.12 *(measured; ~0.99 at the protocol floor, §3.1)* | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations |
-| SRT                   | 1.033 *(derived)*  | sub-second     | no native fan-out; N origin sessions or a re-origination tier | published spec, open source |
+| MoQ                   | 0.982 *(measured; 0.973 with MTU discovery on, §3.1)* | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations |
+| SRT                   | 1.037 *(measured, same path)* | sub-second     | no native fan-out; N origin sessions or a re-origination tier | published spec, open source |
 | Zixi                  | ~1.03 *(estimated)*| sub-second     | broadcaster fans out; last mile is N unicast copies  | proprietary, per-GB licence |
 | TS over HTTP/1.1      | ~1.05 *(estimated)*| seconds        | cache fans out; last mile is N unicast copies        | **no agreed standard — vendor-specific in practice** |
 | HLS / DVB-DASH        | ~1.05 *(estimated)*| seconds–tens   | cache fans out; last mile is N unicast copies        | RFC 8216 / ETSI TS 103 285 |
@@ -709,8 +717,8 @@ hop is the one leaving the cloud.
 
 What a relay removes is duplicated *upstream* carriage. For the eight-service
 redundant multiplex backhauled between continents, a regional relay collapses N copies
-of backhaul into one, holding it flat at about $13,000 a year however many receivers
-share the region — against $26,000 for two and $211,000 for sixteen without it. So the
+of backhaul into one, holding it flat at about $11,500 a year however many receivers
+share the region — against $23,000 for two and $185,000 for sixteen without it. So the
 advantage is real, bounded and specific: **it economises backhaul and uplink, not
 delivery**, and it only pays where receivers cluster — the same clustering that favours
 satellite's free fan-out, so the two advantages compete for the same topologies.
@@ -721,11 +729,13 @@ same economics reached natively rather than through segment polling and cache
 hierarchies, which is an architectural argument ([transport](transport.md) §3.3) and
 not an economic one.
 
-In that context MoQ's carriage penalty is small: its 8.4 % higher wire rate against SRT
-costs about $570 a year for one redundant 10 Mbps channel to one destination and
-$41,000 for eight channels to sixteen — roughly the gap between two providers' list
-prices, and a tenth of what committed pricing saves. **A transport chosen for its cost
-efficiency on this line would be the wrong basis for choosing MoQ.**
+In that context carriage overhead is not where the money is, in either direction. MoQ's
+5.3 % *lower* wire rate against SRT saves on the order of $360 a year for one redundant
+10 Mbps channel to one destination and $26,000 for eight channels to sixteen — real, but
+smaller than the gap between two providers' list prices and a fraction of what committed
+pricing saves, and it would shrink towards nothing on a tightly packed source.
+**Carriage efficiency is the wrong basis for choosing a transport either way**, which is
+the same conclusion this section reached when the measurement pointed the other way.
 
 ### 4.9 The market-structure argument: why MoQ can reach commodity pricing and SRT cannot
 
@@ -772,7 +782,7 @@ are structurally confined to premium, per-stream pricing. If CDNs deploy MoQ rel
 compete, relay capacity follows CDN delivery down the ladder rather than sitting at
 hyperscaler primary-distribution rates — and that competitive pressure reaches a segment
 that has never felt it, because SRT never gave the commodity market a product to sell.
-On the model in §4.7, that is the difference between parity at 83 destinations and 283,
+On the model in §4.7, that is the difference between parity at 95 destinations and 323,
 which is what makes a transponder's worth of channels to several hundred destinations an
 arguable proposition rather than an obviously losing one.
 
@@ -848,14 +858,14 @@ the comparison is meaningless.
 - **SLA and staffing.** Fixed, and dominant at low route counts: at §4.5's scale one
 on-call engineer costs more than the entire modelled transport line, which is the
 strongest argument here against reading §4 as a business case.
-- **Like-for-like carriage.** Apply the ~1.12x multiplier (§3.1) to the MoQ side and
-hold the baseline to its own overhead; comparing MoQ wire bytes against a *nominal* TS
-rate flatters the challenger on the deciding line. The discipline cuts the other way
-too, and by more: the multiplier is measured ~3x above the protocol's floor, and at that
-floor MoQ needs *less* IP capacity than SRT for the same service because it declines to
-carry null stuffing. So this line is the model's largest two-sided sensitivity — an
-implementation defect currently costs ~8 % against the baseline, where the protocol
-would win by ~4 %, and on a loosely-filled carrier by considerably more.
+- **Like-for-like carriage.** Hold each transport to its own measured overhead (§3.1) —
+0.982x for MoQ's media-aware lane, 1.037x for SRT — rather than comparing either against
+a *nominal* TS rate. The discipline used to be a caution against flattering MoQ; now it
+is what establishes MoQ's advantage, and the sensitivity has moved to **the source**.
+MoQ's 5.3 % is the stuffing ratio of the clip measured: a tightly packed carrier
+converges the two multipliers to the ~1.2-point AEAD floor, a loosely filled one widens
+the gap well past 5 %. Model it as a wash and treat the advantage as upside, and note
+that a deployment requiring byte-verbatim carriage forgoes it entirely.
 
 ## 8. Commercial packaging options
 
@@ -898,7 +908,7 @@ buying power and one open to challengers.
 - **What will a CDN actually charge to operate a MoQ relay at committed volume?** §4.7
 models it at a modest premium over commodity CDN delivery, and that assumption carries
 more of the reclamation case than any measurement in this paper: it is the difference
-between parity at 83 destinations and at 283. The one announced rate is five to ten
+between parity at 95 destinations and at 323. The one announced rate is five to ten
 times higher. Until a second provider quotes, this is the largest unvalidated input in
 the model.
 - Can committed-egress terms be bought for general compute, or only inside a managed
@@ -907,24 +917,22 @@ because reserved bandwidth is product-specific.
 
 **Engineering, with a direct economic payoff.**
 
-- **Where are the ~10 points of carriage overhead that no header accounts for?** This
-replaces the older and vaguer "why is MoQ's overhead ~12 % where SRT's is ~3 %": the
-protocol floor is 5.5 % at the deployed MTU and every MoQ and container header adds under
-one point, so the question is now a specific byte hunt rather than an open puzzle (§3.1).
-Three cheap steps, in order: histogram UDP datagram sizes on a non-loopback path, which
-tests the underfill hypothesis in one capture; A/B the MTU-discovery flag, which is
-defaulted off and worth ~1 point; attribute wire bytes per track. It sits on the deciding
-line, which makes it the highest-value optimisation available to the transport.
-- **What does the opaque lane cost to carry, and can null stripping be banked?** The
-measured figure is the media-aware lane; the lane this paper prefers for hardware IRDs has
-never been measured. Derived, stripping stuffing puts MoQ *below* SRT — decisively so on
-loosely-filled carriers — which would turn the deciding line from a penalty into an
-advantage. Two prerequisites: a measurement, and the deterministic groomer that makes
-stripping safe on a 1+1 pair ([architecture](architecture.md) §14.1).
-- **What is the overhead under loss, and how does SRT actually measure?** Every figure on
-both sides is clean-path, and SRT's is framing arithmetic rather than a measurement.
-Retransmission is charged differently by the two protocols, so the commercial comparison
-needs both measured back-to-back on the same degraded path.
+- **How much of MoQ's carriage advantage survives a different source?** This replaces the
+older "why is MoQ's overhead ~12 % where SRT's is ~3 %", which was answered by finding the
+measurement wrong (§3.1). The advantage is now measured at 5.3 %, but it *is* the 4.57 % of
+null stuffing the reference clip carries, so a tightly packed source should shrink it to the
+~1.2-point AEAD floor and a loosely filled one should roughly double it. Two more source
+profiles turn the model's largest carriage caveat into a range, and it is the cheapest
+outstanding measurement on the deciding line.
+- **What does the opaque lane cost to carry?** The measured figure is the media-aware lane;
+the lane this paper prefers for hardware IRDs has never been measured, and it is the lane
+whose whole promise — byte-verbatim carriage — is what forgoes the null-stripping saving.
+Derivation puts verbatim carriage near SRT and null-stripped carriage near the media-aware
+lane, which makes this the difference between carriage being a wash and being an advantage
+for the receiver population that most needs the lane.
+- **What is the overhead under loss beyond 1 %?** Both protocols are now measured
+back-to-back at 1 % and neither moved by more than a point, but retransmission is charged
+differently by the two, and the sender-side cost above 1 % is inferred rather than captured.
 - **What does SRT actually cost to fan out?** Serving many destinations over a
 point-to-point protocol needs either N origin sessions or a re-origination tier, and
 neither is free, so a per-datagram framing comparison flatters SRT at exactly the
@@ -937,9 +945,11 @@ packet handling and congestion-control work.
 - Is relay capacity a market the buyer can shop? The cost case treats it as a commodity
 procurable from more than one supplier, but a feed currently traverses only relays from
 the same implementation as the publisher ([evidence](evidence.md) §9).
-- What does relay memory instability cost to operate around? The reference relay grows
-under sustained load in a way cache tuning does not bound (§3.1), so a realistic model
-carries headroom and a planned restart cycle rather than steady-state capacity alone.
+- What does relay memory growth cost to operate around? The reference relay accumulates
+per-connection QUIC stream state that cache tuning does not bound (§3.1). Now that this
+is understood to plateau at roughly 100 MB per publisher connection rather than climb
+indefinitely, it is a sizing line rather than a restart cycle — but one that scales with
+channels carried, not audience, so it lands on multi-channel relay density.
 - How much of the operational-saving hypothesis (§5) survives running an immature
 platform to a broadcast SLA? §7 notes one on-call engineer outweighs the entire
 modelled transport line at single-route scale.

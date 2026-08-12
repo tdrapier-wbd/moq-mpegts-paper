@@ -438,10 +438,13 @@ one implementation.
   entitlement differs per service — carry verbatim and filter at egress, or
   demux earlier?
 - What is the correct behaviour on source-side discontinuities and PID changes:
-  pass through transparently, or normalise, and at which layer? (Partly answered
-  upstream today, and wrongly: an audio elementary stream losing frame sync aborts
-  the whole publisher, while video resynchronises — see
-  [lab T9](../lab/test-9-performance.md).)
+  pass through transparently, or normalise, and at which layer? Half of this is now
+  settled upstream: an audio elementary stream losing frame sync used to abort the
+  whole publisher while video resynchronised, and since `moq-mux` 0.9.5 the audio
+  parsers resync too, at a measured cost of one 24 ms frame. What remains open is
+  **whether a recovered gap should be visible downstream** — today it is signalled
+  nowhere, so a feed losing audio is indistinguishable from a healthy one
+  ([lab T9](../lab/test-9-performance.md)).
 - Does a `moq2ts` MSFTS broadcast traverse a `moq-dev` relay (§9)? Relay neutrality
   is a load-bearing assumption of this architecture and is currently untested
   across implementations.

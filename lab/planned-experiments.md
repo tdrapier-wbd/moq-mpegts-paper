@@ -1,9 +1,14 @@
 # Specified but not yet executed
 
 These protocols were designed as part of the campaign and are recorded here so an external engineer
-can execute them reproducibly. Most have **not been run**. Where an experiment has since been partly
-executed it has its own per-test file, and the entry below is reduced to the protocol for the
-*remaining* conditions plus a pointer — the measured results live in the per-test file, not here.
+can execute them reproducibly.
+
+**This file holds only what is outstanding.** Everything measured lives in the per-test file it
+belongs to; where an experiment is partly executed, the entry here is reduced to the *remaining*
+conditions plus a pointer. Nothing is marked done here — a completed item is deleted from this file,
+not struck through, because a to-do list that accumulates its own history stops being readable as a
+to-do list. Results, corrections and the reasoning behind them belong in `test-*.md`.
+
 Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
 `INSTRUCTIONS.local.md`.
 
@@ -22,44 +27,32 @@ verdicts. Exercise the boundaries a groomer must handle beyond steady state:
   legs stay byte-identical under *divergent* object-loss recovery, not only in the clean case.
 
 Where access exists, corroborate with a second analyser (Elecard / R&S MTS4EA / Tektronix MTS / Ateme
-Titan). The output-determinism *precondition* (which groomer topologies can produce a byte-identical
-pair) is characterised offline in [test-6-relay-resilience.md](test-6-relay-resilience.md), and the
-dual-leg hand-off it enables is already graded in software by
-[T12](test-12-dual-path-handoff.md) — including the divergent-loss case, where a single groomer
-duplicated onto two paths stays mergeable at 1 % and 3 % loss. The hardware drill therefore starts
-from a known-good sender pattern, and its open question is whether a real IRD's merge engine agrees
-with T12's reference receiver.
+Titan). The precondition — which groomer topologies can produce a byte-identical pair — is already
+characterised in [test-6-relay-resilience.md](test-6-relay-resilience.md), and the hand-off it enables
+is graded in software in [T12](test-12-dual-path-handoff.md). This drill therefore starts from a
+known-good sender pattern, and its open question is narrow: **does a real IRD's merge engine agree with
+T12's reference receiver?**
 
 ---
 
 ## Dual-path 1+1: remaining conditions (T12)
 
-**All four arms have been run** — protocol, measured results and limitations are in
-[test-12-dual-path-handoff.md](test-12-dual-path-handoff.md), rigs in
-[`scripts/t12-*`](scripts/). In short: two ungroomed legs merge exactly but are not TR 101
-290-presentable; two *arrival-clocked* groomers cannot be merged at all, structurally rather than
-through re-stamped PCR; one groomer duplicated onto two paths is hitless but protects the last hop
-only; and two *stream-clocked* groomers are byte-identical and hitless across path failures and the
-death of a publisher, relay or exporter alike. What remains below is what those results left open.
+All four arms are run; results and limitations are in
+[test-12-dual-path-handoff.md](test-12-dual-path-handoff.md), rigs in [`scripts/t12-*`](scripts/).
+What those results left open:
 
-**Restart one leg of a live pair.** Stream clocking removed the defect that made this look like a
-start-order problem: a leg that mutes and returns now rejoins its partner's numbering exactly
-(deficit 0) and resumes carrying programme, and a leg that joins 20 s late puts the same programme
-in the same slots under the same numbers. It joins in phase too, a median 10 ms from its partner at
-equal sequence numbers. One thing stops the pair being byte-identical afterwards, and it is not in
-the groomer: **the exporter's continuity counters**. `moq export ts` numbers each PID from its own
-process state, so two exporters that did not start together are offset by a constant — measured at
-+2 on video and +8 on PSI, unchanging across a run. Masking that one field lifts a recovered leg from
-68.6 % to 98.2 % agreement and a late-joining leg from 0.09 % to 97.1 %. Filed as
-[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779); the test once it lands is the same
-two cells, expecting 100 %.
+**Restart one leg of a live pair — blocked upstream.** A stream-clocked leg that mutes and returns
+already rejoins its partner's numbering and phase correctly; the one thing stopping the pair being
+byte-identical afterwards is the exporter's continuity counters, filed as
+[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779). Once that lands, re-run the recovered-leg
+and late-join cells expecting 100 % agreement.
 
-That test needs a grader the current one is not. `t12-merge-oracle.py` recovers the sequence offset
-between the legs by voting on payload identity and derives skew from that offset, so it cannot grade
-a pair that differs in any field: on the join cell it voted on 15 datagrams out of 23 175 and
-reported a spurious offset and a spurious 12 s skew, which cost two false hypotheses before
-[`t12-seqskew.py`](scripts/t12-seqskew.py) measured the phase without a correlator. Either give the
-oracle a masked-compare mode or fix the exporter first.
+That re-run also needs a grader the current one is not. `t12-merge-oracle.py` recovers the legs'
+sequence offset by voting on payload identity and derives skew from it, so it cannot grade a pair that
+differs in any field — it graded the join cell on 15 datagrams out of 23,175 and returned a spurious
+offset and a 12 s skew that did not exist. Either give the oracle a masked-compare mode or wait for the
+exporter fix; meanwhile use [`t12-seqskew.py`](scripts/t12-seqskew.py), which measures phase without
+correlating.
 
 **Two-host and meshed variants.** Both T12 legs ran on one host, sharing a clock, which flatters the
 rate coherence [architecture](../docs/architecture.md) §14.1 requires of two gateways on free-running
@@ -125,49 +118,28 @@ correlated with the T5 reordering finding (a handover that also reorders is the 
 
 ## System performance & resource utilisation (T9)
 
-The executed work — soaks, fan-out envelope, bitrate sweep, protocol overhead and the relay memory
-finding — has its own file: [test-9-performance.md](test-9-performance.md). Publisher and subscriber
-roles pass the stability criterion; the relay does not. The leak is now fully characterised: **~9 KiB
-retained per ingested group, flat in subscriber count, causally confirmed by a matched GOP pair, and
-bounded by neither documented cache control.** What remains, in priority order:
+Soaks, the fan-out envelope, the bitrate sweep, protocol overhead, the relay memory characterisation
+and the audio-resync work are all executed and written up in
+[test-9-performance.md](test-9-performance.md). What is left:
 
-1. ~~**Per-subscriber or per-group?**~~ **Answered.** The slope is flat in N (+28.70 / +27.86 / +28.00
-   / +28.13 MB/h for N = 1/2/4/8) while ingested groups hold at 3,200/h. Per-session state is fixed at
-   +3.22 MB per subscriber and does not accumulate; egress was N × ingress at every leg, so send
-   backlog is excluded across the sweep rather than just at N = 1.
-2. ~~**Confirm it causally, then report.**~~ **Confirmed.** The matched GOP pair (identical content,
-   encoder and 9.3 Mbps; only `-g` differs) doubled the slope when group rate doubled — +31.22 →
-   +62.30 MB/h, ratio 1.995 against 2.000, kB/group equal to three significant figures. The
-   registered prediction held. `--cache-duration 5s` left the rate unchanged at +27.00 MB/h, so
-   **both documented knobs are excluded**. Reported upstream as
-   [#2745](https://github.com/moq-dev/moq/issues/2745).
-3. **Characterise the allocation site**, if upstream wants more than the black-box shape. The release
-   binaries are not built with a profiling allocator, so this needs a local rebuild with one before a
-   heap profile can name the retained structure. Worth offering rather than promising.
-4. **Re-test after any fix**, using `gop14` as the sensitive case — at 6,445 groups/h it shows a
-   regression in half the time.
-5. **The publisher thread count**, which grows and decelerates without settling.
-6. A cross-machine fan-out to find the relay's own knee, overhead under loss versus SRT, and the
+1. **Confirm the predicted memory plateau on this rig** — asked for by the maintainer on
+   [#2745](https://github.com/moq-dev/moq/issues/2745), and running. `gop14` for 4 h on the default
+   10,000 stream slots should knee at ~1.55 h and level at ~99 MB above baseline; a second leg at
+   `--server-quic-max-streams 1024` should knee at ~9 min and reach roughly a tenth of that. A plateau
+   confirms the root cause; continued linear growth past 10,000 ingested groups would mean something
+   else is also in play.
+2. **Re-test the memory behaviour after any upstream fix**, using `gop14` as the sensitive case — at
+   6,445 groups/h it shows a regression in half the time. The fix has to come from `quinn-proto` and no
+   released version past 0.11.16 changes the recycling behaviour, so this may wait a long time.
+3. **What a real decoder does with an unflagged 24 ms audio hole**, if
+   [#2798](https://github.com/moq-dev/moq/issues/2798) needs it. A resync is signalled nowhere, but
+   "unsignalled" only matters if something downstream would have acted on the signal.
+4. **The publisher thread count**, which grows and decelerates without settling.
+5. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
-
-### Evidence checklist for the audio-resync upstream report
-
-Any audio elementary stream losing frame sync aborts `moq import` outright, while the video path
-resynchronises through the same corruption; the mechanism is located in
-[test-9-performance.md](test-9-performance.md). Remaining before posting:
-
-- [x] Deterministic minimal reproducer with no timeline jump (unit level, `moq-mux` 0.9.4).
-- [x] Root cause located and contrasted with the paths that do resync.
-- [x] Generality across codecs (MP2, AC-3; video-only survives).
-- [ ] End-to-end on real content: bit-flip one MP2 frame header mid-file (not a loop), capture the
-      exit, with a corrupted-video-NAL control on the same file.
-- [ ] Blast radius as measured: confirm video and SCTE-35 tracks die with the audio, and what the
-      subscriber sees.
-- [ ] Regression test in repo style asserting the *fixed* behaviour, ready to follow the issue.
-
-A rig consequence that constrains any future long publisher run: looping a normal broadcast TS cannot
-produce a long-lived publisher until this is fixed. A video-only remux is the workaround, at the cost
-of not exercising the audio, SCTE-35 or teletext paths.
+6. **A full-feed publisher soak.** Every long run to date used a video-only source, because looping a
+   normal broadcast TS killed the publisher at the wrap. `moq-mux` 0.9.5 lifts that, so a re-run can
+   now exercise audio, SCTE-35 and teletext — the EC2 box needs upgrading past 0.9.9 first.
 
 **Standing method** (used for the executed conditions, and for the remaining ones). Per role
 (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope and its
@@ -187,25 +159,23 @@ awk '{n++;x=$1;y=$2;sx+=x;sy+=y;sxy+=x*y;sxx+=x*x}
   END{b=(n*sxy-sx*sy)/(n*sxx-sx*sx); printf "RSS slope = %.4f MB/hour\n", b*3600/1024}' soak_<role>.log
 ```
 
-Sweeps: bitrate ~2 / 10 / 27 Mbps (reuse the T1 clips); fan-out N ∈ {1,5,10,25,50} subscribers against
-one relay broadcast, recording relay CPU/RSS/fd at each N (the fan-out knee). Pass criteria: RSS growth
-slope statistically ≈ 0 over the soak for every role; fd/socket/thread counts stable and return to
-baseline after join/leave and relay-reconnect churn; bounded CPU with headroom; per-core throughput and
-fan-out knee documented. Pair the soak with the T7 ≥ 24 h PLL-lock soak.
+Pass criteria for any role: RSS growth slope statistically ≈ 0 over the soak, or a plateau with a
+stated ceiling; fd, socket and thread counts stable and returning to baseline after join/leave and
+relay-reconnect churn; bounded CPU with headroom. Pair the soak with the T7 ≥ 24 h PLL-lock soak so one
+long run yields both verdicts. Re-running the fan-out sweep across two machines needs
+N ∈ {1,5,10,25,50} subscribers on hosts separate from the relay, since a co-resident subscriber costs
+more CPU than the relay serving it and the knee then belongs to the box.
 
-**Overhead, re-specified.** Per hop, `tcpdump` a fixed window and compare wire bytes to TS payload —
-but the first pass produced a number with nothing to read it against, so three things are now fixed in
-advance. *State the budget*: QUIC's per-packet cost is ~64 B (IP + UDP + short header + AEAD tag +
-`STREAM` header), so 5.5 % at a 1200 B datagram and 4.5 % at 1500 B, against SRT's 3.3 %; pass is
-within a point or two of that, and anything above is an implementation gap to localise, not a protocol
-property. *State three denominators separately* — elementary-stream bytes, delivered TS, source TS —
-because they differ by the stuffing and TS-header volumes and only the first prices the protocol.
-*Control the transport*: pin `--{client,server}-quic-mtu-discovery` on both ends (it defaults **off**,
-overriding quinn), run **off loopback** so the UDP datagram-size histogram is readable, and use a
-window long enough that a subscriber's join-time cache backlog cannot inflate the wire side. Cover both
-carriage lanes, since they carry different byte volumes, and repeat under loss alongside the same
-measurement on SRT ([T9](test-9-performance.md) for the decomposition, [T8](test-8-srt-vs-moq.md) for
-the rig).
+**Carriage overhead: the opaque lane and loss above 1 % remain.** The media-aware lane and SRT are
+measured on a real path ([T9](test-9-performance.md)). Two rules for whoever runs the rest, on top of
+the three enforced by the rigs themselves ([`scripts/README.md`](scripts/README.md)) — the first pass
+here produced a wrong number that survived two rounds of hypothesis:
+
+- **State the budget in advance.** QUIC's per-packet cost is ~64 B (IP + UDP + short header + AEAD tag
+  + `STREAM` header), so 5.5 % at a 1200 B datagram and 4.5 % at 1500 B, against SRT's 3.3 %. Without
+  a prediction, a wrong measurement has nothing to fail against.
+- **State the denominator.** Elementary-stream bytes, delivered TS and source TS differ by the stuffing
+  and TS-header volumes; only the last is the like-for-like comparison against a byte pipe.
 
 ---
 
@@ -213,20 +183,18 @@ the rig).
 
 Three other MoQ implementations now matter to this project
 ([interoperability](../docs/interoperability.md) §9), and "a MoQ relay is a neutral transport fabric"
-is a load-bearing assumption that has only ever been tested against `moq-dev` peers. Three experiments,
-in ascending cost. T11a is partly executed — the harness, the relay matrix and the isolated root cause
-are in [test-11-interop.md](test-11-interop.md); the remaining legs are specified below.
+is a load-bearing assumption that has only ever been tested against `moq-dev` peers.
 
-**T11a — `moq-dev` client against a Cloudflare relay.** *Runnable now.* Cloudflare's managed relays
-are provisioned by API and free during the beta; they serve MOQT drafts 14 and 16, and `moq-dev`
-offers 14–19 by ALPN, so negotiation should succeed. Provision a relay, obtain publish and subscribe
-tokens, and run the standard `moq import ts` → `moq export ts` round trip across it. Record: the
-negotiated draft, whether the `hang` catalog survives a relay that has no catalog concept, round-trip
-fidelity against the T1 baseline, and added latency. **This is the strongest available test of relay
-neutrality** because it uses real third-party production infrastructure rather than a lab peer. Note
-their relay treats publisher disconnect as terminal, so do not expect any source-failover behaviour —
-verifying *that* is itself a result worth recording against [architecture](../docs/architecture.md)
-§14.
+**T11a — `moq-dev` against third-party relays.** *Partly run;* harness, relay matrix and the isolated
+root cause are in [test-11-interop.md](test-11-interop.md), which carries its own list of remaining
+legs. The one worth prioritising is **Cloudflare with a provisioned scope**: the anonymous attempt
+negotiated draft 18 cleanly and returned no data, which is the expected outcome without publish and
+subscribe tokens, so it has not yet tested anything. Done properly it is **the strongest available test
+of relay neutrality**, because it uses third-party production infrastructure rather than a lab peer.
+Record the negotiated draft, whether the `hang` catalog survives a relay with no catalog concept,
+round-trip fidelity against the T1 baseline, and added latency. Their relay treats publisher disconnect
+as terminal, so expect no source-failover behaviour — confirming that is itself a result worth
+recording against [architecture](../docs/architecture.md) §14.
 
 **T11b — a `moq2ts` broadcast through a `moq-dev` relay.** *Runnable now, weaker result.* `moq2ts` is
 publisher-only, so there is no MSFTS subscriber to close the loop; the question is only whether the

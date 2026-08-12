@@ -3,33 +3,35 @@
 **Pyramid (§6):** operational envelope. **Gate (§7):** feeds [operations](../docs/operations.md) and
 [economics](../docs/economics.md) §3.1, §4 and §9 (not a fidelity/resilience gate). **State:** two ≥ 24 h
 soaks plus a controlled build A/B. The **publisher and subscriber roles pass** (+0.03 and +0.15 MB/h).
-The **relay fails the stability criterion under sustained subscriber load**: holding the workload fixed
-and varying only the binary, both 0.14.8 and 0.14.9 grow **linearly at ~27 MB/h with four subscribers**,
-with no decay across 2.5 h — about 650 MB/day. It is therefore not a 0.14.9 regression. With **no**
-subscriber attached the relay is flat, so the growth tracks served load. **`--cache-capacity` does not
-bound it**: at a 32 MiB cap the relay ran more than twice the cap past its baseline with no inflection,
-at the same ~27 MB/h — the growth is not cached payload, so the byte-budget control cannot evict it.
-**The N = 0/1/2/4/8 sweep localises it: the slope is flat in N** (+28.70 / +27.86 / +28.00 /
-+28.13 MB/h from one to eight subscribers) while ingested groups hold at 3,200/h, giving
-**~9 KiB retained per ingested group, independent of subscriber count**. Per-session state is real
-but fixed (+3.22 MB per subscriber at join, not accumulating), and egress equals N × ingress at every
-leg, so send backlog is excluded. **A controlled GOP pair then confirmed causation**: at identical
-bitrate and content, doubling the group rate doubled the leak (+31.22 → +62.30 MB/h, ratio 1.995
-against a group-rate ratio of 2.000, kB/group agreeing to three significant figures).
-**Neither documented memory control binds it** — `--cache-duration 5s` grew +27.00 MB/h, unchanged.
-Reported as [#2745](https://github.com/moq-dev/moq/issues/2745).
-Eleven legs now agree, and because shorter groups mean lower latency, **the defect scales with how
-aggressively latency is tuned**: ~62 MB/h (1.5 GB/day) at a 0.56 s GOP. The 0.13.7 no-subscriber OOM
-leak is a separate, fixed defect. Fan-out envelope, bitrate sweep and protocol overhead are all
-measured on Linux. **Carriage overhead now has a budget beside it and misses it, but not for the reason
-previously recorded:** 1.12x the source TS rate is measured against an analytic protocol floor of
-~0.99x, so it is an implementation gap rather than a property of MoQ — at the floor MoQ needs *less* IP
-capacity than SRT, because it declines to carry null stuffing a byte pipe cannot refuse. QUIC's
-per-packet cost plus every MoQ and hang header accounts for at most ~6.3 % where ~21 % is implied,
-leaving **~1.2 Mbps on a 9.5 Mbps feed unattributed to any header**. Two contributors are identified
-and both cheap to act on — MTU discovery is defaulted **off**, pinning every measurement to QUIC's
-1200 B minimum, and the TS importer opens a new QUIC stream per audio access unit — but neither is
-large enough, and the residual is unexplained.
+The relay retains **~9 KiB per ingested group** and does not release it: across eleven legs the slope
+is ~27–31 MB/h, identical on 0.14.8 and 0.14.9, **flat in subscriber count** (+28.70 / +27.86 / +28.00
+/ +28.13 MB/h from one to eight subscribers, with ingested groups constant at 3,200/h), and bounded by
+**neither** documented cache control (`--cache-capacity 32MiB` and `--cache-duration 5s` both left it
+unchanged). A controlled GOP pair confirmed causation: at identical bitrate and content, doubling the
+group rate doubled the slope (+31.22 → +62.30 MB/h, ratio 1.995 against 2.000). Reported as
+[#2745](https://github.com/moq-dev/moq/issues/2745) and **root-caused upstream within a day: it is
+`quinn-proto` recycling one receive-stream state, with its assembler chunk heap, per stream the
+connection has ever accepted — not moq state at all.**
+
+**That correction matters, and it is partly against us.** The growth **plateaus** once every uni slot
+is filled — `moq-relay` sets 10,000 per connection, so the ceiling is **~99 MB above baseline per
+publisher connection**, reached after ~10,000 ingested groups (~3.1 h at 3,222 groups/h). Every leg
+here was shorter than that knee, so this file's earlier "linear, 650 MB/day, fails the stability
+criterion" reading was a measurement-window artefact. The defect is real, unfixable by configuration,
+and needs an upstream `quinn-proto` change — but it is **bounded**, and the mitigation is to lower
+`--server-quic-max-streams`, which caps the ceiling proportionally. Verification of the plateau on
+this rig is in flight. The 0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out
+envelope, bitrate sweep and protocol overhead are all measured on Linux. **Carriage overhead is not a MoQ penalty: measured on a real path the media-aware
+lane needs 0.982x the source TS rate of IP capacity against SRT's 1.037x, so MoQ carries the same
+service in 5.3 % less bandwidth** — 6.2 % less with MTU discovery on, which is a one-flag change worth
+0.92 points and off by default. The overhead decomposes exactly: +2.79 % over the delivered TS, of
+which 2.54 points are IP+UDP headers and 0.25 is every QUIC, moq-lite and hang header combined. MoQ
+wins because it declines to carry the 4.57 % of null stuffing a byte pipe cannot refuse, and that is
+worth more than everything QUIC charges. Datagrams are full (88.4 % exactly 1200 B), the
+stream-per-audio-access-unit pattern costs under 0.2 points, 1 % loss moves neither protocol by a
+point, and MoQ's only clear debit is a return path eight times SRT's (1.16 % of forward versus 0.13 %).
+**The previously recorded 1.12x was an artefact of the loopback rig** dividing a capture window by a
+shorter payload window; see [Corrections](#corrections).
 
 ## Objective
 
@@ -45,7 +47,8 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
 - Bounded CPU with documented headroom; per-core throughput and the fan-out knee documented.
 - Per-hop wire overhead within budget (wire bytes vs TS payload over a fixed window). *No numeric
   budget was fixed in advance, which was a mistake — it left the first measurement with nothing to be
-  read against. The budget is derived from the protocol below and applied retrospectively.*
+  read against, and a rig error inside it went unnoticed for that reason. The budget is derived from the
+  protocol below and applied retrospectively; the measurement now meets it.*
 
 ## Environment
 
@@ -63,9 +66,19 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
   **no** subscriber — the EC2 condition), `session_leak.sh` (retained memory per completed session).
 - **EC2 rigs** in `~/t9/` on the box: `fanout_ec2.sh` (fan-out envelope), `fanout_cpu_ec2.sh` (the
   same sweep with CPU attributed to relay / subscribers / whole box), `bitrate_cache_ec2.sh` (bitrate
-  sweep and the bounded-cache control), `overhead_ec2.sh` (`tcpdump` wire-vs-payload),
-  `soak_ec2.sh` + `soak_report.sh` (the phased soak and its per-role slope fit), and
-  `soak2_ec2.sh` + `soak2_report.sh` (the publisher-role soak).
+  sweep and the bounded-cache control), `soak_ec2.sh` + `soak_report.sh` (the phased soak and its
+  per-role slope fit), and `soak2_ec2.sh` + `soak2_report.sh` (the publisher-role soak).
+- **Carriage-overhead rigs** in [`lab/scripts/`](scripts/), all rate-based:
+  [`t9-overhead-wan.sh`](scripts/t9-overhead-wan.sh) (origin relay + publisher on EC2, subscriber
+  local, capture on the origin's egress; legs for the default configuration, MTU discovery, a GSO
+  control, a video-only source and SRT over the same path),
+  [`t9-overhead-wan-cap.sh`](scripts/t9-overhead-wan-cap.sh) (the capture and datagram histogram, run
+  on the origin), [`t9-overhead-lo.sh`](scripts/t9-overhead-lo.sh) (the same accounting all on one
+  host, which is what the superseded `overhead_ec2.sh` did wrongly) and
+  [`t9-netem-lane.sh`](scripts/t9-netem-lane.sh) (impairment, with drop-counter verification).
+  **The overhead legs must run off loopback and with `--server-quic-gso=false`**, or the kernel
+  coalesces sends and the datagram distribution — the output that prices per-packet cost — is
+  meaningless.
 - **Source:** `~/CNNiEMEA2.ts` looped via `tsp regulate --pcr-synchronous` (≈ 9.93 Mbps). For the
   bitrate sweep, `t9_2mbps.ts` and `t9_27mbps.ts` were encoded on the box from that clip
   (verified at 2.000 and 27.500 Mbps). For the publisher-role soak, `t9_loop_vidonly.ts` — the same
@@ -299,38 +312,116 @@ operational point is what matters: **bounding the cache is free**, so there is n
 run a production relay unbounded. Note the limit of that advice: bounding the cache costs nothing, but
 it also does not bound the under-load growth documented below, which sits outside the accounted pool.
 
-## Protocol overhead: 1.12x the source TS rate measured, against a protocol floor of ~0.99x
+## Carriage overhead: 0.98x the source TS rate on a real path, below SRT's 1.04x
 
-`~/t9/overhead_ec2.sh`: one publisher, one subscriber, media-aware lane (`moq import ts`), `tcpdump`
-on the subscriber's UDP flow for a 20 s window, against the TS bytes that subscriber actually wrote
-in the same window.
+Measured on a WAN path (origin relay and publisher on EC2, subscriber at home, ~25 ms RTT) with
+[`t9-overhead-wan.sh`](scripts/t9-overhead-wan.sh): media-aware lane (`moq import ts`), `tcpdump` on
+the origin's egress interface, against the TS bytes the subscriber wrote. Each side reduces to a rate
+over a span it measures itself — the capture over the pcap's own first-to-last packet time, the
+payload over its own timer. Source clip 9.946 Mbps, of which 4.57 % is null stuffing (18,279 null
+packets per 400,000).
 
-| | 10 Mbps source | 27.5 Mbps source |
+| Forward path, same clip, same 60 s window | Delivered TS | IP wire | vs source TS | vs delivered |
+|---|---:|---:|---:|---:|
+| **MoQ, media-aware, 1200 B (the deployed default)** | 9.500 Mbps | **9.765 Mbps** | **0.982x** | +2.79 % |
+| MoQ, media-aware, MTU discovery on (1452 B) | 9.518 Mbps | **9.675 Mbps** | **0.973x** | +1.65 % |
+| SRT, same path, same clip, byte-verbatim | 9.979 Mbps | 10.311 Mbps | 1.037x | +3.33 % |
+
+**MoQ carries this service in 5.3 % less bandwidth than SRT — 6.2 % less with MTU discovery on** — and
+in slightly less than the source TS rate itself. Two independent legs of the default configuration
+agreed to 0.03 points, so the figure repeats.
+
+The mechanism is entirely visible in the delivered column. SRT hands over 9.979 Mbps, the source
+verbatim. MoQ hands over 9.500 Mbps, 4.5 % less, which is the null stuffing it declined to carry and
+which the downstream groomer regenerates locally. That saving is larger than everything QUIC charges
+for carrying the rest.
+
+Where MoQ's +2.79 % over the delivered payload goes, and it closes exactly:
+
+| Component | Rate | Share of delivered TS |
 |---|---:|---:|
-| TS delivered to subscriber | 9.55 Mbps | 25.98 Mbps |
-| QUIC payload, downstream | +14.28 % over delivered TS | +15.72 % |
-| Downstream IP wire at a 1200 B MTU | +16.94 % | +18.42 % |
-| **Downstream IP wire vs the *source* TS rate** | **1.124x** | **1.119x** |
-| Upstream (acknowledgements) | 0.70 % of TS | 0.31 % of TS |
+| IP + UDP headers, counted per real datagram (66,729 of them) | 0.241 Mbps | 2.54 % |
+| Everything else — QUIC header, AEAD tag, `STREAM` frames, moq-lite and hang framing | 0.024 Mbps | 0.25 % |
+| **Total** | **0.265 Mbps** | **2.79 %** |
 
-Two denominators matter and they answer different questions. Against the **delivered** payload the
-overhead is ~17-18 %; against the **source TS rate** it is ~12 %, because MoQ does not carry the
-source's null/stuffing packets — it strips them on import and the exported TS is correspondingly
-leaner. For capacity planning the second is the number to use: **a 9.95 Mbps service needs about
-11.2 Mbps of IP capacity, and a 27.5 Mbps service about 30.8 Mbps** — call it 1.12x, plus well under
-1 % on the return path. The ratio is essentially bitrate-independent across a 2.75x range.
+The second row is the whole of MoQ's own framing, net of the TS packet headers and PSI that `export`
+regenerates at the far end rather than carrying. It is a quarter of a point.
 
-Method caveat worth stating, because it is the reason the table has two wire rows. On loopback the
-kernel coalesces datagrams via GSO: only 4,317 datagrams were captured for 27.3 MB, with a large
-spike at 12,000 bytes (ten 1200-byte QUIC datagrams in one segment). Counting IP+UDP headers on what
-`tcpdump` saw therefore *undercounts* headers badly. The "at a 1200 B MTU" row instead prices the
-headers a real path would pay, analytically, from the payload volume. The QUIC-payload row needs no
-such adjustment and is the platform-independent part of the measurement.
+Return path: MoQ costs 0.113 Mbps of acknowledgements against SRT's 0.014 Mbps — 1.16 % of the
+forward rate versus 0.13 %, so **MoQ's return path is eight times SRT's**. It is the one line where
+SRT is clearly cheaper, and it does not change the total: including both directions MoQ is still
+4.3 % below SRT, or 5.2 % with MTU discovery on.
 
-### The floor: what the protocol is entitled to charge
+### The datagrams are full, and MTU discovery is worth about a point
 
-Both numbers above are *measurements without a budget to compare them against*, which is what made
-the gap to SRT look intrinsic. Pricing the headers analytically, per packet over IPv4:
+88.4 % of downstream datagrams are **exactly 1200 bytes**; the mean is 1105.8. The superseded
+explanation for the overhead — underfilled datagrams, which would have required a mean nearer 250 B —
+is dead on its own evidence. The whole population of short datagrams costs 0.20 % of the delivered TS:
+a perfectly packed stream would have needed 61,497 datagrams rather than 66,729, and 8.5 % more IP+UDP
+headers is 0.019 Mbps.
+
+The same accounting on loopback ([`t9-overhead-lo.sh`](scripts/t9-overhead-lo.sh)) gives 0.993x source
+and +3.54 % over delivered — 0.7 points worse than the WAN path and in the same place. Loopback is
+therefore usable for this measurement to within about a point, *provided* GSO is off and the two spans
+are measured independently.
+
+Turning MTU discovery on at both ends moved 87.3 % of datagrams to 1452 B, cut the datagram count by
+16.6 % and the forward wire rate by **0.92 %**. Two details worth keeping:
+
+- **1452 B is quinn's own ceiling, not the path's** (`MtuDiscoveryConfig::upper_bound` defaults to
+  1452 in `quinn-proto`). The path carried it without loss, so this is a floor on the available
+  saving; a higher ceiling on a 1500 B path would take a little more.
+- The QUIC payload rate fell *below* the delivered TS rate (−0.47 %) once packets were larger, because
+  the per-packet QUIC header and AEAD tag are charged 16.6 % less often.
+
+`moq-native` defaults MTU discovery to off *and* explicitly overrides quinn's default-on to do it
+(`rs/moq-native/src/quic.rs`, `mtu_discovery.unwrap_or(false)`; applied in
+`rs/moq-native/src/quinn.rs`). It is a one-flag change —
+`--client-quic-mtu-discovery=true` / `--server-quic-mtu-discovery=true`, needed on the sending side of
+the hop being measured — and there is no reason for a deployment not to set it.
+
+GSO is byte-neutral: the same configuration with GSO on and off differed by 0.004 % in QUIC payload
+bytes. It changes syscall batching, not what goes on the path. Its only effect on this campaign was to
+make loopback captures unreadable.
+
+### The stream-per-access-unit pattern costs at most a fifth of a point
+
+The TS importer opens a new group — and therefore a new QUIC uni stream — after every audio access
+unit, every teletext PES and every SCTE-35 section (`import.cut(None)` in
+`rs/moq-mux/src/container/ts/import.rs`), which is ~100 stream opens per second on this clip against
+~1/s for video. It is deliberate: it lets a relay forward without waiting for the next frame.
+
+A video-only leg prices it. Removing audio, teletext and SCTE-35 cut the share of sub-200 B datagrams
+from 7.02 % to 2.85 %, so those tracks do produce the short-datagram tail — but the entire tail is the
+0.20 % computed above. The relative overhead did not fall (it rose slightly, to +3.11 %, because
+`export` regenerates proportionally more TS packet headers for a leaner service). **This is a latency
+trade with a measured price of under a fifth of a point, not a defect**, and that is the form the
+upstream question should take.
+
+### Under 1 % loss both protocols scale with the loss rate and the ranking holds
+
+Same rig with a `netem` lane on the origin shaping only the two measured flows
+([`t9-netem-lane.sh`](scripts/t9-netem-lane.sh)), verified against the shaper's own drop counters:
+
+| At 1 % forward loss | Delivered TS | Bytes onto the path | Bytes the sender pushed |
+|---|---:|---:|---:|
+| MoQ, media-aware, 1200 B | 9.519 Mbps | 9.757 Mbps | 9.860 Mbps (+0.97 % vs clean) |
+| SRT | 9.944 Mbps | 10.303 Mbps | 10.402 Mbps (+0.88 % vs clean) |
+
+Neither protocol lost goodput and neither's overhead moved by more than a point, so 1 % loss does not
+disturb the comparison. At 10 % loss SRT pushed 11.630 Mbps, +12.8 % over its clean rate — as expected
+when every lost packet must be sent again.
+
+The two right-hand columns differ because **the capture tap sits downstream of the shaper**, which was
+established rather than assumed: over one window the capture recorded 22,381 datagrams against the
+shaper's 22,396 passed and 2,441 dropped. A capture on the sending host therefore measures what
+reached the path, and the sender's own push rate has to be recovered from the shaper's counters. Any
+future impairment run needs the same check, or "unchanged under loss" reads as a finding when it is an
+artefact of where the tap is.
+
+### The floor the measurement now sits on
+
+Pricing the headers analytically, per packet over IPv4:
 
 | Component | Bytes |
 |---|---:|
@@ -348,98 +439,66 @@ the gap to SRT look intrinsic. Pricing the headers analytically, per packet over
 | 8952 B (9000 B jumbo path) | 0.7 % |
 | SRT for comparison: 7 × 188 B in 1360 B | 3.3 % |
 
-**The irreducible QUIC-versus-SRT gap at a normal Internet MTU is therefore ~1.2 points, and 16 of
-the 18 extra bytes are the AEAD tag** — mandatory authentication in QUIC, which SRT pays only if its
-own encryption is enabled. That is the whole structural penalty. It is nothing like the measured gap.
+SRT's row is now confirmed by measurement rather than derivation: the SRT leg came back at +3.33 %
+over its delivered payload, with a 1332 B maximum datagram (1316 B payload plus a 16 B SRT header),
+against 3.34 % predicted. The framing arithmetic in this table can be trusted; it was the loopback
+*measurement* that could not.
 
-**Every measurement in this campaign was taken with the path pinned at QUIC's 1200 B minimum.**
-`moq-native` defaults MTU discovery to off *and* explicitly overrides quinn's default-on to do it
-(`rs/moq-native/src/quic.rs`, `mtu_discovery.unwrap_or(false)`; applied in `rs/moq-native/src/quinn.rs`).
-The flag already exists — `--client-quic-mtu-discovery` / `--server-quic-mtu-discovery` — so raising
-the MTU is a one-flag A/B, worth ~1 point on a public path and ~4.8 points on a private path carrying
-jumbo frames. Note IPv6 costs 20 more bytes per packet, so a v6 path is ~1.4 points worse than v4 at
-1200 B.
+**The irreducible QUIC-versus-SRT gap at a normal Internet MTU is ~1.2 points, and 16 of the 18 extra
+bytes are the AEAD tag** — mandatory authentication in QUIC, which SRT pays only if its own encryption
+is enabled. That is the whole structural penalty, and MoQ recovers several times it by not carrying
+stuffing. IPv6 costs 20 more bytes per packet, so a v6 path is ~1.4 points worse than v4 at 1200 B.
 
-### The framing does not account for the rest
+The floor is charged on the bytes QUIC carries, while the measurements above are expressed over the TS
+the subscriber receives — a larger denominator, because `export` regenerates TS packet headers and PSI
+at the far end rather than carrying them. Backing the per-packet QUIC cost out of the measured capture
+reconciles the two: 66,729 datagrams at ~36 B of QUIC header, tag and `STREAM` framing means MoQ carried
+**9.214 Mbps of stream bytes** to put 9.765 Mbps on the wire (**+5.98 %**, against the 5.5 % floor plus
+the 0.2-point short-datagram tail) and to deliver 9.500 Mbps of TS (**+3.11 %**, which is ~4 B of TS
+header per 188 plus PSI). The two effects net to the +2.79 % measured, and the floor is met.
 
-The remaining suspicion was that MoQ's own group/object/frame framing was the expensive part. Read
-against the source clip's measured inventory (`tsanalyze`: 9,024 kbps AVC in 1,752 PES over 48.3 s,
-so ≈36 access units/s of ≈31 kB; 202 kbps MPEG-1 Layer II; 198 kbps AC-3; 38 kbps teletext;
-3 × ~1.5 kbps SCTE-35; 453 kbps of nulls), it is not:
+MoQ's own framing, audited against the source clip's inventory, is what makes the second row of the
+decomposition table a quarter of a point rather than several:
 
 - **moq-lite frame header: ~4 bytes** — a zigzag-delta timestamp varint plus a size varint
   (`rs/moq-net/src/lite/publisher.rs`, `serve_frame`).
 - **hang Legacy container: ~4 bytes more**, a microsecond timestamp varint *inside* the payload
-  (`rs/hang/src/container/frame.rs`, `encode_header`). **The timestamp goes on the wire twice.**
+  (`rs/hang/src/container/frame.rs`, `encode_header`). **The timestamp goes on the wire twice** — still
+  the one gratuitous cost in the format, though at ~36 video access units and ~100 audio/data units per
+  second it is a few kbps.
 - **moq-lite group header: 3–6 bytes** — stream type, subscribe ID, group sequence.
-- **The TS importer opens a new group — and therefore a new QUIC uni stream — after every audio
-  access unit, every teletext PES and every SCTE-35 section** (`import.cut(None)` in
-  `rs/moq-mux/src/container/ts/import.rs`, deliberate, so a relay forwards without waiting for the
-  next frame). On this clip that is ~100 stream opens per second: ~42 MP2 + ~31 AC-3 + ~25 teletext
-  + ~3 sections, against ~1/s for video, which groups per GOP.
 - **The catalog is deduplicated** and does not republish at steady state (SI repetition, bitrate
   estimate and jitter all gate on change), though when it *does* change it goes out three times over
   — `catalog.json`, `catalog.json.z` and the MSF `catalog`, each a full snapshot with deltas disabled.
-
-Audio and data are only ~4 % of this feed's bitrate, so even the stream-per-access-unit pattern —
-the largest single inefficiency here, and a deliberate latency trade rather than a defect — costs well
-under one point. Adding everything above to the 5.5 % floor accounts for **at most ~6.3 %** of overhead
-over the elementary-stream bytes actually carried, against **~21 % implied by the measurement**.
-Roughly **1.2 Mbps on a 9.5 Mbps feed is in no header this audit can find.**
+- The verbatim side tracks are bounded by their source rates, ~42 kbps combined (0.4 %); relay stats
+  are off by default and on a separate broadcast.
 
 ### Where that leaves the comparison
 
-Expressed as the IP rate needed to deliver the same 9.95 Mbps service, with 453 kbps of source
-stuffing and the TS packet headers stripped on import (so ~9.25 Mbps of elementary-stream bytes
-actually reach the wire):
+Expressed as the IP rate needed to deliver the same 9.946 Mbps service:
 
-| | IP rate | vs source TS |
-|---|---:|---:|
-| SRT (derived, carries the stuffing verbatim) | 10.27 Mbps | 1.033x |
-| **MoQ measured** (media-aware, 1200 B MTU) | **11.18 Mbps** | **1.124x** |
-| MoQ at the floor, 1200 B MTU (derived) | ~9.8 Mbps | ~0.99x |
-| MoQ at the floor, 1500 B MTU (derived) | ~9.7 Mbps | ~0.98x |
+| | Forward IP | Return IP | vs source TS | Basis |
+|---|---:|---:|---:|---|
+| SRT, byte-verbatim | 10.311 Mbps | 0.014 Mbps | 1.037x | measured, same path |
+| **MoQ, media-aware, 1200 B** | **9.765 Mbps** | 0.113 Mbps | **0.982x** | measured, same path |
+| **MoQ, media-aware, MTU discovery on** | **9.675 Mbps** | 0.112 Mbps | **0.973x** | measured, same path |
+| MoQ, opaque lane, verbatim (derived) | ~10.2 Mbps | — | ~1.03x | not measured |
+| MoQ, opaque lane, nulls stripped (derived) | ~9.8 Mbps | — | ~0.98x | not measured |
 
-**The floor is below SRT, not above it**, because MoQ declines to carry stuffing that SRT — a byte
-pipe — has no way to avoid. The measured figure sits ~3.3x above that floor. So the bandwidth
-disadvantage recorded here is **an implementation gap, not a protocol property**, and it is the
-highest-value optimisation available to the transport
-([economics](../docs/economics.md) §3.1, §9).
+**Not carrying stuffing is MoQ's structural bandwidth advantage over SRT**, and it is now a measured
+advantage rather than a derived one. It is bankable on a 1+1 pair as well:
+[T12](test-12-dual-path-handoff.md) arm D shows two groomers that each regenerate their own stuffing
+from stream position still produce byte-identical legs. What stripping costs is byte-verbatim carriage,
+which is a separate decision — and the saving scales with the stuffing ratio, so it is much larger on a
+loosely filled carrier: on the T12 profile, 1.9 Mbps of content in a 4 Mbps carrier, SRT needs
+4.13 Mbps of IP where the media-aware lane needs ~2.0 Mbps.
 
-**Leading hypothesis: underfilled UDP datagrams.** For ~35 bytes of per-packet QUIC overhead inside
-the UDP payload to register as +14.28 %, the mean datagram payload has to be ~250 bytes rather than
-~1164. The send path makes that plausible: `Writer::encode()` issues a separate `write_buf` per field
-(`rs/moq-net/src/coding/writer.rs`), payload goes out in whatever chunks the importer produced, and
-`moq-net` has no coalescing layer, so quinn can emit a packet per small write — compounded by ~100
-stream opens a second.
-
-**It is a hypothesis, and this run's own capture is in tension with it.** The GSO spike at 12,000 B is
-ten *full* 1200-byte datagrams in one segment, and 27.3 MB over 4,317 records averages 6,324 B ≈ 5.3 ×
-1200 — which is what mostly-full datagrams look like. If they really are full then the floor model
-predicts ~3 % and the missing bytes are somewhere else entirely, in which case the next suspects are the
-denominator (a 20 s window is short enough for join-time cache backlog to inflate the wire side) and
-retransmission.
-
-**Either way, one capture decides it, and it must be off loopback.** Histogram UDP datagram sizes —
-`overhead_ec2.sh` already reports the histogram, but loopback GSO both hides underfill and undercounts
-headers, so the distribution is unreadable there. Stated in advance: a mean near 1200 B refutes underfill
-and moves the search to the denominator and retransmission; a mean of 250–400 B confirms it, and the fix
-is send-path coalescing with no protocol change. Ruled out already, so as not to be re-derived: catalog
-republication, the verbatim side tracks (bounded by their source rates at ~42 kbps combined, 0.4 %),
-timeline side tracks, relay stats (default off, and a separate broadcast) and PSI, which import keeps in
-the catalog and export regenerates into the output TS rather than onto the wire.
-
-**Scope limit that matters more than any number here: this is the media-aware lane.** The
-opaque/transparent lane's carriage cost has never been measured, and its accounting is different —
-whole TS packets in objects, so ~5.5 % at 1200 B over whatever it carries. Carried verbatim
-including stuffing that is ~1.05x source, near parity with SRT; with nulls stripped before
-transmission and re-stuffed by the downstream groomer (which `mpegts-pacer` does anyway for
-TR 101 290) it is ~1.01x. That saving scales with stuffing ratio: on the T12 profile — 1.9 Mbps of
-content in a 4 Mbps carrier — SRT needs 4.13 Mbps of IP where MoQ would need ~2.0 Mbps. **Not
-carrying stuffing is MoQ's structural bandwidth advantage over SRT**, and it is now bankable on a
-1+1 pair as well: [T12](test-12-dual-path-handoff.md) arm D shows two groomers that each regenerate
-their own stuffing from stream position still produce byte-identical legs. What stripping still
-costs is byte-verbatim carriage, which is a separate decision.
+**Scope limit: both measured MoQ rows are the media-aware lane.** The opaque lane — the paper's
+preferred carriage for hardware IRDs — still has no measurement; its two derived rows above apply the
+per-byte carriage cost measured here to a verbatim and a null-stripped payload, and the verbatim case
+should come out marginally *cheaper* than the arithmetic suggests because a single large track packs
+datagrams better than 100 short streams per second. The platform binaries for that lane are not built
+in this environment, which is the only reason it is still outstanding.
 
 ## Soak method
 
@@ -515,7 +574,12 @@ slope can be fitted through it. The subscriber aggregate is likewise not a clean
 because the set size changes with churn (phase slopes −0.04 / −0.69 / +0.19 MB/h are all ≈ 0, but the
 denominator moves). A second soak addresses the publisher directly.
 
-## Any audio stream losing frame sync kills `moq import`
+## Any audio stream losing frame sync killed `moq import` — reported, fixed, verified
+
+**Status: closed.** Reported as [#2729](https://github.com/moq-dev/moq/issues/2729), fixed by
+[#2751](https://github.com/moq-dev/moq/pull/2751) (merged to `main`, `moq-mux` 0.9.5), and
+independently replicated here against real content — see *Verifying the fix* below. The finding as
+originally measured is kept because it is the evidence the report rested on.
 
 Three loop variants of the same clip were run through `tsp -I file --infinite | moq import ts` across
 the ~601 s wrap:
@@ -526,17 +590,19 @@ the ~601 s wrap:
 | H.264 + AC3 | **died** — `Error: missing AC-3 sync word` |
 | H.264 video only | **survived**, ran on past 800 s |
 
-So it is not an MP2 parser bug. **Every audio codec tried aborts the whole process when its
-elementary stream loses frame sync, while the video path resynchronises through the very same
-discontinuity.** That asymmetry is the finding: video is treated as resynchronisable and audio as
-fatal.
+So it was not an MP2 parser bug. **Every audio codec tried aborted the whole process when its
+elementary stream lost frame sync, while the video path resynchronised through the very same
+discontinuity.** That asymmetry was the finding: video was treated as resynchronisable and audio as
+fatal. (The AC-3 row of that table needs a caveat, recorded under *Verifying the fix* below.)
 
 For primary distribution that is the wrong way round to fail. A contribution feed does glitch, and a
 publisher that exits on a momentary audio defect converts a few damaged frames into a full session
 teardown, reconnect, and the ~4 s re-attach measured in T6.
 
-The practical consequence for the rig: `t9_loop_vidonly.ts` is a source that loops indefinitely
-without restarting the publisher.
+The practical consequence for the rig, on the builds this campaign ran on: `t9_loop_vidonly.ts` is a
+source that loops indefinitely without restarting the publisher. From `moq-mux` 0.9.5 that workaround
+is no longer needed — a full A/V loop now survives its wraps — but every measurement in this file
+predates the fix and used the video-only source.
 
 ### It is not a loop artefact: the root cause, with no timeline jump
 
@@ -582,29 +648,93 @@ behaviour contradicts, and two in-repo precedents for the correct behaviour. The
 precedent for it being accepted: [#2265](https://github.com/moq-dev/moq/issues/2265) ("one bad frame
 fatally crashes the process") was treated as a bug and fixed.
 
-**What is still missing before posting** — see the checklist in
-[planned-experiments](planned-experiments.md) (T9 follow-ups):
+### Verifying the fix (#2751)
 
-1. **End-to-end on real content.** Bit-flip one MP2 frame header mid-file in `CNNiEMEA2.ts` (no loop),
-   feed it through `moq import`, and capture the exit. Same file with a video NAL corrupted instead as
-   the control. This is the broadcast-credible artifact; the unit test is the precise one.
-2. **Blast radius, stated as measured.** Confirm the video and SCTE-35 tracks die with the audio, and
-   that a subscriber sees the session drop rather than an audio-only gap.
-3. **The design question**, which is why this should open as an **issue, not a PR**: resync policy is a
-   choice, not a mechanical fix. How far should the parser scan before giving up? Should the skipped
-   interval be signalled (a gap the exporter can reflect) or silently dropped? Should the track abort
-   while the session survives, which is a middle option the current code structure already supports via
-   `legacy::Import::abort`? Upstream's own guidance ([#2722](https://github.com/moq-dev/moq/pull/2722))
-   recommends opening an issue first when the solution needs brainstorming, and this qualifies.
-4. **A regression test in repo style**, which `Root Cause First` requires of any fix. The probe above is
-   the seed but is written to assert the *broken* behaviour; the shipped version must assert the fixed
-   behaviour (frame A and frame C both delivered, damaged frame B dropped).
+The fix was accepted and merged the same week. The upstream change scans forward to the next
+sync-word candidate and confirms it before trusting it — a frame is accepted only once a second header
+parses exactly where the first one says the frame ends, the same confirm-before-trust rule the TS layer
+already applied to a candidate packet. The scan is bounded at 64 KiB, and only a *confirmed* frame
+resets that budget, so a PID carrying something other than the codec its PMT declares still fails
+rather than scanning forever. Two things came out that we had not reported: the same defect shape
+covered **AAC**, which additionally never reassembled a frame split across a PES boundary at all, and
+the trigger does not need corruption — any carried tail spliced onto unrelated bytes does it, which is
+what our loop wrap was.
 
-Contribution mechanics, checked against the current `CONTRIBUTING.md`: this targets **`main`**, not
-`dev` — the branch split is strictly about breaking a published API, and the guide explicitly places
-"changing what a component does with input it *already* takes (e.g. recognizing a media pattern it used
-to mishandle)" and "a parser accepting a broader set of inputs it previously rejected" on `main`.
-Any GitHub prose needs the model-attribution marker.
+Replicated here rather than taken on trust, building both the merge commit (`36c3bbd73`, `moq-mux`
+0.9.5) and its parent (`2b62488e5`, 0.9.4) so each arm has a before and an after:
+
+**Unit level.** 498 tests pass at the merge commit, including all twelve new resync tests. That is four
+more than the PR body claims, because two arrived during review — a bounded-recovery test for the AAC
+path, and `legacy_seek_resets_the_resync_budget` for a real bug a reviewer caught: a seek did not reset
+the scan budget, so a stream that had scanned close to 64 KiB before a discontinuity could fail on the
+first parse error after it while being perfectly in sync.
+
+**End-to-end on real content**, which was the outstanding item on our own checklist. Three copies of a
+20 s cut of the 9.95 Mbps DVB capture (H.264 + MP2 + AC-3 + teletext + 3× SCTE-35), each differing from
+the clean original by **exactly one byte** (`cmp -l` = 1), fed through a real relay to a real
+subscriber:
+
+| Arm | one-byte change | pre-fix 0.9.4 | post-fix 0.9.5 |
+|---|---|---|---|
+| MP2 header | sync `0xFF` → `0xFE` | **died at 12 s**, `Error: missing MP2 frame sync`, rc=1 | ran to end of file, rc=0 |
+| H.264 start code (control) | `0x01` → `0x00` | survived | survived |
+| Full A/V looped | none — `--infinite` wrap | **died at the first wrap** (21 s on a 20 s clip) | survived 50 s, 2+ wraps |
+
+The looped arm is the production shape: this is the defect that accumulated 216 publisher restarts,
+one per wrap, and it now runs through them.
+
+**What the fix costs, measured.** Comparing the damaged run against a clean control by PTS set rather
+than by eye, on every elementary stream:
+
+- **exactly one 24 ms MP2 frame is dropped**, at t+8.616 s — the damage point;
+- **nothing is published that the clean run did not publish**, on any PID, so the damaged frame is
+  discarded rather than emitted as mixed bytes;
+- video, AC-3, teletext and all three SCTE-35 PIDs are untouched, and all eight tracks reach the
+  subscriber.
+
+One damaged byte cost one 24 ms audio frame instead of the whole broadcast. That is the right shape.
+
+#### Correction: the loop wrap is fatal when it splits a frame, not always
+
+The video+AC-3 row of the table above does not reproduce as stated. Re-running it here, the **pre-fix**
+build survived a looped video+AC-3 clip for 50 s with the AC-3 track present and decoding, where the
+original run died with `missing AC-3 sync word`. The difference is where the cut falls: a wrap is fatal
+only when it splits an audio frame, leaving a carried tail to be spliced onto the start of the file.
+Our 132,000-packet cut happens not to. So the correct statement is that **a loop wrap is fatal when it
+lands mid-frame**, which is a property of the cut and not of the codec — the codec-generality claim
+rests on the unit reproducers and on AC-3 having the identical `Descriptor::parse` shape, not on this
+row. The MP2 single-bit arm is unaffected and remains decisive, because there the damage is placed on a
+verified frame header rather than wherever a cut happened to land.
+
+#### The recovered gap is completely unsignalled
+
+Worth stating plainly, because it is the part that matters for primary distribution and the part the
+fix does not address. The subscriber's TS after a resync carries:
+
+- **0 continuity errors** (identical to the clean control);
+- **0 signalled discontinuities** — no `discontinuity_indicator`, on any PID;
+- an audio timeline that simply steps **24 ms → 48 ms** across the hole.
+
+Nor is it visible above the TS: the resync path emits no `tracing` call at any level, exposes no
+counter, and does not touch the `container::Producer::discontinuity` counter that already exists for
+timeline rewinds. The upstream doc comment states the policy deliberately — *"a few lost milliseconds
+of audio stay a gap in one track rather than an error that takes the whole session down"* — so the
+silence is intended, not an oversight.
+
+A TR 101 290 monitor at egress therefore sees a fully conformant stream with no indication that
+anything was lost. That is question 2 of the original issue — *should the dropped interval be visible
+downstream, so a TS exporter can reflect a real gap?* — and it went unanswered in the PR.
+
+**The 1+1 worry does not survive measurement, and it is worth saying so.** The obvious escalation is
+that two legs resyncing independently would produce different audio with neither reporting a fault —
+the T12 merge problem with no fault indication. Two importers fed the same damaged source dropped
+**precisely the same frame**, so the resync is deterministic on identical input and this is not a
+redundancy risk. What remains is narrower and still real: the fix converted a maximally loud failure
+into a completely silent one. We only found our own source was wrapping mid-frame *because* it crashed
+216 times; the same condition now produces a stream that looks healthy. Raised as
+[#2798](https://github.com/moq-dev/moq/issues/2798), scoped to observability rather than correctness —
+the ask is a `warn!` on a completed resync and a counter to alarm on a *rate* of them, neither of which
+touches the protocol.
 
 ## Soak #2 — publisher and subscriber roles pass
 
@@ -685,10 +815,15 @@ run-to-run noise. Soak #1's flat 102.1 MB was a property of its *workload*, not 
 build difference does show up, but in the baseline rather than the slope: both 0.14.9 legs start at
 ~54.7 MB against 0.14.8's 34.1 MB, so 0.14.9 carries roughly 20 MB more fixed overhead.
 
-**The growth is linear, not a settling working set.** Five consecutive 30-minute windows on 0.14.8 read
-+25.43, +27.05, +27.64, +26.80 and +28.13 MB/h — no decay whatsoever over 2.5 hours. That is a much
-cleaner signature than soak #2's decaying curve, and it retires the "working set converging" reading
-that the soak alone permitted. Extrapolated, +27 MB/h is 650 MB/day.
+**The growth is linear across this window.** Five consecutive 30-minute windows on 0.14.8 read
++25.43, +27.05, +27.64, +26.80 and +28.13 MB/h — no decay whatsoever over 2.5 hours.
+
+> **Corrected after the upstream root cause (see below).** The extrapolation drawn here at the time —
+> "+27 MB/h is 650 MB/day" — was wrong, and so was retiring soak #2's decaying curve as the misleading
+> signature. The growth *does* plateau, at ~10,000 ingested groups per publisher connection; every leg
+> in this campaign was shorter than that knee, so linearity within the window says nothing about the
+> ceiling. Soak #2's decay was the approach to the plateau and was the more informative shape all
+> along. The measurements stand; the extrapolation from them does not.
 
 **The 256 MiB cap leg proves less than it appears to, and this matters.** It grew at the same rate as
 uncapped — but RSS only reached 131 MB, and `--cache-capacity` counts *payload bytes*, not process
@@ -872,17 +1007,90 @@ which is what the 0.7 %-of-payload arithmetic predicted: history is not what acc
 bounds payload bytes and the growth is not payload; `--cache-duration` bounds retained history and the
 growth is not history. There is no configuration an operator can set to stop it.
 
-#### The operational sting: low latency leaks faster
+#### Latency tuning changes how fast the ceiling arrives, not how high it is
 
-Group cadence is how MoQ trades latency. Shorter groups mean a tighter live edge — and, on these
-numbers, proportionally faster leakage. At ~9.9 KiB/group the same 9.3 Mbps channel costs about
-**18 MB/h at a 2 s GOP, 31 MB/h at 1.1 s, and 62 MB/h at 0.56 s** — 1.5 GB/day for the
-low-latency configuration. The defect therefore penalises precisely the operating point MoQ is chosen
-for, and a deployment tuned for latency needs proportionally more headroom or more frequent recycling.
+Group cadence is how MoQ trades latency, and shorter groups do leak proportionally faster: at
+~9.9 KiB/group the same 9.3 Mbps channel grows about **18 MB/h at a 2 s GOP, 31 MB/h at 1.1 s and
+62 MB/h at 0.56 s**.
+
+But because the retained state is one slot per *stream* and the slot count is capped (below), the
+**ceiling is the same** — a shorter GOP reaches it sooner rather than climbing higher. The retained
+bytes per slot are set by frame size, not group size, which is why `gop14` and `gop28` measured
+9.90 and 9.92 KiB despite `gop14`'s groups carrying half the bytes: same encoder, same bitrate, same
+frame rate, so the same frames, just fewer of them per group.
+
+*(This section originally concluded that low-latency deployments leak proportionally more in total.
+They do not. Corrected after the root cause below.)*
+
+### Root cause: quinn-proto stream recycling, not moq state (upstream #2745)
+
+The maintainer reproduced and root-caused this within a day, and the answer is **not in `moq` at
+all**. `quinn-proto` pre-allocates a slot in `StreamsState::recv` for every stream the peer is
+permitted to open. When a received stream is freed its `Recv` goes onto a `free_recv` pool and the
+replacement slot immediately takes it back — and the recycling path deliberately keeps the buffer:
+
+```rust
+// quinn-proto 0.11.16, connection/assembler.rs
+pub(super) fn reinit(&mut self) {
+    let old_data = mem::take(&mut self.data);   // chunk heap kept for reuse
+    *self = Self::default();
+    self.data = old_data;
+    self.data.clear();                          // cleared, not deallocated
+}
+```
+
+So every ingested group permanently converts an empty slot into one holding a recycled `Recv` plus its
+retained assembler capacity. Each property we measured falls out of that:
+
+- **Flat in subscriber count** — only *remote-initiated* streams consume recv slots. Egress group
+  streams are locally initiated, so the whole cost lands on the publisher connection.
+- **No cache setting touches it** — `--cache-capacity` bounds moq's own payload pool and structurally
+  cannot bound quinn's per-connection stream state. Nor can `--cache-duration`.
+- **Not a regression** — the quinn behaviour predates 0.11.13 (Aug 2025).
+- **~9.9 KiB per group** — a patched probe measured retained bytes per slot scaling with frame size
+  (360 B at 200-byte frames, 1,965 B at 20 KB frames); extrapolated to our ~46 KB frames it lands on
+  our figure. Two `malloc_history` snapshots 240 s apart showed exactly two growing stacks, both in
+  quinn (`StreamsState::received`, `Recv::ingest → Assembler::insert`) and none in moq.
+
+#### The correction that matters: it is bounded
+
+Growth stops once every uni slot is filled. `moq-relay` raises the limit from moq-native's 1,024 to
+`DEFAULT_MAX_STREAMS = 10_000`, so the ceiling is **~10,000 × 9.9 KiB ≈ 99 MB above baseline, per
+publisher connection** — reached after ~10,000 ingested groups, which at 3,222 groups/h is ~3.1 h and
+at `gop14`'s 6,445 is ~1.55 h.
+
+**Every leg in this campaign was shorter than that knee.** The A/B and cap legs ran 2.5 h, the sweep
+and GOP legs 90 minutes. That is why the slope looked unbounded, and it is a straightforward
+measurement-window error on our part: we established linearity carefully and then extrapolated it past
+the range we had evidence for.
+
+It also retro-explains the two results this file previously treated as anomalies. Soak #2's decaying
+tail (+1.57 MB/h and falling) was the approach to the plateau, not a mysterious partial leak — and it
+was the *more* informative shape, which we set aside in favour of the cleaner-looking linear legs. The
+standing relay sitting flat at 224 MB for seven hours had simply finished filling its slots.
+
+**Verification in flight** (`~/t9/knee.sh`, launched 2026-08-12 20:15 UTC): `gop14` for 4 h on the
+default 10,000 slots, expecting a knee at ~1.55 h and a plateau ~99 MB above baseline; then 2 h with
+`--server-quic-max-streams 1024`, expecting the knee at ~9 min and roughly a tenth of the ceiling.
+
+#### Mitigation, and why there is no quick fix
+
+The real fix is upstream in `quinn-proto` — shrink the oversized chunk heap in `Assembler::reinit`, or
+normalise capacity when a `Recv` enters `free_recv`, keeping the allocation-reuse win without the
+retention. **No released `quinn-proto` newer than 0.11.16 changes this**, so there is no version to
+upgrade to.
+
+The only local lever is the slot count: `--server-quic-max-streams` (or the relay's
+`DEFAULT_MAX_STREAMS`) caps the ceiling proportionally. The maintainer measured a plateau at ~17 MB
+with 128 slots. That trades away concurrent-stream headroom on busy connections, so the value is a
+judgement call rather than a free win — and note the flag's help text still says "Defaults to 1024",
+which is moq-native's default; `moq-relay` overrides it to 10,000.
 
 **Representativeness limit of the publisher figure:** a video-only source exercises the import path
 without audio, SCTE-35 or teletext, so this measures the publisher's *resource* behaviour rather than
-its full-feed behaviour. Closing that gap needs the audio-resync fix below, not a rig change.
+its full-feed behaviour. That gap was a consequence of the audio-resync defect rather than of the rig;
+with the fix on `moq-mux` 0.9.5 a full A/V loop survives its wraps, so a re-run can now carry the
+complete feed.
 
 ## Publisher-side CPU on a trickle-fed live source
 
@@ -908,18 +1116,28 @@ soak design.
 
 ## Corrections
 
-Five readings in this experiment were wrong and were corrected by later measurement or analysis. They
+Six readings in this experiment were wrong and were corrected by later measurement or analysis. They
 are recorded because each carries a method lesson that changed how the rest of the campaign was run.
 
-- **The 1.12x carriage overhead read as "the extra bytes are in QUIC, stream and object framing".**
-  Pricing the headers from the source gives a protocol floor of 5.5 % at the deployed 1200 B MTU and
-  under one point for every MoQ and hang header combined — at most ~6.3 % against the ~21 % implied by
-  the measurement. The framing hypothesis was not just imprecise, it was the wrong order of magnitude,
-  and it would have sent the optimisation effort at the frame headers, which are already nearly free.
-  *Lesson: a measured overhead is uninterpretable without an analytic budget beside it. Price what the
-  protocol is entitled to charge before calling the difference intrinsic — and check the transport
-  configuration the measurement ran under, since this one was pinned to QUIC's minimum MTU by a
-  library default that overrides the QUIC stack's own.*
+- **The 1.12x carriage overhead was a rig artefact, and MoQ is in fact cheaper than SRT.** The
+  loopback rig started `tcpdump` under a `timeout` of `WINDOW + 3` seconds and compared the bytes it
+  captured against payload bytes sampled over `WINDOW` seconds, so the wire side was divided by a
+  window ~15 % shorter than the one it covered. Re-running the identical topology with each side
+  reduced to a rate over a span it measures itself put the mismatch at **1.1646** and the overhead at
+  +3.54 % rather than +14.75 %; on a real path it is +2.79 %, or 0.982x the source TS rate against
+  SRT's measured 1.037x. Everything built on the 1.12x followed from this: the "unattributed
+  ~1.2 Mbps", the underfilled-datagram hypothesis (datagrams are 88.4 % exactly 1200 B), and an 8.4 %
+  carriage penalty in the cost model that is really an advantage. *Lesson: when two quantities are
+  divided, measure each over a duration its own side establishes, and never assume two windows that
+  were started separately are the same length. The analytic floor was right and the measurement was
+  wrong — which is the opposite of the usual assumption, and the reason the discrepancy survived so
+  long is that no numeric budget had been fixed in advance for the measurement to fail against.*
+
+- **The framing was suspected of the missing bytes, then underfilled datagrams were.** Both were
+  chasing an artefact. The framing audit that cleared moq-lite and hang was nevertheless correct and is
+  retained: every MoQ and hang header combined is a quarter of a point. *Lesson: before hypothesising a
+  mechanism for a surprising measurement, re-derive the measurement. Two rounds of plausible mechanism
+  were built on a number that a five-minute re-run falsified.*
 
 - **A 3.2 GB relay read as a settled "plateau."** Sampled over ~20 s it looked flat and `dmesg` showed
   no OOM kills. A 20 s window cannot distinguish a plateau from 21 MB/h, and the process was in fact
@@ -940,42 +1158,43 @@ are recorded because each carries a method lesson that changed how the rest of t
 
 ## Still outstanding
 
-- **Localise the relay growth** — the top open item, and the reason T9 fails its own pass criterion for
-  the relay role. The build and cache-bound questions are answered; what remains is the N-sweep that
-  separates per-session state from per-group bookkeeping, and then the upstream report. Pair a future
-  repeat with the T7 ≥ 24 h PLL-lock soak so one run yields both verdicts.
+- **An upstream fix for the relay growth**, the reason T9 fails its own pass criterion for the relay
+  role. The characterisation is complete — build A/B, both cache controls, the N-sweep and the GOP pair
+  all agree on ~9 KiB retained per ingested group independent of subscriber count — and it is filed as
+  [#2745](https://github.com/moq-dev/moq/issues/2745). What remains is not measurement but a fix, and
+  then a ≥ 24 h re-soak to confirm the slope reaches zero; pair that repeat with the T7 PLL-lock soak so
+  one run yields both verdicts.
 - **The publisher thread count**, which grows and decelerates without settling. Cheap to check: a
   longer run plus what the pool is sized against.
 - **Fan-out over a real path**, relay and subscribers on separate hosts. Both sweeps so far are
   loopback, and the Linux sweep showed why that matters: co-located subscribers cost 2.4x the relay,
   so the rig's knee is the host's. A cross-machine run would price the NIC and the network stack
   honestly and establish the relay's own knee, which neither sweep reached.
-- **Locate the unattributed carriage bytes** — now the highest-value item here, because it sits on the
-  line that dominates the cost model. In order of cost to run: (1) histogram UDP datagram sizes on a
-  **non-loopback** path, which either confirms or kills the underfill hypothesis in one 20 s capture;
-  (2) A/B `--client-quic-mtu-discovery` / `--server-quic-mtu-discovery`, a one-flag change worth ~1
-  point; (3) attribute wire bytes **per track**, which separates media from catalog and verbatim side
-  tracks and would catch anything republishing at rate.
-- **Overhead on the opaque lane, which has never been measured at all.** Everything above is the
-  media-aware lane. The opaque lane is the paper's preferred carriage for hardware IRDs and its
-  accounting is different and probably better; the null-stripped variant is derived at ~1.01x source
-  and is the single largest bandwidth lever identified, so it needs a measurement rather than
-  arithmetic.
-- **Overhead under loss, and back-to-back against SRT.** Every figure here is a clean path with no
-  retransmission, and SRT's 1.033x is framing arithmetic rather than a measurement. The number that
-  decides the commercial comparison is both protocols measured on the same degraded path (T8/T8b have
-  the rig).
-- **Upstream: one QUIC stream per audio access unit.** `import.cut(None)` after every ADTS/MP2/AC-3
-  frame, every teletext PES and every SCTE-35 section — ~100 stream opens per second on the reference
-  clip. Deliberate (it lets a relay forward without waiting for the next frame) and worth well under a
-  point at these byte volumes, so this is a latency-versus-overhead question to raise rather than a
-  defect to report. Quantify the trade before opening it.
+- **Overhead on the opaque lane, which has never been measured.** Everything above is the media-aware
+  lane. The opaque lane is the paper's preferred carriage for hardware IRDs, and the two derived rows in
+  the comparison table above are the only figures the paper has for it. The blocker is environmental —
+  the `moq_publisher`/`moq_subscriber` platform binaries are not built here — not methodological: the
+  WAN rig takes it unchanged once they are.
+- **Retransmission cost measured directly rather than recovered from shaper counters.** The current rig
+  drops packets in the origin's own qdisc, downstream of the capture tap, so the sender's push rate is
+  inferred from `netem`'s passed/dropped counts. Shaping between two network namespaces and capturing on
+  the sender's side of the shaper would measure it outright, and would also let the loss sweep run past
+  1 % without the inference. The T8b netns rig is the natural host for it.
+- **Attribute wire bytes per track.** The video-only leg separates media from audio/data and the totals
+  leave no room for anything republishing at rate, but nothing here distinguishes the catalog and
+  verbatim side tracks from each other. Low value now that the totals close to 0.03 points, worth doing
+  only if a future measurement stops closing.
+- **A second source profile for the carriage figure.** Both the advantage over SRT and its size depend
+  on the source's stuffing ratio, and every carriage measurement here is one 9.95 Mbps clip with 4.57 %
+  nulls. A loosely filled carrier should widen the gap sharply — the T12 profile implies roughly 2x —
+  and a tightly packed one should narrow it towards the ~1.2-point AEAD floor. Until that is measured,
+  the 5.3 % is specific to this clip.
 - **Per-role envelope for the groomer/pacer**, which the objective asks for and none of these runs
   covers.
-- **The audio-sync abort on real content** — a bit-flipped MP2 frame header mid-file, with a corrupted
-  video NAL on the same file as the control, plus the blast radius as measured. The unit reproducer
-  already establishes the mechanism; this is the broadcast-credible artefact for the upstream issue
-  (checklist in [planned-experiments](planned-experiments.md)).
+- ~~**The audio-sync abort on real content.**~~ **Done, and the defect is fixed upstream.** The
+  bit-flipped MP2 header, the video-NAL control and the blast radius are all measured above; the fix
+  ([#2751](https://github.com/moq-dev/moq/pull/2751)) was verified against both builds. What it left
+  open — the recovered gap being unsignalled — is now the follow-up.
 - **Isolate the live-source `moq import` CPU cost** (~3x the file-paced case, bitrate-independent).
   Profile it and re-test with the live source staged through a file; if it holds up, it is an upstream
   report, and it affects the normal live contribution topology.
