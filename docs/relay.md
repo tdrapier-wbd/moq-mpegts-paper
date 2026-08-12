@@ -154,14 +154,16 @@ attaches or the active source dies, `reselect` promotes the winner and live trac
 `test_route_failover`. On paper this is exactly the standby-and-failover mechanism a
 redundant fabric needs.
 
-**Until [#2473](https://github.com/moq-dev/moq/pull/2473), that table was never *fed* a second live
-route for the same broadcast.** Two publishers on one relay did not form a standby pair (the second
-announce made the path `unroutable` and tore both down), and across a two-relay mesh the pair
-coexisted without the carrying relay ever learning the standby route: announcements were coalesced
-to one best route per path, and the split-horizon loop filter (`exclude_hop`) suppressed the return
-announcement. Cost-weighted standby routing (#2424, in the opt-in `moq-lite-06-wip` version) could
-not help, because the blocker was route *propagation*, not pricing. The full diagnosis is in the
-notebook ([lab: T6](../lab/test-6-relay-resilience.md)).
+**Until [#2473](https://github.com/moq-dev/moq/pull/2473), a 1+1 pair could not use it.** Two
+publishers on one relay did not form a standby pair (the second announce made the path `unroutable`
+and tore both down), and across a two-relay mesh the pair coexisted but never failed over: graded
+well beyond one full QUIC idle timeout, the subscriber on the relay serving the active source stayed
+frozen for the rest of the window. What #2473 supplies is the per-peer *selection* step ([lab:
+T6](../lab/test-6-relay-resilience.md); our original diagnosis, that the standby announcement was
+suppressed by announce coalescing and the `exclude_hop` split-horizon filter, was withdrawn).
+Cost-weighted standby routing (#2424, in the opt-in `moq-lite-06-wip` version) could not close it on
+its own: with both relays and all clients opted in the mesh behaved exactly as before, because
+pricing decides between the routes a relay is willing to offer and does not create one.
 
 **#2473 (issue #2461) closes that gap and ships on `main`.** It advertises, per peer, the best route
 whose hop chain *excludes* that peer (so a peer inside the serving chain is offered the standby

@@ -223,8 +223,9 @@ is open to a lower default (~10 s) as a separate change.
 advertises, per peer, the best route whose hop chain *excludes* the requester, and a `moq --origin
 <id>` flag lets the two publishers **declare their feeds interchangeable**. That promise has to be
 explicit because the relay never infers it: the relay is content-agnostic, and it will not rewrite
-timestamps to bridge two broadcasts. Before #2473 the standby's route was simply never propagated
-back across a mesh, so the pair coexisted with no failover at all.
+timestamps to bridge two broadcasts. Before #2473 the pair coexisted with no failover at all: the
+relay serving the active source never reselected onto the standby, graded well past the detection
+window.
 
 The two-relay drill now passes end to end ([lab: T6](../lab/test-6-relay-resilience.md)). The
 standby is advertised the instant its publisher joins, and when the active publisher is killed the

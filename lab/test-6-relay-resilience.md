@@ -114,16 +114,21 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   two relays and a shared `--origin`.
 
 **Why the mesh needed a routing fix, which #2473 supplied.** Before that fix a two-relay mesh
-tolerated the pair but did **not** fail over: with `pubA→relayA` / `pubB→relayB` meshed, both coexist,
-but killing `pubA` left `relayA` unable to re-splice, because `relayB` never re-announced its local
-`red.hang` back to `relayA` (announce coalescing keeps one best route per path; split-horizon
-`exclude_hop` suppressed the return route). `relayA` had **no standby route to reselect**. The origin
-already implemented multi-source splice (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`,
-unit test `test_route_failover`); it was simply never fed a second live route. This also explains why
-`moq-lite-06` cost routing is **necessary but not sufficient** on its own: with both relays and all
-clients opted in (#2424 — a standby seeds a high `route.cost`, the winner's drops to 0 while it
-carries), the mesh drill behaved exactly as before, because pricing has nothing to rank when the
-standby route is never advertised.
+tolerated the pair but did **not** fail over: with `pubA→relayA` / `pubB→relayB` meshed, both
+coexist, but killing `pubA` left `relayA` unable to re-splice, and `sub1` stayed frozen for the rest
+of the window — graded beyond one full idle timeout (a 68 s control), so this is the mechanism and
+not the detection budget. The origin already implemented multi-source splice
+(`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`, unit test `test_route_failover`); the
+drill never reached it. What #2473 adds is the *selection* rule that makes a relay offer a peer a
+route other than the one it is already serving through. Our original diagnosis — that `relayB` never
+emitted the standby announcement at all, suppressed by announce coalescing and the split-horizon
+`exclude_hop` filter — was withdrawn (see [Corrections](#corrections)); what `relayA`'s route table
+actually held before the fix was never re-established, and only the failure to reselect is measured.
+
+This also explains why `moq-lite-06` cost routing is **necessary but not sufficient** on its own:
+with both relays and all clients opted in (#2424 — a standby seeds a high `route.cost`, the winner's
+drops to 0 while it carries), the mesh drill behaved exactly as before, because pricing decides
+between the routes a relay is willing to offer and does not create one.
 
 ### Mesh source failover works, bounded by detection
 
