@@ -254,8 +254,10 @@ regenerating its own nulls ([evidence](evidence.md) §7,
 [architecture](architecture.md) §14.1). So the choice is three-way rather than two-way —
 verbatim, stripped-and-regroomed, or media-aware — and it is now a fidelity decision with a
 known price rather than a bandwidth gamble. **The opaque lane's own carriage cost remains
-unmeasured**, which is the gap worth closing next on this line, since it is the lane the
-architecture prefers for hardware receivers.
+unmeasured**, which is the gap worth closing next on this line: the fallback's price is
+derived rather than known — near SRT if it carries stuffing verbatim, near the media-aware
+lane if it strips it — and MSFTS leaves null removal to the publisher, so "opaque" does not
+by itself decide which.
 
 **T-STD (buffer-model) conformance is a muxing property, distinct from PCR pacing.**
 The MPEG-2 Systems T-STD (Transport Stream System Target Decoder) is the reference

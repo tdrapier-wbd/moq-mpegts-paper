@@ -2,7 +2,9 @@
 
 ## Objective
 
-Demonstrate that the platform's **opaque `m2ts` lane** — the product path — carries a complete
+Demonstrate that the platform's **opaque `m2ts` lane** — the fallback lane
+([architecture](../docs/architecture.md) §4.2), and the one the prototype chain implements end to
+end — carries a complete
 MPEG-TS end-to-end over a local MoQ relay **without altering it**: verify, component by component
 against the T1 §5.6 inventory, that video, every audio track, teletext, every SCTE-35 PID and the
 full PSI/SI survive at their original PIDs; that TSID/ONID/service identity and PMT/PCR PIDs are
@@ -133,7 +135,7 @@ the media-aware lane's residual gaps).
 
 ## References
 
-- Product path rationale: [`docs/transport.md`](../docs/transport.md) §4;
+- Lane choice and the fallback rationale: [`docs/transport.md`](../docs/transport.md) §4;
   [`docs/architecture.md`](../docs/architecture.md) §4.2.
 - Media-aware counterpart: [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md).
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §1–§3.
