@@ -122,12 +122,11 @@ Soaks, the fan-out envelope, the bitrate sweep, protocol overhead, the relay mem
 and the audio-resync work are all executed and written up in
 [test-9-performance.md](test-9-performance.md). What is left:
 
-1. **Confirm the predicted memory plateau on this rig** — asked for by the maintainer on
-   [#2745](https://github.com/moq-dev/moq/issues/2745), and running. `gop14` for 4 h on the default
-   10,000 stream slots should knee at ~1.55 h and level at ~99 MB above baseline; a second leg at
-   `--server-quic-max-streams 1024` should knee at ~9 min and reach roughly a tenth of that. A plateau
-   confirms the root cause; continued linear growth past 10,000 ingested groups would mean something
-   else is also in play.
+1. **Run a leg long enough to resolve the soft plateau.** The knee reproduced where predicted, but
+   growth past it continues at ~+8 MB/h rather than stopping, and four hours cannot distinguish slow
+   convergence from a second, shallower leak. A 12-hour leg on the default slot count would settle it.
+   Related: the ceiling has a ~20–30 MB slot-independent term whose origin is unattributed — a third
+   slot count (say 4,096) would test whether the two-point fit holds as a line.
 2. **Re-test the memory behaviour after any upstream fix**, using `gop14` as the sensitive case — at
    6,445 groups/h it shows a regression in half the time. The fix has to come from `quinn-proto` and no
    released version past 0.11.16 changes the recycling behaviour, so this may wait a long time.

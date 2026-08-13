@@ -17,11 +17,15 @@ connection has ever accepted — not moq state at all.**
 is filled — `moq-relay` sets 10,000 per connection, so the ceiling is **~99 MB above baseline per
 publisher connection**, reached after ~10,000 ingested groups (~3.1 h at 3,222 groups/h). Every leg
 here was shorter than that knee, so this file's earlier "linear, 650 MB/day, fails the stability
-criterion" reading was a measurement-window artefact. The defect is real, unfixable by configuration,
-and needs an upstream `quinn-proto` change — but it is **bounded**, and the mitigation is to lower
-`--server-quic-max-streams`, which caps the ceiling proportionally. Verification of the plateau on
-this rig is in flight. The 0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out
-envelope, bitrate sweep and protocol overhead are all measured on Linux. **Carriage overhead is not a MoQ penalty: measured on a real path the media-aware
+criterion" reading was a measurement-window artefact. **Now confirmed on this rig:** the slope holds at
+~+60 MB/h for three windows and breaks in exactly the window containing the predicted knee, to 13 % of
+its pre-knee value, at baseline + 108 MB against a predicted + 97 MB; and two independent fits put the
+per-slot cost at **9.14 and 10.54 KiB**, bracketing upstream's predicted 9.9 KiB. Capping
+`--server-quic-max-streams` at 1,024 plateaued the relay at 91.4 MB against 189.5 MB on the same
+workload. Two caveats the prediction did not cover: growth continues at ~+8 MB/h past the knee rather
+than stopping, and the ceiling falls only 3.3× for a 9.8× slot reduction because ~20–30 MB of it is
+slot-independent. The 0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out envelope,
+bitrate sweep and protocol overhead are all measured on Linux. **Carriage overhead is not a MoQ penalty: measured on a real path the media-aware
 lane needs 0.982x the source TS rate of IP capacity against SRT's 1.037x, so MoQ carries the same
 service in 5.3 % less bandwidth** — 6.2 % less with MTU discovery on, which is a one-flag change worth
 0.92 points and off by default. The overhead decomposes exactly: +2.79 % over the delivered TS, of
@@ -1069,9 +1073,58 @@ tail (+1.57 MB/h and falling) was the approach to the plateau, not a mysterious 
 was the *more* informative shape, which we set aside in favour of the cleaner-looking linear legs. The
 standing relay sitting flat at 224 MB for seven hours had simply finished filling its slots.
 
-**Verification in flight** (`~/t9/knee.sh`, launched 2026-08-12 20:15 UTC): `gop14` for 4 h on the
-default 10,000 slots, expecting a knee at ~1.55 h and a plateau ~99 MB above baseline; then 2 h with
-`--server-quic-max-streams 1024`, expecting the knee at ~9 min and roughly a tenth of the ceiling.
+#### Verified on this rig: the knee is where it was predicted, and capping streams caps the footprint
+
+`~/t9/knee.sh`, two legs on `gop14` (1.79 ingested groups/s), 4 h on the default 10,000 slots and 2 h
+with `--server-quic-max-streams 1024`. Half-hourly slopes:
+
+| Window | default (10,000 slots) | capped (1,024 slots) |
+|---|---:|---:|
+| 0–30 min | +63.33 MB/h | +35.90 MB/h |
+| 30–60 min | +59.94 | +5.53 |
+| 60–90 min | +59.41 | +1.59 |
+| 90–120 min | **+14.84** ← knee predicted at 93 min | +0.91 |
+| 120–150 min | +9.18 | — |
+| 150–180 min | +5.65 | — |
+| 180–210 min | +8.04 | — |
+| 210–240 min | +9.96 | — |
+
+**The default leg holds ~+60 MB/h for three windows and then breaks in exactly the window containing
+the predicted knee** — 5,577 s, where the 10,000th group is ingested. The slope falls to 13 % of its
+pre-knee value and stays there. RSS at the knee was 164.9 MB, **baseline + 108.1 MB against a predicted
++97 MB**, an 11 % error on a prediction made from a different machine and a different workload.
+
+**The capped leg is the cleaner demonstration.** Its knee arrives at 570 s, and the last 90 minutes are
+flat to measurement resolution (+0.91 MB/h in the final window, with individual 5-minute windows
+scattering negative). It finished at 91.4 MB against the default leg's 189.5 MB — the same workload,
+the same duration of media, less than half the footprint.
+
+Two independent fits confirm the mechanism quantitatively. Treating the ceiling as
+`A + B × slots` and solving from the two legs:
+
+| Measured at | per-slot cost | slot-independent term |
+|---|---:|---:|
+| the knee | **9.14 KiB** | 18.9 MB |
+| leg end | **10.54 KiB** | 29.7 MB |
+
+Both bracket the 9.9 KiB per slot that upstream's patched probe predicted, from data upstream never
+saw. That is about as strong as this kind of confirmation gets.
+
+**Two things the prediction did not cover, and they matter operationally.**
+
+First, **growth does not stop dead at the knee — it drops to ~13 % and continues.** The default leg
+added another 25 MB over the 2.5 h after its knee (+8 MB/h mean), so the ceiling is soft rather than
+hard. Whether that converges needs a run longer than four hours; the capped leg's residual of
++0.91 MB/h suggests it is also slot-related, since capping removed it as well.
+
+Second, **the ceiling does not scale with slot count as cleanly as "a tenth of the slots, a tenth of
+the ceiling"**: a 9.77× reduction in slots bought only a 3.30× reduction in retained memory, because of
+the ~20–30 MB slot-independent term above. Cutting `--server-quic-max-streams` therefore helps
+substantially but sub-proportionally, and a deployment cannot configure its way below that floor.
+
+One caveat on the capped leg's own numbers: its knee at 570 s lands inside the startup ramp, so its
+pre-knee slope cannot be separated from the working set settling. It establishes the plateau and the
+ceiling, not the pre-knee rate.
 
 #### Mitigation, and why there is no quick fix
 

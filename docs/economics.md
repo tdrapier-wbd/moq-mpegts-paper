@@ -947,9 +947,11 @@ procurable from more than one supplier, but a feed currently traverses only rela
 the same implementation as the publisher ([evidence](evidence.md) §9).
 - What does relay memory growth cost to operate around? The reference relay accumulates
 per-connection QUIC stream state that cache tuning does not bound (§3.1). Now that this
-is understood to plateau at roughly 100 MB per publisher connection rather than climb
-indefinitely, it is a sizing line rather than a restart cycle — but one that scales with
-channels carried, not audience, so it lands on multi-channel relay density.
+is understood — and measured on our own rig — to plateau at roughly 100 MB per publisher
+connection rather than climb indefinitely, it is a sizing line rather than a restart
+cycle, but one that scales with channels carried rather than audience, so it lands on
+multi-channel relay density. The stream-limit lever reduces it sub-proportionally and
+cannot go below a ~20–30 MB floor, so density has a hard ceiling per channel.
 - How much of the operational-saving hypothesis (§5) survives running an immature
 platform to a broadcast SLA? §7 notes one on-call engineer outweighs the entire
 modelled transport line at single-route scale.

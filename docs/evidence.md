@@ -522,8 +522,26 @@ A relay is therefore sizeable rather than fragile: budget the ceiling per publis
 scheduled restarts are prudence, not a necessity. The one lever that does work is the stream limit
 itself — `--server-quic-max-streams` caps the ceiling proportionally, at the cost of concurrent-stream
 headroom on busy connections. There is no released version of the QUIC library that fixes this, so the
-overhead should be planned for rather than waited out. Confirmation of the plateau on our own rig is
-in flight.
+overhead should be planned for rather than waited out.
+
+**The plateau then reproduced on our own rig, closely.** A four-hour leg on the default slot count held
+~+60 MB/hour for three half-hourly windows and broke in exactly the window containing the predicted
+knee — the point at which the ten-thousandth group is ingested — falling to 13 % of its pre-knee rate
+and staying there. Memory at the knee was 108 MB above baseline against a predicted 97 MB, an 11 %
+error on a prediction derived on different hardware under a different workload. A second leg capping
+the limit at 1,024 streams was flatter still, level to measurement resolution for its final ninety
+minutes and finishing at 91 MB where the uncapped leg reached 190 MB on identical media. Solving the
+ceiling as a per-slot cost plus a constant, from the two legs independently at the knee and at their
+ends, puts the per-slot figure at 9.1 and 10.5 KiB — bracketing the 9.9 KiB upstream derived from
+instrumenting the library. The diagnosis is confirmed.
+
+Two qualifications survive that confirmation, and both are operational rather than diagnostic. Growth
+does not stop at the knee so much as slow sharply, continuing at ~8 MB/hour and adding a further 25 MB
+over the following two and a half hours, so the ceiling is soft and a longer run is needed to see
+whether it truly converges. And the ceiling does not fall in proportion to the slot count: cutting
+slots by 9.8× reduced retained memory by only 3.3×, because 20–30 MB of it is independent of slots
+altogether. Lowering the stream limit is a real mitigation, but a sub-proportional one with a floor
+beneath it.
 
 **Bounding the relay cache is free.** With `--cache-capacity` set, CPU was identical and RSS differed
 by under 1.5 MB, because a healthy working set sits far below any sensible bound. The cache is

@@ -148,10 +148,15 @@ The platform must be observable in two languages simultaneously
   problem rather than this one. A lower latency target reaches the same ceiling sooner
   rather than settling higher, so it changes the shape of the curve and not the budget.
 
-  `--server-quic-max-streams` is the one control that binds it, cutting the ceiling
-  proportionally — 1,024 streams gives roughly a tenth. It costs concurrent-stream
-  headroom on busy connections, so treat it as a memory-constrained-host lever rather
-  than a default. No released QUIC library version fixes this, so plan for the
+  `--server-quic-max-streams` is the one control that binds it, but it is
+  **sub-proportional**: measured on our own rig, cutting slots by 9.8× reduced retained
+  memory by only 3.3×, because 20–30 MB of the ceiling is independent of slot count.
+  A capped relay levelled at 91 MB where an uncapped one on identical media reached
+  190 MB — worth having on a memory-constrained host, at the cost of concurrent-stream
+  headroom on busy connections, but not a way to configure the overhead away. Two
+  further practical notes from that verification: the plateau is **soft**, still
+  creeping at ~8 MB/hour after the knee, so set alarm thresholds above the ceiling
+  rather than at it; and no released QUIC library version fixes this, so plan for the
   overhead rather than waiting for it to go away
   ([lab T9](../lab/test-9-performance.md)).
 
