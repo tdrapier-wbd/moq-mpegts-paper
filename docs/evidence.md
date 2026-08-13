@@ -328,7 +328,7 @@ sequence numbers:
 | Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1 523 of 1 524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | yes | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | yes — CBR, every PCR within ±500 ns | **the last hop only** |
-| One *stream-clocked* groomer per leg | **yes** — 100 %, byte-identical on every datagram | yes — CBR | **the whole chain**, including publisher, relay and exporter death |
+| One *stream-clocked* groomer per leg | **yes** — 100 %, byte-identical on every datagram, on a single-track feed with both legs co-started; see the exporter's three per-process values below for what a second track or a late join costs | yes — CBR | **the whole chain**, including publisher, relay and exporter death |
 
 The middle row fails **structurally, not through re-stamped PCR**: across 400 sampled conflicting
 datagrams, none differs only in the PCR field, 39.5 % do not agree on PID order and 28.2 % carry a
@@ -373,14 +373,27 @@ in the stream. A stream-clocked leg returns from the same injection with a numbe
 **zero** and 5 526 of its next 5 658 datagrams carrying programme — it rejoins both the numbering and
 the schedule.
 
-What it does not do is become byte-identical again, and the reason is not the groomer. Masking one
-field lifts the recovered leg from 68.6 % to **98.2 %** agreement, and a leg that joined 20 s late
-from 0.09 % to **97.1 %**: that field is the continuity counter, which `moq export ts` numbers from
-its own process state, leaving two exporters that did not start together permanently offset by a
-constant (+2 on the video PID, +8 on PSI, unchanging over a 60 s run). Each leg is internally
-continuous — 0 continuity errors on either — so the divergence appears only when a receiver compares
-them. **Independent restart of one leg of a groomed pair therefore waits on the exporter, not the
-edge** ([moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779)).
+What it does not do is become byte-identical again, and the reason is upstream of the groomer.
+Masking one field lifts the recovered leg from 68.6 % to **98.2 %** agreement, and a leg that joined
+20 s late from 0.09 % to **97.1 %**: that field is the continuity counter, which `moq export ts`
+numbers from its own process state, leaving two exporters that did not start together permanently
+offset by a constant (+2 on the video PID, +8 on PSI, unchanging over a 60 s run). Each leg is
+internally continuous — 0 continuity errors on either — so the divergence appears only when a
+receiver compares them.
+
+The counter is one of three values the exporter renders from its own process state rather than from
+the broadcast, and grooming conceals none of them — it supplies the common slot grid that makes two
+legs comparable at all, and then carries every difference faithfully. The 2.9 % the mask leaves is
+the second: the emission cadence for SI tables was anchored to process start, and in that capture
+**31 of 31** SDT emissions land on a slot where the other leg carries video, displacing every packet
+after them. [#2825](https://github.com/moq-dev/moq/pull/2825) fixes it, and takes a single-track pair
+from 96.4 % to **100.0 %**. The third is the audio/video interleave: the exporter emits the earliest
+*available* frame rather than the earliest frame, so two legs whose bytes arrive at different moments
+order the same media differently, and on ordinary multi-track content the pair stops at **95.6 %**
+([#2829](https://github.com/moq-dev/moq/issues/2829)). That ceiling is not about restarting — two
+legs started at the same instant sit at 95.2 %, agreeing on every table while placing different
+numbers of audio and video packets. **A byte-identical pair therefore waits on the exporter, not on
+the edge** ([#2779](https://github.com/moq-dev/moq/issues/2779), #2825, #2829).
 
 **One further constraint on operating a pair.** Failure detection cannot be faster than the leg's
 own burstiness: an ungroomed leg has inter-datagram gaps to 242 ms, so a silence threshold below
@@ -390,7 +403,7 @@ pacer is what makes prompt failover detection possible, quite apart from its TR 
 leg that joins late joins *in phase*: a stream-clocked leg brought up 20 s after its partner sends
 each shared sequence number a median of **10 ms** from it, and varying the groomer's release latency
 between 500 ms and 2 s moves that by tens of milliseconds, not seconds. Phase is therefore not the
-obstacle to independent restart; the continuity counter above is the whole of it.
+obstacle to independent restart; the exporter's per-process rendering above is the whole of it.
 
 Two scope limits. The receiver is a reference implementation of the selection rules, not a hardware
 IRD's merge engine, so this can disprove mergeability but cannot substitute for the Gate 2

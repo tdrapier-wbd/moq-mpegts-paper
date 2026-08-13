@@ -36,7 +36,12 @@ window.
   [`t12-merge-oracle.py`](scripts/t12-merge-oracle.py), grading
   [`t12-grade.sh`](scripts/t12-grade.sh), matrix [`t12-matrix.sh`](scripts/t12-matrix.sh),
   divergence analysis [`t12-conflict-anatomy.py`](scripts/t12-conflict-anatomy.py), resume
-  behaviour [`t12-resume.py`](scripts/t12-resume.py). Grading reads only the capture, so the whole
+  behaviour [`t12-resume.py`](scripts/t12-resume.py). The later re-run against candidate exporter
+  fixes uses a second, smaller rig on a laptop —
+  [`t12-armd-join-local.sh`](scripts/t12-armd-join-local.sh) with
+  [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) — which drops to one publisher and one relay so that the
+  only asymmetry between the legs is when each exporter tuned in; its sources are stated with its
+  results. Grading reads only the capture, so the whole
   campaign is re-graded from the pcaps whenever the receiver changes — which it did, four times. The
   standing loop publisher is stopped for the duration so CPU is attributable.
 
@@ -325,7 +330,7 @@ placed everything it then received in slots that had already been transmitted. T
 with perfect numbering and **0 of 1 155 datagrams carrying programme** — a failure invisible to every
 metric except asking whether the carrier had anything in it.
 
-#### What remains is a continuity counter, and it is not the groomer's
+#### What remains is upstream of the groomer, and most of it is a continuity counter
 
 The recovery cell scores 68.6 % alignment yield and the mid-stream join 0.08 %, which reads like
 arm B until the conflicts are opened up. Masking the continuity counter
@@ -353,11 +358,10 @@ rewriting a field it was handed. Each leg is internally continuous — TSDuck re
 errors on either — so this is invisible until the two are compared.
 
 The counter is the largest of three exporter values minted per process rather than derived from the
-broadcast, and it is the only one this groomed comparison can see. Filed as
-[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779); the other two are measured in
-[the exporter-determinism section below](#three-values-the-exporter-mints-per-process-not-one), and
-the reason they are invisible here is that the groomer re-places every packet onto a stream-clocked
-CBR grid, which absorbs them before anything compares the legs.
+broadcast, and it accounts for the whole of the gap between the two columns. Filed as
+[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779). It is not the whole of the row: the
+2.90 % that survives the mask is the second of the three, and is
+[attributed below](#three-values-the-exporter-mints-per-process-and-what-a-groomed-pair-sees-of-each).
 
 #### A leg that joins 20 s late lands in phase, and the tooling said otherwise
 
@@ -437,49 +441,87 @@ aligned, muted and came back is misnumbered by its outage exactly as a late-join
 misnumbered by its start delay: one defect, that RTP numbering counts what the groomer sent rather
 than where it is in the stream. Arm D removes that defect. A leg that joins 20 s late, or that mutes
 and returns, comes back on its partner's numbering, in its partner's slots and within tens of
-milliseconds of its partner's timing; what still separates the pair is a single upstream field, and
-that is below.
+milliseconds of its partner's timing; what still separates the pair is upstream of the groomer
+entirely, and that is below.
 
-### Three values the exporter mints per process, not one
+### Three values the exporter mints per process, and what a groomed pair sees of each
 
-The 97 % masked-identical figure above says the counter is the whole of what a *groomed* pair
-disagrees about. It does not say the counter is the whole of what the *exporter* renders from
-process state, and it is not. Measured directly on the exporter, with the groomer removed
-([`export-determinism.sh`](scripts/export-determinism.sh)): one publisher feeding
-`CNNiEMEA2.ts`, two `moq export ts` subscribers of one broadcast on one relay, the second joining
-20 s late.
+`moq export ts` renders three things from its own process state rather than from the broadcast. Each
+is a separate defect, and grooming does not absorb any of them — it only changes which ones a given
+source can expose.
 
-**The SI cadence is anchored to process start.** `export.rs` decided when to re-emit a table by
-measuring forward from its own last emission, so two exporters put the tables on different frames
-for ever. PAT and PMT largely escape it because they are also re-emitted at every video keyframe, a
-boundary both legs share; SDT and NIT have no such anchor.
-[`ts-table-anchor.py`](scripts/ts-table-anchor.py) tags each table emission with the PTS of the
-frame that triggered it (the exporter writes due tables and then that frame's PES packets into one
-buffer), and reports frames where both legs emitted over frames where either did:
+**1. The continuity counter** is a constant per-PID offset between two exporters that did not start
+together (+2 video, +8 PSI above). It is masked out of every figure in this section and filed as
+[#2779](https://github.com/moq-dev/moq/issues/2779).
+
+**2. The SI cadence was anchored to process start.** `export.rs` decided when to re-emit a table by
+measuring forward from its own last emission, so two legs put the tables on different frames.
+Measured at the exporter with the groomer removed ([`export-determinism.sh`](scripts/export-determinism.sh),
+`CNNiEMEA2.ts`, second subscriber joining 20 s late),
+[`ts-table-anchor.py`](scripts/ts-table-anchor.py) tags each emission with the PTS of the frame that
+triggered it and reports frames where both legs emitted over frames where either did:
 
 | | PAT/PMT | SDT | NIT |
 |---|---|---|---|
 | before [#2825](https://github.com/moq-dev/moq/pull/2825) | 95.51 % | **0.00 %** | **0.00 %** |
 | with #2825 | 96.36 % | 92.74 % | 95.71 % |
 
-Not "low" before the fix — over a 45 s overlap the two legs never once emitted SDT on a common
-frame. This is invisible in the arm D comparison because the groomer re-places every packet onto a
-stream-clocked CBR grid.
+PAT and PMT largely escape it because they are also re-emitted at every video keyframe, a boundary
+both legs share; SDT and NIT have no such anchor and, over a 45 s overlap, never once landed on a
+common frame.
 
-**The audio/video interleave is a function of arrival timing.** The exporter emits whichever track
-has a frame in hand rather than waiting for the track whose frame should come first, so two legs on
-different paths order the same frames differently. Comparing the two raw exporter outputs packet by
-packet ([`ts-legcmp.py`](scripts/ts-legcmp.py)), the longest run they share is **32 packets** even
-with the continuity counter masked, and the PID census over the aligned span shows the legs
-rendering different numbers of video and audio packets across the same media interval. On a
-single-track synthetic fixture this is invisible; on real multi-track content it is what stops a byte
-comparison working at all.
+**This is exactly what the 2.90 % residue in the arm D join cell is**, and it is visible in the
+original capture: re-grading it with a PID census ([`t12-maskcmp.py`](scripts/t12-maskcmp.py)) shows
+both legs emitting the same tables — PAT 123/123, PMT 123/123, SDT 31/31 — while **31 of the 31 SDT
+emissions land on a slot where the other leg has video**, and PAT and PMT disagree on 16 of 123. A
+misplaced table displaces everything after it by one packet, which is the 2 561 video packets and
+1 351 video/stuffing swaps that make up the rest of the residue. The groomer places by stream
+position, so it faithfully carries the displacement rather than hiding it.
 
-**Consequence for 1+1.** A byte-identical pair needs all three: the counter, the SI cadence, and the
-interleave. The groomer hides the last two by rebuilding placement from stream position, which is why
-arm D reaches 97 % with only the counter outstanding — but a pair fed from raw `export ts` output,
-without stream-clocked grooming, is not close to mergeable and the counter is the least of the
-reasons.
+**3. The audio/video interleave is a function of arrival timing.** `pick_next_track` takes the
+smallest timestamp among tracks that *currently hold* a frame, and a track only holds one once its
+own read has returned — so the exporter emits the earliest *available* frame, not the earliest frame.
+Two legs with different arrival timing order the same media differently. Comparing raw exporter
+outputs packet by packet ([`ts-legcmp.py`](scripts/ts-legcmp.py)) the longest run they share is
+**32 packets** even with the counter masked. Filed as
+[#2829](https://github.com/moq-dev/moq/issues/2829).
+
+**Consequence for 1+1.** A byte-identical pair needs all three. Grooming is what makes the pair
+comparable at all — it rebuilds placement from stream position, so the legs share a slot grid — but
+it neither creates nor conceals these differences. Which of them a run exposes depends on the
+source: a single-track feed cannot show the interleave, and a feed carrying no standalone SI can
+barely show the cadence.
+
+### What the fixes are worth, measured on the pair
+
+The arm D join cell re-run against candidate fixes, on
+[`t12-armd-join-local.sh`](scripts/t12-armd-join-local.sh): the same topology reduced to one
+publisher and one relay, so the only asymmetry left is when each exporter tuned in, graded by
+[`t12-rtpcmp.py`](scripts/t12-rtpcmp.py). Builds are upstream `main` (`6d3c51d7`), #2825 as proposed,
+and #2825 with `!=` → `>` in `due` — the one-character change from the review, which stops a
+backwards timestamp counting as a new slot. Slots identical with the continuity counter masked, leg B
+joining 20 s late:
+
+| Source | `main` | #2825 | #2825 + monotonic `due` |
+|---|---|---|---|
+| video-only 2 Mb/s, 1.8 s GOP | 96.43 % | **100.00 %** | 100.00 % |
+| video-only 2 Mb/s, 2 s GOP | 100.00 % | 100.00 % | — |
+| `CNNiEMEA2.ts` — 2 audio, B-frames, SDT + NIT | 87.75 % | 89.72 % | **95.62 %** |
+
+- **On single-track content #2825 closes the pair.** The two legs become byte-identical bar the
+  counter, which is what the arm D cell was one defect short of. The 2 s GOP row is not a rule —
+  the campaign's own source has a 2 s GOP and scores 97.10 % — it is the reminder that two legs
+  coinciding is incidental, so a source that shows nothing proves nothing.
+- **On multi-track content it does not**, and the shortfall is not about joining late: with both legs
+  co-started the residue is 4.82 %, against 4.38 % for the late joiner. Over 62 073 shared slots the
+  tables agree exactly (PAT 111/111, PMT 111/111, SDT 22/22, NIT 5/5) while the legs place different
+  numbers of media packets — video +19, the two audio PIDs −72 and −51. That is [#2829](https://github.com/moq-dev/moq/issues/2829).
+- **The PSI inflation in #2825 as proposed reaches the receiver.** Over the same span it emits PAT
+  1 959/1 946 and SDT 818/803 across the two legs, where the monotonic variant emits 111/111 and
+  22/22 — so the surplus tables are not only overhead, they land inconsistently and cost 5.9 points
+  of agreement.
+- **The publisher is not implicated.** Running the same cell with two importers fed by one `tee`,
+  the topology the campaign used, gives 100.00 % on the single-track source, unchanged.
 
 ### Verdict against the pass criteria
 
@@ -488,7 +530,7 @@ reasons.
 | Arm C: 100 % yield, and 0 lost / 0 CC / no PCR degradation across every path injection | **pass** — rig valid |
 | Arm A feasible only at 100 % yield | **pass** when co-started (12/12 cells); fails on mid-stream join |
 | Arm B feasible only at 100 % yield | **fail** — 30–53 %; mechanism measured and structural |
-| Arm D feasible only at 100 % yield | **pass** co-started, including across every upstream-chain failure. A leg that joins or recovers separately reaches 97–98 % and is blocked from 100 % by the exporter's continuity counters, not by the groomer |
+| Arm D feasible only at 100 % yield | **pass** co-started, including across every upstream-chain failure. A leg that joins or recovers separately reaches 97–98 %, and what blocks 100 % is upstream of the groomer: the continuity counter accounts for all but 2.90 %, the SI cadence for the rest. With [#2825](https://github.com/moq-dev/moq/pull/2825) the same cell reaches 100 % on this single-track source |
 | Graceful exit: `SIGTERM` to publisher A, 0 lost packets under seq-merge | **pass** (arms A and D). Arm B's merged output also loses nothing, but the pair is not mergeable, so the criterion does not apply to it |
 | Input-select: bounded and reported | reported: 1–4 CC errors, gap ≈ `k`, and `k` ≥ 250 ms on ungroomed legs |
 | Skew: reported as measured | 0.23 ms clean; injected delay tracked to 60 µs up to 200 ms; a stream-clocked leg joining 20 s late lands a median 10 ms from its partner, and −26 to −30 ms as its release latency is varied |
@@ -496,7 +538,14 @@ reasons.
 ### What this rig cannot tell you
 
 - **One host, loopback.** There is no path diversity: skew is injected, not natural, and the
-  correlated-failure question a real 1+1 deployment asks is out of scope.
+  correlated-failure question a real 1+1 deployment asks is out of scope. It also means the two legs
+  share a wall clock, which is exactly what arm D's identity claim should not depend on — the two-host
+  variant in [planned-experiments.md](planned-experiments.md) is what settles that, and it is waiting
+  on a second EC2 in another availability zone.
+- **The source is video-only, so a whole class of defect cannot appear.** The interleave
+  ([#2829](https://github.com/moq-dev/moq/issues/2829)) needs a second media track to be visible at
+  all; on multi-track content it holds an otherwise-fixed pair to 95.6 %. Every 100 % in this file is
+  a statement about a single-track feed.
 - **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7
   receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2.
 - **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean
@@ -527,14 +576,20 @@ reasons.
 ## Corrections
 
 - **Believed:** the exporter's continuity counter was the single remaining obstacle to a
-  byte-identical 1+1 pair. **True:** it is one of three values the exporter mints per process. The SI
-  cadence was anchored to process start (SDT and NIT agreed on 0 % of emission frames across a 45 s
-  overlap) and the audio/video interleave follows arrival timing, so two raw exporter outputs share
-  no run longer than 32 packets even with the counter masked. **Rule:** a measurement taken
-  downstream of a normalising stage bounds only what that stage does not absorb. The groomer rebuilds
-  packet placement from stream position, so it hid both other defects; "the counter is the only
-  difference" was true of the groomed pair and false of the exporter, and only the second is a
-  statement about the software.
+  byte-identical 1+1 pair. **True:** it is one of three values the exporter mints per process,
+  alongside the SI cadence ([#2825](https://github.com/moq-dev/moq/pull/2825)) and the audio/video
+  interleave ([#2829](https://github.com/moq-dev/moq/issues/2829)). **Rule:** an unattributed residue
+  is not a finding. The evidence for the second defect was in the arm D capture from the day it was
+  taken — 2.90 % of datagrams still differed after masking the counter — but the comparison reported
+  only a percentage, so "what remains is a continuity counter" was written over the top of a
+  measurement that said otherwise. Breaking the residue down by PID, which the tool now does by
+  default, names it in one line: every SDT emission on a slot where the other leg has video.
+- **Believed:** the groomer concealed the other two defects by rebuilding packet placement from
+  stream position. **True:** it concealed neither. Placing by stream position is what makes two legs
+  comparable at all, and it carries a displaced table faithfully rather than absorbing it; the
+  cadence is measurable through the groomer and the interleave is what holds a multi-track pair to
+  95.6 %. **Rule:** distinguish a stage that *normalises* a difference from one that merely gives two
+  streams a common frame of reference — only the first bounds what a downstream measurement can see.
 - **Believed:** two independent groomers would produce the same transport differing only in
   re-stamped PCR, so a receiver could merge them by ignoring the PCR field. **True:** none of the
   400 sampled conflicts differs only in PCR; 39.5 % do not even agree on PID order and 28.2 % carry a

@@ -60,6 +60,14 @@ session — `~/moq-dev/target/release` is stale); `mpegts-pacer` build + invocat
 remote EC2 path. Keep it current: when environment facts change (rebuilds, new commit, new relay
 address, new clips), update `INSTRUCTIONS.local.md` and/or `STATUS.md`.
 
+## Before pushing to an upstream repository
+
+Work contributed to `moq-dev/moq` (or any other upstream) must pass **that repository's** gate before
+it is pushed, not ours. Run its formatter and linter locally — for `moq-dev` that is `just fix` then
+`just check` from `~/moq-dev`, detailed in `INSTRUCTIONS.local.md` §1. Its conventions are not ours:
+its `.editorconfig` indents shell with spaces where `lab/scripts/` uses tabs, so a script moved
+between the two fails on whitespace alone. Re-run any script the formatter rewrote before pushing it.
+
 ## After every engineering session
 
 1. Record the raw chronology — dated runs, provenance, hypotheses, log excerpts — in

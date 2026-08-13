@@ -63,6 +63,13 @@ cells across two hosts, and optionally with relay B dialling relay A as a cluste
 (`~/t6-redundancy/relayA.toml`/`relayB.toml`), to check that relay reselect neither helps nor
 interferes once the receiver is doing the switching.
 
+The second host is a **second EC2 instance in a different AWS availability zone**, which is wanted in
+its own right as the secondary relay. Until it exists this is blocked: the local re-run in
+[T12](test-12-dual-path-handoff.md#what-the-fixes-are-worth-measured-on-the-pair) shares a host too,
+so nothing measured so far separates "the legs agree about stream position" from "the legs share a
+clock". Run it once the exporter fixes land, so the two-host result grades path diversity rather than
+re-measuring defects already filed.
+
 **Also unaddressed by T12:** SMPTE 2022-1 FEC; a full 10 Mbps mux rather than 2 Mbps on a 2-vCPU box;
 a carrier rate matched to the content rate, to resolve whether the 1.4 % PCR-interval floor measured
 there is an artefact of 55–60 % stuffing; and any hardware IRD merge, which is Gate 2.

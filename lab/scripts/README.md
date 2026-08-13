@@ -20,7 +20,7 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`t12-matrix.sh`](t12-matrix.sh) | Runs the arm × injection matrix and grades every cell. |
 | [`t12-analyse.sh`](t12-analyse.sh) | TSDuck verdict on a single reconstructed output: continuity, PCR interval distribution, `pcrverify`, bitrate. |
 | [`t12-conflict-anatomy.py`](t12-conflict-anatomy.py) | When two legs disagree at the same RTP sequence number, says *how*: same packets with different PCR stamps, same packets with different stuffing, or different content. The distinction decides whether a receiver could recover the pair. |
-| [`t12-maskcmp.py`](t12-maskcmp.py) | Compares the legs datagram by datagram at equal sequence numbers, raw and with the continuity counter masked. Separates *the groomer placed different bytes* from *an upstream stage renumbered the same bytes*. |
+| [`t12-maskcmp.py`](t12-maskcmp.py) | Compares the legs datagram by datagram at equal sequence numbers, raw and with the continuity counter masked, then attributes whatever survives the mask to a PID. Separates *the groomer placed different bytes* from *an upstream stage renumbered the same bytes*. |
 | [`t12-seqskew.py`](t12-seqskew.py) | Differential arrival at equal sequence numbers, with no correlation step. |
 | [`t12-resume.py`](t12-resume.py) | For a leg that stopped and came back: how far its numbering drifted from its partner's across the outage, measured without needing payload identity. |
 | [`t12-placement.py`](t12-placement.py) | Strips stuffing and asks where one leg's programme sits in its partner's output. |
@@ -34,13 +34,23 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`export-determinism.sh`](export-determinism.sh) | Two `moq export ts` subscribers of one broadcast, the second joining late. The 1+1 topology with the groomer removed, so what it measures is the exporter alone. |
 | [`ts-table-anchor.py`](ts-table-anchor.py) | Where each leg puts its tables, in media time. Tags every table emission with the PTS of the frame that triggered it, so it answers whether the SI cadence is a property of the broadcast without needing the legs to be byte-identical. |
 | [`ts-legcmp.py`](ts-legcmp.py) | Packet-by-packet comparison of two renderings of one broadcast, aligned with the continuity counter masked, attributing every residual difference to a PID. |
+| [`t12-armd-join-local.sh`](t12-armd-join-local.sh) | T12 arm D's mid-stream-join cell with one publisher and one relay, so the only asymmetry is when each exporter tuned in. Records the RTP legs from the sockets, needing no capture privileges. `TWO_PUB=1` restores the campaign's two-importer topology to price the publisher's contribution. |
+| [`t12-rtpcmp.py`](t12-rtpcmp.py) | Grades those recordings on the same metric as `t12-maskcmp.py`, and attributes the residue: which PID each surviving difference sits on, and whether the legs spent the same number of packets on each PID. |
+| [`upstream-state.sh`](upstream-state.sh) | Reads every issue and PR number mentioned in the given files and reports its live state, distinguishing merged from closed and printing a merged PR's base branch. What to run first after time away, so a written claim about upstream is checked rather than trusted. |
 
-**Do not measure the exporter through the groomer.** `t12-maskcmp.py` compares *groomed* legs, and
-the groomer rebuilds packet placement from stream position, so it absorbs any exporter defect that
-moves packets rather than changing a field. Two defects hid behind it — the SI cadence and the
-audio/video interleave — and both are visible the moment the same pair is compared at the exporter
-with `export-determinism.sh`. Use the groomed comparison to ask what a receiver would see, and the
-raw one to ask what the software does.
+**Always attribute the residue.** A pair that is "97 % identical bar the continuity counter" has a
+3 % that is *something*, and the percentage cannot say what. Both comparison tools now break it down
+by PID and census the two legs, which is the difference between "what remains is a counter" and
+"every SDT emission lands where the other leg has video". Where the legs spend a different number of
+packets on a PID, one of them carried media the other placed elsewhere, and no field-masking will
+reconcile them.
+
+**Pair datagrams by RTP timestamp, not sequence number.** Under stream clocking both are functions of
+the output slot, but the sequence number is 16 bits and wraps after 65 536 datagrams — under a minute
+at 15 Mb/s. Past the wrap a late-joining leg is a whole epoch out from its partner and a comparison
+keyed on the sequence number pairs unrelated slots, quietly. `t12-rtpcmp.py` keys on the 32-bit
+timestamp and says so when a run wrapped; `t12-maskcmp.py` keys on the sequence number and is safe
+only below that rate-times-duration product.
 
 **Count distinct SI sections, not transmitted ones.** `moq-mux` dedupes SI by section identity and
 only takes the catalog write lock when the bytes change, so a table's transmitted rate says nothing
