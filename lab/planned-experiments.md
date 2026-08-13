@@ -130,13 +130,22 @@ and the audio-resync work are all executed and written up in
 2. **Re-test the memory behaviour after any upstream fix**, using `gop14` as the sensitive case — at
    6,445 groups/h it shows a regression in half the time. The fix has to come from `quinn-proto` and no
    released version past 0.11.16 changes the recycling behaviour, so this may wait a long time.
-3. **What a real decoder does with an unflagged 24 ms audio hole**, if
+3. **What a real decoder does with an unflagged 24 ms audio hole, and with a substituted frame**, if
    [#2798](https://github.com/moq-dev/moq/issues/2798) needs it. A resync is signalled nowhere, but
-   "unsignalled" only matters if something downstream would have acted on the signal.
-4. **The publisher thread count**, which grows and decelerates without settling.
-5. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
+   "unsignalled" only matters if something downstream would have acted on the signal. The splice case is
+   the sharper half: a frame of spliced bytes decodes to *something*, and whether that is an inaudible
+   glitch or a full-scale click decides how much the missing signal costs. An AC-3 decoder that honours
+   `crc1` should conceal it; an MP2 decoder on this content has no CRC to check.
+4. **Re-test the splice case against whatever supersedes
+   [#2823](https://github.com/moq-dev/moq/pull/2823).** The fix as it stands does not reach a real loop
+   wrap, because the splice lands inside a PES rather than at a PES boundary; the arms and the audit are
+   `lab/scripts/ts-splice-audit.py` and take ~5 minutes to re-run. Also worth constructing the opposite
+   case — a mux that *does* split audio frames across PES boundaries — to confirm the fix works where its
+   precondition holds, which no content we have exercises.
+5. **The publisher thread count**, which grows and decelerates without settling.
+6. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
-6. **A full-feed publisher soak.** Every long run to date used a video-only source, because looping a
+7. **A full-feed publisher soak.** Every long run to date used a video-only source, because looping a
    normal broadcast TS killed the publisher at the wrap. `moq-mux` 0.9.5 lifts that, so a re-run can
    now exercise audio, SCTE-35 and teletext — the EC2 box needs upgrading past 0.9.9 first.
 

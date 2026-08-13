@@ -26,7 +26,9 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`t12-placement.py`](t12-placement.py) | Strips stuffing and asks where one leg's programme sits in its partner's output. |
 | [`t12-join-diagnostic.sh`](t12-join-diagnostic.sh) | A single stream-clocked leg joining a broadcast already in progress, run to read the groomer's own counters (`start_backlog`, `resyncs`, `dropped`) rather than to grade a pair. |
 | [`ts-corrupt-header.py`](ts-corrupt-header.py) | Flips exactly one bit in one MP2, AC-3 or H.264 frame header of a real transport stream, located by walking the PID's PES payload rather than by offset. The damage artefact for demuxer-robustness arms. |
-| [`moq-import-survival.sh`](moq-import-survival.sh) | Relay, subscriber and importer in one invocation; reports whether `moq import ts` survived a source, with its exit status. Run once per binary for a before/after on a demuxer fix. |
+| [`moq-import-survival.sh`](moq-import-survival.sh) | Relay, subscriber and importer in one invocation; reports whether `moq import ts` survived a source, with its exit status. Run once per binary for a before/after on a demuxer fix. It keeps the subscriber's egress capture, which is what turns a survival arm into a fidelity arm. |
+| [`ts-audio-frames.py`](ts-audio-frames.py) | Walks one PID's audio elementary stream frame by frame: per-frame offset, length and hash, resync gaps, whether MP2 frames carry a CRC, and whether the stream ends mid-frame. The trailing-partial figure is what decides whether looping a clip splices an audio frame at the wrap. |
+| [`ts-splice-audit.py`](ts-splice-audit.py) | Does a capture contain an audio frame the source never had? Hashes every frame in the egress against the source's frame set, so a frame assembled across a splice is detected by construction rather than by listening. Also reports PES/frame alignment, leading continuation packets, and for AC-3 whether the mandatory `crc1` rejects each suspect frame. |
 | [`make-eit-fixture.sh`](make-eit-fixture.sh) + [`eit-epg.xml`](eit-epg.xml) | Injects a synthetic EPG onto PID 0x0012 of a clip that has none, so the lane's EIT handling can be measured rather than inferred. `pf` gives p/f only; `full` adds schedule, which is the shape that prices catalog carriage. EIT packets come from the clip's existing stuffing, so the mux rate is unchanged. |
 | [`eit-roundtrip.sh`](eit-roundtrip.sh) | Publishes an EIT-bearing fixture through a local relay and censuses which SI PIDs survive at the exporter. The measurement behind [T2](../test-2-media-aware-transparency.md)'s EIT row. |
 | [`export-determinism.sh`](export-determinism.sh) | Two `moq export ts` subscribers of one broadcast, the second joining late. The 1+1 topology with the groomer removed, so what it measures is the exporter alone. |
@@ -87,6 +89,20 @@ arm that survives may mean the parser recovered, or may mean the damaged byte wa
 Always run the same file against a build known to fail, and treat "survived on both" as inconclusive
 rather than as a pass. The same applies to a looping source: a wrap is only fatal when it splits a
 frame, which depends on where the clip was cut.
+
+**Survival is the weakest question you can ask of a demuxer.** Once a parser stops aborting, "it
+survived" stops discriminating: a build that recovers cleanly and a build that publishes a frame of
+spliced garbage both survive, and both look healthy at the TS layer — 0 continuity errors, no
+discontinuity flag, an unbroken PTS sequence, because the corrupt frame sits in the real frame's slot.
+Grade fidelity instead, with `ts-splice-audit.py`: a frame whose bytes appear nowhere in the source
+cannot be a frame the source produced, which is decidable and needs no listening test. This is exactly
+how a fix that passes its own unit tests was shown not to reach real content.
+
+**Check that a fix's precondition exists in your content before reading a null result as a
+regression.** A carried tail across a PES boundary only arises if the mux splits frames that way, and a
+broadcast mux commonly does not — `ts-splice-audit.py` reports interior PES/frame alignment for that
+reason. Where every audio PES holds a whole number of frames, the only mid-frame cut is the file end,
+and a wrap then splices *inside* one PES rather than between two. Same symptom, different code path.
 
 **The T12 rig grades itself before it grades MoQ.** Every run reports whether either leg was empty,
 what the pacer dropped, and whether a relay failed to bind; a leaked relay from a previous run is

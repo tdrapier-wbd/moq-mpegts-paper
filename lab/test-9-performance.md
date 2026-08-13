@@ -687,8 +687,8 @@ subscriber:
 The looped arm is the production shape: this is the defect that accumulated 216 publisher restarts,
 one per wrap, and it now runs through them.
 
-**What the fix costs, measured.** Comparing the damaged run against a clean control by PTS set rather
-than by eye, on every elementary stream:
+**What the fix costs, measured — on the single-bit arm.** Comparing the damaged run against a clean
+control by PTS set rather than by eye, on every elementary stream:
 
 - **exactly one 24 ms MP2 frame is dropped**, at t+8.616 s — the damage point;
 - **nothing is published that the clean run did not publish**, on any PID, so the damaged frame is
@@ -697,6 +697,12 @@ than by eye, on every elementary stream:
   subscriber.
 
 One damaged byte cost one 24 ms audio frame instead of the whole broadcast. That is the right shape.
+
+**Scope limit, and it matters.** That by-PTS comparison was run on the **bit-flip arm only**; the looped
+arm above was graded on survival alone. The two are different code paths — a flipped sync byte fails to
+parse and takes the scan-and-confirm path, whereas a wrap presents an *intact* header followed by
+foreign bytes — so "nothing extra is published" is established for corruption and was never established
+for a splice. It does not hold there: see *A splice still publishes a mixed frame* below.
 
 #### Correction: the loop wrap is fatal when it splits a frame, not always
 
@@ -709,6 +715,65 @@ lands mid-frame**, which is a property of the cut and not of the codec — the c
 rests on the unit reproducers and on AC-3 having the identical `Descriptor::parse` shape, not on this
 row. The MP2 single-bit arm is unaffected and remains decisive, because there the damage is placed on a
 verified frame header rather than wherever a cut happened to land.
+
+#### A splice still publishes a mixed frame, and the fix for it does not reach real content
+
+Upstream split the remaining gap out as [#2802](https://github.com/moq-dev/moq/issues/2802) — at a
+splice the importer publishes one frame of mixed bytes as real audio, recovering only on the frame after
+— and fixed it in [#2823](https://github.com/moq-dev/moq/pull/2823) by extending confirmation to a frame
+that begins in a carried tail. Tested here against real content, because the PR's four in-tree captures
+show the fix costs nothing on a well-formed mux but none of them contains a splice.
+
+**Rig.** `pre` = `main` `f91e3bbd2`, `post` = the PR head `a64dc4d12`; the three commits on main since
+the PR's merge base do not touch `container/ts/`, so the arms differ only by the fix. The PR's own two
+new tests pass on the `post` build, which is the control that it really is the fixed binary. Source: a
+20 s cut of `CNNiEMEA2.ts` looped through `moq import ts` for 70 s, so three wraps.
+
+**Detection is decidable.** A frame is *alien* if its bytes appear nowhere in the source's audio
+elementary stream — a frame assembled across a splice is made of bytes from both sides of it, so it can
+match nothing in the source. `lab/scripts/ts-splice-audit.py` does this, and needs no listening test.
+
+**Result: the fix changes nothing here.**
+
+| | frames | alien | |
+|---|---:|---:|---|
+| MP2 (PID 121) pre | 2580 | 3 | one per wrap, all `0b8cc4572738` |
+| MP2 (PID 121) post | 2589 | 3 | same hashes, same positions |
+| AC-3 (PID 123) pre | 1917 | 3 | one per wrap, all `9524a1486a3b` |
+| AC-3 (PID 123) post | 1926 | 3 | same hashes, same positions |
+
+Each alien frame begins with exactly the source's trailing partial frame (554 B MP2, 282 B AC-3), so
+these are the splice frames. Over the common capture length the audio is **byte-identical between the
+arms** — 1,486,080 B of MP2 and 1,472,454 B of AC-3, spanning all three wraps; the frame-count
+difference is only that the `post` capture ran ~0.2 s longer.
+
+**Why the fix cannot fire on this content**, which is the finding rather than the null result:
+
+- **This mux never splits an audio frame across a PES boundary.** Every audio PES payload is exactly
+  5184 B = 9 × 576 B MP2 frames (AC-3: 6912 B = 9 × 768 B); 0 of 91 interior MP2 and 0 of 68 AC-3 PES
+  ends fall mid-frame. So the carried tail the PR guards is always empty at a PES boundary, and the only
+  mid-frame cut in the clip is the *file* end.
+- **At the wrap the foreign bytes join the same PES, not the next one.** The clip was cut out of a longer
+  stream, so it begins with 16 continuation packets on the MP2 PID (2806 B, no PUSI). The final PES
+  before the wrap is truncated and still short of its declared `PES_packet_length`, so those packets are
+  appended to it and it flushes once the declared length is reached.
+
+The demuxer therefore sees one PES whose payload is `[whole frames][554 B partial][~736 B foreign]`. The
+mixed frame begins inside the PES body, so `in_tail` is false, and the preceding frame vouched for the
+offset, so `unconfirmed` is false — no confirmation is required and it is published. The confirmation
+*rule* would have caught it: at the frame's declared end the bytes are `29126d37`, not a valid header.
+It is the gate that misses, not the test.
+
+**Two zero-latency signals are going unused, and one is already implemented next door.** The wrap breaks
+the continuity counter on every PID (MP2 `cc 3 → 12` where 4 was due, AC-3 `9 → 0`, video `4 → 3`), and
+`SectionReassembler` in the same file already drops its partial on a CC gap, a declared discontinuity or
+a transport error — for private sections. The PES path never reads `packet.header.n_counter`. Applying
+the same discipline there would catch this with no added latency and independently of codec. Separately,
+AC-3 carries a mandatory `crc1` that `ac3::parse_header` steps over, and it rejects all three mixed
+frames (implementation validated against 620/620 genuine source frames first) — but that route is
+codec-specific and cannot be leaned on: **0 of this clip's 826 MP2 frames carry a CRC at all**.
+
+Reported at [PR #2823](https://github.com/moq-dev/moq/pull/2823#issuecomment-5278428604).
 
 #### The recovered gap is completely unsignalled
 
@@ -728,6 +793,14 @@ silence is intended, not an oversight.
 A TR 101 290 monitor at egress therefore sees a fully conformant stream with no indication that
 anything was lost. That is question 2 of the original issue — *should the dropped interval be visible
 downstream, so a TS exporter can reflect a real gap?* — and it went unanswered in the PR.
+
+The splice case above sharpens this. There the stream is not merely missing a frame, it carries a
+**substituted** one: 0 continuity errors, no `discontinuity_indicator`, and an unbroken evenly-spaced
+audio PTS sequence, because the corrupt frame occupies the real frame's slot. A gap at least leaves
+evidence of itself in a frame count against the source; a corrupt frame of the right length in the right
+place is invisible to everything short of comparing bytes. Raised on
+[#2798](https://github.com/moq-dev/moq/issues/2798#issuecomment-5278433763), arguing the counter should
+cover any frame published without confirmation rather than the resync path alone.
 
 **The 1+1 worry does not survive measurement, and it is worth saying so.** The obvious escalation is
 that two legs resyncing independently would produce different audio with neither reporting a fault —

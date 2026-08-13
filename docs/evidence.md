@@ -138,6 +138,21 @@ steps over the hole. A feed quietly losing frames is therefore indistinguishable
 which is a real loss of diagnostic signal in exchange for the robustness
 ([lab: T9](../lab/test-9-performance.md)).
 
+**A bit error and a splice are not the same defect, and only the first is closed.** Where the damage is a
+corrupt byte the parser rejects the frame and drops it. Where it is a *splice* — a feed restarting, a
+dropped PES, a looping file wrapping mid-frame — the header at that point is intact and only the bytes
+after it are foreign, so the frame is published: not a frame lost but a frame **substituted**, carrying
+audio from both sides of the discontinuity. Measured on a looped broadcast feed this happens once per
+wrap on both MP2 and AC-3, and it survives the current upstream fix for it, which guards a frame split
+across a PES boundary while a real wrap splices inside one. It is the harder case to detect downstream,
+because a substituted frame of the right length in the right place leaves the timeline intact — no
+continuity error, no discontinuity flag, evenly spaced timestamps — whereas a dropped frame at least
+shows up in a frame count. Two mechanisms that would catch it are already carried in the stream and
+unread for audio: the transport continuity counter, which the same demuxer checks for private sections
+but not for elementary streams, and the CRC that AC-3 mandates in every frame. For an architecture that
+treats the ingest edge as the place where a contribution feed's defects are absorbed, the absorbing
+needs to be observable ([lab: T9](../lab/test-9-performance.md)).
+
 The same pattern holds beyond the TS mapping: the congestion-control selector (#2432), exporter
 survival across session loss (#2469) and standby-route propagation (#2473) are upstream changes
 rather than local workarounds (§6, §7). Media-aware is the right default partly for this

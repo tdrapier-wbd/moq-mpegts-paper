@@ -441,10 +441,16 @@ one implementation.
   pass through transparently, or normalise, and at which layer? Half of this is now
   settled upstream: an audio elementary stream losing frame sync used to abort the
   whole publisher while video resynchronised, and since `moq-mux` 0.9.5 the audio
-  parsers resync too, at a measured cost of one 24 ms frame. What remains open is
-  **whether a recovered gap should be visible downstream** — today it is signalled
-  nowhere, so a feed losing audio is indistinguishable from a healthy one
-  ([lab T9](../lab/test-9-performance.md)).
+  parsers resync too, at a measured cost of one 24 ms frame. Two things remain open.
+  **Whether a recovered gap should be visible downstream** — today it is signalled
+  nowhere, so a feed losing audio is indistinguishable from a healthy one. And at a
+  *splice* rather than a bit error the ingest edge does not lose a frame but
+  **substitutes** one, publishing bytes from both sides of the discontinuity as
+  though they were real audio; measured on a looped broadcast feed, that survives
+  the current fix for it, because the fix guards a frame split across a PES boundary
+  and a real wrap lands inside a PES instead. The transport-layer signal that would
+  settle it — the continuity counter — is carried in every packet and read only for
+  private sections, not for audio ([lab T9](../lab/test-9-performance.md)).
 - Does a `moq2ts` MSFTS broadcast traverse a `moq-dev` relay (§9)? Relay neutrality
   is a load-bearing assumption of this architecture and is currently untested
   across implementations.
