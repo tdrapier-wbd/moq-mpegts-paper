@@ -29,6 +29,16 @@ credentials or personal paths** — the real values live in the git-ignored
 | [`moq-import-survival.sh`](moq-import-survival.sh) | Relay, subscriber and importer in one invocation; reports whether `moq import ts` survived a source, with its exit status. Run once per binary for a before/after on a demuxer fix. |
 | [`make-eit-fixture.sh`](make-eit-fixture.sh) + [`eit-epg.xml`](eit-epg.xml) | Injects a synthetic EPG onto PID 0x0012 of a clip that has none, so the lane's EIT handling can be measured rather than inferred. `pf` gives p/f only; `full` adds schedule, which is the shape that prices catalog carriage. EIT packets come from the clip's existing stuffing, so the mux rate is unchanged. |
 | [`eit-roundtrip.sh`](eit-roundtrip.sh) | Publishes an EIT-bearing fixture through a local relay and censuses which SI PIDs survive at the exporter. The measurement behind [T2](../test-2-media-aware-transparency.md)'s EIT row. |
+| [`export-determinism.sh`](export-determinism.sh) | Two `moq export ts` subscribers of one broadcast, the second joining late. The 1+1 topology with the groomer removed, so what it measures is the exporter alone. |
+| [`ts-table-anchor.py`](ts-table-anchor.py) | Where each leg puts its tables, in media time. Tags every table emission with the PTS of the frame that triggered it, so it answers whether the SI cadence is a property of the broadcast without needing the legs to be byte-identical. |
+| [`ts-legcmp.py`](ts-legcmp.py) | Packet-by-packet comparison of two renderings of one broadcast, aligned with the continuity counter masked, attributing every residual difference to a PID. |
+
+**Do not measure the exporter through the groomer.** `t12-maskcmp.py` compares *groomed* legs, and
+the groomer rebuilds packet placement from stream position, so it absorbs any exporter defect that
+moves packets rather than changing a field. Two defects hid behind it — the SI cadence and the
+audio/video interleave — and both are visible the moment the same pair is compared at the exporter
+with `export-determinism.sh`. Use the groomed comparison to ask what a receiver would see, and the
+raw one to ask what the software does.
 
 **Count distinct SI sections, not transmitted ones.** `moq-mux` dedupes SI by section identity and
 only takes the catalog write lock when the bytes change, so a table's transmitted rate says nothing

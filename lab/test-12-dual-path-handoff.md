@@ -352,10 +352,12 @@ did not start together are permanently offset, and no groomer downstream can cor
 rewriting a field it was handed. Each leg is internally continuous — TSDuck reports 0 continuity
 errors on either — so this is invisible until the two are compared.
 
-This is the single remaining obstacle to a groomed 1+1 pair whose legs can restart independently,
-and it belongs to the exporter: a continuity counter derived from stream position rather than from
-process state would close it, and that is filed as
-[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779).
+The counter is the largest of three exporter values minted per process rather than derived from the
+broadcast, and it is the only one this groomed comparison can see. Filed as
+[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779); the other two are measured in
+[the exporter-determinism section below](#three-values-the-exporter-mints-per-process-not-one), and
+the reason they are invisible here is that the groomer re-places every packet onto a stream-clocked
+CBR grid, which absorbs them before anything compares the legs.
 
 #### A leg that joins 20 s late lands in phase, and the tooling said otherwise
 
@@ -438,6 +440,47 @@ and returns, comes back on its partner's numbering, in its partner's slots and w
 milliseconds of its partner's timing; what still separates the pair is a single upstream field, and
 that is below.
 
+### Three values the exporter mints per process, not one
+
+The 97 % masked-identical figure above says the counter is the whole of what a *groomed* pair
+disagrees about. It does not say the counter is the whole of what the *exporter* renders from
+process state, and it is not. Measured directly on the exporter, with the groomer removed
+([`export-determinism.sh`](scripts/export-determinism.sh)): one publisher feeding
+`CNNiEMEA2.ts`, two `moq export ts` subscribers of one broadcast on one relay, the second joining
+20 s late.
+
+**The SI cadence is anchored to process start.** `export.rs` decided when to re-emit a table by
+measuring forward from its own last emission, so two exporters put the tables on different frames
+for ever. PAT and PMT largely escape it because they are also re-emitted at every video keyframe, a
+boundary both legs share; SDT and NIT have no such anchor.
+[`ts-table-anchor.py`](scripts/ts-table-anchor.py) tags each table emission with the PTS of the
+frame that triggered it (the exporter writes due tables and then that frame's PES packets into one
+buffer), and reports frames where both legs emitted over frames where either did:
+
+| | PAT/PMT | SDT | NIT |
+|---|---|---|---|
+| before [#2825](https://github.com/moq-dev/moq/pull/2825) | 95.51 % | **0.00 %** | **0.00 %** |
+| with #2825 | 96.36 % | 92.74 % | 95.71 % |
+
+Not "low" before the fix — over a 45 s overlap the two legs never once emitted SDT on a common
+frame. This is invisible in the arm D comparison because the groomer re-places every packet onto a
+stream-clocked CBR grid.
+
+**The audio/video interleave is a function of arrival timing.** The exporter emits whichever track
+has a frame in hand rather than waiting for the track whose frame should come first, so two legs on
+different paths order the same frames differently. Comparing the two raw exporter outputs packet by
+packet ([`ts-legcmp.py`](scripts/ts-legcmp.py)), the longest run they share is **32 packets** even
+with the continuity counter masked, and the PID census over the aligned span shows the legs
+rendering different numbers of video and audio packets across the same media interval. On a
+single-track synthetic fixture this is invisible; on real multi-track content it is what stops a byte
+comparison working at all.
+
+**Consequence for 1+1.** A byte-identical pair needs all three: the counter, the SI cadence, and the
+interleave. The groomer hides the last two by rebuilding placement from stream position, which is why
+arm D reaches 97 % with only the counter outstanding — but a pair fed from raw `export ts` output,
+without stream-clocked grooming, is not close to mergeable and the counter is the least of the
+reasons.
+
 ### Verdict against the pass criteria
 
 | Criterion (fixed in advance) | Result |
@@ -474,14 +517,24 @@ that is below.
 - **Recovery is measured at two outage lengths, one per arm.** Arm B's 15 s blackout produced a 23 s
   mute, arm D's a 13.6 s mute. How a resumed leg behaves at outages shorter than the pacer's cushion,
   or longer than the QUIC idle timeout that would force a fresh session, is untested.
-- **The continuity-counter offset is measured, its origin is inferred.** `moq export ts` was not
-  instrumented; the constant offset across a whole run, on every PID, is consistent with per-process
-  numbering and with nothing else observed, but the exporter's source was not read.
+- **The continuity-counter offset's origin is now confirmed, not inferred.** `Export` holds a
+  per-PID counter map seeded empty at process start, so two exporters are offset by however many
+  packets the older one emitted first. Read from the source and confirmed upstream on
+  [#2779](https://github.com/moq-dev/moq/issues/2779).
 - **One run per cell**, 60 s each; only the arm A clean control was repeated (three times, all
   identical at 100 % yield and offset 0). Enough to establish mechanism, not distribution tails.
 
 ## Corrections
 
+- **Believed:** the exporter's continuity counter was the single remaining obstacle to a
+  byte-identical 1+1 pair. **True:** it is one of three values the exporter mints per process. The SI
+  cadence was anchored to process start (SDT and NIT agreed on 0 % of emission frames across a 45 s
+  overlap) and the audio/video interleave follows arrival timing, so two raw exporter outputs share
+  no run longer than 32 packets even with the counter masked. **Rule:** a measurement taken
+  downstream of a normalising stage bounds only what that stage does not absorb. The groomer rebuilds
+  packet placement from stream position, so it hid both other defects; "the counter is the only
+  difference" was true of the groomed pair and false of the exporter, and only the second is a
+  statement about the software.
 - **Believed:** two independent groomers would produce the same transport differing only in
   re-stamped PCR, so a receiver could merge them by ignoring the PCR field. **True:** none of the
   400 sampled conflicts differs only in PCR; 39.5 % do not even agree on PID order and 28.2 % carry a
