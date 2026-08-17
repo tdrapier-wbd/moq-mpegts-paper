@@ -228,6 +228,52 @@ republished the catalog every repetition.
 Not covered here: EIT p/f *other* (0x4F), which the PR also excludes because `section_key` cannot
 tell two foreign services with the same `service_id` apart. No source held here carries it.
 
+### What carried SI costs the catalog, and why it is a scaling question
+
+The catalog is whole-state: one changed SI section rewrites the entire document on the plaintext
+and DEFLATE tracks, and appends a group to the MSF one. Whether that matters cannot be read off a
+single-service capture, so it was measured against service count.
+[`si-catalog-cost.rs`](scripts/si-catalog-cost.rs) records every catalog publish on all three
+tracks; [`make-mpts-fixture.sh`](scripts/make-mpts-fixture.sh) supplies the multiplexes, grafting
+SDT and NIT for N services and a rolling EPG onto this clip's media. That graft is not a
+contrivance: a real SPTS carved out of a distribution multiplex carries its whole multiplex's SDT,
+NIT and EIT p/f in full.
+
+**SDT and NIT cost nothing after acquisition.** Ten minutes of `CNNiEMEA2.ts`: 7 catalog publishes,
+none caused by SI, 184 B of a 1,587 B catalog. Synthesised to 40 services the standing size grows
+but the churn is still exactly zero, because neither table turns over.
+
+**EIT is what makes it expensive, and the cost is the product of two growing terms** — the number of
+republishes at a programme junction and the size of each document:
+
+| services | standing catalog | SI share | junction | plain | deflate | active set as binary |
+|---|---:|---:|---|---:|---:|---:|
+| 1 | 2,180 B | 34.8 % | 2 republishes in 0.11 s | 4,360 B | 1,625 B | 525 B |
+| 12 | 6,746 B | 79.2 % | 20 republishes in 0.11 s | 134,920 B | 26,935 B | 3,900 B |
+| 40 | 18,428 B | 92.7 % | 61 republishes in 1.27 s | 1,124,108 B | 157,958 B | 12,531 B |
+
+Between 12 and 40 services, 3.3× the services costs 8.3× the junction. The bandwidth is not the
+problem — 1.12 MB against a multiplex of tens of Mb/s is noise, and a consumer reads one track
+rather than their sum. What the numbers actually indict is the *join* (18,428 B read before media
+discovery, 92.7 % of it SI, against 1,342 B without) and the *parsing* (every consumer re-parsing
+an 18 kB document 61 times in 1.27 s for a table it will never use).
+
+Two further findings are not about scale at all:
+
+- **A multi-section table is assembled in the catalog in public.** At 40 services the SDT is held at
+  1 of its 2 sections for 5.2 s across 53 publishes. Section 0 declares `last_section_number = 1`,
+  so an exporter re-emitting that state puts a table on the wire that announces two sections and
+  transmits one — incomplete rather than merely stale. No tuning of the catalog fixes this; the
+  fault is that a whole-state document is revised one section at a time.
+- **The MSF catalog churns identically.** It is derived from the media sections alone, so an
+  SI-only change appends a byte-identical group: 120 groups with 4 distinct payloads by SHA-256
+  over the 40-service run. That holds on the real single-service feed too.
+
+These are the measurements behind [#2882](https://github.com/moq-dev/moq/issues/2882), which asks
+whether carried SI belongs in the catalog or on its own snapshot track. They support the move — on
+the coherence argument more than the cost one — but they also show that the tables #2440 actually
+shipped would gain nothing from it.
+
 Paced `CNNiEMEA2` egress (raw-fed → `auto` regenerate): **10.999 Mbps exact CBR**; PCR > 40 ms
 9.08 % → **0 %** (max 320 → 31.9 ms); `pcrverify` > 500 µs → **0/2286**, max |jitter| 6 µs; null
 stuffing 0 → **12.8 % (40,910 pkts)**, 645 PCR-only re-inserted, **0 dropped**; **0 CC**; all 7
