@@ -159,7 +159,12 @@ and the audio-resync work are all executed and written up in
    groomer/pacer envelope.
 7. **A full-feed publisher soak.** Every long run to date used a video-only source, because looping a
    normal broadcast TS killed the publisher at the wrap. `moq-mux` 0.9.5 lifts that, so a re-run can
-   now exercise audio, SCTE-35 and teletext — the EC2 box needs upgrading past 0.9.9 first.
+   now exercise audio, SCTE-35 and teletext. **The version blocker is cleared** — the origin host is on
+   a `main` build carrying the whole audio-resync and continuity series (#2751, #2823, #2891) — but the
+   standing loop publisher is not the soak: it runs `ffmpeg` with no `-map`, so it carries one video and
+   one audio track and drops the AC-3, teletext and SCTE-35 PIDs entirely. Publish the file's own bytes
+   (`tsp -I file --infinite`) or add `-map 0`, or the soak proves nothing about the tracks it was
+   commissioned to exercise.
 
 **Standing method** (used for the executed conditions, and for the remaining ones). Per role
 (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope and its
