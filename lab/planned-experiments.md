@@ -157,14 +157,16 @@ and the audio-resync work are all executed and written up in
 5. **The publisher thread count**, which grows and decelerates without settling.
 6. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
-7. **A full-feed publisher soak.** Every long run to date used a video-only source, because looping a
-   normal broadcast TS killed the publisher at the wrap. `moq-mux` 0.9.5 lifts that, so a re-run can
-   now exercise audio, SCTE-35 and teletext. **The version blocker is cleared** — the origin host is on
-   a `main` build carrying the whole audio-resync and continuity series (#2751, #2823, #2891) — but the
-   standing loop publisher is not the soak: it runs `ffmpeg` with no `-map`, so it carries one video and
-   one audio track and drops the AC-3, teletext and SCTE-35 PIDs entirely. Publish the file's own bytes
-   (`tsp -I file --infinite`) or add `-map 0`, or the soak proves nothing about the tracks it was
-   commissioned to exercise.
+7. **A full-feed publisher soak — both blockers now cleared, so this is ready to run.** Every long run
+   to date used a video-only source, because looping a normal broadcast TS killed the publisher at the
+   wrap. The origin host now runs a `main` build carrying the whole audio-resync and continuity series
+   (#2751, #2823, #2891), and its standing loop publisher was rebuilt to replay the file's own bytes
+   (`tsp -I file --infinite -P regulate --pcr-synchronous`) instead of re-muxing through `ffmpeg -c
+   copy`. Verified at the subscriber: all seven elementary streams arrive on the source's own PIDs with
+   AC-3 typed AC-3, the teletext descriptor intact and all three SCTE-35 PIDs typed 0x86 — where the
+   ffmpeg loop had delivered two tracks on renumbered PIDs. The soak therefore now exercises what it was
+   commissioned to exercise, and the publisher's `NRestarts` doubles as a wrap regression test, since
+   the byte-faithful wrap is the #2802 splice rather than a remuxer's approximation of it.
 
 **Standing method** (used for the executed conditions, and for the remaining ones). Per role
 (publisher, relay, subscriber + groomer/pacer), establish the steady-state resource envelope and its
