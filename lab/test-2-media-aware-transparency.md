@@ -155,8 +155,8 @@ a service record through the catalog and rebuilds the SI on export:
 | Transport-stream ID | 0x0000 | regenerated → 0x0001 | **preserved** |
 | Original Network Id | present | not preserved | **preserved** |
 | PMT PID | 0x0064 | renumbered → 0x1000 | **preserved (0x0064)** |
-| TDT / TOT (time) | present (0x0014) | dropped | **still dropped** |
-| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | **still dropped** |
+| TDT / TOT (time) | present (0x0014) | dropped | **still dropped**, deliberately |
+| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | dropped by #2440; **p/f actual carried by [#2824](https://github.com/moq-dev/moq/pull/2824)** |
 
 ### EIT: measured on a synthetic fixture, and what carrying it would cost
 
@@ -201,6 +201,33 @@ republish, for a table that says nothing but "now" and that an exporter can mint
 than it can relay. The scaling caveat is that distinct-section count grows with events × services:
 p/f is bounded at two sections per service, schedule is not.
 
+### EIT p/f now survives the round-trip, verified on the same fixture
+
+[#2824](https://github.com/moq-dev/moq/pull/2824) acts on that split: `SI_PIDS` gains a `table_id`
+filter and 0x0012 enters carrying p/f actual (0x4E) only, at a 2 s interval. Re-running
+`eit-roundtrip.sh` against the PR head, EIT goes **0 → 37 packets** at egress over a 43 s export,
+all of them 0x4E, with every one of the 411 schedule sections dropped. That is 19 emissions of a
+two-section table, ~2.4 s apart against the 2 s interval; SDT and NIT are undisturbed at ~2.2 s and
+~10.8 s, and TDT/TOT stays at zero.
+
+The carried sections are **byte-identical to the source**. Cutting a 60 s window across the point
+where the EPG's version rolls from 0 to 1 and reassembling both sides, all four p/f sections match
+exactly (90, 65, 65 and 88 bytes), every schedule section is absent, and the egress makes the version
+switch once and cleanly — v0 ×27 then v1 ×28, with no flapping and no stale version left behind.
+
+**The `current_next_indicator` guard needed a fixture built for it.** The PR also drops sections
+carrying a version that is not yet in force, which nothing here transmitted.
+[`ts-eit-pending-version.py`](scripts/ts-eit-pending-version.py) marks the first occurrences of the
+new version as pending and recomputes the section CRC, so the result is a legal stream and a
+rejection means the guard fired rather than the section being malformed. On that clip the egress
+carries **v0 ×47 then v1 ×8** against ×27/×28 unpatched, and no pending section appears at all: the
+exporter holds the version that applies and adopts the new one only when it becomes current. Without
+the guard each pending section would have replaced the current one under the same identity and
+republished the catalog every repetition.
+
+Not covered here: EIT p/f *other* (0x4F), which the PR also excludes because `section_key` cannot
+tell two foreign services with the same `service_id` apart. No source held here carries it.
+
 Paced `CNNiEMEA2` egress (raw-fed → `auto` regenerate): **10.999 Mbps exact CBR**; PCR > 40 ms
 9.08 % → **0 %** (max 320 → 31.9 ms); `pcrverify` > 500 µs → **0/2286**, max |jitter| 6 µs; null
 stuffing 0 → **12.8 % (40,910 pkts)**, 645 PCR-only re-inserted, **0 dropped**; **0 CC**; all 7
@@ -218,10 +245,12 @@ is the faithful measure.
   intact) but **not broadcast-transparent**: it dropped the DVB service layer, renumbered the PMT,
   and emitted non-CBR bursty egress violating TR 101 290 P1 on 13–26 % of intervals.
 - The timing/CBR half is closed downstream of *any* VBR source by `mpegts-pacer`; the service-layer
-  half is closed upstream by #2440. Together they leave only **TDT/TOT and EIT** unpreserved, and
-  those two are not one gap: EIT revises rarely enough to fit #2440's catalog carriage at ~12
-  updates per ten minutes, while TDT/TOT is new content in every section and belongs at the
-  exporter's clock rather than in the catalog.
+  half is closed upstream by #2440. Those left **TDT/TOT and EIT** unpreserved, and the two were
+  never one gap: EIT revises rarely enough to fit #2440's catalog carriage at ~12 updates per ten
+  minutes, and #2824 now carries its present/following half on exactly that argument, while TDT/TOT
+  is new content in every section and belongs at the exporter's clock rather than in the catalog. So
+  what an exporter must **regenerate** rather than relay is now just the clock — which matters more
+  than it did, since a receiver with no TDT has no wall clock to place the surviving EPG against.
 - The open-GOP round-trip requires **both** #2072 and #2066 on the same tree: with #2072 alone an
   IDR-less feed's video never resolves, so the reservation gate stays shut and the catalog never
   publishes.
