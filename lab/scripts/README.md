@@ -111,7 +111,18 @@ spliced garbage both survive, and both look healthy at the TS layer — 0 contin
 discontinuity flag, an unbroken PTS sequence, because the corrupt frame sits in the real frame's slot.
 Grade fidelity instead, with `ts-splice-audit.py`: a frame whose bytes appear nowhere in the source
 cannot be a frame the source produced, which is decidable and needs no listening test. This is exactly
-how a fix that passes its own unit tests was shown not to reach real content.
+how a fix that passes its own unit tests was shown not to reach real content — and, once upstream
+rescoped it, how the replacement was confirmed to reach it (alien frames 3 → 0) and then shown to be
+blind on a wrap that happens not to break the continuity counter. Both directions came from the same
+one-line question.
+
+**Define "the source" as the bytes the publisher actually sends, not the bytes you can parse.** The
+audit's first version built its known-frame set from the first PUSI onward, because that is where PES
+reassembly can begin. A clip cut out of a longer stream *opens* with continuation packets belonging to a
+PES whose start was lost, and a demuxer that resyncs inside them emits frames that are perfectly correct
+yet match nothing in that set — false aliens, and on one clip they outnumbered the real one 2:1. Any
+comparison against a reference has this shape of error: the reference has to be built the way the thing
+under test consumes it.
 
 **Check that a fix's precondition exists in your content before reading a null result as a
 regression.** A carried tail across a PES boundary only arises if the mux splits frames that way, and a

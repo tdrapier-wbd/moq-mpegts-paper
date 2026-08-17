@@ -100,8 +100,16 @@ def main():
 
 		src = es_of(source, pid)
 		sf, lead, tail, _ = taf.walk(src, parser)
-		srcset = {f["sha1"] for f in sf}
 		flen = sorted({f["len"] for f in sf})
+
+		# A file whose first packets on this PID are continuations belongs to a PES
+		# whose start was cut off, so `es_of` (which opens at the first PUSI) misses
+		# those bytes. They are still the publisher's own audio, and a demuxer that
+		# resyncs inside them emits frames that are correct but absent from `sf`.
+		# Count them as known, or every such frame is reported as alien.
+		ncont, contbytes = leading_continuations(source, pid)
+		lf, _, _, _ = taf.walk(contbytes + src, parser)
+		srcset = {f["sha1"] for f in sf} | {f["sha1"] for f in lf}
 
 		print(f"\n===== PID {pid} ({pid:#x}) {codec} =====")
 		print(f"source            : {len(sf)} frames, length(s) {flen}, "
@@ -111,9 +119,9 @@ def main():
 		print(f"PES alignment     : {len(misaligned)}/{len(ends)-1} interior PES ends "
 		      f"fall mid-frame"
 		      f"{'  -> a carried tail can only come from the file end' if not misaligned else ''}")
-		ncont, contbytes = leading_continuations(source, pid)
 		print(f"leading continuation packets (no PUSI): {ncont} ({len(contbytes)} B) "
-		      f"-> foreign bytes enter the SAME PES as the pre-wrap tail")
+		      f"-> foreign bytes enter the SAME PES as the pre-wrap tail; "
+		      f"{len(lf) - len(sf)} extra frames counted as known")
 		if codec == "mp2" and sf:
 			prot = sum(1 for f in sf if not (src[f["es_offset"] + 1] & 0x01))
 			print(f"CRC protection    : {prot}/{len(sf)} frames carry a CRC "

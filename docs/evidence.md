@@ -138,20 +138,27 @@ steps over the hole. A feed quietly losing frames is therefore indistinguishable
 which is a real loss of diagnostic signal in exchange for the robustness
 ([lab: T9](../lab/test-9-performance.md)).
 
-**A bit error and a splice are not the same defect, and only the first is closed.** Where the damage is a
-corrupt byte the parser rejects the frame and drops it. Where it is a *splice* — a feed restarting, a
-dropped PES, a looping file wrapping mid-frame — the header at that point is intact and only the bytes
-after it are foreign, so the frame is published: not a frame lost but a frame **substituted**, carrying
-audio from both sides of the discontinuity. Measured on a looped broadcast feed this happens once per
-wrap on both MP2 and AC-3, and it survives the current upstream fix for it, which guards a frame split
-across a PES boundary while a real wrap splices inside one. It is the harder case to detect downstream,
-because a substituted frame of the right length in the right place leaves the timeline intact — no
-continuity error, no discontinuity flag, evenly spaced timestamps — whereas a dropped frame at least
-shows up in a frame count. Two mechanisms that would catch it are already carried in the stream and
-unread for audio: the transport continuity counter, which the same demuxer checks for private sections
-but not for elementary streams, and the CRC that AC-3 mandates in every frame. For an architecture that
-treats the ingest edge as the place where a contribution feed's defects are absorbed, the absorbing
-needs to be observable ([lab: T9](../lab/test-9-performance.md)).
+**A bit error and a splice are not the same defect, and closing the first left the second open.** Where
+the damage is a corrupt byte the parser rejects the frame and drops it. Where it is a *splice* — a feed
+restarting, a dropped PES, a looping file wrapping mid-frame — the header at that point is intact and
+only the bytes after it are foreign, so the frame is published: not a frame lost but a frame
+**substituted**, carrying audio from both sides of the discontinuity. That is the harder case to detect
+downstream, because a substituted frame of the right length in the right place leaves the timeline intact
+— no continuity error, no discontinuity flag, evenly spaced timestamps — whereas a dropped frame at least
+shows up in a frame count. Measured on a looped broadcast feed it happened once per wrap on both MP2 and
+AC-3, and the first upstream fix for it did not reach that content at all: it guarded a frame split
+across a PES boundary, whereas a real wrap splices *inside* one. The mechanism that does catch it was
+already in the stream and already implemented next door — the transport continuity counter, which the
+same demuxer checked for private sections but not for elementary streams. Upstream adopted exactly that,
+generalising the section-level continuity rules and applying them to PES PIDs
+([#2823](https://github.com/moq-dev/moq/pull/2823)), and the substituted frame is now gone from the same
+capture. The residual is that the guard trusts one signal: where a wrap happens to leave the counter
+*contiguous* — about one cut point in sixteen, which a constructed clip demonstrates — the splice is
+invisible again and the mixed frame returns. Codec CRC would close that (AC-3 mandates one per frame and
+it rejects every mixed frame measured) but cannot be the general answer, because MP2 carries no CRC at
+all in this feed. For an architecture that treats the ingest edge as the place where a contribution
+feed's defects are absorbed, the absorbing needs to be observable — and a resync is still signalled
+nowhere ([lab: T9](../lab/test-9-performance.md)).
 
 The same pattern holds beyond the TS mapping: the congestion-control selector (#2432), exporter
 survival across session loss (#2469) and standby-route propagation (#2473) are upstream changes

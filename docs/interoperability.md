@@ -444,13 +444,16 @@ one implementation.
   parsers resync too, at a measured cost of one 24 ms frame. Two things remain open.
   **Whether a recovered gap should be visible downstream** — today it is signalled
   nowhere, so a feed losing audio is indistinguishable from a healthy one. And at a
-  *splice* rather than a bit error the ingest edge does not lose a frame but
-  **substitutes** one, publishing bytes from both sides of the discontinuity as
-  though they were real audio; measured on a looped broadcast feed, that survives
-  the current fix for it, because the fix guards a frame split across a PES boundary
-  and a real wrap lands inside a PES instead. The transport-layer signal that would
-  settle it — the continuity counter — is carried in every packet and read only for
-  private sections, not for audio ([lab T9](../lab/test-9-performance.md)).
+  *splice* rather than a bit error the ingest edge did not lose a frame but
+  **substituted** one, publishing bytes from both sides of the discontinuity as
+  though they were real audio. The transport-layer signal that settles that — the
+  continuity counter, carried in every packet and previously read only for private
+  sections — is now applied to elementary streams too
+  ([#2823](https://github.com/moq-dev/moq/pull/2823)), and the substituted frame is
+  gone from the feed that produced it. What remains is that the check has one input:
+  a wrap that happens to leave the counter contiguous is still invisible, and the
+  demuxer publishes the mixed frame exactly as before
+  ([lab T9](../lab/test-9-performance.md)).
 - Does a `moq2ts` MSFTS broadcast traverse a `moq-dev` relay (§9)? Relay neutrality
   is a load-bearing assumption of this architecture and is currently untested
   across implementations.

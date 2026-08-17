@@ -143,12 +143,16 @@ and the audio-resync work are all executed and written up in
    the sharper half: a frame of spliced bytes decodes to *something*, and whether that is an inaudible
    glitch or a full-scale click decides how much the missing signal costs. An AC-3 decoder that honours
    `crc1` should conceal it; an MP2 decoder on this content has no CRC to check.
-4. **Re-test the splice case against whatever supersedes
-   [#2823](https://github.com/moq-dev/moq/pull/2823).** The fix as it stands does not reach a real loop
-   wrap, because the splice lands inside a PES rather than at a PES boundary; the arms and the audit are
-   `lab/scripts/ts-splice-audit.py` and take ~5 minutes to re-run. Also worth constructing the opposite
-   case — a mux that *does* split audio frames across PES boundaries — to confirm the fix works where its
-   precondition holds, which no content we have exercises.
+4. **Two residuals from the splice fix ([#2823](https://github.com/moq-dev/moq/pull/2823), merged and
+   verified: the mixed frame is gone from the looped feed).** First, **the counter-contiguous wrap**,
+   where the fix is blind and the mixed frame returns — reproduced on `main` with
+   `/tmp/t2802_cc130705.ts` and worth reporting as its own issue once the AC-3 question below is
+   answered, since a CRC or a PES-length check would cover it. Second, **why AC-3 loses the 8 whole
+   frames inside its truncated PES while MP2 keeps its 7**, when `salvages_partial_pes` is true for both
+   and they take the same branch: either the salvage flush is not reaching the parser for AC-3 or the
+   parser is discarding a confirmed frame, and ~256 ms of good audio per wrap turns on which. Also worth
+   constructing the opposite case — a mux that *does* split audio frames across PES boundaries — to
+   exercise the first commit's confirmation path, which no content we have reaches.
 5. **The publisher thread count**, which grows and decelerates without settling.
 6. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.

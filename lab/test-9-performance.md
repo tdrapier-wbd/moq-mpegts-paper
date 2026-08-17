@@ -716,7 +716,7 @@ rests on the unit reproducers and on AC-3 having the identical `Descriptor::pars
 row. The MP2 single-bit arm is unaffected and remains decisive, because there the damage is placed on a
 verified frame header rather than wherever a cut happened to land.
 
-#### A splice still publishes a mixed frame, and the fix for it does not reach real content
+#### A splice still publishes a mixed frame, and the first fix for it did not reach real content
 
 Upstream split the remaining gap out as [#2802](https://github.com/moq-dev/moq/issues/2802) — at a
 splice the importer publishes one frame of mixed bytes as real audio, recovering only on the frame after
@@ -775,6 +775,59 @@ codec-specific and cannot be leaned on: **0 of this clip's 826 MP2 frames carry 
 
 Reported at [PR #2823](https://github.com/moq-dev/moq/pull/2823#issuecomment-5278428604).
 
+#### The rescoped fix does reach real content, on a wrap that breaks the continuity counter
+
+Upstream took the finding, reproduced it in-tree before touching anything, and rescoped the PR from one
+commit to five: `SectionReassembler`'s continuity rules — transport errors, declared discontinuities,
+counter gaps, duplicate packets — were generalised into a shared `Continuity` and applied to PES PIDs
+too, which is the zero-latency codec-independent route argued for above. Merged 14 Aug as `6198e5757`.
+The original confirmation commit stayed, for a mux that genuinely does split a frame across a PES
+boundary with continuity intact. Re-verified here on the same rig, three arms:
+
+| arm | commit | MP2 alien | AC-3 alien |
+|---|---|---:|---:|
+| pre | `f91e3bbd2` (before the PR) | 3 | 3 |
+| PR head, first commit only | `a64dc4d12` | 3 | 3 |
+| merged | `6198e5757` | **0** | **0** |
+| today's `main`, incl. #2891 | `eab960192` | **0** | **0** |
+
+**The fix is real and it holds on today's main.** Same clip, same three wraps, and the mixed frame is
+gone from both audio PIDs. Two qualifications came out of the re-run, both measured rather than argued.
+
+**It is conditional on the wrap breaking the counter, and a wrap need not.** The 132,000-packet cut used
+above breaks continuity on all three PIDs (MP2 `cc 3 → 12` where 4 was due, AC-3 `9 → 0`, video
+`4 → 3`), so the new check sees every splice. That is a property of where the file was cut, not of
+looping: a cut whose last packet on a PID leaves `cc + 1` equal to the counter the file opens with wraps
+*contiguously*, and the break becomes invisible. Roughly one cut point in 16 per PID does this — 4062 of
+the 30,000 cut points scanned in `[120000, 150000]`. Cutting at 130,705 packets puts AC-3 in exactly
+that state (last `cc 15`, file opens at `cc 0`) while still ending mid-frame, and on **today's `main`**
+the original bug returns unchanged: **1 alien AC-3 frame per wrap, 3 in 70 s**, each beginning with the
+source's 106 B trailing partial and each rejected by its own `crc1`. MP2 stays clean on that clip
+because its counter still breaks there. So the guard is sound but its trigger is probabilistic on the
+one signal it consults; `/tmp/t2802_cc130705.ts` is the counter-example.
+
+**The salvage does not deliver what it promises, for AC-3.** On a break the truncated PES is meant to be
+flushed first, so whole frames it already carried still publish, and `salvages_partial_pes` is true for
+`Stream::Legacy` (both codecs here). MP2 behaves that way — the 7 complete frames inside its final PES
+(source frames 819–825) publish before and after the fix. AC-3 does not: the 8 complete frames inside
+its final PES (612–619) are published by the pre-fix build at all three wraps and are **absent from
+every wrap of both post-merge builds**, searched by hash across the whole capture. That is ~256 ms of
+good audio per wrap traded for the corrupt frame, where MP2 pays nothing. Both PIDs take the same branch
+of the same `match`, so the asymmetry is downstream of it, in how a flushed short PES is parsed.
+
+**The hole itself is unchanged, which is the point #2798 still carries.** Each wrap already dropped the
+first ~90 MP2 frames (~2160 ms) and ~72 AC-3 frames (~2304 ms) of the next loop, and that is identical
+across all four arms — it is the resync cost, not the fix's. Post-fix AC-3 loses 80 frames instead of 72
+(~2560 ms) for the reason above. Nothing about any of it is signalled.
+
+**A correction to the audit tool, because it changed a number.** `ts-splice-audit.py` built its
+known-frame set from the first PUSI onward, since that is where PES reassembly can start. A clip cut out
+of a longer stream *opens* with continuation packets (2694 B on AC-3 here) belonging to a PES whose start
+was lost, and a demuxer that resyncs inside those bytes emits frames that are correct but were missing
+from the set — reported as alien. On the counter-example that inflated 1 alien per wrap to 3. The set now
+includes frames parsed from those leading bytes, and every number above is post-correction. It does not
+affect the original finding: those three aliens were `crc1`-rejected mixed frames either way.
+
 #### The recovered gap is completely unsignalled
 
 Worth stating plainly, because it is the part that matters for primary distribution and the part the
@@ -794,13 +847,20 @@ A TR 101 290 monitor at egress therefore sees a fully conformant stream with no 
 anything was lost. That is question 2 of the original issue — *should the dropped interval be visible
 downstream, so a TS exporter can reflect a real gap?* — and it went unanswered in the PR.
 
-The splice case above sharpens this. There the stream is not merely missing a frame, it carries a
-**substituted** one: 0 continuity errors, no `discontinuity_indicator`, and an unbroken evenly-spaced
-audio PTS sequence, because the corrupt frame occupies the real frame's slot. A gap at least leaves
-evidence of itself in a frame count against the source; a corrupt frame of the right length in the right
-place is invisible to everything short of comparing bytes. Raised on
+The splice case sharpened this while it stood: there the stream was not merely missing a frame, it
+carried a **substituted** one — 0 continuity errors, no `discontinuity_indicator`, and an unbroken
+evenly-spaced audio PTS sequence, because the corrupt frame occupied the real frame's slot. A gap at
+least leaves evidence of itself in a frame count against the source; a corrupt frame of the right length
+in the right place is invisible to everything short of comparing bytes. Raised on
 [#2798](https://github.com/moq-dev/moq/issues/2798#issuecomment-5278433763), arguing the counter should
 cover any frame published without confirmation rather than the resync path alone.
+
+**#2823 turned the substitution back into a gap, and left the gap as silent as it found it.** The
+merged fix drops the spliced frame instead of publishing it, so on a counter-breaking wrap the sharper
+version of the complaint no longer applies — and on a counter-contiguous one it applies unchanged. Either
+way the reporting half is untouched: the merge adds nothing to the export side (its `export.rs` changes
+are #2825's SI cadence, not discontinuity signalling), no `tracing` call, no counter, and the hole
+measured above is identical across all four arms. #2798 stands exactly as filed.
 
 **The 1+1 worry does not survive measurement, and it is worth saying so.** The obvious escalation is
 that two legs resyncing independently would produce different audio with neither reporting a fault —
