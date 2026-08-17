@@ -782,29 +782,30 @@ commit to five: `SectionReassembler`'s continuity rules — transport errors, de
 counter gaps, duplicate packets — were generalised into a shared `Continuity` and applied to PES PIDs
 too, which is the zero-latency codec-independent route argued for above. Merged 14 Aug as `6198e5757`.
 The original confirmation commit stayed, for a mux that genuinely does split a frame across a PES
-boundary with continuity intact. Re-verified here on the same rig, three arms:
+boundary with continuity intact. Re-verified here on the same rig, four arms:
 
 | arm | commit | MP2 alien | AC-3 alien |
 |---|---|---:|---:|
 | pre | `f91e3bbd2` (before the PR) | 3 | 3 |
 | PR head, first commit only | `a64dc4d12` | 3 | 3 |
 | merged | `6198e5757` | **0** | **0** |
-| today's `main`, incl. #2891 | `eab960192` | **0** | **0** |
+| `main` at 16 Aug, incl. #2891 | `eab960192` | **0** | **0** |
 
-**The fix is real and it holds on today's main.** Same clip, same three wraps, and the mixed frame is
-gone from both audio PIDs. Two qualifications came out of the re-run, both measured rather than argued.
+**The fix is real and it holds on the current `main`.** Same clip, same three wraps, and the mixed frame
+is gone from both audio PIDs. Two qualifications came out of the re-run, both measured rather than argued.
 
 **It is conditional on the wrap breaking the counter, and a wrap need not.** The 132,000-packet cut used
 above breaks continuity on all three PIDs (MP2 `cc 3 → 12` where 4 was due, AC-3 `9 → 0`, video
 `4 → 3`), so the new check sees every splice. That is a property of where the file was cut, not of
 looping: a cut whose last packet on a PID leaves `cc + 1` equal to the counter the file opens with wraps
-*contiguously*, and the break becomes invisible. Roughly one cut point in 16 per PID does this — 4062 of
-the 30,000 cut points scanned in `[120000, 150000]`. Cutting at 130,705 packets puts AC-3 in exactly
-that state (last `cc 15`, file opens at `cc 0`) while still ending mid-frame, and on **today's `main`**
-the original bug returns unchanged: **1 alien AC-3 frame per wrap, 3 in 70 s**, each beginning with the
-source's 106 B trailing partial and each rejected by its own `crc1`. MP2 stays clean on that clip
-because its counter still breaks there. So the guard is sound but its trigger is probabilistic on the
-one signal it consults; `/tmp/t2802_cc130705.ts` is the counter-example.
+*contiguously*, and the break becomes invisible. Roughly one cut point in 16 does this per PID, and
+4062 of the 30,000 scanned in `[120000, 150000]` do it for at least one of the two audio PIDs. Cutting at 130,705 packets puts AC-3 in exactly
+that state (last `cc 15`, file opens at `cc 0`) while still ending mid-frame, and on the **merged
+`main`** the original bug returns unchanged: **1 alien AC-3 frame per wrap, 3 in 70 s**, each beginning
+with the source's 106 B trailing partial and each rejected by its own `crc1`. MP2 stays clean on that
+clip because its counter still breaks there. So the guard is sound but its trigger is probabilistic on
+the one signal it consults. That 130,705-packet cut is the counter-example, and the recipe for finding
+one in any clip is in the scripts' README.
 
 **The salvage does not deliver what it promises, for AC-3.** On a break the truncated PES is meant to be
 flushed first, so whole frames it already carried still publish, and `salvages_partial_pes` is true for

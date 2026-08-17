@@ -145,9 +145,10 @@ and the audio-resync work are all executed and written up in
    `crc1` should conceal it; an MP2 decoder on this content has no CRC to check.
 4. **Two residuals from the splice fix ([#2823](https://github.com/moq-dev/moq/pull/2823), merged and
    verified: the mixed frame is gone from the looped feed).** First, **the counter-contiguous wrap**,
-   where the fix is blind and the mixed frame returns — reproduced on `main` with
-   `/tmp/t2802_cc130705.ts` and worth reporting as its own issue once the AC-3 question below is
-   answered, since a CRC or a PES-length check would cover it. Second, **why AC-3 loses the 8 whole
+   where the fix is blind and the mixed frame returns — reproduced on `main` with a 130,705-packet cut
+   of the broadcast clip, chosen so the audio PID's counter runs straight through the wrap, and worth
+   reporting as its own issue once the AC-3 question below is answered, since a CRC or a PES-length
+   check would cover it. Second, **why AC-3 loses the 8 whole
    frames inside its truncated PES while MP2 keeps its 7**, when `salvages_partial_pes` is true for both
    and they take the same branch: either the salvage flush is not reaching the parser for AC-3 or the
    parser is discarding a confirmed frame, and ~256 ms of good audio per wrap turns on which. Also worth

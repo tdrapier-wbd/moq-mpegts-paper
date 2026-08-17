@@ -128,6 +128,15 @@ yet match nothing in that set — false aliens, and on one clip they outnumbered
 comparison against a reference has this shape of error: the reference has to be built the way the thing
 under test consumes it.
 
+**A looping clip only exercises a continuity-based guard if its wrap actually breaks the counter.** Since
+[#2823](https://github.com/moq-dev/moq/pull/2823) the importer drops a PES completed across a continuity
+break, so whether a splice is *visible* depends on where the file was cut. Read the first continuity
+counter each PID carries in the file, then walk candidate cut points tracking each PID's running counter:
+a cut where `(last_cc + 1) % 16` equals that first value wraps **contiguously** and the break is
+invisible — roughly one cut point in 16 per PID. To exercise the guard, cut where the counter breaks; to
+exercise what it misses, cut where it does not, and require a non-zero trailing partial frame either way
+(`ts-audio-frames.py`) or there is no spliced frame to find.
+
 **Check that a fix's precondition exists in your content before reading a null result as a
 regression.** A carried tail across a PES boundary only arises if the mux splits frames that way, and a
 broadcast mux commonly does not — `ts-splice-audit.py` reports interior PES/frame alignment for that
