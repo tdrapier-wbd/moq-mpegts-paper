@@ -156,7 +156,7 @@ a service record through the catalog and rebuilds the SI on export:
 | Original Network Id | present | not preserved | **preserved** |
 | PMT PID | 0x0064 | renumbered → 0x1000 | **preserved (0x0064)** |
 | TDT / TOT (time) | present (0x0014) | dropped | **still dropped**, deliberately |
-| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | dropped by #2440; **p/f actual carried by [#2824](https://github.com/moq-dev/moq/pull/2824)** |
+| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | dropped by #2440; **p/f actual carried by [#2824](https://github.com/moq-dev/moq/pull/2824)**, an open PR |
 
 ### EIT: measured on a synthetic fixture, and what carrying it would cost
 
@@ -201,9 +201,11 @@ republish, for a table that says nothing but "now" and that an exporter can mint
 than it can relay. The scaling caveat is that distinct-section count grows with events × services:
 p/f is bounded at two sections per service, schedule is not.
 
-### EIT p/f now survives the round-trip, verified on the same fixture
+### EIT p/f survives the round-trip on #2824's branch, verified on the same fixture
 
-[#2824](https://github.com/moq-dev/moq/pull/2824) acts on that split: `SI_PIDS` gains a `table_id`
+The PR is **open**, so nothing below is in a released build; it is the measurement of a proposed fix,
+not of shipped behaviour. [#2824](https://github.com/moq-dev/moq/pull/2824) acts on that split:
+`SI_PIDS` gains a `table_id`
 filter and 0x0012 enters carrying p/f actual (0x4E) only, at a 2 s interval. Re-running
 `eit-roundtrip.sh` against the PR head, EIT goes **0 → 37 packets** at egress over a 43 s export,
 all of them 0x4E, with every one of the 411 schedule sections dropped. That is 19 emissions of a
@@ -310,8 +312,11 @@ is the faithful measure.
 
 The media-aware lane carries all elementary streams and PMT descriptors with 0 CC and rides out the
 CNN open-GOP + triple-SCTE-35 feed deterministically. With `mpegts-pacer` (timing/CBR) and PR #2440
-(service layer) it is broadcast-transparent **except** the dynamic TDT/TOT/EIT tables and the P2
-hardware pass (T7). The permanent finding is recorded in
+(service layer) it is broadcast-transparent **except** the time-varying tables and the P2 hardware
+pass (T7). Those tables are no longer one gap: EIT p/f actual round-trips byte-identically on
+[#2824](https://github.com/moq-dev/moq/pull/2824) — measured here, but still an open PR, so no
+released build carries it — while TDT/TOT stays dropped deliberately, leaving the wall clock as the
+one thing an exporter must regenerate rather than relay. The permanent finding is recorded in
 [`docs/evidence.md`](../docs/evidence.md) §3 (PCR cadence + pacer) and §4 (open-GOP + service layer).
 
 ## References

@@ -171,12 +171,13 @@ The core runbooks map to the operational workflows in
 - **Failover/failback.** Shift to the redundant disjoint path, confirm the IRD's
   ST 2022-7 switch was hitless, service the drained element, restore. The IRD
   should observe nothing ([architecture](architecture.md) §15.3). Two constraints
-  from measurement ([evidence](evidence.md) §7): the pair must have been **started
-  together**, because a leg that joins or restarts alone comes back on the right
-  numbering carrying the right programme but not byte-identical to its partner — so
-  restoring the drained element means restarting *both* legs unless the merge is being
-  run in input-select mode; and the leg being drained must be confirmed dead by
-  **content**, not by carrier, or the receiver will keep selecting it.
+  from measurement ([evidence](evidence.md) §7). A leg that restarts alone rejoins
+  its partner's numbering and schedule, so **input-select protection returns
+  immediately**, but it does not return to byte-identity, because `moq export ts`
+  renders continuity counters from process state — so a **sequence-merge** receiver
+  needs *both* legs restarted together, while an input-select receiver does not.
+  And the leg being drained must be confirmed dead by **content**, not by carrier,
+  or the receiver will keep selecting it.
 - **Entitlement incidents.** Emergency disable / revoke under time pressure; the
   runbook must be simple enough to execute correctly under stress
   ([entitlement](entitlement.md) §9).
@@ -254,6 +255,10 @@ Before a route carries contracted content:
   agreed; change/rollback procedures defined.
 - **Tooling** — dual-domain monitoring wired up and correlated; TR 101 290
   probing at egress; audit trail flowing.
+- **Configuration** — congestion controller pinned explicitly rather than left to the
+  backend default, and chosen against the route's own conditions
+  ([relay](relay.md) §7); relay memory bound and its per-connection ceiling budgeted
+  (§3); groomer silence detection enabled on every groomed leg (§3).
 - **Drills** — failover, revocation, and regional-failure drills executed and
   timed at least once against the real topology, not just in theory.
 

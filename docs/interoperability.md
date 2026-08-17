@@ -69,22 +69,24 @@ of it — is independent of how the feed arrived.
 The single most important interop property is that carriage across MoQ preserves
 what the installed base depends on:
 
-- **Service identity (SDT)** and the exact **PMT PID** layout.
+- **Service identity (SDT/NIT)** and the exact **PMT PID** layout.
 - **SCTE-35** splice/ad signalling, intact and correctly timed relative to the
   programme.
 - **Teletext and subtitling** streams.
-- **Continuity counters** and programme structure.
+- **Programme structure** and a continuity-clean output mux.
 
-The default media-aware lane ([transport](transport.md) §4.1) must preserve or
-faithfully regenerate this signalling; doing so reliably across real contribution
-feeds is exactly the upstream work still in progress ([evidence](evidence.md) §4).
-The **opaque fallback** preserves all of it *verbatim by construction* — the
-MPEG-TS is carried byte-for-byte — which is why it is the safe choice for the
-feeds or endpoints where exact preservation is required and the media-aware path
-cannot yet guarantee it. The verbatim approach is validated by round-trip and
-property tests ([evidence](evidence.md) §1 and §4); its cost — forgoing per-track
-prioritisation — is discussed in [transport](transport.md) §4.1 and
-[relay](relay.md) §3.3.
+The default media-aware lane ([transport](transport.md) §4.1) delivers all of the above —
+measured, not assumed, since upstream took the DVB service layer through the catalog
+([evidence](evidence.md) §4). Two distinctions matter for an operator. Continuity counters
+are **regenerated** rather than relayed, which satisfies the receiver but means two
+independent legs of a 1+1 pair are not byte-identical (§10). And the **time-varying**
+tables are the lane's one carriage residual: TDT/TOT is dropped by design, on the argument
+that an exporter mints wall time more accurately than it relays it, and EIT carriage exists
+only on an unmerged upstream branch. The **opaque fallback** preserves everything
+*verbatim by construction*, those tables included, which is why it remains the safe choice
+for a receiver that needs the carried clock or EPG rather than a regenerated one. Its cost
+— forgoing per-track prioritisation, and the null-stripping bandwidth saving if it is truly
+verbatim — is discussed in [transport](transport.md) §4.1 and [relay](relay.md) §3.3.
 
 ## 5. Egress
 
@@ -111,13 +113,12 @@ platform's single most important open validation.
 
 MoQ's object/burst delivery produces a reconstructed stream whose PCR is
 smooth-but-not-byte-accurate; hardware IRDs lock a PLL to PCR and raise TR 101 290
-P1/P2 alarms in response ([evidence](evidence.md) §3 measured ~24% of PCR
-intervals exceeding the 40 ms limit before grooming). The edge grooming layer —
-byte-locked CBR, monotonic PCR re-stamp, PCR re-insertion — restores conformant
-timing: measured on file it takes the bursty egress from 13–26% of PCR intervals
-> 40 ms to **0%** with 0 `pcrverify` violations at 500 µs
-([lab: T2](../lab/test-2-media-aware-transparency.md), [architecture](architecture.md) §7.2),
-subject to the hardware caveat below.
+P1/P2 alarms in response. The edge grooming layer — byte-locked CBR, monotonic PCR
+re-stamp, PCR re-insertion — restores conformant timing: measured on file it takes
+the bursty egress from **13–26 %** of PCR intervals > 40 ms to **0 %** with 0
+`pcrverify` violations at 500 µs, and at the tighter ±500 ns accuracy gate from
+1 523 of 1 524 PCRs failing to 0 of 2 598 ([evidence](evidence.md) §3,
+[architecture](architecture.md) §7.2), subject to the hardware caveat below.
 
 > Grooming is file-validated and structurally sound, but **must be proven to pass
 > P1/P2 on real hardware IRDs**: file analysis confirms the PCR arithmetic, not
@@ -129,25 +130,33 @@ subject to the hardware caveat below.
 
 ## 7. Non-ideal source feeds
 
-Real contribution feeds are not clean. The platform must be robust to what
-actually arrives, not to an idealised stream:
+Real contribution feeds are not clean, and the media-aware lane's two encounters
+with that are both instructive and both now closed upstream
+([evidence](evidence.md) §4).
 
-- **Open-GOP encodes using recovery-point SEI rather than IDR frames** (e.g. a
-  broadcast capture with roughly one IDR per 15 s) have historically
-  defeated naive keyframe detection that keys only on IDR NAL type, causing
-  media-aware import to fail to produce a video rendition and to emit misleading
-  downstream errors ([evidence](evidence.md) §4). This is common for contribution,
-  not an edge case; upstream has begun addressing it in main/dev, though the fix
-  is not yet independently validated here.
-- The **opaque lane sidesteps this entire failure class** by carrying the TS
-  verbatim without depending on those fixes — which is exactly why it is retained
-  as the fallback for feeds like this one, until the media-aware default handles
-  them. Media-aware re-muxing remains the default and preferred lane
-  ([architecture](architecture.md) §4.2).
+- **Open-GOP encodes using recovery-point SEI rather than IDR frames** (a broadcast
+  capture with roughly one IDR per 15 s) defeated keyframe detection that keyed only
+  on the IDR NAL type, so media-aware import produced no video rendition at all.
+  Common for contribution, not an edge case. Fixed upstream and verified here: the
+  same feed now round-trips deterministically.
+- **Audio frame-sync loss used to be fatal to the whole publisher.** A single damaged
+  byte in an audio frame header, or a splice that left a frame truncated, terminated
+  the session and took video, teletext and SCTE-35 with it — while the video path
+  resynchronised through identical damage. Also fixed upstream, at a measured cost of
+  a single audio frame where the damage is a bit error.
 
-Other non-ideal conditions to be characterised: irregular PCR in the *source*
-feed, discontinuities, PID changes mid-stream, and multi-programme transport
-streams where only some services are entitled.
+What survives is not a carriage gap but an **observability** one: a recovered stream
+is signalled nowhere — no continuity error, no discontinuity indicator, no counter —
+so a feed quietly losing or substituting audio frames is indistinguishable from a
+healthy one at egress. For a platform whose interop case rests on the ingest edge
+absorbing a contribution feed's defects, the absorbing needs to be visible.
+
+The **opaque lane sidesteps the whole class** by not parsing the payload, which is
+part of why it is retained; media-aware re-muxing remains the default and preferred
+lane ([architecture](architecture.md) §4.2). Other non-ideal conditions still to be
+characterised: irregular PCR in the *source* feed, discontinuities, PID changes
+mid-stream, and multi-programme transport streams where only some services are
+entitled.
 
 ## 8. Compatibility matrix
 
@@ -332,9 +341,9 @@ with a byte-identical egress in both cases and a late subscriber joining mid-str
 **Against all eight other public relays — Meta, Google, Cisco, Nokia, Meetecho, Cloudflare, OzU and
 openmoq — no media flows at all.**
 
-The cause is not the one this paper expected. Draft-version negotiation, the thing §9.6 previously
-listed as the obvious hazard, works better than advertised: `moq-transport-19` was negotiated
-against two relays, above the ceiling `moq-dev`'s own help text claims. The blocker is a convention
+The cause is not draft-version negotiation, the obvious candidate, which works better than
+advertised: `moq-transport-19` was negotiated against two relays, above the ceiling
+`moq-dev`'s own help text claims. The blocker is a convention
 above the version. **`moq-dev`'s publisher is demand-driven: it withholds its `PUBLISH_NAMESPACE`
 announcement until the peer explicitly asks for it with a `SUBSCRIBE_NAMESPACE`.** Its own relay
 interrogates every publisher session unconditionally, so the chain completes and everything works.
@@ -412,8 +421,10 @@ one implementation.
 
 ## 10. Testing and acceptance
 
-- **Round-trip fidelity.** Byte-level preservation of SDT/PMT/PIDs/SCTE-35/
-  teletext/continuity across carriage ([evidence](evidence.md) §1).
+- **Round-trip fidelity.** Byte-level preservation of SDT, NIT, PMT PIDs,
+  `stream_type`, SCTE-35 and teletext across carriage, with the media-aware lane's
+  regenerated continuity counters and wall clock judged on the output mux's own
+  correctness rather than on identity to the source ([evidence](evidence.md) §4).
 - **Conformance on hardware.** TR 101 290 P1/P2 pass on real IRDs, captured and
   analysed (TSDuck `pcrverify`/`analyze`, Sencore) — the decisive acceptance test.
 - **Non-ideal-source robustness.** A suite of real contribution captures
@@ -438,22 +449,16 @@ one implementation.
   entitlement differs per service — carry verbatim and filter at egress, or
   demux earlier?
 - What is the correct behaviour on source-side discontinuities and PID changes:
-  pass through transparently, or normalise, and at which layer? Half of this is now
-  settled upstream: an audio elementary stream losing frame sync used to abort the
-  whole publisher while video resynchronised, and since `moq-mux` 0.9.5 the audio
-  parsers resync too, at a measured cost of one 24 ms frame. Two things remain open.
-  **Whether a recovered gap should be visible downstream** — today it is signalled
-  nowhere, so a feed losing audio is indistinguishable from a healthy one. And at a
-  *splice* rather than a bit error the ingest edge did not lose a frame but
-  **substituted** one, publishing bytes from both sides of the discontinuity as
-  though they were real audio. The transport-layer signal that settles that — the
-  continuity counter, carried in every packet and previously read only for private
-  sections — is now applied to elementary streams too
-  ([#2823](https://github.com/moq-dev/moq/pull/2823)), and the substituted frame is
-  gone from the feed that produced it. What remains is that the check has one input:
-  a wrap that happens to leave the counter contiguous is still invisible, and the
-  demuxer publishes the mixed frame exactly as before
-  ([lab T9](../lab/test-9-performance.md)).
-- Does a `moq2ts` MSFTS broadcast traverse a `moq-dev` relay (§9)? Relay neutrality
-  is a load-bearing assumption of this architecture and is currently untested
-  across implementations.
+  pass through transparently, or normalise, and at which layer? The carriage half is
+  settled upstream (§7), leaving three narrower questions. **Should a recovered gap be
+  visible downstream?** Today it is signalled nowhere. **Should the continuity-counter
+  guard be the only check?** A splice that happens to leave the counter contiguous is
+  still invisible, and the demuxer publishes the mixed frame as before. And **should
+  salvage be codec-uniform?** It is not: the same fix loses ~256 ms of good AC-3 audio
+  per splice where MP2 loses nothing ([evidence](evidence.md) §4).
+- Relay neutrality is measured and **fails outside a single implementation** (§9.6), so the
+  open questions are now narrower ones about closing it. Does fixing the announce
+  convention clear the pairings it blocks, or only some of them, given at least four
+  distinct causes across the eight failures? What are the three undiagnosed
+  connection/SETUP failures? And in the other direction, does a `moq2ts` MSFTS broadcast
+  traverse a `moq-dev` relay (§9.5)?

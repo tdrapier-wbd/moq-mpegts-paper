@@ -215,8 +215,9 @@ over at all.** When the active publisher terminates cleanly rather than dying, t
 reselect. It propagates completion, and `moq export ts` terminates, its muxer refusing a catalog that
 lost a track. The relay cannot distinguish "this source is done, and so is the content" from "this
 source is done, but an interchangeable one exists", so the shared `--origin` buys nothing on this
-path. This is intended semantics rather than a defect, asserted directly by upstream's model tests,
-but it means failover covers the *harder* failure (host loss) and not the easier, far more common one:
+path. This reads as intended semantics rather than a defect — it is covered by upstream's model
+tests, on the reading that a source which finishes has declared its content over — but it means
+failover covers the *harder* failure (host loss) and not the easier, far more common one:
 SIGTERM to an encoder, a container rescheduled, a rolling restart. The remedy is specified but not
 shipped: [#2610](https://github.com/moq-dev/moq/issues/2610) proposes a publisher-minted epoch per
 path plus an explicit `Ended` flag, which is exactly the bit a consumer needs to tell the two apart.
@@ -263,7 +264,7 @@ versus what it is designed to deliver.
   survives a relay restart too** — fixed by
   [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger*): it rides out
   the outage and resumes automatically, bounded not hitless
-  ([transport](transport.md) §8.3).
+  ([transport](transport.md) §8.2).
 - **Confirmed limitation — source failover is bounded, not hitless.** Since
   [#2473](https://github.com/moq-dev/moq/pull/2473) a two-relay mesh does switch to a standby when
   the active source dies, and the drill passes end to end, **provided both publishers share one
@@ -327,7 +328,14 @@ capacity-planned separately.
   For relays serving lossy last-mile paths, **`delay` (BBR) is the recommended
   default** — it removes the loss/reorder/WAN throughput collapse (§5,
   [lab: T8](../lab/test-8-srt-vs-moq.md)) — and, being sender-local, it changes nothing on
-  the wire and preserves interop with any QUIC subscriber.
+  the wire and preserves interop with any QUIC subscriber. Two caveats.
+  **Pin it explicitly**: the resolved default differs per QUIC backend, so an unset
+  flag is not a known configuration. And **`delay` selects a different BBR generation
+  per backend**, which matters because the ranking inverts by regime: the generation
+  that best resists non-congestive loss is not the one that behaves best under a
+  shaped bottleneck, so a permanent fixed-rate trunk needs the controller chosen
+  against its own conditions rather than against this recommendation
+  ([evidence](evidence.md) §6).
 
 ## 8. Metrics and SLOs
 

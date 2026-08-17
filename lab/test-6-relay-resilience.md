@@ -380,7 +380,7 @@ implementation*, not of the standard, which specifies object-dedup as a SHOULD. 
 out-of-scope case in *both* spec and implementation is bridging two *different* broadcasts (timestamp
 rewriting) — that is Malformed under §9.1, and is the "won't merge two broadcasts" the maintainer means.
 Docs corrected accordingly ([evidence](../docs/evidence.md) §7, [relay](../docs/relay.md) §4.1/§5.1,
-[transport](../docs/transport.md) §8.4, [architecture](../docs/architecture.md) §14.3/§14.5).
+[transport](../docs/transport.md) §8.3, [architecture](../docs/architecture.md) §14.3/§14.5).
 
 ### Reconnect latency and media retention
 

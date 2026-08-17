@@ -109,7 +109,7 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 | Mux structure | VBR; nulls stripped (CBR restored by pacer) | **CBR preserved; nulls preserved** |
 | PCR intervals > 40 ms (P1) | 13–26 % → **0 % (paced)** | **0 %** |
 | Egress monitoring | none | **built-in TR 101 290** |
-| Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT/EIT** | **broadcast-transparent** |
+| Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** (until [#2824](https://github.com/moq-dev/moq/pull/2824) merges) | **broadcast-transparent** |
 
 ## Observations
 

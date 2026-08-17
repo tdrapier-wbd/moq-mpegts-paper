@@ -177,16 +177,16 @@ it inherits the protocol's per-track prioritisation and selective-subscription
 benefits directly, and it produces the individual renditions that endpoints such
 as OTT origins actively want. It is the upstream/core preference and therefore
 the approach most likely to attract ongoing investment and to interoperate
-cleanly with the broader MoQ ecosystem. It has historically had two weaknesses
-for broadcast *contribution*: naive keyframe detection can fail on open-GOP
-encodes that use recovery-point SEI rather than IDR frames (common on real feeds
-with roughly one IDR every fifteen seconds), and a re-mux can lose service
-signalling (SDT, the exact PMT PID layout, SCTE-35, teletext, continuity
-counters) that an IRD and downstream headend depend on. Both are recognised
-issues that upstream has begun to address in main/dev; those changes are **not
-yet independently validated here**, but the trajectory is toward media-aware
-carriage becoming viable across a wider range of contribution feeds, and this
-document should not treat the historical limitations as permanent.
+cleanly with the broader MoQ ecosystem. It had two weaknesses for broadcast
+*contribution*, and **both are now closed upstream and verified here**: naive
+keyframe detection failed on open-GOP encodes signalling recovery-point SEI
+rather than IDR frames (common on real feeds, roughly one IDR every fifteen
+seconds), and the re-mux lost service signalling (SDT/NIT, the exact PMT PID
+layout, TSID/ONID) that an IRD and downstream headend depend on
+([evidence](evidence.md) §4). What the lane still does not relay is the *clock*:
+TDT/TOT is dropped by design, on the argument that an exporter mints wall time
+more accurately than it relays it, and EIT carriage exists only on an unmerged
+upstream branch.
 
 **The case for opaque carriage.** It carries the transport stream verbatim, so
 it preserves service signalling and programme structure *by construction* and
@@ -197,27 +197,30 @@ about the source encode. Its cost is that it forgoes per-track prioritisation an
 selective subscription, because a multiplexed programme is treated as a single
 opaque object stream.
 
-**How this architecture treats the choice.** A distinction between *proven today*
-and *intended default* matters here and is easy to blur. **Media-aware re-muxing
-is the intended default and preferred path**; opaque carriage is the **fallback**.
-But that ordering is a statement of *design direction*, not of what is
-demonstrated: for the specific hardware-IRD use case, the lane actually exercised
-end-to-end is the **opaque** one ([evidence](evidence.md) §1, §4;
-[implementation](implementation.md) §2), while media-aware re-muxing of real
-contribution feeds is still maturing upstream and is not independently validated
-here. Media-aware is preferred because it fits MoQ's track/object model and is
-what lets the platform exploit native relay and 1:N amplification with per-track
-prioritisation and selective subscription (a subscriber can protect video over a
-secondary audio, or drop a rendition under stress) and serve rendition-consuming
-endpoints directly. Opaque carriage preserves service signalling verbatim and
-makes no assumptions about the source encode, which makes it the safe choice
-where media-aware is not yet adequate — certain open-GOP contribution feeds, or
-IRDs needing an exactly intact TS — but it cannot express per-track
-prioritisation, presenting the whole programme as one object stream. The rule for
-a given route is therefore "media-aware unless a specific feed or endpoint forces
-the fallback," and routes move to media-aware as soon as the feed and endpoint
-allow. This is a point on which the repository actively invites challenge (see
-[CONTRIBUTING](../CONTRIBUTING.md)).
+**How this architecture treats the choice.** **Media-aware re-muxing is the
+default and preferred path**; opaque carriage is the **fallback**. That ordering
+is now supported by what has been measured rather than only by design direction:
+the media-aware lane is the one carried end-to-end over the public internet, the
+one whose contribution-feed defects have closed upstream, and the one that costs
+5.3 % less bandwidth than SRT because it declines to carry null stuffing
+([evidence](evidence.md) §1, §4, §8). The opaque prototype has never left
+loopback, so it functions here as a transparency *reference* — the benchmark
+against which the media-aware lane's residual gaps are measured — rather than as
+a deployed alternative ([implementation](implementation.md) §2). Media-aware is
+also what lets the platform exploit per-track prioritisation and selective
+subscription (a subscriber can protect video over a secondary audio, or drop a
+rendition under stress) and serve rendition-consuming endpoints directly.
+
+Two reasons to reach for the fallback remain. It preserves the time-varying
+tables the media-aware lane drops, which matters where a receiver needs the
+carried wall clock or EPG rather than a regenerated one. And it makes no
+assumptions about the source encode at all, which is worth something for a feed
+whose provenance is unknown. Against that it cannot express per-track
+prioritisation, presenting the whole programme as one object stream, and it
+forgoes the null-stripping saving if it carries the stream truly verbatim. The
+rule for a given route is therefore "media-aware unless a specific feed or
+endpoint forces the fallback." This is a point on which the repository actively
+invites challenge (see [CONTRIBUTING](../CONTRIBUTING.md)).
 
 Upstream has for now scoped the opaque TS lane out of the core protocol
 implementation (it "breaks interop with players that don't support TS") — a
@@ -483,14 +486,14 @@ directly from those bursts has a programme clock reference that is *smooth but
 not byte-accurate*: the PCR values are broadly correct but the inter-PCR timing,
 as seen at the byte level, is not. Software players tolerate this. **Hardware
 IRDs do not**: they lock a phase-locked loop to the PCR and raise TR 101 290
-P1/P2 alarms when the PCR interval drifts. On the media-aware lane roughly a
-quarter of PCR intervals exceed the 40 ms conformance limit, with excursions well over
-100 ms ([evidence](evidence.md) §3, [lab: T2](../lab/test-2-media-aware-transparency.md)).
+P1/P2 alarms when the PCR interval drifts. On the media-aware lane **13–26 % of PCR
+intervals exceed the 40 ms conformance limit** depending on source, with excursions well
+over 100 ms ([evidence](evidence.md) §3, [lab: T2](../lab/test-2-media-aware-transparency.md)).
 
 It is worth being precise about *what* is at fault, because three distinct things
 are easily conflated. (1) **Delivery cadence:** MoQ hands objects to the edge in
 bursts, so a stream reassembled directly from those bursts has PCR *intervals*
-that no longer reflect a constant mux rate — this is the ~24% figure above, and it
+that no longer reflect a constant mux rate — this is the 13–26 % figure above, and it
 is a property of object delivery over a congestion-adaptive transport, not of MoQ
 corrupting the TS bytes. (2) **Timestamp regeneration:** the *media-aware* lane,
 which demultiplexes and re-muxes, additionally has to *regenerate* PCR/PTS/DTS
@@ -1017,7 +1020,7 @@ a separate, upstream concern:
   path fails, the surviving leg keeps flowing and the IRD rides it; a subscriber can
   *also* re-home to the other path's relay (**subscriber-side relay failover**, the axis
   that matters most here — today supervisor-assisted, since MoQ has no native
-  client-side relay failover yet, [transport](transport.md) §8.4).
+  client-side relay failover yet, [transport](transport.md) §8.3).
 4. **Edge** — each leg's **subscriber** (`moq export ts`) feeds a **pacer** that
   grooms the delivered MoQ objects into a packet-identical, rate-coherent RTP egress.
   (The "edge gateway" of §7 is exactly this subscriber+pacer pairing.) The pacer
@@ -1036,94 +1039,68 @@ between the two publishers — that is a bounded nice-to-have (§14.3,
 decision lives at the IRD, using its existing ST 2022-7 capability, so the final
 failover requires no new receiver behaviour.
 
-**Making the ST 2022-7 pair actually hitless.** ST 2022-7 reconstructs by
-matching RTP sequence numbers, so the two egress streams must be
-*packet-identical with aligned sequence numbers* (it tolerates differential path
-delay, but not differing packet content). Two pacers grooming
-independently would produce non-identical output — different null placement, PCR
-re-stamping, and RTP sequencing — and the IRD merge would fail. Since the pacers
-cannot be locked together in real time, the property is achieved the other way
-round: **grooming is specified as a deterministic function of the delivered MoQ
-objects.** Both legs deliver the same bytes to their pacer (the §14.5 common-source
-requirement); if null re-insertion, PCR re-stamp, and RTP sequencing are all keyed to the
-reconstructed stream (byte position in the CBR reconstruction, object/group
-identity, and control-plane-supplied parameters — target mux rate, PCR PID, SSRC,
-sequence-number seed) rather than to local wall-clock or arrival jitter, the two
-pacers independently compute a byte-identical, sequence-aligned egress — which the
-two IRDs then merge hitlessly — with no inter-pacer link.
+**Making the ST 2022-7 pair actually hitless is a constraint on the groomer, and it is
+the one design decision in this section that matters.** ST 2022-7 reconstructs by matching
+RTP sequence numbers, so the two egress streams must be *packet-identical with aligned
+sequence numbers*; it tolerates differential path delay but not differing packet content.
+The pacers cannot be locked together in real time, so identity has to be computed
+independently — and **what decides whether they can is whose clock chooses each packet's
+slot.**
 
-Identity is necessary but not sufficient: ST 2022-7 has a bounded skew/buffer
-window, so the streams must also arrive within it at a *coherent output rate*.
-Two gateways pacing from free-running local oscillators can drift apart; if that
-drift or the differential path delay exceeds the merge window, protection fails
-even with content-identical packets. The pacers therefore need a disciplined
-common egress rate (locked to a shared reference or the source-derived CBR rate),
-though not packet-for-packet phase alignment. This determinism *and* rate
-coherence is a hard requirement and an open validation item (§17): any
-non-determinism, including divergent object-loss recovery, breaks the property,
-so the outputs must be verified bit-identical *under loss*, not only in the clean
-case. The determinism half is now measured; the rate-coherence half is not. Offline,
-the groomer's stream-clocked path is byte-exact reproducible (identical SHA-256
-run-to-run, on par with FFmpeg CBR and TSDuck `pcradjust`,
-[lab: T6](../lab/test-6-relay-resilience.md)). End to end at a receiver, a pair
-produced by **one groomer duplicated onto both paths is hitless** — zero lost packets
-under leg blackout, 1 % and 3 % loss, and differential delay to 200 ms — and so is a
-pair produced by **two independent stream-clocked groomers**, which is the topology
-this section was written to justify: 100 % alignment, byte-identical on every datagram,
-across leg blackout, loss, differential delay *and* every upstream-chain failure
-([lab: T12](../lab/test-12-dual-path-handoff.md)). Oscillator drift between two
-gateways remains untested: those measurements ran both legs on one host, so the pair
-shared a clock and the rate-coherence requirement above was flattered, not exercised.
+Two groomers keyed to their own **emit instants** do not merge at all, and the failure is
+structural rather than a timing mismatch: each strips the arriving nulls and picks its own
+content/stuffing interleave, so the legs disagree on PID order and null count. They are two
+different transports rather than one transport stamped twice, and nothing at the receiver
+can rescue that. Keying placement to the **stream** instead — a packet's slot is a function
+of its source PCR at the locked mux rate, with the emitted PCR, RTP sequence number and RTP
+timestamp all derived from that slot — makes what a leg sends a function of the broadcast
+rather than of when its process started. Two such groomers sharing no process, clock or
+messages emit one transport.
 
-What decides it is whose clock chooses the slot. Two groomers keyed to their own emit
-instants do not merge at all — 30–53 % alignment — and they fail worse than a timing
-mismatch: of 400 sampled conflicting datagrams, **none** differs only in the PCR field,
-39.5 % disagree on PID order and 28.2 % carry a different number of nulls. Each strips
-the arriving nulls and picks its own content/stuffing interleave against its own emit
-clock, so the two legs are different transports rather than one transport stamped
-twice, and no receiver-side tolerance can rescue them. Keying placement to the stream
-instead — the packet's slot is a function of its source PCR at the locked mux rate, and
-the emitted PCR, RTP sequence number and RTP timestamp are functions of that slot —
-covers stuffing placement and null numbering along with PCR and framing, which is why
-it produces one transport from two processes that share nothing.
+That is measured: at a reference receiver, a pair from **two independent stream-clocked
+groomers** is hitless across leg blackout, path loss, differential delay and every
+upstream-chain failure, as is a pair from **one groomer duplicated onto both paths**
+([evidence](evidence.md) §7, [lab: T12](../lab/test-12-dual-path-handoff.md)). One half of
+the requirement is not: identity is necessary but not sufficient, because two gateways
+pacing from free-running oscillators can drift apart, and if that drift plus differential
+path delay exceeds the merge window protection fails even with identical packets. The pair
+measured shared a host and therefore a clock, so **rate coherence between independent
+gateways is untested**; a real deployment needs a disciplined common egress rate, locked to
+a shared reference or to the source-derived CBR rate, though not packet-for-packet phase
+alignment.
 
-That change has a second, unrelated payoff worth naming here because it shares the same
-prerequisite: **it is what would let the platform stop carrying null stuffing over the
-WAN at all.** Stuffing exists to hold a constant carrier rate for the receiver, and §7.2
-already regenerates it at the edge, so carrying it across the fabric is waste that a byte
-pipe such as SRT cannot avoid and MoQ need not pay. It is measured rather than argued: on
-the media-aware lane it is what takes carriage to **5.3 % below SRT on the same path**, and
-roughly half the bandwidth bill on a loosely-filled carrier
-([evidence](evidence.md) §8, [economics](economics.md) §3.1). That saving used to be
-unbankable on a redundant pair for exactly the reason above — stripping made each
-groomer choose its own stuffing, and independently-chosen stuffing is what made the legs
-unmergeable. Stream-derived stuffing removes the objection and unlocks the saving
-together. **Two independently groomed chains are now the topology to build**: unlike
-groom-once-and-duplicate, which is equally hitless but has a single publisher, relay and
-exporter behind it, a stream-clocked pair protects the whole chain and survives a
-publisher, relay or exporter dying with nothing lost at the receiver. Two ungroomed legs
-also merge exactly, which was worth knowing — it isolated the obstacle to the groomer
-rather than to MoQ delivery — but an ungroomed leg is not a transport an IRD will lock
-to ([evidence](evidence.md) §3). Where deterministic grooming cannot be guaranteed for a
-feed, the honest fallback is 1+1 hot-standby with a brief switch artefact, not a
-claimed-hitless pair.
+That change has a second payoff, because it shares the same prerequisite: **it is what
+lets the platform stop carrying null stuffing over the WAN at all.** Stuffing exists to
+hold a constant carrier rate for the receiver, and §7.2 regenerates it at the edge
+regardless, so carrying it across the fabric is waste a byte pipe such as SRT cannot
+avoid and MoQ need not pay — measured at **5.3 % below SRT on the same path**, and worth
+roughly half the bandwidth bill on a loosely filled carrier ([evidence](evidence.md) §8,
+[economics](economics.md) §3.1). The saving used to be unbankable on a redundant pair for
+exactly the reason above, since stripping made each groomer choose its own stuffing.
+Stream-derived stuffing removes the objection and unlocks the saving together.
 
-One operating constraint survives, and it has moved to a different component. Under
-arrival clocking a pair had to be **co-started**, because a leg brought up 20 s late
-landed 3 542 datagrams out of alignment, and a leg that merely stopped and returned came
-back misnumbered by the length of its own outage — its RTP sequence counted datagrams
-sent, so a silence cost it numbers instead of consuming them. Stream clocking removes
-both: a leg that mutes and returns rejoins its partner's numbering exactly and resumes
-carrying programme, and a leg that joins 20 s late puts the same programme in the same
-slots under the same numbers, within ~10 ms of its partner. What stops those two cases
-short of byte-identity is not the groomer but `moq export ts`, which numbers continuity
-counters from its own process state, so two exporters that did not start together are
-permanently offset by a constant (+2 on video in the measured run) in one byte of every
-packet. Independent restart of a
-leg therefore waits on an upstream fix ([moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779)),
-not on the edge. And grooming, which is what
-makes a leg presentable, is also what makes a *dead* leg look alive unless the groomer
-stops with its content: see §14.3.
+**Two independently groomed chains are therefore the topology to build.**
+Groom-once-and-duplicate is equally hitless but has a single publisher, relay and exporter
+behind it, so it protects the last hop only; a stream-clocked pair protects the whole
+chain. (Two *ungroomed* legs also merge exactly, which was worth establishing because it
+isolated the obstacle to the groomer rather than to MoQ delivery, but an ungroomed leg is
+not a transport an IRD will lock to, [evidence](evidence.md) §3.) Where deterministic
+grooming cannot be guaranteed for a feed, the honest fallback is 1+1 hot-standby with a
+brief switch artefact, not a claimed-hitless pair.
+
+One operating constraint survives, and stream clocking moved it to a different component.
+Under arrival clocking a pair had to be **co-started**, because a leg that joined late or
+returned came back misnumbered by the length of its own absence — RTP sequence counted
+datagrams sent, so silence cost it numbers instead of consuming them. Stream clocking
+removes that: a leg that mutes and returns rejoins its partner's numbering exactly, and a
+leg joining late puts the same programme in the same slots under the same numbers. What
+stops both cases short of *byte*-identity is not the groomer but `moq export ts`, which
+renders continuity counters from its own process state. So **which receiver a deployment
+uses decides whether a single leg can be restarted alone**: input-select protection returns
+immediately, while a sequence-merge receiver needs the pair restarted together until the
+upstream fix lands ([moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779)). And
+grooming, which is what makes a leg presentable, is also what makes a *dead* leg look alive
+unless the groomer stops with its content: see §14.3.
 
 ### 14.2 Graceful degradation
 
@@ -1161,7 +1138,7 @@ of detection, ungraceful loss only, no seamless merge. Useful, not load-bearing;
 no-stall path is the IRD.
 - **Relay or link failure** — the surviving leg keeps flowing and the IRD rides it
 hitlessly; the affected subscriber can additionally re-home to another relay
-(supervisor-assisted today, [transport](transport.md) §8.4).
+(supervisor-assisted today, [transport](transport.md) §8.3).
 - **Edge (subscriber / pacer) failure** — the redundant leg's egress continues; the
 IRD's ST 2022-7 merge covers the loss hitlessly.
 - **Content loss behind a healthy groomer** — the failure mode this list originally
@@ -1179,13 +1156,16 @@ Monitoring still keys on **programme content** rather than packet arrival, becau
 mute is a configured behaviour and a leg groomed by something else will not do it — and
 the content check has to discount the groomer's own adaptation-field-only PCR
 insertions, which otherwise register as content ([operations](operations.md) §3).
-- **A leg that returns** — a recovered leg is not a restored pair. A groomer that mutes
-and resumes comes back at the next RTP sequence number it would have sent, so it is
-behind its partner by the whole outage (8 756 datagrams after 23 s) and no constant
-offset reconciles them. Until numbering derives from stream position rather than
-datagrams sent (§14.1), a recovered leg re-enters as an unaligned stream that only
-input failover can use, and the pair runs unprotected until both legs are restarted
-together.
+- **A leg that returns** — a recovered leg rejoins the schedule but not byte-identity. A
+stream-clocked groomer that mutes and resumes comes back on exactly the numbering its
+partner has reached, carrying the same programme in the same slots within ~10 ms, so
+input-select protection is restored immediately and the numbering deficit that made an
+arrival-clocked leg unusable is gone (§14.1). What it does not recover is packet identity,
+because `moq export ts` renders continuity counters and the audio/video interleave from its
+own process state; the returning leg is therefore mergeable by input select but not by
+sequence merge until the pair is restarted together, and closing that gap is upstream work
+([evidence](evidence.md) §7). Which of the two a deployment's receivers implement therefore
+decides whether a single leg can be maintained in isolation.
 - **IRD failure** — the second IRD (also dual-input) keeps delivering to its
 downstream path; doubling the receiver removes the last single point.
 - **Regional failure** — routes are re-homed to another region by the routing
@@ -1246,7 +1226,7 @@ current gaps:
   active/active source failover ([#2473](https://github.com/moq-dev/moq/pull/2473), §14.3;
   [relay](relay.md) §4.1) — the latter as a *bounded* reselect, since this implementation's
   content-agnostic relay does route selection rather than the object-level dedup the IETF draft
-  specifies as a hedged SHOULD (§9.3; [relay](relay.md) §4.1, [evidence](evidence.md) §7).
+  specifies as a hedged SHOULD ([relay](relay.md) §4.1, [evidence](evidence.md) §7).
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless
   selection.** Relay-mesh source failover has since landed, but it is bounded (one idle
   timeout, ungraceful loss only), so service continuity is still delivered the way
@@ -1261,19 +1241,20 @@ current gaps:
   ([lab: T12](../lab/test-12-dual-path-handoff.md), §14.1). The residual constraint is
   narrower than the old one and sits upstream: a leg that restarts *alone* rejoins the
   numbering and the programme but not byte-identity, because `moq export ts` numbers
-  continuity counters per process. Planned maintenance on one leg of a live pair
-  therefore still means taking the pair down and bringing it back together.
+  continuity counters per process. Planned maintenance on one leg of a live pair is
+  therefore safe under an input-select receiver and needs a paired restart under a
+  sequence-merge one.
 
 The forward-looking nuance: relay-mesh source failover has landed and is *useful* — it
 lets a single-homed subscriber ride out an *ungraceful* active-source death without a
 downstream merge — but it is a **bounded routing-layer enhancement, not a substitute for
 broadcast-grade service today**: it costs one detection interval, does not cover a
 graceful source exit, and a genuinely seamless merge is out of scope for *this*
-content-agnostic-relay implementation — the IETF draft does specify object-level dedup (§9.3, a
-hedged SHOULD), but conformant dedup needs identical object *numbering* across the pair, not just
-identical bytes, which is at least as hard as the receiver-side alignment ([relay](relay.md) §4.1,
-[evidence](evidence.md) §7). The doubled-and-downstream pattern remains the no-stall answer. Input failover, by contrast, should stay outside
-MoQ permanently.
+content-agnostic-relay implementation. The IETF draft does specify object-level dedup, as a hedged
+SHOULD, but conformant dedup needs identical object *numbering* across the pair rather than merely
+identical bytes, which is at least as hard as the receiver-side alignment
+([relay](relay.md) §4.1, [evidence](evidence.md) §7). The doubled-and-downstream pattern remains the
+no-stall answer, and input failover should stay outside MoQ permanently.
 
 ---
 
@@ -1330,6 +1311,10 @@ traffic to the redundant path first, then servicing the drained element, then
 restoring. The IRD, protected by ST 2022-7 on the last hop, sees nothing. This is
 the operational pattern that lets the platform be patched and upgraded (including
 transport-draft upgrades, §4.3) without a maintenance window visible to the feed.
+Two conditions from §14.1 apply: the drained leg must be confirmed dead by *content*
+rather than by carrier, and restoring a single leg is only transparent to an
+input-select receiver — a sequence-merge receiver needs the pair restored together
+([operations](operations.md) §4).
 
 ### 15.4 Degraded-quality triage
 
@@ -1352,7 +1337,7 @@ The load-bearing decisions and the trade-offs they carry:
 
 | Decision                                              | Rationale                                                        | Trade-off accepted                                                 |
 | ----------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Media-aware re-muxing as default/preferred; opaque TS carriage as fallback (§4.2) | Media-aware is MoQ-native and enables relay/amplify with per-track prioritisation; opaque preserves signalling verbatim for feeds/IRDs media-aware cannot yet serve | Opaque fallback forgoes per-track prioritisation and selective subscription; some media-aware feed handling still maturing |
+| Media-aware re-muxing as default/preferred; opaque TS carriage as fallback (§4.2) | Media-aware is MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing; opaque preserves the time-varying tables verbatim | Opaque fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; media-aware does not relay TDT/TOT, so the edge must mint wall time |
 | Transport-independent media/control layers (§4.3, §9) | Survives MoQ draft churn; transport commoditises                 | Extra abstraction; cannot exploit every transport-specific feature |
 | Grooming at the edge, not the publisher (§7.2)        | Absorbs whole-path jitter where determinism is required          | CPU/timing-heavy edge; per-flow real-time obligation               |
 | Dumb-and-fast relays (§5.4)                           | Keeps the commodity layer commodity; value moves up-stack        | Intelligence and cost concentrate at edge and control plane; relays are not yet interchangeable *between* implementations (§17) |

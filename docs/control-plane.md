@@ -47,7 +47,7 @@ An illustrative surface mirrors the entity model: create/update/suspend/delete f
 
 ## 4. Multi-tenant isolation
 
-Multi-tenancy lets tenants share the commodity relay fabric while operating under strong logical and cryptographic isolation within the control plane. The isolation model is developed further in [security](security.md).
+Multi-tenancy lets tenants share the relay fabric while operating under strong logical and cryptographic isolation within the control plane. The isolation model is developed further in [security](security.md).
 
 ### 4.1 Namespace model
 Every channel, track, and routing entity is bound to a cryptographically enforced, hierarchically scoped namespace unique to that tenant (e.g., `moq://tenant-id/channel-id/track-id`). Relays reject any subscription attempt where the presented token scopes do not match the target track namespace.
