@@ -1377,7 +1377,10 @@ the fix is a client-side default, but until it is demonstrated, "commodity relay
 is an aspiration and vendor lock-in is the realistic near-term position.
 - **Economics at always-on trunk scale.** As the vision notes, the cost case is
 route-specific and strongest for dynamic/long-tail routes; it is not
-established for always-on trunk routes against depreciated incumbent capacity.
+established for always-on trunk routes against depreciated incumbent capacity — and
+unlike the others here, it cannot be settled *in public*, since the deciding inputs are
+commercially sensitive. [Economics](economics.md) §4.7 therefore states it as a parity
+threshold an operator substitutes its own figures into.
 
 These are the questions the rest of the repository — the transport, control-plane,
 interoperability, operations, and economics documents — exists to reduce. This

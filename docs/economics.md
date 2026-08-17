@@ -347,9 +347,12 @@ trunk portfolio has and a single route does not.
 
 Any global media organisation buys cloud under a negotiated agreement, not at list, so
 the enterprise discount is not a footnote to the arithmetic — it is the model's most
-consequential unknown, and worth modelling explicitly. Applying a hypothetical
-discount to first-tier list egress and carrying it through the eight-service redundant
-multiplex of §4.7:
+consequential input. It is also the one that cannot be published: real discount terms are
+commercially sensitive, so the ladder below is *hypothetical* percentages off list, chosen
+to show the shape of the sensitivity rather than to represent anyone's terms. A reader who
+knows their own figure should read the row nearest it and ignore the rest. Applying a
+hypothetical discount to first-tier list egress and carrying it through the eight-service
+redundant multiplex of §4.7:
 
 
 | *Hypothetical* discount off first-tier list | Effective $/GB | Marginal $/destination-year | Destinations to parity per $1M/yr of incumbent cost |
@@ -906,10 +909,14 @@ between cloud list and commodity delivery is not durable — that spread is the 
 
 **Commercial, and decisive.**
 
-- What is the real TCO delta against one broadcaster's *actual, depreciated* route
-cost — the single most important unanswered question here, shared with the
-[README](../README.md). §4.7 supplies the challenger's half of the arithmetic; the
-incumbent's half is the only thing missing.
+- What is the real TCO delta against one broadcaster's *actual, depreciated* route cost?
+This is the decisive question, and it is **unpublishable rather than unknown** — an
+operator's negotiated rates and depreciated route costs are commercially sensitive, so
+they cannot appear here whatever is known privately. That is why §4.7 supplies the
+challenger's half as a **parity threshold** instead of a figure: the arithmetic is linear,
+so substituting the incumbent's half is a one-line change the operator can make in
+private. Treat the published numbers as an upper bound and a method, not a result awaiting
+data.
 - **Why does published cloud egress sit an order of magnitude above commodity CDN
 delivery, and does anything force that gap to close?** The trunk question lives inside
 that spread. Two independent estimates of what delivery actually costs — the published
