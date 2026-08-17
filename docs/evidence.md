@@ -386,14 +386,24 @@ the broadcast, and grooming conceals none of them — it supplies the common slo
 legs comparable at all, and then carries every difference faithfully. The 2.9 % the mask leaves is
 the second: the emission cadence for SI tables was anchored to process start, and in that capture
 **31 of 31** SDT emissions land on a slot where the other leg carries video, displacing every packet
-after them. [#2825](https://github.com/moq-dev/moq/pull/2825) fixes it, and takes a single-track pair
-from 96.4 % to **100.0 %**. The third is the audio/video interleave: the exporter emits the earliest
-*available* frame rather than the earliest frame, so two legs whose bytes arrive at different moments
-order the same media differently, and on ordinary multi-track content the pair stops at **95.6 %**
-([#2829](https://github.com/moq-dev/moq/issues/2829)). That ceiling is not about restarting — two
-legs started at the same instant sit at 95.2 %, agreeing on every table while placing different
-numbers of audio and video packets. **A byte-identical pair therefore waits on the exporter, not on
-the edge** ([#2779](https://github.com/moq-dev/moq/issues/2779), #2825, #2829).
+after them. [#2825](https://github.com/moq-dev/moq/pull/2825), now merged, fixes it and takes a
+single-track pair from 96.4 % to **100.0 %**. The third is the audio/video interleave: the exporter
+emits the earliest *available* frame rather than the earliest frame, so two legs whose bytes arrive
+at different moments order the same media differently, and on ordinary multi-track content the pair
+stops at **94–96 %** ([#2829](https://github.com/moq-dev/moq/issues/2829)). That ceiling is not about
+restarting — two legs started at the same instant sit in the same band, agreeing on every table while
+placing different numbers of audio and video packets. **A byte-identical pair therefore waits on the
+exporter, not on the edge** ([#2779](https://github.com/moq-dev/moq/issues/2779), #2825, #2829).
+
+The counter itself is no longer an open question of feasibility, only of adoption. Restarting each
+PID's counter at the video keyframe boundary and padding every span to a multiple of 16 packets —
+prototyped as a filter below the exporter, so it can be measured before it is built — takes the same
+pair from 0.4 % to **99.9 %** identical on single-track content and from 24.6 % to **93.6 %** on
+multi-track, which is its interleave ceiling. Both groomed legs stay continuity-clean, so the
+constant-bitrate stage below absorbs the filler. The cost is small in aggregate and regressive in
+detail: 1.5–1.7 % of packets, but **10–18 kb/s per PID almost regardless of what that PID carries**,
+because a PID emitting one or two packets per group is nearly always 14 or 15 short of a multiple of
+16. A 10 Mb/s video PID pays 9.6 kb/s; a low-rate data PID pays several times its own payload.
 
 **One further constraint on operating a pair.** Failure detection cannot be faster than the leg's
 own burstiness: an ungroomed leg has inter-datagram gaps to 242 ms, so a silence threshold below

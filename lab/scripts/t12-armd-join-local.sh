@@ -20,6 +20,17 @@
 # Everything runs inside one invocation: background processes do not survive across
 # separate shell invocations in this environment.
 #
+# Both legs run their exporter with the container consumer at debug, and the run reports how
+# many groups each leg skipped. A leg that drops a group the other kept is a content
+# divergence no amount of field determinism repairs, so a pair graded without that number is
+# only ever an upper bound. LATENCY_MAX is exposed so the counter can be shown to fire:
+# LATENCY_MAX=0ms is the positive control.
+#
+# FILTER runs between the exporter and the groomer on both legs (e.g. ts-keyframe-pad.py),
+# for pricing a change to the emitted packet count against the groomer downstream of it.
+# FILTER_B replaces it on leg B alone, which is how the legs are made to diverge on purpose
+# (ts-stall.py stops one leg consuming until its budget expires).
+#
 # Usage: t12-armd-join-local.sh <moq> <moq-relay> <pacer-dir> <label> <source.ts> [join_s] [window_s] [rate_bps]
 
 set -euo pipefail
@@ -36,7 +47,7 @@ RATE="${8:-4000000}"
 # Matched to t12-dual-leg.sh so the numbers are comparable with the campaign.
 SSRC=538968071
 SEQ_SEED=0
-LATENCY_MAX=500ms
+LATENCY_MAX="${LATENCY_MAX:-500ms}"
 PACER_LAT=1000
 PACER_MAXLAT=8000
 PACER_STALL=1000
@@ -92,7 +103,11 @@ sleep 1
 
 # GSO off: it stalls on macOS loopback. https:// + pinned fingerprint: the http://
 # bootstrap is broken in these builds.
-( cd ~/moq-dev && "$RELAY" demo/relay/localhost.toml --server-quic-gso=false ) >"$OUT/relay.log" 2>&1 &
+# RELAY_ARGS reaches the cache: retention is unbounded unless `--cache-duration` is set, and
+# with nothing ever expiring a leg that falls behind is never forced to skip. It is what
+# decides whether a stalled leg lags or loses media.
+# shellcheck disable=SC2086
+( cd ~/moq-dev && "$RELAY" demo/relay/localhost.toml --server-quic-gso=false ${RELAY_ARGS:-} ) >"$OUT/relay.log" 2>&1 &
 PIDS+=("$!")
 for _ in $(seq 1 40); do
 	FP="$(curl -s http://localhost:4443/certificate.sha256 || true)"
@@ -105,13 +120,31 @@ BCAST_A="$BCAST"
 BCAST_B="${TWO_PUB:+${BCAST}b}"
 BCAST_B="${BCAST_B:-$BCAST}"
 
-leg() { # rtp_port broadcast logfile
-	"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$2" export ts --latency-max "$LATENCY_MAX" 2>>"$3" |
-		"$PACER/moq_egress" "127.0.0.1:$1" "$RATE" --rtp --ssrc "$SSRC" \
-			--latency-ms "$PACER_LAT" --max-latency-ms "$PACER_MAXLAT" \
-			--stall-ms "$PACER_STALL" --on-stall mute \
-			--stream-clock --sequence-seed "$SEQ_SEED" >>"$3" 2>&1
+export_ts() { # broadcast logfile
+	# The whole crate rather than the consumer module: "starting track" then appears on every
+	# run, so a run with no skip lines is one where the filter was demonstrably live, rather
+	# than one where the directive silently failed to match.
+	RUST_LOG="${RUST_LOG:-warn,moq_mux=debug}" \
+		"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
+		--client-quic-gso=false --broadcast "$1" export ts --latency-max "$LATENCY_MAX" 2>>"$2"
+}
+
+# SC2094: every stage appends to the one log; none of them reads it.
+# shellcheck disable=SC2094
+leg() { # rtp_port broadcast logfile [filter]
+	local groom=(
+		"$PACER/moq_egress" "127.0.0.1:$1" "$RATE" --rtp --ssrc "$SSRC"
+		--latency-ms "$PACER_LAT" --max-latency-ms "$PACER_MAXLAT"
+		--stall-ms "$PACER_STALL" --on-stall mute
+		--stream-clock --sequence-seed "$SEQ_SEED"
+	)
+	if [[ -n "${4:-}" ]]; then
+		# Unquoted: a filter carries its arguments (ts-stall.py takes two).
+		# shellcheck disable=SC2086
+		export_ts "$2" "$3" | python3 $4 2>>"$3" | "${groom[@]}" >>"$3" 2>&1
+	else
+		export_ts "$2" "$3" | "${groom[@]}" >>"$3" 2>&1
+	fi
 }
 
 publish() { # fifo broadcast logfile
@@ -119,7 +152,7 @@ publish() { # fifo broadcast logfile
 		--client-quic-gso=false --broadcast "$2" import ts <"$1" >"$3" 2>&1
 }
 
-leg "$PORT_A" "$BCAST_A" "$OUT/leg-a.log" &
+leg "$PORT_A" "$BCAST_A" "$OUT/leg-a.log" "${FILTER:-}" &
 PIDS+=("$!")
 sleep 2
 
@@ -143,7 +176,7 @@ fi
 
 echo "==> leg A running; leg B joins in ${JOIN}s"
 sleep "$JOIN"
-leg "$PORT_B" "$BCAST_B" "$OUT/leg-b.log" &
+leg "$PORT_B" "$BCAST_B" "$OUT/leg-b.log" "${FILTER_B:-${FILTER:-}}" &
 PIDS+=("$!")
 
 echo "==> capturing ${WINDOW}s"
@@ -153,3 +186,15 @@ trap - EXIT
 sleep 1
 
 echo "==> leg A $(wc -c <"$OUT/a.rtp") bytes, leg B $(wc -c <"$OUT/b.rtp") bytes -> $OUT"
+
+# The exporter logs every group it abandons, so the pair's grade can be qualified rather
+# than assumed. "slow" is the latency budget expiring; "old" and "evicted" are a group
+# arriving behind the cursor or having aged out of the relay. Any of them means the legs
+# stopped carrying the same media, which no field-level determinism repairs.
+for l in a b; do
+	log="$OUT/leg-$l.log"
+	printf '    leg %s: %s slow, %s old, %s evicted (--latency-max %s)\n' "$l" \
+		"$(grep -c 'skipping slow groups' "$log" || true)" \
+		"$(grep -c 'skipping old group' "$log" || true)" \
+		"$(grep -c 'current group evicted' "$log" || true)" "$LATENCY_MAX"
+done

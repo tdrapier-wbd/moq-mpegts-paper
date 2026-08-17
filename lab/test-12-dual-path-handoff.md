@@ -499,14 +499,20 @@ The arm D join cell re-run against candidate fixes, on
 publisher and one relay, so the only asymmetry left is when each exporter tuned in, graded by
 [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py). Builds are upstream `main` (`6d3c51d7`), #2825 as proposed,
 and #2825 with `!=` → `>` in `due` — the one-character change from the review, which stops a
-backwards timestamp counting as a new slot. Slots identical with the continuity counter masked, leg B
-joining 20 s late:
+backwards timestamp counting as a new slot. **#2825 merged in the `>` form**, so the last column is
+what `main` does today and the middle one is a build that never shipped. Slots identical with the
+continuity counter masked, leg B joining 20 s late:
 
-| Source | `main` | #2825 | #2825 + monotonic `due` |
-|---|---|---|---|
-| video-only 2 Mb/s, 1.8 s GOP | 96.43 % | **100.00 %** | 100.00 % |
-| video-only 2 Mb/s, 2 s GOP | 100.00 % | 100.00 % | — |
-| `CNNiEMEA2.ts` — 2 audio, B-frames, SDT + NIT | 87.75 % | 89.72 % | **95.62 %** |
+| Source | pre-merge `main` | #2825 as proposed (`!=`) | monotonic `due` (`>`) | stock `main` today |
+|---|---|---|---|---|
+| video-only 2 Mb/s, 1.8 s GOP | 96.43 % | **100.00 %** | 100.00 % | **100.00 %** |
+| video-only 2 Mb/s, 2 s GOP | 100.00 % | 100.00 % | — | — |
+| `CNNiEMEA2.ts` — 2 audio, B-frames, SDT + NIT | 87.75 % | 89.72 % | **95.62 %** | **94.09 %** |
+
+The first three columns are hand-built approximations (upstream `6d3c51d7` plus the patch under
+review); the last is a stock build of `main` at `eab960192`, which is the one to quote. The
+multi-track pair moves between 94 % and 96 % from run to run because what it is now measuring is
+the interleave, which is a race; the single-track pair is 100 % every time.
 
 - **On single-track content #2825 closes the pair.** The two legs become byte-identical bar the
   counter, which is what the arm D cell was one defect short of. The 2 s GOP row is not a rule —
@@ -516,12 +522,66 @@ joining 20 s late:
   co-started the residue is 4.82 %, against 4.38 % for the late joiner. Over 62 073 shared slots the
   tables agree exactly (PAT 111/111, PMT 111/111, SDT 22/22, NIT 5/5) while the legs place different
   numbers of media packets — video +19, the two audio PIDs −72 and −51. That is [#2829](https://github.com/moq-dev/moq/issues/2829).
-- **The PSI inflation in #2825 as proposed reaches the receiver.** Over the same span it emits PAT
+- **The PSI inflation in the form first proposed reaches the receiver**, which is why it was changed
+  before merging. Over the same span it emits PAT
   1 959/1 946 and SDT 818/803 across the two legs, where the monotonic variant emits 111/111 and
   22/22 — so the surplus tables are not only overhead, they land inconsistently and cost 5.9 points
   of agreement.
 - **The publisher is not implicated.** Running the same cell with two importers fed by one `tee`,
   the topology the campaign used, gives 100.00 % on the single-track source, unchanged.
+
+### Whether a leg ever drops media the other keeps
+
+A pair graded on field identity is only an upper bound until the legs are known to be carrying the
+same media, and the exporter's consumer is free to abandon a group whose data is late. Neither leg
+ever did so here. The per-PID census agrees to within one packet over 16 660 shared slots on the
+single-track source and 62 418 on the multi-track one; a group is a whole GOP, thousands of
+packets, and cannot hide in that. Dropping `--latency-max` from 500 ms to 0 changes nothing — on
+loopback no group is ever late, so the budget is never the binding constraint.
+
+More useful is what happens when a leg is made to fall behind. [`ts-stall.py`](scripts/ts-stall.py)
+stops one leg consuming for 8 s and then 25 s, which blocks its exporter on the write:
+
+- **A slow leg does not skip a group. It lags, without bound.** The export loop reads a frame and
+  then writes it, so a blocked output stops the consumer reading — but the skip test is only
+  reached when the current group cannot yield a frame, and a consumer that is merely behind has
+  frames in hand. It drains them in order and the delay accumulates. The media the stalled leg
+  lost (72 packets at 8 s, 221 at 25 s) was discarded by the groomer's own release ceiling
+  downstream, not by the exporter.
+- **What bites is relay retention, not the latency budget** — and it does not cause a skip either.
+  `--cache-duration` is unbounded unless set; at 5 s, the same 25 s stall ends with the exporter
+  exiting on `hang: moq error: old`. For a 1+1 pair that is the better failure, since a leg that
+  dies is visible and can be restarted, where one that silently diverges is not.
+
+### Renumbering the counter from the stream, prototyped
+
+The remaining defect ([#2779](https://github.com/moq-dev/moq/issues/2779)) is the continuity
+counter, and the fix proposed upstream is to restart it at each video keyframe and pad every PID's
+span to a multiple of 16 so the restart stays continuous.
+[`ts-keyframe-pad.py`](scripts/ts-keyframe-pad.py) does that between the exporter and the groomer,
+which prices it without waiting for it to be built. Same cell, and now graded on **raw** identity
+rather than with the counter masked:
+
+| Source | identical, stock `main` | identical, padded | masked ceiling |
+|---|---|---|---|
+| video-only 2 Mb/s, 1.8 s GOP | 0.37 % | **99.92 %** | 100.00 % |
+| `CNNiEMEA2.ts` | 24.61 % | **93.57 %** | 93.79 % |
+
+- **The counter stops being a defect**, on both sources: raw identity arrives within 0.2 points of
+  the masked ceiling. What is left below 100 % on the multi-track source is the interleave.
+- **The groomer absorbs the filler.** Both groomed legs report zero continuity errors under TSDuck,
+  the constant bitrate holds, and the pair still aligns slot for slot.
+- **The cost is real and regressive.** 1.72 % of packets on the 4-PID single-track service
+  (47 kb/s) and 1.49 % on the 11-PID service (136 kb/s) — but per PID it is 10–18 kb/s almost
+  regardless of what that PID carries, because a PID emitting one or two packets per GOP is
+  nearly always 14 or 15 short of a multiple of 16. The 10 Mb/s video PID pays 9.6 kb/s, PAT pays
+  16.4 kb/s, and each low-rate data PID pays ~18 kb/s, several times its own payload.
+- **A joining leg pays a one-off**: it emits a full SI set at tune-in, so for that one span it
+  renders 15 filler packets its partner does not (visible as +15 on the NIT PID). It does not
+  recur.
+- **It is conditional on the interleave.** The counter becomes an index within the span, so
+  wherever the legs order media differently the renumbering diverges with it. On multi-track
+  content this fix cannot land alone; it needs [#2829](https://github.com/moq-dev/moq/issues/2829).
 
 ### Verdict against the pass criteria
 
@@ -530,7 +590,7 @@ joining 20 s late:
 | Arm C: 100 % yield, and 0 lost / 0 CC / no PCR degradation across every path injection | **pass** — rig valid |
 | Arm A feasible only at 100 % yield | **pass** when co-started (12/12 cells); fails on mid-stream join |
 | Arm B feasible only at 100 % yield | **fail** — 30–53 %; mechanism measured and structural |
-| Arm D feasible only at 100 % yield | **pass** co-started, including across every upstream-chain failure. A leg that joins or recovers separately reaches 97–98 %, and what blocks 100 % is upstream of the groomer: the continuity counter accounts for all but 2.90 %, the SI cadence for the rest. With [#2825](https://github.com/moq-dev/moq/pull/2825) the same cell reaches 100 % on this single-track source |
+| Arm D feasible only at 100 % yield | **pass** co-started, including across every upstream-chain failure. A leg that joins or recovers separately reached 97–98 % when the campaign ran, and what blocked 100 % was upstream of the groomer: the continuity counter accounted for all but 2.90 %, the SI cadence for the rest. [#2825](https://github.com/moq-dev/moq/pull/2825) has since merged and the same cell reaches 100 % on a single-track source, with the counter masked |
 | Graceful exit: `SIGTERM` to publisher A, 0 lost packets under seq-merge | **pass** (arms A and D). Arm B's merged output also loses nothing, but the pair is not mergeable, so the criterion does not apply to it |
 | Input-select: bounded and reported | reported: 1–4 CC errors, gap ≈ `k`, and `k` ≥ 250 ms on ungroomed legs |
 | Skew: reported as measured | 0.23 ms clean; injected delay tracked to 60 µs up to 200 ms; a stream-clocked leg joining 20 s late lands a median 10 ms from its partner, and −26 to −30 ms as its release latency is varied |
