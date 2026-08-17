@@ -667,20 +667,22 @@ disappears.
 
 **The transport choice barely registers.** Every option lands within a few percent of
 the same wire volume, so the choice among them moves this table by single digits while
-destination count moves it by three orders of magnitude. MoQ is the cheapest row on this
-column, because it is the only one that can decline to carry null stuffing — but the
-margin is a few percent and it travels with the source's stuffing ratio, which is why
-this is a footnote to the destination-count result rather than a reason to choose a
-transport:
+destination count moves it by three orders of magnitude. MoQ is the cheapest *measured*
+row, because it declines to carry null stuffing where a byte pipe such as SRT cannot — but
+the margin is a few percent, it travels with the source's stuffing ratio, and it is **not
+a property unique to MoQ**: a packager producing TS segments for HLS has no reason to
+retain stuffing either, so the segmented-HTTP rows below are estimated on verbatim
+carriage and could plausibly match MoQ on this line if measured. Treat this as a footnote
+to the destination-count result rather than a reason to choose a transport:
 
 
 | Transport             | Wire multiplier    | Latency        | Fan-out topology                                     | Standardisation |
 | --------------------- | ------------------ | -------------- | ---------------------------------------------------- | --------------- |
-| MoQ                   | 0.982 *(measured; 0.973 with MTU discovery on, §3.1)* | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations |
+| MoQ                   | 0.982 *(measured; 0.973 with MTU discovery on, §3.1)* | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations — but carriage **fails against every third-party relay** ([evidence](evidence.md) §9) |
 | SRT                   | 1.037 *(measured, same path)* | sub-second     | no native fan-out; N origin sessions or a re-origination tier | published spec, open source |
 | Zixi                  | ~1.03 *(estimated)*| sub-second     | broadcaster fans out; last mile is N unicast copies  | proprietary, per-GB licence |
-| TS over HTTP/1.1      | ~1.05 *(estimated)*| seconds        | cache fans out; last mile is N unicast copies        | **no agreed standard — vendor-specific in practice** |
-| HLS / DVB-DASH        | ~1.05 *(estimated)*| seconds–tens   | cache fans out; last mile is N unicast copies        | RFC 8216 / ETSI TS 103 285 |
+| TS over HTTP (chunked)| ~1.05 *(estimated)*| seconds        | cache fans out; last mile is N unicast copies        | **no agreed standard — vendor-specific in practice** |
+| HLS with TS / DVB-DASH | ~1.05 *(estimated)*| ~2–5 s low-latency mode; tens otherwise | cache fans out; last mile is N unicast copies        | *informational* spec (`draft-pantos-hls-rfc8216bis`, obsoletes RFC 8216) / ETSI TS 103 285 — **not standards-track, yet universally interoperable** |
 
 
 **No option on that list breaks the linearity, and the common intuition that HTTP
@@ -778,7 +780,19 @@ broadcast-grade low-latency transport to have both.**
 The consequence is the argument: MoQ is the first sub-second, broadcast-grade transport
 whose architecture lets the *commoditised* delivery market sell it. HTTP-based formats
 already have commodity economics but not the latency; SRT and Zixi have the latency but
-are structurally confined to premium, per-stream pricing. If CDNs deploy MoQ relays and
+are structurally confined to premium, per-stream pricing.
+
+**The obvious objection is the strongest one, and it limits this argument to part of the
+market.** If a route's latency budget is seconds rather than sub-second — which
+[transport](transport.md) §2 concedes covers *most* primary distribution — then HLS
+carrying MPEG-TS has commodity economics *and* sufficient latency *and* interop MoQ has
+not demonstrated, and this entire section stops applying to that route
+([transport](transport.md) §3.4). The argument survives only where sub-second latency is
+genuinely required, or where verbatim multi-programme carriage or subscription-time
+revocation are, and those are a subset of primary distribution rather than the whole of
+it. Stated at its narrowest: MoQ is the first transport that could bring *commodity*
+pricing to the sub-second band. It is not a general claim that MoQ is the cheapest way to
+move a broadcast feed over the internet. If CDNs deploy MoQ relays and
 compete, relay capacity follows CDN delivery down the ladder rather than sitting at
 hyperscaler primary-distribution rates — and that competitive pressure reaches a segment
 that has never felt it, because SRT never gave the commodity market a product to sell.
