@@ -75,6 +75,7 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T9 | System performance & resource utilisation | 5 (scale/soak) | feeds [operations](../docs/operations.md), [economics](../docs/economics.md) §3.1, §4, §9 | partial — publisher and subscriber pass; relay growth root-caused upstream to quinn-proto and its predicted plateau confirmed on this rig (soft ceiling; sub-proportional mitigation) | [test-9-performance.md](test-9-performance.md) |
 | T11 | Cross-implementation interop | 7 (comparative lab) | transport neutrality | T11a partial; T11b open | [test-11-interop.md](test-11-interop.md) |
 | T12 | End-to-end 1+1 dual-path delivery and hand-off | 6 (redundancy drill) | Gate 3 — resilience; de-risks Gate 2 | complete for a co-started pair, arms A–D, incl. leg failure and recovery; independent restart of one leg blocked upstream | [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md) |
+| T13 | Off-the-shelf CBR/PCR grooming of a MoQ egress | 4 (file), plus wire cadence | supports Gate 2; decides how the grooming requirement can be documented | complete for TSDuck, FFmpeg and GStreamer on a broadcast mux and a single-programme feed; no off-the-shelf stage satisfies all four criteria | [test-13-downstream-grooming.md](test-13-downstream-grooming.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -114,8 +115,8 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
   delivered-rate curves are within a stated margin and the failure mode is no worse; egress quality at
   least matches (P1); overhead/CPU recorded as economic inputs. Feeds [economics](../docs/economics.md) §4 and §9.
 
-T8b, T9 and T11 were specified after this list was fixed; their pass criteria are stated the same way,
-in advance, at the top of their own files.
+T8b, T9, T11 and T13 were specified after this list was fixed; their pass criteria are stated the same
+way, in advance, at the top of their own files.
 
 ### Desk analyses
 

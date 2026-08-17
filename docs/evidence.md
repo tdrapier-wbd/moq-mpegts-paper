@@ -102,6 +102,25 @@ sufficient*: file analysis confirms the re-stamp arithmetic, not software-pacer 
 physical output. **The hardware pass remains the open, load-bearing test.** (Supports
 [architecture](architecture.md) §7.2.)
 
+**The grooming stage does not depend on that one implementation, but no off-the-shelf tool does the
+whole job.** Graded against the same oracle, TSDuck's `regulate` changes nothing about conformance
+(1 527 of the 1 567 checked PCRs still outside ±500 ns) because it paces without grooming, and
+TSDuck cannot restore stuffing at all: `tsp` overwrites existing null packets rather than inflating a
+stream, so `mux` fed a null file inserts **zero** packets into a MoQ egress. `pcradjust` at the
+stream's own content rate does pass the ±500 ns gate with the mux preserved byte-for-byte and
+duration fidelity exact, but leaves 299 PCR intervals above 40 ms and rewrites PTS/DTS, and it can
+only run at the content rate rather than a nominal service rate. The two regenerating muxers fix
+rate, repetition and accuracy — FFmpeg's `-muxrate` to 8.8 µs, GStreamer's `mpegtsmux bitrate=` to
+25 µs — at the cost of rebuilding the mux, and they lose different things: FFmpeg keeps every PID but
+retypes SCTE-35, while GStreamer keeps SCTE-35 correctly typed on one PID and discards the rest of
+the signalling, including all PSI beyond PAT and PMT. Neither is a paced wire. Measured live, FFmpeg
+delivered 46.3 Mb/s in its first second and then oscillated 8–13 Mb/s per second with 1.3 Gb/s peaks
+inside 10 ms windows; GStreamer's clock-synchronised sink holds the nominal rate but bursts, falling
+silent for up to 284 ms, 376 times in 25 s; against 9.70–9.73 Mb/s and no gap beyond 15 ms for a
+paced chain ([lab: T13](../lab/test-13-downstream-grooming.md)). So the requirement is documentable
+with standard tools for feeds whose signalling is not contractual and whose receiver tolerates a
+bursty wire; a mux carrying full signalling to a hardware receiver still needs a purpose-built stage.
+
 ## 4. Real feeds broke naive media-aware import — and the gaps closed upstream
 
 A CNN International capture (open-GOP H.264 signalling recovery-point SEI, roughly one IDR every
