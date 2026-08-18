@@ -123,10 +123,26 @@ stream to a nominal service rate at all (`tsp` overwrites existing nulls rather 
 rewrites PTS/DTS. The regenerating muxers fix rate, repetition and accuracy — FFmpeg to 8.8 µs,
 GStreamer to 25 µs — by rebuilding the mux, which costs signalling: FFmpeg keeps every PID but retypes
 SCTE-35, GStreamer types SCTE-35 correctly on one PID and discards all PSI beyond PAT and PMT. Neither
-emits a usable wire shape, oscillating 8–13 Mb/s with gigabit peaks or falling silent for up to 284 ms,
-against a paced chain's 9.70–9.73 Mb/s and no gap beyond 15 ms
-([lab: T13](../lab/test-13-downstream-grooming.md)). So the requirement is documentable with standard
-tools where signalling is not contractual and the receiver tolerates a bursty wire; a mux carrying full
+emits a usable wire shape *on its own socket*, oscillating 8–13 Mb/s with gigabit peaks or falling
+silent for up to 284 ms, against a paced chain's 9.70–9.73 Mb/s and no gap beyond 15 ms
+([lab: T13](../lab/test-13-downstream-grooming.md)).
+
+**The wire half of that job does have an off-the-shelf answer, and it isolates what is actually
+missing.** Putting a dedicated datagram sender after the muxer — 366 lines of C11 pacing 1316-byte
+datagrams against absolute deadlines
+([EDIS-mx/rawsendmpeg2ts](https://github.com/EDIS-mx/rawsendmpeg2ts)) — leaves the stream untouched
+and changes only when packets leave. Holding the muxer fixed and swapping only the egress takes the
+same FFmpeg output from a 6.55 coefficient of variation, a 171× 10 ms peak-to-mean and a 265.8 ms
+silence, to **0.048, 1.15× and 3.5 ms**, delivering the declared 11.000 Mb/s rather than the
+12.721 Mb/s its own socket puts out while dumping a join backlog. Replaying a CBR file the same sender
+is byte-identical to it across 165,326 packets, and reaches the instrument's resolution floor: no
+10 ms window more than one datagram above nominal. So a fully off-the-shelf chain now passes three of
+T13's four criteria — including PCR repetition *as delivered*, 0 intervals above 40 ms where the
+purpose-built pacer at a 1 s cushion posts 159 — and **fails only carriage**: PIDs can be pinned back,
+SCTE-35 stream types cannot, AC-3 is relabelled and the NIT is dropped. The two halves of grooming
+therefore separate cleanly, and only one is unsolved off the shelf: tools that regenerate a mux can
+time it perfectly and cannot carry it, and tools that carry it cannot inflate it. The requirement is
+documentable with standard tools wherever signalling is not contractual; a mux carrying full
 signalling to a hardware receiver still needs a purpose-built stage.
 
 ## 4. Real feeds broke naive media-aware import — and the gaps closed upstream

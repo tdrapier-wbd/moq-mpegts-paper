@@ -167,6 +167,38 @@ What remains open:
 
 ---
 
+## T13 extended — an off-the-shelf datagram sender — **run**
+
+Results in [test-13-downstream-grooming.md](test-13-downstream-grooming.md) under "The egress stage on
+its own"; rig in [`scripts/t13-rawsend.sh`](scripts/t13-rawsend.sh). T13 concluded that a constant-rate
+stream is not a paced wire and that the missing piece is a stage owning a clock.
+[`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) is exactly that stage and nothing else,
+so it tests the conclusion directly rather than adding another candidate groomer.
+
+The conclusion holds and the gap it named is now closed. Holding the muxer fixed and swapping only the
+egress takes the same FFmpeg output from 10 ms CoV 6.553 and a 265.8 ms silence to 0.048 and 3.5 ms,
+at the declared rate rather than 15 % above it. Replaying a CBR file the sender is byte-identical
+across 165,326 packets and reaches the instrument's resolution floor. A fully off-the-shelf chain now
+passes three of T13's four criteria and fails only carriage, which sharpens what has to be said in
+someone else's documentation: not "you need a groomer" but "you need a stage that inflates a mux and
+re-places PCR without rewriting it, and nothing off the shelf does that".
+
+Legs ran on the EC2 box because the sender does not build on macOS — `clock_nanosleep` with
+`TIMER_ABSTIME` is the pacing mechanism and does not exist there — so every control was re-measured
+on that host at a matched rate.
+
+What remains open:
+
+- **Hardware.** This is loopback on a general-purpose kernel, and the tool's own documentation insists
+  a switch between sender and IRD invalidates the test. It is a candidate for [T7](test-7-timing-integrity.md)'s Gate 2 rather than a substitute.
+- **Behaviour at a join backlog.** The sender has no buffer policy, so a backlog becomes standing
+  latency or is discarded upstream by the exporter's `--latency-max`. Neither was measured; a
+  deliberately delayed start would show which.
+- **A rate that drifts.** The rate is derived once from ~1 s of PCR on a CBR assumption. What happens
+  when the groomer in front does not hold it exactly is untested.
+
+---
+
 ## Dual-path 1+1: remaining conditions (T12)
 
 All four arms are run; results and limitations are in

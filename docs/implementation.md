@@ -45,7 +45,7 @@ the two differ, **they are incomplete in opposite places** (§2.2).
 | **Publish / package** | `moq import ts` (media-aware) or the opaque `m2ts` lane under MSFTS | *classic:* TSDuck `tsp -O hls`<br>*low-latency TS:* Apple `mediastreamsegmenter --format=transport -w <ms>` | distributor |
 | **Fan-out** | `moq-relay` on a reachable host; Cloudflare's implementation | any HTTP origin + cache: nginx, Caddy, or a commodity CDN | distributor or CDN |
 | **Receive → TS** | `moq export ts` | *classic:* `tsp -I hls`, FFmpeg<br>*low-latency:* **see §2.2** | recipient or distributor |
-| **Groom → conformant CBR** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, PCR re-stamp, RTP/multicast egress, stream-clocked 1+1 pairing | **the same binary, no flags changed.** Bursts are ~240× coarser, so it sizes its buffer to seconds rather than milliseconds from the arrival it observes; measured to the same conformance on both (§9.1, [T16](../lab/test-16-grooming-segmented-http.md)) | **distributor, on both** |
+| **Groom → conformant CBR** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, PCR re-stamp, RTP/multicast egress, stream-clocked 1+1 pairing | **the same binary, no flags changed.** Bursts are ~240× coarser, so it sizes its buffer to seconds rather than milliseconds from the arrival it observes; measured to the same conformance on both (§9.1, [T16](../lab/test-16-grooming-segmented-http.md)). The datagram-pacing half of this stage is separable and has a second free implementation (§2.2) | **distributor, on both** |
 | **Egress FEC / ST 2022-7 / start gate** | private (see below) | private; identical requirement | **distributor, on both** |
 | **Analysis / conformance** | TSDuck (`pcrverify`, `analyze`), hardware TR 101 290 analyser | identical | distributor |
 | **Control plane** | provisioning, entitlement, observability ([control-plane](control-plane.md)) | identical model, different projection target ([alternatives](alternatives.md) §7) | distributor |
@@ -94,7 +94,20 @@ commercial products sell:
 | Classic HLS → TS, ~6 s latency | `tsp -I hls`, FFmpeg | any professional IRD with an HLS input |
 | **Low-latency HLS → TS, ~2 s** | **none** | Synamedia MEG (ABR2TS), Ateme TITAN Edge |
 | MoQ → TS | `moq export ts` | **none** |
-| TS → conformant CBR egress | `mpegts-pacer` | Synamedia, Ateme, Harmonic gateways |
+| TS → CBR, PCR re-stamped, **mux preserved** | `mpegts-pacer` | Synamedia, Ateme, Harmonic gateways |
+| CBR TS → paced wire | `rawsendmpeg2ts`, `mpegts-pacer` | the same gateways |
+
+That last stage is worth separating from the one above it, because the two are usually sold together
+and are not the same problem. Pacing a constant-rate stream onto a socket is small, self-contained and
+now has an independent free implementation:
+[`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) is 366 lines of C11 that rewrite nothing
+and put 1316-byte datagrams on absolute deadlines, and measured on a matched host it produces a
+tighter wire than anything else graded — a 0.048 coefficient of variation over 10 ms windows and no
+silence beyond 3.5 ms ([T13](../lab/test-13-downstream-grooming.md)). It is Linux-only, IPv4-only,
+single-programme, and it has no buffer policy, so a join backlog becomes standing latency rather than
+being absorbed or reported. Rewriting the mux to be constant-rate in the first place — adding
+stuffing and re-placing PCR *without* renumbering PIDs or retyping SCTE-35 — is the half that
+remains a single free implementation.
 
 **The two data planes are therefore incomplete in mirror-image ways.** Segmented HTTP
 has mature commercial receivers and no free low-latency one; MoQ has a free receiver

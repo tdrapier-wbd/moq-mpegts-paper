@@ -207,7 +207,7 @@ buffer, which the specification requires to be at least twice and recommends at 
 the part target duration. Simpler to write and already written are both real advantages; for an
 operator, already written usually wins.
 
-### 4.3 Grooming: unsolved off the shelf for both, and measurably harder for segmented HTTP
+### 4.3 Grooming: mux-preserving grooming is unsolved off the shelf for both, and measurably harder for segmented HTTP
 
 **Segmented HTTP inherits the grooming problem in full, and it is worse rather than equal — measured,
 at two orders of magnitude.** Each transport's ungroomed egress was captured at the same point with the
@@ -254,15 +254,23 @@ segment duration rather than by parts; against MoQ the gap closes from ~240× to
 ([T14](../lab/test-14-data-plane-comparison.md) measurement 2b). So an operator gets both problems
 together and cannot pay down either without buying receive-side hardware (§4.4).
 
-What is not in doubt is that off-the-shelf tools do not do it. T13 graded every candidate an
+What is not in doubt is that off-the-shelf tools do not do all of it. T13 graded every candidate an
 engineer would reach for against four criteria fixed in advance — mux preserved, PCR inside 481 ns,
 no interval above 40 ms, honest duration on a rate-controlled wire. TSDuck cannot restore stuffing
 at all, because `tsp` can overwrite existing null packets but cannot inflate a stream. FFmpeg's
-`-muxrate` produces the best PCR arithmetic measured and an unusable wire, retypes all three
-SCTE-35 PIDs and relabels AC-3. GStreamer's `mpegtsmux` loses every PSI table beyond PAT and PMT,
-the PMT's own PID, the teletext descriptor and two of three splice PIDs. **None of those failures
-is about MoQ** — they are properties of the tools, so they apply identically to a stream reassembled
-from HLS segments. The purpose-built groomer is required on both paths.
+`-muxrate` produces the best PCR arithmetic measured and, on its own socket, an unusable wire; it
+retypes all three SCTE-35 PIDs and relabels AC-3. GStreamer's `mpegtsmux` loses every PSI table
+beyond PAT and PMT, the PMT's own PID, the teletext descriptor and two of three splice PIDs.
+
+The wire criterion has since fallen to an off-the-shelf tool, which is worth stating because it
+locates the remaining gap exactly. A dedicated datagram sender after the muxer — 366 lines of C11
+that rewrite nothing — takes FFmpeg's output to a tighter wire than any stage measured here, so a
+fully off-the-shelf chain now satisfies three of the four criteria and **fails only carriage**. What
+no such tool does is inflate a stream to a nominal rate and re-place its PCR *while leaving the mux
+alone*: the tools that regenerate a mux can time it perfectly and cannot carry it, and the tools that
+carry it cannot inflate it. **None of those failures is about MoQ** — they are properties of the
+tools, so they apply identically to a stream reassembled from HLS segments. A groomer that preserves
+a broadcast mux is required on both paths.
 
 ### 4.4 What the IRD vendors' HLS inputs are, and are not
 

@@ -15,6 +15,12 @@ graded against the same oracle as
 [T2](test-2-media-aware-transparency.md) and [T7](test-7-timing-integrity.md), with the pacer present
 only as a control.
 
+Those three each try to do the whole job. A fourth,
+[`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts), does only half of it deliberately — it
+paces datagrams and rewrites nothing — and was added later, because the first pass concluded that
+the half it does was the one nothing off the shelf did well. It is graded in its own group below,
+against controls re-measured on its host.
+
 The answer decides how the grooming requirement can honestly be written in someone else's
 documentation, which is where this started: the upstream review of
 [moq-dev/moq#2830](https://github.com/moq-dev/moq/pull/2830) rightly objected to a recipe that
@@ -60,8 +66,17 @@ A grooming stage is a candidate for a documented recipe if it does all four:
   nominal. That it differs from the file-domain capture's 9,507,216 b/s is expected — with the source's
   stuffing removed, what is left is variable, so the content rate is a property of the window measured,
   which is why each domain measures its own.
+- **Egress-pacer rig (a second host).** The legs that test a datagram sender on its own run on the
+  EC2 box (Ubuntu, 2 vCPU, kernel 7.0) rather than the laptop, because
+  [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) does not build on macOS:
+  `clock_nanosleep` with `TIMER_ABSTIME` does not exist there, and that call *is* its pacing
+  mechanism, so a shimmed build would measure the shim. Every control in that group — TSDuck,
+  FFmpeg, the pacer — is therefore re-measured on the same box at the same rate rather than compared
+  against the laptop figures above. Source is the same clip; the MoQ legs subscribe to the box's
+  standing relay and loop publisher, `moq` 0.9.11-eab96019.
 - Rigs: [`t13-groom-matrix.sh`](scripts/t13-groom-matrix.sh) builds the file-domain variants,
-  [`t13-cadence.sh`](scripts/t13-cadence.sh) runs the live legs, and
+  [`t13-cadence.sh`](scripts/t13-cadence.sh) runs the live legs,
+  [`t13-rawsend.sh`](scripts/t13-rawsend.sh) runs the egress-pacer legs, and
   [`t13-grade.py`](scripts/t13-grade.py) and [`t13-cadence.py`](scripts/t13-cadence.py) grade them.
 
 ## Procedure
@@ -83,6 +98,14 @@ Nine chains in the file domain, each fed the identical ungroomed capture:
 Then the four that were worth running live — the pinned FFmpeg, GStreamer, the TSDuck pass-through
 (`pcradjust` then `regulate` then `-O ip`), and the pacer — measured on the socket for delivered
 rate, gap distribution, and the PCR conformance of the stream *as received*.
+
+Then a third group, on the second host, isolating the egress stage. The pairs are the point: the same
+FFmpeg output sent by FFmpeg's own socket and by `rawsendmpeg2ts`, so the only difference is which
+stage decides when to send; and the same MoQ egress groomed by FFmpeg-plus-sender and by the pacer at
+an identical 11 Mb/s, so the two architectures are compared at one rate. Two further legs establish
+what the tools do at their best and what the instrument's floor is: the sender replaying the source
+clip with no groomer in the chain at all, and TSDuck's own sender on that clip, at its default
+`regulate` and at `--wait-min 5`.
 
 ## Results
 
@@ -146,25 +169,89 @@ exporter's, and the same AC-3 and SCTE-35 retyping as on file. GStreamer discard
 SDT and the exporter's PMT PID — and emitted its own PAT and PMT, because `tsdemux` presents no PSI
 to re-mux.
 
+### The egress stage on its own
+
+Every chain above bundles two jobs: rewrite the stream so it is constant-rate and PCR-conformant, and
+put it on the wire on a clock. [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) does only
+the second — 366 lines of C11 that take a CBR, null-stuffed stream, derive the mux rate from bytes per
+PCR, and send seven packets per datagram against absolute `CLOCK_MONOTONIC` deadlines anchored at
+start. It rewrites nothing, so it cannot be scored as a grooming stage; it is the stage T13 concluded
+was missing after one.
+
+Eight legs on the second host plus an ungroomed reference capture, 25 s each, one at a time. The
+three at 11.000 Mb/s are rate-matched on
+purpose: the instrument's 10 ms window resolves 1316-byte datagrams to about a tenth of a window, so
+the quantisation floor moves with the rate and a cross-rate comparison would read that as a difference
+between tools. For the same reason the pacer runs without `--rtp` here, unlike the laptop legs above,
+so that every leg puts 1316 payload bytes in every datagram.
+
+| Leg | delivered | gap p50 / p95 / p99 / max | 10 ms CoV | 10 ms peak/mean |
+|---|---|---|---|---|
+| **at 11.000 Mb/s, MoQ egress, same groomer** | | | | |
+| `ffmpeg -muxrate` + `rawsendmpeg2ts` | 11.000 | 957 µs / 990 µs / 1.05 ms / **3.65 ms** | **0.048** | 1.15 |
+| `ffmpeg` PIDs pinned + `rawsendmpeg2ts` | 11.000 | 957 µs / 991 µs / 1.05 ms / **3.51 ms** | **0.048** | 1.15 |
+| `mpegts-pacer` *(control)* | 11.000 | 1.08 ms / 1.14 ms / 1.27 ms / 3.87 ms | 0.077 | 1.15 |
+| `ffmpeg -muxrate` + its own UDP output | **12.721** | 3 µs / 17 µs / 159 µs / **265.8 ms** | **6.553** | **171.13** |
+| **at 9.946 Mb/s** | | | | |
+| `rawsendmpeg2ts` replaying the source file | 9.946 | 1.06 ms / 1.08 ms / 1.10 ms / **1.65 ms** | 0.053 | **1.06** |
+| `tsp regulate --pcr-synchronous -O ip` | 9.976 | 3 µs / 19 µs / 73.6 ms / 74.3 ms | 2.502 | 7.51 |
+| the same, `--wait-min 5` | 9.958 | 3 µs / 91 µs / 24.7 ms / 33.7 ms | 1.206 | 3.39 |
+| `mpegts-pacer` *(control)* | 9.946 | 1.08 ms / 2.08 ms / 2.11 ms / 9.96 ms | 0.087 | 1.59 |
+
+Carriage and conformance of the same legs, as received:
+
+| Leg | PID set delivered | jitter > 481 ns | intervals > 40 ms | max interval | stuffing |
+|---|---|---|---|---|---|
+| ungroomed egress *(reference)* | 0, 16, 17, 100, 111, 121, 123, 131, 141–143 | 528 | 55 | 319.9 ms | 0 % |
+| `rawsendmpeg2ts`, source file | **byte-identical to the file** | 0 | **0** | 25.0 ms | 4.5 % |
+| `ffmpeg -muxrate` + sender | 0, 17, 256, 257, 4096 | 0 | **0** | 20.2 ms | 15.3 % |
+| `ffmpeg` pinned + sender | 0, 17, 111, 121, **123 ATSC**, 131, **141–143 private**, 4096 | 0 | **0** | 20.4 ms | 13.8 % |
+| `mpegts-pacer` *(control)* | 0, 16, 17, 100, 111, 121, 123, 131, 141–143 | 0 | **159** | 227.4 ms | 11.1 % |
+
+The file leg is the strongest statement available about what the sender does to a stream: the
+31,081,288 bytes received compare equal to the first 31,081,288 bytes of the source, all 165,326
+packets of it, PID 0x1FFF stuffing and TDT included. Its rate derivation returned 9,945,951 bit/s,
+the clip's nominal mux rate to the bit, and it reported no clock slip in 25 s on any of the three
+legs it ran.
+
+The pacer's leg at 9.946 Mb/s is not a steady state and is included only for completeness: it
+delivered 0 % stuffing, which means it spent the window drawing down a backlog rather than padding a
+surplus, because the egress content rate on this host is close enough to the nominal to leave nothing
+to pad with. That is the same trap the first correction below records, and its bimodal gap
+distribution — a p95 of 2.08 ms against a 1.06 ms mean, datagrams leaving in pairs — is what the trap
+looks like on a socket. The 11.000 Mb/s legs are the comparison to read.
+
 ### Against the pass criteria
 
-Each candidate chain, scored on the four criteria fixed above. No off-the-shelf chain passes all four,
-and the two that come closest fail different ones. The unpinned FFmpeg and the plain GStreamer remux
-fail criterion 1 harder than the forms listed, so they are not scored separately.
+Each candidate chain, scored on the four criteria fixed above. No off-the-shelf chain passes all four.
+The closest now fails one criterion only, and it is carriage. The unpinned FFmpeg and the plain
+GStreamer remux fail criterion 1 harder than the forms listed, so they are not scored separately.
 
 | Chain | 1 mux preserved | 2 PCR ≤ 481 ns | 3 no interval > 40 ms | 4 honest time, paced wire | Verdict |
 |---|---|---|---|---|---|
 | TSDuck `regulate` alone | pass | **fail** (1,527) | **fail** (163) | pass (its wire measured in the chain below) | **fail** — paces without grooming |
 | TSDuck `pcradjust` @ content (+ `regulate` for the wire) | pass | pass | **fail** (299 file; 136 live) | pass | **partial** — the only pass-through option, and it cannot run at a nominal rate |
 | TSDuck `mux` nulls + `pcradjust` @ nominal | pass | pass | **fail** (284) | **fail** (duration 0.956) | **fail** — claims a rate it does not carry |
-| FFmpeg `-muxrate`, PIDs pinned | **fail** (SCTE-35 retyped, AC-3 relabelled, SDT injected) | pass | pass | **fail** on the wire (8.11–46.34 Mb/s) | **partial** — timing yes, fidelity and cadence no |
-| GStreamer `mpegtsmux`, PIDs pinned, SCTE-35 forwarded | **fail** (PSI beyond PAT/PMT, PMT's PID, teletext descriptor, 2 of 3 splice PIDs) | pass | pass | duration pass, wire **partial** (silences to 284 ms) | **partial** — the strongest off-the-shelf option; loses signalling, and its wire still needs pacing |
-| `mpegts-pacer` *(control)* | pass | pass | pass (0 file; 131 live) | pass | **pass** |
+| FFmpeg `-muxrate`, PIDs pinned, own socket | **fail** (SCTE-35 retyped, AC-3 relabelled, SDT injected) | pass | pass | **fail** on the wire (8.11–46.34 Mb/s) | **partial** — timing yes, fidelity and cadence no |
+| FFmpeg `-muxrate`, PIDs pinned, **+ `rawsendmpeg2ts`** | **fail** (the same three) | pass | pass (0 live, max 20.4 ms) | pass (11.000 Mb/s, CoV 0.048, worst silence 3.5 ms) | **partial** — the only failure left is carriage |
+| GStreamer `mpegtsmux`, PIDs pinned, SCTE-35 forwarded | **fail** (PSI beyond PAT/PMT, PMT's PID, teletext descriptor, 2 of 3 splice PIDs) | pass | pass | duration pass, wire **partial** (silences to 284 ms) | **partial** — loses signalling, and its wire still needs pacing |
+| `mpegts-pacer` *(control)* | pass | pass | pass on file (0); **fail live** (131 laptop, 159 box) | pass | **pass** as scored; see criterion 3's live column |
 
 Criterion 4's duration test is 1.000 within the arithmetic of adding stuffing, which is why the 1.001
 readings above count as exact; what it is there to catch is the 0.956 of the nominal-rate `mux`
-variant, a stream running 4.4 % fast. Criterion 3 is scored on the file domain, where a stage places
-PCRs freely; the live column is given beside it because no stage improves there.
+variant, a stream running 4.4 % fast.
+
+Criterion 3 is scored on the file domain, where a stage places PCRs freely, and that scoring now
+flatters one class of stage at the other's expense. On the wire the two candidate chains separate
+completely: the regenerating chain delivers 0 intervals above 40 ms with a 20.4 ms maximum, and the
+pacer delivers 159, up to 227 ms. Neither is a defect. A stage that mints its own PCR schedule places
+PCRs wherever its `-pcr_period` says, and inherits nothing; a stage that carries the exporter's
+inherits their spacing, and MoQ's egress arrives with 55 intervals already above 40 ms and a 319.9 ms
+maximum. What decides it for a pass-through stage is buffer depth rather than live operation as such
+— [T16](test-16-grooming-segmented-http.md) reaches 0 on the wire by carrying seconds of cushion —
+so the choice is to regenerate PCR, or to hold enough buffer to always have a packet ready at the
+deadline. At the ~1 s cushion used here, the pacer does neither. Read criterion 3 on the live column
+when the question is what an IRD receives.
 
 ## Observations
 
@@ -232,10 +319,44 @@ with a bounded 2.06 peak-to-mean and no silence longer than 15 ms, lumpy only in
 which is its regulation granularity and is tunable with `--packet-burst`. Paired with `pcradjust` it is
 the only pass-through chain here that is both PCR-conformant and rate-controlled.
 
+**The wire half of grooming is a solved problem, and it is small.** The finding above — that a
+constant-rate stream is not a paced wire, and that the missing thing is a stage owning a clock — has
+an off-the-shelf answer in 366 lines of C11 with no dependencies beyond POSIX. Holding the groomer fixed
+and swapping only the egress takes the same FFmpeg output from CoV 6.553, a 171× peak-to-mean and a
+265.8 ms silence to CoV 0.048, 1.15× and 3.5 ms. Nothing about the stream changed; the only
+difference is which stage decided when to call `send`.
+
+**Delivering the declared rate and delivering the right average are different tests.** Told to run at
+11 Mb/s, FFmpeg's own socket put 12.721 Mb/s on the wire across the window and 51.65 Mb/s in the
+first second, because it writes as fast as its input arrives and MoQ hands it a join backlog. The
+same groomer behind the sender delivered 11.000 Mb/s, every second of the window between 10.99 and
+11.00. A per-second series is what separates these; a window average does not.
+
+**Uniform pacing without a buffer policy moves the problem rather than removing it.** The sender's
+deadlines are anchored at start and its socket is blocking with a 32 kB send buffer, so it will not
+dump a backlog — but neither will it discard one. Whatever MoQ delivers at join above the derived
+rate becomes standing latency in the pipe, or is dropped upstream when the exporter's own
+`--latency-max` expires, and nothing in the chain reports which. This is the whole of the difference
+in kind between it and the pacer, whose looser cadence buys `--latency-ms`, `--max-latency-ms`,
+`--stall-ms` and `--on-stall`. It is also why the rate matters so much: the rate is derived once, from
+about a second of PCR at start, on a CBR assumption, so the groomer in front must hold a fixed rate
+for the life of the stream.
+
+**Past a point the 10 ms peak-to-mean stops measuring the tool and starts measuring the window.**
+Replaying the source file, no 10 ms window ever held more than one datagram above nominal: p95 and
+maximum both land on 10.528 Mb/s, which is exactly ten 1316-byte datagrams where the mean calls for
+9.45, and the peak-to-mean of 1.06 is that ratio and nothing else. At 11 Mb/s the floor is 12
+datagrams against 10.45, or 1.15 — and all three paced legs there report exactly 1.15, sender and
+pacer alike. The statistic separates a paced wire from an unpaced one by two orders of magnitude and
+cannot separate two paced ones at all. What still discriminates is the coefficient of variation
+(0.048 against 0.077) and the gap distribution: a p95 of 990 µs against 1.14 ms, and p99 1.05 ms
+against 1.27 ms.
+
 ## Conclusion
 
-**There is no off-the-shelf stage that does both halves of the job.** Each candidate fails a
-different one, and which failure is acceptable depends on the receiver:
+**There is no off-the-shelf stage that does both halves of the job, and the half still missing is
+carriage.** Each candidate fails a different criterion, and which failure is acceptable depends on the
+receiver:
 
 - **`tsp -P pcradjust --bitrate <content rate> -P regulate --bitrate <content rate> -O ip`** is the
   only pass-through option: the mux survives byte-for-byte, PCR passes the P2 gate, duration fidelity
@@ -250,22 +371,41 @@ different one, and which failure is acceptable depends on the receiver:
   and every splice PID after the first; its wire is rate-controlled per second but bursts with silences
   up to 284 ms, so anything expecting smooth delivery still needs a pacing stage. The pipeline must be
   written per stream and its queues resized, or it deadlocks.
-- **`ffmpeg -muxrate`** is a complete answer to PCR arithmetic and a poor one to fidelity and to the
-  wire: PIDs can be pinned back, SCTE-35 stream types cannot, and the socket output is unusable without
-  a pacing stage after it. For a single-programme feed with no signalling contract it is genuinely good.
-- **`mpegts-pacer`** remains the only stage measured here that satisfies all four criteria at once.
-  That is a statement about the state of the ecosystem, not a recommendation: as the upstream review
-  of [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation
+- **`ffmpeg -muxrate ... | rawsendmpeg2ts`** is the strongest fully off-the-shelf chain, and its only
+  remaining failure is carriage. PCR arithmetic is exact, PCR repetition is the best of anything
+  measured as delivered (0 intervals above 40 ms, 20.4 ms maximum, because the muxer mints its own
+  schedule), and the wire is the tightest of any chain at the same rate. What it costs is the mux:
+  PIDs can be pinned back, SCTE-35 stream types cannot, AC-3 is relabelled ATSC, the NIT is dropped
+  and an SDT is synthesised. For a single-programme feed with no signalling contract this is now a
+  complete answer; for a broadcast mux it is not, and no configuration of it is.
+- **`mpegts-pacer`** remains the only stage measured here that satisfies all four criteria as scored,
+  and it is the only one that keeps the mux intact. Its weakness is the one criterion 3's live column
+  exposes: at the ~1 s cushion run here it inherits the exporter's PCR spacing, 159 intervals above
+  40 ms in 25 s. [T16](test-16-grooming-segmented-http.md) shows that is a buffer-depth choice rather
+  than a limit — with seconds of cushion the same stage posts 0 — so the trade is PCR repetition
+  against latency. That it satisfies the set at all is a statement about the state of the ecosystem, not a
+  recommendation: as the upstream review of
+  [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation
   path at the time, and it is still one lab's unpublished tool.
+
+The two halves of the job now separate cleanly, and only one of them is unsolved off the shelf. Any
+stage that owns a clock can produce a broadcast-grade wire, and one that does is 366 lines of C. What no
+off-the-shelf stage does is add stuffing and re-place PCR *while carrying a broadcast mux unchanged*:
+the tools that regenerate a mux can time it perfectly and cannot carry it, and the tools that carry it
+cannot inflate it. That is the gap to state in someone else's documentation, and it is narrower and
+more specific than "you need a groomer".
 
 For upstream documentation this supports stating the *requirement* precisely and naming the
 off-the-shelf options with their measured limits, rather than naming any single tool as the answer.
 That holds whether or not our own tool can be installed, which is why the installability fix noted
 below does not reopen it.
 
-**Scope.** These are file-arithmetic and loopback-cadence results on a laptop. They say nothing about
-what a hardware IRD accepts, which remains [T7](test-7-timing-integrity.md)'s open Gate 2, and the
-wire figures carry a general-purpose OS's scheduling jitter.
+**Scope.** These are file-arithmetic and loopback-cadence results on two general-purpose machines, a
+laptop and a 2-vCPU cloud instance. They say nothing about what a hardware IRD accepts, which remains
+[T7](test-7-timing-integrity.md)'s open Gate 2 — and the sender's own documentation is emphatic that a
+switch between sender and IRD invalidates the test, because multicast storm control fakes the pacing
+either way. The wire figures carry a general-purpose OS's scheduling jitter, and the two hosts'
+figures are not interchangeable: compare within a group, never across.
 
 ## Corrections
 
@@ -286,6 +426,16 @@ wire figures carry a general-purpose OS's scheduling jitter.
   schedule, so content arrives ahead of the slots the groomer has for it. **Method rule:** grade a
   downstream stage against captures taken from the pipeline it will sit in, never against a
   synthesised approximation of that pipeline's output.
+- **Killing a backgrounded pipeline by `$!` reaps only its last stage.** The egress-pacer rig started
+  each leg as `subscriber | groomer &` and killed `$!`, which is the groomer. Every subscriber
+  survived its own leg and kept pulling the broadcast for the rest of the run, so by the last leg
+  three extra `moq export ts` processes were competing for two cores — load the late legs paid and the
+  early ones did not, in a rig whose whole subject is scheduling jitter. It inflated exactly what was
+  being measured: worst-case silences of 8.8 ms and 18 reported clock slips became 3.5 ms and zero
+  once each subscriber was wrapped in `timeout` and swept by command line afterwards. The tell was
+  arithmetic, not suspicion — a 17 MB reference capture that censused as 2.4 M packets, because the
+  process writing it had never stopped. **Method rule:** in a timing rig, assert the process census
+  between legs rather than trusting a kill, and check that a file's size and its packet count agree.
 - **"No supported installation path" was true when written, and has since been fixed.** The pacer was
   library-only: every documented command was `cargo run --example`, and `cargo install` refused the
   crate outright for having no binary target. The egress adapter is now the crate's `mpegts-pacer`
@@ -302,3 +452,5 @@ wire figures carry a general-purpose OS's scheduling jitter.
   placement determinism matters for a 1+1 pair.
 - [moq-dev/moq#2830](https://github.com/moq-dev/moq/pull/2830) — the upstream documentation review
   that prompted this experiment.
+- [EDIS-mx/rawsendmpeg2ts](https://github.com/EDIS-mx/rawsendmpeg2ts) — the datagram sender graded in
+  the egress-pacer group.
