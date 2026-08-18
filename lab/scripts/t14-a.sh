@@ -75,7 +75,14 @@ PIDS+=("$CAPTURE")
 sleep 1
 
 # --- publisher: raw source, looped, PCR-paced so the wire is live-rate ----------
-(tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>"$OUT/tsp.log" |
+# WAITMIN is `regulate`'s release granularity and therefore the burstiness of the
+# *source*: at TSDuck's 50 ms default this publisher emits ~92 kB every ~73 ms.
+# The default is left alone so this arm stays the one T14 quotes; T15 re-runs it at
+# WAITMIN=5 to establish whether MoQ's egress granularity follows its input or is a
+# property of the object model.
+(tsp -I file "$SRC" --infinite \
+	-P regulate --pcr-synchronous --wait-min "${WAITMIN:-50}" \
+	-O file - 2>"$OUT/tsp.log" |
 	"$TGT/moq" --client-tls-fingerprint "$FP" --client-connect "$URL" \
 		--client-quic-gso=false --broadcast "$NAME.hang" import ts) \
 	>"$OUT/pub.log" 2>&1 &

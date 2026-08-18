@@ -516,8 +516,11 @@ from decoded timing, a separate source of error that the opaque lane avoids
 entirely by carrying the original values verbatim. (3) **Live-wire accuracy:**
 even a perfectly re-timed file can jitter at the physical output (§7.2 caveat).
 Only (1) is inherent to *Internet-native delivery as such* — it is the same reason SRT,
-Zixi, RIST and segmented HTTP are all bursty on the wire and all groom the transport
-stream before hand-off to an IRD. (2) is the only one of the three that is genuinely
+Zixi, RIST and segmented HTTP all groom the transport stream before hand-off to an IRD.
+They do not arrive at that requirement by the same route: the object and segment planes
+impose a cadence of their own, whereas the point-to-point tunnels are transparent and
+merely pass on their publisher's ([evidence](evidence.md) §11). Either way none of them
+re-stamps PCR against an output clock, which is what the IRD is grading. (2) is the only one of the three that is genuinely
 specific to a data plane, and specifically to MoQ's media-aware lane: segmented HTTP
 carries the original timestamps verbatim, as the opaque lane does, and so avoids it.
 Grooming (below) addresses (1) and (3), while the opaque lane sidesteps (2).

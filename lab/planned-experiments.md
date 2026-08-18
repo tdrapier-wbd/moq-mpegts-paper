@@ -82,29 +82,23 @@ result here — nothing about hardware acceptance except in measurement 1.
 
 ---
 
-## T15 — RIST on the cadence instrument (extends T14)
+## T15 — RIST and SRT on the cadence instrument — **run**
 
-[alternatives](../docs/alternatives.md) §10.1 argues that RIST should hand a groomer the *cleanest*
-egress of the four transports considered, because it is a packet-level tunnel with a jitter buffer
-that reconstructs the source's own pacing rather than reassembling a stream from objects or segments.
-**That is reasoned, not measured, and it is the largest unmeasured structural claim in the paper.**
+Results in [test-15-point-to-point-cadence.md](test-15-point-to-point-cadence.md). Neither of the two
+outcomes this was specified against is what happened, so the specification is kept here in summary
+rather than deleted.
 
-Run a RIST leg through the same instrument as T14 — `libRIST`'s `ristsender`/`ristreceiver` (Simple
-and Main profile), the receiver's ungroomed output piped into
-[`t13-cadence.py`](scripts/t13-cadence.py) — and report median burst, gap distribution and 10 ms
-peak/mean against the existing MoQ (12.4 kB, 149 ms, 23.95×) and segmented-HTTP (2.95 MB, 4.01 s,
-231.07×) columns. Add SRT on the same instrument while the rig is up, since T4 ran SRT for throughput
-but never for cadence.
+It asked whether RIST's egress is near-source-paced, expecting either that **grooming burden ranks
+inversely to scalability** or that the incumbents' hand-off advantage is folklore. The answer is
+neither: RIST and SRT are *transparent* — measured identical to a no-transport control on burst size —
+so their egress is whatever their publisher produced, while MoQ's is set by its object model and does
+not move when the source changes. Grooming burden therefore does **not** rank inversely to
+scalability; MoQ hands over the finest bursts (12.2 kB against 30.6 kB from the same source), and the
+tunnels lead only on worst-case silence (~35 ms against 149 ms), which is the figure that sizes a
+groomer's start gate.
 
-Two outcomes, both useful. If RIST's egress is near-source-paced, then **grooming burden ranks
-inversely to scalability** across the four transports, which is a sharper statement of the paper's
-trade-off than it currently makes, and it strengthens rather than weakens the case for RIST on routes
-that do not need internet-scale fan-out. If it is not — if the jitter buffer's drain is as bursty as
-an object model's — then a significant part of the incumbent transports' perceived hand-off advantage
-is folklore, which is worth knowing before anyone cites it in a procurement.
-
-*Needs:* `libRIST` built locally; no new hardware. *Moves:* §4's hand-off axis, §10.1, and the
-groomer-agnosticism argument in [implementation](../docs/implementation.md) §9.1.
+What remains open from this line is in T15's own "still open" table: the tunnels under loss and RTT,
+and a true CBR hardware source, which the transparency result makes the interesting variable.
 
 ---
 

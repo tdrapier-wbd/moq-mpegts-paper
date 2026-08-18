@@ -280,12 +280,20 @@ magnitude more input buffering, and a start gate that must not declare underrun 
 normal inter-segment gap.
 
 Amending it to absorb that, and to size its buffer from observed arrival rather than
-from a configured assumption, would make **one groomer serve both data planes** — and,
-on the reasoning in [alternatives](alternatives.md) §10.1, a RIST or SRT input as well.
-That is worth more than the code involved: the paper's central claim is that the layer
-above the transport is common to both, and a groomer that only tolerates one arrival
-pattern quietly contradicts it. The claim should be demonstrable by running the same
-binary on either input, not merely argued.
+from a configured assumption, would make **one groomer serve both data planes**. That is
+worth more than the code involved: the paper's central claim is that the layer above the
+transport is common to both, and a groomer that only tolerates one arrival pattern
+quietly contradicts it. The claim should be demonstrable by running the same binary on
+either input, not merely argued.
+
+Sizing it from observed arrival matters more than it first appears, because a RIST or
+SRT input is not a third fixed shape to code against. Those transports are *transparent*
+— their egress reproduces their publisher's cadence, measured identical to a
+no-transport control ([evidence](evidence.md) §11) — so a groomer behind one of them
+inherits whatever the far-end encoder does, which is not a property the groomer can
+know in advance. The three arrival patterns to tolerate are therefore MoQ's fixed
+12.2–12.4 kB, segmented HTTP's segment-sized bursts, and *unknown*. Only the third
+requires the buffer to be adaptive rather than merely large.
 
 ### 9.2 A slim low-latency HLS receiver that pipes into the groomer
 

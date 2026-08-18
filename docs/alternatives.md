@@ -210,22 +210,37 @@ operator, already written usually wins.
 ### 4.3 Grooming: unsolved off the shelf for both, and measurably harder for segmented HTTP
 
 **Segmented HTTP inherits the grooming problem in full, and it is worse rather than equal — measured,
-at two orders of magnitude.** Both legs' ungroomed egress was captured at the same point with the same
-instrument ([T14](../lab/test-14-data-plane-comparison.md)):
+at two orders of magnitude.** Each transport's ungroomed egress was captured at the same point with the
+same instrument, the two candidate data planes in [T14](../lab/test-14-data-plane-comparison.md) and
+the point-to-point tunnels in [T15](../lab/test-15-point-to-point-cadence.md):
 
-| | MoQ | Segmented HTTP (2 s segments) |
-|---|---|---|
-| Median burst | 12.4 kB | **2.95 MB** |
-| Bursts in 60 s | 3,078 | 28 |
-| Gaps above 1 s | **none** | **24** |
-| Largest gap | 149 ms | **4.01 s** |
-| 10 ms peak/mean | 24× | **231×** |
+| | MoQ | Segmented HTTP (2 s segments) | RIST / SRT *(see below)* |
+|---|---|---|---|
+| Median burst | 12.4 kB | **2.95 MB** | 30.6 kB — the source's, not the protocol's |
+| Bursts in 60 s | 3,078 | 28 | 2,400–2,650 |
+| Gaps above 1 s | **none** | **24** | **none** |
+| Largest gap | 149 ms | **4.01 s** | **~35 ms** |
+| 10 ms peak/mean | 24× | **231×** | 3.4× |
 
 The mechanism is unambiguous: silences arrive at exactly the segment duration, with occasional stalls
 of two segment periods, because the client fetches a completed segment at line rate and then waits for
 the next one to exist. MoQ delivers something in every second of the window; segmented HTTP alternates
 between nothing and 20–30 Mb/s. A groomer for it needs seconds of buffer where a MoQ groomer needs
 milliseconds.
+
+The third column is [T15](../lab/test-15-point-to-point-cadence.md), and it is a different kind of
+entry, in two ways worth stating before it is read across. RIST and SRT are **transparent** — measured
+identical to a plain-UDP control — so the 30.6 kB is what this campaign's software publisher produced
+and not a property of either protocol; a smoother source would come through smoother. And it is taken
+at a *finer* publisher setting than the first two columns, because at the setting T14 used the source's
+own bursts were coarser than anything the tunnels could add and the control could not be separated
+from the transport. That does not make the columns incomparable: MoQ was re-run at both settings and
+does not move (12.2 kB against 12.4 kB, peak/mean 23.93 against 23.95), and segmented HTTP's burst is
+segment-sized regardless. Only the third column depends on the source, which is the finding.
+
+The two rankings that result disagree, and a hand-off claim has to say which one it means: **MoQ hands
+over the smallest bursts, the tunnels the shortest silences.** Buffer depth follows the former; a
+groomer's start gate and underrun threshold follow the latter.
 
 **The consequence is a single knob; it is the same knob as latency; and it is measurably stuck.** Burst
 size is segment size, so reducing the grooming burden means reducing segment size, which is identical to
@@ -578,13 +593,21 @@ included — and RIST.
   Profile is compatible with SMPTE 2022-1 FEC. Main Profile adds DTLS or PSK encryption,
   tunnelling, multiplexing and in-band control — a coherent answer to several things this paper
   has to build above the transport.
-- **Its hand-off is structurally the cleanest of the four.** RIST is a packet-level tunnel with a
-  jitter buffer and hybrid ARQ/FEC: it reconstructs the *original* packet cadence, delayed, rather
-  than reassembling a stream from objects or segments. Where MoQ hands the groomer 12.4 kB bursts
-  and segmented HTTP hands it 2.95 MB bursts (§4.3), RIST should hand it something close to the
-  source's own pacing. **This is reasoned, not measured** — no RIST leg has been run on this
-  campaign's cadence instrument, and it is the obvious next experiment. If it holds, RIST needs the
-  least grooming of the four, which is the exact inverse of its position on scaling.
+- **Its hand-off leads the four on worst-case silence — tied with SRT — and is mid-table on burst
+  size.**
+  RIST is a packet-level tunnel with a jitter buffer and hybrid ARQ/FEC, so it reconstructs the
+  *original* packet cadence, delayed, rather than reassembling a stream from objects or segments.
+  Measured, that is exactly what it does: RIST's egress is identical to a no-transport control on
+  burst size, at two different source granularities, and so is SRT's
+  ([evidence](evidence.md) §11). The consequence is not the one the mechanism suggests. A
+  transparent transport hands on whatever it was given, whereas MoQ *re-paces* — its 12.2–12.4 kB
+  bursts are a property of the object model and do not move when the source is made four times
+  finer. So from the same publisher RIST hands a groomer 30.6 kB where MoQ hands it 12.2 kB. Where
+  RIST leads is the longest silence, which is what actually sizes a groomer's start gate and
+  underrun threshold: **~35 ms against MoQ's 149 ms and segmented HTTP's 4.01 s.** Two caveats in
+  RIST's favour: transparency means a true CBR hardware source would come through smoother than this
+  campaign's software publisher, and libRIST's opt-in `cbr-output` paces the receiver's own egress
+  down to 1.3 kB, the finest measured anywhere here.
 - **Dual-path seamless protection is native**, rather than the 1+1 construction §4 has to assemble.
 
 **Where it fails, and it is the same failure as SRT.** Fan-out is N sessions from a replication
@@ -598,7 +621,7 @@ cross.**
 **The honest summary is uncomfortable for the thesis and worth stating plainly.** For a distributor
 serving *tens* of destinations over owned transit or a managed network — which is a great deal of
 real primary distribution — RIST is likely the best-engineered choice available today, and better
-than either candidate here on openness, hand-off cleanliness and installed-base fit. What it cannot
+than either candidate here on openness, worst-case delivery silence and installed-base fit. What it cannot
 do is follow commodity delivery pricing to hundreds of destinations over the public internet. The
 case for an Internet-native data plane is therefore a case about **reach and cost at scale**, not
 about RIST being deficient — and any argument that reaches for RIST's technical shortcomings is
@@ -606,13 +629,13 @@ reaching for the wrong thing.
 
 ---
 
-## 11. Five corrections the comparison forced
+## 11. Six corrections the comparison forced
 
-Each of the five below is a plausible claim, each was load-bearing in this comparison, and each
+Each of the six below is a plausible claim, each was load-bearing in this comparison, and each
 turned out to be false. They are recorded together because the *way* each failed generalises to
 other transport comparisons. Two fail in the direction that flatters MoQ, two in the direction that
-flatters the alternative — one by argument, one by measurement — and the fifth in both directions
-at once.
+flatters the alternative — one by argument, one by measurement — the fifth in both directions
+at once, and the sixth in favour of a transport that is in neither camp.
 
 - **"HLS carrying TS is a new capability."** It is the opposite: MPEG-TS was HLS's original
   container and, until fragmented MP4 arrived a decade ago, its only one. Nor is HLS a
@@ -649,6 +672,15 @@ at once.
   rule: **when an argument says two measurements should converge, check whether the mechanism it
   proposes would cost something elsewhere in the same comparison.** A saving reasoned about in
   isolation is usually a trade seen from one side.
+- **"RIST reproduces the source's own cadence, so it hands a groomer the cleanest egress."** The
+  premise is exactly right and the conclusion does not follow. Measured, RIST and SRT are
+  *transparent* — indistinguishable from a no-transport control on burst size — while MoQ *re-paces*,
+  emitting 12.2–12.4 kB regardless of what it is fed (§10.1, [evidence](evidence.md) §11). So
+  "reproduces the source" is a weaker property than "sets its own granularity", and from the same
+  publisher RIST hands over 30.6 kB where MoQ hands over 12.2 kB. The method rule: **when a
+  comparison ranks transports by a property of their output, measure the input as well** — otherwise
+  a transport that merely passes its input through is credited with its source's virtues, and a
+  claim about an encoder is filed as a claim about a protocol.
 
 ---
 
@@ -663,7 +695,7 @@ repository and the current specifications.
 | Reliability under loss | neither | none — shared QUIC substrate; MoQ measured at parity with SRT (§3.1) |
 | Reliability of recovery | segmented HTTP | clear — specified availability window, idempotent retry, client-driven failover (§3.2) |
 | Reassembly to a transport stream | segmented HTTP | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |
-| Grooming to a clean hand-off | **MoQ** | **measured — the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP** (§4.3) |
+| Grooming to a clean hand-off | **MoQ** | **measured — the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two candidates split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
 | Latency | **MoQ** | **decisive — sub-second against a 2–5 s floor that free software cannot reach with MPEG-TS at all: parts publish free, no free client fetches them, so ~6 s without buying a receiver** (§5) |
 | Interoperability | segmented HTTP | decisive, conditional on the single-programme envelope (§6) |
 | Entitlement and control | MoQ | narrow — enforcement point and session observability, not revocation speed (§7) |

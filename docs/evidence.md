@@ -691,3 +691,52 @@ figures are an upper bound — but burst *size* is set by segment size and the s
 so those are structural. Per-packet framing is derived, not measured, for the reason given above. Two cells
 of the comparison remain unrun, both blocked on ABR-to-TS hardware or a CDN account
 ([lab](../lab/planned-experiments.md)).
+
+---
+
+## 11. The point-to-point transports are transparent, so their egress is their source's
+
+[Alternatives](alternatives.md) §10.1 argues that RIST hands a groomer the cleanest egress of the
+transports weighed here, on the reasoning that a packet tunnel with a jitter buffer reproduces the
+source's own cadence rather than reassembling a stream from objects or segments. Run on the same
+instrument as §10, from the same clip, **the mechanism is confirmed and the ranking it implied is
+not** ([lab: T15](../lab/test-15-point-to-point-cadence.md)).
+
+**RIST and SRT are indistinguishable from no transport at all.** Against a plain-UDP control through
+the same chain, median and p95 burst match to three significant figures, for RIST Main, RIST Simple
+and SRT, at two different source granularities. They neither coarsen their input nor refine it.
+
+**MoQ, by contrast, sets its own granularity.** Fed a source four times finer, its egress does not
+move — 12.2 kB median against 12.4 kB, and a 149 ms worst case either way. That is the structural
+difference, and it sorts the three classes:
+
+| Class | Egress granularity is set by | Median burst | Largest gap |
+|---|---|---|---|
+| MoQ | the object model — *re-paces*, finer than its input | 12.2–12.4 kB, whatever the source | 149 ms |
+| RIST / SRT | the source — *transparent* | 30.6 kB here, tracking the publisher exactly | ~35 ms |
+| Segmented HTTP | segment duration — *aggregates* | 2.95 MB at 2 s segments | 4.01 s |
+
+**The two hand-off rankings disagree, and which one matters depends on the groomer.** MoQ delivers the
+smallest bursts; RIST and SRT the shortest silences, by a factor of four. A groomer's buffer is sized
+by burst, but its start gate and underrun threshold are sized by the longest silence, so a claim that
+one transport "hands over more cleanly" has to say which it means. What does *not* hold is the
+prediction that grooming burden ranks inversely to scalability: the most scalable candidate is also
+the finest-grained, and the incumbent tunnels sit in the middle.
+
+**Transparency moves the question to the source.** Because a tunnel's egress is its ingress, the
+30.6 kB above is a fact about this campaign's software pacer, not about RIST — a true CBR hardware
+feed would come through smoother. It also means a tunnel cannot improve a bursty publisher, which is
+the mirror image of the same property.
+
+**One transport can be told to pace itself, and it produces the finest egress measured here.**
+libRIST's receiver-side `cbr-output` spaces output at the stream's measured rate, giving a 1.3 kB
+median burst and a 10 ms peak/mean of 3.28. It is not grooming: no PCR re-stamp, no padding to a
+nominal rate, no accuracy guarantee. It shrinks what an edge groomer must absorb without removing the
+need for one — which is §2's conclusion, now tested on a fourth transport.
+
+**Limits.** Loopback, so no loss, reordering or RTT: this measures the delivery shape of a healthy
+stream, not the recovery these protocols exist for. One clip, one run per leg, 60 s windows. The
+median burst is quoted at the 1 ms grouping threshold T14 fixed; the point-to-point legs are
+insensitive to it between 0.2 ms and 5 ms, while MoQ's median ranges 7.1–25.8 kB across that sweep,
+so MoQ's single figure depends on the grouping in a way the others' does not. The ordering is
+unaffected below a 2 ms threshold.
