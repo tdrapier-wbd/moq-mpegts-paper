@@ -1,6 +1,9 @@
 # Entitlement
 
 Status: working draft
+Layer: **above the transport** — the grant model, token design and lifecycle are transport-independent.
+Only the *enforcement point* differs by data plane: a relay subscription against a per-request check at
+a CDN edge, compared in [alternatives](alternatives.md) §7.
 Scope: the model by which the platform grants, enforces, and revokes the right of
 an endpoint to receive a channel. This is the deep-dive companion to
 [architecture](architecture.md) §11; it develops the grant model, token design,

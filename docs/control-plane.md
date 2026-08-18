@@ -1,6 +1,9 @@
 # Control Plane
 
 Status: working draft
+Layer: **above the transport** — required and owned identically whichever data plane carries the bytes.
+What changes between them is only the projection target: a relay's authorization hook against a CDN's
+origin and token configuration ([alternatives](alternatives.md) §7).
 Scope: the provisioning, entitlement, policy, and observability control layer for
 the distribution platform. This is the deep-dive companion to
 [architecture](architecture.md) §9 and assumes that context rather than restating

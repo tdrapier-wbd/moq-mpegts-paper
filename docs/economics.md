@@ -1,10 +1,11 @@
 # Economics
 
 Status: working draft
-Scope: a cost framework for comparing an Internet-native MoQ distribution path
-against incumbent primary-distribution methods, **and a numeric model of the always-on
-case built entirely from published rates** (§4). This is the companion to the economic
-risk raised in the [README](../README.md).
+Layer: **cross-cutting** — the cost framework is data-plane agnostic; the data plane enters only as a
+wire multiplier and a delivery price, and both candidates are priced side by side in §4.7.
+Scope: a cost framework for comparing Internet-native distribution paths against incumbent
+primary-distribution methods, **and a numeric model of the always-on case built entirely from published
+rates** (§4). This is the companion to the economic risk raised in the [README](../README.md).
 
 > **Confidentiality and provenance note.** Every figure here is either published or
 > derived in the open from something published. *Published* rates — hyperscaler egress
@@ -165,9 +166,9 @@ IP wire bytes against the source TS rate, both measured on the same WAN path wit
 same clip. MoQ delivers the service in **5.3 % less bandwidth than SRT**, or 6.2 % less
 with path MTU discovery enabled, a flag that exists and is off by default. It applies
 directly to egress, and a 1+1 path carries it twice, so the sign of this line matters
-more than its size. An earlier version of this document put MoQ at 1.12x and priced a
-carriage penalty from it; that figure was an artefact of the measuring rig, not a
-property of the protocol ([lab: T9](../lab/test-9-performance.md) Corrections).
+more than its size. A carriage *penalty* for MoQ, in the region of 1.12x, is a plausible
+reading of an unpaced test rig and an artefact of one
+([lab: T9](../lab/test-9-performance.md) Corrections).
 
 **MoQ wins because it declines to carry null stuffing.** The reference clip is 4.57 %
 nulls, which a byte pipe cannot refuse and the media-aware lane strips on import, the
@@ -668,15 +669,16 @@ that has already commoditised it — but because the incumbent's fan-out inside 
 is free while every column here is linear in destinations, it moves rather than
 disappears.
 
-**The transport choice barely registers.** Every option lands within a few percent of
-the same wire volume, so the choice among them moves this table by single digits while
-destination count moves it by three orders of magnitude. MoQ is the cheapest *measured*
-row, because it declines to carry null stuffing where a byte pipe such as SRT cannot — but
-the margin is a few percent, it travels with the source's stuffing ratio, and it is **not
-a property unique to MoQ**: a packager producing TS segments for HLS has no reason to
-retain stuffing either, so the segmented-HTTP rows below are estimated on verbatim
-carriage and could plausibly match MoQ on this line if measured. Treat this as a footnote
-to the destination-count result rather than a reason to choose a transport:
+**The transport choice barely registers, and what little it moves is one decision rather
+than five.** Every option lands within about 7 % of the same wire volume, so the choice
+among them moves this table by single digits while destination count moves it by three
+orders of magnitude. The rows also do not vary independently: **the only thing that puts a
+row below 1.0 is declining to carry the multiplex verbatim.** MoQ's media-aware lane
+strips this clip's 4.57 % null stuffing and every TS packet header; every verbatim row —
+SRT at 1.037, segmented HTTP at 1.056 — sits above 1.0 whatever its framing. So there is
+one economic question here, and it is not which protocol but whether the far end needs the
+contribution mux back byte-for-byte. Treat this as a footnote to the destination-count
+result rather than a reason to choose a transport:
 
 
 | Transport             | Wire multiplier    | Latency        | Fan-out topology                                     | Standardisation |
@@ -684,8 +686,26 @@ to the destination-count result rather than a reason to choose a transport:
 | MoQ                   | 0.982 *(measured; 0.973 with MTU discovery on, §3.1)* | sub-second     | relay fans out; last mile is N unicast copies        | IETF draft, open implementations — but carriage **fails against every third-party relay** ([evidence](evidence.md) §9) |
 | SRT                   | 1.037 *(measured, same path)* | sub-second     | no native fan-out; N origin sessions or a re-origination tier | published spec, open source |
 | Zixi                  | ~1.03 *(estimated)*| sub-second     | broadcaster fans out; last mile is N unicast copies  | proprietary, per-GB licence |
-| TS over HTTP (chunked)| ~1.05 *(estimated)*| seconds        | cache fans out; last mile is N unicast copies        | **no agreed standard — vendor-specific in practice** |
-| HLS with TS / DVB-DASH | ~1.05 *(estimated)*| ~2–5 s low-latency mode; tens otherwise | cache fans out; last mile is N unicast copies        | *informational* spec (`draft-pantos-hls-rfc8216bis`, obsoletes RFC 8216) / ETSI TS 103 285 — **not standards-track, yet universally interoperable** |
+| TS over HTTP (chunked)| ~1.03–1.06 *(by analogy with the HLS row: same verbatim payload, framing set by substrate)* | seconds        | cache fans out; last mile is N unicast copies        | **no agreed standard — vendor-specific in practice** |
+| HLS with TS / DVB-DASH | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×, [T14](../lab/test-14-data-plane-comparison.md); framing added from §3.1's measured per-packet cost)* | ~2–5 s low-latency mode, ~6 s on free TS tooling; tens otherwise | cache fans out; last mile is N unicast copies        | *informational* spec (`draft-pantos-hls-rfc8216bis`, obsoletes RFC 8216) / ETSI TS 103 285 — **not standards-track, yet universally interoperable** |
+
+Two details in that HLS row are worth pulling out, because both resist estimation.
+**HTTP's own overhead is negligible** — response headers and playlist re-fetching
+come to 0.06 % of payload at 2.4 s segments and 0.09 % at 1.26 s, with the request bytes
+back a further 0.01 %, so HLS costs what it costs because of what it carries, not because
+it is HTTP. And
+**HTTP/3 is the more expensive substrate, by ~2.6 points**, since QUIC's minimum 1200 B
+datagram charges 5.5 % framing where a 1500 B TCP path charges 2.7 %. Moving segmented
+HTTP to HTTP/3 for its loss resilience is a real cost, partly recoverable by raising the
+datagram to 1452 B.
+
+It is natural to expect the segmented-HTTP rows to converge on MoQ's once measured, on the
+grounds that a TS packager has no reason to retain stuffing either. They do not converge,
+and the reason is instructive: the off-the-shelf packager retains stuffing, and a
+packager that stripped it would stop producing byte-verbatim segments and forfeit exactly
+the fidelity advantage that is segmented HTTP's strongest card
+([alternatives](alternatives.md) §8). **The bandwidth and the fidelity are one trade, and
+it is the same trade on both data planes.**
 
 
 **No option on that list breaks the linearity, and the common intuition that HTTP
@@ -714,7 +734,7 @@ though it looks among the cheapest to build.
 
 ### 4.8 Where relay fan-out changes the bill, and what carriage costs
 
-MoQ's 1:N amplification is the paper's first-stated advantage
+MoQ's 1:N amplification is the advantage usually cited first
 ([README](../README.md)), so it deserves an honest accounting: **it does not reduce
 last-mile egress.** Delivering to N receivers outside the cloud costs N copies of
 internet egress whether or not the protocol has a native relay, because the expensive
@@ -742,12 +762,22 @@ pricing saves, and it would shrink towards nothing on a tightly packed source.
 **Carriage efficiency is the wrong basis for choosing a transport either way**, which is
 the same conclusion this section reached when the measurement pointed the other way.
 
-### 4.9 The market-structure argument: why MoQ can reach commodity pricing and SRT cannot
+### 4.9 The market-structure argument: who operates the fan-out, and which market prices it
 
 The preceding sections price today's options. This one states the argument for why the
 prices should be expected to move, because it is the strongest economic case for MoQ in
 this document and it rests on none of the measurements above. **It is a hypothesis about
-market structure, not a result.**
+market structure, not a result** — and a narrow one, because the position it argues MoQ
+could reach is one segmented HTTP already occupies everywhere except the sub-second band.
+
+The question the section actually answers is **who operates the replication point, and which
+market prices it.** Three answers exist, and they differ by an order of magnitude:
+
+| Data plane | Who runs the fan-out | Market it is priced in |
+|---|---|---|
+| Segmented HTTP | the commodity delivery market, a dozen suppliers, today | $0.005–0.010/GB commodity CDN list (§4.2) |
+| MoQ | one CDN today; otherwise you | $0.050/GB published, or hyperscaler egress if self-run |
+| SRT / Zixi / RIST | **you, or a managed media service** | own transit, or ~$0.09/GB metered egress, or per-flow premium |
 
 Start with what the pricing ladder actually shows. **Hyperscalers are not expensive by
 accident; they sell elasticity, and elasticity is the wrong product for this workload.**
@@ -769,6 +799,33 @@ business rather than a delivery business. **That is why no CDN sells SRT relay a
 commodity product, and why one already sells MoQ relay.** The absence is structural, not
 historical.
 
+**SRT can nonetheless be scaled, and saying otherwise would be wrong.** The mechanism is a
+re-origination or gateway tier — each hop stays point-to-point, and fan-out comes from
+running N sessions out of a replication point — so a DIY relay platform is a serious answer
+rather than a workaround. What the market does not sell is that replication *to the
+destination*: CDNs support SRT at the door, as contribution ingest into a packaging tier
+that then fans out as segmented HTTP. So an SRT trunk to N professional endpoints resolves
+to one of three cost bases, and choosing among them is the real decision:
+
+1. **Own transit and points of presence.** Cheapest per byte — the illustrative all-in rates
+   in §4.4 and [lab: cost model](../lab/cost-model.md) §10.1 put the eight-service multiplex
+   near $970 per destination-year — and bounded by reach, since several hundred sites means
+   PoPs near all of them and the build-up prices one (§4.7).
+2. **A gateway fleet in a hyperscaler.** Easiest to stand up and structurally the most
+   expensive, because every copy leaves through metered egress at roughly ten times
+   commodity delivery. The whole always-on trunk case lives inside that spread (§4.2).
+3. **A managed media service** — MediaConnect, Zixi, Haivision, LTN. Premium per-flow pricing
+   on top of hyperscaler-class egress, with quotas that are structural rather than elastic: a
+   MediaConnect transport-stream flow allows **50 outputs, not increasable**, and 2 sources,
+   so past 50 destinations the topology becomes chained flows each paying egress again.
+
+**So the SRT-versus-MoQ difference is not fan-out capability but who bears the operational
+and pricing burden of the replication point** — and the consequence for this section is that
+the advantage MoQ claims over SRT is exactly the advantage segmented HTTP already has. Being
+cache-shaped is not a MoQ property; it is a property of anything cache-shaped, and segmented
+HTTP has been both cache-shaped and commoditised for over a decade
+([alternatives](alternatives.md) §10).
+
 Openness is a necessary condition rather than the distinguishing one, and it is worth
 separating the two because they are easily conflated. An open, royalty-free
 specification is what allows *many* suppliers to implement the same relay and compete on
@@ -787,15 +844,17 @@ are structurally confined to premium, per-stream pricing.
 
 **The obvious objection is the strongest one, and it limits this argument to part of the
 market.** If a route's latency budget is seconds rather than sub-second — which
-[transport](transport.md) §2 concedes covers *most* primary distribution — then HLS
-carrying MPEG-TS has commodity economics *and* sufficient latency *and* interop MoQ has
-not demonstrated, and this entire section stops applying to that route
-([transport](transport.md) §3.4). The argument survives only where sub-second latency is
-genuinely required, or where verbatim multi-programme carriage or subscription-time
-revocation are, and those are a subset of primary distribution rather than the whole of
-it. Stated at its narrowest: MoQ is the first transport that could bring *commodity*
-pricing to the sub-second band. It is not a general claim that MoQ is the cheapest way to
-move a broadcast feed over the internet. If CDNs deploy MoQ relays and
+[transport](transport.md) §2 concedes covers *most* primary distribution — then segmented
+HTTP carrying MPEG-TS has commodity economics *and* sufficient latency *and* interop MoQ has
+not demonstrated *and* an off-the-shelf path back to a transport stream, and this entire
+section stops applying to that route ([alternatives](alternatives.md)). What choosing it does
+not avoid is the cost of the broadcast-grade edge layer, which the distributor owns on either
+data plane ([alternatives](alternatives.md) §4). The argument survives
+only where sub-second latency is genuinely required, or where verbatim multi-programme
+carriage or a portable enforcement point are, and those are a subset of primary distribution
+rather than the whole of it. Stated at its narrowest: MoQ is the first transport that could
+bring *commodity* pricing to the sub-second band. It is not a general claim that MoQ is the
+cheapest way to move a broadcast feed over the internet. If CDNs deploy MoQ relays and
 compete, relay capacity follows CDN delivery down the ladder rather than sitting at
 hyperscaler primary-distribution rates — and that competitive pressure reaches a segment
 that has never felt it, because SRT never gave the commodity market a product to sell.
@@ -877,8 +936,8 @@ on-call engineer costs more than the entire modelled transport line, which is th
 strongest argument here against reading §4 as a business case.
 - **Like-for-like carriage.** Hold each transport to its own measured overhead (§3.1) —
 0.982x for MoQ's media-aware lane, 1.037x for SRT — rather than comparing either against
-a *nominal* TS rate. The discipline used to be a caution against flattering MoQ; now it
-is what establishes MoQ's advantage, and the sensitivity has moved to **the source**.
+a *nominal* TS rate. That discipline is what establishes MoQ's advantage rather than
+merely guarding against overstating it, and it puts the sensitivity on **the source**.
 MoQ's 5.3 % is the stuffing ratio of the clip measured: a tightly packed carrier
 converges the two multipliers to the ~1.2-point AEAD floor, a loosely filled one widens
 the gap well past 5 %. Model it as a wash and treat the advantage as upside, and note
@@ -938,15 +997,15 @@ because reserved bandwidth is product-specific.
 
 **Engineering, with a direct economic payoff.**
 
-- **How much of MoQ's carriage advantage survives a different source?** This replaces the
-older "why is MoQ's overhead ~12 % where SRT's is ~3 %", which was answered by finding the
-measurement wrong (§3.1). The advantage is now measured at 5.3 %, but it *is* the 4.57 % of
+- **How much of MoQ's carriage advantage survives a different source?** The advantage is
+measured at 5.3 % against SRT, but it *is* the 4.57 % of
 null stuffing the reference clip carries, so a tightly packed source should shrink it to the
 ~1.2-point AEAD floor and a loosely filled one should roughly double it. Two more source
 profiles turn the model's largest carriage caveat into a range, and it is the cheapest
 outstanding measurement on the deciding line.
 - **What does the opaque lane cost to carry?** The measured figure is the media-aware lane;
-the lane this paper prefers for hardware IRDs has never been measured, and it is the lane
+the fallback lane, the one taken where an intact multiplex must reach an IRD untouched
+([transport](transport.md) §4.1), has never been measured, and it is the lane
 whose whole promise — byte-verbatim carriage — is what forgoes the null-stripping saving.
 Derivation puts verbatim carriage near SRT and null-stripped carriage near the media-aware
 lane, which makes this the difference between carriage being a wash and being an advantage

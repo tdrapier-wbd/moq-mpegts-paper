@@ -76,6 +76,7 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T11 | Cross-implementation interop | 7 (comparative lab) | transport neutrality | T11a partial; T11b open | [test-11-interop.md](test-11-interop.md) |
 | T12 | End-to-end 1+1 dual-path delivery and hand-off | 6 (redundancy drill) | Gate 3 — resilience; de-risks Gate 2 | complete for a co-started pair, arms A–D, incl. leg failure and recovery; independent restart of one leg blocked upstream | [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md) |
 | T13 | Off-the-shelf CBR/PCR grooming of a MoQ egress | 4 (file), plus wire cadence | supports Gate 2; decides how the grooming requirement can be documented | complete for TSDuck, FFmpeg and GStreamer on a broadcast mux and a single-programme feed; no off-the-shelf stage satisfies all four criteria | [test-13-downstream-grooming.md](test-13-downstream-grooming.md) |
+| T14 | MoQ against segmented HTTP on one route | 7 (comparative lab) | Gate 1 + Gate 2, both data planes; feeds [alternatives](../docs/alternatives.md) | partial — burst granularity (both arms), carriage fidelity and wire cost measured; the low-latency arm split, publishing TS parts free but finding no free client that fetches them; hardware P1/P2 (which now gates latency too) and MPTS-through-CDN blocked on kit this lab does not have | [test-14-data-plane-comparison.md](test-14-data-plane-comparison.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -140,6 +141,7 @@ per-test file when executed. In priority order:
 | # | Test | Purpose | Gate |
 |---|---|---|---|
 | T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
+| T14 (remainder) | MoQ against segmented HTTP — the two blocked cells | Burst granularity (both arms), carriage fidelity and wire cost are measured in [test-14](test-14-data-plane-comparison.md). What remains: a commercial ABR-to-TS gateway on P1/P2, which now also gates glass-to-glass latency since arm B2 showed no *free* client fetches partial segments (needs hardware, and is the cell that moves the paper most); and MPTS through a real CDN (needs a CDN account — and now carries the whole of MoQ's carriage-fidelity advantage) | Gate 1 and Gate 2, on both data planes |
 | T12/E | Restart one leg of a live pair | Stream clocking (T12 arm D) made two independently groomed chains byte-identical, and got a recovered or late-joining leg back onto its partner's numbering, slots and phase. What remains is byte-identity on independent restart, blocked by `moq export ts` numbering continuity counters per process — which also needs a grader that can score a pair that is not byte-identical. Plus a two-host variant, where the legs no longer share a clock | Gate 3 — completes the 1+1 story |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
 | T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
@@ -149,6 +151,14 @@ per-test file when executed. In priority order:
 
 - **No hardware IRD pass yet.** Gate 2 (T7/P2) is the load-bearing open test. Everything above it is
   necessary but not sufficient.
+- **The alternative data plane is only partly measured.** [alternatives](../docs/alternatives.md)
+  grades MoQ against segmented HTTP carrying MPEG-TS. [T14](test-14-data-plane-comparison.md) has
+  measured three of its rows — burst granularity, carriage fidelity and wire cost — and moved all three.
+  The rest are still specification text or vendor datasheets, and the vendor claims in particular should
+  be read as such: no ABR-to-TS product has been graded on the Gate 2 rig. The comparison is also
+  single-route, single-clip, loopback, and its per-packet framing is derived rather than measured. Its
+  low-latency arm has now run, and split: publishing MPEG-TS partial segments is free and works, while
+  no free client fetches them, so that arm's *receive* half is untested for want of any implementation.
 - **No live contribution source in the *opaque* transparency run yet.** T2/T3 are localhost,
   file-fed; T4 has run a live SRT contribution source end-to-end on the media-aware lane, but the
   opaque lane over the wire awaits deploying the opaque publisher on EC2.

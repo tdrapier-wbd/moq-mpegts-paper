@@ -1,6 +1,9 @@
 # Security
 
 Status: working draft
+Layer: **above the transport** — the threat model, identity, key management and tenant isolation apply
+whichever data plane carries the bytes. Where the enforcement point sits does differ by data plane
+([alternatives](alternatives.md) §7).
 Scope: the security model of the platform — the threat model, identity and
 authentication, authorization, key management, data protection, abuse mitigation,
 compliance, and security operations. This is the deep-dive companion to

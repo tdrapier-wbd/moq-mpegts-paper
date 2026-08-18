@@ -1,11 +1,19 @@
 # Implementation and Testing
 
 Status: working draft
+Layer: **above the transport** — the assembly and test path is largely the same on either data plane,
+and §2 marks the stages where it is not.
 Scope: the bridge from the reference architecture to a running, testable system —
-which components are required, where to obtain the public ones, what prerequisites
-they impose, a minimal reference deployment, and the test methodology that leads
+which components are required **on each data plane**, which of them are free and which must be bought,
+what prerequisites they impose, a minimal reference deployment, and the test methodology that leads
 to the make-or-break hardware-IRD proof. This is the practical companion to
-[architecture](architecture.md) and [transport](transport.md).
+[architecture](architecture.md), [transport](transport.md) and [alternatives](alternatives.md).
+
+> **Recipes live in the lab, not here.** Exact commands, versions and runnable scripts for both data
+> planes are in [lab/](../lab/README.md) — [T13](../lab/test-13-downstream-grooming.md) for grooming and
+> [T14](../lab/test-14-data-plane-comparison.md) for the head-to-head, whose
+> [scripts](../lab/scripts/) stand up each path end to end. This document is the map: what the stages
+> are, what fills them, and what it costs.
 
 > **Confidentiality note.** The platform's own publisher/subscriber and grooming
 > components are, at the time of writing, a private repository. This document
@@ -19,92 +27,174 @@ to the make-or-break hardware-IRD proof. This is the practical companion to
 This document describes *what you would assemble* to stand up an end-to-end path
 and prove it works. It is not a step-by-step install guide (versions and commands
 move too fast for a reference document) but a map of the components, their
-dependencies, and the validation pipeline, with enough specificity to reproduce
-the setup.
+dependencies, and the validation pipeline.
 
-The end-to-end path being assembled is the one in [architecture](architecture.md)
-§3: publisher → cloud relay → edge/subscriber → egress → IRD (or analyser).
+The end-to-end path is the one in [architecture](architecture.md) §3 —
+publisher → fan-out → subscriber → groomer → egress → IRD (or analyser). It has the same
+shape on either data plane, and only the publish, fan-out and receive stages change.
 
-## 2. Components
+## 2. The toolchain, stage by stage
 
-| Role | Component | Source | Public? |
+Both data planes decompose the same way, so the useful view is stage by stage rather
+than protocol by protocol. Two things fall out of it: most stages are common, and where
+the two differ, **they are incomplete in opposite places** (§2.2).
+
+| Stage | MoQ | Segmented HTTP | Owned by |
 |---|---|---|---|
-| MoQ transport (relay + endpoints) | `moq` (moq-dev) / Cloudflare `moq-rs` / `kixelated/moq` | github.com/moq-dev/moq; the wider MoQ implementations | Public |
-| Media packaging profile | MSFTS `m2ts` (`draft-gregoire-moq-msfts`) | github.com/mondain/msfts; IETF draft | Public |
-| TS analysis / conformance | TSDuck (`tsp`, `pcrverify`, `analyze`) | tsduck.io | Public |
-| Publisher (ingest → MoQ) | `moq import ts` on the default media-aware lane; the platform's opaque `m2ts` publisher as the transparency reference | Public (moq-dev) / private repository | Mixed |
-| CBR/PCR groomer | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, PCR re-stamp, RTP/multicast egress, stream-clocked 1+1 pairing | github.com/tdrapier-wbd/mpegts-pacer | Public |
-| Subscriber + egress | `moq export ts` plus the groomer above; the platform subscriber (FEC, ST 2022-7, start gate, egress TR 101 290) as the reference | Public (moq-dev) / private repository | Mixed |
-| Control plane | Provisioning/entitlement/observability services | Design ([control-plane](control-plane.md)); not yet a public artifact | **No** |
-| Relay host | Cloud VM (e.g. AWS EC2) with public reachability | Any cloud/CDN with QUIC/UDP egress | Public |
-| Validation hardware | Hardware IRD(s) and a TR 101 290 analyser (e.g. Sencore) | Broadcast equipment | n/a |
+| **Ingest** (contribution in) | SRT / RTP / file — TSDuck `tsp` | identical | distributor |
+| **Publish / package** | `moq import ts` (media-aware) or the opaque `m2ts` lane under MSFTS | *classic:* TSDuck `tsp -O hls`<br>*low-latency TS:* Apple `mediastreamsegmenter --format=transport -w <ms>` | distributor |
+| **Fan-out** | `moq-relay` on a reachable host; Cloudflare's implementation | any HTTP origin + cache: nginx, Caddy, or a commodity CDN | distributor or CDN |
+| **Receive → TS** | `moq export ts` | *classic:* `tsp -I hls`, FFmpeg<br>*low-latency:* **see §2.2** | recipient or distributor |
+| **Groom → conformant CBR** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, PCR re-stamp, RTP/multicast egress, stream-clocked 1+1 pairing | same requirement and the same design, but a harder input: bursts are ~240× coarser, so the buffer is seconds rather than milliseconds. The public groomer is validated against MoQ arrival only (§9.1) | **distributor, on both** |
+| **Egress FEC / ST 2022-7 / start gate** | private (see below) | private; identical requirement | **distributor, on both** |
+| **Analysis / conformance** | TSDuck (`pcrverify`, `analyze`), hardware TR 101 290 analyser | identical | distributor |
+| **Control plane** | provisioning, entitlement, observability ([control-plane](control-plane.md)) | identical model, different projection target ([alternatives](alternatives.md) §7) | distributor |
 
-The split has moved since this document was first written, and in the direction the
-thesis predicted ([vision](vision.md) §6). The *transport, packaging and the
-CBR/PCR grooming stage* are now all reproducible from public sources: the
-media-aware lane is upstream, and the groomer is a public crate. What remains
-private is the rest of the IRD-facing egress (FEC, ST 2022-7 pairing, start gating,
-egress TR 101 290 monitoring) and the control plane. So a reader can reproduce the
-whole path from contribution to a conformant CBR RTP egress today, and the
-grooming logic is no longer the undisclosed part.
+The bottom four rows are the same on both, which is the paper's thesis expressed as
+a bill of materials: the parts an operator has to build or buy do not change with the
+transport, and the parts that change with the transport are the ones already written.
+
+### 2.1 What is still private, and what no longer is
+
+Transport, packaging and the CBR/PCR grooming stage are all reproducible from public
+sources: the media-aware lane is upstream, and the groomer is a public crate — the
+distribution of open and closed components the thesis expects ([vision](vision.md) §6).
+What remains private is the rest of the IRD-facing egress — FEC, ST 2022-7 pairing,
+start gating, egress TR 101 290 monitoring — and the control plane. A reader can
+reproduce the whole path from contribution to a conformant CBR RTP egress today, on
+either data plane, and the grooming logic is no longer the undisclosed part.
+
+### 2.2 What a free path looks like, and the one stage you cannot get free
+
+This is the practical question for anyone unwilling to buy a commercial gateway, and
+it has a measured answer ([T14](../lab/test-14-data-plane-comparison.md) measurement 2b).
+
+**Every stage above has a free implementation except one: receiving low-latency HLS
+back into a transport stream.** The gap is narrow and specific, and it is worth stating
+exactly, because it is easy to assume from the surrounding availability that it must
+exist somewhere.
+
+- **Publishing** low-latency HLS with MPEG-TS partial segments *is* free. Apple's HLS
+  Tools do it in one command, emitting conformant `EXT-X-PART` entries pointing at
+  0.28–0.30 s TS parts. The tools are closed-source and macOS-only, but they cost nothing.
+- **Receiving** those parts has no free implementation at all. TSDuck cannot parse
+  `EXT-X-PART` — pointed at a live edge carrying only parts it exits with `empty HLS
+  media playlist` — and FFmpeg's HLS demuxer exposes no way to fetch them. Measured
+  against a fully conformant origin (Apple's `ll-hls-origin-example.go`, advertising
+  `CAN-BLOCK-RELOAD=YES` and `PART-HOLD-BACK`, validating clean), both fetched **zero**
+  parts and issued **zero** blocking reloads, falling back to whole segments. Apple's own
+  `mediastreamvalidator` fetched 17 parts over that same origin using 12 blocking
+  reloads, so the capability is real and advertised; the limitation is in the clients.
+
+So the free toolchain is **asymmetric**, and the missing half is precisely what the
+commercial products sell:
+
+| Want | Free option | Commercial option |
+|---|---|---|
+| Classic HLS → TS, ~6 s latency | `tsp -I hls`, FFmpeg | any professional IRD with an HLS input |
+| **Low-latency HLS → TS, ~2 s** | **none** | Synamedia MEG (ABR2TS), Ateme TITAN Edge |
+| MoQ → TS | `moq export ts` | **none** |
+| TS → conformant CBR egress | `mpegts-pacer` | Synamedia, Ateme, Harmonic gateways |
+
+**The two data planes are therefore incomplete in mirror-image ways.** Segmented HTTP
+has mature commercial receivers and no free low-latency one; MoQ has a free receiver
+and no commercial one, and carries media in only a single implementation
+([interoperability](interoperability.md) §9). Neither offers a complete free path to a
+low-latency, IRD-conformant hand-off today. An operator who will not buy hardware gets
+classic HLS at roughly six seconds — whatever the publisher emits — or MoQ with a
+single implementation to depend on.
+
+**The narrowness of the gap is what makes it worth pinning.** A free receiver needs
+`EXT-X-PART` parsing and blocking playlist reload in front of a TS demuxer that already
+exists — a few hundred lines, not a new stack — and everything downstream of it, the
+grooming and egress that actually decide IRD acceptance, is already public. That
+possibility is tracked in §9.
 
 ## 3. Prerequisites
 
+Most of these apply to both data planes; the two marked *MoQ only* are the cost of that choice.
+
 - **Toolchain.** A Rust toolchain matching the targeted MoQ implementation
-  (the MoQ transport crates are Rust). Standard build tooling for the surrounding
-  services.
-- **Transport runtime.** QUIC / HTTP-3 support end to end, which in practice means
+  (the MoQ transport crates are Rust) — *MoQ only*. Segmented HTTP needs no build step:
+  TSDuck, nginx and Apple's tools are all packaged binaries. Standard build tooling for
+  the surrounding services either way.
+- **Transport runtime.** For MoQ, QUIC / HTTP-3 end to end, which in practice means
   UDP reachability (not just TCP/443 proxies) between publisher, relay, and
-  subscriber, and a working TLS 1.3 stack. Middleboxes that block or throttle UDP
-  will break or degrade the path.
+  subscriber, and a working TLS 1.3 stack; middleboxes that block or throttle UDP
+  will break or degrade the path. Segmented HTTP is more forgiving by construction — it
+  runs over HTTP/3 if UDP is available and falls back to HTTP/2 on TCP if it is not,
+  at a cost of roughly 2.6 points of wire overhead ([evidence](evidence.md) §10).
 - **Identity / PKI.** Certificates for mTLS between data-plane peers and a signing
   key for subscriber entitlement tokens ([security](security.md) §2, §4). For a
   lab, a private CA is sufficient.
 - **Network.** A publicly reachable relay endpoint; on the egress side, the
   ability to emit UDP/RTP and, for realistic tests, IP **multicast** and an
   ST 2022-7 dual-path network path to the IRD.
-- **Wire-version pinning.** Neither lane sits on the ecosystem's interop target. The
-  preferred media-aware lane rides **moq-lite**, upstream's own simplified wire
-  protocol, so it tracks upstream releases rather than the IETF draft series; the
+- **Wire-version pinning** — *MoQ only.* Neither lane sits on the ecosystem's interop
+  target. The preferred media-aware lane rides **moq-lite**, upstream's own simplified
+  wire protocol, so it tracks upstream releases rather than the IETF draft series; the
   opaque prototype pins **draft-14** (`moq-transport` 0.14.2). Treat the wire version
   as a pinned dependency and plan migration explicitly ([transport](transport.md) §5).
+  Segmented HTTP has no equivalent exposure: HLS's wire format has been stable and
+  universally implemented for fifteen years, which is the interoperability and maturity
+  argument in [alternatives](alternatives.md) §6 stated as a prerequisite.
 - **Validation gear.** At least one hardware IRD and, ideally, a TR 101 290
   analyser. File-based analysis (TSDuck) is a necessary but *not sufficient*
   substitute for hardware (§6).
 
 ## 4. Reference deployment topology
 
-A minimal but representative end-to-end lab:
+A minimal but representative end-to-end lab. The two data planes differ only in the
+middle; the source at one end and the grooming, egress and conformance stage at the
+other are common, and the common part is where the engineering is.
 
 ```mermaid
 flowchart LR
     SRC["Source TS\n(file or live contribution:\nSRT/RTP)"]
-    PUB["Publisher\n(media-aware: moq import ts)"]
-    RELAY["Cloud relay\n(MoQ, public IP)"]
-    SUB["Subscriber + groomer\n(moq export ts → CBR/PCR, egress)"]
+
+    subgraph DP["the data plane — interchangeable"]
+        direction TB
+        PUB["moq import ts"] -->|MoQ over QUIC| RELAY["moq-relay\n(public IP)"] -->|MoQ over QUIC| SUB["moq export ts"]
+        HPUB["tsp -O hls /\nmediastreamsegmenter"] -->|HTTP/3| CACHE["origin + CDN cache\n(nginx, Caddy)"] -->|HTTP/3| HSUB["tsp -I hls /\nABR2TS gateway"]
+    end
+
+    GROOM["Groomer\n(CBR/PCR, FEC, ST 2022-7)"]
     IRD["Hardware IRD\n+ TR 101 290 analyser"]
 
-    SRC --> PUB -->|MoQ over QUIC,\npublic internet| RELAY -->|MoQ over QUIC| SUB -->|"RTP/UDP\n(multicast, ST 2022-7)"| IRD
+    SRC --> DP --> GROOM -->|"RTP/UDP\n(multicast, ST 2022-7)"| IRD
 ```
 
-This is the lane that has been run end-to-end over the public internet via a cloud
-relay ([evidence](evidence.md) §1); the opaque prototype exercises the same shape on
-loopback only. Scaling to the full reference architecture adds relay federation
-([relay](relay.md) §6), regional edge gateways, and the control plane, but the
-single-path lab above is the unit that must work first.
+The MoQ path has been run end-to-end over the public internet via a cloud relay
+([evidence](evidence.md) §1); the opaque prototype exercises the same shape on
+loopback only. The segmented-HTTP path has been run on loopback for burst granularity,
+carriage fidelity and wire cost ([T14](../lab/test-14-data-plane-comparison.md)), and
+its low-latency variant only as far as the origin, for the reason in §2.2. Scaling to
+the full reference architecture adds relay federation ([relay](relay.md) §6) or CDN
+tiering, regional edge gateways, and the control plane, but the single-path lab above
+is the unit that must work first.
 
 ## 5. Build and run outline
 
-At a high level, and without reproducing sensitive detail:
+At a high level, and without reproducing sensitive detail. Runnable versions of steps
+1–3 for both data planes are in [lab/scripts/](../lab/scripts/) — `t14-a.sh` for MoQ,
+`t14-b1.sh` and `t14-b2.sh` for classic and low-latency segmented HTTP.
 
-1. Build/obtain the MoQ relay and stand it up on a publicly reachable host with a
-   valid TLS certificate and the pinned ALPN for the targeted draft.
-2. Configure the publisher to ingest the source (file or live contribution),
-   demultiplex it onto media-aware tracks, publish its catalog, and connect to the
-   relay — or, on the fallback lane, package the TS verbatim under an MSF catalog.
-3. Configure the subscriber to authenticate, subscribe to the advertised tracks,
-   re-mux, groom to CBR with PCR correction, and emit the configured egress.
-4. Point the egress at the IRD/analyser and confirm lock and conformance (§6).
+1. **Stand up the fan-out.** For MoQ, build or obtain the relay and put it on a
+   publicly reachable host with a valid TLS certificate and the pinned ALPN for the
+   targeted draft. For segmented HTTP, point an HTTP origin at the packager's output
+   directory and put a cache or CDN in front of it.
+2. **Configure the publisher.** For MoQ, ingest the source, demultiplex it onto
+   media-aware tracks, publish the catalog and connect to the relay — or, on the
+   fallback lane, package the TS verbatim under an MSF catalog. For segmented HTTP,
+   segment the source into the origin's directory, choosing the segment duration
+   deliberately: it sets both the latency floor and the size of the burst the groomer
+   will have to absorb, and those are the same knob
+   ([architecture](architecture.md) §7.4).
+3. **Configure the receiver.** Authenticate, subscribe or fetch, reassemble to a
+   transport stream, groom to CBR with PCR correction, and emit the configured egress.
+   This stage is where the two planes' effort diverges most: the reassembly is easier
+   on segmented HTTP and the grooming considerably harder.
+4. **Point the egress at the IRD/analyser** and confirm lock and conformance (§6).
 
 ## 6. Testing and validation
 
@@ -151,8 +241,11 @@ The validation pyramid, from cheapest/fastest to most decisive:
    pair requires either one groomer duplicated onto both paths (protecting the last
    hop only) or two **stream-clocked** groomers, and two arrival-clocked groomers do
    not merge at all ([evidence](evidence.md) §7).
-7. **Comparative lab (optional but recommended).** Head-to-head against SRT under matched conditions, feeding the economic model
-   ([economics](economics.md) §9).
+7. **Comparative lab (not optional).** Head-to-head against the alternative data plane
+   and against SRT under matched conditions, feeding the economic model
+   ([economics](economics.md) §9). [T14](../lab/test-14-data-plane-comparison.md) settled
+   which data plane is harder to groom, and settled it against the intuitive answer, so
+   this belongs *before* a data-plane commitment rather than after one.
 
 ## 7. Acceptance gates
 
@@ -172,14 +265,71 @@ implementation should make the ALPN, control-message set, and data-plane encodin
 swappable behind the stable media/packaging interface so that a draft upgrade does
 not touch the tested media layer or the grooming logic.
 
-## 9. Open questions
+## 9. Two pieces of work worth doing
+
+Neither exists yet, both are small, and between them they would close the free path end to
+end: one removes the receive gap of §2.2, the other lets a single groomer sit behind either
+data plane.
+
+### 9.1 Make the groomer data-plane agnostic
+
+`mpegts-pacer` was written against a MoQ egress, which arrives in 12.4 kB bursts with a
+worst-case silence of 149 ms. A segmented-HTTP egress arrives in ~2.95 MB bursts with
+silences over four seconds ([evidence](evidence.md) §10) — the same job, two orders of
+magnitude more input buffering, and a start gate that must not declare underrun during a
+normal inter-segment gap.
+
+Amending it to absorb that, and to size its buffer from observed arrival rather than
+from a configured assumption, would make **one groomer serve both data planes** — and,
+on the reasoning in [alternatives](alternatives.md) §10.1, a RIST or SRT input as well.
+That is worth more than the code involved: the paper's central claim is that the layer
+above the transport is common to both, and a groomer that only tolerates one arrival
+pattern quietly contradicts it. The claim should be demonstrable by running the same
+binary on either input, not merely argued.
+
+### 9.2 A slim low-latency HLS receiver that pipes into the groomer
+
+The gap in §2.2 is narrow: `EXT-X-PART` parsing, blocking playlist reload (`_HLS_msn` /
+`_HLS_part`), preload-hint handling, and part-to-TS concatenation on stdout. Everything
+downstream — grooming, PCR re-stamp, CBR pacing, egress — already exists and is public.
+A receiver whose entire output contract is "a transport stream on stdout, into
+`mpegts-pacer`" needs no player, no rendition switching, no MSE, and no decoder.
+
+On the choice of base, one candidate is less suitable than it first appears: **Shaka
+Player is a browser player targeting Media Source Extensions**, so it neither produces a
+transport stream nor runs outside a browser, and Shaka Packager is a packager rather
+than a client. The more promising routes, in order:
+
+1. **Extend TSDuck's `hls` input plugin.** It already fetches playlists, already emits TS
+   into a `tsp` chain, and already has everything except partial-segment support — which
+   is precisely what it was measured lacking. It is C++, actively maintained, and the
+   work is upstreamable, so the fix would land for everyone rather than becoming another
+   private tool. This is the strongest option and the one to cost first.
+2. **Extend FFmpeg's HLS demuxer**, for the same reason and a wider install base, against
+   a larger and slower-moving codebase.
+3. **A standalone client**, which is the least work to a first result and the most work to
+   maintain; useful as a proof that the parts are consumable, less useful as a product.
+
+The strategic point is that (1) inverts the finding in §2.2. That measurement says the
+free toolchain has a hole exactly where the commercial products sell. A few hundred lines
+in a maintained open-source project would fill it — which makes the current state look
+much more like nobody having needed TS parts outside broadcast than like a hard problem.
+
+## 10. Open questions
 
 - How is the hardware-IRD test matrix defined (which IRD models, which analyser
   settings) so that a P1/P2 pass is credible across the installed base rather than
   on a single decoder ([interoperability](interoperability.md) §11)?
+- Of the two pieces of work in §9, which earns its keep first? §9.1 makes an existing
+  claim demonstrable; §9.2 changes what is possible on free software. They are
+  independent, but §9.2 is worth little without §9.1, since a receiver that emits
+  part-granular bursts still needs a groomer that will accept them.
+- Should §9.2 be attempted upstream in TSDuck rather than as a local tool? Upstreaming
+  is slower and would close the gap for the whole industry rather than for one
+  distributor — which is the same trade already made with the groomer, and made the
+  right way round.
 - Now that the grooming stage is public and the remaining private surface is the
   IRD-facing egress and control plane, does publishing that egress layer buy more in
-  credibility than it costs in differentiation? The answer changed once
-  [T13](../lab/test-13-downstream-grooming.md) showed the grooming *requirement* can
-  be documented with off-the-shelf tools, which removes the argument that keeping the
-  groomer private protected anything defensible.
+  credibility than it costs in differentiation? Since
+  [T13](../lab/test-13-downstream-grooming.md) shows the grooming *requirement* can be
+  documented with off-the-shelf tools, secrecy there protects nothing defensible.

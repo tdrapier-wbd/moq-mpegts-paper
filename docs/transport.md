@@ -1,6 +1,10 @@
-# Transport: Why MoQ, and How Media Is Carried
+# Transport: The Case for MoQ, and How Media Is Carried
 
 Status: working draft
+Layer: **the data plane, MoQ side.** §2 states the requirements any candidate must meet and is
+data-plane agnostic; §3.4 summarises the head-to-head; §4 onward develop MoQ's carriage, versioning and
+recovery specifically. The competing case is made at equal length in
+[alternatives](alternatives.md), and this document does not settle the choice on its own.
 Scope: the transport-layer rationale that bridges the *why* of [vision](vision.md)
 and the *how* of [architecture](architecture.md). This document answers three
 questions the vision leaves open and the architecture assumes settled: **why MoQ
@@ -38,7 +42,12 @@ invented here:
 - **Latency low enough for linear operation.** Sub-second glass-to-glass is
   desirable and, for most primary distribution, a few seconds is tolerable — but
   latency must be *bounded and stable*, because a drifting or unbounded buffer is
-  itself a fault for downstream playout and ad insertion.
+  itself a fault for downstream playout and ad insertion. "Tolerable" needs
+  answering per route rather than once: it is true of the feed's own integrity and
+  understates the transition, because a geostationary path delivers a fraction of a
+  second and a 2–5 s replacement consumes most of a downstream budget that was
+  previously free, at every destination ([alternatives](alternatives.md) §5). This is
+  the axis on which the choice of data plane is actually decided.
 - **Graceful behaviour under loss and congestion.** The public Internet delivers
   variable loss and jitter. The transport must degrade predictably rather than
   stall, and must not impose head-of-line blocking that converts a single lost
@@ -66,7 +75,7 @@ invented here:
 
 ## 3. MoQ against the requirements
 
-**MoQ is selected on comparative, architectural grounds — not because it dominates the mature incumbents (SRT, Zixi, RIST, RTP over managed IP, TS-over-HTTP) on the narrow task.** The case must therefore be stated with its weaknesses attached.
+**MoQ is evaluated here on comparative, architectural grounds — not because it dominates the mature incumbents (SRT, Zixi, RIST, RTP over managed IP, TS-over-HTTP) on the narrow task, and not because it is the only Internet-native candidate.** There are two: segmented HTTP carrying MPEG-TS is the other, and the head-to-head against it is [alternatives](alternatives.md). The case must therefore be stated with its weaknesses attached.
 
 ### 3.1 Where MoQ is differentiated
 
@@ -115,7 +124,12 @@ invented here:
   on that hook, not wire-format primitives that MoQ itself defines and guarantees
   across implementations. The differentiator is that the transport gives
   authorization a native place to live and enforce; the credential format is our
-  choice. See [evidence](evidence.md) §5 for what has been verified.
+  choice. See [evidence](evidence.md) §5 for what has been verified. The differentiator
+  is **not** revocation speed: segmented HTTP authorizes every request and re-fetches
+  a low-latency playlist each part duration, so its worst-case revocation bound is
+  about one request interval. What MoQ adds is a portable enforcement point and a
+  session that is a live, queryable fact rather than an inference from delivery logs
+  ([alternatives](alternatives.md) §7).
 
 ### 3.2 Where the case is weak
 
@@ -132,24 +146,37 @@ invented here:
   programme as a single opaque object stream, which limits that. The degradation
   advantage is therefore fully realised on the media-aware default and constrained
   wherever the opaque fallback is in use.
-- **The object/burst model creates a broadcast-specific problem.** MoQ delivers
-  objects in bursts, which produces reconstructed-stream timing that hardware IRDs
-  reject (§4.3, [evidence](evidence.md) §3). This is inherent, not a defect, and
-  it is why the grooming layer in [architecture](architecture.md) §7 exists.
-- **A specified, universally interoperable alternative already carries MPEG-TS.**
-  HLS-with-TS is ahead of MoQ today on carriage interop, delivery economics and
-  operational maturity, and its latency sits inside the tolerance §2 states. MoQ's
-  advantage over it reduces to sub-second capability, multi-programme verbatim carriage,
-  subscription-native entitlement and a push model (§3.4). That is a narrower case than
-  this document's framing elsewhere implies.
+- **The object/burst model creates a broadcast-specific problem — though not one that
+  distinguishes MoQ.** MoQ delivers objects in bursts, which produces reconstructed-stream
+  timing that hardware IRDs reject (§4.3, [evidence](evidence.md) §3). This is inherent to
+  bursty delivery rather than a defect, and it is why the grooming layer in
+  [architecture](architecture.md) §7 exists. It is listed here for completeness rather than
+  as a mark against MoQ: segmented HTTP incurs the same problem ~240× more severely
+  ([evidence](evidence.md) §10).
+- **A specified, universally interoperable alternative already carries MPEG-TS
+  (the strongest challenge to the thesis).** Segmented HTTP carrying TS is ahead of MoQ
+  today on carriage interop, delivery economics, operational maturity, recovery model and the
+  availability of an off-the-shelf path back to a transport stream — though not on the grooming
+  stage that turns that stream into something an IRD locks to, which the distributor owns on
+  either data plane. Its latency sits inside the tolerance §2 states for most routes, though
+  reaching the low end of that band with MPEG-TS needs a commercial receiver: parts publish
+  free and no free client fetches them ([evidence](evidence.md) §10.1). MoQ's
+  advantage over it reduces to sub-second capability, multi-programme verbatim carriage, a
+  portable enforcement point and a push model (§3.4, [alternatives](alternatives.md)). That
+  is a narrower case than this document's framing elsewhere implies.
 - **It is pre-standard (§5)** — and, measured, less interoperable in practice than a
   specification that does not claim standard status at all (§3.4).
 
-The honest summary: MoQ is selected as the *preferred* data plane on
-architectural grounds, not because it dominates incumbents on the narrow task.
-The architecture is deliberately built so the transport is swappable
-([architecture](architecture.md) §2, principle 2), which is both a hedge against
-these weaknesses and an admission that the transport case is not yet closed.
+The honest summary: MoQ is the *preferred* data plane on architectural grounds for the
+sub-second band, not because it dominates incumbents on the narrow task and not to the
+exclusion of segmented HTTP, which on current evidence is the better choice wherever a
+route's destinations can absorb 2–5 s — nearer 6 s unless a commercial ABR-to-TS receiver
+is bought ([alternatives](alternatives.md) §12). The
+architecture is deliberately built so the transport is swappable
+([architecture](architecture.md) §2, principle 2) — a hedge against these weaknesses, an
+admission that the transport case is not closed, and, now that there are two viable
+Internet-native data planes rather than one, the property that makes the rest of the
+platform worth building at all.
 
 ### 3.3 A closer comparison: TS-over-HTTP
 
@@ -212,109 +239,75 @@ budgets are relaxed, and native TS carriage is the priority, TSoHTTP is a sound,
 low-risk choice — and in those cases may be the better one. For broadcast
 *primary* distribution — where the target model is dynamic entitlement,
 relay-based fan-out, and graceful behaviour on best-effort paths — MoQ's per-stream
-transport and native subscription/relay model are a closer architectural fit,
-which is why this paper treats it as the more compelling long-term candidate. That
-judgement is contingent on MoQ reaching wire stability (§5).
+transport and native subscription/relay model are a closer architectural fit, which makes
+it the more compelling long-term candidate *of these two*. That judgement is contingent on
+MoQ reaching wire stability (§5), and it does not carry over to the comparison with
+segmented HTTP, which is specified where TSoHTTP is not (§3.4).
 
-### 3.4 The strongest alternative: HLS carrying MPEG-TS segments
+### 3.4 The strongest alternative: segmented HTTP carrying MPEG-TS
 
-**This is the most serious competing answer to the question this paper asks, and the
-comparison is less favourable to MoQ than the rest of this document implies.** It is
-assessed here against the current specification, [HTTP Live Streaming 2nd
-Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)
-(`draft-pantos-hls-rfc8216bis`, which obsoletes RFC 8216 and folds in Low-Latency HLS).
+**The most serious competing answer to the question this paper asks is not SRT but HLS
+carrying MPEG-TS segments over HTTP/3, and on most axes it is currently ahead of MoQ.**
+The full head-to-head — scaling, reliability, hand-off complexity, interoperability,
+latency, entitlement, carriage fidelity, economics and maturity, each against
+`draft-pantos-hls-rfc8216bis-22` rather than against convention — is
+[alternatives](alternatives.md), which also assesses SRT's scaling story (§10) and states
+the verdict axis by axis (§12). What that comparison establishes, and this section must not
+contradict:
 
-One factual correction first, because it changes how the option should be weighed.
-Carrying MPEG-TS in HLS is not a new capability being *proposed*: MPEG-TS was HLS's
-original and, until fragmented MP4 arrived a decade ago, its **only** container. Nor is
-HLS a "carry anything" envelope — the specification admits a closed list of five formats
-(MPEG-2 TS, fragmented MP4, packed audio, WebVTT, IMSC) and states that "transport of
-other media file formats is not defined." What is genuinely newer is **Low-Latency mode**, and
-partial segments may be MPEG-TS. So TS-in-HLS has been available throughout, which means
-it deserves evaluating on its merits rather than being treated as either novel or
-exotic.
+- **The QUIC substrate distinguishes neither.** Low-Latency HLS *requires* HTTP/2 or
+  HTTP/3, with RFC 9218 priorities mandatory on HTTP/3, so over HTTP/3 it rides the same
+  substrate with the same per-stream loss isolation. What differentiates MoQ is the object
+  and subscription model above QUIC — §3.1's first bullet should be read with that
+  narrowing in mind.
+- **The grooming requirement is identical, and neither specification acknowledges it.** PCR,
+  constant bit rate, stuffing and null packets occur nowhere in the HLS document, and MoQ
+  has no notion of them either. This is the strongest support for the paper's central claim
+  rather than a counter to it: the broadcast-grade layer sits above the transport and is
+  required whichever data plane is chosen ([architecture](architecture.md) §7.2). It is also
+  *owned* either way, because a distributor no longer supplies its clients' receivers and so
+  must hand off a clean, paced transport stream at its own demarcation regardless of what the
+  client runs. What segmented HTTP does have is an off-the-shelf *reassembly* stage — `tsp -I
+  hls` and ffmpeg both read a playlist, against MoQ's single `moq export ts` — and a class of
+  edge gateway that can be bought to fill part of the grooming stage, unmeasured
+  ([alternatives](alternatives.md) §4).
+- **But what it hands the groomer is much harder to pace, and this is measured.** At 2 s
+  segments the segmented-HTTP egress bursts at ~2.95 MB against MoQ's 12.4 kB, and stops for
+  over a second 24 times in a minute where MoQ never stops for more than 149 ms
+  ([T14](../lab/test-14-data-plane-comparison.md)). Burst size *is* segment size, so this is
+  the same knob as latency; partial segments would turn it, but measurement found none of the
+  free clients will fetch them, so on free tooling it cannot be paid down at all — which makes
+  "easier to receive" and "easier to hand off cleanly" different claims, only the first of
+  which favours the alternative ([alternatives](alternatives.md) §4.6).
+- **Carriage fidelity on a single programme is a measured wash, not a MoQ advantage.** An
+  MPEG-TS segment is byte-identical to source except the continuity counter on the PAT and PMT
+  the segmenter injects at each segment head — stuffing, all three splice PIDs and the DVB
+  service layer all travel, because nothing in the path parses the payload. What survives of
+  MoQ's fidelity advantage is the multi-programme mux alone
+  ([alternatives](alternatives.md) §8).
+- **Interop status is inverted relative to interop outcome.** HLS states plainly that it "is
+  not an Internet standard"; MoQ is genuinely standards-track. Yet HLS interoperates across
+  essentially every CDN, packager and analyser, while a MoQ feed carries media only within a
+  single implementation ([evidence](evidence.md) §9). On the acceptance criterion §7 sets
+  for itself, segmented HTTP passes today and MoQ does not — subject to one limit worth
+  carrying here, that its interop holds only inside a single-programme envelope, since
+  "Transport Stream Segments MUST contain a single MPEG-2 Program".
+- **Latency is the deciding axis.** Low-Latency mode is bounded by part duration and a
+  hold-back the specification requires to be at least twice the part target, giving a 2–5 s
+  envelope in practice against MoQ's measured sub-second. Where a route's destinations can
+  absorb that, segmented HTTP is the better choice today; where they cannot, it is not a
+  candidate at all.
 
-**Where HLS-with-TS is stronger than MoQ, including on this paper's own criteria.**
-
-- **Interoperability, and this is the uncomfortable one.** HLS states plainly that it "is
-  not an Internet standard" — it is an Apple-authored Informational document. MoQ is
-  genuinely standards-*track*. Yet measured against every registered public relay, a MoQ
-  feed carries media only within a single implementation
-  ([evidence](evidence.md) §9), while HLS interoperates across essentially every CDN,
-  packager, analyser and client in the industry. On the acceptance criterion this paper
-  set for itself in §7 — *does a stream published into somebody else's infrastructure
-  arrive intact* — **HLS passes today and MoQ does not.** Standards-track status is a
-  prediction about interop; HLS is the evidence that the prediction and the property are
-  different things.
-- **Commodity delivery already, not prospectively.** [Economics](economics.md) §4.9
-  argues MoQ *could* reach commodity relay pricing. Segmented HTTP is already there, from
-  a dozen suppliers, which is the position that argument is trying to reach.
-- **Standardised splice signalling.** The specification defines an explicit mapping of
-  SCTE-35 `splice_info_section()` into `EXT-X-DATERANGE`, so ad signalling has a specified
-  out-of-band representation rather than depending on an in-band PID surviving transit.
-- **Specified redundancy.** Redundant variant streams, and Content Steering with Pathway
-  Cloning, give client-driven failover between disjoint delivery paths as part of the
-  specification.
-
-**Where it does not fit primary distribution — from the specification, not from
-preference.**
-
-- **Single programme only, normatively.** "Transport Stream Segments MUST contain a single
-  MPEG-2 Program; playback of Multi-Program Transport Streams is not defined." A
-  multi-programme contribution mux cannot be carried as such. This is the sharpest
-  divergence: the opaque MoQ lane carries an MPTS verbatim, and it is also where the
-  second independent TS-over-MoQ implementation lands, since `moq2ts` selects one
-  programme out of an MPTS too ([interoperability](interoperability.md) §9.3).
-- **The DVB service layer is outside the model.** A TS segment's initialisation state is
-  defined as "a Program Association Table (PAT) followed by a Program Map Table (PMT)",
-  and each segment must carry both. SDT, NIT, EIT, TDT and TOT appear nowhere in the
-  specification. So the claim that TS-in-HLS *guarantees* carriage of the DVB components
-  is true of PIDs, PES, `stream_type` and PAT/PMT, and untrue of the service layer:
-  nothing forbids extra PIDs riding along, and nothing requires or preserves them.
-  That is the same residual the media-aware MoQ lane has (§4.1), reached by a different
-  route — and unlike that lane, there is no catalog through which the service layer could
-  be threaded.
-- **The timing problem is identical, and the specification is silent on it.** PCR,
-  constant bit rate, stuffing and null packets do not occur anywhere in the document.
-  Segmented HTTP delivery is as bursty as object delivery, so a reconstructed stream needs
-  the same edge grooming — byte-locked CBR, PCR re-stamp, null re-insertion — before a
-  hardware IRD will lock to it. **This is the strongest evidence for the paper's central
-  claim rather than against it:** the broadcast-grade layer above the transport is the hard
-  part, and it is required whichever Internet-native transport is chosen
-  ([architecture](architecture.md) §7.2).
-- **Latency is structural, and forecloses the sub-second case.** Low-Latency mode reaches
-  roughly 2–5 s in practice, bounded by part duration and hold-back. That is *within* the
-  tolerance §2 states for most primary distribution, so it is not a disqualifier — but the
-  one place MoQ's economic argument is unique is precisely a sub-second transport that a
-  commodity market can sell ([economics](economics.md) §4.9), and segmented HTTP does not
-  occupy it.
-- **Authorization is external.** Entitlement is signed URLs, cookies or DRM at the HTTP
-  layer, with revocation bounded by token lifetime and no session to drop. §3.1's
-  subscription-time authorization hook is a genuine structural difference, not a
-  packaging preference.
-- **The receiver is not an IRD.** An HLS client is not what the installed base has, so an
-  edge gateway must terminate and produce a conformant TS either way. HLS-with-TS is an
-  alternative *trunk* transport, not a way to reach existing receivers directly.
-
-**Neither alternative is HTTP/1.1-bound, which is a common misconception and matters
-here.** Low-Latency HLS *requires* delivery over HTTP/2 or HTTP/3, with the RFC 9218
-priority scheme mandatory on HTTP/3. Over HTTP/3 it therefore rides **the same QUIC
-substrate as MoQ**, with the same per-stream loss isolation. So "MoQ rides QUIC" is not a
-differentiator against LL-HLS-over-HTTP/3; what remains differentiating is the
-object/subscription model above the transport — push rather than playlist polling, native
-relay, and authorization at subscription. §3.1's first bullet should be read with that
-narrowing in mind.
-
-**The honest conclusion.** For an operator whose priority is faithful carriage of a
-single-programme service over commodity delivery with proven interop *today*, and whose
-latency budget is seconds rather than sub-second, **HLS carrying MPEG-TS is a stronger
-near-term choice than MoQ**, and a shorter path to a working service. MoQ's remaining case
-is narrower than this paper's framing suggests, and is best stated as four things:
-sub-second capability, verbatim multi-programme carriage, subscription-native revocable
-entitlement, and a push model with no manifest polling. Those are real and they matter for
-primary distribution specifically — but they are the case, and the case does not include
-carriage fidelity, interop or delivery economics, on all three of which segmented HTTP is
-currently ahead.
+**The honest conclusion.** MoQ's case is not general and should not be stated as though it
+were. It is six specific things — sub-second capability, verbatim *multi-programme* carriage,
+a portable enforcement point with an observable session, push rather than manifest polling,
+an egress a groomer can actually pace, and ~7 % less wire volume — and it does not include
+carriage fidelity on a single programme, interop, delivery economics or ecosystem maturity, on
+all of which segmented HTTP is currently ahead. The last item on each list should be read
+together: MoQ moves ~7 % fewer bytes, and those bytes currently cost five to ten times as much,
+so the volume advantage is a rounding error against the price of delivery. Nor does the choice
+affect the largest build: the grooming and egress layer is the distributor's on both data
+planes, though it has measurably more to absorb on the alternative.
 
 ---
 
@@ -367,6 +360,18 @@ is three-way — verbatim, stripped-and-regroomed, or media-aware — and it is 
 decision with a known price rather than a bandwidth gamble. **The opaque lane's own carriage
 cost remains unmeasured**, and MSFTS leaves null removal to the publisher, so "opaque" does
 not by itself decide which side of that price it lands on.
+
+**The same rule decides the comparison against segmented HTTP, and it is now measured there
+too.** HLS carrying MPEG-TS is byte-verbatim, so it carries the stuffing, and it lands at
+**1.056x the source TS rate over HTTP/3** at QUIC's 1200 B minimum datagram against the
+media-aware lane's 0.982x — a ~7 % saving that does not depend on datagram size, because both
+ride QUIC and pay identical framing ([evidence](evidence.md) §10). Read across all four
+measured or derived figures and the axis is not protocol at all: **every verbatim data plane
+sits between 1.03x and 1.06x, and only declining to be verbatim goes below 1.0x.** Two
+sub-results are worth carrying: HTTP's own overhead — response headers, playlist re-fetching
+and the request bytes back — is under 0.1 % of payload and so decides nothing; and HTTP/3 is the *more* expensive
+substrate, by ~2.6 points against HTTP/2 on TCP, since a 1500 B TCP path charges 2.7 % framing
+where a 1200 B QUIC datagram charges 5.5 %.
 
 **T-STD (buffer-model) conformance is a muxing property, distinct from PCR pacing.**
 The MPEG-2 Systems T-STD (Transport Stream System Target Decoder) is the reference
@@ -702,13 +707,18 @@ concealed by the exporter.
 - How much of MoQ's graceful-degradation advantage is recoverable under opaque TS
   carriage, and is a media-aware secondary lane worth the interop cost to regain
   it?
-- **Does MoQ beat HLS-with-TS on a route a broadcaster would actually buy?** This is now
-  the strongest live challenge to the thesis (§3.4). It is testable rather than
-  rhetorical, and the cheapest form is a head-to-head on one route measuring the four
-  things that decide it: achievable glass-to-glass latency at equal conformance, what each
-  preserves from a real DVB mux, wire cost, and whether either carries a multi-programme
-  service. The comparison against SRT was run and moved the sign on bandwidth; this one
-  has not been run at all, and it is against the alternative that is currently ahead.
+- **Does MoQ beat segmented HTTP on a route a broadcaster would actually buy?** This is the
+  strongest live challenge to the thesis (§3.4), and it is now partly answered. Measured, on
+  one route ([T14](../lab/test-14-data-plane-comparison.md)): the alternative's egress is
+  ~240× burstier and therefore harder to groom, its carriage of a single programme is
+  byte-verbatim, and it costs ~7 % more on the wire *because* it is verbatim — so two axes moved
+  to MoQ and one moved away, and the last two are the same finding. The low-latency arm has also
+  run, and divided: partial segments carrying MPEG-TS publish free and correctly, and no free
+  client fetches them, so the burst gap barely moves and the only receiver that could change that
+  is commercial. What is still open is therefore the cell that matters most — whether a commercial
+  ABR-to-TS gateway passes TR 101 290 P1/P2 on hardware, which now gates the latency comparison
+  too — plus multi-programme carriage, both blocked on kit the lab does not have
+  ([lab](../lab/planned-experiments.md)).
 - What does the opaque lane cost on the wire, and is verbatim carriage worth its
   bandwidth? Only the media-aware lane is measured (§4.1), where carriage comes out
   *below* SRT. The question is not MoQ-versus-SRT framing, which is a ~1.2-point

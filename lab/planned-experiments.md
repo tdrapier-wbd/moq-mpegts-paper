@@ -35,6 +35,79 @@ T12's reference receiver?**
 
 ---
 
+## T14 — remaining measurements (Gate 1 + Gate 2, both data planes)
+
+**Partly run.** Burst granularity, carriage fidelity and wire cost are measured and recorded in
+[test-14-data-plane-comparison.md](test-14-data-plane-comparison.md), which also holds the rigs, the
+environment and what the results do to
+[alternatives](../docs/alternatives.md). Three cells remain, each blocked on something the lab does not
+currently have.
+
+1. **Whether a commercial ABR-to-TS gateway, run as the distributor's own edge stage, passes
+   TR 101 290 P1/P2 on hardware.** Feed a MEG- or TITAN-Edge-class gateway an HLS-with-TS feed and
+   grade its TS output on the Gate 2 rig — PLL lock, P1/P2 clean, PCR accuracy inside 481 ns, no
+   interval above 40 ms, duration fidelity 1.000. The question is not whether a client's receiver
+   relieves the distributor of the hand-off, since the distributor does not supply that receiver; it
+   is whether such a box discharges the distributor's *own* grooming obligation. §4.4 of
+   [alternatives](../docs/alternatives.md) rests on datasheet claims and this converts them into a
+   finding either way. **Blocked on:** hardware. *Moves:* whether part of the broadcast-grade edge
+   layer is purchasable for segmented HTTP and not for MoQ, or whether the hand-off axis closes
+   entirely.
+2. **Glass-to-glass latency at equal conformance.** Tune each leg until its groomed egress passes the
+   *same* P1/P2 gate, then measure, reporting the composition rather than the total. Report arm B1's
+   floor alongside, because B1 is what off-the-shelf tooling gives. **Blocked on:** the same hardware
+   as measurement 1, and this is why the two have merged. Arm B2 has now run: partial segments can be
+   *published* with MPEG-TS free of charge, and no free client fetches them, so the only receiver that
+   could realise the low-latency arm is a commercial ABR-to-TS box. The sub-question this cell used to
+   carry — how far 200–330 ms parts close the 240× burst gap — is **answered**: not at all, because
+   nothing free gets at the parts. *Moves:* §5's structural floor.
+3. **Multi-programme carriage in practice.** HLS normatively excludes it ("Transport Stream Segments
+   MUST contain a single MPEG-2 Program"), and a cache does not parse the payload. Publish TS
+   segments containing an MPTS through a real CDN and record: does it deliver them, does a conformant
+   analyser accept the result, and does an ABR-to-TS gateway. **Blocked on:** a CDN account.
+   *Moves:* this now carries the *whole* of MoQ's carriage-fidelity advantage, because test-14 showed
+   single-programme carriage in TS segments is verbatim — so it is the one cell where a negative
+   result for HLS is the interesting one.
+
+**Deliberately not queued.** Wire cost's per-packet framing is derived from
+[T9](test-9-performance.md)'s real-path measurement rather than measured on the segmented-HTTP leg,
+because loopback's 16384 B MTU cannot price a packet and the HTTP-layer term that *is* measured is
+path-independent. Re-running arm B1 on the EC2 path under
+[`t9-overhead-wan.sh`](scripts/t9-overhead-wan.sh)'s accounting would confirm a multiplier, not move a
+result, so it ranks below all three cells above.
+
+**What none of this can settle.** One route, one source, one host. Nothing about whether a commodity
+MoQ relay market appears, nothing about operating either chain at scale, and — like every Gate 1
+result here — nothing about hardware acceptance except in measurement 1.
+
+---
+
+## T15 — RIST on the cadence instrument (extends T14)
+
+[alternatives](../docs/alternatives.md) §10.1 argues that RIST should hand a groomer the *cleanest*
+egress of the four transports considered, because it is a packet-level tunnel with a jitter buffer
+that reconstructs the source's own pacing rather than reassembling a stream from objects or segments.
+**That is reasoned, not measured, and it is the largest unmeasured structural claim in the paper.**
+
+Run a RIST leg through the same instrument as T14 — `libRIST`'s `ristsender`/`ristreceiver` (Simple
+and Main profile), the receiver's ungroomed output piped into
+[`t13-cadence.py`](scripts/t13-cadence.py) — and report median burst, gap distribution and 10 ms
+peak/mean against the existing MoQ (12.4 kB, 149 ms, 23.95×) and segmented-HTTP (2.95 MB, 4.01 s,
+231.07×) columns. Add SRT on the same instrument while the rig is up, since T4 ran SRT for throughput
+but never for cadence.
+
+Two outcomes, both useful. If RIST's egress is near-source-paced, then **grooming burden ranks
+inversely to scalability** across the four transports, which is a sharper statement of the paper's
+trade-off than it currently makes, and it strengthens rather than weakens the case for RIST on routes
+that do not need internet-scale fan-out. If it is not — if the jitter buffer's drain is as bursty as
+an object model's — then a significant part of the incumbent transports' perceived hand-off advantage
+is folklore, which is worth knowing before anyone cites it in a procurement.
+
+*Needs:* `libRIST` built locally; no new hardware. *Moves:* §4's hand-off axis, §10.1, and the
+groomer-agnosticism argument in [implementation](../docs/implementation.md) §9.1.
+
+---
+
 ## Dual-path 1+1: remaining conditions (T12)
 
 All four arms are run; results and limitations are in

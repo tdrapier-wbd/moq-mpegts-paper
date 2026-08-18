@@ -1,6 +1,10 @@
 # Operations
 
 Status: working draft
+Layer: **above the transport** — the operating model, service levels, egress monitoring and runbooks
+are owned by the distributor whichever data plane carries the bytes. What differs between them is the
+set of failure modes to watch for upstream of the groomer, collected in §9; §3's systems-domain
+signals are the MoQ-specific exception.
 Scope: how the platform is run for contracted content — the operating model,
 service levels, monitoring, runbooks, incident and change management, and the
 readiness a broadcast NOC would require. This is the deep-dive companion to the
@@ -57,7 +61,9 @@ presenting unvalidated numbers as fact.
 ## 3. Monitoring and alerting
 
 The platform must be observable in two languages simultaneously
-([architecture](architecture.md) §12), and alerting must bridge them.
+([architecture](architecture.md) §12), and alerting must bridge them. The broadcast-domain
+half is identical on either data plane; the systems-domain half below is written against a
+MoQ relay fabric, and §9 gives the segmented-HTTP equivalents.
 
 - **Golden signals (systems domain).** Latency, traffic, errors, saturation
   across publishers, relays, and gateways; session and subscription counts; cache
@@ -245,7 +251,30 @@ change is performed *without* a maintenance window visible to the feed:
   hardware-IRD vendors, since a broadcast-impacting fault may originate outside the
   platform's own components.
 
-## 9. Operational readiness checklist
+## 9. What changes on a segmented-HTTP data plane
+
+Almost nothing in §§1–8 does. The operating model, the SLO classes, the egress TR 101 290
+probing, the groomer silence detection and the ST 2022-7 runbooks are all owned by the
+distributor and are written against the *hand-off*, which does not know how the feed
+arrived. What differs is the set of failure modes the NOC watches for upstream of the
+groomer, and they are worth naming because they are unfamiliar to a broadcast NOC:
+
+| Concern | On MoQ | On segmented HTTP |
+|---|---|---|
+| Liveness signal | subscription state; relay memory and per-connection ceiling (§3) | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
+| Silent failure mode | publisher with no subscriber dies at ~30 s to the QUIC idle timeout ([evidence](evidence.md) §7) | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
+| Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal* here, so an alarm threshold set below the segment duration will chatter and one set above it is slow |
+| Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
+| Recovery | reconnect and resubscribe | re-fetch; the segment is still addressable, which is genuinely easier ([alternatives](alternatives.md) §3) |
+
+The second and third rows are the ones that catch people. Segmented HTTP's failure modes
+are *quieter* than MoQ's: a stale playlist and a warm cache produce no error anywhere,
+and the first symptom is content that has stopped advancing. A NOC moving from MoQ to
+segmented HTTP should expect to replace connection-liveness alarms with playlist-age and
+media-timestamp-advance alarms, and to widen its groomer-underrun thresholds to match the
+larger buffer.
+
+## 10. Operational readiness checklist
 
 Before a route carries contracted content:
 
@@ -262,7 +291,7 @@ Before a route carries contracted content:
 - **Drills** — failover, revocation, and regional-failure drills executed and
   timed at least once against the real topology, not just in theory.
 
-## 10. Open questions
+## 11. Open questions
 
 - What is the realistic fully-loaded operational cost (NOC + on-call + tooling)
   for an always-on contracted feed, and how does it compare with the incumbent's

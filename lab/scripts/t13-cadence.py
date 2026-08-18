@@ -2,6 +2,7 @@
 """T13 wire cadence: what a groomer actually puts on the socket.
 
     t13-cadence.py capture <port> <out-prefix> <seconds> [rtp]
+    t13-cadence.py pipe <out-prefix> <seconds>
     t13-cadence.py report <capture.csv> [...]
 
 `capture` timestamps every datagram arriving on a loopback port, writing
@@ -9,6 +10,15 @@
 `<prefix>.ts` (the stream as received, RTP header stripped when `rtp` is given)
 so one capture answers both the cadence and the PCR question. Reading the socket
 directly needs no privileges, which is why this rather than a pcap.
+
+`pipe` does the same for a stream arriving on stdin, which is what T14
+measurement 2 needs: the cadence of an *ungroomed* egress — `tsp -I hls` or
+`moq export ts` — before any pacer touches it. Each `read()` returns whatever the
+writer has buffered, so a burst appears as consecutive full-size reads at ~zero
+gap and an idle period as one long gap, the same shape a datagram capture sees.
+Two limits worth stating when quoting the numbers: the read size caps resolution,
+so bursts are resolved at or above `CHUNK`, and the pipe buffer itself smooths
+anything finer. Both legs must be measured with the same `CHUNK` to compare.
 
 `report` summarises the gap distribution and the delivered rate in 10 ms and 1 s
 windows. The 1 s series is the one that exposes a groomer which emits a
@@ -19,6 +29,7 @@ average comes out right while the wire is nothing an IRD would accept.
 from __future__ import annotations
 
 import csv
+import os
 import socket
 import statistics as stats
 import sys
@@ -26,6 +37,19 @@ import time
 
 WINDOW_10MS = 10_000_000
 WINDOW_1S = 1_000_000_000
+CHUNK = 65536
+
+
+def write_records(prefix: str, records: list[tuple[int, int]], unit: str) -> None:
+    with open(prefix + ".csv", "w") as fh:
+        fh.write("t_ns,bytes\n")
+        for arrival, length in records:
+            fh.write(f"{arrival},{length}\n")
+
+    span = records[-1][0] / 1e9 if records else 0.0
+    total = sum(length for _, length in records)
+    rate = f", {total * 8 / span / 1e6:.3f} Mb/s" if span else ""
+    print(f"captured {len(records):,} {unit}, {total:,} bytes, {span:.2f} s{rate}")
 
 
 def capture(port: int, prefix: str, seconds: float, rtp: bool) -> None:
@@ -53,15 +77,28 @@ def capture(port: int, prefix: str, seconds: float, rtp: bool) -> None:
             records.append((now - first, len(datagram)))
             stream.write(datagram[12:] if rtp else datagram)
 
-    with open(prefix + ".csv", "w") as fh:
-        fh.write("t_ns,bytes\n")
-        for arrival, length in records:
-            fh.write(f"{arrival},{length}\n")
+    write_records(prefix, records, "datagrams")
 
-    span = records[-1][0] / 1e9 if records else 0.0
-    total = sum(length for _, length in records)
-    rate = f", {total * 8 / span / 1e6:.3f} Mb/s" if span else ""
-    print(f"captured {len(records):,} datagrams, {total:,} bytes, {span:.2f} s{rate}")
+
+def pipe(prefix: str, seconds: float) -> None:
+    """Timestamp reads from stdin, writing the same csv/ts pair as `capture`."""
+    fd = sys.stdin.fileno()
+    records: list[tuple[int, int]] = []
+    first: int | None = None
+    with open(prefix + ".ts", "wb") as stream:
+        while True:
+            block = os.read(fd, CHUNK)
+            if not block:
+                break
+            now = time.perf_counter_ns()
+            if first is None:
+                first = now
+            elif (now - first) / 1e9 > seconds:
+                break
+            records.append((now - first, len(block)))
+            stream.write(block)
+
+    write_records(prefix, records, "reads")
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -96,7 +133,7 @@ def report(paths: list[str]) -> None:
         fine = windowed(records, WINDOW_10MS)
         coarse = windowed(records, WINDOW_1S)
         name = path.split("/")[-1].removesuffix(".csv")
-        print(f"=== {name}: {len(records):,} datagrams over {records[-1][0] / 1e9:.2f} s")
+        print(f"=== {name}: {len(records):,} records over {records[-1][0] / 1e9:.2f} s")
         print(f"    gap us   mean {stats.mean(gaps):8.1f}  p50 {percentile(gaps, 50):8.1f}"
               f"  p95 {percentile(gaps, 95):8.1f}  p99 {percentile(gaps, 99):8.1f}"
               f"  max {max(gaps):9.1f}")
@@ -113,6 +150,8 @@ def main() -> None:
     if sys.argv[1] == "capture":
         capture(int(sys.argv[2]), sys.argv[3], float(sys.argv[4]),
                 len(sys.argv) > 5 and sys.argv[5] == "rtp")
+    elif sys.argv[1] == "pipe":
+        pipe(sys.argv[2], float(sys.argv[3]))
     elif sys.argv[1] == "report":
         report(sys.argv[2:])
     else:

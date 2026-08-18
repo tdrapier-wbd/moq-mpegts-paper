@@ -1,22 +1,26 @@
-# MoQ for Broadcast Primary Distribution
-Internet-Native Primary Distribution for Professional Broadcast
+# Internet-Native Primary Distribution for Professional Broadcast
+MPEG-TS over MoQ and over segmented HTTP, evaluated together
 
-**A technical evaluation of Media over QUIC (MoQ) as a candidate transport for broadcast-grade primary distribution.**
+**A technical evaluation of Internet-native primary distribution for professional broadcast, on the two data planes that can carry it: Media over QUIC, and segmented HTTP carrying MPEG-TS.**
 
 Status: working draft. This paper is deliberately critical: the goal is to find the fastest way to *disprove* the thesis, not to sell it. AI assistance was used in drafting.
 
-> **In one line.** *Media over QUIC (MoQ)* is a live-media transport being standardised in the IETF and built on the same QUIC / HTTP-3 substrate that CDNs and hyperscalers already operate globally. This paper asks a narrow, technical question: **does MoQ deserve serious evaluation as a future primary distribution technology for professional broadcast workflows?**
+> **In one line.** Broadcast's trunk layer is being pushed off satellite and managed fibre onto the public internet. This paper asks what an Internet-native replacement has to do, and which data plane can do it: **Media over QUIC (MoQ)**, a live-media transport being standardised in the IETF, or **segmented HTTP carrying MPEG-TS** (HLS with TS segments, over HTTP/3), which is already specified, interoperable and sold over commodity delivery. Most of the answer turns out not to be about the transport at all.
+
+**Why two data planes and not one.** The obvious comparison for a new live transport is against the point-to-point incumbents — SRT, Zixi, RIST — and it is the wrong one to lead with, because it flatters anything that can fan out at all. The demanding comparison is against segmented HTTP carrying MPEG-TS, which is already specified, universally interoperable and sold over commodity delivery, and which on most axes an operator decides on is **ahead of MoQ today** ([Alternatives](docs/alternatives.md)). Hence the shape of this paper: two candidate data planes, one shared broadcast-grade layer above them, and a conclusion about that layer rather than about a protocol.
 
 ---
 
 ## What this paper is — and is not
 
 **It is:**
-- A technical argument that the pressures reshaping broadcast (cloud-native plants, API-driven operations, shrinking linear revenue, global/dynamic rights) are pushing primary distribution toward an Internet-native model, and that MoQ is among the few live-media transports whose *architecture* fits that model — chiefly through native relay and 1:N amplification.
-- A reference architecture for a broadcast-grade distribution platform built on MoQ, including the unglamorous interop, grooming, entitlement, and observability layers above the transport.
-- Explicit about what remains unproven, and about where MoQ's advantage over existing IP transports is narrow.
+- A technical argument that the pressures reshaping broadcast (cloud-native plants, API-driven operations, shrinking linear revenue, global/dynamic rights) are pushing primary distribution toward an Internet-native model.
+- A head-to-head evaluation of the two data planes that can serve that model, on scaling, reliability, hand-off complexity, interoperability, latency, entitlement, carriage fidelity, economics and maturity ([Alternatives](docs/alternatives.md)).
+- A reference architecture for a broadcast-grade distribution platform — the unglamorous interop, grooming, entitlement, redundancy and observability layers above the transport, nearly all of which is common to both data planes. It is written against MoQ because that is what the prototype runs on, and the parts that are transport-specific are marked as such.
+- Explicit about what remains unproven, and about where MoQ's advantage over existing IP transports and over segmented HTTP is narrow.
 
 **It is not:**
+- A claim that MoQ beats segmented HTTP. On current evidence it does not, except on latency, on how easily its egress can be groomed into a clean hand-off, and on wire volume by ~7 % ([Alternatives](docs/alternatives.md) §12).
 - A claim that MoQ is production-ready today. The wire protocol is pre-standard and unstable (see [Transport](docs/transport.md)).
 - A claim that Internet-native distribution is *already* economically superior to a depreciated satellite transponder or an existing IP contract. The always-on case is modelled numerically, and the headline is that **cost is decided by commercial terms rather than by transport engineering**: which market delivery is bought in moves the bill by an order of magnitude, the choice of transport by a few percent ([Economics](docs/economics.md) §4).
 
@@ -27,9 +31,15 @@ Status: working draft. This paper is deliberately critical: the goal is to find 
 
 ## Bottom line up front
 
-MoQ is a credible **transport foundation**. It is open-source, standards-track, and prototypes show it works: the media-aware lane carries a full contribution mux end-to-end over a public-internet cloud relay with 0 continuity errors, a downstream groomer takes the bursty egress to exact CBR (0 % of PCR intervals > 40 ms where the carrier rate is matched to the content, and no PCR outside TR 101 290's ±500 ns accuracy limit on file), and switching the sender off QUIC's default CUBIC to BBR holds full-rate, byte-complete delivery on par with SRT under loss — though which BBR generation suits a permanent fixed-rate trunk is not yet settled ([Evidence](docs/evidence.md) §1, §3 and §6; campaign record in [lab](lab/README.md)). The engineering that matters for broadcast is the **broadcast-grade layer above the transport**: IRD-accurate egress and PCR grooming, entitlement and multi-tenant control, redundancy, observability, and interop with the installed base (MPEG-TS, RTP, SRT/Zixi, hardware IRDs). Whether that layer can meet broadcast's trust bar on a best-effort substrate is a real, testable question, and it is *not yet proven*.
+**The transport is not the decision.** Both candidate data planes ride QUIC, both need the same grooming layer before a hardware IRD will lock to them, both are unicast at the last mile, and they land within 7 % of the same wire volume. Segmented HTTP is ahead today where it counts commercially — universally interoperable, sells over commodity delivery now, the more robust recovery model, and an off-the-shelf path back to a transport stream where MoQ has one implementation. It is also, measured, byte-verbatim for a single programme — so the fidelity advantage usually assumed for MoQ survives only on a multi-programme mux. What MoQ has is latency, and one asymmetry that is easy to underweight until it is measured: **its egress is two orders of magnitude easier to pace.** At 2 s segments the alternative bursts at ~2.95 MB against MoQ's 12.4 kB and stops for over a second 24 times a minute, where MoQ never stops for more than 149 ms ([Evidence](docs/evidence.md) §10) — and because burst size *is* segment size, that is the same knob as latency, not a separate one. MoQ also moves ~7 % fewer bytes, though those bytes currently cost five to ten times as much to deliver, so that one is a rounding error against the price. So the decision rule is narrow and testable: **if the destinations can absorb seconds — nearer six of them unless a commercial ABR-to-TS receiver is bought, since partial segments publish free but no free client fetches them — segmented HTTP is the better engineering choice today; if they cannot, MoQ is the only Internet-native candidate with commodity delivery in prospect** ([Alternatives](docs/alternatives.md) §12).
 
-**Operational maturity is a separate risk from the protocol being pre-standard, and it cuts both ways.** Most of what this evaluation found wanting sits in the implementations and tooling being built alongside the standard rather than in MoQ itself: defaults tuned for demos rather than trunk routes, memory held by the QUIC library beneath the relay, thin observability, and interop conventions the drafts leave open to more than one reading. That is the expected shape of implementations maturing *with* a specification rather than after it, and several gaps found here closed upstream during the campaign. The counterweight is that a broadcaster procures an implementation, not a specification — so much of what reads as "MoQ does X" is really "this build does X", and an evaluation of a pre-1.0 ecosystem is tracking a moving target ([Evidence](docs/evidence.md) §1, §8 and §9).
+**What that leaves is the layer above the transport, and it is the same layer either way** — IRD-accurate egress and PCR grooming, 1+1 with byte-identical legs and receiver-side selection, entitlement and multi-tenant control, observability in broadcast terms, and interop with the installed base. Neither specification addresses any of it. That is where nearly all the measured work here sits, which is why it transfers between the two data planes, and whether that layer can meet broadcast's trust bar on a best-effort substrate is the real question — still open, and **not yet proven**.
+
+**And that layer does not transfer to the client on either data plane.** A distributor no longer supplies its clients' receiving equipment, so the deliverable is a clean, paced transport stream at a demarcation the distributor owns, and the assumption has to be that many receivers want nothing else. Where a client happens to run a modern software-defined receiver that takes segmented HTTP directly, that is useful optionality on the client's side of the line; it is not something a design can rest on, and there is no equivalent for MoQ. Neither specification says a word about PCR, constant bit rate or stuffing, so the grooming stage is required and owned whichever data plane is chosen ([Alternatives](docs/alternatives.md) §4).
+
+MoQ is a credible **transport foundation**. It is open-source, standards-track, and prototypes show it works: the media-aware lane carries a full contribution mux end-to-end over a public-internet cloud relay with 0 continuity errors, a downstream groomer takes the bursty egress to exact CBR (0 % of PCR intervals > 40 ms where the carrier rate is matched to the content, and no PCR outside TR 101 290's ±500 ns accuracy limit on file), and switching the sender off QUIC's default CUBIC to BBR holds full-rate, byte-complete delivery on par with SRT under loss — though which BBR generation suits a permanent fixed-rate trunk is not yet settled ([Evidence](docs/evidence.md) §1, §3 and §6; campaign record in [lab](lab/README.md)). Everything measured there is evidence about the layer above the transport as much as about MoQ, which is the point.
+
+**Operational maturity is a separate risk from the protocol being pre-standard, and it cuts both ways.** Most of what this evaluation found wanting sits in the implementations and tooling being built alongside the standard rather than in MoQ itself: defaults tuned for demos rather than trunk routes, memory held by the QUIC library beneath the relay, thin observability, and interop conventions the drafts leave open to more than one reading. That is the expected shape of implementations maturing *with* a specification rather than after it, and several gaps recorded here have since closed upstream. The counterweight is that a broadcaster procures an implementation, not a specification — so much of what reads as "MoQ does X" is really "this build does X", and an evaluation of a pre-1.0 ecosystem is tracking a moving target ([Evidence](docs/evidence.md) §1, §8 and §9).
 
 ---
 
@@ -37,14 +47,13 @@ MoQ is a credible **transport foundation**. It is open-source, standards-track, 
 
 Traditional primary distribution — satellite, leased fibre, MPLS — succeeds by *engineering determinism into a dedicated or managed layer and charging for the guarantee*. That model works and its buyers are structurally conservative. But the plant around it has gone software-defined and API-driven, linear revenue is declining (pressuring the fixed cost of dedicated capacity), rights are increasingly global and dynamic, and the QUIC/HTTP-3 substrate needed for an Internet-native alternative now exists as a commodity. The full argument, with the strongest counter-cases, is in [Vision](docs/vision.md).
 
-## Why MoQ, and how it differs from the alternatives
+## Which data plane, and why the question is narrower than it looks
 
-There are two classes of incumbent, and MoQ has to answer both. SRT, Zixi and RIST already move a linear feed reliably from A to B; segmented HTTP (HLS carrying MPEG-TS, and DVB-DASH) already delivers over commodity CDN at seconds of latency with interop MoQ does not yet have. MoQ's *incremental* advantage on the narrow point-to-point job is real but narrow, and against segmented HTTP it reduces to four things — sub-second capability, verbatim multi-programme carriage, subscription-native entitlement, and push rather than manifest polling ([Transport](docs/transport.md) §3.3–§3.4). What distinguishes it is architectural, not raw performance:
+There are three candidates in two classes. SRT, Zixi and RIST already move a linear feed reliably from A to B — RIST notably well, being the only one of these transports that is both openly specified and demonstrably multi-vendor, and probably the cleanest hand-off of any of them ([Alternatives](docs/alternatives.md) §10.1). What none of them can do is fan out over a market: replication is a point the operator runs, because a CDN will take SRT at its door as contribution ingest and will not carry it to the destination, so an SRT trunk to N endpoints is priced on own transit, hyperscaler egress, or a managed media service with a 50-output quota ([Economics](docs/economics.md) §4.9). Segmented HTTP already delivers over commodity CDN at seconds of latency, with interop and maturity MoQ does not have, and an off-the-shelf path back to a transport stream. Against that field, MoQ's case reduces to four claims: sub-second capability, verbatim multi-programme carriage, a portable enforcement point with an observable session, and push rather than manifest polling ([Alternatives](docs/alternatives.md)). The architecture underneath them is what distinguishes MoQ, not raw performance:
 
-- **Native relay and 1:N amplification** (the advantage we put forward first): a single protocol carries a feed from contribution through a relay fabric that fans out point-to-multipoint, with caching, on the QUIC/HTTP-3 substrate CDNs and hyperscalers already run. The economic value of that fan-out is narrower than it sounds — it removes duplicated backhaul and uplink, not last-mile egress, which stays linear in destinations for every transport including this one ([Economics](docs/economics.md) §4.8).
+- **Native relay and 1:N amplification** (the advantage usually cited first, and the weakest of them): a single protocol carries a feed from contribution through a relay fabric that fans out point-to-multipoint, with caching, on the QUIC/HTTP-3 substrate CDNs and hyperscalers already run. The economic value of that fan-out is narrower than it sounds — it removes duplicated backhaul and uplink, not last-mile egress, which stays linear in destinations for every transport including this one ([Economics](docs/economics.md) §4.8).
 - **A shape a commodity delivery market can sell** — the strongest economic argument here, and a claim about markets rather than a measurement. A MoQ relay *is* a cache, so relaying maps onto machinery CDNs already run at scale; SRT has no object model or native relay, so fanning it out means a stateful media gateway per stream per destination. That is why no CDN sells SRT relay as a commodity product and one already sells MoQ relay, and why MoQ is the first *sub-second* broadcast-grade transport whose price could follow commodity delivery down rather than sitting at hyperscaler rates ([Economics](docs/economics.md) §4.9). The word sub-second is load-bearing: segmented HTTP already has the commodity delivery market, so this argument is about the latency band it cannot reach, not about delivery economics in general.
-- **Subscription-oriented delivery**, which maps directly onto dynamic, revocable entitlement.
-- **A native authorization point** at subscription (the platform layers path-scoped tokens, mTLS, and expiry on it).
+- **Subscription-oriented delivery with a native authorization point** at subscription (the platform layers path-scoped tokens, mTLS, and expiry on it). The advantage is *not* revocation speed — segmented HTTP authorizes every request and re-fetches a low-latency playlist each part duration, so its worst case is about one request interval. It is that the enforcement point is a relay you can operate, so the policy is yours and portable, and that a subscription is a live, queryable fact rather than something inferred from delivery logs ([Alternatives](docs/alternatives.md) §7).
 - **Per-stream delivery** — a lost packet stalls only its own object, not the whole multiplex — with **graceful multi-rendition degradation** (strongest on the default media-aware lane, constrained on the opaque fallback). Loss resilience itself is a controller choice, not a free protocol property: QUIC's default CUBIC *collapses* under loss, while BBR restores full-rate delivery *on par with* SRT — parity, not superiority ([Transport](docs/transport.md) §3.1, [Evidence](docs/evidence.md) §6).
 
 These matter most at fan-out scale and heterogeneity — precisely where primary distribution is *least* heterogeneous, so the fit must be tested, not assumed. Developed in [Vision](docs/vision.md) and [Transport](docs/transport.md).
@@ -55,15 +64,17 @@ The strongest reasons the thesis fails, each testable rather than rhetorical:
 
 - **The transport isn't stable enough (highest technical risk).** MoQ is pre-standard; recent drafts are "almost a completely new protocol," while broadcasters need 5–10 year stability. *Mitigation:* keep the media and control layers transport-independent (already done — see [Evidence](docs/evidence.md)), so the control plane can run over today's transports if MoQ slips ([Transport](docs/transport.md) §5.2).
 - **MoQ's advantage over SRT/Zixi/RIST is too narrow for *this* job (highest thesis risk).** The head-to-head has run, and it moved the sign on the line carrying most of the cost: MoQ's media-aware lane puts 0.982x the source TS rate on the wire against SRT's 1.037x ([Evidence](docs/evidence.md) §8). But that ~5 % is the null stuffing MoQ declines to carry, so it travels with the source's stuffing ratio — a tightly packed carrier converges the two to a ~1.2-point floor, and byte-verbatim carriage forgoes it entirely. The narrow case is therefore still open, and the thesis cannot rest on bandwidth.
-- **A specified, universally interoperable alternative already carries MPEG-TS (newly the strongest challenge).** HLS has carried MPEG-TS since 2009, and its current edition folds in low-latency mode. It is explicitly *not* an Internet standard, yet it interoperates across essentially every CDN, packager and analyser — while MoQ, which *is* standards-track, currently carries media only within a single implementation. On carriage interop, delivery economics and maturity, segmented HTTP is ahead today, and its 2–5 s latency sits inside the tolerance this paper states. *Test (not run):* a head-to-head on one real route, measuring latency at equal conformance, what each preserves from a real DVB mux, wire cost, and multi-programme carriage ([Transport](docs/transport.md) §3.4).
-- **Hardware IRDs reject groomed MoQ output (potential showstopper).** MoQ's object/burst model yields PCR that hardware IRDs flag on TR 101 290 P1/P2 — inherent, not a bug. Grooming addresses it but must be *proven on real hardware*. *Test (not yet run):* a clean P1/P2 pass on real IRDs ([Evidence](docs/evidence.md), [Architecture](docs/architecture.md) §7.2 and §17). Note this risk is transport-independent: no Internet-native transport, MoQ or HTTP-based, delivers IRD-conformant timing without an edge grooming stage.
+- **A specified, universally interoperable alternative already carries MPEG-TS (the strongest challenge).** HLS has carried MPEG-TS since 2009, and its current edition folds in low-latency mode over HTTP/2 or HTTP/3 — so it rides the same QUIC substrate. It is explicitly *not* an Internet standard, yet it interoperates across essentially every CDN, packager and analyser, while MoQ, which *is* standards-track, currently carries media only within a single implementation. It is ahead today on interop, delivery economics, maturity and recovery model, it is byte-verbatim for a single programme (measured), and its 2–5 s latency sits inside the tolerance this paper states for most routes — though reaching that band *with* MPEG-TS turns out to be blocked in a specific and awkward place: partial segments carrying MPEG-TS can be **published** free of charge with Apple's macOS-only tools, and no freely available client will **fetch** them, so free software lands nearer 6 s whatever the publisher emits, and the only candidate receiver is commercial ABR-to-TS hardware (measured). What it does *not* do is remove the broadcast-grade edge stage: the obligation to hand a client a clean paced TS is the distributor's on either data plane, and the alternative gives that stage measurably more to absorb ([Evidence](docs/evidence.md) §10). *Test (partly run):* four rows of the head-to-head are measured; the cell that would move the paper most — a commercial ABR-to-TS gateway on real hardware — needs kit this lab does not have ([Alternatives](docs/alternatives.md) §12).
+- **Hardware IRDs reject groomed output, on either data plane (potential showstopper).** Bursty delivery yields PCR that hardware IRDs flag on TR 101 290 P1/P2 — inherent to Internet-native carriage, not a bug in any one protocol. Grooming addresses it but must be *proven on real hardware*. *Test (not yet run):* a clean P1/P2 pass on real IRDs ([Evidence](docs/evidence.md), [Architecture](docs/architecture.md) §7.2 and §17). The *requirement* is transport-independent, and so is the ownership of it: no Internet-native transport, MoQ or HTTP-based, delivers IRD-conformant timing without an edge grooming stage; the HLS specification mentions PCR, CBR, stuffing and null packets nowhere at all; and since the distributor no longer supplies its clients' receivers, that stage sits on the distributor's side of the demarcation either way. Off-the-shelf tools groom neither — and measured, the alternative needs *more* grooming, not less, because segment-granular bursts are ~240× coarser than MoQ's frame-granular ones ([Evidence](docs/evidence.md) §10, [Alternatives](docs/alternatives.md) §4).
 - **Relay portability never arrives, which removes the strongest economic argument.** The commodity-relay case assumes a feed can be carried over a relay somebody else operates, and treating relay capacity as a substitutable commodity is what [Economics](docs/economics.md) §4.9 rests on. Measured against all eight other registered public relays, no media arrives at all. Version negotiation is *not* the obstacle — the nearest cause is an announce convention the draft permits either way — but the eight failures have at least four distinct causes, so no single fix restores portability ([Evidence](docs/evidence.md) §9). Until it is demonstrated, single-vendor dependence is the realistic position and "commodity relay" is an aspiration.
 
 ---
 
-## MoQ in broadcast terms
+## The two data planes in broadcast terms
 
-The documents below use MoQ's vocabulary. This is the whole of it, in the nearest broadcast equivalent:
+The documents below use both vocabularies. This is the whole of each, in the nearest broadcast equivalent. The two are worth reading side by side, because several rows are the same idea under different names — a **group** and a **segment** are both "the point a receiver can join at", and a **catalog** and a **Media Initialization Section** are both "what PAT/PMT tells you".
+
+### MoQ
 
 | MoQ term | What it means here |
 |---|---|
@@ -77,28 +88,60 @@ The documents below use MoQ's vocabulary. This is the whole of it, in the neares
 | **Route reselect** | A relay switching from a failed publisher to a standby carrying the same feed. |
 | **Publisher / subscriber** | The sending and receiving endpoints. In this paper they are `moq import ts` and `moq export ts`, which convert between MPEG-TS and MoQ tracks. |
 
+### Segmented HTTP (HLS carrying MPEG-TS)
+
+Terms are from [HTTP Live Streaming 2nd Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/); the comparison that uses them is [Alternatives](docs/alternatives.md).
+
+| HLS term | What it means here |
+|---|---|
+| **Media Segment** | A few seconds of one programme as a standalone file. Here it is an MPEG-TS file, and it **must carry exactly one MPEG-2 programme** — the constraint that rules out a contribution mux ([Alternatives](docs/alternatives.md) §6). The nearest MoQ analogue is a group. |
+| **Partial Segment** (`EXT-X-PART`) | A fraction of a segment, typically 200–330 ms, published before the segment completes. This is what makes Low-Latency mode low-latency, and it may also be MPEG-TS. The nearest MoQ analogue is an object. |
+| **Media Initialization Section** | What a receiver needs before it can decode a segment. For MPEG-TS it is defined as a PAT followed by a PMT, and every segment must carry both. Note what is *not* in it: SDT, NIT, EIT, TDT and TOT appear nowhere in the specification. |
+| **Media Playlist** | The list of segments currently available for one rendition, re-fetched continuously. It is the closest thing to a subscription: there is no session, only a receiver repeatedly asking what exists now. |
+| **Multivariant Playlist** | The top-level list of renditions and their properties. Loosely a catalog. |
+| **Blocking Playlist Reload** | The server holds a playlist request open until the part the receiver asked for exists, instead of answering "nothing new yet". It is how a pull protocol approximates push, and it is why the delivery path must not time out held requests. |
+| **`PART-HOLD-BACK`** | How far back from the live edge a receiver must start. At least twice, and preferably three times, the part duration — the structural floor under Low-Latency HLS's latency ([Alternatives](docs/alternatives.md) §5). |
+| **Availability Duration** | How long a segment stays fetchable after it leaves the playlist. This is the retry window, and it is what makes recovery a cache problem rather than a session problem ([Alternatives](docs/alternatives.md) §3.2). |
+| **`EXT-X-DATERANGE`** | Where SCTE-35 goes: the specification defines an explicit mapping of `splice_info_section()` into a playlist tag, so splice signalling travels out of band rather than depending on an in-band PID surviving transit. |
+| **Redundant Variant Stream / Content Steering** | Two disjoint delivery paths for the same feed, and the mechanism by which a receiver moves between them. The specified equivalent of a 1+1 pair with receiver-side selection. |
+| **ABR2TS** *(vendor term, not in the specification)* | The stage that turns segments back into a continuous transport stream for the installed base. Professional IRDs and edge gateways list it as an input mode; a distributor may buy such a box as its *own* edge stage, but cannot assume a client's receiver has one, so this does not remove the hand-off obligation ([Alternatives](docs/alternatives.md) §4). |
+
 ---
 
 ## Repository
 
-Read [Vision](docs/vision.md) for the *why*, [Transport](docs/transport.md) for *why MoQ specifically*, [Architecture](docs/architecture.md) for *how it would be engineered*, and [Implementation](docs/implementation.md) for *how to build and test it*. The remaining documents are topic deep-dives.
+**The documents are organised in three layers, because that is the paper's argument.** If the
+conclusion is that the data plane is the small part of the problem, the structure should show which
+part is which. Every document in `docs/` declares its layer in its header:
 
-### The paper (`docs/`) — the design and what we've learned
+| Layer | What it covers | Depends on the data plane? |
+|---|---|---|
+| **The requirement** | What Internet-native primary distribution has to do, before any transport is chosen. | No |
+| **The data plane** | Which transport carries the bytes, and the case for each. | It *is* the choice |
+| **Above the transport** | Everything that makes the result broadcast-grade: IRD-accurate egress and PCR grooming, 1+1 redundancy, entitlement, control, observability, interop with the installed base. | **No — required and owned identically on both** |
 
-| Document | Description |
-|----------|-------------|
-| [Vision](docs/vision.md) | Why broadcast primary distribution is changing — industry problem, opportunity, and critical analysis. |
-| [Transport](docs/transport.md) | Why MoQ specifically; QUIC/WebTransport, MPEG-TS/MSFTS carriage, and draft-stability strategy. |
-| [Architecture](docs/architecture.md) | End-to-end reference architecture for a broadcast-grade MoQ distribution platform. |
-| [Implementation](docs/implementation.md) | Components, prerequisites, reference deployment, and the test path to the hardware-IRD proof. |
-| [Relay](docs/relay.md) | Relay fabric, routing, fan-out, federation, and resilience. |
-| [Control Plane](docs/control-plane.md) | Provisioning and orchestration. |
-| [Entitlement](docs/entitlement.md) | Dynamic, revocable distribution rights. |
-| [Security](docs/security.md) | Identity, authentication, and threat model. |
-| [Interoperability](docs/interoperability.md) | IRDs, MPEG-TS, RTP, ST 2022-7, SRT, Zixi. |
-| [Operations](docs/operations.md) | NOC model, SLOs, monitoring, and runbooks. |
-| [Economics](docs/economics.md) | Cost framework, and a numeric model of the always-on case at published rates — MoQ against SRT, managed services, commodity CDN delivery and satellite. |
-| [Evidence](docs/evidence.md) | What the working prototype proved — the empirical basis for the claims above. |
+The third row is the paper's substance and the reason the transport choice does not settle much. Read
+[Vision](docs/vision.md) for the *why*, [Alternatives](docs/alternatives.md) for *which data plane*,
+[Architecture](docs/architecture.md) for *how the layer above it is engineered*, and
+[Implementation](docs/implementation.md) for *what you would assemble, on either*.
+
+### The paper (`docs/`) — the design and the validated findings
+
+| Document | Layer | Description |
+|----------|-------|-------------|
+| [Vision](docs/vision.md) | Requirement | Why broadcast primary distribution is changing — industry problem, opportunity, and critical analysis. |
+| [Alternatives](docs/alternatives.md) | **Data plane** | The head-to-head: MoQ against segmented HTTP carrying MPEG-TS, and against SRT/Zixi/RIST, on scaling, reliability, hand-off complexity, interop, latency, entitlement, fidelity, economics and maturity. |
+| [Transport](docs/transport.md) | **Data plane (MoQ)** | The transport requirements primary distribution imposes, how MoQ meets them, MPEG-TS/MSFTS carriage, and draft-stability strategy. |
+| [Relay](docs/relay.md) | **Data plane (MoQ)** | MoQ relay fabric, routing, fan-out, federation, and resilience. The segmented-HTTP equivalent is a CDN cache, treated in [Alternatives](docs/alternatives.md) §2. |
+| [Architecture](docs/architecture.md) | Above the transport | End-to-end reference architecture for a broadcast-grade platform, worked through on the MoQ data plane; the grooming, redundancy, control and observability layers apply unchanged to segmented HTTP. |
+| [Implementation](docs/implementation.md) | Above the transport | What you would assemble and how you would test it, on either data plane — including which toolchain stages are free and which must be bought. |
+| [Control Plane](docs/control-plane.md) | Above the transport | Provisioning and orchestration. |
+| [Entitlement](docs/entitlement.md) | Above the transport | Dynamic, revocable distribution rights. |
+| [Security](docs/security.md) | Above the transport | Identity, authentication, and threat model. |
+| [Interoperability](docs/interoperability.md) | Above the transport | IRDs, MPEG-TS, RTP, ST 2022-7, SRT, Zixi — on ingest and egress, for both data planes. |
+| [Operations](docs/operations.md) | Above the transport | NOC model, SLOs, monitoring, and runbooks. |
+| [Economics](docs/economics.md) | Cross-cutting | Cost framework, and a numeric model of the always-on case at published rates — MoQ against SRT, segmented HTTP, managed services, commodity CDN delivery and satellite. |
+| [Evidence](docs/evidence.md) | Cross-cutting | What the working prototype proved — the empirical basis for the claims above, on both data planes. |
 
 ### The validation campaign (`lab/`) — what was planned and measured
 
@@ -127,6 +170,10 @@ propose a change, and for the editorial and confidentiality conventions.
 
 ## Open questions
 
+- **Does the sub-second requirement exist on identifiable routes, or is it a preference?** This is now the question that decides how much of primary distribution MoQ addresses at all, because every other axis on which the two data planes differ currently favours segmented HTTP. ([Alternatives](docs/alternatives.md) §5)
+- **Does a commercial ABR-to-TS gateway, run as the distributor's own edge stage, produce TR 101 290 P1/P2-conformant output on real hardware?** The IRD vendors' HLS and DASH inputs are datasheet claims, and the equivalent question is open for this project's own groomer. If yes, part of the broadcast-grade edge layer is purchasable on one data plane and not the other; if no, it is a build on both. ([Alternatives](docs/alternatives.md) §12)
+- **Should the edge gateway sit at each client's demarcation or in the distributor's own regional PoPs?** The choice sets how many destinations the Internet-native transport actually serves, and therefore most of the delivery bill, identically on both data planes. ([Alternatives](docs/alternatives.md) §4.5)
+- **Can a CDN carry a multi-programme TS segment in practice?** HLS normatively excludes it and a cache does not parse the payload, so MoQ's clearest carriage advantage is either real or merely normative, and nothing has established which. ([Alternatives](docs/alternatives.md) §6)
 - Does the parity threshold survive substitution of a real operator's own two numbers? This is the decisive commercial question and it is deliberately *not* answered here: the model is built on public list prices and expressed as a threshold precisely so it can be re-run in private against negotiated and depreciated costs that cannot be published. It is a test only the operator can run. ([Economics](docs/economics.md) §4.7)
 - Why does published cloud egress sit roughly an order of magnitude above commodity CDN delivery and above the all-in cost of running delivery yourself, and does anything force that gap to close? The always-on trunk case lives entirely inside that spread. ([Economics](docs/economics.md) §4.2)
 - Does groomed MoQ output pass TR 101 290 P1/P2 on real hardware IRDs? ([Evidence](docs/evidence.md))
@@ -145,8 +192,9 @@ propose a change, and for the editorial and confidentiality conventions.
 Senior Director, Service Management & Partner Services  
 Broadcast Distribution Engineering
 
-This repository represents research and engineering work on Media over QUIC for
-broadcast primary distribution. Parts of the documents were drafted with AI
+This repository represents research and engineering work on Internet-native
+broadcast primary distribution, evaluating Media over QUIC and segmented HTTP as
+candidate data planes for it. Parts of the documents were drafted with AI
 assistance and then reviewed (see [CONTRIBUTING](CONTRIBUTING.md)).
 
 LinkedIn: https://www.linkedin.com/in/tdrapier/
@@ -176,7 +224,8 @@ interoperate, and where they do not — is in
 - CMSF (CMAF profile of MSF): https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/
 - MSFTS (MPEG-TS profile): https://github.com/mondain/msfts
 - OpenMOQ: https://openmoq.org/
-- HTTP Live Streaming 2nd Edition (obsoletes RFC 8216; includes Low-Latency HLS and MPEG-TS segment carriage — the closest specified alternative, [Transport](docs/transport.md) §3.4): https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/
+- HTTP Live Streaming 2nd Edition (obsoletes RFC 8216; includes Low-Latency HLS and MPEG-TS segment carriage — the alternative data plane, [Alternatives](docs/alternatives.md)): https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/
+- DVB-MABR, adaptive media streaming over IP multicast (ETSI TS 103 769) — the only specified point-to-multipoint profile in the field, and an access-network one: https://dvb.org/?standard=adaptive-media-streaming-over-ip-multicast
 
 **Testing and background**
 

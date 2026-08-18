@@ -1,10 +1,15 @@
-# Reference Architecture: Broadcast-Grade Primary Distribution over MoQ
+# Reference Architecture: Broadcast-Grade Primary Distribution
 
 Status: working draft
+Layer: **above the transport,** worked through on the MoQ data plane. The distinction matters for
+reading this document: the grooming stage (§7), redundancy (§14), control (§9–§12) and installed-base
+interop (§4.1, §8) are required and owned by the distributor *whichever* data plane carries the bytes,
+and are the substance here. Only §4–§6 — packaging lanes and relay fabric — are MoQ-specific, and their
+segmented-HTTP counterparts are in [alternatives](alternatives.md) §2–§3.
 Scope: an end-to-end reference architecture for a broadcast-grade primary
-distribution platform built on Media over QUIC (MoQ), covering the data plane,
-the control plane, interoperability with the installed base, and the
-operational model.
+distribution platform, covering the data plane, the control plane,
+interoperability with the installed base, and the operational model. MoQ is used
+throughout as the worked example because it is what the prototype runs on.
 
 ---
 
@@ -475,20 +480,30 @@ each configured egress it performs, in order:
 
 
 
-### 7.2 The grooming problem, and why it's inherent
+### 7.2 The grooming problem, and why it belongs to every data plane
 
-**MoQ's bursty object delivery yields a PCR that hardware IRDs reject on
-TR 101 290 — an inherent property of the object model, fixed at the edge by
-grooming, not by the transport.**
+**Any Internet-native transport delivers media in bursts, and a transport stream
+reassembled directly from those bursts has a PCR that hardware IRDs reject on
+TR 101 290. Grooming is the fix, it sits at the edge, and it is required whichever
+data plane carries the bytes.**
 
-MoQ delivers objects and groups in bursts. A transport stream reassembled
-directly from those bursts has a programme clock reference that is *smooth but
-not byte-accurate*: the PCR values are broadly correct but the inter-PCR timing,
-as seen at the byte level, is not. Software players tolerate this. **Hardware
-IRDs do not**: they lock a phase-locked loop to the PCR and raise TR 101 290
-P1/P2 alarms when the PCR interval drifts. On the media-aware lane **13–26 % of PCR
-intervals exceed the 40 ms conformance limit** depending on source, with excursions well
-over 100 ms ([evidence](evidence.md) §3, [lab: T2](../lab/test-2-media-aware-transparency.md)).
+It is tempting to read this as a cost of MoQ's object model, and measurement says the
+opposite: **segmented HTTP is the harder case, by two orders of magnitude.** Carrying the
+same clip, MoQ's egress arrives in 12.4 kB bursts with a
+worst-case silence of 149 ms, while classic HLS arrives in 2.95 MB bursts with 24
+silences over a second and a worst case of 4.01 s
+([evidence](evidence.md) §10). A MoQ groomer needs milliseconds of buffer; a
+segmented-HTTP groomer needs seconds. Low-latency HLS does not rescue this in practice —
+partial segments would, but no free client fetches them (§7.4).
+
+The underlying mechanism is common. A stream reassembled from bursts has a programme
+clock reference that is *smooth but not byte-accurate*: the PCR values are broadly
+correct but the inter-PCR timing, as seen at the byte level, is not. Software players
+tolerate this. **Hardware IRDs do not**: they lock a phase-locked loop to the PCR and
+raise TR 101 290 P1/P2 alarms when the PCR interval drifts. On MoQ's media-aware lane
+**13–26 % of PCR intervals exceed the 40 ms conformance limit** depending on source,
+with excursions well over 100 ms ([evidence](evidence.md) §3,
+[lab: T2](../lab/test-2-media-aware-transparency.md)).
 
 It is worth being precise about *what* is at fault, because three distinct things
 are easily conflated. (1) **Delivery cadence:** MoQ hands objects to the edge in
@@ -500,10 +515,12 @@ which demultiplexes and re-muxes, additionally has to *regenerate* PCR/PTS/DTS
 from decoded timing, a separate source of error that the opaque lane avoids
 entirely by carrying the original values verbatim. (3) **Live-wire accuracy:**
 even a perfectly re-timed file can jitter at the physical output (§7.2 caveat).
-Only (1) is "inherent to the object model," and it is the same reason SRT, Zixi,
-and RIST are bursty on the wire and groom the transport stream before hand-off to
-an IRD; grooming (below) addresses (1) and (3), while the opaque lane sidesteps
-(2).
+Only (1) is inherent to *Internet-native delivery as such* — it is the same reason SRT,
+Zixi, RIST and segmented HTTP are all bursty on the wire and all groom the transport
+stream before hand-off to an IRD. (2) is the only one of the three that is genuinely
+specific to a data plane, and specifically to MoQ's media-aware lane: segmented HTTP
+carries the original timestamps verbatim, as the opaque lane does, and so avoids it.
+Grooming (below) addresses (1) and (3), while the opaque lane sidesteps (2).
 
 Grooming reconstructs a constant cadence from the bursty arrival. Concretely it:
 (a) **re-inserts null packets** (PID `0x1FFF` stuffing) to pad the reassembled
@@ -571,6 +588,37 @@ largely stateless across flows, this scales cleanly. The gateway is, however,
 the most CPU- and timing-sensitive component (CBR pacing and PCR re-stamping are
 real-time obligations), so gateway capacity planning is dominated by timing
 headroom, not raw throughput.
+
+### 7.4 The same gateway on a segmented-HTTP data plane
+
+The edge gateway is the component that makes this architecture broadcast-grade, and
+**it is required in the same place, with the same responsibilities, if the data plane
+is segmented HTTP instead of MoQ.** Setting the two side by side is the clearest
+statement of why the transport choice settles less than it appears to:
+
+| Gateway responsibility (§7.1) | On MoQ | On segmented HTTP |
+|---|---|---|
+| Reassemble to a transport stream | re-mux from tracks, or verbatim on the opaque lane | concatenate segments — **easier**, and byte-verbatim for a single programme |
+| Absorb delivery burstiness | 12.4 kB bursts, 149 ms worst-case silence → milliseconds of buffer | 2.95 MB bursts, 4.01 s worst-case silence → **seconds of buffer** |
+| Re-insert stuffing to the target mux rate | required: nulls are stripped in transit | not required: nulls are carried, which is also why it costs ~7 % more on the wire |
+| Byte-locked CBR pacing and PCR re-stamp | required | **required, identically** |
+| FEC, ST 2022-7 pairing, start gating, egress TR 101 290 | required | **required, identically** |
+
+The bottom two rows are the expensive ones, and they do not move. What moves is the
+buffer the gateway needs and the arithmetic it does on the way in — and on balance the
+segmented-HTTP gateway is *easier to write* and *harder to run*: reassembly is trivial,
+and the burst absorption that precedes conformant pacing is two orders of magnitude
+larger. The obligation is identical on both; the public groomer has so far been exercised
+only against MoQ arrival ([implementation](implementation.md) §9.1).
+
+**The escape route is closed for now.** Burst size is segment size, so a smaller
+segment reduces both the buffer and the latency floor, and the limit of that is partial
+segments. Those can be *published* carrying MPEG-TS, free, with Apple's tools — but no
+freely available client fetches them, so the egress a gateway actually sees is the
+classic one and the only receivers that could change that are commercial ABR-to-TS
+boxes ([evidence](evidence.md) §10.1,
+[implementation](implementation.md) §2.2). Until that changes, choosing segmented HTTP
+means choosing the larger buffer.
 
 ---
 
@@ -1141,7 +1189,7 @@ hitlessly; the affected subscriber can additionally re-home to another relay
 (supervisor-assisted today, [transport](transport.md) §8.3).
 - **Edge (subscriber / pacer) failure** — the redundant leg's egress continues; the
 IRD's ST 2022-7 merge covers the loss hitlessly.
-- **Content loss behind a healthy groomer** — the failure mode this list originally
+- **Content loss behind a healthy groomer** — the failure mode a component-liveness list
 missed, and the one the receiver cannot be made responsible for. A groomer asked only
 to hold a rate holds it against a dead source: byte-perfect CBR carrier, correct PCRs
 included, no programme packets in it, for as long as it is left running. Loss,

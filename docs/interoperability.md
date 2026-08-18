@@ -1,6 +1,9 @@
 # Interoperability
 
 Status: working draft
+Layer: **above the transport** — the installed base does not know or care which data plane fed the
+gateway, so the contract with it (§2), the egress formats (§5) and the TR 101 290 obligation (§6) are
+identical on both. §9's implementation survey is MoQ-specific; §9.8 is its segmented-HTTP counterpart.
 Scope: how the platform coexists with the installed base of professional
 broadcast equipment and the transports that feed it (MPEG-TS, RTP/FEC, SRT, ST 2110-7, unicast and multicast, hardware IRDs) — on ingest and on egress. This is the deep-dive companion to
 [architecture](architecture.md) §4.1, §7, and §8, and to the carriage discussion
@@ -79,7 +82,8 @@ The default media-aware lane ([transport](transport.md) §4.1) delivers all of t
 measured, not assumed, since upstream took the DVB service layer through the catalog
 ([evidence](evidence.md) §4). Two distinctions matter for an operator. Continuity counters
 are **regenerated** rather than relayed, which satisfies the receiver but means two
-independent legs of a 1+1 pair are not byte-identical (§10). And the **time-varying**
+independent legs of a 1+1 pair are not byte-identical ([evidence](evidence.md) §7,
+[architecture](architecture.md) §14). And the **time-varying**
 tables are the lane's one carriage residual: TDT/TOT is dropped by design, on the argument
 that an exporter mints wall time more accurately than it relays it, and EIT carriage exists
 only on an unmerged upstream branch. The **opaque fallback** preserves everything
@@ -111,22 +115,34 @@ what the local plant expects, decoupled from how the feed traversed the fabric.
 Conformance is where interoperability is won or lost, and it is the subject of the
 platform's single most important open validation.
 
-MoQ's object/burst delivery produces a reconstructed stream whose PCR is
-smooth-but-not-byte-accurate; hardware IRDs lock a PLL to PCR and raise TR 101 290
-P1/P2 alarms in response. The edge grooming layer — byte-locked CBR, monotonic PCR
+**The conformance obligation is transport-independent.** Any Internet-native data plane
+delivers media in bursts, and a stream reconstructed from bursts has a PCR that is
+smooth-but-not-byte-accurate; hardware IRDs lock a PLL to PCR and raise TR 101 290 P1/P2
+alarms in response. This holds for MoQ, for segmented HTTP, and for SRT, Zixi and RIST
+before them — which is why every one of them grooms before hand-off, and why the
+grooming stage is the distributor's obligation rather than a quirk of any one protocol.
+
+It is worth being explicit that this is *not* a MoQ tax, since that is the natural
+assumption. Measured on the same clip, segmented HTTP arrives in bursts ~240× coarser
+than MoQ's, with 24 silences over a second against none ([evidence](evidence.md) §10).
+If either data plane makes conformance harder, it is the segmented one.
+
+The edge grooming layer — byte-locked CBR, monotonic PCR
 re-stamp, PCR re-insertion — restores conformant timing: measured on file it takes
 the bursty egress from **13–26 %** of PCR intervals > 40 ms to **0 %** with 0
 `pcrverify` violations at 500 µs, and at the tighter ±500 ns accuracy gate from
 1 523 of 1 524 PCRs failing to 0 of 2 598 ([evidence](evidence.md) §3,
-[architecture](architecture.md) §7.2), subject to the hardware caveat below.
+[architecture](architecture.md) §7.2), subject to the hardware caveat below. Those
+figures are from the MoQ lane; the equivalent grooming pass on a segmented-HTTP egress
+is unmeasured, and would need a larger buffer to achieve the same result.
 
 > Grooming is file-validated and structurally sound, but **must be proven to pass
 > P1/P2 on real hardware IRDs**: file analysis confirms the PCR arithmetic, not
 > the live-wire pacing jitter or PCR_accuracy (±500 ns) that only a hardware
-> analyser can measure ([architecture](architecture.md) §7.2). Until that evidence
-> exists (Sencore analyser plus real IRDs, in progress per [evidence](evidence.md)
-> §3), conformance is "expected" not "demonstrated." This is the make-or-break
-> interop claim.
+> analyser can measure ([architecture](architecture.md) §7.2). Until a hardware
+> analyser and real IRDs have graded the live egress, conformance is "expected" not
+> "demonstrated" ([evidence](evidence.md) §3). This is the make-or-break interop claim,
+> and it is open.
 
 ## 7. Non-ideal source feeds
 
@@ -181,9 +197,9 @@ details (§5), not ingest concerns.
 
 ## 9. The implementation landscape
 
-Until mid-2026 this paper could treat "MPEG-TS over MoQ" as a single-implementation question. That
-is no longer true: there is now a dedicated MPEG-TS-over-MoQ effort with its own working-group
-format, a second independent publisher, and a production relay from a major CDN. That changes the
+"MPEG-TS over MoQ" is no longer a single-implementation question: there is now a dedicated
+MPEG-TS-over-MoQ effort with its own working-group format, a second independent publisher, and a
+production relay from a major CDN. That changes the
 argument from "can this be made to work?" to "which parts of it are converging, and where does an
 operator still have to choose?" This section maps the field. *The survey in §9.2–§9.5 is assessed
 from repositories, drafts and public documentation only; §9.6 is measured against running relays.*
@@ -413,11 +429,43 @@ carriage.
   default-off. **Relay neutrality is a property to verify per pairing, not to assume** — and on
   current evidence it fails for every pairing outside a single implementation.
 
-That same PR independently reproduces a finding of ours: a publisher with no subscriber attached dies
+That same PR independently reports the same idle-timeout behaviour: a publisher with no subscriber attached dies
 at ~32 s to the default QUIC idle timeout, fixed with a 5 s keepalive. It matches the ~30 s bound
 measured here ([evidence](evidence.md) §7) from an entirely different stack, which is useful
 corroboration that the idle timeout is a first-order operational constraint rather than an artefact of
 one implementation.
+
+### 9.8 The segmented-HTTP landscape, for contrast
+
+Set against §9, the comparison is unflattering to MoQ.
+
+**On ingest, HLS is a solved interop problem.** Every professional encoder emits it,
+every CDN carries it, every analyser reads it, and TSDuck, FFmpeg and Shaka all
+segment MPEG-TS into it. Where §9.6 measures MoQ media failing to flow between *any*
+two implementations, an HLS segment written by one vendor's packager is read by
+another's receiver as a matter of routine. Note what this is not: HLS has no normative
+reference implementation at all — it is an Apple-authored informational document, and
+its authoritative implementation is closed-source. Open source and interoperability are
+different axes, and here they point in opposite directions
+([evidence](evidence.md) §10.1).
+
+**On egress, the picture divides by latency, and this is the useful part.**
+
+| Reassembly to TS | Classic HLS | Low-latency HLS with TS parts |
+|---|---|---|
+| Free software | `tsp -I hls`, FFmpeg — routine | **nothing.** TSDuck cannot parse `EXT-X-PART`; FFmpeg's demuxer offers no way to fetch parts. Both measured fetching **zero** parts from an origin advertising them |
+| Professional hardware | most modern IRDs take an HLS input | Synamedia MEG (ABR2TS), Ateme TITAN Edge |
+
+So the interop story for segmented HTTP is excellent at seconds of latency and
+non-existent below it without buying a gateway. That is the mirror image of MoQ's
+position — a free receiver that works, in exactly one implementation — and it is why
+neither data plane currently offers a complete, free, low-latency path to a conformant
+hand-off ([implementation](implementation.md) §2.2).
+
+**What does not change either way:** the receiving plant still expects a clean, paced,
+CBR transport stream, and §6's grooming obligation is the distributor's on both. A
+client's willingness to accept HLS directly is a property of *that client's* equipment,
+not a reason the distributor can stop producing a conformant TS for everyone else (§2).
 
 ## 10. Testing and acceptance
 

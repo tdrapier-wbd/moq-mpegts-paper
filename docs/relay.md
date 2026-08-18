@@ -1,6 +1,10 @@
 # Relay
 
 Status: working draft
+Layer: **the MoQ data plane.** Deliberately single-plane: this is MoQ's fan-out component. The
+segmented-HTTP counterpart is an ordinary CDN cache — the same topology under a different name, since
+both collapse upstream carriage to one copy and leave the last mile as N unicast copies
+([alternatives](alternatives.md) §2, [economics](economics.md) §4.7).
 Scope: the relay layer of the data plane — the component that performs
 subscription-based fan-out and forwarding. This is the deep-dive companion to
 [architecture](architecture.md) §5–§6; it assumes that context and develops the

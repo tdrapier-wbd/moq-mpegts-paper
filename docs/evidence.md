@@ -1,20 +1,24 @@
 # Evidence: What Has Been Built and Measured
 
 Status: working draft.
+Layer: **cross-cutting** — measurements from every layer. §1–§9 are the MoQ data plane, because that is
+what the prototype runs on; §10 measures segmented HTTP against it; the grooming and redundancy results
+belong to the layer above the transport and apply to both.
 
 The empirical basis for the claims in the [README](../README.md), [transport](transport.md)
-and [architecture](architecture.md), for the one question this paper asks: *is MoQ a credible
-transport for broadcast primary distribution?* The plan (objectives, gates, pass criteria) and the
-executed procedures, commands and full result tables are in the laboratory notebook
-([`lab/`](../lab/README.md)). Every conformance figure below is measured at **P1 (file/analyser)**
-or against a reference software receiver; nothing here is a hardware IRD pass, and that gate (§3)
-is still open.
+and [architecture](architecture.md), for the question this paper asks: *what does an Internet-native
+primary-distribution path have to do to be broadcast-grade, and which data plane should carry it?* Most
+of what follows is measured on MoQ, because that is what the prototype runs on; §10 measures the
+alternative. The plan (objectives, gates, pass criteria) and the executed procedures, commands and full
+result tables are in the laboratory notebook ([`lab/`](../lab/README.md)). Every conformance figure below
+is measured at **P1 (file/analyser)** or against a reference software receiver; nothing here is a
+hardware IRD pass, and that gate (§3) is still open.
 
 ---
 
 ## What exists today, and where
 
-Results come from three code bases, and it matters which produced which.
+Results come from four code bases, and it matters which produced which.
 
 - **Upstream `moq-dev` — the media-aware lane** (`moq import ts` → `moq-relay` →
   `moq export ts`; moq-lite-04 on the wire), which demultiplexes the transport stream into MoQ
@@ -22,13 +26,16 @@ Results come from three code bases, and it matters which produced which.
   ([architecture](architecture.md) §4.2), the lane deployed over the public internet, and the
   lane almost every result below was measured on.
 - **[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) (public, ours)** — a
-  transport-agnostic CBR/PCR groomer downstream of any MoQ subscriber; not part of the
-  transport, deliberately (§3).
+  CBR/PCR groomer, deliberately outside the transport (§3). Every result below exercises it on a
+  MoQ egress; §10 measures what a segmented-HTTP egress would ask of it instead.
 - **`moq-publisher-subscriber` (private prototype, ours) — the opaque `m2ts` prototype** (draft-14,
   MSFTS `m2ts` packaging per `draft-gregoire-moq-msfts`, with its own IRD-facing egress). Its role
   here is **reference and benchmark**: it shows what byte-for-byte transparency looks like, so the
   media-aware lane's residual gaps are measured rather than asserted. It has only ever run on
   loopback.
+- **TSDuck's `hls` output and input plugins — the segmented-HTTP leg** (§10). Not a MoQ component at
+  all: it is the *alternative* data plane, published and reassembled with the same tool that serves as
+  the same oracle used throughout, so its results are directly comparable with the MoQ rows.
 
 | Property | Media-aware lane (`moq-dev` + `mpegts-pacer`) | Opaque prototype (reference) |
 |---|---|---|
@@ -75,18 +82,22 @@ belongs. On the preferred lane that layer is re-hosted downstream of `moq export
 pacer, rather than being intrinsic to a carriage lane. (Supports
 [architecture](architecture.md) §4.2 and §7.)
 
-## 3. "Broadcast-grade" ≠ "plays in ffplay" — the PCR problem is inherent
+## 3. "Broadcast-grade" ≠ "plays in ffplay" — the PCR problem is inherent to bursty delivery
 
-MoQ delivers objects in bursts, so a reconstructed transport stream has PCR *intervals* that no
+Bursty delivery leaves a reconstructed transport stream with PCR *intervals* that no
 longer track a constant mux rate: the bytes, PCR values included, are intact; the delivery
 *cadence* is not. Soft players tolerate this; **hardware IRDs lock a PLL to PCR and raise
-TR 101 290 P1/P2 alarms.** On the media-aware lane 13–26 % of PCR intervals exceeded the 40 ms
+TR 101 290 P1/P2 alarms.** The figures below are MoQ's, because that is what the prototype runs on;
+**§10 measures the same effect on segmented HTTP and finds it two orders of magnitude worse**, so
+nothing in this section should be read as a MoQ-specific penalty.
+
+On the media-aware lane 13–26 % of PCR intervals exceeded the 40 ms
 limit depending on source, on loopback and over the EC2 path alike
 ([lab: T2](../lab/test-2-media-aware-transparency.md), [T4](../lab/test-4-remote-e2e-srt.md));
 the opaque prototype fed the raw stream holds **0 % > 40 ms**
 ([lab: T3](../lab/test-3-opaque-transparency.md)), which isolates cadence loss to the re-mux
-rather than to QUIC. Cadence loss is inherent to the object model, and distinct from the PCR/PTS
-*regeneration* that only the media-aware re-mux performs.
+rather than to QUIC. Cadence loss is inherent to object delivery over any congestion-adaptive
+transport, and distinct from the PCR/PTS *regeneration* that only the media-aware re-mux performs.
 
 The fix is built and public:
 [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, monotonic PCR
@@ -131,7 +142,7 @@ included, and [#2440](https://github.com/moq-dev/moq/pull/2440) threads the DVB 
 encoding nor the DVB service layer is any longer a reason to prefer the opaque lane.
 
 **What the media-aware lane must now regenerate rather than relay is the clock, not the tables.**
-The residual was long recorded as "TDT/TOT and EIT", inferred from reading the import gate. Measured
+Reading the import gate suggests a residual of "TDT/TOT and EIT". Measured
 on a synthetic fixture — no capture held here carries EIT — both were confirmed absent at egress,
 and the measurement then split them, because they revise at opposite rates. EIT repeats
 byte-identically between event transitions, so carrying it through the catalog costs ~12 updates and
@@ -507,7 +518,7 @@ the shapes as the result and the constants as indicative.
 
 Every result above was measured against `moq-dev` peers. That makes "a MoQ relay is a neutral transport
 fabric" — load-bearing in [architecture](architecture.md), and the basis for treating relay capacity as a
-substitutable commodity in [economics](economics.md) — an assumption this campaign had never tested.
+substitutable commodity in [economics](economics.md) — and an assumption normally granted without test.
 Testing it needs a media-level check rather than a handshake, so the fixture is a 20-second transport
 stream and the oracle is its own continuity counters and PSI/SI: a TS validates itself, with no decoder,
 player or frame capture ([lab: T11](../lab/test-11-interop.md); the client is public in
@@ -548,3 +559,135 @@ media-level interop profile ([interoperability](interoperability.md) §9.5), whi
 contributed rather than merely proposed. One incidental finding from the same runs is a confound worth
 naming: the client abandons QUIC for a WebSocket fallback on a fixed 200 ms timer, so any relay much
 further away than that is silently carried over TCP, head-of-line blocking included.
+
+---
+
+## 10. The alternative data plane is easier to receive, harder to hand off cleanly, and ~7 % dearer on the wire
+
+The comparison in [alternatives](alternatives.md) grades MoQ against **segmented HTTP carrying
+MPEG-TS**. Most of its segmented-HTTP rows rest on specification text or a vendor datasheet; three rest
+on measurement, taken on one route with both legs fed from the same source. The first two are
+instrumented at the same point — the *ungroomed* egress, i.e. what the reassembly stage hands the groomer
+— and the third at the HTTP layer ([lab: T14](../lab/test-14-data-plane-comparison.md)).
+
+**The egress a groomer has to pace is two orders of magnitude coarser on segmented HTTP.** At 2 s
+segments, from the same source through the same instrument:
+
+| | MoQ | Segmented HTTP |
+|---|---|---|
+| Median burst | 12.4 kB | **2.95 MB** |
+| Gaps above 1 s in 60 s | **none** | **24** |
+| Largest gap | 149 ms | **4.01 s** |
+| 10 ms peak/mean | 24× | **231×** |
+
+The silences fall at exactly the segment duration, occasionally at two segment periods: the client fetches
+a completed segment at line rate, then waits for the next to exist. **Burst size is segment size**, which
+makes the grooming burden and the latency floor one knob rather than two — neither can be paid down
+without partial segments, and while those can be *published* with MPEG-TS, no free client fetches them
+(§10.1). A groomer for
+this leg needs seconds of buffer where a MoQ groomer needs milliseconds, so the `--stall-ms` timeouts
+documented for a MoQ egress are an order of magnitude too tight.
+
+The consequence for the comparison is that "easier to receive" and "easier to hand off cleanly" are
+different claims. Reassembly *is* off the shelf for segmented HTTP — TSDuck's `tsp -I hls` and ffmpeg both
+read a playlist, against MoQ's single `moq export ts` — but grooming, the half that decides whether a
+hardware IRD locks, is unsolved off the shelf on both and measurably harder on the alternative. Since a
+distributor does not supply its clients' receivers, that obligation sits on the distributor's side of the
+demarcation either way ([alternatives](alternatives.md) §4).
+
+**Carriage fidelity for a single programme is a wash, against the expectation that MoQ leads on it.**
+An MPEG-TS segment is byte-identical to its source but for **one byte in one packet type**: the continuity
+counter on the PAT and PMT that the segmenter injects at each segment head. Media, audio, teletext, all
+three SCTE-35 PIDs with correct typing, the null stuffing and the whole DVB service layer (NIT, SDT,
+TDT/TOT) travel unchanged, with zero continuity errors across segment boundaries — not because the HLS
+specification provides for them, which it does not, but because nothing in the path parses the payload.
+Segmented HTTP is therefore as verbatim as the opaque MoQ lane here and better than the media-aware lane,
+which regenerates continuity counters and drops stuffing. **MoQ's fidelity advantage narrows to the
+multi-programme mux alone**, which HLS excludes normatively and which remains untested in practice.
+
+**Wire cost follows from the same property, and it is the fidelity result priced.** Because segmented HTTP
+carries the mux verbatim it carries this clip's 4.57 % null stuffing and every TS packet header, and the
+media-aware MoQ lane carries neither:
+
+| Data plane | Wire vs source TS |
+|---|---:|
+| MoQ, media-aware, 1200 B / 1452 B | **0.982× / 0.973×** measured on a real path (§8) |
+| Segmented HTTP over HTTP/3, 1200 B / 1452 B | **1.056× / 1.046×** |
+| Segmented HTTP over HTTP/2 on TCP+TLS, 1500 B | 1.029× |
+| SRT, byte-verbatim, same real path | 1.037× |
+
+**MoQ carries this service in ~7.0 % less bandwidth than segmented HTTP, and the figure does not depend on
+the datagram size** — both ride QUIC and pay identical framing, so the saving is 7.0 % at 1200 B and 7.0 %
+at 1452 B. Read the table down rather than across and the pattern is not MoQ-against-HTTP: **every verbatim
+data plane sits between 1.03× and 1.06×, and the only thing that gets below 1.0× is declining to be
+verbatim.** SRT is a cheaper verbatim carriage than segmented HTTP over HTTP/3; the two differ only in
+framing. So the fidelity wash above and this 7 % are one finding read twice, and the 7 % is contingent on
+the source — an unstuffed mux narrows it to roughly 2.5 points of TS packet headers and uncarried SI.
+
+Two components resist estimation and had to be measured. **HTTP's own overhead is negligible**: response
+headers and playlist re-fetching total 0.06 % of payload at 2.4 s segments and 0.09 % at 1.26 s, with the
+request bytes back a further 0.01 %, all scaling as 1/segment-duration and playlist re-fetching the larger
+forward term throughout. Extrapolated to the 200–330 ms parts low-latency HLS needs, that is ~0.4–0.6 % —
+so **the chattiness of
+LL-HLS is not a bandwidth argument against it**, which is often assumed. And **HTTP/3 is the more expensive
+substrate by ~2.6 points**, since QUIC's minimum 1200 B datagram charges 5.5 % framing against a 1500 B TCP
+path's 2.7 %: moving segmented HTTP to HTTP/3 buys loss resilience at a real cost, a point of which is
+recoverable at 1452 B.
+
+The measured input is the HTTP layer at **1.0006× source TS bytes**, which is a byte-to-byte ratio and so
+path-independent; per-packet framing is added from §8's real-path measurement rather than measured here,
+because loopback's 16384 B MTU makes packet counts meaningless. This vindicates the *number* in
+[economics](economics.md) §4.7's ~1.05× estimate while falsifying its *mechanism*: the estimate assumed the
+packager strips stuffing, and it does not.
+
+### 10.1 Low-latency HLS with MPEG-TS is free to publish and impossible to receive
+
+The HLS specification permits partial segments in MPEG-TS, and the low-latency ecosystem standardised on
+CMAF/fMP4 regardless. Measured rather than read off documentation, the resulting gap turns out to sit
+entirely on one side of the pipeline.
+
+**Publishing works, free, first time.** Apple's `mediastreamsegmenter --format=transport
+--part-target-duration-ms=300` emits a conformant playlist with `EXT-X-PART` entries pointing at MPEG-TS
+parts of 0.28–0.30 s and 240–430 kB, `INDEPENDENT=YES` where a part carries an IDR, and a preload hint for
+the part still being written. The tools are closed-source and macOS-only, but they are free and they took
+one command.
+
+**Nothing free receives it.** Both freely available clients that can turn HLS back into a transport stream
+fetched **zero** parts from an origin advertising them, and fell back to whole segments. Repeated against
+two origins — a static one, and Apple's own `ll-hls-origin-example.go` advertising
+`CAN-BLOCK-RELOAD=YES` and `PART-HOLD-BACK=0.900` and validating with zero MUST-fix issues — with the same
+outcome, and **zero blocking playlist reloads** from either client, so neither even attempted the
+low-latency handshake:
+
+| 45 s window, 300 ms parts, 2 s segments | MoQ | Classic HLS | LL-HLS + `tsp -I hls` | LL-HLS + FFmpeg |
+|---|---|---|---|---|
+| Partial segments fetched | — | — | **0** | **0** |
+| Median burst | **12.4 kB** | 2.95 MB | **2.27 MB** | **2.34 MB** |
+| Largest gap | **149 ms** | 4.01 s | 2.01 s | 2.09 s |
+| 10 ms peak/mean | **24×** | 231× | 217× | **428×** |
+
+**So low-latency HLS with MPEG-TS does not reduce the grooming burden in practice**: the ~20 % smaller
+burst is explained by Apple's segmenter producing clean 2.00 s segments where TSDuck overshoots to 2.38 s,
+not by parts. The control that makes this a statement about clients rather than about the rig is Apple's
+own `mediastreamvalidator`, which over the same origins fetched 21 parts against 5 segments, and 17
+against 7 using 12 blocking reloads — the parts are real, conformant and actively advertised. TSDuck's
+limitation is proven outright: pointed at a live edge where the playlist legitimately holds only parts,
+it exits with `empty HLS media playlist`. It cannot see parts at all.
+
+**The practical envelope for TS-in-HLS therefore remains nearer 6 s than the 2–5 s the hold-back arithmetic
+implies — and the reason is a market rather than an immaturity.** The missing stage is the receive stage,
+which is exactly what Synamedia's MEG and Ateme's TITAN Edge sell as ABR-to-TS hardware. An operator
+unwilling to buy a receiver gets classic HLS whatever the publisher emits.
+
+This is worth holding beside §9. HLS has no normative reference implementation at all — it is an
+Apple-authored informational document — and its authoritative implementation is closed-source, yet it
+interoperates everywhere. MoQ is standards-track with open implementations and no cross-implementation
+media interop. Open source and interoperability are not the same axis, and here they point in opposite
+directions.
+
+**Limits.** One route, one clip, one run per leg, single host, loopback, no packet loss; burst granularity
+and fidelity at one segment duration, wire cost at three. Loopback inflates burst *rate*, so the peak-rate
+figures are an upper bound — but burst *size* is set by segment size and the silences by the publish cadence,
+so those are structural. Per-packet framing is derived, not measured, for the reason given above. Two cells
+of the comparison remain unrun, both blocked on ABR-to-TS hardware or a CDN account
+([lab](../lab/planned-experiments.md)).
