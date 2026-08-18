@@ -329,7 +329,7 @@ genuinely contested; the trade-offs are set out in full in
   contribution feeds (open-GOP keyframe detection, and loss of SDT/NIT/PMT-PID
   identity on re-mux) are **closed upstream and verified here**; what it still does
   not relay is the *clock*, since TDT/TOT is dropped by design and EIT carriage
-  exists only on an unmerged branch ([evidence](evidence.md) §4).
+  exists only on an open upstream pull request ([evidence](evidence.md) §4).
 - **Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque
   payload, packaged per the `m2ts` profile of `draft-gregoire-moq-msfts` (MSFTS),
   which extends the MoQ Transport Streaming Format (MSF) catalog to carry MPEG-2

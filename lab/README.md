@@ -78,6 +78,7 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T13 | Off-the-shelf CBR/PCR grooming of a MoQ egress | 4 (file), plus wire cadence | supports Gate 2; decides how the grooming requirement can be documented | complete for TSDuck, FFmpeg and GStreamer on a broadcast mux and a single-programme feed; no off-the-shelf stage satisfies all four criteria | [test-13-downstream-grooming.md](test-13-downstream-grooming.md) |
 | T14 | MoQ against segmented HTTP on one route | 7 (comparative lab) | Gate 1 + Gate 2, both data planes; feeds [alternatives](../docs/alternatives.md) | partial — burst granularity (both arms), carriage fidelity and wire cost measured; the low-latency arm split, publishing TS parts free but finding no free client that fetches them; hardware P1/P2 (which now gates latency too) and MPTS-through-CDN blocked on kit this lab does not have | [test-14-data-plane-comparison.md](test-14-data-plane-comparison.md) |
 | T15 | RIST and SRT on T14's cadence instrument | 7 (comparative lab) | extends T14; grades [alternatives](../docs/alternatives.md) §10.1 | complete on a healthy path — RIST (Main and Simple) and SRT measured transparent, identical to a no-transport control, so their egress is their source's; MoQ's granularity is source-independent; loss/RTT and a true CBR hardware source left open | [test-15-point-to-point-cadence.md](test-15-point-to-point-cadence.md) |
+| T16 | Grooming a segmented-HTTP egress | 4 (file), plus wire cadence | supports Gate 2 on the alternative data plane; closes [implementation](../docs/implementation.md) §9.1 and the unmeasured cell in [interoperability](../docs/interoperability.md) §6 | complete on a healthy path — the same groomer, sizing itself from arrival, takes T14 arm B1's egress to T13's MoQ-lane conformance with nothing dropped; the three flag-pinned control arms show why it needed deriving rather than documenting; 6 s segments and a lossy path left open | [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -118,8 +119,8 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
   delivered-rate curves are within a stated margin and the failure mode is no worse; egress quality at
   least matches (P1); overhead/CPU recorded as economic inputs. Feeds [economics](../docs/economics.md) §4 and §9.
 
-T8b, T9, T11 and T13 were specified after this list was fixed; their pass criteria are stated the same
-way, in advance, at the top of their own files.
+T8b, T9, T11, T13 and T16 were specified after this list was fixed; their pass criteria are stated the
+same way, in advance, at the top of their own files.
 
 ### Desk analyses
 
@@ -160,6 +161,9 @@ per-test file when executed. In priority order:
   single-route, single-clip, loopback, and its per-packet framing is derived rather than measured. Its
   low-latency arm has now run, and split: publishing MPEG-TS partial segments is free and works, while
   no free client fetches them, so that arm's *receive* half is untested for want of any implementation.
+  [T16](test-16-grooming-segmented-http.md) has since added the grooming row, on the same route and
+  therefore with the same limits: the alternative's egress reaches the MoQ lane's conformance from one
+  groomer, at one segment duration, on a path where nothing was ever lost — only late.
 - **No live contribution source in the *opaque* transparency run yet.** T2/T3 are localhost,
   file-fed; T4 has run a live SRT contribution source end-to-end on the media-aware lane, but the
   opaque lane over the wire awaits deploying the opaque publisher on EC2.
@@ -214,7 +218,7 @@ Source TS (file or live SRT/RTP)
 | Real-time source pacing | TSDuck `regulate` (PCR-based; `--pcr-synchronous` for looped files) |
 | Media-aware lane | `moq-dev` `moq` (import/export) + `moq-relay` (public reference impl; moq-lite / moq-transport) |
 | Opaque `m2ts` lane | private `moq_publisher` / `moq_relay` / `moq_subscriber` (draft-14 / MSFTS `m2ts`) |
-| CBR/PCR grooming | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`cbr_file` / `moq_egress` examples) |
+| CBR/PCR grooming | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`cbr_file` / `ts_egress` examples — `ts_egress` was `moq_egress` before [T16](test-16-grooming-segmented-http.md), and records written earlier name it that way) |
 | Network impairment | Linux `tc` / `netem` (optionally `tbf`/`htb` for rate); shaped-bottleneck rigs (`t8b-netns.sh`, `t8b-shaper.sh`, `t8b-rtt-probe.sh`) are kept local — see `INSTRUCTIONS.local.md` |
 | Hardware conformance | Hardware IRD + TR 101 290 analyser (P2; access-dependent) |
 

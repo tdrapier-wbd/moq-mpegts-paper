@@ -9,7 +9,7 @@ consuming, so its exporter blocks on the write, its consumer buffers, and the la
 expires: a group skipped on one leg and kept on the other, which is the divergence the issue
 says no field-level determinism can repair.
 
-Usage: moq export ts ... | ts-stall.py <after_s> <for_s> | moq_egress ...
+Usage: moq export ts ... | ts-stall.py <after_s> <for_s> | ts_egress ...
 """
 
 import sys

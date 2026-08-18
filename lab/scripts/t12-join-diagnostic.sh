@@ -20,6 +20,12 @@ BCAST=t12.joindiag$$.hang
 R=$HOME/t12/joindiag
 rm -rf "$R"; mkdir -p "$R"
 
+# The pacer's egress example was renamed moq_egress -> ts_egress when it learned to groom
+# a segmented-HTTP arrival pattern as well as a MoQ one (T16). Accept either, so this rig
+# runs against the build it was written for and against current heads.
+EGRESS="$PACER/ts_egress"
+[[ -x "$EGRESS" ]] || EGRESS="$PACER/moq_egress"
+
 cleanup() {
 	for pid in ${LEG:-} ${PUB:-} ${RELAY:-}; do
 		pkill -KILL -P "$pid" 2>/dev/null
@@ -43,7 +49,7 @@ sleep "$JOIN_AFTER"
 
 setsid bash -c "\"$MOQ\" --client-tls-disable-verify --client-connect https://localhost:$PORT/anon \
 	--broadcast $BCAST export ts --latency-max ${LATENCY_MAX:-500ms} \
-	| \"$PACER/moq_egress\" 127.0.0.1:$RTP_PORT $RATE --rtp --ssrc 538968071 \
+	| \"$EGRESS\" 127.0.0.1:$RTP_PORT $RATE --rtp --ssrc 538968071 \
 		--latency-ms $LAT --max-latency-ms $MAXLAT --stall-ms 1000 --on-stall mute \
 		--stream-clock --sequence-seed 0" >"$R/leg.log" 2>&1 </dev/null &
 LEG=$!

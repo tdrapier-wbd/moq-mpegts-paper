@@ -377,6 +377,13 @@ period, plus margin for the observed two-period stalls. `mpegts-pacer`'s `--stal
 mechanism, but the timeouts documented for leg A are an order of magnitude too tight for a
 segment-fetching leg. That is a configuration finding, not a defect.
 
+> **Narrowed by [T16](test-16-grooming-segmented-http.md).** The mechanism claim holds and the
+> parameter claim does not. Run with only the timeout raised — this paragraph's literal proposal —
+> the groomer stops muting and instead overflows its buffer and pads the shortfall with nulls,
+> producing 231 continuity errors behind a flawless PCR record. The operative parameter is the
+> cushion, 200 ms to 8 s, with the timeout following from it; and its value is a property of the
+> egress rather than of the tool, which is why T16's passing arm derives it from arrival instead.
+
 **The carriage result inverts a claim this paper leaned on.** MoQ's clearest carriage advantage was
 verbatim fidelity via the opaque lane. For a *single programme* an MPEG-TS segment achieves the same
 thing on the alternative, with no special lane, and it keeps the DVB service layer the HLS

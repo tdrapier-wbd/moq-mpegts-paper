@@ -27,7 +27,7 @@ discarded by demuxers) on elementary PIDs, and 0xFF section stuffing on PSI/SI P
 With `--keep-cc` it pads without renumbering, which separates "can the groomer take a variable
 packet count" from "does the renumbering make the pair identical".
 
-Usage: moq export ts ... | ts-keyframe-pad.py [--keep-cc] | moq_egress ...
+Usage: moq export ts ... | ts-keyframe-pad.py [--keep-cc] | ts_egress ...
 """
 
 import sys

@@ -263,7 +263,7 @@ groomer, and they are worth naming because they are unfamiliar to a broadcast NO
 |---|---|---|
 | Liveness signal | subscription state; relay memory and per-connection ceiling (§3) | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
 | Silent failure mode | publisher with no subscriber dies at ~30 s to the QUIC idle timeout ([evidence](evidence.md) §7) | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
-| Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal* here, so an alarm threshold set below the segment duration will chatter and one set above it is slow |
+| Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal* here, so an alarm threshold set below the segment duration will chatter and one set above it is slow. Measured, the groomer derives ~9 s from the arrival pattern against the MoQ lane's ~1 s ([T16](../lab/test-16-grooming-segmented-http.md)) |
 | Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
 | Recovery | reconnect and resubscribe | re-fetch; the segment is still addressable, which is genuinely easier ([alternatives](alternatives.md) §3) |
 
@@ -272,7 +272,13 @@ are *quieter* than MoQ's: a stale playlist and a warm cache produce no error any
 and the first symptom is content that has stopped advancing. A NOC moving from MoQ to
 segmented HTTP should expect to replace connection-liveness alarms with playlist-age and
 media-timestamp-advance alarms, and to widen its groomer-underrun thresholds to match the
-larger buffer.
+larger buffer — which the groomer will do for itself, since it sizes the threshold from the
+arrival pattern it observes rather than from a configured value
+([implementation](implementation.md) §9.1). **The number to plan around is that a
+segment-fetching leg cannot report a dead source faster than a segment period**, so
+~9 s of detection latency on a 2 s-segment feed is the cost of the data plane and not
+something a threshold can tune away. An operator whose failover budget is tighter than that
+needs MoQ, or needs a second monitored path.
 
 ## 10. Operational readiness checklist
 

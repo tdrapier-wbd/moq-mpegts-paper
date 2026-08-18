@@ -86,7 +86,8 @@ independent legs of a 1+1 pair are not byte-identical ([evidence](evidence.md) �
 [architecture](architecture.md) §14). And the **time-varying**
 tables are the lane's one carriage residual: TDT/TOT is dropped by design, on the argument
 that an exporter mints wall time more accurately than it relays it, and EIT carriage exists
-only on an unmerged upstream branch. The **opaque fallback** preserves everything
+only on an open upstream pull request ([evidence](evidence.md) §4). The **opaque
+fallback** preserves everything
 *verbatim by construction*, those tables included, which is why it remains the safe choice
 for a receiver that needs the carried clock or EPG rather than a regenerated one. Its cost
 — forgoing per-track prioritisation, and the null-stripping bandwidth saving if it is truly
@@ -132,9 +133,26 @@ re-stamp, PCR re-insertion — restores conformant timing: measured on file it t
 the bursty egress from **13–26 %** of PCR intervals > 40 ms to **0 %** with 0
 `pcrverify` violations at 500 µs, and at the tighter ±500 ns accuracy gate from
 1 523 of 1 524 PCRs failing to 0 of 2 598 ([evidence](evidence.md) §3,
-[architecture](architecture.md) §7.2), subject to the hardware caveat below. Those
-figures are from the MoQ lane; the equivalent grooming pass on a segmented-HTTP egress
-is unmeasured, and would need a larger buffer to achieve the same result.
+[architecture](architecture.md) §7.2), subject to the hardware caveat below.
+
+**The equivalent pass on a segmented-HTTP egress is now measured, and it is the same
+binary.** Inserted into the identical publisher-origin-receiver chain the ungroomed
+figures came from, the groomer takes an egress whose worst silence is 4.01 s to zero PCR
+violations at 481 ns, zero repetition intervals above 40 ms, zero continuity errors and a
+10 ms coefficient of variation of 0.068 against the ungroomed 12.381 — with nothing
+dropped and nothing muted, and with no flag set beyond the output rate
+([T16](../lab/test-16-grooming-segmented-http.md)). It does need a larger buffer, as this
+section previously predicted, and the correction to the prediction is that the depth is
+not something an operator has to supply: the groomer derives it from the arrival pattern
+it observes, and on the MoQ lane the same derivation is a no-op
+([implementation](implementation.md) §9.1). So the conformance obligation is
+transport-independent *and* dischargeable by one stage, which is a stronger statement than
+the paper could previously make.
+
+Two costs come with it and neither is removable by a better groomer: the segmented arm held
+7.5 s of programme before emitting a byte and ran a 13.1 MB buffer, and its derived stall
+timeout is ~9 s against the MoQ lane's ~1 s, because on a segment-fetching leg a dead origin
+and a slow publish are indistinguishable faster than a segment period.
 
 > Grooming is file-validated and structurally sound, but **must be proven to pass
 > P1/P2 on real hardware IRDs**: file analysis confirms the PCR arithmetic, not

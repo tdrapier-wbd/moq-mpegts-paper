@@ -190,8 +190,9 @@ seconds), and the re-mux lost service signalling (SDT/NIT, the exact PMT PID
 layout, TSID/ONID) that an IRD and downstream headend depend on
 ([evidence](evidence.md) §4). What the lane still does not relay is the *clock*:
 TDT/TOT is dropped by design, on the argument that an exporter mints wall time
-more accurately than it relays it, and EIT carriage exists only on an unmerged
-upstream branch.
+more accurately than it relays it, and EIT carriage exists only on an open
+upstream pull request, having been through one withdrawn design already
+([evidence](evidence.md) §4).
 
 **The case for opaque carriage.** It carries the transport stream verbatim, so
 it preserves service signalling and programme structure *by construction* and
@@ -493,8 +494,10 @@ same clip, MoQ's egress arrives in 12.4 kB bursts with a
 worst-case silence of 149 ms, while classic HLS arrives in 2.95 MB bursts with 24
 silences over a second and a worst case of 4.01 s
 ([evidence](evidence.md) §10). A MoQ groomer needs milliseconds of buffer; a
-segmented-HTTP groomer needs seconds. Low-latency HLS does not rescue this in practice —
-partial segments would, but no free client fetches them (§7.4).
+segmented-HTTP groomer needs seconds — a depth it derives from the arrival it observes rather
+than one an operator supplies, which is what lets a single stage sit behind either plane
+(§7.4). Low-latency HLS does not rescue this in practice — partial segments would, but no
+free client fetches them (§7.4).
 
 The underlying mechanism is common. A stream reassembled from bursts has a programme
 clock reference that is *smooth but not byte-accurate*: the PCR values are broadly
@@ -602,7 +605,7 @@ statement of why the transport choice settles less than it appears to:
 | Gateway responsibility (§7.1) | On MoQ | On segmented HTTP |
 |---|---|---|
 | Reassemble to a transport stream | re-mux from tracks, or verbatim on the opaque lane | concatenate segments — **easier**, and byte-verbatim for a single programme |
-| Absorb delivery burstiness | 12.4 kB bursts, 149 ms worst-case silence → milliseconds of buffer | 2.95 MB bursts, 4.01 s worst-case silence → **seconds of buffer** |
+| Absorb delivery burstiness | 12.4 kB bursts, 149 ms worst-case silence → milliseconds of buffer | 2.95 MB bursts, 4.01 s worst-case silence → **seconds of buffer**, derived from arrival rather than configured |
 | Re-insert stuffing to the target mux rate | required: nulls are stripped in transit | not required: nulls are carried, which is also why it costs ~7 % more on the wire |
 | Byte-locked CBR pacing and PCR re-stamp | required | **required, identically** |
 | FEC, ST 2022-7 pairing, start gating, egress TR 101 290 | required | **required, identically** |
@@ -611,8 +614,22 @@ The bottom two rows are the expensive ones, and they do not move. What moves is 
 buffer the gateway needs and the arithmetic it does on the way in — and on balance the
 segmented-HTTP gateway is *easier to write* and *harder to run*: reassembly is trivial,
 and the burst absorption that precedes conformant pacing is two orders of magnitude
-larger. The obligation is identical on both; the public groomer has so far been exercised
-only against MoQ arrival ([implementation](implementation.md) §9.1).
+larger. The obligation is identical on both, and it is now discharged by one stage on
+both: the public groomer has been measured to the same conformance on a segmented-HTTP
+egress as on a MoQ one, with no flag changed ([implementation](implementation.md) §9.1,
+[T16](../lab/test-16-grooming-segmented-http.md)).
+
+**The buffer depth is a quantity the gateway derives, not an operator assumption, and that
+distinction is load-bearing.** "Seconds of buffer" is not a number anyone can supply in
+advance, because it is a property of the egress rather than of the gateway: it follows from
+segment duration, from how often the client misses a publish cycle, and — behind a
+transparent transport like RIST or SRT — from whatever the far-end encoder happens to do
+([evidence](evidence.md) §11). The groomer therefore measures how far ahead of real time its
+input runs and sizes the cushion, the buffer cap, the start condition and the stall timeout
+from that one observation. Two consequences for anyone sizing a gateway: the resident memory
+is set by the input (13.1 MB on a 2 s-segment 10 Mb/s feed, against megabytes on MoQ), and so
+is the failure-detection time (~9 s against MoQ's ~1 s), because a cushion deep enough to ride
+out a normal inter-segment gap cannot also distinguish a dead origin from a slow publish.
 
 **The escape route is closed for now.** Burst size is segment size, so a smaller
 segment reduces both the buffer and the latency floor, and the limit of that is partial

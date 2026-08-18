@@ -45,7 +45,7 @@ the two differ, **they are incomplete in opposite places** (§2.2).
 | **Publish / package** | `moq import ts` (media-aware) or the opaque `m2ts` lane under MSFTS | *classic:* TSDuck `tsp -O hls`<br>*low-latency TS:* Apple `mediastreamsegmenter --format=transport -w <ms>` | distributor |
 | **Fan-out** | `moq-relay` on a reachable host; Cloudflare's implementation | any HTTP origin + cache: nginx, Caddy, or a commodity CDN | distributor or CDN |
 | **Receive → TS** | `moq export ts` | *classic:* `tsp -I hls`, FFmpeg<br>*low-latency:* **see §2.2** | recipient or distributor |
-| **Groom → conformant CBR** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, PCR re-stamp, RTP/multicast egress, stream-clocked 1+1 pairing | same requirement and the same design, but a harder input: bursts are ~240× coarser, so the buffer is seconds rather than milliseconds. The public groomer is validated against MoQ arrival only (§9.1) | **distributor, on both** |
+| **Groom → conformant CBR** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — byte-locked CBR, PCR re-stamp, RTP/multicast egress, stream-clocked 1+1 pairing | **the same binary, no flags changed.** Bursts are ~240× coarser, so it sizes its buffer to seconds rather than milliseconds from the arrival it observes; measured to the same conformance on both (§9.1, [T16](../lab/test-16-grooming-segmented-http.md)) | **distributor, on both** |
 | **Egress FEC / ST 2022-7 / start gate** | private (see below) | private; identical requirement | **distributor, on both** |
 | **Analysis / conformance** | TSDuck (`pcrverify`, `analyze`), hardware TR 101 290 analyser | identical | distributor |
 | **Control plane** | provisioning, entitlement, observability ([control-plane](control-plane.md)) | identical model, different projection target ([alternatives](alternatives.md) §7) | distributor |
@@ -267,11 +267,11 @@ not touch the tested media layer or the grooming logic.
 
 ## 9. Two pieces of work worth doing
 
-Neither exists yet, both are small, and between them they would close the free path end to
-end: one removes the receive gap of §2.2, the other lets a single groomer sit behind either
-data plane.
+One is now done and measured; the other still stands. Between them they close the free path
+end to end: §9.1 lets a single groomer sit behind either data plane, §9.2 removes the receive
+gap of §2.2.
 
-### 9.1 Make the groomer data-plane agnostic
+### 9.1 Make the groomer data-plane agnostic — done, and measured as T16
 
 `mpegts-pacer` was written against a MoQ egress, which arrives in 12.4 kB bursts with a
 worst-case silence of 149 ms. A segmented-HTTP egress arrives in ~2.95 MB bursts with
@@ -279,21 +279,45 @@ silences over four seconds ([evidence](evidence.md) §10) — the same job, two 
 magnitude more input buffering, and a start gate that must not declare underrun during a
 normal inter-segment gap.
 
-Amending it to absorb that, and to size its buffer from observed arrival rather than
-from a configured assumption, would make **one groomer serve both data planes**. That is
-worth more than the code involved: the paper's central claim is that the layer above the
-transport is common to both, and a groomer that only tolerates one arrival pattern
-quietly contradicts it. The claim should be demonstrable by running the same binary on
-either input, not merely argued.
+**The groomer now sizes itself from arrival, and the claim is demonstrated rather than
+argued.** It measures the *lead* its input builds — how far ahead of real time the media it
+has been handed runs — and derives the cushion, the buffer cap, the condition on which output
+starts and the stall timeout from that one quantity. On a MoQ egress the lead never approaches
+the 200 ms floor, so nothing changes. On a segmented-HTTP egress it settles at seconds, and
+the same binary with no flag changed reaches the same conformance the MoQ lane was graded to:
+zero PCR violations at 481 ns, zero repetition intervals above 40 ms, zero continuity errors,
+10 ms CoV 0.068 against the ungroomed egress's 12.381, nothing dropped and nothing muted
+([T16](../lab/test-16-grooming-segmented-http.md)). **One groomer serves both data planes,
+and it is the same binary on either input.**
 
-Sizing it from observed arrival matters more than it first appears, because a RIST or
-SRT input is not a third fixed shape to code against. Those transports are *transparent*
-— their egress reproduces their publisher's cadence, measured identical to a
-no-transport control ([evidence](evidence.md) §11) — so a groomer behind one of them
-inherits whatever the far-end encoder does, which is not a property the groomer can
-know in advance. The three arrival patterns to tolerate are therefore MoQ's fixed
-12.2–12.4 kB, segmented HTTP's segment-sized bursts, and *unknown*. Only the third
-requires the buffer to be adaptive rather than merely large.
+Two results from running it are worth carrying here rather than leaving in the lab record.
+
+**The remedy was not the one this section originally implied, and the difference is
+instructive.** [T14](../lab/test-14-data-plane-comparison.md) called the gap "a configuration
+finding, not a defect", the proposal being that the timeouts documented for the MoQ lane were
+too tight. Run that way — timeout raised, depths left alone — the groomer stops muting and
+instead overflows its buffer and pads the shortfall with nulls, emitting a stream with 231
+continuity errors behind a flawless PCR record and a perfectly flat wire. The operative
+parameter was the cushion, 200 ms to 8 s, with the timeout following from it. A
+flag-only configuration that passes does exist, so the parameter space was adequate; but its
+three numbers are properties of the egress rather than of the tool, which is exactly why
+deriving them is worth more than documenting them.
+
+**Sizing from observed arrival matters more than it first appears,** because a RIST or SRT
+input is not a third fixed shape to code against. Those transports are *transparent* — their
+egress reproduces their publisher's cadence, measured identical to a no-transport control
+([evidence](evidence.md) §11) — so a groomer behind one of them inherits whatever the far-end
+encoder does, which is not a property the groomer can know in advance. The three arrival
+patterns to tolerate are MoQ's fixed 12.2–12.4 kB, segmented HTTP's segment-sized bursts, and
+*unknown*. Only the third requires the buffer to be adaptive rather than merely large, and it
+is the case the adaptive path is built for even though T16 could only measure the second.
+
+What remains is a bound rather than a mechanism. The cushion is clamped at a default ceiling
+of 8 s, which is adequate for 2 s segments and would need raising for 6 s ones, and the cost
+of absorption is arithmetic: T16's passing arm held 7.5 s of programme before emitting a byte
+and ran a 13.1 MB buffer. A groomer cannot ride out a gap it has not stored programme for, so
+segment duration still sets a latency floor and grooming still adds a multiple of it. What
+grooming removes is that floor being visible to the receiver as a cadence fault.
 
 ### 9.2 A slim low-latency HLS receiver that pipes into the groomer
 
@@ -328,10 +352,11 @@ much more like nobody having needed TS parts outside broadcast than like a hard 
 - How is the hardware-IRD test matrix defined (which IRD models, which analyser
   settings) so that a P1/P2 pass is credible across the installed base rather than
   on a single decoder ([interoperability](interoperability.md) §11)?
-- Of the two pieces of work in §9, which earns its keep first? §9.1 makes an existing
-  claim demonstrable; §9.2 changes what is possible on free software. They are
-  independent, but §9.2 is worth little without §9.1, since a receiver that emits
-  part-granular bursts still needs a groomer that will accept them.
+- §9.1 is done, which removes the ordering question that used to sit here: a receiver
+  emitting part-granular bursts now has a groomer that will accept them, so §9.2 can be
+  costed on its own merits. The question it leaves is narrower — is the 8 s ceiling on a
+  derived cushion the right default, given that it binds at 6 s segments and that raising it
+  costs resident memory on every deployment including the MoQ ones that never need it?
 - Should §9.2 be attempted upstream in TSDuck rather than as a local tool? Upstreaming
   is slower and would close the gap for the whole industry rather than for one
   distributor — which is the same trade already made with the groomer, and made the

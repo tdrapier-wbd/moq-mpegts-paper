@@ -20,6 +20,10 @@ PCR accuracy is reported at both gates that matter: `--absolute --jitter-max 13`
 `--jitter-max 500`, which TSDuck reads as 500 *micro*-seconds. Passing the second
 says very little; only the first is the broadcast limit.
 
+The units follow `--absolute`, which is easy to get wrong in either direction: with
+it, `--jitter-max` counts 27 MHz PCR ticks (13 ticks = 481 ns, 500 ticks = 18 us);
+without it, the same option is microseconds. Both gates here are as labelled.
+
 `gstbranches` prints the `gst-launch-1.0` branch fragment for a GStreamer remux of
 this stream, one token per line: `tsdemux` names its pads after the PID and
 `mpegtsmux` takes the PID from its request pad name, so both ends can be pinned,

@@ -226,7 +226,9 @@ The mechanism is unambiguous: silences arrive at exactly the segment duration, w
 of two segment periods, because the client fetches a completed segment at line rate and then waits for
 the next one to exist. MoQ delivers something in every second of the window; segmented HTTP alternates
 between nothing and 20–30 Mb/s. A groomer for it needs seconds of buffer where a MoQ groomer needs
-milliseconds.
+milliseconds — and [T16](../lab/test-16-grooming-segmented-http.md) has since shown that one groomer
+covers both, provided it sizes that buffer from what it observes arriving rather than from a configured
+depth: same binary, no flag changed, and an egress indistinguishable from the groomed MoQ lane's.
 
 The third column is [T15](../lab/test-15-point-to-point-cadence.md), and it is a different kind of
 entry, in two ways worth stating before it is read across. RIST and SRT are **transparent** — measured
@@ -319,9 +321,12 @@ easy to run them together.**
 durable engineering value sits in the broadcast-grade layer above the transport
 ([vision](vision.md) §7, item 6). Because the obligation to hand off a clean paced TS does not
 transfer to the client on either data plane, that layer is required and owned on both — so it is
-defensible against the alternative, not merely against MoQ's immaturity. The caveat that remains is
-narrower once reassembly and grooming are separated: a *product* exists that can be bought to fill part of that layer on
-the segmented-HTTP side, and whether it fills it to broadcast conformance is unmeasured.
+defensible against the alternative, not merely against MoQ's immaturity. It is also now demonstrably
+*one* layer rather than two: the same groomer, sizing itself from arrival, has been measured to the same
+conformance behind either plane ([T16](../lab/test-16-grooming-segmented-http.md)). The caveat that
+remains is narrower once reassembly and grooming are separated: a *product* exists that can be bought to
+fill part of that layer on the segmented-HTTP side, and whether it fills it to broadcast conformance is
+unmeasured.
 
 ---
 

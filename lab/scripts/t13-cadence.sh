@@ -26,7 +26,13 @@ OUT="$HOME/t13_cadence"
 NOMINAL=9945951
 SETTLE=6
 
-for f in "$MOQ" "$RELAY" "$PACER_DIR/moq_egress"; do
+# The pacer's egress example was renamed moq_egress -> ts_egress when it learned to
+# groom a segmented-HTTP arrival pattern as well as a MoQ one (T16). Accept either, so
+# this rig runs against the build it was written for and against current heads.
+PACER="$PACER_DIR/ts_egress"
+[[ -x "$PACER" ]] || PACER="$PACER_DIR/moq_egress"
+
+for f in "$MOQ" "$RELAY" "$PACER"; do
 	[[ -x "$f" ]] || {
 		echo "not executable: $f" >&2
 		exit 1
@@ -154,7 +160,7 @@ run_variant tsduck 5002 udp \
 
 # Control: the pacer's live path.
 run_variant pacer 5003 rtp \
-	"$PACER_DIR/moq_egress" 127.0.0.1:5003 "$NOMINAL" --rtp \
+	"$PACER" 127.0.0.1:5003 "$NOMINAL" --rtp \
 	--stall-ms 1000 --on-stall mute
 
 echo

@@ -102,6 +102,37 @@ and a true CBR hardware source, which the transparency result makes the interest
 
 ---
 
+## T16 — grooming a segmented-HTTP egress — **run**
+
+Results in [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md), rig in
+[`scripts/t16-groom-segmented.sh`](scripts/t16-groom-segmented.sh). Specified to close the cell
+[interoperability](../docs/interoperability.md) §6 admitted was open — "the equivalent grooming pass on
+a segmented-HTTP egress is unmeasured" — by inserting the groomer into T14 arm B1's chain and changing
+nothing else, then grading with T13's criteria and gates verbatim.
+
+It also tested T14's disposal of the gap as "a configuration finding, not a defect", by running the
+groomer at three points in the parameter space beside the adaptive arm. That is the half of the
+specification worth keeping: the adaptive arm passed, and so did an arm with every depth pinned by flag
+to what the adaptive arm derived — but T14's proposal taken literally, raising only the stall timeout,
+produced a stream with 231 continuity errors behind a flawless PCR record and a perfectly flat wire. **A
+cadence instrument and a PCR grader between them cannot detect a groomer that is deleting programme**,
+which is a method finding for any future pacing measurement: score packet conservation as its own
+column.
+
+What remains open is in T16's own "still open" table. In rough order of value:
+
+- **6 s segments**, which T14 measurement 5 already publishes, against the groomer's 8 s default cushion
+  ceiling. This is the one arm expected to fail as shipped, and therefore the one worth running.
+- **1 s segments**, where 2.5 × the observed lead lands under that ceiling, so the adaptive factor is
+  tested rather than clamped. T16 measured only that 8 s was adequate.
+- **A lossy segmented path.** Every T16 arm is loopback, so no segment ever failed to arrive; the run
+  measures absorption of a late delivery, not recovery from a missing one.
+- **A feed that is not rate-matched, or a join mid-segment,** which is what would distinguish the
+  content-based start gate from a plain timer at the same depth. On a rate-matched delivery the two
+  coincide, so T16 leaves the gate unfalsified rather than demonstrated.
+
+---
+
 ## Dual-path 1+1: remaining conditions (T12)
 
 All four arms are run; results and limitations are in

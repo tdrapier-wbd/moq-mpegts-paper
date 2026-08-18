@@ -43,7 +43,7 @@ Results come from four code bases, and it matters which produced which.
 | Elementary streams, original PIDs, SCTE-35 | preserved | preserved verbatim |
 | Service layer (SDT/NIT, PMT PID, TSID/ONID) | preserved | preserved verbatim |
 | TDT/TOT | not preserved, by design (§4) | preserved verbatim |
-| EIT | present/following round-trips byte-identically on an open upstream PR, so no released build carries it; schedule and p/f-other excluded by design | preserved verbatim |
+| EIT | present/following measured to round-trip byte-identically on a since-withdrawn upstream PR; carriage is being reimplemented on per-table snapshot tracks, so no released build carries it (§4) | preserved verbatim |
 | CBR and PCR cadence | restored downstream by `mpegts-pacer` | preserved end to end by the prototype's own pacer |
 | IRD egress (RTP/UDP, multicast, FEC, ST 2022-7, de-jitter, start gate, TR 101 290 monitoring) | RTP/UDP by `mpegts-pacer`, with ST 2022-7 pairing measured at a receiver (§7) | implemented; measured here only for the start gate, CBR pacing and egress monitoring |
 | Public-internet (EC2) operation | yes | no — never deployed off loopback |
@@ -148,13 +148,16 @@ and the measurement then split them, because they revise at opposite rates. EIT 
 byte-identically between event transitions, so carrying it through the catalog costs ~12 updates and
 ~1.3 kB over ten minutes, the same order as SDT and NIT. Every TDT/TOT section is new content, so
 every one is a republish, for a table that says nothing but "now" and that an exporter can mint more
-accurately than it can relay. Upstream PR
-[#2824](https://github.com/moq-dev/moq/pull/2824) acts on that split and carries EIT
-present/following actual through the round-trip **byte-identically**, including a clean version roll
-and correct suppression of sections not yet in force, while excluding EIT schedule and p/f *other*
-by design. Two caveats: **the PR is open, so no released build carries EIT**, and dropping TDT/TOT
-matters more once the EPG survives, because a receiver with no wall clock has nothing to place the
-EPG against ([lab: T2](../lab/test-2-media-aware-transparency.md),
+accurately than it can relay. A first attempt acted on that split, carrying EIT present/following
+through the catalog, and was measured here to round-trip **byte-identically**, including a clean
+version roll and correct suppression of sections not yet in force
+([#2824](https://github.com/moq-dev/moq/pull/2824)). It was withdrawn rather than merged, because the
+cost measurements below moved the carriage out of the catalog altogether; the implementation that
+replaced it gives every carried table its own snapshot track and takes EIT schedule with it
+([#2909](https://github.com/moq-dev/moq/pull/2909)). Two things hold whichever route lands:
+**no released build carries EIT**, and dropping TDT/TOT matters more once the EPG survives, because a
+receiver with no wall clock has nothing to place the EPG against
+([lab: T2](../lab/test-2-media-aware-transparency.md),
 [T3](../lab/test-3-opaque-transparency.md)).
 
 **Carrying service information in the catalog is cheap for the tables that shipped and expensive for
@@ -167,10 +170,12 @@ noise; what the numbers indict is the *join* (18 kB read before media discovery,
 information) and the *parsing*. A second finding is not about scale at all: a multi-section table is
 assembled in the catalog **in public**, so an exporter re-emitting a half-assembled SDT puts a table
 on the wire that announces two sections and transmits one — incomplete rather than merely stale.
-These are the measurements behind [#2882](https://github.com/moq-dev/moq/issues/2882), which asks
-whether carried service information belongs in the catalog or on its own snapshot track; they support
-the move on coherence grounds, and also show that the tables #2440 shipped would gain nothing from
-it.
+These are the measurements behind [#2882](https://github.com/moq-dev/moq/issues/2882), which asked
+whether carried service information belongs in the catalog or on its own snapshot track. They
+supported the move on coherence rather than bandwidth grounds — the incoherence is what no amount of
+snapshot-policy tuning fixes — and also showed that the tables #2440 shipped would gain nothing from
+it. The question is settled in favour of tracks, and implemented in
+[#2909](https://github.com/moq-dev/moq/pull/2909), which is open.
 
 **A second real-feed defect, of a more serious kind, closed the same way.** Until recently a single
 damaged byte in an MP2, AC-3 or E-AC-3 frame header terminated the publisher outright and took every
@@ -584,16 +589,47 @@ The silences fall at exactly the segment duration, occasionally at two segment p
 a completed segment at line rate, then waits for the next to exist. **Burst size is segment size**, which
 makes the grooming burden and the latency floor one knob rather than two — neither can be paid down
 without partial segments, and while those can be *published* with MPEG-TS, no free client fetches them
-(§10.1). A groomer for
-this leg needs seconds of buffer where a MoQ groomer needs milliseconds, so the `--stall-ms` timeouts
-documented for a MoQ egress are an order of magnitude too tight.
+(§10.1). A groomer for this leg needs seconds of buffer where a MoQ groomer needs milliseconds.
+
+**Groomed, the two egresses are indistinguishable, and it is the same binary on both.** The pacer was
+then inserted into the identical chain — same publisher, origin, receiver and instrument, one stage added
+([lab: T16](../lab/test-16-grooming-segmented-http.md)):
+
+| | Segmented HTTP, ungroomed | **Segmented HTTP, groomed** | MoQ, groomed ([T13](../lab/test-13-downstream-grooming.md)) |
+|---|---|---|---|
+| Median burst | 2.97 MB | **1.3 kB** | one datagram |
+| Largest gap | 4.01 s | **17.2 ms** | 10.4 ms |
+| 10 ms CoV | 12.381 | **0.068** | 0.079 |
+| PCR violations at 481 ns | 2,506 | **0** | 0 |
+| PCR intervals > 40 ms | 0 | **0** | 0 on file, 131 on the wire |
+| Continuity errors | 0 | **0** | 0 |
+| Packets dropped by the groomer | — | **0** | 0 |
+
+The groomer was told the output rate and nothing else: it measures how far ahead of real time its input
+runs and derives the cushion, the buffer cap, the start condition and the stall timeout from that
+([implementation](implementation.md) §9.1). On a MoQ egress the same derivation is a no-op, because the
+lead never approaches its 200 ms floor. **So the grooming obligation is dischargeable by one stage on
+both data planes, which is the paper's layering claim demonstrated rather than argued.**
+
+The PCR-repetition row also corrects a conclusion T13 drew. Its 131 live intervals above 40 ms on the MoQ
+lane were read as a property of re-timing a stream as it arrives, against 0 when reading a file. The
+segmented arm posts 0 *on the wire*, holding 8 s of cushion, so what constrains PCR placement is not live
+operation but whether the stage always has a packet ready at the deadline — which is what buffer depth
+buys.
+
+Two costs are structural and survive grooming. The segmented arm held **7.5 s of programme before
+emitting a byte** and ran a **13.1 MB** buffer, and its derived stall timeout is **~9 s against the MoQ
+lane's ~1 s** — on a segment-fetching leg a dead origin and a slow publish cannot be told apart faster
+than a segment period. Segment duration still sets a latency floor; what grooming removes is that floor
+being visible to the receiver as a cadence fault.
 
 The consequence for the comparison is that "easier to receive" and "easier to hand off cleanly" are
 different claims. Reassembly *is* off the shelf for segmented HTTP — TSDuck's `tsp -I hls` and ffmpeg both
 read a playlist, against MoQ's single `moq export ts` — but grooming, the half that decides whether a
-hardware IRD locks, is unsolved off the shelf on both and measurably harder on the alternative. Since a
-distributor does not supply its clients' receivers, that obligation sits on the distributor's side of the
-demarcation either way ([alternatives](alternatives.md) §4).
+hardware IRD locks, is unsolved off the shelf on both, measurably harder on the alternative, and reached
+here only with a stage that sizes itself from arrival. Since a distributor does not supply its clients'
+receivers, that obligation sits on the distributor's side of the demarcation either way
+([alternatives](alternatives.md) §4).
 
 **Carriage fidelity for a single programme is a wash, against the expectation that MoQ leads on it.**
 An MPEG-TS segment is byte-identical to its source but for **one byte in one packet type**: the continuity
