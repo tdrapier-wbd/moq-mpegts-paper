@@ -17,3 +17,6 @@ docs/upstream/issue2461-close.md
 
 __pycache__/
 *.pyc
+
+# Editorial audit — not part of the publication set
+docs/publication-review.md

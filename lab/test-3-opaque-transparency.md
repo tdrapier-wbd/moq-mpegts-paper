@@ -107,7 +107,7 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 | TSID / ONID | regenerated → **preserved (#2440)** | **preserved** |
 | SCTE-35 splice PIDs | carried (opaque per-PID tracks) | **preserved in-mux, verbatim** |
 | Mux structure | VBR; nulls stripped (CBR restored by pacer) | **CBR preserved; nulls preserved** |
-| PCR intervals > 40 ms (P1) | 13–26 % → **0 % (paced)** | **0 %** |
+| PCR intervals > 40 ms (P1), file domain | 0–26 % by clip → **0 % (paced)** | **0 %** |
 | Egress monitoring | none | **built-in TR 101 290** |
 | Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** (until [#2824](https://github.com/moq-dev/moq/pull/2824) merges) | **broadcast-transparent** |
 
@@ -135,7 +135,7 @@ the media-aware lane's residual gaps).
 
 ## References
 
-- Lane choice and the fallback rationale: [`docs/transport.md`](../docs/transport.md) §4;
+- Lane choice and the fallback rationale: [`docs/architecture.md`](../docs/architecture.md) §6;
   [`docs/architecture.md`](../docs/architecture.md) §4.2.
 - Media-aware counterpart: [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md).
-- Finding: [`docs/evidence.md`](../docs/evidence.md) §1–§3.
+- Finding: [`docs/evidence.md`](../docs/evidence.md) §3.1–§3.

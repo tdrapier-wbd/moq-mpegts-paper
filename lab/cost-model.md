@@ -39,7 +39,7 @@ disclosed or needed.
 |---|---|---|
 | Availability | 24/7/365 — 8,760 h, 31,536,000 s | always-on trunk, the hardest case |
 | Bitrate profiles | 10 Mbps and 25 Mbps TS | arbitrary but representative; 10 Mbps now, 25 Mbps aspirational |
-| Redundancy | active/active 1+1, both legs always live | [architecture](../docs/architecture.md) §14; two full-rate copies at all times |
+| Redundancy | active/active 1+1, both legs always live | [architecture](../docs/architecture.md) §5; two full-rate copies at all times |
 | Regions | EU (Ireland), US East (N. Virginia), US West (Oregon) | egress rates are identical across all three |
 | MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge groomer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)) |
 | SRT carriage multiplier | **1.037x** | T9 measured on the same path with the same clip; matches its framing arithmetic (7 × 188 B TS + 16 B SRT + 8 B UDP + 20 B IPv4 = 1,360 / 1,316 = 1.0334) |

@@ -251,6 +251,10 @@ forwarding nor pure synthesis, and is what `timeref --start` does.
 
 ## Corrections
 
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
+
 - **A sparse sub-table is invisible to `tsp -P tables`, and reading that as absence produced a false
   finding.** The census that opened this experiment used `tables` without `--all-sections` and
   reported the `full` fixture as carrying EIT p/f only, from which followed a conclusion that the

@@ -379,8 +379,8 @@ What changes is **framing**: "a seamless relay-side merge is out of scope" is tr
 implementation*, not of the standard, which specifies object-dedup as a SHOULD. The genuinely
 out-of-scope case in *both* spec and implementation is bridging two *different* broadcasts (timestamp
 rewriting) — that is Malformed under §9.1, and is the "won't merge two broadcasts" the maintainer means.
-Docs corrected accordingly ([evidence](../docs/evidence.md) §7, [relay](../docs/relay.md) §4.1/§5.1,
-[transport](../docs/transport.md) §8.3, [architecture](../docs/architecture.md) §14.3/§14.5).
+Docs corrected accordingly ([evidence](../docs/evidence.md) §3.4, [architecture](../docs/architecture.md) §8.4/§5.1,
+[architecture](../docs/architecture.md) §8.4, [architecture](../docs/architecture.md) §5.5/§14.5).
 
 ### Reconnect latency and media retention
 
@@ -441,6 +441,10 @@ serve?), not just a process-alive check, because this failure keeps the process 
 | ST 2022-7 single-path loss (hitless drill) | **0 lost packets** at the merged output | **hitless** — blackout, 1 %/3 % loss and up to 200 ms skew all covered | ✅ measured in [T12](test-12-dual-path-handoff.md) against a reference receiver, both for one groomer duplicated onto both paths and for two independent stream-clocked pacers; the on-hardware merge is Gate 2 |
 
 ## Corrections
+
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
 
 Four issues were reported upstream from this work. **Two were real defects; two were artefacts of our
 own harness.** The artefacts are the more useful record, because each yields a method rule that any
@@ -530,10 +534,10 @@ the switch hitless — including the graceful exit that has no single-leg answer
 determinism question for two live pacers, and the answer turns on whose clock chooses the slot: keyed
 to their own emit instants they diverge structurally rather than through PCR re-stamping, and keyed
 to stream position they are byte-identical. The full validated finding — including which of our reports were real vs
-harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §7.
+harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
 
 ## References
 
-- Redundancy model: [`docs/relay.md`](../docs/relay.md) §5–§6; [`docs/architecture.md`](../docs/architecture.md) §14 (ST 2022-7 §14.1); [`docs/transport.md`](../docs/transport.md) §8.
+- Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §8.4–§6; [`docs/architecture.md`](../docs/architecture.md) §5 (ST 2022-7 §5.1); [`docs/architecture.md`](../docs/architecture.md) §8.4.
 - Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. Cluster/detach/resume rewrite: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
-- Finding: [`docs/evidence.md`](../docs/evidence.md) §7.
+- Finding: [`docs/evidence.md`](../docs/evidence.md) §3.4.

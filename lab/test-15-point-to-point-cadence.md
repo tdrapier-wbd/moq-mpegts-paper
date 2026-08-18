@@ -2,7 +2,7 @@
 
 ## Objective
 
-[Alternatives](../docs/alternatives.md) §10.1 argues that RIST should hand a groomer the *cleanest*
+[Comparison](../docs/comparison.md) §10.1 argues that RIST should hand a groomer the *cleanest*
 egress of the transports this paper weighs, on the reasoning that a packet-level tunnel with a jitter
 buffer "reconstructs the original packet cadence, delayed, rather than reassembling a stream from
 objects or segments." That was reasoned and explicitly flagged as unmeasured, and it was the largest
@@ -274,9 +274,13 @@ T13 and T14 reached, now with the point-to-point class measured rather than assu
 | RIST Advanced profile | libRIST 0.2.20 exposes it; nothing in the comparison currently turns on it. |
 | What a *proxied* clock would do through MoQ | Needs 0x0014 added to the importer's SI allowlist and a build; the code path predicts a snapshot that freezes after 32 distinct sections and is then replayed at the 500 ms PSI cadence, but that is code reading, not a measurement ([#2914](https://github.com/moq-dev/moq/issues/2914)). |
 | The clock legs' true end-to-end latency | The rig's publisher blocks until its peer connects, which anchors `timeref` before the stream flows and turns the stall into a constant offset. Fixing it means anchoring after the connection is up. |
-| Whether `cbr-output`'s spacing survives a groomer's input stage | It reduces burst absorption, and whether that lets a smaller buffer pass TR 101 290 is a groomer question ([implementation](../docs/implementation.md) §9.1). |
+| Whether `cbr-output`'s spacing survives a groomer's input stage | It reduces burst absorption, and whether that lets a smaller buffer pass TR 101 290 is a groomer question ([architecture](../docs/architecture.md) §4.5). |
 
 ## Corrections
+
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
 
 - **"RIST should hand the groomer the cleanest egress of the four" — withdrawn as stated.** The
   reasoning behind it (a packet tunnel reproduces source pacing rather than reassembling from objects
@@ -299,7 +303,7 @@ T13 and T14 reached, now with the point-to-point class measured rather than assu
   threshold, and the MoQ and segmented-HTTP columns quoted here.
 - [T17 — SI on snapshot tracks](test-17-si-snapshot-tracks.md): the 0 packets on PID 0x0014 that
   measurement 4 exists to put in context.
-- [alternatives](../docs/alternatives.md) §10.1: the claim under test.
+- [comparison](../docs/comparison.md) §10.1: the claim under test.
 - [`t15-cadence.sh`](scripts/t15-cadence.sh), [`t15-bursts.py`](scripts/t15-bursts.py),
   [`tdt-transports.sh`](scripts/tdt-transports.sh), [`tdt-staleness.py`](scripts/tdt-staleness.py).
 - VSF TR-06-2:2022 (RIST Main Profile) and `draft-sharabayko-srt`: neither mentions any TS table.

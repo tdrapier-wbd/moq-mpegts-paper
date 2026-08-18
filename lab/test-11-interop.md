@@ -1,7 +1,7 @@
 # Test 11 — Cross-implementation interop
 
-**Pyramid (§6):** transport neutrality. **Gate (§7):** feeds
-[interoperability](../docs/interoperability.md) §9 and the "a MoQ relay is a neutral transport fabric"
+**Pyramid rung 7** (comparative lab). **Feeds:**
+[comparison](../docs/comparison.md) §12 and the "a MoQ relay is a neutral transport fabric"
 assumption in [architecture](../docs/architecture.md). **State:** T11a partly run. A
 media-level test client exists and passes against `moq-dev` locally and over the public internet;
 **eight other registered public relays return no data**. Root cause isolated for the five that
@@ -61,7 +61,7 @@ concept and a transparent-carriage test.
 `ts-late-subscriber` also passes locally: a subscriber joining 8 s into the 20 s fixture receives
 2.59 MB, continuity clean from the join, PSI present without waiting for a new session.
 
-### Failure signatures: at least four distinct causes, one isolated
+### Failure signatures: at least four distinct causes
 
 Per-relay signatures from the sweep, which show the eight failures are **not** a single cause:
 
@@ -76,9 +76,18 @@ Per-relay signatures from the sweep, which show the eight failures are **not** a
 | quiche-moq | — | no version negotiated; connection never established |
 | libquicr | — | no version negotiated; connection never established |
 
-Only moxygen is explained so far. The most interesting group is the middle one: **imquic, moqx and
-Cloudflare all negotiate a modern draft (16/18/19) with no error at any layer, and still deliver no
-media.** That is a different failure from moxygen's and has not been diagnosed.
+Only moxygen's signature is self-explaining at this point in the sweep; the group below it —
+**imquic, moqx and Cloudflare all negotiate a modern draft (16/18/19) with no error at any layer and
+still deliver no media** — is the interesting one, and the next section identifies the cause it shares
+with moxygen. The bottom three, which never establish a session or have SETUP refused, remain
+undiagnosed.
+
+**The arithmetic behind "at least four distinct causes"**, since it is quoted downstream:
+(1) the demand-driven announce convention, covering the five relays that establish a session;
+(2) the empty-prefix namespace subscription sitting behind it, which is what moxygen rejects
+outright; (3) one SETUP refusal (moqtail); and (4) two connections that never establish
+(quiche-moq, libquicr). Causes 3 and 4 are undiagnosed, so the count is a floor rather than a
+finding.
 
 Version negotiation is clearly working broadly — `moq-transport-19` was negotiated twice, above the
 `moq-transport-17` ceiling the CLI's own help text advertises.

@@ -5,7 +5,7 @@
 [T14](test-14-data-plane-comparison.md) measurement 2 established that a segmented-HTTP egress is ~240×
 coarser than a MoQ egress by median burst size, and stopped there on purpose: the measurement point was
 the *ungroomed* egress, because the question was burst granularity. That left the consequence unmeasured.
-[interoperability](../docs/interoperability.md) §6 said so in as many words — "the equivalent grooming
+[evidence](../docs/evidence.md) §3.2 said so in as many words — "the equivalent grooming
 pass on a segmented-HTTP egress is unmeasured, and would need a larger buffer" — and T14's observations
 disposed of it in one sentence:
 
@@ -38,7 +38,7 @@ setting the documented flags differently.
    criteria by discarding programme has not groomed anything.
 5. **No tuning.** Criteria 1–4 with the pacer told the output rate and nothing else. If it has to be
    told the segment duration or the buffer depth, T14's "configuration finding" stands and
-   [implementation](../docs/implementation.md) §9.1 does not.
+   [architecture](../docs/architecture.md) §4.5 does not.
 
 ---
 
@@ -271,7 +271,7 @@ reaches the same timing gates and a better cadence figure, with no flag changed 
 path, because the quantity it sizes against — the lead the input builds ahead of real time — is measured
 rather than assumed. This matters for the paper's framing beyond the tool: the grooming obligation sits
 on the distributor's side of the demarcation on *both* planes
-([alternatives](../docs/alternatives.md) §4.1), and it is dischargeable by one stage rather than two.
+([comparison](../docs/comparison.md) §4.1), and it is dischargeable by one stage rather than two.
 
 **A perfect wire is not evidence of a good groomer, and arm D is the proof.** Arm D's cadence
 (CoV 0.083, no silence beyond 16 ms) and PCR record (0 violations, 7.9 µs max jitter — the best of any
@@ -294,17 +294,24 @@ clean cadence necessarily buys slow failure detection with it. An operator takin
 primary distribution gets off-the-shelf reassembly and pays ~9 s of failure detection for it. That is a
 property of the data plane, not of the groomer, and not a defect to fix.
 
-**A shallow cushion, not live operation, is what limits PCR placement.** T13 measured 0 PCR repetition
-intervals above 40 ms on a file against 131 in 25 s on the wire, and concluded that a stage re-timing a
-stream as it arrives cannot place PCRs as freely as one reading a file. Arm B posts 0 on the wire. The
-distinction that holds is not file-versus-live but whether the stage always has a packet available at the
-deadline, which is what depth buys.
+**A shallow cushion, not live operation, is what limits PCR placement — and that generalises past this
+data plane.** T13 measured 0 PCR repetition intervals above 40 ms on a file against 131 in 25 s on the
+wire, and concluded that a stage re-timing a stream as it arrives cannot place PCRs as freely as one
+reading a file. Arm B posts 0 on the wire. The distinction that holds is not file-versus-live but
+whether the stage always has a packet available at the deadline, which is what depth buys.
+
+**The consequence for the paper is on the other data plane, and it is not measured here.** If depth is
+what buys P1 PCR repetition, then the MoQ lane needs depth too — and depth is latency, which is the
+only axis on which MoQ leads. This arm cost 7.5 s of programme before the first byte to reach 0. Where
+the MoQ lane's curve crosses zero, and whether that point is compatible with sub-second delivery, is
+unmeasured and is now the campaign's highest-leverage outstanding run
+([planned-experiments](planned-experiments.md); [comparison](../docs/comparison.md) §5.1).
 
 ---
 
 ## Conclusion
 
-**The unmeasured cell in [interoperability](../docs/interoperability.md) §6 is closed, and the answer is
+**The unmeasured cell in [evidence](../docs/evidence.md) §3.2 is closed, and the answer is
 yes.** A segmented-HTTP egress grooms to the same standard T13 reached on the MoQ lane — 0 PCR violations
 at 481 ns, 0 repetition intervals above 40 ms, 0 continuity errors, 10 ms CoV 0.068, largest silence
 17.2 ms, every PID and all three SCTE-35 PIDs preserved — by the same tool, in the same chain, with
@@ -338,6 +345,10 @@ Protocols for these are in [planned-experiments.md](planned-experiments.md).
 ---
 
 ## Corrections
+
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
 
 **A conclusion was drafted from arithmetic and the run contradicted it.** The first version of this file
 stated that no configuration of the documented flags passes, reasoning correctly that a 2,000 ms cap
@@ -387,7 +398,7 @@ the flag.*
   gates are reused verbatim, and whose "passing every PCR check is not the same as being right"
   observation arm D reproduces
 - [T9](test-9-performance.md) — the loopback span artefact recorded in Corrections
-- [implementation](../docs/implementation.md) §9.1 — the work this measures
-- [interoperability](../docs/interoperability.md) §6 — the unmeasured cell this closes
+- [architecture](../docs/architecture.md) §4.5 — the work this measures
+- [evidence](../docs/evidence.md) §3.2 — the unmeasured cell this closes
 - Rigs: [`t16-groom-segmented.sh`](scripts/t16-groom-segmented.sh),
   [`t13-cadence.py`](scripts/t13-cadence.py), [`t13-grade.py`](scripts/t13-grade.py)

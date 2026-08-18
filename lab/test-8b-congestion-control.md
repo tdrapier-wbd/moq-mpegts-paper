@@ -197,9 +197,12 @@ permanent trunk.
   maintainer's own "quinn BBR is kind of bugged" note (asked upstream on #2432).
 - **BBRv3 (noq) is out** — it both bloats and collapses delivery to ~12 %, the #768 overflow biting
   under sustained pressure. A controller that can abort the relay is an outage by definition here.
-- **The controller to pin is BBRv2 on quiche** — stable, complete, no aborts. It does not need to be
-  the upstream default; it needs to be a supported choice that can be run continuously (the open
-  question to the maintainer on #2432).
+- **The controller that survives this condition best is BBRv2 on quiche** — stable, complete, no
+  aborts on every replicate. **Read that at its actual strength: one condition, 2–3 replicates, and a
+  delivered fraction that swings ~20 points.** It is enough to say the ranking under a shaped
+  bottleneck is not the ranking under non-congestive loss; it is not enough to pin a controller for a
+  24/7/365 feed, and C2 is what would be. The open question to the maintainer on #2432 is whether
+  BBRv2 on quiche is a supported choice that can be run continuously.
 - **MoQ and SRT fail in opposite directions** — the T8 finding, now under congestion too. MoQ sheds
   *whole groups* and emits a syntactically clean TS (0 CC, 45–81 % delivered) — thinned but
   reconstructable. SRT keeps 90 % of the bytes but its ARQ cannot hold under sustained
@@ -227,13 +230,13 @@ For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not a
 
 C1 establishes the rig and the qualitative picture under a deliberately under-provisioned
 cap: **CUBIC reliably bloats but stays clean; BBRv2 (quiche) is the stable, complete performer; BBRv1
-(quinn) is bimodal and therefore unsuitable for a permanent feed as it stands; BBRv3 (noq) is broken
-by #768; and MoQ thins where SRT damages.** The controller to pin today is **BBRv2 on quiche**,
-pending the maintainer's answer on whether that is a first-class supported choice or whether the
-quinn-BBRv1 intermittency is a fixable bug (asked on [#2432](https://github.com/moq-dev/moq/pull/2432)).
+(quinn) is bimodal on one replicate of three; BBRv3 (noq) is broken by #768; and MoQ thins where SRT
+damages.** **No controller recommendation for a permanent fixed-rate trunk follows from one
+under-provisioned condition** — the bimodality is a reason to run C2, not a disqualification. The
+question is with the maintainer on [#2432](https://github.com/moq-dev/moq/pull/2432).
 
 This is **not yet promoted to [`docs/evidence.md`](../docs/evidence.md)**, and the controller wording
-in [`docs/transport.md`](../docs/transport.md) §3.1 / [`docs/relay.md`](../docs/relay.md) §5 is **not**
+in [`docs/architecture.md`](../docs/architecture.md) §8.5 / [`docs/architecture.md`](../docs/architecture.md) §8.4 is **not**
 changed on the strength of it. The load-bearing follow-up is C2 (transient congestion on a provisioned
 path), then the C6 soak — the two conditions that actually test a permanent trunk.
 
@@ -255,4 +258,4 @@ path), then the C6 soak — the two conditions that actually test a permanent tr
 - Impairment method and SSH-safe lane: [test-5-network-impairment.md](test-5-network-impairment.md).
 - Upstream: [#2468](https://github.com/moq-dev/moq/pull/2468) (backend-specific CC defaults),
   [noq #768](https://github.com/n0-computer/noq/issues/768) (BBRv3 panic).
-- Findings destination (once settled): [`docs/evidence.md`](../docs/evidence.md) §6.
+- Findings destination (once settled): [`docs/evidence.md`](../docs/evidence.md) §3.3.

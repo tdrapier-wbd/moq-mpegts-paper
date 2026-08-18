@@ -2,6 +2,16 @@
 
 ## Objective
 
+> **Read criterion 3 on the wire, not on the file.** The headline result of this experiment that
+> travels furthest is a negative one: `mpegts-pacer` posts **0** PCR intervals above 40 ms on a
+> captured file and **131 on the laptop rig and 159 on the EC2 box, with a 227.4 ms maximum, on the
+> wire**, at the cushion the MoQ lane runs. [T16](test-16-grooming-segmented-http.md) later showed the
+> constraint is buffer depth rather than live operation, reaching 0 on the wire at an 8 s cushion on
+> the *other* data plane. **The depth at which the MoQ lane would reach 0, and whether it is
+> compatible with sub-second delivery, is unmeasured** and is the campaign's highest-leverage
+> outstanding run ([planned-experiments](planned-experiments.md)).
+
+
 `moq ... export ts` emits a transport stream with no stuffing and no wire cadence: MPEG-TS null
 packets are not carried, so what arrives is content only, delivered in MoQ's object bursts. Anything
 downstream that expects a constant mux rate has to put both back. Every measurement in this campaign
@@ -409,6 +419,10 @@ either way. The wire figures carry a general-purpose OS's scheduling jitter, and
 figures are not interchangeable: compare within a group, never across.
 
 ## Corrections
+
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
 
 - **A pacing target must be measured from the stream the stage will receive.** The pass-through chain
   needs the egress content rate, and it was twice taken from somewhere else: first from a file-domain

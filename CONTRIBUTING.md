@@ -63,16 +63,25 @@ Contributions are held to the same standard as the existing text. Please:
 - **Avoid marketing, hype, and startup language.** This is reference material, not
   promotion. Keep commercial and go-to-market argument out of the technical
   documents.
-- **Cross-link, don't duplicate.** The reference architecture
-  ([`docs/architecture.md`](docs/architecture.md)) is the integrative overview;
-  the topic documents are the deep dives. Add detail in the right place and link
-  to it rather than restating it.
+- **Cross-link, don't duplicate.** Each concept has exactly one authoritative home and every
+  other mention is a one-line cross-reference. The requirement set lives in
+  [`docs/problem.md`](docs/problem.md) §5; the data-plane comparison in
+  [`docs/comparison.md`](docs/comparison.md); the grooming and redundancy design in
+  [`docs/architecture.md`](docs/architecture.md) §4 and §5; every measurement in
+  [`docs/evidence.md`](docs/evidence.md). Add detail in the right place and link to it rather
+  than restating it.
+- **Name the evidence, or say there is none.** A claim that decides something must cite the
+  measurement that established it. Where a claim is specification-based, architectural
+  reasoning or a vendor datasheet, say so in the sentence that makes it — those words
+  (*measured*, *derived*, *specified*, *reasoned*, *datasheet*) are load-bearing here. Where a
+  figure comes from a file capture rather than the live wire, name the domain: the two differ,
+  and in this repository they have differed materially.
 - **Write the current state, not the sequence that produced it.** Both the paper and the
   notebook describe what is understood now. When something changes, replace the stale
   statement where it is made rather than appending a correction after it, and merge repeated
   discussions of the same point into one authoritative explanation. Where a correction carries
-  a lesson worth keeping, the per-test file records it once in a `Corrections` section — the
-  correction survives, the blow-by-blow does not.
+  a lesson worth keeping, it goes once into [`lab/method-notes.md`](lab/method-notes.md) as a
+  method rule — the correction survives, the blow-by-blow does not.
 - **Use Mermaid for diagrams** so they render in the repository and stay
   diff-friendly.
 
@@ -94,7 +103,7 @@ working in [`lab/cost-model.md`](lab/cost-model.md) so it stays auditable.
 
 If a point can only be made with confidential data, describe the *method* and leave
 the numbers out — or, better, express the result as a threshold derived from public
-figures, as §4.7 does for the satellite comparison.
+figures, as [`docs/economics.md`](docs/economics.md) §4.4 does for the satellite comparison.
 
 **Third-party reports of what somebody pays are not published prices**, and the model
 excludes them. A rate belongs in the paper only if it is on a public price page, derived
@@ -119,17 +128,23 @@ submit — the same standard as any other contribution.
 
 ## Document map
 
-If you are not sure where a change belongs, the [README](README.md) has the full
-document map. In brief, the **paper** (`docs/`): [`vision`](docs/vision.md) (why),
-[`transport`](docs/transport.md) (why MoQ specifically), [`architecture`](docs/architecture.md)
-(how, integrative), [`implementation`](docs/implementation.md) (build and test), the topic
-deep-dives (`relay`, `control-plane`, `entitlement`, `security`, `interoperability`,
-`operations`), [`economics`](docs/economics.md) (cost framework), and
-[`evidence`](docs/evidence.md) (what the prototype showed).
+If you are not sure where a change belongs, the [Readme](README.md) has the full map. In brief,
+the **paper** (`docs/`) is seven documents:
 
-The **validation campaign** lives in [`lab/`](lab/README.md) — both the plan (objectives,
-acceptance gates, pass criteria) and the per-test engineering notebook (procedures, commands,
-measured results). Code this project contributes back to the ecosystem lives in
+| Document | Owns |
+|---|---|
+| [problem](docs/problem.md) | Why this is changing, and the requirement set R1–R9 |
+| [comparison](docs/comparison.md) | The data-plane head-to-head, the toolchain survey, the verdict table |
+| [architecture](docs/architecture.md) | The edge gateway, redundancy, carriage, the fabric, observability, version strategy |
+| [control plane](docs/control-plane.md) | Provisioning, entitlement, tenancy, security — design only, no evidence |
+| [evidence](docs/evidence.md) | Method, instruments, results by question, limits, ranked open questions |
+| [economics](docs/economics.md) | Cost framework and the always-on model at published rates |
+| [glossary](docs/glossary.md) | The two vocabularies |
+
+The **validation campaign** lives in [`lab/`](lab/README.md) — the plan with pass criteria fixed
+in advance, the per-experiment record, [`method-notes`](lab/method-notes.md) for the measurement
+rules the campaign learned, and [`upstream-contributions`](lab/upstream-contributions.md) for
+what was reported and fixed in other projects. Code contributed back lives in
 [`interop/`](interop/README.md); the CBR groomer is the separate
 [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) crate.
 

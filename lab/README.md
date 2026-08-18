@@ -5,7 +5,7 @@ evaluation. It is both the campaign **plan** (the objective, the gate mapping, a
 agreed *before* the numbers were known) and the campaign **record** (what was actually done and
 measured — objectives, environments, exact procedures, results, observations and conclusions) so that
 an external engineer can follow the experiments and reproduce them. It is the executable companion to
-[implementation](../docs/implementation.md) §6–§7 (the validation pyramid and acceptance gates).
+[evidence](../docs/evidence.md) §1.2 (the validation pyramid and the acceptance gates).
 
 It is deliberately distinct from the rest of the repository:
 
@@ -14,10 +14,17 @@ It is deliberately distinct from the rest of the repository:
   pass criteria fixed in advance. Where a result was later corrected, the per-test file states the
   current finding and records that the earlier reading was wrong and why — the correction is kept,
   the blow-by-blow is not.
-- **`docs/` — "this is what we've learned."** The paper: [`docs/evidence.md`](../docs/evidence.md) is
-  the validated-findings summary; the topic docs (`architecture.md`, `transport.md`, `relay.md`, …)
-  are the design and architecture conclusions. Where an observation here has become a permanent
-  finding, this notebook cross-references `docs/evidence.md` rather than restating it.
+- **`docs/` — "this is what we've learned."** The paper. [`docs/evidence.md`](../docs/evidence.md)
+  is the results document — organised by *question*, not by experiment, with the limits of the
+  evidence stated in one place; the other documents are the requirement, the comparison, the
+  architecture and the economics. Where an observation here has become a permanent finding, this
+  notebook cross-references `docs/evidence.md` rather than restating it.
+- **[`method-notes.md`](method-notes.md)** — every measurement rule this campaign learned by getting
+  something wrong, organised by theme rather than by experiment, because several of them bit more
+  than once in different rigs. Per-test files point here rather than repeating them.
+- **[`upstream-contributions.md`](upstream-contributions.md)** — what was found, reported and
+  verified in other people's projects. Kept separate because it is a contribution record rather than
+  a measurement record, and it is a different argument from the one the paper makes.
 
 > **On honesty.** The plan below is written to be *disproven*. Its value is the method and the pass
 > criteria, fixed before the numbers are known; the numbers themselves — including results that
@@ -26,8 +33,8 @@ It is deliberately distinct from the rest of the repository:
 
 > Machine-specific reproduction detail (relay addresses, the EC2 host IP, absolute paths, TLS
 > fingerprints, build locations, credentials) is **not** in this public notebook — it lives in the
-> git-ignored `INSTRUCTIONS.local.md`. Public commands below use placeholders such as `<EC2_IP>`
-> and `<subscriber-home-ip>`.
+> git-ignored `INSTRUCTIONS.local.md`. Public commands here use placeholders such as `<EC2_IP>`
+> and `<subscriber-home-ip>`. Everything else, including every rig script, is committed.
 
 ## Objective
 
@@ -41,7 +48,7 @@ The thesis fails if any of the following holds and cannot be remedied:
 - MoQ carriage is *not* bit-transparent (continuity errors, dropped signalling, or structural
   corruption survive a lossless path).
 - Groomed egress cannot pass **TR 101 290 P1/P2 on a hardware IRD** (the make-or-break gate —
-  [implementation](../docs/implementation.md) §7, Gate 2).
+  [evidence](../docs/evidence.md) §1.2, Gate 2).
 - Impairment or failure behaviour is qualitatively worse than the incumbent IP transports
   (SRT/Zixi/RIST) it would replace, at matched conditions.
 
@@ -59,9 +66,9 @@ work — a resilient path that a hardware IRD rejects is not a product.
 
 Each experiment is its own file, structured as Objective / Environment / Procedure / Results /
 Observations / Conclusion / References. The pyramid tier and acceptance gate are from
-[implementation](../docs/implementation.md) §6–§7.
+[evidence](../docs/evidence.md) §1.2.
 
-| # | Experiment | Pyramid (§6) | Gate (§7) | State | File |
+| # | Experiment | Pyramid rung | Gate | State | File |
 |---|---|---|---|---|---|
 | T1 | Baseline TS characterisation (P0 reference) | reference for 1, 3 | precondition for Gate 1 | complete | [test-1-baseline-ts.md](test-1-baseline-ts.md) |
 | T2 | Transport transparency — media-aware lane (local) | 1, 2, 3 | Gate 1 (reference lane) | complete | [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md) |
@@ -72,14 +79,14 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T7 | Timing integrity (TR 101 290) | 3 (file), 4 (**hardware**) | **Gate 2 — make-or-break** | P1 complete; P2 open | [test-7-timing-integrity.md](test-7-timing-integrity.md) |
 | T8 | SRT vs MoQ comparative benchmark | 7 (comparative lab) | feeds [economics](../docs/economics.md) §4, §9 | partial | [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) |
 | T8b | Congestion control for a permanent fixed-rate trunk | 7 (comparative lab) | extends T8 | C1 run; C2–C6 open | [test-8b-congestion-control.md](test-8b-congestion-control.md) |
-| T9 | System performance & resource utilisation | 5 (scale/soak) | feeds [operations](../docs/operations.md), [economics](../docs/economics.md) §3.1, §4, §9 | partial — publisher and subscriber pass; relay growth root-caused upstream to quinn-proto and its predicted plateau confirmed on this rig (soft ceiling; sub-proportional mitigation) | [test-9-performance.md](test-9-performance.md) |
+| T9 | System performance & resource utilisation | 5 (scale/soak) | feeds [architecture](../docs/architecture.md) §9), [economics](../docs/economics.md) §3.1, §4, §9 | partial — publisher and subscriber pass; relay growth root-caused upstream to quinn-proto and its predicted plateau confirmed on this rig (soft ceiling; sub-proportional mitigation) | [test-9-performance.md](test-9-performance.md) |
 | T11 | Cross-implementation interop | 7 (comparative lab) | transport neutrality | T11a partial; T11b open | [test-11-interop.md](test-11-interop.md) |
 | T12 | End-to-end 1+1 dual-path delivery and hand-off | 6 (redundancy drill) | Gate 3 — resilience; de-risks Gate 2 | complete for a co-started pair, arms A–D, incl. leg failure and recovery; independent restart of one leg blocked upstream | [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md) |
 | T13 | Off-the-shelf CBR/PCR grooming of a MoQ egress | 4 (file), plus wire cadence | supports Gate 2; decides how the grooming requirement can be documented | complete for TSDuck, FFmpeg and GStreamer on a broadcast mux and a single-programme feed, and for `rawsendmpeg2ts` as a datagram sender after them; no off-the-shelf stage satisfies all four criteria, but the wire half is now solved off the shelf and the closest chain fails carriage alone | [test-13-downstream-grooming.md](test-13-downstream-grooming.md) |
-| T14 | MoQ against segmented HTTP on one route | 7 (comparative lab) | Gate 1 + Gate 2, both data planes; feeds [alternatives](../docs/alternatives.md) | partial — burst granularity (both arms), carriage fidelity and wire cost measured; the low-latency arm split, publishing TS parts free but finding no free client that fetches them; hardware P1/P2 (which now gates latency too) and MPTS-through-CDN blocked on kit this lab does not have | [test-14-data-plane-comparison.md](test-14-data-plane-comparison.md) |
-| T15 | RIST and SRT on T14's cadence instrument | 7 (comparative lab) | extends T14; grades [alternatives](../docs/alternatives.md) §10.1 | complete on a healthy path — RIST (Main and Simple) and SRT measured transparent, identical to a no-transport control, so their egress is their source's; MoQ's granularity is source-independent; loss/RTT and a true CBR hardware source left open | [test-15-point-to-point-cadence.md](test-15-point-to-point-cadence.md) |
-| T16 | Grooming a segmented-HTTP egress | 4 (file), plus wire cadence | supports Gate 2 on the alternative data plane; closes [implementation](../docs/implementation.md) §9.1 and the unmeasured cell in [interoperability](../docs/interoperability.md) §6 | complete on a healthy path — the same groomer, sizing itself from arrival, takes T14 arm B1's egress to T13's MoQ-lane conformance with nothing dropped; the three flag-pinned control arms show why it needed deriving rather than documenting; 6 s segments and a lossy path left open | [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md) |
-| T17 | Standalone SI on snapshot tracks: EIT carriage and its join cost | 2/3 (carriage fidelity) | closes the EIT residual in [evidence](../docs/evidence.md) §4; prices the join question [#2882](https://github.com/moq-dev/moq/issues/2882) asked | complete against the open upstream PR — EIT round-trips section-for-section including the sparse schedule, carriage is bitrate-neutral (0.985×) and the export gate costs 1 ms; leaves an unbounded-gate liveness risk and TDT/TOT as the sole remaining service-layer gap | [test-17-si-snapshot-tracks.md](test-17-si-snapshot-tracks.md) |
+| T14 | MoQ against segmented HTTP on one route | 7 (comparative lab) | Gate 1 + Gate 2, both data planes; feeds [comparison](../docs/comparison.md) | partial — burst granularity (both arms), carriage fidelity and wire cost measured; the low-latency arm split, publishing TS parts free but finding no free client that fetches them; hardware P1/P2 (which now gates latency too) and MPTS-through-CDN blocked on kit this lab does not have | [test-14-data-plane-comparison.md](test-14-data-plane-comparison.md) |
+| T15 | RIST and SRT on T14's cadence instrument | 7 (comparative lab) | extends T14; grades [comparison](../docs/comparison.md) §10.1 | complete on a healthy path — RIST (Main and Simple) and SRT measured transparent, identical to a no-transport control, so their egress is their source's; MoQ's granularity is source-independent; loss/RTT and a true CBR hardware source left open | [test-15-point-to-point-cadence.md](test-15-point-to-point-cadence.md) |
+| T16 | Grooming a segmented-HTTP egress | 4 (file), plus wire cadence | supports Gate 2 on the alternative data plane; closes [architecture](../docs/architecture.md) §4.5 and the unmeasured cell in [evidence](../docs/evidence.md) §3.2 | complete on a healthy path — the same groomer, sizing itself from arrival, takes T14 arm B1's egress to T13's MoQ-lane conformance with nothing dropped; the three flag-pinned control arms show why it needed deriving rather than documenting; 6 s segments and a lossy path left open | [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md) |
+| T17 | Standalone SI on snapshot tracks: EIT carriage and its join cost | 2/3 (carriage fidelity) | closes the EIT residual in [evidence](../docs/evidence.md) §3.1; prices the join question [#2882](https://github.com/moq-dev/moq/issues/2882) asked | complete against the open upstream PR — EIT round-trips section-for-section including the sparse schedule, carriage is bitrate-neutral (0.985×) and the export gate costs 1 ms; leaves an unbounded-gate liveness risk and TDT/TOT as the sole remaining service-layer gap | [test-17-si-snapshot-tracks.md](test-17-si-snapshot-tracks.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -155,8 +162,19 @@ per-test file when executed. In priority order:
 ## Cross-cutting limitations (stated up front)
 
 - **No hardware IRD pass yet.** Gate 2 (T7/P2) is the load-bearing open test. Everything above it is
-  necessary but not sufficient.
-- **The alternative data plane is only partly measured.** [alternatives](../docs/alternatives.md)
+  necessary but not sufficient, and nothing in this campaign has ever been fed to a hardware decoder
+  or graded by a hardware analyser.
+- **No latency measurement, on either data plane.** Glass-to-glass latency is owed by T8 and recorded
+  as unmeasured by T14. It is the axis on which the paper's data-plane comparison turns, so its
+  absence is a first-order limitation rather than a loose end
+  ([evidence](../docs/evidence.md) §3.1).
+- **The groomed MoQ egress is not P1-conformant on PCR repetition on the wire** at the cushion the
+  lane runs: 0 % of intervals above 40 ms on file, 131–159 in 25 s on the wire
+  ([T13](test-13-downstream-grooming.md)). [T16](test-16-grooming-segmented-http.md) reaches 0 on the
+  wire at an 8 s cushion on the *other* data plane, so the depth at which the MoQ lane would reach it
+  — and whether that depth is compatible with sub-second delivery — is unmeasured and is the campaign's
+  highest-leverage outstanding run ([planned-experiments](planned-experiments.md)).
+- **The alternative data plane is only partly measured.** [comparison](../docs/comparison.md)
   grades MoQ against segmented HTTP carrying MPEG-TS. [T14](test-14-data-plane-comparison.md) has
   measured three of its rows — burst granularity, carriage fidelity and wire cost — and moved all three.
   The rest are still specification text or vendor datasheets, and the vendor claims in particular should
@@ -171,7 +189,7 @@ per-test file when executed. In priority order:
   file-fed; T4 has run a live SRT contribution source end-to-end on the media-aware lane, but the
   opaque lane over the wire awaits deploying the opaque publisher on EC2.
 - **No production relay cluster.** T6 is a two-relay lab, not a federated mesh
-  ([relay](../docs/relay.md) §6).
+  ([architecture](../docs/architecture.md) §8.3).
 - **The 1+1 measurement is a software receiver on one host.** [T12](test-12-dual-path-handoff.md)
   runs two concurrently live legs into a receiver that selects between them, which is the form a
   head-end expects at a hand-off — but the receiver is a reference implementation of the selection
@@ -180,15 +198,15 @@ per-test file when executed. In priority order:
 - **`netem` is an emulator.** T5/T8 complement but do not replace the real public-internet EC2 path.
 - **Draft-14 pin.** The opaque lane and T3 are against a pinned, now-behind draft (`moq-transport`
   0.14.2); migration to later drafts is a tracked dependency and its own re-test
-  ([transport](../docs/transport.md) §5, [implementation](../docs/implementation.md) §8).
+  ([architecture](../docs/architecture.md) §10, [architecture](../docs/architecture.md) §10).
 - **Reproducibility.** The opaque publisher/subscriber/groomer are private
-  ([implementation](../docs/implementation.md) §2); the T2 media-aware lane is fully reproducible today
+  ([comparison](../docs/comparison.md) §11); the T2 media-aware lane is fully reproducible today
   with public `moq-dev` binaries + TSDuck, and its downstream CBR/PCR groom with the public
   [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) crate. Reproducing the opaque,
   IRD-grade egress independently still requires the opaque grooming logic or an equivalent.
 - **Large artefacts are not committed.** Captures, pcaps and analyser exports are the evidence of
   record but are kept out of this repository; the notebook records their identity and method, not the
-  binaries ([CONTRIBUTING](../CONTRIBUTING.md)).
+  binaries ([Contributing](../CONTRIBUTING.md)).
 
 ## Shared test environment and conventions
 
@@ -251,8 +269,9 @@ awk -F, 'NR>1{cur=$7; if(prev!=""){d=(cur-prev)/27000; n++; sum+=d;
 - Raw captures and analyser exports are the evidence of record; they are large binaries and are not
   committed. The commands above regenerate them from the source clips.
 - Where an experiment produces a result table too large to read inline, the full table is committed as
-  CSV in [`results/`](results/) and the per-test file summarises it. The runnable rigs themselves are
-  kept local (`lab/scripts/`, git-ignored) and are described in the per-test files.
+  CSV in [`results/`](results/) and the per-test file summarises it. The runnable rigs are committed in
+  [`scripts/`](scripts/) and are named per test; only machine-specific values (addresses, absolute
+  paths, credentials, TLS fingerprints) are held out, in the git-ignored `INSTRUCTIONS.local.md`.
 
 ### macOS loopback gotchas (local runs)
 
