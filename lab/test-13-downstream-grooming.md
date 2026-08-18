@@ -255,11 +255,13 @@ different one, and which failure is acceptable depends on the receiver:
   a pacing stage after it. For a single-programme feed with no signalling contract it is genuinely good.
 - **`mpegts-pacer`** remains the only stage measured here that satisfies all four criteria at once.
   That is a statement about the state of the ecosystem, not a recommendation: as the upstream review
-  of [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it has no supported installation
-  path, so it cannot be a documented dependency for anyone else.
+  of [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation
+  path at the time, and it is still one lab's unpublished tool.
 
 For upstream documentation this supports stating the *requirement* precisely and naming the
 off-the-shelf options with their measured limits, rather than naming any single tool as the answer.
+That holds whether or not our own tool can be installed, which is why the installability fix noted
+below does not reopen it.
 
 **Scope.** These are file-arithmetic and loopback-cadence results on a laptop. They say nothing about
 what a hardware IRD accepts, which remains [T7](test-7-timing-integrity.md)'s open Gate 2, and the
@@ -284,6 +286,13 @@ wire figures carry a general-purpose OS's scheduling jitter.
   schedule, so content arrives ahead of the slots the groomer has for it. **Method rule:** grade a
   downstream stage against captures taken from the pipeline it will sit in, never against a
   synthesised approximation of that pipeline's output.
+- **"No supported installation path" was true when written, and has since been fixed.** The pacer was
+  library-only: every documented command was `cargo run --example`, and `cargo install` refused the
+  crate outright for having no binary target. The egress adapter is now the crate's `mpegts-pacer`
+  binary, installable with `cargo install --git`, though still not on crates.io. This changes none of
+  the measurements above and none of the conclusion: the recommendation for someone else's
+  documentation was never contingent on our tool being installable, and remains the requirement plus
+  the off-the-shelf options.
 
 ## References
 

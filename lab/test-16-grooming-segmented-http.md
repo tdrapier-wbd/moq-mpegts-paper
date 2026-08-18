@@ -51,7 +51,7 @@ setting the documented flags differently.
 | Publisher | TSDuck 3.44-4676 `tsp -O hls`, 2 s target, `--intra-close --align-first-segment --live 6 --live-extra-segments 3` |
 | Origin | `python3 -m http.server`, as T14 measurement 2 |
 | Receiver | TSDuck 3.44-4676 `tsp -I hls --live`, bounded by `-P until --seconds` so the groomer sees a clean end of stream and flushes |
-| Groomer | `mpegts-pacer` 0.1.0 with adaptive sizing, `examples/ts_egress` |
+| Groomer | `mpegts-pacer` 0.1.0 with adaptive sizing, `examples/ts_egress` — the same code has since become the crate's `mpegts-pacer` binary, and the rig builds whichever the checkout has |
 | Output rate | 11,437,843 b/s — the source's PCR-derived content rate (9,945,951) plus the pacer's 15 % default headroom, pinned so every arm is graded against one byte clock |
 | Instrument | [`t13-cadence.py`](scripts/t13-cadence.py): `pipe` mode for arm A (64 kB reads, as T14), `capture` mode for the groomed arms (loopback UDP, as T13's MoQ lane) |
 | Grading | [`t13-grade.py`](scripts/t13-grade.py) over `compliance.py`, plus `tsp -P pcrverify`, `-P continuity` and `-P analyze` directly |

@@ -20,11 +20,17 @@ BCAST=t12.joindiag$$.hang
 R=$HOME/t12/joindiag
 rm -rf "$R"; mkdir -p "$R"
 
-# The pacer's egress example was renamed moq_egress -> ts_egress when it learned to groom
-# a segmented-HTTP arrival pattern as well as a MoQ one (T16). Accept either, so this rig
-# runs against the build it was written for and against current heads.
-EGRESS="$PACER/ts_egress"
-[[ -x "$EGRESS" ]] || EGRESS="$PACER/moq_egress"
+# The pacer's egress adapter was renamed moq_egress -> ts_egress when it learned to groom
+# a segmented-HTTP arrival pattern as well as a MoQ one (T16), then graduated from an
+# example to the crate's binary, `mpegts-pacer`. Accept any of the three, so this rig runs
+# against the build it was written for and against current heads.
+EGRESS="$PACER/mpegts-pacer"
+for candidate in mpegts-pacer ts_egress moq_egress; do
+	if [[ -x "$PACER/$candidate" ]]; then
+		EGRESS="$PACER/$candidate"
+		break
+	fi
+done
 
 cleanup() {
 	for pid in ${LEG:-} ${PUB:-} ${RELAY:-}; do

@@ -218,7 +218,7 @@ Source TS (file or live SRT/RTP)
 | Real-time source pacing | TSDuck `regulate` (PCR-based; `--pcr-synchronous` for looped files) |
 | Media-aware lane | `moq-dev` `moq` (import/export) + `moq-relay` (public reference impl; moq-lite / moq-transport) |
 | Opaque `m2ts` lane | private `moq_publisher` / `moq_relay` / `moq_subscriber` (draft-14 / MSFTS `m2ts`) |
-| CBR/PCR grooming | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`cbr_file` / `ts_egress` examples — `ts_egress` was `moq_egress` before [T16](test-16-grooming-segmented-http.md), and records written earlier name it that way) |
+| CBR/PCR grooming | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`cargo install --git`; the `cbr_file` example for the file arms). The live egress adapter was the `moq_egress` example, renamed `ts_egress` at [T16](test-16-grooming-segmented-http.md) and now the crate's `mpegts-pacer` binary; records name whichever they were run against, and the rigs accept all three. |
 | Network impairment | Linux `tc` / `netem` (optionally `tbf`/`htb` for rate); shaped-bottleneck rigs (`t8b-netns.sh`, `t8b-shaper.sh`, `t8b-rtt-probe.sh`) are kept local — see `INSTRUCTIONS.local.md` |
 | Hardware conformance | Hardware IRD + TR 101 290 analyser (P2; access-dependent) |
 

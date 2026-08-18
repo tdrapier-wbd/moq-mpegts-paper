@@ -56,7 +56,18 @@ PORT_B=5200
 BCAST="t12d-$LABEL.hang"
 OUT="$HOME/t12d_$LABEL"
 
-for f in "$MOQ" "$RELAY" "$PACER/moq_egress"; do
+# The pacer's egress adapter was moq_egress, then ts_egress, and is now the crate's
+# binary `mpegts-pacer`. Accept any of the three, so this rig runs against the build it
+# was written for and against current heads.
+EGRESS="$PACER/moq_egress"
+for candidate in mpegts-pacer ts_egress moq_egress; do
+	if [[ -x "$PACER/$candidate" ]]; then
+		EGRESS="$PACER/$candidate"
+		break
+	fi
+done
+
+for f in "$MOQ" "$RELAY" "$EGRESS"; do
 	[[ -x "$f" ]] || { echo "not executable: $f" >&2; exit 1; }
 done
 [[ -r "$SRC" ]] || { echo "no such source: $SRC" >&2; exit 1; }
@@ -133,7 +144,7 @@ export_ts() { # broadcast logfile
 # shellcheck disable=SC2094
 leg() { # rtp_port broadcast logfile [filter]
 	local groom=(
-		"$PACER/moq_egress" "127.0.0.1:$1" "$RATE" --rtp --ssrc "$SSRC"
+		"$EGRESS" "127.0.0.1:$1" "$RATE" --rtp --ssrc "$SSRC"
 		--latency-ms "$PACER_LAT" --max-latency-ms "$PACER_MAXLAT"
 		--stall-ms "$PACER_STALL" --on-stall mute
 		--stream-clock --sequence-seed "$SEQ_SEED"

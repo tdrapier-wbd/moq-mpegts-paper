@@ -26,11 +26,17 @@ OUT="$HOME/t13_cadence"
 NOMINAL=9945951
 SETTLE=6
 
-# The pacer's egress example was renamed moq_egress -> ts_egress when it learned to
-# groom a segmented-HTTP arrival pattern as well as a MoQ one (T16). Accept either, so
-# this rig runs against the build it was written for and against current heads.
-PACER="$PACER_DIR/ts_egress"
-[[ -x "$PACER" ]] || PACER="$PACER_DIR/moq_egress"
+# The pacer's egress adapter was renamed moq_egress -> ts_egress when it learned to
+# groom a segmented-HTTP arrival pattern as well as a MoQ one (T16), then graduated from
+# an example to the crate's binary, `mpegts-pacer`. Accept any of the three, so this rig
+# runs against the build it was written for and against current heads.
+PACER="$PACER_DIR/mpegts-pacer"
+for candidate in mpegts-pacer ts_egress moq_egress; do
+	if [[ -x "$PACER_DIR/$candidate" ]]; then
+		PACER="$PACER_DIR/$candidate"
+		break
+	fi
+done
 
 for f in "$MOQ" "$RELAY" "$PACER"; do
 	[[ -x "$f" ]] || {

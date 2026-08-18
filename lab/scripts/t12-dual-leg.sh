@@ -8,9 +8,9 @@
 #
 # Arms differ only in how each leg turns delivered MoQ objects into RTP:
 #   a  two chains, no pacer      (tsp -O ip --rtp, framing pinned identically)
-#   b  two chains, one pacer each (mpegts-pacer moq_egress --rtp)
-#   c  one chain, groom once, duplicate the datagrams (mpegts-pacer dual_rtp)
-#   d  two chains, one *stream-clocked* pacer each (moq_egress --rtp --stream-clock)
+#   b  two chains, one pacer each (mpegts-pacer --rtp)
+#   c  one chain, groom once, duplicate the datagrams (mpegts-pacer's dual_rtp example)
+#   d  two chains, one *stream-clocked* pacer each (mpegts-pacer --rtp --stream-clock)
 #
 # Arm c has a single upstream chain by construction, so only the path injections
 # apply to it; the upstream ones take the whole arm down, which is the result, not
@@ -25,7 +25,7 @@
 #   SRC        source clip (a video-only remux if the run loops it)
 #   MOQ        moq client binary
 #   MOQ_RELAY  moq-relay binary
-#   PACER      directory holding the built moq_egress / dual_rtp examples
+#   PACER      directory holding the built mpegts-pacer binary and dual_rtp example
 #
 # Usage: ARM=c INJECT=blackout SECS=60 AT=30 ./t12-dual-leg.sh <label>
 set -euo pipefail
@@ -40,7 +40,7 @@ RATE=${RATE:-auto}
 SRC=${SRC:?set SRC to the source clip}
 MOQ=${MOQ:?set MOQ to the moq client binary}
 MOQ_RELAY=${MOQ_RELAY:?set MOQ_RELAY to the moq-relay binary}
-PACER=${PACER:?set PACER to the directory holding moq_egress and dual_rtp}
+PACER=${PACER:?set PACER to the directory holding the pacer binary and dual_rtp}
 OUTDIR=${OUTDIR:-./t12-runs}
 PORT_A=${PORT_A:-7443}
 PORT_B=${PORT_B:-7543}
@@ -61,6 +61,17 @@ IFACE=${IFACE:-lo}
 SETTLE=${SETTLE:-8}              # seconds between starting the chains and capturing
 DELAY_B=${DELAY_B:-0}            # start leg B's egress this many seconds late (mid-stream standby)
 RECOVER=${RECOVER:-15}           # how long a *_recover injection lasts before it is cleared
+
+# The pacer's egress adapter was moq_egress, then ts_egress, and is now the crate's
+# binary `mpegts-pacer`. Accept any of the three, so this rig runs against the build it
+# was written for and against current heads.
+EGRESS="$PACER/moq_egress"
+for candidate in mpegts-pacer ts_egress moq_egress; do
+	if [[ -x "$PACER/$candidate" ]]; then
+		EGRESS="$PACER/$candidate"
+		break
+	fi
+done
 
 RUN="$OUTDIR/$LABEL"
 rm -rf "$RUN"; mkdir -p "$RUN"
@@ -133,12 +144,12 @@ start_leg_egress() { # port rtp_port logfile -> pid (exporter + egress pipeline)
 	# default 8 MB is ~32 s at 2 Mb/s — a live leg looks dead. Bound it.
 	a) egress="tsp --buffer-size-mb 1 -O ip $RTP_HOST:$rtp_port --rtp --enforce-burst \
 			--packet-burst 7 --start-sequence-number 0 --ssrc-identifier $SSRC" ;;
-	b) egress="'$PACER/moq_egress' $RTP_HOST:$rtp_port $RATE --rtp --ssrc $SSRC \
+	b) egress="'$EGRESS' $RTP_HOST:$rtp_port $RATE --rtp --ssrc $SSRC \
 			--latency-ms $PACER_LAT --max-latency-ms $PACER_MAXLAT \
 			--stall-ms $PACER_STALL --on-stall $PACER_ONSTALL" ;;
 	# Both legs take the same seed: the offset is a property of the pair, and the
 	# numbering within it stays a function of stream position.
-	d) egress="'$PACER/moq_egress' $RTP_HOST:$rtp_port $RATE --rtp --ssrc $SSRC \
+	d) egress="'$EGRESS' $RTP_HOST:$rtp_port $RATE --rtp --ssrc $SSRC \
 			--latency-ms $PACER_LAT --max-latency-ms $PACER_MAXLAT \
 			--stall-ms $PACER_STALL --on-stall $PACER_ONSTALL \
 			--stream-clock --sequence-seed $SEQ_SEED" ;;

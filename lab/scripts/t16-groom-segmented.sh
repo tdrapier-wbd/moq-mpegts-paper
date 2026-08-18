@@ -67,16 +67,27 @@ rm -rf "$OUT"
 mkdir -p "$OUT/hls" "$OUT/graded"
 
 # --- the groomer ---------------------------------------------------------------
+# The egress adapter graduated from an example to the crate's binary after this test
+# ran, so it now builds as --bin and lands in release/ rather than release/examples/.
+# Build whichever this checkout has, and take the first that exists: the numbers below
+# were produced by `examples/ts_egress`, which is the same code under its old name.
 echo "building mpegts-pacer..."
-(cd "$PACER" && cargo build --release --example ts_egress) >"$OUT/build.log" 2>&1 || {
+(cd "$PACER" && { cargo build --release --bin mpegts-pacer ||
+	cargo build --release --example ts_egress; }) >"$OUT/build.log" 2>&1 || {
 	cat "$OUT/build.log" >&2
 	exit 1
 }
 TARGET=$(cd "$PACER" && cargo metadata --format-version 1 --no-deps |
 	sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
-EGRESS="$TARGET/release/examples/ts_egress"
-[ -x "$EGRESS" ] || {
-	echo "no ts_egress binary at $EGRESS" >&2
+EGRESS=""
+for candidate in "$TARGET/release/mpegts-pacer" "$TARGET/release/examples/ts_egress"; do
+	if [ -x "$candidate" ]; then
+		EGRESS="$candidate"
+		break
+	fi
+done
+[ -n "$EGRESS" ] || {
+	echo "no pacer binary under $TARGET/release" >&2
 	exit 1
 }
 
