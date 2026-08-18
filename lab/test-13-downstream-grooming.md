@@ -91,7 +91,7 @@ Nine chains in the file domain, each fed the identical ungroomed capture:
 | `ffmpeg -muxrate <nominal>` | FFmpeg's constant-rate muxer, defaults |
 | `ffmpeg -muxrate <nominal>` + `-streamid` + `-mpegts_pmt_start_pid` | the same with every PID pinned back to its original value |
 | GStreamer `tsdemux ! mpegtsmux bitrate=<nominal>`, PIDs pinned | GStreamer's constant-rate muxer, both ends pinned |
-| the same + `send-scte35-events` + `scte-35-pid` | whether GStreamer can carry splice information at all |
+| GStreamer again, `tsdemux send-scte35-events=true` and `mpegtsmux scte-35-pid=<first splice PID>` | whether GStreamer can carry splice information at all |
 | `mpegts-pacer` at the nominal rate | control |
 | `mpegts-pacer` at its own chosen rate | control |
 
@@ -187,7 +187,7 @@ so that every leg puts 1316 payload bytes in every datagram.
 
 | Leg | delivered | gap p50 / p95 / p99 / max | 10 ms CoV | 10 ms peak/mean |
 |---|---|---|---|---|
-| **at 11.000 Mb/s, MoQ egress, same groomer** | | | | |
+| **told to run at 11.000 Mb/s, MoQ egress, same groomer** | | | | |
 | `ffmpeg -muxrate` + `rawsendmpeg2ts` | 11.000 | 957 µs / 990 µs / 1.05 ms / **3.65 ms** | **0.048** | 1.15 |
 | `ffmpeg` PIDs pinned + `rawsendmpeg2ts` | 11.000 | 957 µs / 991 µs / 1.05 ms / **3.51 ms** | **0.048** | 1.15 |
 | `mpegts-pacer` *(control)* | 11.000 | 1.08 ms / 1.14 ms / 1.27 ms / 3.87 ms | 0.077 | 1.15 |
@@ -198,7 +198,8 @@ so that every leg puts 1316 payload bytes in every datagram.
 | the same, `--wait-min 5` | 9.958 | 3 µs / 91 µs / 24.7 ms / 33.7 ms | 1.206 | 3.39 |
 | `mpegts-pacer` *(control)* | 9.946 | 1.08 ms / 2.08 ms / 2.11 ms / 9.96 ms | 0.087 | 1.59 |
 
-Carriage and conformance of the same legs, as received:
+Carriage and conformance of the same legs, as received. PID 0x1FFF is omitted from the PID sets and
+reported in the stuffing column instead:
 
 | Leg | PID set delivered | jitter > 481 ns | intervals > 40 ms | max interval | stuffing |
 |---|---|---|---|---|---|
@@ -233,7 +234,7 @@ GStreamer remux fail criterion 1 harder than the forms listed, so they are not s
 | TSDuck `pcradjust` @ content (+ `regulate` for the wire) | pass | pass | **fail** (299 file; 136 live) | pass | **partial** — the only pass-through option, and it cannot run at a nominal rate |
 | TSDuck `mux` nulls + `pcradjust` @ nominal | pass | pass | **fail** (284) | **fail** (duration 0.956) | **fail** — claims a rate it does not carry |
 | FFmpeg `-muxrate`, PIDs pinned, own socket | **fail** (SCTE-35 retyped, AC-3 relabelled, SDT injected) | pass | pass | **fail** on the wire (8.11–46.34 Mb/s) | **partial** — timing yes, fidelity and cadence no |
-| FFmpeg `-muxrate`, PIDs pinned, **+ `rawsendmpeg2ts`** | **fail** (the same three) | pass | pass (0 live, max 20.4 ms) | pass (11.000 Mb/s, CoV 0.048, worst silence 3.5 ms) | **partial** — the only failure left is carriage |
+| FFmpeg `-muxrate`, PIDs pinned, **+ `rawsendmpeg2ts`** | **fail** (all three SCTE-35 PIDs retyped, AC-3 relabelled ATSC, NIT dropped, SDT synthesised) | pass | pass (0 live, max 20.4 ms) | pass (11.000 Mb/s, CoV 0.048, worst silence 3.5 ms) | **partial** — the only failure left is carriage |
 | GStreamer `mpegtsmux`, PIDs pinned, SCTE-35 forwarded | **fail** (PSI beyond PAT/PMT, PMT's PID, teletext descriptor, 2 of 3 splice PIDs) | pass | pass | duration pass, wire **partial** (silences to 284 ms) | **partial** — loses signalling, and its wire still needs pacing |
 | `mpegts-pacer` *(control)* | pass | pass | pass on file (0); **fail live** (131 laptop, 159 box) | pass | **pass** as scored; see criterion 3's live column |
 
