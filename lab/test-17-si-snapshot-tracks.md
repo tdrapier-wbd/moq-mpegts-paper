@@ -213,14 +213,26 @@ before the cycle wraps yields a committed generation quietly missing a segment. 
 algorithm can do better — that is what sparseness costs — but it bounds how strong a fidelity
 guarantee this carriage can claim.
 
-**TDT/TOT is carried by neither side, by design on one and by omission on the other.** The importer
-excludes it on sound grounds: a clock is not state, every section is new content, and an upstream
-multiplexer's time carries an unknown delay. But nothing regenerates it downstream either, so the
-egress has no time table at all (measured: 0 packets on 0x0014). A DVB receiver downstream of
-`export ts` therefore has no TDT/TOT, which is a gap for a broadcast hand-off even though the
-reasoning for not forwarding it is right — and one that grows more visible as the EPG survives, since
-a schedule needs a clock to be placed against. Reported upstream as
-[#2914](https://github.com/moq-dev/moq/issues/2914).
+**TDT/TOT is carried by neither side, by design on one and by omission on the other**, and the
+egress has no time table at all (measured: 0 packets on 0x0014). A DVB receiver behind `export ts`
+therefore has no clock, which grows more visible as the EPG survives, since a schedule needs a clock
+to be placed against. Reported upstream as [#2914](https://github.com/moq-dev/moq/issues/2914).
+
+The *reason* for the exclusion is weaker than it first appeared, and this lab supplied the weak
+version of it. Two findings since:
+
+- **The incumbents proxy the clock and are right to.** RIST and SRT forward TDT verbatim with no
+  variance added ([T15](test-15-point-to-point-cadence.md) measurement 4), because a constant-delay
+  pipe that never repeats a section is late by its path and by nothing else. That is a property of
+  that class of machine, not an argument about time tables, and it does not transfer to a stage that
+  re-emits SI on a cadence of its own.
+- **A clock synthesised from the host would break the EPG this test just validated.** EIT event times
+  are absolute UTC, so a clock and the schedule read against it must share one time base — which is
+  why TSDuck's `timeref` shifts EIT event times alongside the tables it re-stamps. Relaying EIT
+  verbatim while minting TDT locally misplaces every event by the offset between the two clocks.
+
+So the defensible design anchors on the source's time and advances it locally, which is neither pure
+forwarding nor pure synthesis, and is what `timeref --start` does.
 
 ## Conclusions
 

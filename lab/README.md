@@ -90,8 +90,10 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
   0 CC, the open-GOP feed round-trips deterministically; (b) downstream timing conformance
   (`mpegts-pacer`): exact CBR, ≈ 0 % of PCR intervals > 40 ms, 0 `pcrverify` violations at 500 µs at
   P1. Full broadcast transparency (incl. the service layer) is proven on the opaque lane (T3); on this
-  lane it is bounded by the time-varying tables — TDT/TOT deliberately (the exporter mints the clock),
-  and EIT until [#2824](https://github.com/moq-dev/moq/pull/2824) merges.
+  lane it is bounded by TDT/TOT alone: the importer excludes it deliberately and nothing regenerates
+  it downstream, so the egress carries no clock at all ([T17](test-17-si-snapshot-tracks.md),
+  [#2914](https://github.com/moq-dev/moq/issues/2914)). EIT, schedule included, now round-trips on
+  [#2909](https://github.com/moq-dev/moq/pull/2909).
 - **T3 — Opaque transparency (Gate 1).** Bit-transparency at P1 — TSID/ONID, service name/type, all
   PSI/SI (PAT/PMT/SDT/NIT/TDT/CAT), PMT PID, PCR PID, every elementary stream and every SCTE-35 PID
   preserved verbatim; 0 CC/transport errors; CBR and PCR conformance (0 % > 40 ms) preserved when fed

@@ -11,6 +11,10 @@ unmeasured structural claim in the paper.
 This runs RIST and SRT through the instrument [T14](test-14-data-plane-comparison.md) used, so the
 point-to-point class can be quoted in the same units as MoQ and segmented HTTP.
 
+Measurement 4 extends the same legs from cadence to carriage, asking what each transport does to the
+DVB time tables it carries. It was added to settle an upstream design question and is reported here
+because it is the same transports on the same rig.
+
 ### Pass criteria (fixed before the runs)
 
 1. **The instrument resolves what it is asked to.** A transport leg is only reportable if a
@@ -36,6 +40,7 @@ Single macOS host, loopback path, same clip and same instrument as T14.
 | Instrument | [`t13-cadence.py`](scripts/t13-cadence.py), 64 kB reads (`pipe`) or per-datagram (`capture`) |
 | Burst grouping | [`t15-bursts.py`](scripts/t15-bursts.py), 1 ms separation — T14's threshold |
 | Window | 60 s per leg |
+| Clock legs (measurement 4) | [`tdt-transports.sh`](scripts/tdt-transports.sh) with [`tdt-staleness.py`](scripts/tdt-staleness.py), 75 s per leg |
 
 The burst tool is new here and was validated before use: run against T14's retained arm A and B1
 captures it reproduces the published figures exactly — 12.4 kB / 90.6 kB / 285.8 kB and
@@ -84,6 +89,9 @@ WAITMIN=5 lab/scripts/t14-a.sh ~/CNNiEMEA2.ts ~/t15/moq-w5 60
 
 python3 lab/scripts/t15-bursts.py ~/t15/*-egress.csv
 python3 lab/scripts/t15-bursts.py --sweep ~/t15/librist-cbr-w5-egress.csv
+
+# Measurement 4: the clock, on the same three transports plus the UDP control
+lab/scripts/tdt-transports.sh ~/CNNiEMEA2.ts ~/tdt_transports 75
 ```
 
 ## Results
@@ -150,6 +158,50 @@ It is also not grooming. `cbr-output` spaces packets at a *measured* rate; it do
 does not pad to a nominal constant rate, and offers no accuracy guarantee. It reduces what a groomer
 must absorb; it does not replace one ([T13](test-13-downstream-grooming.md)).
 
+### Measurement 4 — what the transports do to the clock they carry
+
+Added later, and about carriage rather than cadence: `export ts` emits no TDT/TOT at all
+([T17](test-17-si-snapshot-tracks.md) measured 0 packets on PID 0x0014), and the upstream argument
+about whether to *proxy* the source's clock or regenerate it turns on what the incumbents do. They do
+nothing whatever to it, and that turns out to be the whole answer.
+
+The source is re-stamped by `tsp -P timeref --start system`, so every TDT it transmits asserts the
+true UTC of its own transmission; whatever the receiver reads is then the transport's contribution.
+
+| Leg | TDT sections delivered | inter-section arrival gaps | staleness spread *(instrument)* |
+|---|---|---|---|
+| plain UDP *(control)* | 5 × 0x70 | 15.23, 15.08, 15.19, 15.10 s | 601 ms |
+| SRT, 1000 ms latency | 5 × 0x70 | 15.23, 15.08, 15.19, 15.10 s | 604 ms |
+| RIST Main, 1000 ms buffer | 5 × 0x70 | 15.24, 15.07, 15.20, 15.10 s | 601 ms |
+| MoQ `export ts` | **0** (T17) | — | — |
+
+**The transports are indistinguishable from the no-transport control, to two decimal places on every
+gap.** They reproduce the source's section cadence packet-for-packet and add no variance to when the
+clock arrives.
+
+Two columns here are instrument and not transport, and saying so is the point of quoting the control:
+
+- The ~600 ms of *growing* staleness is `timeref --start`, which advances its reference over
+  packets ÷ bitrate. The replay ran 1.00–1.02 % slow against that assumed rate, so the asserted clock
+  slides at ~10 ms/s — identically on all three legs. It is a fair illustration of what
+  media-timeline-derived time does, and it is not any transport's doing.
+- **The absolute offset is not the configured buffer.** A publisher whose output blocks until its peer
+  connects has already anchored `timeref`, so the stall becomes a constant lateness for the rest of the
+  run. These legs are comparable by spread and by gaps, not by median.
+
+The specifications agree with the measurement: VSF TR-06-2:2022 (RIST Main Profile) and the SRT
+protocol draft contain **no occurrence of TDT, TOT, SI, PSI, SDT or EIT** between them, and the only
+reference to TS syntax anywhere in TSDuck's `srt` or `rist` I/O plugins is reading PCR to estimate
+input bitrate. RIST's null-packet deletion is the sole case of either touching TS content, and it is
+explicitly reversible — the sender strips nulls and sends a bitmask of their positions, the receiver
+restores them in place.
+
+**So proxying a clock is not correct in general; it is correct for this class of machine.** A
+constant-delay pipe that never repeats a section is late by its path and cannot drift further. A
+stage that rebuilds the multiplex, assigns its own PIDs and re-emits SI on its own cadence is a
+different machine, and for that class the reference toolkit's answer is `tsp -P timeref`, whose
+`--start` anchors once and then advances locally.
+
 ### Against the pass criteria
 
 | | Outcome |
@@ -179,6 +231,16 @@ must absorb; it does not replace one ([T13](test-13-downstream-grooming.md)).
   ingress, "RIST hands over a clean stream" is a statement about the encoder, not about RIST. On a
   true CBR hardware feed the tunnels should be smoother than anything measured here; behind a bursty
   software packager they are exactly as bursty as it is. Neither is a protocol property.
+- **Transparency extends to carriage, and that is what makes the incumbents' clock handling safe.**
+  The same property measured on cadence holds on the time tables: the transports neither parse nor
+  repeat a section, so a forwarded TDT is late by the path and by nothing else. It follows that
+  "proxy the source's clock" is advice about constant-delay pipes rather than about time tables, and
+  it does not transfer to a stage that re-emits SI on a cadence of its own.
+- **A test whose control drifts identically to its arms has measured its own instrument.** All three
+  clock legs returned a spread within 3 ms of each other; the shared component was the replay-rate
+  error in `timeref --start`, and only the presence of a no-transport control made it separable from
+  a transport property. This is the same lesson the cadence half of T15 learned, arrived at from the
+  other direction.
 
 ## Conclusion
 
@@ -210,6 +272,8 @@ T13 and T14 reached, now with the point-to-point class measured rather than assu
 | RIST and SRT under loss and RTT | Loopback has neither. This measures delivery shape on a healthy path, not recovery. |
 | A true CBR hardware source | Would establish the tunnels' floor rather than this publisher's. The transparency result makes this the interesting remaining variable. |
 | RIST Advanced profile | libRIST 0.2.20 exposes it; nothing in the comparison currently turns on it. |
+| What a *proxied* clock would do through MoQ | Needs 0x0014 added to the importer's SI allowlist and a build; the code path predicts a snapshot that freezes after 32 distinct sections and is then replayed at the 500 ms PSI cadence, but that is code reading, not a measurement ([#2914](https://github.com/moq-dev/moq/issues/2914)). |
+| The clock legs' true end-to-end latency | The rig's publisher blocks until its peer connects, which anchors `timeref` before the stream flows and turns the stall into a constant offset. Fixing it means anchoring after the connection is up. |
 | Whether `cbr-output`'s spacing survives a groomer's input stage | It reduces burst absorption, and whether that lets a smaller buffer pass TR 101 290 is a groomer question ([implementation](../docs/implementation.md) §9.1). |
 
 ## Corrections
@@ -233,5 +297,9 @@ T13 and T14 reached, now with the point-to-point class measured rather than assu
 - [T13 — downstream grooming](test-13-downstream-grooming.md): what no off-the-shelf stage does.
 - [T14 — MoQ against segmented HTTP](test-14-data-plane-comparison.md): the instrument, the burst
   threshold, and the MoQ and segmented-HTTP columns quoted here.
+- [T17 — SI on snapshot tracks](test-17-si-snapshot-tracks.md): the 0 packets on PID 0x0014 that
+  measurement 4 exists to put in context.
 - [alternatives](../docs/alternatives.md) §10.1: the claim under test.
-- [`t15-cadence.sh`](scripts/t15-cadence.sh), [`t15-bursts.py`](scripts/t15-bursts.py).
+- [`t15-cadence.sh`](scripts/t15-cadence.sh), [`t15-bursts.py`](scripts/t15-bursts.py),
+  [`tdt-transports.sh`](scripts/tdt-transports.sh), [`tdt-staleness.py`](scripts/tdt-staleness.py).
+- VSF TR-06-2:2022 (RIST Main Profile) and `draft-sharabayko-srt`: neither mentions any TS table.
