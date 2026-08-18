@@ -26,11 +26,47 @@ PUB_LOG="$HOME/eit_pub.log"
 
 [[ -r "$SRC" ]] || { echo "fixture not readable: $SRC — run make-eit-fixture.sh first" >&2; exit 1; }
 
-TGT="$(cd ~/moq-dev && cargo metadata --format-version 1 --no-deps \
-	| python3 -c "import json,sys;print(json.load(sys.stdin)['target_directory'])")/release"
+# TGT may be set to grade a build other than the working checkout's — a PR head in a
+# throwaway worktree, say. Unset, it resolves the sandbox cargo target, which rotates
+# per session.
+TGT="${TGT:-$(cd ~/moq-dev && cargo metadata --format-version 1 --no-deps \
+	| python3 -c "import json,sys;print(json.load(sys.stdin)['target_directory'])")/release}"
 [[ -x "$TGT/moq" && -x "$TGT/moq-relay" ]] || { echo "binaries missing under $TGT" >&2; exit 1; }
+describe_build() {
+	# The worktree a TGT belongs to is not derivable from the target dir when
+	# CARGO_TARGET_DIR was redirected, so name it explicitly with BUILD_DESC.
+	if [[ -n "${BUILD_DESC:-}" ]]; then
+		echo "$BUILD_DESC"
+	else
+		(cd ~/moq-dev && git log --oneline -1)
+	fi
+}
+
+# Two incompatible flag surfaces are in the wild: the dial-side options were renamed
+# from `--client-*` to `--connect-*` and per-direction QUIC tuning was merged into one
+# `--quic-*` section. Builds carrying the rename still *parse* the old names behind a
+# deprecation warning, but `--client-quic-gso=false` does not reach the transport there,
+# so GSO stays on and the session stalls on macOS loopback with no error logged. Detect
+# the surface rather than assuming one.
+if "$TGT/moq" --connect https://localhost --help >/dev/null 2>&1; then
+	FLAGS_NEW=1
+	GSO=(--quic-gso=false)
+else
+	FLAGS_NEW=0
+	GSO=(--client-quic-gso=false)
+fi
+CF=() # dial-side flags, filled by client_flags once the fingerprint is known
+client_flags() { # <fingerprint>
+	if [[ "$FLAGS_NEW" == 1 ]]; then
+		CF=(--connect-tls-fingerprint "$1" --connect https://localhost:4443 --quic-gso=false)
+	else
+		CF=(--client-tls-fingerprint "$1" --client-connect https://localhost:4443 --client-quic-gso=false)
+	fi
+}
+
 echo "==> binaries $TGT"
-echo "==> build    $(cd ~/moq-dev && git log --oneline -1)"
+echo "==> build    $(describe_build)"
+echo "==> flags    $([[ "$FLAGS_NEW" == 1 ]] && echo '--connect-* (current)' || echo '--client-* (legacy)')"
 
 PIDS=()
 cleanup() { for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; wait 2>/dev/null || true; }
@@ -38,7 +74,7 @@ trap cleanup EXIT
 
 # GSO off: it stalls on macOS loopback. https:// + pinned fingerprint: the http://
 # bootstrap is broken in this build.
-( cd ~/moq-dev && "$TGT/moq-relay" demo/relay/localhost.toml --server-quic-gso=false ) \
+( cd ~/moq-dev && "$TGT/moq-relay" demo/relay/localhost.toml "${GSO[@]/#--client-/--server-}" ) \
 	>"$RELAY_LOG" 2>&1 &
 PIDS+=($!)
 
@@ -51,14 +87,13 @@ done
 echo "==> relay up, fingerprint ${FP:0:16}…"
 
 # Subscriber first: catalog reservation gating publishes the catalog once tracks resolve.
-"$TGT/moq" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-	--client-quic-gso=false --broadcast "$BROADCAST" export ts >"$OUT" 2>"$SUB_LOG" &
+client_flags "$FP"
+"$TGT/moq" "${CF[@]}" --broadcast "$BROADCAST" export ts >"$OUT" 2>"$SUB_LOG" &
 PIDS+=($!)
 sleep 2
 
 tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null \
-	| "$TGT/moq" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$BROADCAST" import ts >"$PUB_LOG" 2>&1 &
+	| "$TGT/moq" "${CF[@]}" --broadcast "$BROADCAST" import ts >"$PUB_LOG" 2>&1 &
 PIDS+=($!)
 
 echo "==> capturing ${WINDOW}s"

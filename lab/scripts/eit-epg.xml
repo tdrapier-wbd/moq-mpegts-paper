@@ -6,8 +6,16 @@
   the present event is genuinely "now" for a receiver decoding the clip from its start.
   Change both together or the p/f table will be empty at t=0.
 
-  `eitinject` ignores the EIT structure here and re-derives p/f and schedule from the
-  event list, so one EIT element carrying every event is the intended input shape.
+  `eitinject` re-derives p/f and schedule from the event list rather than emitting the
+  table declared here, so one EIT element carrying every event is the intended input
+  shape: under --actual this yields table 0x4E and schedule table 0x50 alike. (`type`
+  itself takes `pf` or a uint4 selecting a schedule table, 0 -> 0x50; it is not a
+  restriction on what gets generated.)
+
+  Twelve events over one day is under a day of EPG, so the schedule it produces is real
+  but tiny. For anything that prices SI carriage, generate a multi-day EPG with
+  make-eit-epg.py instead.
+
   The service triplet must match the clip: original_network_id 0, transport_stream_id 0,
   service_id 1 (CNNI EMEA HD).
 -->

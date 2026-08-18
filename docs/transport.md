@@ -328,8 +328,9 @@ genuinely contested; the trade-offs are set out in full in
   1:N amplification with per-track prioritisation. Its historical weaknesses for
   contribution feeds (open-GOP keyframe detection, and loss of SDT/NIT/PMT-PID
   identity on re-mux) are **closed upstream and verified here**; what it still does
-  not relay is the *clock*, since TDT/TOT is dropped by design and EIT carriage
-  exists only on an open upstream pull request ([evidence](evidence.md) §4).
+  not relay is the *clock* alone, since TDT/TOT is dropped by design and regenerated
+  by nothing downstream, while EIT — schedule included — is measured to round-trip on
+  an open upstream pull request ([evidence](evidence.md) §4).
 - **Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque
   payload, packaged per the `m2ts` profile of `draft-gregoire-moq-msfts` (MSFTS),
   which extends the MoQ Transport Streaming Format (MSF) catalog to carry MPEG-2

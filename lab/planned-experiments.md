@@ -133,6 +133,40 @@ What remains open is in T16's own "still open" table. In rough order of value:
 
 ---
 
+## T17 — standalone SI on snapshot tracks — **run**
+
+Results in [test-17-si-snapshot-tracks.md](test-17-si-snapshot-tracks.md); rigs in
+[`scripts/eit-roundtrip.sh`](scripts/eit-roundtrip.sh) and
+[`scripts/si-join-cost.sh`](scripts/si-join-cost.sh), fixture generator in
+[`scripts/make-eit-epg.py`](scripts/make-eit-epg.py). Specified to settle the one part of upstream's
+SI-on-tracks design that code review cannot: an EIT schedule sub-table is sparse, so its completeness
+cannot be decided by counting sections, and the importer commits on observing the transmission cycle
+wrap instead. Whether that reconstructs the table is empirical.
+
+It does. EIT round-trips section-for-section across four sub-tables of an 8-day EPG against zero on the
+merge base, and the two costs theory predicted are immaterial: carriage is bitrate-neutral (0.985×) and
+the export gate — which holds all output until every SI entry has a snapshot — costs 1 ms, because the
+subscriptions are issued together. The experiment also produced the 8-day price
+[#2882](https://github.com/moq-dev/moq/issues/2882) asked for: 29,912 B across four snapshot tracks per
+service, so ~1.1 MiB across 160 tracks at 40 services.
+
+The method finding is worth more than either number. The census that opened the run used
+`tsp -P tables` without `--all-sections` and read a sparse sub-table's *non-completion* as its
+*absence*, producing a confident and wrong conclusion about the existing fixture. **An instrument that
+reports completed tables cannot establish the absence of a table designed never to complete.**
+
+What remains open:
+
+- **A lossy path.** In a sparse table a lost section and a skipped section number are
+  indistinguishable, so a section lost before the cycle wraps should yield a snapshot quietly missing a
+  segment. That is reasoned, not measured; it wants a drop injected on the SI PID.
+- **The unbounded gate.** An SI track that neither succeeds nor fails holds all output indefinitely.
+  Reproducing it needs a stale announce naming a track that will not resolve, which is a rig in itself.
+- **Multi-service.** The 40-service figures are scaled from one service, not measured on an MPTS.
+- **TDT/TOT regeneration**, which nothing currently does, leaving the egress with no time table.
+
+---
+
 ## Dual-path 1+1: remaining conditions (T12)
 
 All four arms are run; results and limitations are in

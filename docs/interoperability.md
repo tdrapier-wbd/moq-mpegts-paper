@@ -83,13 +83,14 @@ measured, not assumed, since upstream took the DVB service layer through the cat
 ([evidence](evidence.md) §4). Two distinctions matter for an operator. Continuity counters
 are **regenerated** rather than relayed, which satisfies the receiver but means two
 independent legs of a 1+1 pair are not byte-identical ([evidence](evidence.md) §7,
-[architecture](architecture.md) §14). And the **time-varying**
-tables are the lane's one carriage residual: TDT/TOT is dropped by design, on the argument
-that an exporter mints wall time more accurately than it relays it, and EIT carriage exists
-only on an open upstream pull request ([evidence](evidence.md) §4). The **opaque
-fallback** preserves everything
+[architecture](architecture.md) §14). And the lane's one carriage residual is now the
+**clock alone**: TDT/TOT is dropped by design, on the argument that an exporter mints wall
+time more accurately than it relays it, though nothing regenerates it downstream yet. EIT,
+schedule included, is measured to round-trip section-for-section on an open upstream pull
+request that gives each table its own snapshot track ([evidence](evidence.md) §4). The
+**opaque fallback** preserves everything
 *verbatim by construction*, those tables included, which is why it remains the safe choice
-for a receiver that needs the carried clock or EPG rather than a regenerated one. Its cost
+for a receiver that needs the carried clock rather than a regenerated one. Its cost
 — forgoing per-track prioritisation, and the null-stripping bandwidth saving if it is truly
 verbatim — is discussed in [transport](transport.md) §4.1 and [relay](relay.md) §3.3.
 

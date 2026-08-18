@@ -6,21 +6,34 @@
 # representative one so the gap can be measured, and — more usefully — so the *cost* of
 # carrying EIT through the catalog can be measured rather than asserted.
 #
-# Two variants, because they answer different questions:
+# Three variants, because they answer different questions:
 #   pf        EIT p/f actual only. Small, two events, changes at event boundaries.
-#             The minimal "does EIT survive the round-trip" fixture.
-#   full      p/f + schedule actual. Multi-section, spans several 3-hour segments,
-#             repeats on the ETSI TS 101 211 cycle. This is the shape that tells you
-#             what a catalog carrying EIT would cost in size and republish rate.
+#             The minimal "does EIT survive the round-trip" fixture. 2 sections, 153 B.
+#   full      p/f + schedule actual from the hand-written one-day EPG: table 0x4E plus a
+#             single schedule table 0x50. Enough to show schedule survives, and already
+#             sparse (7 sections against a last_section_number of 48), but under a day of
+#             EPG and ~975 B in total — too small to price anything.
+#   sched     p/f + schedule actual from a generated multi-day EPG (make-eit-epg.py),
+#             sized to the DVB planning horizon: 8 days across three schedule tables
+#             (0x50/0x51/0x52), 69 sections, ~30 kB. This is the variant to use when the
+#             question is what SI carriage *costs* rather than whether it works.
+#             `EPG_DAYS` (default 8) and `EPG_SERVICES` (default 1) size it.
+#
+# An EIT schedule sub-table is sparse: it declares a `last_section_number` covering its
+# whole four-day range and transmits only the segment-boundary sections that hold events.
+# So completeness cannot be decided by counting sections — and note that `tsp -P tables`
+# will not print such a sub-table at all for the same reason. Census these fixtures with
+# `--all-sections`, or schedule looks absent when it is present.
 #
 # The EPG is anchored to the source clip's own TDT epoch (see eit-epg.xml), and
 # `eitinject` resynchronises its time reference on every TDT/TOT, so the present event is
-# genuinely current for a receiver decoding the clip from its start.
+# genuinely current for a receiver decoding the clip from its start. It also drops events
+# already in the past, so an EPG anchored to wall clock injects nothing.
 #
 # EIT packets are taken from the clip's null stuffing, so the output stays at the source
 # mux rate. The script fails if that costs the stream its CBR structure.
 #
-# Usage: make-eit-fixture.sh [pf|full] [source.ts] [output.ts]
+# Usage: make-eit-fixture.sh [pf|full|sched] [source.ts] [output.ts]
 
 set -euo pipefail
 
@@ -29,12 +42,20 @@ SRC="${2:-$HOME/CNNiEMEA2.ts}"
 OUT="${3:-$HOME/CNNiEMEA2_eit_${VARIANT}.ts}"
 # Must match the service the EPG describes; see eit-epg.xml.
 SERVICE_ID="${SERVICE_ID:-1}"
-EPG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/eit-epg.xml"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EPG="$HERE/eit-epg.xml"
 
 case "$VARIANT" in
 	pf)   EIT_ARGS=(--actual-pf) ;;
 	full) EIT_ARGS=(--actual) ;;
-	*)    echo "usage: $(basename "$0") [pf|full] [source.ts] [output.ts]" >&2; exit 2 ;;
+	sched)
+		EIT_ARGS=(--actual)
+		EPG="$(mktemp -t eit-epg-sched).xml"
+		python3 "$HERE/make-eit-epg.py" --out "$EPG" \
+			--days "${EPG_DAYS:-8}" --services "${EPG_SERVICES:-1}" \
+			--first-service-id "$SERVICE_ID"
+		;;
+	*)    echo "usage: $(basename "$0") [pf|full|sched] [source.ts] [output.ts]" >&2; exit 2 ;;
 esac
 
 [[ -r "$SRC" ]] || { echo "source clip not readable: $SRC" >&2; exit 1; }
@@ -55,8 +76,12 @@ tsp --verbose \
 	-O file "$OUT"
 
 echo
-echo "==> EIT sections present on PID 0x0012"
-tsp -I file "$OUT" -P tables --pid 0x0012 --max-tables 4 -O drop
+echo "==> EIT sub-tables present on PID 0x0012"
+# --all-sections, not --max-tables: an EIT schedule sub-table is sparse, so the section
+# demux never completes it and `tables` alone prints nothing for exactly the table this
+# fixture exists to carry.
+tsp -I file "$OUT" -P tables --pid 0x0012 --all-sections -O drop 2>/dev/null \
+	| grep -oE "TID 0x[0-9A-F]+" | sort | uniq -c
 
 echo
 echo "==> EIT PID bitrate and structure"

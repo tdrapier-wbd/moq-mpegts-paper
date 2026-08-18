@@ -188,10 +188,12 @@ keyframe detection failed on open-GOP encodes signalling recovery-point SEI
 rather than IDR frames (common on real feeds, roughly one IDR every fifteen
 seconds), and the re-mux lost service signalling (SDT/NIT, the exact PMT PID
 layout, TSID/ONID) that an IRD and downstream headend depend on
-([evidence](evidence.md) §4). What the lane still does not relay is the *clock*:
+([evidence](evidence.md) §4). What the lane still does not relay is the *clock*.
 TDT/TOT is dropped by design, on the argument that an exporter mints wall time
-more accurately than it relays it, and EIT carriage exists only on an open
-upstream pull request, having been through one withdrawn design already
+more accurately than it relays it — but nothing regenerates it downstream either,
+so it is the one named residual in the DVB service layer. EIT, including the
+schedule, is measured to round-trip section-for-section, on an open upstream pull
+request that carries each table on its own snapshot track
 ([evidence](evidence.md) §4).
 
 **The case for opaque carriage.** It carries the transport stream verbatim, so

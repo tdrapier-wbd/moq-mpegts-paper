@@ -43,7 +43,7 @@ Results come from four code bases, and it matters which produced which.
 | Elementary streams, original PIDs, SCTE-35 | preserved | preserved verbatim |
 | Service layer (SDT/NIT, PMT PID, TSID/ONID) | preserved | preserved verbatim |
 | TDT/TOT | not preserved, by design (§4) | preserved verbatim |
-| EIT | present/following measured to round-trip byte-identically on a since-withdrawn upstream PR; carriage is being reimplemented on per-table snapshot tracks, so no released build carries it (§4) | preserved verbatim |
+| EIT | present/following **and schedule** measured to round-trip section-for-section on an open upstream PR carrying SI on per-table snapshot tracks; no released build carries it (§4) | preserved verbatim |
 | CBR and PCR cadence | restored downstream by `mpegts-pacer` | preserved end to end by the prototype's own pacer |
 | IRD egress (RTP/UDP, multicast, FEC, ST 2022-7, de-jitter, start gate, TR 101 290 monitoring) | RTP/UDP by `mpegts-pacer`, with ST 2022-7 pairing measured at a receiver (§7) | implemented; measured here only for the start gate, CBR pacing and egress monitoring |
 | Public-internet (EC2) operation | yes | no — never deployed off loopback |
@@ -145,20 +145,41 @@ encoding nor the DVB service layer is any longer a reason to prefer the opaque l
 Reading the import gate suggests a residual of "TDT/TOT and EIT". Measured
 on a synthetic fixture — no capture held here carries EIT — both were confirmed absent at egress,
 and the measurement then split them, because they revise at opposite rates. EIT repeats
-byte-identically between event transitions, so carrying it through the catalog costs ~12 updates and
-~1.3 kB over ten minutes, the same order as SDT and NIT. Every TDT/TOT section is new content, so
-every one is a republish, for a table that says nothing but "now" and that an exporter can mint more
-accurately than it can relay. A first attempt acted on that split, carrying EIT present/following
-through the catalog, and was measured here to round-trip **byte-identically**, including a clean
-version roll and correct suppression of sections not yet in force
-([#2824](https://github.com/moq-dev/moq/pull/2824)). It was withdrawn rather than merged, because the
-cost measurements below moved the carriage out of the catalog altogether; the implementation that
-replaced it gives every carried table its own snapshot track and takes EIT schedule with it
-([#2909](https://github.com/moq-dev/moq/pull/2909)). Two things hold whichever route lands:
-**no released build carries EIT**, and dropping TDT/TOT matters more once the EPG survives, because a
-receiver with no wall clock has nothing to place the EPG against
-([lab: T2](../lab/test-2-media-aware-transparency.md),
-[T3](../lab/test-3-opaque-transparency.md)).
+byte-identically between event transitions, so carrying it costs little; every TDT/TOT section is new
+content, so every one is a republish, for a table that says nothing but "now" and that an exporter can
+mint more accurately than it can relay. Carriage now follows that split. Each carried table gets its
+own snapshot track, and **EIT round-trips including the schedule**: measured across four sub-tables of
+an 8-day EPG, the set of distinct sections on the egress equals the source's exactly — none missing,
+none added, sizes and `last_section_number` preserved — against zero EIT packets on the same fixture
+from the merge base ([#2909](https://github.com/moq-dev/moq/pull/2909), open;
+[lab: T17](../lab/test-17-si-snapshot-tracks.md)).
+
+That result matters because the interesting sub-table cannot be validated by counting sections. An
+EIT schedule sub-table is **sparse** — it declares a `last_section_number` spanning its whole four-day
+range and transmits only the segment-boundary sections holding events, measured here as 32 sections
+against a declared 248 — so an importer cannot decide it is complete and must commit on observing the
+transmission cycle wrap instead. The corollary is a limit on the guarantee: in a sparse table a lost
+section and a deliberately skipped section number are indistinguishable, so a section lost before the
+cycle wraps yields a snapshot quietly missing a segment.
+
+Two costs that theory predicted turn out not to be material. Carriage is bitrate-neutral: the EIT PID
+runs at 28,445 bps on the egress against 28,870 bps at source (0.985×), even though export re-emits at
+the ETSI TS 101 211 maximum interval rather than the source's observed cadence. And the join costs
+almost nothing, although the mechanism moved: export holds *all* output until every SI entry the
+catalog names has produced its first snapshot, so SI leaves the join bandwidth path and joins the
+blocking path. Measured, that gate costs **1 ms** — a median 15 ms time-to-first-byte across six SI
+tracks against 14 ms across two — because the subscriptions are issued together, making the cost a
+bandwidth term rather than a round-trip per track. An 8-day EPG is 29,912 B across four snapshot
+tracks per service, so a 40-service multiplex puts ~1.1 MiB across 160 tracks in front of the first TS
+packet: bounded, and bounded by the EPG's size.
+
+**Dropping TDT/TOT matters more now that the EPG survives**, because a receiver with no wall clock has
+nothing to place the EPG against. The exclusion is deliberate and correctly argued upstream — a clock
+is not state, and an upstream multiplexer's time carries unknown delay — but nothing regenerates it
+downstream either, so the egress carries no time table at all. The remaining named gap in the DVB
+service layer over this lane is therefore TDT/TOT alone, and the fix is local regeneration rather than
+carriage ([lab: T2](../lab/test-2-media-aware-transparency.md),
+[T3](../lab/test-3-opaque-transparency.md), [T17](../lab/test-17-si-snapshot-tracks.md)).
 
 **Carrying service information in the catalog is cheap for the tables that shipped and expensive for
 the one that has not.** The catalog is whole-state, so one changed section rewrites the whole
@@ -175,7 +196,15 @@ whether carried service information belongs in the catalog or on its own snapsho
 supported the move on coherence rather than bandwidth grounds — the incoherence is what no amount of
 snapshot-policy tuning fixes — and also showed that the tables #2440 shipped would gain nothing from
 it. The question is settled in favour of tracks, and implemented in
-[#2909](https://github.com/moq-dev/moq/pull/2909), which is open.
+[#2909](https://github.com/moq-dev/moq/pull/2909), which is open and measured above: the join cost the
+catalog route would have imposed does not reappear on the track route.
+
+One residual risk in that implementation is a liveness property rather than a cost. Export opens its
+output once every SI entry either holds a snapshot or has reached a terminal state, and terminal
+*failure* is handled deliberately — the track logs and keeps its last snapshot rather than killing the
+mux. A track that neither succeeds nor fails is not covered: it leaves the gate shut, and the exporter
+emits no TS at all, media included. Before SI moved to its own tracks it lived in the catalog and could
+not independently gate media ([lab: T17](../lab/test-17-si-snapshot-tracks.md)).
 
 **A second real-feed defect, of a more serious kind, closed the same way.** Until recently a single
 damaged byte in an MP2, AC-3 or E-AC-3 frame header terminated the publisher outright and took every
