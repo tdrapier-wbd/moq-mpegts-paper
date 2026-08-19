@@ -5,12 +5,85 @@ can execute them reproducibly.
 
 **This file holds only what is outstanding.** Everything measured lives in the per-test file it
 belongs to; where an experiment is partly executed, the entry here is reduced to the *remaining*
-conditions plus a pointer. Nothing is marked done here — a completed item is deleted from this file,
-not struck through, because a to-do list that accumulates its own history stops being readable as a
-to-do list. Results, corrections and the reasoning behind them belong in `test-*.md`.
+conditions plus a pointer to the results. An entry is deleted once nothing of it is outstanding — a
+to-do list that accumulates its own history stops being readable as a to-do list. Results,
+corrections and the reasoning behind them belong in `test-*.md` and
+[method-notes.md](method-notes.md).
+
+**Ordered by leverage, not by convenience.** The first two entries would change the paper's
+conclusions; the rest refine them.
 
 Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
 `INSTRUCTIONS.local.md`.
+
+---
+
+## The cushion sweep: does MoQ stay sub-second while reaching P1 on the wire? (T13/T16 extension)
+
+**The highest-leverage outstanding measurement in the campaign, and the cheapest.** Nothing is
+blocked: the rig, the instrument and the grading script all exist and the source is unchanged.
+
+**The question.** Grooming buys TR 101 290 P1 PCR-repetition conformance with buffer depth, and
+buffer depth is latency. Two points are measured and they are on different data planes:
+
+| Groomer cushion | Data plane | PCR intervals > 40 ms, on the wire | Source |
+|---|---|---|---|
+| shallow (the depths the MoQ lane runs) | MoQ | **131** on the laptop rig, **159** on the EC2 box, 227 ms max | [T13](test-13-downstream-grooming.md) |
+| 8 s, derived from arrival | segmented HTTP | **0** | [T16](test-16-grooming-segmented-http.md) |
+
+T16's explanation is general rather than plane-specific — *what constrains PCR placement is not live
+operation but whether the stage always has a packet ready at the deadline, which is what buffer depth
+buys*. If that holds on MoQ, the edge stage that makes MoQ presentable spends the only advantage MoQ
+has ([comparison](../docs/comparison.md) §5.1).
+
+**Procedure.** T16's rig with leg A replaced by the MoQ chain — publisher, relay, `moq export ts`,
+groomer, `t13-cadence.py capture` — sweeping the cushion and grading each arm with
+`t13-grade.py` plus `tsp -P pcrverify`, `-P continuity` and `-P analyze`:
+
+```bash
+for CUSHION in 200 400 800 1500 3000 5000 8000; do
+	# MoQ leg, groomer cushion pinned; capture on loopback UDP as T13's wire domain
+	LAT_MS=$CUSHION lab/scripts/t13-cadence.sh ~/CNNiEMEA2.ts ~/t18/moq-$CUSHION 60
+done
+python3 lab/scripts/t13-grade.py grade ~/t18/moq-*/egress.ts
+```
+
+**Report, per cushion:** PCR intervals above 40 ms and the maximum interval, `pcrverify --absolute
+--jitter-max 13`, continuity errors, packets dropped and muted (criterion 4 — a pass reached by
+discarding programme is not a pass), 10 ms coefficient of variation, and **the resident buffer and
+the programme held before the first byte**, which is the latency the conformance costs.
+
+**Fix the pass criteria before running.** (1) The cushion at which wire-domain intervals above 40 ms
+first reaches 0 with nothing dropped and nothing muted. (2) Whether that cushion, plus the exporter's
+own `--latency-max`, plus a nominal encode and network budget, leaves the chain under one second. A
+negative answer on (2) is the more valuable result, and it should be published as such.
+
+**One thing to pin while there.** T13 describes its cushion as "~1 s" while the flag set
+[T16](test-16-grooming-segmented-http.md) reproduces as "the depths T13 ran" is
+`--latency-ms 200 --max-latency-ms 2000 --stall-ms 1000`. Record the cushion actually in force per
+arm so the two files agree.
+
+---
+
+## Glass-to-glass latency, at equal conformance, on both data planes
+
+**Unmeasured on either plane, and it decides the comparison.** [T8](test-8-srt-vs-moq.md) records it
+as owed; [T14](test-14-data-plane-comparison.md) records it as unmeasured. There is no latency figure
+anywhere in this campaign, and the paper's decision rule
+([comparison](../docs/comparison.md) §5.2) currently rests on a structural argument plus the
+measured delivery granularity.
+
+**Method.** One encoder with burnt-in timecode and a local clock reference, tee'd byte-identical into
+both data planes, each groomed to the *same* P1/P2 gate before measurement — otherwise the comparison
+prices conformance rather than transport. Report the composition, not just the total: encode,
+package, deliver, reassemble, groom, egress. A buffer ladder is already defined in T8
+(B ∈ {250 ms, 500 ms, 1 s, 2 s}).
+
+**Partly blocked.** The segmented arm cannot reach the low end of its own envelope on free software —
+no free client fetches partial segments ([T14](test-14-data-plane-comparison.md) measurement 2b) — so
+a like-for-like low-latency comparison needs the same commercial ABR-to-TS hardware as the entry
+below. The **MoQ arm is not blocked** and should be run with the cushion sweep above, since the two
+share a rig and the sweep produces half the answer.
 
 ---
 
@@ -40,7 +113,7 @@ T12's reference receiver?**
 **Partly run.** Burst granularity, carriage fidelity and wire cost are measured and recorded in
 [test-14-data-plane-comparison.md](test-14-data-plane-comparison.md), which also holds the rigs, the
 environment and what the results do to
-[alternatives](../docs/alternatives.md). Three cells remain, each blocked on something the lab does not
+[comparison](../docs/comparison.md). Three cells remain, each blocked on something the lab does not
 currently have.
 
 1. **Whether a commercial ABR-to-TS gateway, run as the distributor's own edge stage, passes
@@ -49,7 +122,7 @@ currently have.
    interval above 40 ms, duration fidelity 1.000. The question is not whether a client's receiver
    relieves the distributor of the hand-off, since the distributor does not supply that receiver; it
    is whether such a box discharges the distributor's *own* grooming obligation. §4.4 of
-   [alternatives](../docs/alternatives.md) rests on datasheet claims and this converts them into a
+   [comparison](../docs/comparison.md) rests on datasheet claims and this converts them into a
    finding either way. **Blocked on:** hardware. *Moves:* whether part of the broadcast-grade edge
    layer is purchasable for segmented HTTP and not for MoQ, or whether the hand-off axis closes
    entirely.
@@ -106,7 +179,7 @@ and a true CBR hardware source, which the transparency result makes the interest
 
 Results in [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md), rig in
 [`scripts/t16-groom-segmented.sh`](scripts/t16-groom-segmented.sh). Specified to close the cell
-[interoperability](../docs/interoperability.md) §6 admitted was open — "the equivalent grooming pass on
+[evidence](../docs/evidence.md) §3.2 admitted was open — "the equivalent grooming pass on
 a segmented-HTTP egress is unmeasured" — by inserting the groomer into T14 arm B1's chain and changing
 nothing else, then grading with T13's criteria and gates verbatim.
 
@@ -159,11 +232,15 @@ What remains open:
 
 - **A lossy path.** In a sparse table a lost section and a skipped section number are
   indistinguishable, so a section lost before the cycle wraps should yield a snapshot quietly missing a
-  segment. That is reasoned, not measured; it wants a drop injected on the SI PID.
-- **The unbounded gate.** An SI track that neither succeeds nor fails holds all output indefinitely.
-  Reproducing it needs a stale announce naming a track that will not resolve, which is a rig in itself.
+  segment. That is reasoned, not measured; it wants a drop injected on the SI PID. Upstream has since
+  fixed a related defect by merging same-version sections rather than replacing them, so this arm is now
+  confirmation of a fix rather than the adjudication of an open question.
 - **Multi-service.** The 40-service figures are scaled from one service, not measured on an MPTS.
-- **TDT/TOT regeneration**, which nothing currently does, leaving the egress with no time table.
+- **The clock's emission timing.** Carriage is settled — TDT/TOT is proxied from the source and TOT's
+  descriptors survive byte-for-byte — but the exporter re-emits a stored section on its own 30 s timer,
+  so the delivered clock is ~14 s late and repeats a time it has already asserted when the source ticks
+  slower than the timer ([T15](test-15-point-to-point-cadence.md) measurement 4). Measured on a clean
+  loopback path only; what a lost snapshot group does to it is untested.
 
 ---
 
@@ -219,7 +296,7 @@ exporter fix; meanwhile use [`t12-seqskew.py`](scripts/t12-seqskew.py), which me
 correlating.
 
 **Two-host and meshed variants.** Both T12 legs ran on one host, sharing a clock, which flatters the
-rate coherence [architecture](../docs/architecture.md) §14.1 requires of two gateways on free-running
+rate coherence [architecture](../docs/architecture.md) §5.1 requires of two gateways on free-running
 oscillators; and both traversed the same physical path, so T12 graded the hand-off, not path
 diversity. This matters more now than it did: arm D's identity claim rests on two groomers agreeing
 about stream position, and on one host they agree about wall time as well. Repeat the arm C and arm D
@@ -373,7 +450,7 @@ here produced a wrong number that survived two rounds of hypothesis:
 ## Cross-implementation interop (T11)
 
 Three other MoQ implementations now matter to this project
-([interoperability](../docs/interoperability.md) §9), and "a MoQ relay is a neutral transport fabric"
+([comparison](../docs/comparison.md) §12), and "a MoQ relay is a neutral transport fabric"
 is a load-bearing assumption that has only ever been tested against `moq-dev` peers.
 
 **T11a — `moq-dev` against third-party relays.** *Partly run;* harness, relay matrix and the isolated
@@ -385,7 +462,7 @@ of relay neutrality**, because it uses third-party production infrastructure rat
 Record the negotiated draft, whether the `hang` catalog survives a relay with no catalog concept,
 round-trip fidelity against the T1 baseline, and added latency. Their relay treats publisher disconnect
 as terminal, so expect no source-failover behaviour — confirming that is itself a result worth
-recording against [architecture](../docs/architecture.md) §14.
+recording against [architecture](../docs/architecture.md) §5.
 
 **T11b — a `moq2ts` broadcast through a `moq-dev` relay.** *Runnable now, weaker result.* `moq2ts` is
 publisher-only, so there is no MSFTS subscriber to close the loop; the question is only whether the

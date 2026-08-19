@@ -2,7 +2,7 @@
 
 ## Objective
 
-[Alternatives](../docs/alternatives.md) grades two candidate data planes for primary distribution —
+[Comparison](../docs/comparison.md) grades two candidate data planes for primary distribution —
 MoQ, and segmented HTTP carrying MPEG-TS — across nine axes. Every MoQ row in that comparison is
 measured in this campaign; every segmented-HTTP row was specification text or a vendor datasheet. Half
 of the verdict table was therefore argument rather than evidence, and the argument was load-bearing:
@@ -16,7 +16,7 @@ comparison made and could not support:
 
 That prediction matters because the whole hand-off axis turned on it. The obligation to hand a client
 a clean, paced transport stream sits on the distributor's side of the demarcation on **both** data
-planes — a distributor does not supply its clients' receivers ([alternatives](../docs/alternatives.md)
+planes — a distributor does not supply its clients' receivers ([comparison](../docs/comparison.md)
 §4.1) — so the question is not who owns the grooming stage but how much work it has to do.
 
 ### Pass criteria (fixed before the runs)
@@ -186,7 +186,7 @@ so the columns are directly comparable.
 **Arm B2 is arm B1 with extra files on disk.** Median burst falls from 2.95 MB to ~2.3 MB, and that
 ~20 % is explained entirely by segment duration — Apple's segmenter produces clean 2.00 s segments
 where TSDuck's `--intra-close` overshoots to 2.38 s — not by parts. Against MoQ the gap closes from
-~238× to ~185×, which is noise on a two-order-of-magnitude difference. ffmpeg is *worse* than classic
+~240× to ~185×, which is noise on a two-order-of-magnitude difference. ffmpeg is *worse* than classic
 TSDuck on both dispersion measures.
 
 **The control that makes this a finding about clients rather than about the rig.** Apple's own
@@ -257,7 +257,7 @@ specification never mentions.
 Both absences on the MoQ leg are known and by design, and this run reproduces them rather than
 discovering them. **Stuffing** is not carried, which is exactly where the media-aware lane's 0.982× wire
 figure comes from. **TDT/TOT** is not relayed either, so the edge must mint wall time
-([evidence](../docs/evidence.md) §4, [architecture](../docs/architecture.md) §4.2). Arm B1 carries both
+([evidence](../docs/evidence.md) §3.1, [architecture](../docs/architecture.md) §4.2). Arm B1 carries both
 without being asked to.
 
 ### Measurement 5 — wire cost: HTTP's own overhead is negligible, and MoQ's ~7 % lead is the price of not being verbatim
@@ -395,7 +395,7 @@ unrun, and now carrying the whole of that row.
 has no normative reference implementation — it is an Apple-authored informational document — yet it
 interoperates everywhere, and its authoritative implementation is closed-source and macOS-only. MoQ is
 standards-track with open implementations and no cross-implementation media interop
-([evidence](../docs/evidence.md) §9). Open source and interoperability are not the same axis.
+([evidence](../docs/evidence.md) §3.7). Open source and interoperability are not the same axis.
 
 ---
 
@@ -444,6 +444,10 @@ Protocols for these are in [planned-experiments.md](planned-experiments.md).
 
 ## Corrections
 
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
+
 **"No maintained toolchain does Low-Latency HLS with MPEG-TS" was too coarse, and the coarseness hid
 the interesting half.** The claim was assembled from documentation — TSDuck implements no
 `EXT-X-PART`, FFmpeg emits no partial-segment tags, Shaka's low-latency path is CMAF — and it was
@@ -479,7 +483,7 @@ but to construct the ratio so that no interval appears in it.*
 
 ## References
 
-- [alternatives](../docs/alternatives.md) §4 — the hand-off axis and the demarcation argument
+- [comparison](../docs/comparison.md) §4 — the hand-off axis and the demarcation argument
 - [T1](test-1-baseline-ts.md) — source mux baseline; [T13](test-13-downstream-grooming.md) — the
   grooming candidates, whose failures are tool properties and so apply to both legs
 - [T7](test-7-timing-integrity.md) — the P1 oracle both legs would be graded against once groomed

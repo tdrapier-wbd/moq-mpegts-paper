@@ -157,7 +157,7 @@ up to **~1 % random loss and ≥ 200 ms added latency**, with in-order jitter to
 sets in by ~3 % loss and **reordering** is the boundary condition. Loss behaviour is graceful and
 bounded (proportionate throughput reduction, recovery observed), not catastrophic — except under
 heavy reordering, where the redundancy path (T6 / ST 2022-7) is the mitigation, not the transport
-alone. Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §6 (the
+alone. Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §3.3 (the
 congestion-control head-to-head in [T8](test-8-srt-vs-moq.md) later showed the loss collapse is a
 CUBIC default, removed by BBR).
 
@@ -165,4 +165,4 @@ CUBIC default, removed by BBR).
 
 - Congestion-control head-to-head that reframes the loss result: [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md).
 - LEO/Starlink handover candidate profile (not yet run): [planned-experiments.md](planned-experiments.md).
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §6.
+- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.3.

@@ -10,8 +10,12 @@ alwaysApply: true
 - **`lab/`** — the *public* engineering notebook: the campaign plan and, per experiment, the objective, environment, procedure and **measured results**. Authoritative for the experimental record; results promoted to `docs/evidence.md` are summarised there, not moved out of the lab.
 - **`lab/*.local.md`** *(git-ignored)* — the internal digest: raw chronology, dated runs, throwaway commit hashes, superseded hypotheses, sensitive infrastructure detail.
 - **`interop/`** *(public)* — the media-level interop test client contributed to `moq-interop-runner`, with its fixture generator and oracle.
-- `docs/evidence.md` → validated empirical findings
-- `docs/*.md` → design and architecture
+- `docs/problem.md` → the requirement set (R1–R9), which everything else is scored against
+- `docs/comparison.md` → the data-plane head-to-head and the verdict table
+- `docs/architecture.md` → the broadcast-grade layer: edge gateway, redundancy, carriage, fabric
+- `docs/control-plane.md` → control, entitlement, security — **design only, no evidence**
+- `docs/evidence.md` → method, results by question, limits, ranked open questions
+- `docs/economics.md`, `docs/glossary.md` → cost model, vocabularies
 - `docs/upstream/` → drafts of issues/PR feedback for upstream projects (`*.local.md` here are unpublished drafts)
 - `README.md` → entry point / document map
 
@@ -22,9 +26,11 @@ When uncertain where something belongs, prefer `lab/` over `docs/`.
 | Location | Role | Contains | Never contains |
 |---|---|---|---|
 | `lab/*.md` *(public)* | Per-experiment engineering record. | objective, environment, procedure, exact commands, measured results, observations, conclusions, pass criteria fixed in advance | dated run-by-run chronology, "re-verified on…" sections, throwaway commit hashes, real IPs/paths (use `<EC2_IP>` placeholders) |
+| `lab/method-notes.md` *(public)* | Every measurement rule the campaign learned, organised by theme. | the rule, the experiment it came from, the one-paragraph incident that produced it | per-experiment narrative |
+| `lab/upstream-contributions.md` *(public)* | What was found, reported and verified in other projects. | the defect, the report, the before/after verification, what remains open | resource or conformance measurements |
 | `lab/*.local.md` *(git-ignored)* | Internal digest. | the chronology, per-run provenance, superseded hypotheses, sensitive infra | — |
 | `docs/*.md` | The paper: stable engineering conclusions. | design & architecture that reflect current understanding | diary entries, TODOs, branch names, command history other than reproducible recipes |
-| `docs/evidence.md` | Validated empirical findings only. | measurements that are confirmed and current | unvalidated or in-flight results |
+| `docs/evidence.md` | Method, results by question, and limits. | measurements that are confirmed and current, each with its measurement point (P0/P1/P2) and its qualifications carried from source; evidence against unmerged upstream code marked `[unmerged]` | unvalidated results presented without their label, and any figure whose file-versus-wire domain is not stated where the two differ |
 | `STATUS.md` *(git-ignored)* | Current state only — a one-page snapshot. | what is true right now (build under test, open items, what's proven) | history, chronology |
 | `INSTRUCTIONS.local.md` *(git-ignored)* | Reproduction environment + workflow + these editing rules. | paths, addresses/ports, start commands, test data, tooling, and how to operate in the repo | engineering findings / results / status (those go to `lab/`) |
 | `README.md` | Entry point and document map. | — | — |

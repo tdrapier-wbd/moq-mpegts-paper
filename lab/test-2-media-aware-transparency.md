@@ -291,7 +291,10 @@ is the faithful measure.
 
 - As shipped, the media-aware lane is *media-faithful* (elementary streams, continuity, PCR PID
   intact) but **not broadcast-transparent**: it dropped the DVB service layer, renumbered the PMT,
-  and emitted non-CBR bursty egress violating TR 101 290 P1 on 13–26 % of intervals.
+  and emitted non-CBR bursty egress violating TR 101 290 P1 on 13.7 % and 25.5 % of intervals
+  for the two clips whose native PCR cadence is coarser than the exporter's group boundaries, and on
+  0.10 % for the 27.5 Mbps mux whose own 27 ms cadence is already inside the limit. **Quote the range
+  as 0–26 % across the four clips T7 measured, not as 13–26 %.**
 - The timing/CBR half is closed downstream of *any* VBR source by `mpegts-pacer`; the service-layer
   half is closed upstream by #2440. Those left **TDT/TOT and EIT** unpreserved, and the two were
   never one gap: EIT revises rarely enough to fit #2440's catalog carriage at ~12 updates per ten
@@ -317,7 +320,7 @@ pass (T7). Those tables are no longer one gap: EIT p/f actual round-trips byte-i
 [#2824](https://github.com/moq-dev/moq/pull/2824) — measured here, but still an open PR, so no
 released build carries it — while TDT/TOT stays dropped deliberately, leaving the wall clock as the
 one thing an exporter must regenerate rather than relay. The permanent finding is recorded in
-[`docs/evidence.md`](../docs/evidence.md) §3 (PCR cadence + pacer) and §4 (open-GOP + service layer).
+[`docs/evidence.md`](../docs/evidence.md) §3.2 (PCR cadence + pacer) and §4 (open-GOP + service layer).
 
 ## References
 
@@ -325,4 +328,4 @@ one thing an exporter must regenerate rather than relay. The permanent finding i
 - Byte-for-byte counterpart and the decisive contrast: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).
 - Upstream: [#1979](https://github.com/moq-dev/moq/issues/1979), #2072, #2066,
   [#2440](https://github.com/moq-dev/moq/pull/2440).
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §3, §4.
+- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.2, §4.

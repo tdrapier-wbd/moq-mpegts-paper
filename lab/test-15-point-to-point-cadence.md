@@ -2,7 +2,7 @@
 
 ## Objective
 
-[Alternatives](../docs/alternatives.md) §10.1 argues that RIST should hand a groomer the *cleanest*
+[Comparison](../docs/comparison.md) §10.1 argues that RIST should hand a groomer the *cleanest*
 egress of the transports this paper weighs, on the reasoning that a packet-level tunnel with a jitter
 buffer "reconstructs the original packet cadence, delayed, rather than reassembling a stream from
 objects or segments." That was reasoned and explicitly flagged as unmeasured, and it was the largest
@@ -12,8 +12,9 @@ This runs RIST and SRT through the instrument [T14](test-14-data-plane-compariso
 point-to-point class can be quoted in the same units as MoQ and segmented HTTP.
 
 Measurement 4 extends the same legs from cadence to carriage, asking what each transport does to the
-DVB time tables it carries. It was added to settle an upstream design question and is reported here
-because it is the same transports on the same rig.
+DVB time tables it carries, and adds the media-aware lane to the comparison. It settles an upstream
+design question — whether a clock should be relayed from the source or synthesised at the edge — and it
+separates the two classes of machine more sharply than the cadence measurements do.
 
 ### Pass criteria (fixed before the runs)
 
@@ -40,7 +41,8 @@ Single macOS host, loopback path, same clip and same instrument as T14.
 | Instrument | [`t13-cadence.py`](scripts/t13-cadence.py), 64 kB reads (`pipe`) or per-datagram (`capture`) |
 | Burst grouping | [`t15-bursts.py`](scripts/t15-bursts.py), 1 ms separation — T14's threshold |
 | Window | 60 s per leg |
-| Clock legs (measurement 4) | [`tdt-transports.sh`](scripts/tdt-transports.sh) with [`tdt-staleness.py`](scripts/tdt-staleness.py), 75 s per leg |
+| Clock legs (measurement 4) | [`tdt-transports.sh`](scripts/tdt-transports.sh) for the pipes, 75 s per leg, and [`tdt-moq.sh`](scripts/tdt-moq.sh) for the media-aware lane, 300 s per arm — both reading [`tdt-staleness.py`](scripts/tdt-staleness.py) |
+| MoQ build (measurement 4) | `dev` at `016fc09ae`, which carries the TDT/TOT proxy (#2929) and the SI snapshot tracks (#2909) |
 
 The burst tool is new here and was validated before use: run against T14's retained arm A and B1
 captures it reproduces the published figures exactly — 12.4 kB / 90.6 kB / 285.8 kB and
@@ -92,6 +94,11 @@ python3 lab/scripts/t15-bursts.py --sweep ~/t15/librist-cbr-w5-egress.csv
 
 # Measurement 4: the clock, on the same three transports plus the UDP control
 lab/scripts/tdt-transports.sh ~/CNNiEMEA2.ts ~/tdt_transports 75
+
+# and on the media-aware lane, whose arms vary the source cadence against the
+# exporter's 30 s re-emission timer
+lab/scripts/tdt-moq.sh "$TGT/moq" "$TGT/moq-relay" \
+	~/moq-dev/demo/relay/localhost.toml ~/CNNiEMEA2.ts ~/tdt_moq 300
 ```
 
 ## Results
@@ -160,24 +167,21 @@ must absorb; it does not replace one ([T13](test-13-downstream-grooming.md)).
 
 ### Measurement 4 — what the transports do to the clock they carry
 
-Added later, and about carriage rather than cadence: `export ts` emits no TDT/TOT at all
-([T17](test-17-si-snapshot-tracks.md) measured 0 packets on PID 0x0014), and the upstream argument
-about whether to *proxy* the source's clock or regenerate it turns on what the incumbents do. They do
-nothing whatever to it, and that turns out to be the whole answer.
+About carriage rather than cadence, and it separates the two classes of machine more sharply than any
+cadence measurement does. The question is not whether a time table arrives but **which time it asserts
+when it does**, so the source is re-stamped by `tsp -P timeref --start system`: every TDT transmitted
+asserts the true UTC of its own transmission, and any lateness a receiver reads is the path's.
 
-The source is re-stamped by `tsp -P timeref --start system`, so every TDT it transmits asserts the
-true UTC of its own transmission; whatever the receiver reads is then the transport's contribution.
+#### The point-to-point transports are transparent
 
 | Leg | TDT sections delivered | inter-section arrival gaps | staleness spread *(instrument)* |
 |---|---|---|---|
 | plain UDP *(control)* | 5 × 0x70 | 15.23, 15.08, 15.19, 15.10 s | 601 ms |
 | SRT, 1000 ms latency | 5 × 0x70 | 15.23, 15.08, 15.19, 15.10 s | 604 ms |
 | RIST Main, 1000 ms buffer | 5 × 0x70 | 15.24, 15.07, 15.20, 15.10 s | 601 ms |
-| MoQ `export ts` | **0** (T17) | — | — |
 
-**The transports are indistinguishable from the no-transport control, to two decimal places on every
-gap.** They reproduce the source's section cadence packet-for-packet and add no variance to when the
-clock arrives.
+**They are indistinguishable from the no-transport control, to two decimal places on every gap.** They
+reproduce the source's section cadence packet-for-packet and add no variance to when the clock arrives.
 
 Two columns here are instrument and not transport, and saying so is the point of quoting the control:
 
@@ -196,11 +200,75 @@ input bitrate. RIST's null-packet deletion is the sole case of either touching T
 explicitly reversible — the sender strips nulls and sends a bitmask of their positions, the receiver
 restores them in place.
 
-**So proxying a clock is not correct in general; it is correct for this class of machine.** A
-constant-delay pipe that never repeats a section is late by its path and cannot drift further. A
-stage that rebuilds the multiplex, assigns its own PIDs and re-emits SI on its own cadence is a
-different machine, and for that class the reference toolkit's answer is `tsp -P timeref`, whose
-`--start` anchors once and then advances locally.
+#### The media-aware lane carries the clock, and delivers it late
+
+`export ts` now proxies TDT/TOT from the source on a latest-value SI slot (upstream #2929), closing the
+zero-packet gap [T17](test-17-si-snapshot-tracks.md) measured. Because the lane is a remultiplexer
+rather than a pipe, it cannot forward a section — it stores the newest one and re-emits it on its own
+timer, which for table 0x70/0x73 is the DVB *maximum* repetition interval of 30 s. The consequence is
+measurable, and it is not the sub-second lateness a pipe adds.
+
+Arms differ only in how the source's cadence sits against that 30 s timer. 300 s per arm,
+[`tdt-moq.sh`](scripts/tdt-moq.sh).
+
+| Arm | source TDT cadence | sections delivered | median late | max late | repeated a section already sent |
+|---|---|---|---|---|---|
+| **control** — same publisher, no MoQ | 15.1 s | 20 × 0x70 | **470 ms** | 916 ms | no |
+| **base** — clip's own clock | 15.1 s | 11 × 0x70 | **14,385 ms** | 15,546 ms | no |
+| **slow** — clock slower than the timer | 45 s | 11 × 0x70 | **23,894 ms** | 38,861 ms | **4 of 11** |
+| **tot** — TDT and TOT together | 20 s each | 11 × 0x70, 11 × 0x73 | **4,332 ms** | 5,009 ms | no |
+
+**The source's clock is true to under a second and arrives ~14 s late.** In the base arm the exporter
+emits every 30.0–30.3 s while the source ticks every 15.1 s, so half the ticks are overwritten in the
+slot before they are ever sent, and what a boundary finds in the store is whatever arrived since the
+last one — here, systematically, a section about one source period old. Steady-state lateness sits at
+13.4–15.5 s across eight consecutive emissions.
+
+Drift is not the explanation, which is why the control runs the same length: over the same 300 s the
+instrument's own slide is ≤ 917 ms, and lateness here is flat rather than growing.
+
+**The magnitude is not a constant of the build.** Same mechanism, same binary: 4.3 s in the `tot` arm,
+14.4 s in `base`, 23.9 s in `slow`. It is set by how the emission grid falls against the source's ticks,
+which varies with both the source's cadence and its phase — so it is not an offset anything downstream
+could be told about and correct for. A single arm would have supported almost any figure.
+
+**Below the timer's rate, the exporter repeats a time it has already asserted.** With the source at
+45 s the exporter still emitted 11 times against 7 distinct source values, re-sending 4 of them:
+
+```text
+  0.01 s  asserts 09:54:50      19.21 s  asserts 09:54:50   <- again, 19 s later
+ 49.48 s  asserts 09:55:35      79.23 s  asserts 09:55:35   <- again
+```
+
+A receiver that trusts each TDT — which is what a TDT is for — sets its clock, advances it locally for
+19 s, then receives the same time again and **steps backwards by 19 s**. A receiver of the original
+multiplex never sees this: every TDT on that wire carries a new time, so its corrections are always
+forward. This is the one result that is a defect rather than a cost, and it is the difference between
+"late by a bounded amount" and "asserting a time known to be wrong".
+
+**TOT survives intact, which validates the argument for proxying at all.** A `local_time_offset`
+descriptor is operator policy — DST transition dates and per-country offsets an exporter cannot invent
+— and both regions' bytes come through identical to the source's, with the section's own CRC
+recomputed around a re-stamped UTC field:
+
+```text
+injected f0 1c 58 1a 47 42 52 02 01 00 ef 9a 02 00 00 00 00 44 45 55 …
+egress   f0 1c 58 1a 47 42 52 02 01 00 ef 9a 02 00 00 00 00 44 45 55 …   identical
+```
+
+#### What the two classes mean for the clock
+
+**Proxying a clock is correct for a pipe and insufficient for a remultiplexer.** A constant-delay pipe
+that never repeats a section is late by its path and cannot be later; the measurement above puts that
+at ~600 ms of instrument and nothing of transport. A stage that rebuilds the multiplex and re-emits SI
+on its own cadence is a different machine: it is late by however long it holds a section, and below
+its own emission rate it repeats one.
+
+The fix that follows is narrow. For a latest-value table the interval should be a *floor on repetition*
+and not the emission schedule — emit when the value changes, fall back to the interval only to satisfy
+the DVB maximum. The reasoning that a source's observed cadence "means nothing downstream" holds for a
+static table, where a repetition carries the same information whenever it is sent; for a clock the
+cadence *is* the information.
 
 ### Against the pass criteria
 
@@ -272,11 +340,15 @@ T13 and T14 reached, now with the point-to-point class measured rather than assu
 | RIST and SRT under loss and RTT | Loopback has neither. This measures delivery shape on a healthy path, not recovery. |
 | A true CBR hardware source | Would establish the tunnels' floor rather than this publisher's. The transparency result makes this the interesting remaining variable. |
 | RIST Advanced profile | libRIST 0.2.20 exposes it; nothing in the comparison currently turns on it. |
-| What a *proxied* clock would do through MoQ | Needs 0x0014 added to the importer's SI allowlist and a build; the code path predicts a snapshot that freezes after 32 distinct sections and is then replayed at the 500 ms PSI cadence, but that is code reading, not a measurement ([#2914](https://github.com/moq-dev/moq/issues/2914)). |
+| A proxied clock through MoQ under loss | Measured on a clean loopback path only. Whether a lost snapshot group extends the staleness above is untested, and it is the arm that would matter on a real route. |
 | The clock legs' true end-to-end latency | The rig's publisher blocks until its peer connects, which anchors `timeref` before the stream flows and turns the stall into a constant offset. Fixing it means anchoring after the connection is up. |
-| Whether `cbr-output`'s spacing survives a groomer's input stage | It reduces burst absorption, and whether that lets a smaller buffer pass TR 101 290 is a groomer question ([implementation](../docs/implementation.md) §9.1). |
+| Whether `cbr-output`'s spacing survives a groomer's input stage | It reduces burst absorption, and whether that lets a smaller buffer pass TR 101 290 is a groomer question ([architecture](../docs/architecture.md) §4.5). |
 
 ## Corrections
+
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
 
 - **"RIST should hand the groomer the cleanest egress of the four" — withdrawn as stated.** The
   reasoning behind it (a packet tunnel reproduces source pacing rather than reassembling from objects
@@ -297,9 +369,10 @@ T13 and T14 reached, now with the point-to-point class measured rather than assu
 - [T13 — downstream grooming](test-13-downstream-grooming.md): what no off-the-shelf stage does.
 - [T14 — MoQ against segmented HTTP](test-14-data-plane-comparison.md): the instrument, the burst
   threshold, and the MoQ and segmented-HTTP columns quoted here.
-- [T17 — SI on snapshot tracks](test-17-si-snapshot-tracks.md): the 0 packets on PID 0x0014 that
-  measurement 4 exists to put in context.
-- [alternatives](../docs/alternatives.md) §10.1: the claim under test.
+- [T17 — SI on snapshot tracks](test-17-si-snapshot-tracks.md): the EIT carriage this clock now
+  accompanies, and the zero-packet gap measurement 4 exists to put in context.
+- [comparison](../docs/comparison.md) §10.1: the claim under test.
 - [`t15-cadence.sh`](scripts/t15-cadence.sh), [`t15-bursts.py`](scripts/t15-bursts.py),
-  [`tdt-transports.sh`](scripts/tdt-transports.sh), [`tdt-staleness.py`](scripts/tdt-staleness.py).
+  [`tdt-transports.sh`](scripts/tdt-transports.sh), [`tdt-moq.sh`](scripts/tdt-moq.sh),
+  [`tdt-staleness.py`](scripts/tdt-staleness.py).
 - VSF TR-06-2:2022 (RIST Main Profile) and `draft-sharabayko-srt`: neither mentions any TS table.

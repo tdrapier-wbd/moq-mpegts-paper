@@ -1,7 +1,7 @@
 # Test 9 — System performance & resource utilisation
 
-**Pyramid (§6):** operational envelope. **Gate (§7):** feeds [operations](../docs/operations.md) and
-[economics](../docs/economics.md) §3.1, §4 and §9 (not a fidelity/resilience gate). **State:** two ≥ 24 h
+**Pyramid rung 5** (operational envelope). **Feeds:** [architecture](../docs/architecture.md) §8.3
+and §9.1, and [economics](../docs/economics.md) §3 (not a fidelity or resilience gate). **State:** two ≥ 24 h
 soaks plus a controlled build A/B. The **publisher and subscriber roles pass** (+0.03 and +0.15 MB/h).
 The relay retains **~9 KiB per ingested group** and does not release it: across eleven legs the slope
 is ~27–31 MB/h, identical on 0.14.8 and 0.14.9, **flat in subscriber count** (+28.70 / +27.86 / +28.00
@@ -106,86 +106,26 @@ distinction is what turned the observation below from a shrug into a finding. Op
 relay memory explicitly (`--cache-capacity`, or `--cache-headroom` for the governor) in any
 deployment regardless.
 
-## The 0.13.7 relay leaked ~21 MB/hour to an OOM kill (fixed, and distinct from the growth below)
+## A separate, fixed leak in an older release, and why it is not the growth measured below
 
-This is a separate defect from the under-load growth documented later, and it is fixed: on 0.13.7 the
-relay grew steadily with **no subscribers attached at all**, which is not the regime the current builds
-fail in. The standing relay was found at VmRSS ≈ 3.2 GB — ~84 % of the 3.8 GB box, with only 3 threads
-and 10 fds — and roughly nine hours later the kernel killed it:
+The relay build that started this investigation (0.13.7, nine releases behind the builds under test)
+grew ~21 MB/hour **with no subscribers attached at all** and was killed by the kernel after six days
+at a 3.2 GB peak. Three measurements over three orders of magnitude of elapsed time agree on the rate
+(19.7, 22.7 and 21.2 MB/h), which is linear unbounded growth rather than a cache converging on a
+working set. It was not media volume (zero subscriber sessions), not CPU (0.17 % over 6.8 days — the
+takeover livelock is a *spin* failure, this was a quiet memory one), and not descriptors or threads.
 
-```
-Aug 07 01:00:57 systemd[1]: moq-relay.service: The kernel OOM killer killed some processes in this unit.
-Aug 07 01:00:57 systemd[1]: moq-relay.service: Main process exited, code=killed, status=9/KILL
-Aug 07 01:00:57 systemd[1]: moq-relay.service: Failed with result 'oom-kill'.
-Aug 07 01:00:57 systemd[1]: moq-relay.service: Consumed 16min 59.032s CPU time over
-                            6d 18h 40min 56.947s wall clock time, 3.2G memory peak.
-```
+**It does not reproduce on current builds in that regime**, and three controlled probes sized so the
+old rate would be unmissable confirm it: with two publishers and zero subscribers — the exact
+condition it died in — resident memory held at 13.0 MB for 35 consecutive minutes where the old rate
+predicts a climb past 30 MB; 40 connect/disconnect subscriber sessions oscillated and returned rather
+than ratcheting; and the 26.5 h soak below shows a *negative* slope in the same regime.
 
-systemd restarted it, giving a fresh process and a second, independent growth measurement. **Three
-measurements over different timescales agree on the rate:**
-
-| Measurement | Elapsed | Growth | Rate |
-|---|---|---|---|
-| Lifetime to the OOM kill | 6 d 18 h 41 m | 3,208 MB peak | **19.7 MB/h** |
-| Fresh process after restart | 9 h 03 m | 204 MB | **22.7 MB/h** |
-| Live sampling (`/proc/<pid>/status`) | 40 s | 204736 → 204972 kB | **21.2 MB/h** |
-
-A constant rate across three orders of magnitude of elapsed time is linear unbounded growth, not a
-cache converging on a working set. Extrapolated, it kills a 3.8 GB box roughly weekly, which is what
-happened.
-
-**What the growth is *not* driven by**, which narrows it usefully:
-
-- **Not media volume.** The relay served **zero subscriber sessions** (`journalctl | grep -c
-  "role=Some(Subscriber)"` = 0). At 21 MB/h it is also three orders of magnitude below the ~4.5 GB/h
-  of media the publishers represent, so it is not cached payload.
-- **Not CPU / not the #2701 wedge.** 17 minutes of CPU over 6.8 days (~0.17 %). The
-  [#2701](https://github.com/moq-dev/moq/pull/2701) livelock is a *spin* failure that burns 100 % CPU;
-  this is a distinct, quiet memory failure.
-- **Not fds or threads.** Steady at 10 fds and 3 threads throughout.
-- **Not high session churn**, though sessions are the one thing that did accumulate: 52 sessions in
-  9 hours, which works out at ~3.5 MB per session if the growth is charged to them.
-
-### Not reproduced on 0.14.8 in the same regime
-
-Three controlled probes on the 0.14.8 release, sized so that the 0.13.7 rate would be plainly visible.
-**None reproduces it.** (This is specifically about the *idle, publisher-only* regime; 0.14.x does grow
-under sustained subscriber load, which is a different mechanism — see the relay-memory section below.)
-
-| Probe | Condition | RSS behaviour | Verdict |
-|---|---|---|---|
-| `leak_probe.sh` | 2 publishers, **0 subscribers** (the EC2 condition), **60 min** | 15.39 → **12.98 MB** over the 300-3000 s window; **slope −2.68 MB/h** | no growth; EC2 rate predicts **+15.8 MB** |
-| `t9_soak.sh` phase A | 1 publisher + 1 steady subscriber, 4 min | ramps to ~95 MB and holds (±6 MB) | bounded working set |
-| `session_leak.sh` | 40 connect/disconnect subscriber sessions in 4 rounds | 100 → 151 → 162 → 181 → **149 MB** | oscillates and returns; no staircase |
-
-The idle probe is the decisive one, because it replicates the exact EC2 condition — publishers
-attached, nothing consuming — and because its baseline is rock steady (CPU 0.0, no media actually
-flowing, since the relay only pulls a track once something subscribes). Against that quiet baseline a
-21 MB/h leak would be unmissable: RSS held at **13.0 MB for 35 consecutive minutes** without moving,
-where the old rate predicts a climb past 30 MB. (It then fell to 4.4 MB near the end as the OS
-reclaimed pages under pressure from a concurrent test — reclaim, not signal, which is why the slope is
-fitted over the flat window rather than the whole hour.)
-
-The session probe is worth reading carefully, because at first glance round 1 looks like the ~3.5
-MB/session the EC2 arithmetic suggests: +50.7 MB retained after ten completed sessions (5.07
-MB/session). But it does not compound. Retained-per-session **decays** across rounds — 5.07, 3.10,
-2.69, 1.23 MB — and round 4 came back *down* to 149 MB, below round 3's 181 MB. That is a bounded
-working set being re-used, not memory lost per session. Throughout every probe, **fds held at 17 and
-threads at 12**.
-
-**The honest limit of this result.** These runs cannot exclude a ~20 MB/h leak in the *churn* regime,
-where the band is ±30 MB and an hour of drift hides inside it. What they do establish is that the
-specific 0.13.7 failure mode — steady linear growth in the idle, publisher-only regime — does not
-occur on 0.14.8, and that is the regime the EC2 relay died in. Between the
-two builds sit the cache and resume rewrites ([#2615](https://github.com/moq-dev/moq/pull/2615) media
-retention and pool bounds, [#2657](https://github.com/moq-dev/moq/pull/2657)
-`--cache-latency-default`, [#2666](https://github.com/moq-dev/moq/pull/2666), which explicitly pruned
-unbounded segment accumulation), any of which is a plausible fix. Confirming the negative properly is
-the ≥ 24 h soak below.
-
-**Not reported upstream.** A leak that only reproduces on 0.13.7 — nine releases and two cache
-rewrites behind `main` — is not actionable for maintainers; the evidence is recorded here instead.
-The separate under-load growth on current builds *is* reportable, and is tracked as such below.
+It is recorded here rather than reported upstream because a leak that only reproduces nine releases
+and two cache rewrites behind `main` is not actionable for maintainers. **It is a different mechanism
+from the under-load growth documented later**, which is bounded, plateaus, and belongs to the QUIC
+library rather than to the relay — and an RSS-trend alarm must be tuned to tell them apart
+([Architecture](../docs/architecture.md) §9.1).
 
 ## Fan-out envelope on macOS loopback: the host-configuration contrast
 
@@ -578,301 +518,22 @@ slope can be fitted through it. The subscriber aggregate is likewise not a clean
 because the set size changes with churn (phase slopes −0.04 / −0.69 / +0.19 MB/h are all ≈ 0, but the
 denominator moves). A second soak addresses the publisher directly.
 
-## Any audio stream losing frame sync killed `moq import` — reported, fixed, verified
+## Audio robustness defects found here — moved
 
-**Status: closed.** Reported as [#2729](https://github.com/moq-dev/moq/issues/2729), fixed by
-[#2751](https://github.com/moq-dev/moq/pull/2751) (merged to `main`, `moq-mux` 0.9.5), and
-independently replicated here against real content — see *Verifying the fix* below. The finding as
-originally measured is kept because it is the evidence the report rested on.
+Three defects in the TS importer's audio path were found by this rig, reported upstream, and verified
+against before-and-after builds: frame-sync loss killing the whole publisher, a splice publishing a
+*substituted* frame, and a recovered stream being signalled nowhere. Two are closed and one is open.
 
-Three loop variants of the same clip were run through `tsp -I file --infinite | moq import ts` across
-the ~601 s wrap:
+The full account — reproducers, root causes, the before/after arms, the two measured residuals on
+AC-3, and the method lessons — is in
+[upstream-contributions.md](upstream-contributions.md) §2. It is kept there rather than here because
+it is a contribution record rather than a resource measurement, and it is not what this experiment
+was specified to establish.
 
-| Loop variant | Result at the wrap |
-|---|---|
-| Full: H.264 + MP2 + AC3 + 3× SCTE-35 + teletext | **died** — `Error: missing MP2 frame sync` |
-| H.264 + AC3 | **died** — `Error: missing AC-3 sync word` |
-| H.264 video only | **survived**, ran on past 800 s |
-
-So it was not an MP2 parser bug. **Every audio codec tried aborted the whole process when its
-elementary stream lost frame sync, while the video path resynchronised through the very same
-discontinuity.** That asymmetry was the finding: video was treated as resynchronisable and audio as
-fatal. (The AC-3 row of that table needs a caveat, recorded under *Verifying the fix* below.)
-
-For primary distribution that is the wrong way round to fail. A contribution feed does glitch, and a
-publisher that exits on a momentary audio defect converts a few damaged frames into a full session
-teardown, reconnect, and the ~4 s re-attach measured in T6.
-
-The practical consequence for the rig, on the builds this campaign ran on: `t9_loop_vidonly.ts` is a
-source that loops indefinitely without restarting the publisher. From `moq-mux` 0.9.5 that workaround
-is no longer needed — a full A/V loop now survives its wraps — but every measurement in this file
-predates the fix and used the video-only source.
-
-### It is not a loop artefact: the root cause, with no timeline jump
-
-A looped file jumps its timeline *backwards*, which a real feed never does — so the loop rig alone
-cannot support the finding. A unit-level reproducer against `moq-mux` 0.9.4 removes that objection:
-one valid MP2 frame, then a second frame with its sync word changed from `0xFF` to `0xFE`, same PID,
-monotonic PTS, no loop and no timeline discontinuity of any kind, returns:
-
-```
-PROBE: one damaged header kills the whole import: missing MP2 frame sync
-```
-
-A single flipped bit is sufficient. `Import::decode` returns `Err`, and because `moq import`
-propagates that, the process exits and every track in the broadcast goes with it.
-
-The mechanism is a single line. In the legacy-audio PES loop
-(`rs/moq-mux/src/container/ts/import.rs`, the `while offset + min_header_len <= data.len()` loop):
-
-```rust
-let header = (self.descriptor.parse)(&data[offset..])?;
-```
-
-The `?` propagates a header-parse failure straight out of the demuxer. There is no attempt to scan
-forward for the next sync word, so a lost sync is unrecoverable by construction rather than by
-policy. What makes this look like an oversight rather than a decision is that **the same codebase
-already resynchronises everywhere else**:
-
-- The **TS container layer** resyncs byte-wise and has three tests pinning it —
-  `import_resyncs_after_byte_misalignment`, `resyncs_past_false_sync_byte`,
-  `resyncs_across_chunk_boundaries`.
-- The **video path** resyncs structurally: Annex-B parsing scans for start codes
-  (`find_start_code` / `after_start_code`), so a damaged NAL is skipped rather than fatal. This is
-  exactly why the video-only loop survives.
-
-Legacy audio is the one layer that treats a lost sync as fatal. The module's own doc comment says
-malformed input is *"rejected, never mis-described"* — and resyncing to the next valid frame honours
-that principle exactly. Rejecting the damaged frame is right; killing the session is the part that
-does not follow.
-
-**View: this is reportable, and it is a strong report rather than a marginal one.** The evidence is a
-deterministic minimal reproducer, a one-line root cause, a documented design principle the current
-behaviour contradicts, and two in-repo precedents for the correct behaviour. There is also a close
-precedent for it being accepted: [#2265](https://github.com/moq-dev/moq/issues/2265) ("one bad frame
-fatally crashes the process") was treated as a bug and fixed.
-
-### Verifying the fix (#2751)
-
-The fix was accepted and merged the same week. The upstream change scans forward to the next
-sync-word candidate and confirms it before trusting it — a frame is accepted only once a second header
-parses exactly where the first one says the frame ends, the same confirm-before-trust rule the TS layer
-already applied to a candidate packet. The scan is bounded at 64 KiB, and only a *confirmed* frame
-resets that budget, so a PID carrying something other than the codec its PMT declares still fails
-rather than scanning forever. Two things came out that we had not reported: the same defect shape
-covered **AAC**, which additionally never reassembled a frame split across a PES boundary at all, and
-the trigger does not need corruption — any carried tail spliced onto unrelated bytes does it, which is
-what our loop wrap was.
-
-Replicated here rather than taken on trust, building both the merge commit (`36c3bbd73`, `moq-mux`
-0.9.5) and its parent (`2b62488e5`, 0.9.4) so each arm has a before and an after:
-
-**Unit level.** 498 tests pass at the merge commit, including all twelve new resync tests. That is four
-more than the PR body claims, because two arrived during review — a bounded-recovery test for the AAC
-path, and `legacy_seek_resets_the_resync_budget` for a real bug a reviewer caught: a seek did not reset
-the scan budget, so a stream that had scanned close to 64 KiB before a discontinuity could fail on the
-first parse error after it while being perfectly in sync.
-
-**End-to-end on real content**, which was the outstanding item on our own checklist. Three copies of a
-20 s cut of the 9.95 Mbps DVB capture (H.264 + MP2 + AC-3 + teletext + 3× SCTE-35), each differing from
-the clean original by **exactly one byte** (`cmp -l` = 1), fed through a real relay to a real
-subscriber:
-
-| Arm | one-byte change | pre-fix 0.9.4 | post-fix 0.9.5 |
-|---|---|---|---|
-| MP2 header | sync `0xFF` → `0xFE` | **died at 12 s**, `Error: missing MP2 frame sync`, rc=1 | ran to end of file, rc=0 |
-| H.264 start code (control) | `0x01` → `0x00` | survived | survived |
-| Full A/V looped | none — `--infinite` wrap | **died at the first wrap** (21 s on a 20 s clip) | survived 50 s, 2+ wraps |
-
-The looped arm is the production shape: this is the defect that accumulated 216 publisher restarts,
-one per wrap, and it now runs through them.
-
-**What the fix costs, measured — on the single-bit arm.** Comparing the damaged run against a clean
-control by PTS set rather than by eye, on every elementary stream:
-
-- **exactly one 24 ms MP2 frame is dropped**, at t+8.616 s — the damage point;
-- **nothing is published that the clean run did not publish**, on any PID, so the damaged frame is
-  discarded rather than emitted as mixed bytes;
-- video, AC-3, teletext and all three SCTE-35 PIDs are untouched, and all eight tracks reach the
-  subscriber.
-
-One damaged byte cost one 24 ms audio frame instead of the whole broadcast. That is the right shape.
-
-**Scope limit, and it matters.** That by-PTS comparison was run on the **bit-flip arm only**; the looped
-arm above was graded on survival alone. The two are different code paths — a flipped sync byte fails to
-parse and takes the scan-and-confirm path, whereas a wrap presents an *intact* header followed by
-foreign bytes — so "nothing extra is published" is established for corruption and was never established
-for a splice. It does not hold there: see *A splice still publishes a mixed frame* below.
-
-#### Correction: the loop wrap is fatal when it splits a frame, not always
-
-The video+AC-3 row of the table above does not reproduce as stated. Re-running it here, the **pre-fix**
-build survived a looped video+AC-3 clip for 50 s with the AC-3 track present and decoding, where the
-original run died with `missing AC-3 sync word`. The difference is where the cut falls: a wrap is fatal
-only when it splits an audio frame, leaving a carried tail to be spliced onto the start of the file.
-Our 132,000-packet cut happens not to. So the correct statement is that **a loop wrap is fatal when it
-lands mid-frame**, which is a property of the cut and not of the codec — the codec-generality claim
-rests on the unit reproducers and on AC-3 having the identical `Descriptor::parse` shape, not on this
-row. The MP2 single-bit arm is unaffected and remains decisive, because there the damage is placed on a
-verified frame header rather than wherever a cut happened to land.
-
-#### A splice still publishes a mixed frame, and the first fix for it did not reach real content
-
-Upstream split the remaining gap out as [#2802](https://github.com/moq-dev/moq/issues/2802) — at a
-splice the importer publishes one frame of mixed bytes as real audio, recovering only on the frame after
-— and fixed it in [#2823](https://github.com/moq-dev/moq/pull/2823) by extending confirmation to a frame
-that begins in a carried tail. Tested here against real content, because the PR's four in-tree captures
-show the fix costs nothing on a well-formed mux but none of them contains a splice.
-
-**Rig.** `pre` = `main` `f91e3bbd2`, `post` = the PR head `a64dc4d12`; the three commits on main since
-the PR's merge base do not touch `container/ts/`, so the arms differ only by the fix. The PR's own two
-new tests pass on the `post` build, which is the control that it really is the fixed binary. Source: a
-20 s cut of `CNNiEMEA2.ts` looped through `moq import ts` for 70 s, so three wraps.
-
-**Detection is decidable.** A frame is *alien* if its bytes appear nowhere in the source's audio
-elementary stream — a frame assembled across a splice is made of bytes from both sides of it, so it can
-match nothing in the source. `lab/scripts/ts-splice-audit.py` does this, and needs no listening test.
-
-**Result: the fix changes nothing here.**
-
-| | frames | alien | |
-|---|---:|---:|---|
-| MP2 (PID 121) pre | 2580 | 3 | one per wrap, all `0b8cc4572738` |
-| MP2 (PID 121) post | 2589 | 3 | same hashes, same positions |
-| AC-3 (PID 123) pre | 1917 | 3 | one per wrap, all `9524a1486a3b` |
-| AC-3 (PID 123) post | 1926 | 3 | same hashes, same positions |
-
-Each alien frame begins with exactly the source's trailing partial frame (554 B MP2, 282 B AC-3), so
-these are the splice frames. Over the common capture length the audio is **byte-identical between the
-arms** — 1,486,080 B of MP2 and 1,472,454 B of AC-3, spanning all three wraps; the frame-count
-difference is only that the `post` capture ran ~0.2 s longer.
-
-**Why the fix cannot fire on this content**, which is the finding rather than the null result:
-
-- **This mux never splits an audio frame across a PES boundary.** Every audio PES payload is exactly
-  5184 B = 9 × 576 B MP2 frames (AC-3: 6912 B = 9 × 768 B); 0 of 91 interior MP2 and 0 of 68 AC-3 PES
-  ends fall mid-frame. So the carried tail the PR guards is always empty at a PES boundary, and the only
-  mid-frame cut in the clip is the *file* end.
-- **At the wrap the foreign bytes join the same PES, not the next one.** The clip was cut out of a longer
-  stream, so it begins with 16 continuation packets on the MP2 PID (2806 B, no PUSI). The final PES
-  before the wrap is truncated and still short of its declared `PES_packet_length`, so those packets are
-  appended to it and it flushes once the declared length is reached.
-
-The demuxer therefore sees one PES whose payload is `[whole frames][554 B partial][~736 B foreign]`. The
-mixed frame begins inside the PES body, so `in_tail` is false, and the preceding frame vouched for the
-offset, so `unconfirmed` is false — no confirmation is required and it is published. The confirmation
-*rule* would have caught it: at the frame's declared end the bytes are `29126d37`, not a valid header.
-It is the gate that misses, not the test.
-
-**Two zero-latency signals are going unused, and one is already implemented next door.** The wrap breaks
-the continuity counter on every PID (MP2 `cc 3 → 12` where 4 was due, AC-3 `9 → 0`, video `4 → 3`), and
-`SectionReassembler` in the same file already drops its partial on a CC gap, a declared discontinuity or
-a transport error — for private sections. The PES path never reads `packet.header.n_counter`. Applying
-the same discipline there would catch this with no added latency and independently of codec. Separately,
-AC-3 carries a mandatory `crc1` that `ac3::parse_header` steps over, and it rejects all three mixed
-frames (implementation validated against 620/620 genuine source frames first) — but that route is
-codec-specific and cannot be leaned on: **0 of this clip's 826 MP2 frames carry a CRC at all**.
-
-Reported at [PR #2823](https://github.com/moq-dev/moq/pull/2823#issuecomment-5278428604).
-
-#### The rescoped fix does reach real content, on a wrap that breaks the continuity counter
-
-Upstream took the finding, reproduced it in-tree before touching anything, and rescoped the PR from one
-commit to five: `SectionReassembler`'s continuity rules — transport errors, declared discontinuities,
-counter gaps, duplicate packets — were generalised into a shared `Continuity` and applied to PES PIDs
-too, which is the zero-latency codec-independent route argued for above. Merged 14 Aug as `6198e5757`.
-The original confirmation commit stayed, for a mux that genuinely does split a frame across a PES
-boundary with continuity intact. Re-verified here on the same rig, four arms:
-
-| arm | commit | MP2 alien | AC-3 alien |
-|---|---|---:|---:|
-| pre | `f91e3bbd2` (before the PR) | 3 | 3 |
-| PR head, first commit only | `a64dc4d12` | 3 | 3 |
-| merged | `6198e5757` | **0** | **0** |
-| `main` at 16 Aug, incl. #2891 | `eab960192` | **0** | **0** |
-
-**The fix is real and it holds on the current `main`.** Same clip, same three wraps, and the mixed frame
-is gone from both audio PIDs. Two qualifications came out of the re-run, both measured rather than argued.
-
-**It is conditional on the wrap breaking the counter, and a wrap need not.** The 132,000-packet cut used
-above breaks continuity on all three PIDs (MP2 `cc 3 → 12` where 4 was due, AC-3 `9 → 0`, video
-`4 → 3`), so the new check sees every splice. That is a property of where the file was cut, not of
-looping: a cut whose last packet on a PID leaves `cc + 1` equal to the counter the file opens with wraps
-*contiguously*, and the break becomes invisible. Roughly one cut point in 16 does this per PID, and
-4062 of the 30,000 scanned in `[120000, 150000]` do it for at least one of the two audio PIDs. Cutting at 130,705 packets puts AC-3 in exactly
-that state (last `cc 15`, file opens at `cc 0`) while still ending mid-frame, and on the **merged
-`main`** the original bug returns unchanged: **1 alien AC-3 frame per wrap, 3 in 70 s**, each beginning
-with the source's 106 B trailing partial and each rejected by its own `crc1`. MP2 stays clean on that
-clip because its counter still breaks there. So the guard is sound but its trigger is probabilistic on
-the one signal it consults. That 130,705-packet cut is the counter-example, and the recipe for finding
-one in any clip is in the scripts' README.
-
-**The salvage does not deliver what it promises, for AC-3.** On a break the truncated PES is meant to be
-flushed first, so whole frames it already carried still publish, and `salvages_partial_pes` is true for
-`Stream::Legacy` (both codecs here). MP2 behaves that way — the 7 complete frames inside its final PES
-(source frames 819–825) publish before and after the fix. AC-3 does not: the 8 complete frames inside
-its final PES (612–619) are published by the pre-fix build at all three wraps and are **absent from
-every wrap of both post-merge builds**, searched by hash across the whole capture. That is ~256 ms of
-good audio per wrap traded for the corrupt frame, where MP2 pays nothing. Both PIDs take the same branch
-of the same `match`, so the asymmetry is downstream of it, in how a flushed short PES is parsed.
-
-**The hole itself is unchanged, which is the point #2798 still carries.** Each wrap already dropped the
-first ~90 MP2 frames (~2160 ms) and ~72 AC-3 frames (~2304 ms) of the next loop, and that is identical
-across all four arms — it is the resync cost, not the fix's. Post-fix AC-3 loses 80 frames instead of 72
-(~2560 ms) for the reason above. Nothing about any of it is signalled.
-
-**A correction to the audit tool, because it changed a number.** `ts-splice-audit.py` built its
-known-frame set from the first PUSI onward, since that is where PES reassembly can start. A clip cut out
-of a longer stream *opens* with continuation packets (2694 B on AC-3 here) belonging to a PES whose start
-was lost, and a demuxer that resyncs inside those bytes emits frames that are correct but were missing
-from the set — reported as alien. On the counter-example that inflated 1 alien per wrap to 3. The set now
-includes frames parsed from those leading bytes, and every number above is post-correction. It does not
-affect the original finding: those three aliens were `crc1`-rejected mixed frames either way.
-
-#### The recovered gap is completely unsignalled
-
-Worth stating plainly, because it is the part that matters for primary distribution and the part the
-fix does not address. The subscriber's TS after a resync carries:
-
-- **0 continuity errors** (identical to the clean control);
-- **0 signalled discontinuities** — no `discontinuity_indicator`, on any PID;
-- an audio timeline that simply steps **24 ms → 48 ms** across the hole.
-
-Nor is it visible above the TS: the resync path emits no `tracing` call at any level, exposes no
-counter, and does not touch the `container::Producer::discontinuity` counter that already exists for
-timeline rewinds. The upstream doc comment states the policy deliberately — *"a few lost milliseconds
-of audio stay a gap in one track rather than an error that takes the whole session down"* — so the
-silence is intended, not an oversight.
-
-A TR 101 290 monitor at egress therefore sees a fully conformant stream with no indication that
-anything was lost. That is question 2 of the original issue — *should the dropped interval be visible
-downstream, so a TS exporter can reflect a real gap?* — and it went unanswered in the PR.
-
-The splice case sharpened this while it stood: there the stream was not merely missing a frame, it
-carried a **substituted** one — 0 continuity errors, no `discontinuity_indicator`, and an unbroken
-evenly-spaced audio PTS sequence, because the corrupt frame occupied the real frame's slot. A gap at
-least leaves evidence of itself in a frame count against the source; a corrupt frame of the right length
-in the right place is invisible to everything short of comparing bytes. Raised on
-[#2798](https://github.com/moq-dev/moq/issues/2798#issuecomment-5278433763), arguing the counter should
-cover any frame published without confirmation rather than the resync path alone.
-
-**#2823 turned the substitution back into a gap, and left the gap as silent as it found it.** The
-merged fix drops the spliced frame instead of publishing it, so on a counter-breaking wrap the sharper
-version of the complaint no longer applies — and on a counter-contiguous one it applies unchanged. Either
-way the reporting half is untouched: the merge adds nothing to the export side (its `export.rs` changes
-are #2825's SI cadence, not discontinuity signalling), no `tracing` call, no counter, and the hole
-measured above is identical across all four arms. #2798 stands exactly as filed.
-
-**The 1+1 worry does not survive measurement, and it is worth saying so.** The obvious escalation is
-that two legs resyncing independently would produce different audio with neither reporting a fault —
-the T12 merge problem with no fault indication. Two importers fed the same damaged source dropped
-**precisely the same frame**, so the resync is deterministic on identical input and this is not a
-redundancy risk. What remains is narrower and still real: the fix converted a maximally loud failure
-into a completely silent one. We only found our own source was wrapping mid-frame *because* it crashed
-216 times; the same condition now produces a stream that looks healthy. Raised as
-[#2798](https://github.com/moq-dev/moq/issues/2798), scoped to observability rather than correctness —
-the ask is a `warn!` on a completed resync and a counter to alarm on a *rate* of them, neither of which
-touches the protocol.
+**What matters for *this* experiment** is only the rig consequence: until the fix landed, a looped
+full A/V source restarted the publisher at every clip wrap (216 restarts on one run), which is why
+every measurement in this file used a **video-only** loop source. From `moq-mux` 0.9.5 that
+workaround is no longer needed, but every figure here predates it.
 
 ## Soak #2 — publisher and subscriber roles pass
 
@@ -1055,7 +716,7 @@ was logging PCR cycling warnings throughout — so the source was live and conne
 pulled **not one byte** of it.
 
 So the relay's *media* path is demand-driven end to end: it accepts the session and, as
-[interoperability](../docs/interoperability.md) §9.7 records, it interrogates the publisher and the
+[comparison](../docs/comparison.md) §12 records, it interrogates the publisher and the
 publisher announces — but no track is actually subscribed upstream until something downstream wants
 it. This leg therefore proves "no traffic, no growth" rather than "publisher load, no growth", which
 is a weaker statement than planned. It is still the right control for the leak question (it rules out
@@ -1303,6 +964,10 @@ soak design.
 
 ## Corrections
 
+> The general method rules extracted from this section, together with those from every other
+> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
+> specific record of what this experiment got wrong.
+
 Six readings in this experiment were wrong and were corrected by later measurement or analysis. They
 are recorded because each carries a method lesson that changed how the rest of the campaign was run.
 
@@ -1398,8 +1063,8 @@ awk '{n++;x=$1;y=$2;sx+=x;sy+=y;sxy+=x*y;sxx+=x*x}
 
 ## References
 
-- Plan: [planned-experiments.md](planned-experiments.md) (T9), [README](README.md) roadmap.
-- Reconnect/retention behaviour the soak interacts with: [evidence](../docs/evidence.md) §7,
+- Plan: [planned-experiments.md](planned-experiments.md) (T9), [Readme](README.md) roadmap.
+- Reconnect/retention behaviour the soak interacts with: [evidence](../docs/evidence.md) §3.4,
   [#2469](https://github.com/moq-dev/moq/pull/2469), [#2647](https://github.com/moq-dev/moq/pull/2647),
   [#2615](https://github.com/moq-dev/moq/pull/2615).
 - The distinct relay-wedge failure mode: [#2701](https://github.com/moq-dev/moq/pull/2701),

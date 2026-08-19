@@ -65,7 +65,7 @@ rules, computed over the same capture pair, so the policies are graded against i
 | Arm | Egress per leg | What it tests |
 |---|---|---|
 | A — no pacer | `moq export ts` → `tsp --buffer-size-mb 1 -O ip <dest> --rtp --enforce-burst --packet-burst 7 --start-sequence-number 0 --ssrc-identifier <fixed>` | the ungroomed control: with RTP framing pinned identically on both legs, does content identity alone yield alignment? |
-| B — one pacer per leg | `mpegts-pacer` `moq_egress <dest> 4000000 --rtp --ssrc <fixed>` on each leg | the two-gateway topology of [architecture](../docs/architecture.md) §14.1, as the pacer is built today |
+| B — one pacer per leg | `mpegts-pacer` `moq_egress <dest> 4000000 --rtp --ssrc <fixed>` on each leg | the two-gateway topology of [architecture](../docs/architecture.md) §5.1, as the pacer is built today |
 | C — one pacer, duplicated | one groom, identical datagrams to both destinations (`dual_rtp`) | **positive control.** The standard ST 2022-7 sender pattern; must be hitless or the rig is invalid |
 | D — one *stream-clocked* pacer per leg | `moq_egress <dest> 4000000 --rtp --ssrc <fixed> --stream-clock --sequence-seed 0` on each leg | arm B's topology with the placement decision moved off the pacer's emit clock and onto the stream: can two independently groomed legs be a pair? |
 
@@ -606,6 +606,16 @@ rather than with the counter masked:
   ([#2829](https://github.com/moq-dev/moq/issues/2829)) needs a second media track to be visible at
   all; on multi-track content it holds an otherwise-fixed pair to 95.6 %. Every 100 % in this file is
   a statement about a single-track feed.
+- **The SI figures are measured against an emission path that no longer exists.** Upstream has since
+  moved SI onto per-table snapshot tracks and added a TDT/TOT proxy, and export now advances each
+  entry's snapshot as its *own* subscription delivers groups, rather than from anything on the media
+  timeline. The emission boundary stays common to both legs — it is absolute slot arithmetic on the
+  media timestamp — and a static table converges once each leg holds the first snapshot. A clock does
+  not: TDT is a latest-value slot whose bytes change every ~15 s against a 30 s boundary, so two legs
+  can hold different generations when a boundary falls between their arrivals, and differ on a PID
+  that carried nothing at all before the proxy landed. **Predicted from the code, not measured** — the
+  arm is this rig with an SI-bearing source on a current build, and it is worth running before either
+  determinism fix is designed, since it would add a divergence source rather than remove one.
 - **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7
   receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2.
 - **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean
@@ -635,82 +645,59 @@ rather than with the counter masked:
 
 ## Corrections
 
+> Every general method rule this experiment produced is in [method-notes.md](method-notes.md), with
+> the rest of the campaign's. What follows is the specific record of what T12 got wrong, kept because
+> each item changed a number that had already been written down.
+
 - **Believed:** the exporter's continuity counter was the single remaining obstacle to a
   byte-identical 1+1 pair. **True:** it is one of three values the exporter mints per process,
-  alongside the SI cadence ([#2825](https://github.com/moq-dev/moq/pull/2825)) and the audio/video
-  interleave ([#2829](https://github.com/moq-dev/moq/issues/2829)). **Rule:** an unattributed residue
-  is not a finding. The evidence for the second defect was in the arm D capture from the day it was
-  taken — 2.90 % of datagrams still differed after masking the counter — but the comparison reported
-  only a percentage, so "what remains is a continuity counter" was written over the top of a
-  measurement that said otherwise. Breaking the residue down by PID, which the tool now does by
-  default, names it in one line: every SDT emission on a slot where the other leg has video.
-- **Believed:** the groomer concealed the other two defects by rebuilding packet placement from
-  stream position. **True:** it concealed neither. Placing by stream position is what makes two legs
-  comparable at all, and it carries a displaced table faithfully rather than absorbing it; the
-  cadence is measurable through the groomer and the interleave is what holds a multi-track pair to
-  95.6 %. **Rule:** distinguish a stage that *normalises* a difference from one that merely gives two
-  streams a common frame of reference — only the first bounds what a downstream measurement can see.
+  alongside the SI cadence and the audio/video interleave. The evidence for the second defect was in
+  the arm D capture from the day it was taken — 2.90 % of datagrams still differed after masking the
+  counter — but the comparison reported only a percentage, so "what remains is a continuity counter"
+  was written over a measurement that said otherwise.
+- **Believed:** the groomer concealed the other two defects by rebuilding packet placement from stream
+  position. **True:** it concealed neither. Placing by stream position is what makes two legs
+  comparable at all, and it carries a displaced table faithfully rather than absorbing it.
 - **Believed:** two independent groomers would produce the same transport differing only in
-  re-stamped PCR, so a receiver could merge them by ignoring the PCR field. **True:** none of the
-  400 sampled conflicts differs only in PCR; 39.5 % do not even agree on PID order and 28.2 % carry a
-  different number of nulls. **Rule:** name a divergence mechanism from the bytes that differ, not
-  from the most plausible cause; "payload conflict" is a symptom, and the fix implied by the wrong
-  mechanism (ignore PCR at the receiver) would not have worked.
-- **Believed:** two independently packetised ungroomed legs would fail alignment on phase, making
-  arm A a negative control. **True:** with RTP framing pinned and both legs co-started, arm A aligns
-  exactly in all 12 cells; it fails on *conformance* instead. **Rule:** pin every parameter the
-  property depends on and then measure; a prediction of divergence is not a substitute for one run.
+  re-stamped PCR, so a receiver could merge them by ignoring the PCR field. **True:** none of the 400
+  sampled conflicts differs only in PCR; 39.5 % do not even agree on PID order and 28.2 % carry a
+  different number of nulls. The fix implied by the wrong mechanism would not have worked.
+- **Believed:** two independently packetised ungroomed legs would fail alignment on phase, making arm
+  A a negative control. **True:** with RTP framing pinned and both legs co-started, arm A aligns
+  exactly in all 12 cells; it fails on *conformance* instead.
 - **Believed:** a leg carrying no loss and no continuity errors is a healthy leg. **True:** a groomer
   asked only to hold a rate will hold it against a dead source indefinitely — 26 s in the run that
-  found this, limited only by the capture — emitting a byte-perfect CBR carrier with zero programme
-  in it, and minting the PCR that makes it look conformant. Both selection policies read that as
-  health: seq-merge preferred the dead leg, and input-select saw no silence to switch on. The
-  groomer now mutes past a stall timeout, and the same cells detect the failure at every threshold.
-  **Rule:** liveness must key on programme content, not carrier presence, and the enforcement point
-  is the groomer — a receiver cannot recover information the sender declined to omit. The
-  content check must also exclude the groomer's own adaptation-only PCR packets, which is what the
-  first version of this metric got wrong, reporting the dead leg as content-bearing to its last
-  datagram.
+  found this, limited only by the capture — emitting a byte-perfect CBR carrier with zero programme in
+  it, and minting the PCR that makes it look conformant. Both selection policies read that as health.
+  The content check must also exclude the groomer's own adaptation-only PCR packets, which is what the
+  first version of this metric got wrong.
 - **Believed:** a groomer that stops when its source dies is enough for a leg to fail over and come
-  back. **True:** stopping and rejoining are separate properties. The resumed leg came back 8 756
-  datagrams behind its partner because its RTP sequence counts datagrams *sent*, so a silence costs
-  it numbers rather than consuming them. **Rule:** for a redundant pair, every stream-position
-  quantity — sequence number, timestamp, PCR — must be a function of position in the stream, not of
-  what this instance happened to emit.
-- **Believed:** a stream-clocked leg's alignment problems after an outage were about headroom — that
-  the carrier had too little slack for a backlog to drain, and a higher mux rate would let a
-  returning leg converge. **True:** doubling the rate to 8 Mb/s changed the join cell by nothing
-  measurable (0.21 % against 0.08 %), and the real cause was a returning leg reading its own outage
-  as a source splice. **Rule:** a hypothesis that predicts a *gradient* is cheap to falsify — run the
-  extreme first. Two runs at 8 Mb/s cost less than the reasoning that preferred them.
+  back. **True:** stopping and rejoining are separate properties. The resumed leg came back 8,756
+  datagrams behind its partner because its RTP sequence counts datagrams *sent*, so a silence cost it
+  numbers rather than consuming them.
+- **Believed:** a stream-clocked leg's alignment problems after an outage were about headroom.
+  **True:** doubling the rate to 8 Mb/s changed the join cell by nothing measurable (0.21 % against
+  0.08 %), and the real cause was a returning leg reading its own outage as a source splice.
 - **Believed:** a payload conflict between two legs means the groomers placed different bytes.
   **True:** in arm D's recovery and join cells 97–98 % of conflicting datagrams differ in one field,
-  the continuity counter, minted per process by `moq export ts` upstream of both groomers.
-  **Rule:** compare with the suspect field masked before attributing a conflict; "the payloads
-  differ" is a measurement, "the groomer diverged" is a conclusion, and here they came apart.
-- **Believed:** a joining stream-clocked leg was sending the right bytes twelve seconds late, so its
-  phase was set upstream of the groomer. **True:** there is no twelve seconds. The oracle's sequence
-  offset is voted by payload identity, and with the continuity counter differing it had 15 votes out
-  of 23 175 (confidence 0.19) and picked an offset of 4 559 datagrams; the reported skew is that
-  offset restated in time. Measured at equal sequence numbers, the joining leg is a median 10 ms from
-  its partner. Two hypotheses, two groomer changes and three runs were spent on an artefact.
-  **Rule:** an instrument that reports its own confidence has to be read — 0.19 was on the screen
-  throughout — and a derived quantity must be re-measured independently before it is explained.
+  the continuity counter, minted per process upstream of both groomers.
+- **Believed:** a joining stream-clocked leg was sending the right bytes twelve seconds late.
+  **True:** there is no twelve seconds. The oracle's sequence offset is voted by payload identity, and
+  with the counter differing it had 15 votes out of 23,175 (confidence 0.19). Measured at equal
+  sequence numbers the joining leg is a median 10 ms from its partner. Two hypotheses, two groomer
+  changes and three runs were spent on an artefact whose confidence figure was on the screen
+  throughout.
 - **Believed:** the merged output should be graded over the window where both legs are live. **True:**
   that truncates the analysis at the blackout it is meant to measure, scoring a covered outage as no
-  outage. **Rule:** the merge window is the union of the legs' activity — the survivor defines the
-  end of the window, which is the entire point of 1+1.
-- **A metric that conflates two faults hides both.** Counting PCR intervals above 100 ms together
-  with negative intervals reported "16 jumps" in arm C's clean control, implying switch damage where
-  there was none; split apart, arm C has zero backward steps anywhere and arm B's 3 % cell has seven.
-  Report long intervals and discontinuities separately.
-- **Two rig faults produced phantom results and are worth stating so the numbers are not re-derived.**
-  A 2.0 Mbps egress target for a 1.9 Mbps feed leaves the groomer no stuffing headroom and it drops
-  content (4 011 packets, 11 continuity errors) — the carrier rate must exceed the content rate, which
-  is why this rig runs 4 Mbps. And the receiver's arrival-ordered selector sorted whole
+  outage.
+- **A metric that conflates two faults hides both.** Counting PCR intervals above 100 ms together with
+  negative intervals reported "16 jumps" in arm C's clean control, implying switch damage where there
+  was none; split apart, arm C has zero backward steps anywhere and arm B's 3 % cell has seven.
+- **Two rig faults produced phantom results.** A 2.0 Mb/s egress target for a 1.9 Mb/s feed leaves the
+  groomer no stuffing headroom and it drops content (4,011 packets, 11 continuity errors) — which is
+  why this rig runs 4 Mb/s. And the receiver's arrival-ordered selector sorted whole
   `(time, leg, payload)` tuples, so microsecond-tied datagrams were ordered by payload bytes and one
-  leg's own packets were scrambled into 207 phantom continuity errors; sort on the key, not the
-  record.
+  leg's own packets were scrambled into 207 phantom continuity errors.
 
 ## References
 
@@ -718,6 +705,6 @@ rather than with the counter masked:
   [`results/t12-input-select.csv`](results/t12-input-select.csv).
 - Remaining conditions (independent restart of one leg, two-host): [planned-experiments.md](planned-experiments.md).
 - The exporter's continuity counters: [moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779).
-- Redundancy model: [`docs/relay.md`](../docs/relay.md) §5–§6; [`docs/architecture.md`](../docs/architecture.md) §14 (ST 2022-7 §14.1).
+- Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §8.4–§6; [`docs/architecture.md`](../docs/architecture.md) §5 (ST 2022-7 §5.1).
 - Single-leg failover and the determinism precondition: [T6](test-6-relay-resilience.md).
 - Grooming and TR 101 290 P1: [T7](test-7-timing-integrity.md).
