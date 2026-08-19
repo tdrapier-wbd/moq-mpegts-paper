@@ -11,8 +11,16 @@ Status: working draft. This is deliberately critical: the goal is to find the fa
 
 ## The question
 
-Broadcast's trunk layer is being pushed off satellite and managed fibre onto the public internet.
-This repository asks what an Internet-native replacement has to do, and which data plane can do it.
+**Broadcast's trunk layer has already moved onto the public internet — it just hasn't scaled.** Zixi and
+SRT carry contracted feeds over commodity internet today, sold as a product by AWS Elemental
+MediaConnect, LTN and others. What they cannot do is replace a satellite transponder, because they are
+point-to-point tunnels: serving N destinations costs N sessions. Satellite serves everyone in its footprint for the price
+of one.
+
+So the question is not whether broadcast can trust the internet — that argument is over and the internet
+won. It is **whether an IP path can serve hundreds to low thousands of delivery points economically**,
+which needs a cache in the path rather than a better tunnel. This repository asks what such a replacement
+has to do ([Problem](docs/problem.md)), and which data plane can do it.
 
 ## The answer, in three sentences
 
@@ -33,12 +41,12 @@ measurement rather than an inference.
 
 ## What is proven, and what is not
 
-| | |
+| Standing | What the evidence shows |
 |---|---|
-| **Demonstrated** | A live contribution mux traverses the whole chain over the public internet with 0 continuity errors. Grooming restores exact CBR and P2-limit PCR accuracy **on file**. A doubled chain with two stream-clocked groomers is byte-identical and hitless through publisher, relay and exporter death, against a reference receiver, on single-track content. Loss resilience reaches parity with SRT once the congestion controller is chosen. Segmented HTTP is byte-verbatim for one programme and ~240× burstier to groom. |
+| **Demonstrated** | A live contribution mux traverses the whole chain over the public internet with 0 continuity errors. Grooming restores exact CBR and P2-limit PCR accuracy **on file**. A doubled chain with two stream-clocked groomers is byte-identical and hitless through publisher, relay and exporter death, against a reference receiver, on single-track content. Loss resilience reaches parity with SRT once the congestion controller is chosen. Segmented HTTP is byte-verbatim for one programme and ~240× burstier to groom. Against segmented HTTP the two planes have **disjoint weaknesses and the ranking inverts** — MoQ on BBR holds 0.96 of source rate through 10 % loss where segmented HTTP over TCP falls to 0.17, and under 25 % reordering they swap exactly, 0.98 against 0.19 — while segmented HTTP never corrupts what it does deliver. |
 | **Measured, and positive** | **MoQ delivers a picture from an EC2 origin to a groomed transport-stream egress here in 109 ms** — 15× lower than SRT and 37× lower than segmented HTTP over the same path in the same window, and on loopback lower even than a plain-UDP control carrying no transport buffer at all. The path costs its round trip and nothing more. |
 | **Measured, and negative** | A MoQ feed carries media through **none** of eight third-party relays. The MoQ lane fails P1 PCR repetition on the wire at **every** buffer depth — 489–504 intervals above 40 ms, unchanged by depth, by removing groomer starvation, or by the path — because the exporter emits PCRs too rarely for any groomer to place them. |
-| **Not established** | **No hardware IRD has ever been fed by this chain.** Whether fixing the exporter's PCR cadence clears the gate is untested, and it is the question that now decides the thesis. Neither latency path was impaired, so the recovery the point-to-point tunnels exist for was never exercised. |
+| **Not established** | **No hardware IRD has ever been fed by this chain.** Whether fixing the exporter's PCR cadence clears the gate is untested, and it is the question that now decides the thesis. The latency measurements were taken on healthy paths, and the impairment ladder ran against a single plain origin rather than a CDN edge, so the failover half of segmented HTTP's recovery model is still specification-only. |
 
 The full accounting, with every limit stated in one place, is [Evidence](docs/evidence.md) §4 and §5.
 
@@ -51,7 +59,7 @@ part of the problem, the structure should show which part is which.
 
 | Document | Layer | What it is |
 |---|---|---|
-| [Problem](docs/problem.md) | Requirement | Why primary distribution is changing, and the numbered requirement set (R1–R9) everything else is scored against |
+| [Problem](docs/problem.md) | Requirement | Why primary distribution is changing, and the numbered requirement set (R1–R8) everything else is scored against |
 | [Comparison](docs/comparison.md) | **Data plane** | The head-to-head: MoQ against segmented HTTP carrying MPEG-TS, and against SRT/Zixi/RIST, on twelve axes with the evidence type marked on each |
 | [Architecture](docs/architecture.md) | **Above the transport** | The reference architecture. The edge gateway and 1+1 redundancy come first because they are the substance and the measured part |
 | [Control, Entitlement and Security](docs/control-plane.md) | Above the transport | Provisioning, entitlement and the threat model. **Design only — nothing here has been built or measured** |

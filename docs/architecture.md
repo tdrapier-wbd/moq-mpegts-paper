@@ -8,8 +8,8 @@ lanes) and §8 (the fan-out fabric) are MoQ-specific; their segmented-HTTP count
 
 Scope: an end-to-end reference architecture for a platform that delivers professional broadcast
 primary distribution over an Internet-native transport. It takes the requirement set in
-[Problem](problem.md) §5 as given and develops R5 (IRD-conformant egress), R6 (redundancy), R8
-(observability) and R9 (stability horizon). MoQ is used as the worked example because it is what the
+[Problem](problem.md) §5 as given and develops R3 (IRD-conformant egress), R6 (redundancy) and R8
+(observability). MoQ is used as the worked example because it is what the
 prototype runs on; the transport-specific parts are marked.
 
 The document is ordered by where the engineering actually is. The edge gateway (§4) and redundancy
@@ -131,7 +131,7 @@ traversed the fabric.
 
 **This is a coexistence architecture.** It does not require the broadcaster or its affiliates to
 replace receivers, re-cable plant or change monitoring. That is both a technical stance and a
-commercial one: the trust barrier ([Problem](problem.md) §2) is lowered dramatically when the
+commercial one: the trust barrier ([Problem](problem.md) §2.4) is lowered dramatically when the
 receiving end is untouched, and migration can proceed route by route rather than as a plant-wide
 cutover. Where a partner is willing to run a native subscriber — at an OTT origin, say — the edge
 gateway can be bypassed for that endpoint, but this is an option, never a requirement.
@@ -967,7 +967,7 @@ failover budget is tighter than that needs MoQ, or needs a second monitored path
 
 ---
 
-## 10. Draft and version strategy (R9) *(MoQ-specific)*
+## 10. Draft and version strategy *(MoQ-specific)*
 
 MoQ's pre-standard instability is the single largest transport risk, and it is managed by
 architecture rather than wished away.

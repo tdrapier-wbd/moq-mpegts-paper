@@ -348,6 +348,48 @@ yours.** *(T12.)*
 > daemon inside the subshell so the recorded pid is the daemon, and after the fingerprint poll succeeds
 > check the daemon is still alive, refusing the run if something else holds the port.
 
+**Cancel a safety watchdog at teardown, or it fires into somebody else's cell.** *(T5.)*
+
+> Each impairment cell armed a `sleep 1800; tc qdisc del` so a killed run could not leave the box
+> shaped. Nothing cancelled them, so they accumulated and began firing half an hour later — *during
+> later cells* — deleting the shaper partway through a run that then reported a clean, plausible
+> result for a condition it never experienced. Every media-aware loss cell in that pass looked immune
+> to loss, and it was the watchdogs. Nothing in the delivered numbers shows this; only the shaper's own
+> counters do, as a missing qdisc where the impairment should be. So the watchdog is cancelled at
+> teardown, and a cell that finds no shaper at the end is **failed rather than reported**.
+
+**Segmentation offload decouples commanded loss from applied loss, and by a different factor for each
+transport — so it breaks comparisons, not just constants.** *(T5.)*
+
+> `netem` makes its drop decision on the buffer it is handed, which under TSO/GSO is a super-packet the
+> stack splits into many wire packets afterwards. The commanded percentage then lands on
+> super-packets while the wire carries many times more. Because TCP and QUIC offload differently, one
+> `loss 10%` command delivered **7.8 % to the segmented lane and 2.5 % to the media-aware lane** — the
+> two arms were never given the same impairment, and the media-aware lane's apparent robustness was
+> partly a smaller dose. Turning off the kernel offloads is only half of it: quinn coalesces datagrams
+> in its own `sendmsg`, so the application's GSO has to go too (`--server-quic-gso=false`), after which
+> the media-aware arm measured 5.08 % against a commanded 5 %.
+>
+> Where a residual gap survives, **label the row with the loss the shaper measured, not the loss it was
+> asked for.** The segmented arm still under-loses by about a third, and reporting actual against
+> commanded is what keeps the row honest — here it also strengthens the finding, since that lane
+> degrades further while receiving less.
+
+**Loopback is not a small version of a network path: its MTU makes a percentage loss model
+meaningless.** *(T5.)*
+
+> `lo` defaults to a 65536-byte MTU, so `loss 1%` discards 1 % of ~37 kB super-packets rather than of
+> wire-sized ones — each drop event tens of times larger and far burstier than any real path produces.
+> Pin the MTU to 1500 for the run. The tell is the packet count: 1,366 packets for a window that should
+> carry 36,000.
+
+**`netem slot MIN MAX` with no allowances is a rate cap, not a jitter model.** *(T5.)*
+
+> Bare `slot` releases **one packet per slot**, which at 30–90 ms intervals is a ~200 kb/s ceiling. The
+> segmented lane read 0.77 Mb/s and the cell was written down as a collapse under jitter; the collapse
+> was entirely the instrument. Set `packets` and `bytes` allowances so the slot varies timing without
+> also metering throughput.
+
 **In a timing rig, assert the process census between legs rather than trusting a kill, and check that
 a file's size and its packet count agree.** *(T13.)*
 

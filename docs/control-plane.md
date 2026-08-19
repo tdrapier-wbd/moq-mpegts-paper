@@ -23,10 +23,10 @@ develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive co
 >
 > This matters beyond ordinary caveating, for two reasons.
 >
-> **It is the largest untested assumption in the thesis.** [Problem](problem.md) §6 holds that
-> durable value accrues in the control, entitlement, egress and observability layers because the
-> transport commoditises. The egress layer has evidence. This one has none, and it is the half of the
-> argument that is commercial rather than engineering.
+> **It is the largest untested assumption in the thesis.** The thesis holds that because the transport
+> commoditises, durable value accrues in the control, entitlement, egress and observability layers
+> instead. The egress layer has evidence. This one has none, and it is the half of the argument that is
+> commercial rather than engineering.
 >
 > **The market is crowded.** MediaConnect, Zixi, LTN and others ship capable provisioning and
 > management planes. "Value lives in the control plane" is therefore a *necessary* condition for

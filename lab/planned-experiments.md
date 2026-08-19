@@ -50,7 +50,10 @@ a single long run rather than new apparatus.
 
 **A lossy WAN path.** Both T18 environments were healthy, so nothing exercised the retransmission and
 jitter-buffer recovery the tunnels exist for — the case that should favour them against the media-aware
-lane. Impairment on the WAN legs is the arm that could change the ordering rather than confirm it.
+lane. Impairment on the WAN legs is the arm that could change the ordering rather than confirm it, and
+[T5](test-5-network-impairment.md) has raised its value: on loopback the media-aware lane and segmented
+HTTP turn out to fail at opposite things, so a real path carrying both loss *and* reordering is where
+that inversion either holds or resolves.
 
 **Still blocked, and unchanged.** The segmented arm cannot reach the low end of its own envelope on free
 software — no free client fetches partial segments ([T14](test-14-data-plane-comparison.md) measurement
@@ -176,8 +179,11 @@ What remains open is in T16's own "still open" table. In rough order of value:
   ceiling. This is the one arm expected to fail as shipped, and therefore the one worth running.
 - **1 s segments**, where 2.5 × the observed lead lands under that ceiling, so the adaptive factor is
   tested rather than clamped. T16 measured only that 8 s was adequate.
-- **A lossy segmented path.** Every T16 arm is loopback, so no segment ever failed to arrive; the run
-  measures absorption of a late delivery, not recovery from a missing one.
+- **A lossy segmented path, downstream of the groomer.** [T5](test-5-network-impairment.md) has since
+  put the segmented lane through a loss ladder and found the *ungroomed* egress byte-verbatim and
+  P1-clean at every level, so what is left for T16 is narrower than it was: not whether segments
+  survive, but whether the groomer's cushion absorbs a lane running at 0.17 of source rate without
+  muting. Every T16 arm is loopback, so no segment has yet failed to arrive.
 - **A feed that is not rate-matched, or a join mid-segment,** which is what would distinguish the
   content-based start gate from a plain timer at the same depth. On a rate-matched delivery the two
   coincide, so T16 leaves the gate unfalsified rather than demonstrated.

@@ -133,7 +133,7 @@ the **paper** (`docs/`) is seven documents:
 
 | Document | Owns |
 |---|---|
-| [problem](docs/problem.md) | Why this is changing, and the requirement set R1–R9 |
+| [problem](docs/problem.md) | Why this is changing, and the requirement set R1–R8 |
 | [comparison](docs/comparison.md) | The data-plane head-to-head, the toolchain survey, the verdict table |
 | [architecture](docs/architecture.md) | The edge gateway, redundancy, carriage, the fabric, observability, version strategy |
 | [control plane](docs/control-plane.md) | Provisioning, entitlement, tenancy, security — design only, no evidence |

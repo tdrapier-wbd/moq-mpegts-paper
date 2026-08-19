@@ -3,7 +3,7 @@
 Status: working draft.
 Layer: **the data-plane choice** — this document *is* the layer where the candidates differ.
 Scope: the head-to-head this repository owes its own thesis. [Problem](problem.md) §5 states the
-requirement set; this document evaluates the candidates against R1–R4 and against the point-to-point
+requirement set; this document evaluates the candidates against R1, R2, R4 and R5, and against the point-to-point
 incumbents, on the axes an operator actually decides on. The layer above the transport — where
 nearly all the measured work sits, and which is common to both candidates — is
 [Architecture](architecture.md).
@@ -58,15 +58,21 @@ in both directions — see §13.
 
 ---
 
-## 2. Scaling the distribution (R4)
+## 2. Scaling the distribution (R2)
 
-**At primary-distribution scale, scaling is not the discriminator. Who operates the replication point
-is.** The topology is one-to-many but not internet-scale: tens to low hundreds of endpoints
-([Problem](problem.md) §1.4). All three candidates handle that without strain, and none of them
-breaks the linearity of last-mile delivery — an HTTP edge cache fetches an object once and serves N
-receivers over N unicast connections, a MoQ relay receives an object once and serves N subscribers
-over N unicast connections, and an SRT gateway holds N sessions. These are the same topology under
-different names ([Economics](economics.md) §4.4).
+**Fan-out is the axis that separates both Internet-native candidates from the point-to-point
+incumbents, and it is barely an axis between the two of them.** Both halves of that matter. R2 exists
+because the adopted tunnel architectures run out in the region of 50 destinations — a documented,
+non-increasable ceiling on the leading managed service ([Problem](problem.md) §2.3) — while the
+requirement is hundreds to low thousands. Against that, **both candidates here put a cache in the path
+and clear the requirement; so what remains to compare is not whether they scale but who operates the
+replication point.**
+
+Neither breaks the linearity of last-mile delivery, and neither claims to: an HTTP edge cache fetches an
+object once and serves N receivers over N unicast connections, a MoQ relay receives an object once and
+serves N subscribers over N unicast connections, and an SRT gateway holds N sessions. The first two are
+the same topology under different names, and the difference from the third is that nobody has to
+originate the N ([Economics](economics.md) §4.4).
 
 What differs is the *shape* of the replication point and who runs it.
 
@@ -76,7 +82,7 @@ What differs is the *shape* of the replication point and who runs it.
 | Replication state | none — any edge can serve any object | per-subscriber, per-track, live | per-destination, live |
 | Who operates it | the commodity delivery market, from a dozen suppliers, today | one CDN today, at five to ten times commodity delivery; otherwise you | you, or a managed media service |
 | Adding a destination | a cache fill nobody provisions | a subscription and its relay state | a gateway output slot, and sometimes an instance |
-| Known hard ceilings | none at this scale | untested beyond our own rig; relay memory grows per ingested group and plateaus softly ([Evidence](evidence.md) §3.6) | AWS MediaConnect: **50 outputs per transport-stream flow, not increasable**; 2 sources per flow |
+| Known hard ceilings | none at this scale | untested beyond our own rig; relay memory grows per ingested group and plateaus softly ([Evidence](evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow |
 | Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network | none | none |
 
 Three conclusions follow, and only the first is a differentiator.
@@ -87,6 +93,8 @@ can move between edges, regions or suppliers mid-stream with nothing to re-estab
 never learns that it happened. MoQ and SRT fan-out is stateful, so the replication point is also a
 failure domain: losing a relay loses a session, and recovery is a resubscribe. Developed in §3.
 
+**The economic case is partly about origin offload.** Rather than egressing every copy of a feed directly from the origin, the stream can be replicated through regional or edge infrastructure, with delivery to consumers occurring closer to the edge. This allows commodity CDN infrastructure to absorb the distribution fan-out while reducing the amount of traffic that must be egressed from the origin.
+
 **Nobody here does point-to-multipoint at the last mile**, which makes the phrase misleading in all
 three columns. Segmented HTTP is the only candidate with a specified multicast profile — DVB-MABR,
 deployed commercially by tier-one operators — but it replicates inside an access network the operator
@@ -95,31 +103,53 @@ not affiliate distribution. So "MoQ is point-to-multipoint and SRT is point-to-p
 the sense developed in §10: it describes **where the replication point sits and who owns it**, not IP
 multicast.
 
-**Fan-out economises backhaul, not delivery, for every candidate equally.** A regional replication
-point collapses N copies of upstream carriage into one, which is worth real money on a backhauled
-multiplex and nothing at all on the last mile ([Economics](economics.md) §4.5). This is the advantage
-most often cited first for MoQ, and it is not an advantage over segmented HTTP, because a cache does
-exactly the same thing.
 
 ---
 
-## 3. Reliability (R2)
+## 3. Reliability (R5)
 
 Two questions hide inside this axis and they have different answers: *how does the transport behave
-under loss*, and *how does the system recover when something fails*. The first is a wash. The second
-favours segmented HTTP, and it is the more important of the two for a trunk.
+under impairment*, and *how does the system recover when something fails*. On the first, the two are
+not comparable as better and worse — their weaknesses are disjoint and the ranking inverts depending on
+what the path does. The second favours segmented HTTP, and it is the more important of the two for a
+trunk.
 
-### 3.1 Under loss: a wash, once the controller is chosen
+### 3.1 Under impairment: disjoint weaknesses, and the ranking inverts
 
-MoQ collapses under uniform loss with QUIC's default CUBIC controller and restores full-rate,
-byte-complete delivery on par with SRT once the sender is switched to BBR — parity, not superiority,
-and a controller choice rather than a protocol property ([Evidence](evidence.md) §3.3).
+**On a shared substrate the two are indistinguishable; on the substrates actually deployed they fail at
+opposite things.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so over HTTP/3 it rides the same QUIC
+substrate with the same per-stream loss isolation and the mandatory RFC 9218 priority scheme, and there
+is no per-packet loss-resilience argument that distinguishes the two. QUIC is a necessary substrate for
+both and distinguishes neither; what distinguishes MoQ is the object and subscription model above it.
 
-Low-Latency HLS **requires** HTTP/2 or HTTP/3, so over HTTP/3 it rides the same QUIC substrate with
-the same per-stream loss isolation, and the RFC 9218 priority scheme is mandatory there. **There is
-no per-packet loss-resilience argument that distinguishes the two.** QUIC is a necessary substrate
-for both and distinguishes neither; what distinguishes MoQ is the object and subscription model above
-it.
+That argument holds for the HTTP/3 profile and says nothing about the one in the field. Measured
+head-to-head on one host under one shaper, with classic HLS over TCP against the media-aware lane on
+BBR ([Evidence](evidence.md) §3.3):
+
+| Applied impairment | Segmented HTTP over TCP | MoQ media-aware, BBR |
+|---|---|---|
+| 3 % loss | ~0.5 of source rate (0.45–0.54, n=3) | **0.96** |
+| 8–10 % loss | 0.17 | **0.96** |
+| 25 % reordering | **0.98** | 0.19 |
+
+**Each lane is robust to precisely what the other is not, and the mechanism is the reliability model on
+both sides.** TCP reassembles in order, so reordering costs it nothing and loss costs it throughput
+through congestion response; QUIC with BBR does not read loss as congestion and holds rate through
+10 %, but does treat reordering as loss and turns it into head-of-line blocking. Neither result is a
+protocol defect and neither is fixable by choosing better — they are the two halves of what a reliable
+ordered stream has to trade.
+
+**What segmented HTTP never did, at any impairment, is corrupt what it delivered:** 0 continuity
+discontinuities and 0 PCR intervals above 40 ms in every cell, including the one where it delivered a
+sixth of the stream. It sheds *time*, not *bytes*, which is the failure a downstream buffer can absorb.
+The media-aware lane's own PCR non-conformance sat unchanged at 7.9–9.2 % in every cell including the
+unimpaired baseline, because it is the exporter defect of §5.1 rather than anything impairment did.
+
+Two things bound this. The segmented arm was served by a single unoptimised origin over HTTP/1.1 rather
+than a tuned CDN edge, which is the configuration its commercial case assumes — a CDN could move the
+loss curve, and cannot move the reordering result, which belongs to TCP. And the media-aware figure is
+the lane at its best: under CUBIC rather than BBR its loss column collapses instead
+([Evidence](evidence.md) §3.3).
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
 
@@ -145,9 +175,14 @@ where current implementations are roughest.
 
 Two qualifications keep this honest. The countervailing MoQ property is that it reaches the same
 completeness with a much smaller buffer, which is the latency argument in §5 and not a reliability
-argument. And **segmented HTTP's recovery model is specification-based here, not measured**: the
-grooming run in [Evidence](evidence.md) §3.2 was on a path where nothing was ever missing, only late,
-so nothing in this campaign has exercised a segmented-HTTP leg's retry behaviour under real loss.
+argument. And **the retry model has now been exercised under loss, with a split verdict**: it does not
+deliver resilience *of rate* — the lane falls to about half source rate at 3 % loss and 0.17 at 8 %, where
+the media-aware lane holds 0.96 (§3.1) — but it does deliver resilience *of content*, arriving
+byte-verbatim and P1-clean at every impairment level tested. Retry buys completeness, not throughput.
+What is still specification-based is the *failover* half: a different edge, a different Pathway, a
+redundant variant. Nothing here exercised those, and the ladder never pushed the lane far enough behind
+for a segment to age out of its availability window, so the boundary where completeness finally breaks
+is unmeasured ([T5](../lab/test-5-network-impairment.md)).
 
 ### 3.3 Where broadcast actually gets its reliability, and why it is common to both
 
@@ -164,7 +199,7 @@ the transport.
 
 ---
 
-## 4. The hand-off (R5)
+## 4. The hand-off (R3)
 
 ### 4.1 What the obligation actually is
 
@@ -331,7 +366,7 @@ seconds on the segmented plane and tens of milliseconds on MoQ (§5).
 
 ---
 
-## 5. Latency (R1)
+## 5. Latency (R4)
 
 **This is the axis on which the two data planes differ most, and the difference is now measured rather
 than reasoned: 109 ms against 4,067 ms over one internet path in one window** ([Evidence](evidence.md)
@@ -366,13 +401,13 @@ qualification that it is *delivery* latency — source to groomed egress — and
 decoder delay, which no plane here varies.
 
 **The edge stage's contribution is measured on both planes, and the asymmetry is stark.** The groomer that
-satisfies R5 held **7.5 s of programme before emitting a byte** on the segmented plane
+satisfies R3 held **7.5 s of programme before emitting a byte** on the segmented plane
 ([Evidence](evidence.md) §3.2), and over the internet that plane's total runs from 4,067 ms at its
 shallowest runnable cushion to 9,286 ms at the depth that makes it P1-conformant. On MoQ the commanded
 cushion turns out not to be the depth in force at all — the lane's standing depth drains to ~90 ms whatever
 it is told, because the carrier outruns the null-stripped content arriving at it — so the edge stage adds
 tens of milliseconds, not seconds. **That is the finding that decides this section:** the stage every
-requirement in R5 needs does not cost the MoQ lane its advantage.
+requirement in R3 needs does not cost the MoQ lane its advantage.
 
 ### 5.1 Latency and PCR conformance are not coupled, and that changes the verdict
 
@@ -425,8 +460,11 @@ wire, for a reason that is fixable upstream and independent of latency.
 
 Note what the rule does *not* decide: the grooming and egress layer is built either way (§4).
 
-And note the question behind the rule, which [Problem](problem.md) §6 lists as a condition of the
-thesis: **does the sub-second requirement exist on identifiable routes, or is it a preference?** The
+And note the question behind the rule, which is a condition of MoQ's case specifically rather than of
+Internet-native distribution generally: **does the sub-second requirement exist on identifiable routes,
+or is it a preference?** Every other axis here favours segmented HTTP, so if no real route needs
+sub-second delivery then MoQ addresses a preference rather than a requirement, whatever its measured
+margin. The
 usual answer — "sub-second desirable, a few seconds tolerable" — is true of the *feed's own
 integrity* and understates the transition. Replacing a geostationary path with a 2–5 s one consumes
 most of a downstream budget that was previously free, at every destination, and the consequences are
@@ -438,7 +476,7 @@ a requirements list.
 
 ---
 
-## 6. Interoperability (R3)
+## 6. Interoperability (R1)
 
 Segmented HTTP wins this decisively, and the reason is worth stating precisely, because the summary
 version flatters both sides.
@@ -515,7 +553,7 @@ subscription ([Evidence](evidence.md) §3.10).
 
 ---
 
-## 8. Carriage fidelity (R3)
+## 8. Carriage fidelity (R1)
 
 | | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane | SRT — the incumbent |
 |---|---|---|---|---|
@@ -874,16 +912,16 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
-| Scaling the distribution (R4) | segmented HTTP | R+S | narrow — both scale at this size; statelessness and supplier count are the difference (§2) |
-| Reliability under loss (R2) | neither | M+S | none — shared QUIC substrate; MoQ measured at parity with SRT (§3.1) |
-| Reliability of recovery (R2) | segmented HTTP | S | clear on the specification — availability window, idempotent retry, client-driven failover. **Not exercised under loss in this campaign** (§3.2) |
+| Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
+| Reliability under impairment (R5) | **depends on the path, and the ranking inverts** | **M** | **decisive in both directions and measured head-to-head: under loss the media-aware lane on BBR holds 0.96 of source rate to 10 % where segmented HTTP over TCP falls to about half at 3 % (0.45–0.54, n=3) and 0.17 at 8 %; under 25 % reordering they swap exactly, 0.98 against 0.19. Disjoint weaknesses, not a winner. On a shared HTTP/3 substrate the loss half would not distinguish them, which is untested** (§3.1) |
+| Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, but complete resilience of *content* — 0 continuity errors and 0 PCR intervals above 40 ms at every impairment level, so the lane sheds time rather than data.** Failover across edges and Pathways remains specification-only, and the availability-window boundary was never reached (§3.2) |
 | Reassembly to a transport stream | segmented HTTP | M | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |
-| Grooming *burden* (R5) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
-| Grooming *outcome* — a P1-conformant wire (R5) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. The groomer inserts no PCRs of its own, so the cause is the exporter emitting them too rarely — a fixable upstream defect rather than a cost the lane must pay** (§5.1) |
-| Latency (R1) | **MoQ, decisively** | **M** | **decisive and now measured: 109 ms across the public internet, against SRT's 1,618 ms and segmented HTTP's 4,067 ms over the same path in the same window — 15× and 37×. Segmented HTTP needs 9,286 ms to reach the depth that makes it conformant. The path term is the round trip and nothing more. Caveats: delivery latency rather than camera-to-display, and both paths measured were healthy** (§5, §5.1, [Evidence](evidence.md) §3.11) |
-| Interoperability (R3) | segmented HTTP | M+S | decisive, conditional on the single-programme envelope (§6) |
+| Grooming *burden* (R3) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
+| Grooming *outcome* — a P1-conformant wire (R3) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. The groomer inserts no PCRs of its own, so the cause is the exporter emitting them too rarely — a fixable upstream defect rather than a cost the lane must pay** (§5.1) |
+| Latency (R4) | **MoQ, decisively** | **M** | **decisive and now measured: 109 ms across the public internet, against SRT's 1,618 ms and segmented HTTP's 4,067 ms over the same path in the same window — 15× and 37×. Segmented HTTP needs 9,286 ms to reach the depth that makes it conformant. The path term is the round trip and nothing more. Caveats: delivery latency rather than camera-to-display, and both paths measured were healthy** (§5, §5.1, [Evidence](evidence.md) §3.11) |
+| Interoperability (R1) | segmented HTTP | M+S | decisive, conditional on the single-programme envelope (§6) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
-| Carriage fidelity, one programme (R3) | neither, on mux content; **SRT on the clock, and it is the only one measured over a real path** | M | **a wash on content across three clips — service identity, PMT/PCR PID, CAT, TDT/TOT, all splice PIDs and stuffing all survive — so MoQ's content advantage narrows to the untested multi-programme case. Segmented HTTP alone is *additive*: one PAT/PMT pair per segment, costing 109–302 µs of file-domain PCR accuracy that grooming then closes. On the clock the incumbent wins outright: byte-faithful SRT reproduces the source mux rate, PSI cadence and PCR grid over the public internet with 0 P2 violations, where the media-aware lane preserves the mux as bytes and destroys it as a timed object** (§8) |
+| Carriage fidelity, one programme (R1) | neither, on mux content; **SRT on the clock, and it is the only one measured over a real path** | M | **a wash on content across three clips — service identity, PMT/PCR PID, CAT, TDT/TOT, all splice PIDs and stuffing all survive — so MoQ's content advantage narrows to the untested multi-programme case. Segmented HTTP alone is *additive*: one PAT/PMT pair per segment, costing 109–302 µs of file-domain PCR accuracy that grooming then closes. On the clock the incumbent wins outright: byte-faithful SRT reproduces the source mux rate, PSI cadence and PCR grid over the public internet with 0 P2 violations, where the media-aware lane preserves the mux as bytes and destroys it as a timed object** (§8) |
 | Wire volume | **MoQ** | M+derived | ~7.0 %, MTU-invariant — 0.982× against 1.056× over HTTP/3; §8's fidelity trade priced (§9) |
 | Delivery economics | segmented HTTP | S(published rates) | decisive, and it swamps the row above — commodity delivery at $0.005–0.010/GB against one MoQ supplier at $0.050 (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and existing staff skills against a pre-1.0 ecosystem |
