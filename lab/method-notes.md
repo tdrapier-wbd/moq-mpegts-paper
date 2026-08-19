@@ -127,6 +127,18 @@ against.** *(T9.)*
 > disagreed on PID order and 28.2 % carried a different number of nulls. The fix implied by the wrong
 > mechanism — ignore PCR at the receiver — would not have worked.
 
+**A mechanism read from the source is a hypothesis; and before reporting a null, work out whether the
+arm could have shown the effect.** *(T12.)*
+
+> Reading the exporter, each SI table's snapshot advances as that leg's own subscription delivers
+> groups — so two legs looked able to assert different clocks at the same slot, and that was put to
+> upstream as a likely 1+1 divergence source. It is wrong: the code says which *state* the emission
+> consults, not what advances it, and the state turns out to track the media position. The first arm
+> that "confirmed" agreement was worth almost nothing either — a 15 s clock and 870 ms of lag predicts
+> 0.6 differing emissions in ten, so observing zero is consistent with both answers. Only after the
+> clock was driven at its resolution limit, where the same lag predicts seven in ten, did zero mean
+> anything. Compute the effect the arm should see before running it, or a null is just a quiet arm.
+
 **Compare with the suspect field masked before attributing a conflict.** *(T12.)*
 
 > "The payloads differ" is a measurement. "The groomer diverged" is a conclusion. Here they came
@@ -183,6 +195,17 @@ synthesised approximation of that pipeline's output.** *(T13.)*
 > so content arrives ahead of the slots the groomer has for it. On that input the groomer dropped
 > 6,360 packets and produced 100 continuity errors — a result that would have been reported as a
 > defect. On a real capture of the same shape it drops nothing.
+
+**A daemon started in a subshell outlives its own teardown, and answering on the port does not make it
+yours.** *(T12.)*
+
+> `( cd dir && relay config ) &` records the *subshell* in `$!`, so teardown kills the wrapper and
+> leaves the relay bound. The next run's relay then failed with `Address already in use`, its
+> fingerprint poll succeeded against the survivor, and the run silently graded a relay of unknown build
+> and unknown remaining lifetime — reading as a clean mid-run collapse at the moment the stranger
+> exited, complete with a plausible step change in the pair's agreement. Two lines fix it: `exec` the
+> daemon inside the subshell so the recorded pid is the daemon, and after the fingerprint poll succeeds
+> check the daemon is still alive, refusing the run if something else holds the port.
 
 **In a timing rig, assert the process census between legs rather than trusting a kill, and check that
 a file's size and its packet count agree.** *(T13.)*

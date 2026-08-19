@@ -458,6 +458,15 @@ that slot — makes what a leg sends a function of the stream rather than of whe
 > any absolute PCR-interval claim from it. **What these runs establish is P2 accuracy and
 > mergeability, not P1 repetition.** A matched-rate re-run would settle it.
 
+**The service layer, clock included, is already deterministic across the pair.** Now that the exporter
+carries the DVB tables and proxies TDT/TOT, a 1+1 pair has to agree about a table whose bytes advance
+while the stream runs — and it does: on the 11-PID DVB feed every PSI/SI PID carries an identical packet
+count on both legs, no SI PID appears in the residue, and both legs emit the same advancing sequence of
+clock values. That holds with one leg running 866 ms behind its partner, and it holds when the clock is
+driven at its one-second resolution limit, where a table selected by arrival rather than by media
+position would differ on roughly seven emissions in ten. So the exporter's remaining per-process values
+are the media-side ones below, and the clock is not among them.
+
 **A groomer must stop when its content stops, and only the groomer can.** Asked only to hold a rate,
 a groomer holds it against a dead source: when a groomed leg's publisher is killed the leg keeps
 emitting a byte-perfect CBR carrier — full rate, valid TS, PCRs present and accurate — containing
