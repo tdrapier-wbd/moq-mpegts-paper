@@ -606,6 +606,16 @@ rather than with the counter masked:
   ([#2829](https://github.com/moq-dev/moq/issues/2829)) needs a second media track to be visible at
   all; on multi-track content it holds an otherwise-fixed pair to 95.6 %. Every 100 % in this file is
   a statement about a single-track feed.
+- **The SI figures are measured against an emission path that no longer exists.** Upstream has since
+  moved SI onto per-table snapshot tracks and added a TDT/TOT proxy, and export now advances each
+  entry's snapshot as its *own* subscription delivers groups, rather than from anything on the media
+  timeline. The emission boundary stays common to both legs — it is absolute slot arithmetic on the
+  media timestamp — and a static table converges once each leg holds the first snapshot. A clock does
+  not: TDT is a latest-value slot whose bytes change every ~15 s against a 30 s boundary, so two legs
+  can hold different generations when a boundary falls between their arrivals, and differ on a PID
+  that carried nothing at all before the proxy landed. **Predicted from the code, not measured** — the
+  arm is this rig with an SI-bearing source on a current build, and it is worth running before either
+  determinism fix is designed, since it would add a divergence source rather than remove one.
 - **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7
   receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2.
 - **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean
