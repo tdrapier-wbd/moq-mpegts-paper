@@ -18,72 +18,45 @@ Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific valu
 
 ---
 
-## The cushion sweep: does MoQ stay sub-second while reaching P1 on the wire? (T13/T16 extension)
+## Delivery latency at equal conformance — measured, see T18
 
-**The highest-leverage outstanding measurement in the campaign, and the cheapest.** Nothing is
-blocked: the rig, the instrument and the grading script all exist and the source is unchanged.
+**Both the cushion sweep and the latency cell this file used to own are now measured in
+[T18](test-18-delivery-latency.md), and the framing they shared was wrong.** They asked where the MoQ
+lane's PCR-repetition curve crosses zero as the groomer's cushion deepens, on the premise that
+conformance is bought with depth and depth is latency. On the media-aware lane the two axes turn out to
+be independent: repetition sits at ~490 intervals above 40 ms with a 228 ms maximum across a ladder
+spanning eight times the depth, and stays there when groomer starvation is removed entirely. The
+groomer reports `pcr_inserted=0`, so every PCR on the egress came from upstream — **the exporter does
+not emit PCRs often enough for any groomer to place them**, and no cushion fixes that.
 
-**The question.** Grooming buys TR 101 290 P1 PCR-repetition conformance with buffer depth, and
-buffer depth is latency. Two points are measured and they are on different data planes:
+What T18 leaves open is listed in its own *Still open* table. Two entries belong here because they need
+setup rather than analysis:
 
-| Groomer cushion | Data plane | PCR intervals > 40 ms, on the wire | Source |
-|---|---|---|---|
-| shallow (the depths the MoQ lane runs) | MoQ | **131** on the laptop rig, **159** on the EC2 box, 227 ms max | [T13](test-13-downstream-grooming.md) |
-| 8 s, derived from arrival | segmented HTTP | **0** | [T16](test-16-grooming-segmented-http.md) |
+**The prediction, tested.** T18 predicts that an exporter emitting PCR-bearing packets at a broadcast
+mux's ~25 ms cadence would pass the gate at a 250 ms cushion — that is, at the 127 ms delivery latency
+already measured. Needs the upstream change, then T18's rig re-run unaltered. This is now the campaign's
+highest-leverage outstanding run. Filed as
+[#2937](https://github.com/moq-dev/moq/issues/2937), which also has to answer a history: upstream built
+this fix once and abandoned it after a real IRD would not lock, so the report's argument is that the
+failure belonged to the delivery model rather than to the PCR density, and that a bounded CBR stage
+downstream absorbs what the exporter was being asked to.
 
-T16's explanation is general rather than plane-specific — *what constrains PCR placement is not live
-operation but whether the stage always has a packet ready at the deadline, which is what buffer depth
-buys*. If that holds on MoQ, the edge stage that makes MoQ presentable spends the only advantage MoQ
-has ([comparison](../docs/comparison.md) §5.1).
+**RIST against SRT on a real path.** The WAN legs have run: the path costs its round trip and nothing
+more, and MoQ delivers a picture across the internet in **109 ms**. One cell did not settle — RIST reads
+262–333 ms below its own loopback figure with a *rising* trend where every other arm falls, so its
+apparent advantage over SRT is an unsettled window rather than a protocol property. This is the one place
+a real path may separate two protocols the campaign has otherwise been unable to tell apart, and it needs
+a single long run rather than new apparatus.
 
-**Procedure.** T16's rig with leg A replaced by the MoQ chain — publisher, relay, `moq export ts`,
-groomer, `t13-cadence.py capture` — sweeping the cushion and grading each arm with
-`t13-grade.py` plus `tsp -P pcrverify`, `-P continuity` and `-P analyze`:
+**A lossy WAN path.** Both T18 environments were healthy, so nothing exercised the retransmission and
+jitter-buffer recovery the tunnels exist for — the case that should favour them against the media-aware
+lane. Impairment on the WAN legs is the arm that could change the ordering rather than confirm it.
 
-```bash
-for CUSHION in 200 400 800 1500 3000 5000 8000; do
-	# MoQ leg, groomer cushion pinned; capture on loopback UDP as T13's wire domain
-	LAT_MS=$CUSHION lab/scripts/t13-cadence.sh ~/CNNiEMEA2.ts ~/t18/moq-$CUSHION 60
-done
-python3 lab/scripts/t13-grade.py grade ~/t18/moq-*/egress.ts
-```
-
-**Report, per cushion:** PCR intervals above 40 ms and the maximum interval, `pcrverify --absolute
---jitter-max 13`, continuity errors, packets dropped and muted (criterion 4 — a pass reached by
-discarding programme is not a pass), 10 ms coefficient of variation, and **the resident buffer and
-the programme held before the first byte**, which is the latency the conformance costs.
-
-**Fix the pass criteria before running.** (1) The cushion at which wire-domain intervals above 40 ms
-first reaches 0 with nothing dropped and nothing muted. (2) Whether that cushion, plus the exporter's
-own `--latency-max`, plus a nominal encode and network budget, leaves the chain under one second. A
-negative answer on (2) is the more valuable result, and it should be published as such.
-
-**One thing to pin while there.** T13 describes its cushion as "~1 s" while the flag set
-[T16](test-16-grooming-segmented-http.md) reproduces as "the depths T13 ran" is
-`--latency-ms 200 --max-latency-ms 2000 --stall-ms 1000`. Record the cushion actually in force per
-arm so the two files agree.
-
----
-
-## Glass-to-glass latency, at equal conformance, on both data planes
-
-**Unmeasured on either plane, and it decides the comparison.** [T8](test-8-srt-vs-moq.md) records it
-as owed; [T14](test-14-data-plane-comparison.md) records it as unmeasured. There is no latency figure
-anywhere in this campaign, and the paper's decision rule
-([comparison](../docs/comparison.md) §5.2) currently rests on a structural argument plus the
-measured delivery granularity.
-
-**Method.** One encoder with burnt-in timecode and a local clock reference, tee'd byte-identical into
-both data planes, each groomed to the *same* P1/P2 gate before measurement — otherwise the comparison
-prices conformance rather than transport. Report the composition, not just the total: encode,
-package, deliver, reassemble, groom, egress. A buffer ladder is already defined in T8
-(B ∈ {250 ms, 500 ms, 1 s, 2 s}).
-
-**Partly blocked.** The segmented arm cannot reach the low end of its own envelope on free software —
-no free client fetches partial segments ([T14](test-14-data-plane-comparison.md) measurement 2b) — so
-a like-for-like low-latency comparison needs the same commercial ABR-to-TS hardware as the entry
-below. The **MoQ arm is not blocked** and should be run with the cushion sweep above, since the two
-share a rig and the sweep produces half the answer.
+**Still blocked, and unchanged.** The segmented arm cannot reach the low end of its own envelope on free
+software — no free client fetches partial segments ([T14](test-14-data-plane-comparison.md) measurement
+2b) — so a like-for-like *low-latency* segmented comparison still needs the commercial ABR-to-TS
+hardware the entry below requires. T18's segmented figures are therefore the classic-segment case:
+3497 ms at best, 9185 ms where it comes closest to the gate.
 
 ---
 
@@ -126,21 +99,26 @@ currently have.
    finding either way. **Blocked on:** hardware. *Moves:* whether part of the broadcast-grade edge
    layer is purchasable for segmented HTTP and not for MoQ, or whether the hand-off axis closes
    entirely.
-2. **Glass-to-glass latency at equal conformance.** Tune each leg until its groomed egress passes the
-   *same* P1/P2 gate, then measure, reporting the composition rather than the total. Report arm B1's
-   floor alongside, because B1 is what off-the-shelf tooling gives. **Blocked on:** the same hardware
-   as measurement 1, and this is why the two have merged. Arm B2 has now run: partial segments can be
-   *published* with MPEG-TS free of charge, and no free client fetches them, so the only receiver that
-   could realise the low-latency arm is a commercial ABR-to-TS box. The sub-question this cell used to
-   carry — how far 200–330 ms parts close the 240× burst gap — is **answered**: not at all, because
-   nothing free gets at the parts. *Moves:* §5's structural floor.
+2. **The segmented plane's *low-latency* arm at equal conformance.** The general cell is measured —
+   [T18](test-18-delivery-latency.md) grades every plane's delivery latency against the conformance of
+   the same bytes — but its segmented arm is the classic-segment case, 3497 ms at its shallowest
+   runnable cushion. What remains is whether partial segments move that, and only hardware can answer
+   it: arm B2 established that parts can be *published* with MPEG-TS free of charge and that no free
+   client fetches them, so the only receiver that could realise the low-latency arm is a commercial
+   ABR-to-TS box. The sub-question this cell used to carry — how far 200–330 ms parts close the 240×
+   burst gap — is **answered**: not at all, because nothing free gets at the parts. **Blocked on:** the
+   same hardware as measurement 1, which is why the two have merged. *Moves:* §5's structural floor,
+   and only for the segmented plane.
 3. **Multi-programme carriage in practice.** HLS normatively excludes it ("Transport Stream Segments
    MUST contain a single MPEG-2 Program"), and a cache does not parse the payload. Publish TS
    segments containing an MPTS through a real CDN and record: does it deliver them, does a conformant
    analyser accept the result, and does an ABR-to-TS gateway. **Blocked on:** a CDN account.
-   *Moves:* this now carries the *whole* of MoQ's carriage-fidelity advantage, because test-14 showed
-   single-programme carriage in TS segments is verbatim — so it is the one cell where a negative
-   result for HLS is the interesting one.
+   *Moves:* this now carries the *whole* of MoQ's carriage-fidelity advantage **on mux content**,
+   because T14 showed single-programme carriage in TS segments is verbatim and
+   [T3](test-3-opaque-transparency.md) confirmed it across three clips and the full service layer — so
+   it is the one cell where a negative result for HLS is the interesting one. The clock half of the
+   axis is settled separately and is not waiting on this: the segment-head PAT/PMT injection costs
+   file-domain PCR accuracy, and grooming closes it.
 
 **Deliberately not queued.** Wire cost's per-packet framing is derived from
 [T9](test-9-performance.md)'s real-path measurement rather than measured on the segmented-HTTP leg,
@@ -485,6 +463,81 @@ ready when the subscriber lands.
 survival, PCR integrity across a relay. The harness already exists and deliberately stops at the
 protocol handshake, so this extends shared infrastructure rather than building a private rig, and
 gives the transparent-TS profile a neutral conformance target.
+
+---
+
+## T3 — the segmented-HTTP transparency arm and the duration sweep — **run**
+
+Results in [test-3-opaque-transparency.md](test-3-opaque-transparency.md); rigs in
+[`scripts/t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh) and
+[`scripts/t3-transparency.py`](scripts/t3-transparency.py). Specified because the paper now treats
+segmented HTTP as a candidate for primary distribution rather than as a foil, while the transparency
+question had only ever been asked of the two MoQ lanes — and because
+[T14](test-14-data-plane-comparison.md) measurement 4 established what the lane *forwards* on one clip
+without being able to see what it *adds*.
+
+Scored against T3's inventory on all three of its clips, the lane preserves mux content as completely
+as the opaque lane — service identity, non-default PMT PIDs, CAT, TDT/TOT, every splice PID, stuffing,
+0 continuity errors, 0 PCR intervals above 40 ms — and adds exactly one PAT/PMT pair per segment and
+no PID the source lacked. The addition costs file-domain PCR accuracy: 37–74 ns to 109–302 µs,
+predicted from 376 bytes at each clip's rate before it was measured and confirmed across a 2.75×
+bitrate spread. Grooming closes it ([T16](test-16-grooming-segmented-http.md)).
+
+**Both cells this file listed as cheap have since been run, and only one of them existed.**
+
+- **6 s and 1 s segments through the same inventory — run, and it confirmed the mechanism.** Sweeping
+  duration moved the injection count 5.7× and the maximum PCR error 1 % (299.6 / 301.9 / 302.4 µs),
+  which is what a per-segment displacement predicts and an accumulating error does not. The violation
+  *count* fell 2,456 → 2,453 → 8, so P2 exposure is partly a segment-duration choice while the error an
+  IRD would see is not. P1 table margin fell monotonically the other way, as predicted.
+- **The two MoQ lanes at `pcrverify --absolute` — not closable, and the reason is the gate.** The gate
+  presupposes a mux rate. The media-aware lane's ungroomed egress has none — 0 stuffing packets, and
+  `analyze` reports 22–32 Gb/s on 10–27 Mb/s content — and graded anyway it returns *exactly* the
+  maximum PCR interval, matching to 0.003 % on three clips whose maxima differ 8×. So it measures MoQ
+  object burst structure, not carriage. The opaque lane cannot be graded at all: its private checkout is
+  gone from the machine and no capture survived, which makes that cell blocked on an artefact rather
+  than on instrument time.
+
+What remains in T3's "still open" table is now uniformly expensive: the opaque lane's build,
+multi-programme carriage, a lossy segmented path, and the opaque lane on a current draft.
+
+---
+
+## T4 — the three-lane arm over the public internet — **run**
+
+Results in [test-4-remote-e2e-srt.md](test-4-remote-e2e-srt.md); rig in
+[`scripts/t4-three-lane.sh`](scripts/t4-three-lane.sh), scored by T3's
+[`scripts/t3-transparency.py`](scripts/t3-transparency.py). Specified to ask T3's transparency question
+on a real path instead of loopback, and to do it as a genuine side-by-side: one clip, one origin, one
+pacing, one packet bound, one instrument, differing only in the transport.
+
+**Byte-faithful SRT is transparent on every criterion** — 13 PIDs of 13 at source numbers, SDT, NIT,
+TDT/TOT, three splice PIDs, stuffing, the exact source mux rate, identical PSI cadence and PCR grid, 0
+CC, and **0 PCR-accuracy violations at 481 ns**, the campaign's first over-the-wire P2 grade of any lane.
+**The media-aware lane is faithful to the mux as bytes and not as a timed object:** identity, PIDs, SI
+and splice all survive; stuffing, mux rate, PSI density (8.04 → 2.51 PAT/s) and PCR spacing do not.
+
+**Segmented HTTP reproduced its loopback result on a prediction registered before the run** — content
+intact, criterion 6 failed by exactly **1.00 injected PAT/PMT pair per segment head**, **302.148 µs** of
+PCR accuracy against **302.4 µs** predicted, 0.043 % of added rate. So the injection accounting is a
+property of the segmenter, not of the path, and T3's loopback carriage breadth can be read as
+generalising.
+
+**Two standing claims fell out of this and have been corrected everywhere they appeared.** T4 credited the
+media-aware lane's 320 ms PCR gaps to the encoder; the source is flat at a 24.95 ms maximum with no
+interval above 40 ms in 600 s, and [T2](test-2-media-aware-transparency.md) had already tabulated those
+figures as lane impairments. And an "all inbound TCP is filtered" claim rested on `nc -z` probes against
+ports with nothing listening, which cannot distinguish a filter from an absent server.
+
+Remaining here, in cost order:
+
+- **Why the lane clusters PCRs** — 86 % of intervals under 1 ms, monotonic, mean conserved. Group-wise
+  reassembly is the obvious candidate but is inferred from the distribution, not confirmed against the
+  exporter. Worth settling before it is raised upstream, because PSI density may have the same cause.
+- **The maximum PAT interval on the media-aware lane**, which no instrument can currently supply: with
+  no mux rate only an average over the PCR span is available (399 ms against P1's 500 ms limit).
+- **Leg C** (opaque over the wire), blocked on that lane's egress delivering zero bytes; the cheap
+  discriminator is EC2's own Linux binaries.
 
 ---
 

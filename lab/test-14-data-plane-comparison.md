@@ -250,9 +250,22 @@ injects an extra PAT/PMT pair at each segment head, so the counters after it mus
 continuous. Every media, audio, teletext, splice and stuffing packet is byte-identical to source.
 `tsp -P continuity` reports **zero errors** on arm B1, on leg A and on the source.
 
-**This is materially better than the MoQ media-aware lane and equal to the opaque lane for a single
-programme** — obtained without an opaque lane, and preserving the DVB service layer the HLS
-specification never mentions.
+> **Extended by [T3](test-3-opaque-transparency.md).** "Verbatim" holds for everything the lane
+> *forwards* and this measurement cannot see what it *adds*, because a census lists what the source
+> carried and looks for it at egress. Scored against T3's transparency inventory on three clips, the
+> lane preserves more than this census records — service identity, TSID/ONID, non-default PMT PIDs,
+> and `testloop`'s CAT — and adds exactly one PAT/PMT pair per segment and nothing else. That
+> addition is not free: it displaces every later PCR in its segment relative to a constant-rate byte
+> clock, taking file-domain PCR accuracy from 37–74 ns to 109–302 µs, or 2,453 violations at the
+> TR 101 290 P2 gate against the source's zero. P1 repetition is untouched. So the arm is transparent
+> to the mux's *content* and not to its *clock*, and the clock half is closed by the groomer of
+> [T16](test-16-grooming-segmented-http.md) rather than by the carriage.
+
+**This is materially better than the MoQ media-aware lane, and equal to the opaque lane on mux
+content for a single programme** — obtained without an opaque lane, and preserving the DVB service
+layer the HLS specification never mentions. It is *not* equal to the opaque lane on the clock:
+[T3](test-3-opaque-transparency.md) scores both against one inventory and finds the segment-head
+injection costs file-domain PCR accuracy that the opaque lane's byte-preserving carriage does not.
 
 Both absences on the MoQ leg are known and by design, and this run reproduces them rather than
 discovering them. **Stuffing** is not carried, which is exactly where the media-aware lane's 0.982× wire

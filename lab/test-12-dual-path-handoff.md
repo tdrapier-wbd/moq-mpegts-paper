@@ -583,6 +583,41 @@ rather than with the counter masked:
   wherever the legs order media differently the renumbering diverges with it. On multi-track
   content this fix cannot land alone; it needs [#2829](https://github.com/moq-dev/moq/issues/2829).
 
+### The service layer, once the exporter began carrying it
+
+Upstream later moved SI onto per-table snapshot tracks and added a TDT/TOT proxy, which puts a table
+on the wire whose *bytes advance while the stream runs*. That is a new thing for a 1+1 pair to have to
+agree about, and reading the exporter suggested it might not: each entry's snapshot advances as that
+leg's own subscription delivers groups, so a table selected by arrival rather than by media position
+would let two legs assert different times at the same slot.
+
+**It does not happen.** Four cells on the 11-PID DVB feed, one publisher into one relay into two
+stream-clocked groomed legs with leg B joining 20 s late, 300 s each, at `dev` `016fc09ae`:
+
+| | source clock | leg B | TDT sections A / B | emissions compared | differing |
+|---|---|---|---|---|---|
+| control | native, 15.1 s | at the live edge | 11 / 10 | 10 | **0** |
+| lagging | native, 15.1 s | ~870 ms behind | 11 / 10 | 10 | **0** |
+| fast clock | re-driven, 5 per s | at the live edge | 10 / 10 | 10 | **0** |
+| fast clock, lagging | re-driven, 5 per s | ~870 ms behind | 10 / 10 | 10 | **0** |
+
+The last row is the one that decides it. TDT carries whole seconds, so a clock injected five times a
+second changes its bytes once a second and no faster — and against a leg running 870 ms behind, a
+table chosen by arrival would differ on roughly seven emissions in ten. None differed, and the two
+legs emitted the same eleven distinct advancing UTC values in the same order. The lag is measured, not
+assumed: leg B's groomer reports `max_content_gap=866 ms` where the control reports none, with
+`stalls=0 muted=0`, so the leg was behind rather than interrupted.
+
+The whole service layer behaves the same way. Across all four cells every PSI/SI PID carries an
+identical packet count on both legs — PAT and PMT 795–796, NIT 30, SDT 149, TDT 10, the three SCTE-35
+PIDs 305/298/302 — and **no SI PID appears in the residue at all**, on either the byte comparison or
+the same-PID-different-bytes attribution. What differs between the legs is media and stuffing, and in
+these cells that difference is not interpretable (see *What this rig cannot tell you*).
+
+So the exporter renders SI from the media position it has reached, not from what its socket has
+delivered, and the clock is emitted on the same grid on both legs with the same contents. The TDT
+proxy is not a divergence source, and the pair needs nothing new to tolerate it.
+
 ### Verdict against the pass criteria
 
 | Criterion (fixed in advance) | Result |
@@ -606,16 +641,12 @@ rather than with the counter masked:
   ([#2829](https://github.com/moq-dev/moq/issues/2829)) needs a second media track to be visible at
   all; on multi-track content it holds an otherwise-fixed pair to 95.6 %. Every 100 % in this file is
   a statement about a single-track feed.
-- **The SI figures are measured against an emission path that no longer exists.** Upstream has since
-  moved SI onto per-table snapshot tracks and added a TDT/TOT proxy, and export now advances each
-  entry's snapshot as its *own* subscription delivers groups, rather than from anything on the media
-  timeline. The emission boundary stays common to both legs — it is absolute slot arithmetic on the
-  media timestamp — and a static table converges once each leg holds the first snapshot. A clock does
-  not: TDT is a latest-value slot whose bytes change every ~15 s against a 30 s boundary, so two legs
-  can hold different generations when a boundary falls between their arrivals, and differ on a PID
-  that carried nothing at all before the proxy landed. **Predicted from the code, not measured** — the
-  arm is this rig with an SI-bearing source on a current build, and it is worth running before either
-  determinism fix is designed, since it would add a divergence source rather than remove one.
+- **The media figures are measured against an exporter that has since been rewritten around SI**, and
+  this host cannot re-take them: at the DVB feed's 9.9 Mb/s, a relay, two exporters and two groomers on
+  one laptop make *both* legs skip groups (400–600 `slow` and 1 600–2 200 `old` per leg, unchanged by
+  raising `--latency-max` from 500 ms to 3 s), so the legs stop carrying the same media and no
+  agreement figure from those runs means anything. The single-track figures stand; the multi-track one
+  needs a host that can carry the pair without skipping.
 - **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7
   receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2.
 - **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean
@@ -681,6 +712,14 @@ rather than with the counter masked:
 - **Believed:** a payload conflict between two legs means the groomers placed different bytes.
   **True:** in arm D's recovery and join cells 97–98 % of conflicting datagrams differ in one field,
   the continuity counter, minted per process upstream of both groomers.
+- **Believed:** because the exporter advances each SI snapshot as its own subscription delivers groups,
+  a table whose bytes change while the stream runs — the TDT proxy above all — would let two legs
+  assert different times at the same slot, adding a divergence source to a 1+1 pair. **True:** it does
+  not. Driving the clock at its one-second resolution limit against a leg running 870 ms behind, where
+  arrival-selected emission predicts roughly seven differing emissions in ten, produced zero across
+  four cells: the exporter renders SI from the media position it has reached. The prediction was drawn
+  from reading which *state* the emission consults, without establishing what advances that state — and
+  a mechanism named from the code alone is a hypothesis, not a finding, however plainly the code reads.
 - **Believed:** a joining stream-clocked leg was sending the right bytes twelve seconds late.
   **True:** there is no twelve seconds. The oracle's sequence offset is voted by payload identity, and
   with the counter differing it had 15 votes out of 23,175 (confidence 0.19). Measured at equal

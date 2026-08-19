@@ -5,7 +5,7 @@
 #
 # T14 measured what `tsp -I hls` hands a groomer and stopped there: the measurement
 # point was the *ungroomed* egress, deliberately, because measurement 2 was about
-# burst granularity. That left interoperability.md §6 admitting that the equivalent
+# burst granularity. That left the paper admitting that the equivalent
 # grooming pass on a segmented-HTTP egress is unmeasured. This closes it, on the
 # same publisher, origin, receiver and instrument, so the before and after are the
 # same chain with one stage inserted:

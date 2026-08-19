@@ -27,16 +27,18 @@ transport stream, and, measured, byte-verbatim for a single programme, so the fi
 usually assumed for MoQ survives only on a multi-programme mux.
 
 **What MoQ has is an egress two orders of magnitude easier to pace, ~7 % less wire volume, and a
-sub-second capability that this campaign has not measured** — which matters, because the sub-second
-band is the only ground on which MoQ's case rests.
+measured 109 ms across the public internet** — 15× lower than SRT over the same path. That last figure
+matters most, because the sub-second band is the only ground on which MoQ's case rests, and it is now a
+measurement rather than an inference.
 
 ## What is proven, and what is not
 
 | | |
 |---|---|
 | **Demonstrated** | A live contribution mux traverses the whole chain over the public internet with 0 continuity errors. Grooming restores exact CBR and P2-limit PCR accuracy **on file**. A doubled chain with two stream-clocked groomers is byte-identical and hitless through publisher, relay and exporter death, against a reference receiver, on single-track content. Loss resilience reaches parity with SRT once the congestion controller is chosen. Segmented HTTP is byte-verbatim for one programme and ~240× burstier to groom. |
-| **Measured, and negative** | A MoQ feed carries media through **none** of eight third-party relays. At the cushion the MoQ lane runs, the groomer delivers **131–159 PCR intervals above 40 ms in 25 s on the wire** — a P1 failure as delivered, where the file result is 0 %. |
-| **Not established** | **No hardware IRD has ever been fed by this chain.** **No glass-to-glass latency figure exists for either data plane.** Whether a MoQ chain can be simultaneously sub-second *and* P1-conformant on the wire is unmeasured, and it is the question that decides the thesis. |
+| **Measured, and positive** | **MoQ delivers a picture from an EC2 origin to a groomed transport-stream egress here in 109 ms** — 15× lower than SRT and 37× lower than segmented HTTP over the same path in the same window, and on loopback lower even than a plain-UDP control carrying no transport buffer at all. The path costs its round trip and nothing more. |
+| **Measured, and negative** | A MoQ feed carries media through **none** of eight third-party relays. The MoQ lane fails P1 PCR repetition on the wire at **every** buffer depth — 489–504 intervals above 40 ms, unchanged by depth, by removing groomer starvation, or by the path — because the exporter emits PCRs too rarely for any groomer to place them. |
+| **Not established** | **No hardware IRD has ever been fed by this chain.** Whether fixing the exporter's PCR cadence clears the gate is untested, and it is the question that now decides the thesis. Neither latency path was impaired, so the recovery the point-to-point tunnels exist for was never exercised. |
 
 The full accounting, with every limit stated in one place, is [Evidence](docs/evidence.md) §4 and §5.
 

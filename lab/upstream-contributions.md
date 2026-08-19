@@ -15,15 +15,58 @@ both ways: the gaps were real, and they closed fast.
 Each item states what was found, how it was verified, and what remains open. Where a fix was verified
 here rather than taken on trust, the before/after rigs are named.
 
+Four kinds of thing are recorded. Defects found and verified against before-and-after builds. Test
+coverage and fixtures contributed, because several of these questions could not be argued about until
+something in the tree could produce the stream in dispute. A review of the *specification* rather than
+an implementation (§7). And requirements this campaign filed early and then withdrew on its own
+measurements (§8), where the ratio is the point rather than an embarrassment.
+
 ---
 
 ## 1. Media-aware carriage: what a real contribution feed breaks
+
+### The lane this campaign measures did not exist when it started
+
+The first reports were about whether a broadcast feed survives the round-trip at all, and it did not.
+A real contribution capture published and subscribed back produced continuously undecodable H.264
+(`non-existing PPS 0 referenced`), because the import/export path kept a single SPS and a single PPS,
+so a source carrying several lost all but the last seen. PES **DTS was not authored at all**, so
+B-frame content — 12,480 B-frames in the capture — emitted a decode timeline a player had to be told
+to ignore. Reported as [#1798](https://github.com/moq-dev/moq/issues/1798) and
+[#1836](https://github.com/moq-dev/moq/issues/1836), fixed by
+[#1812](https://github.com/moq-dev/moq/pull/1812) and
+[#1843](https://github.com/moq-dev/moq/pull/1843).
+
+Those were defects. The larger question — how a whole transport stream should be carried — was put as
+[#1799](https://github.com/moq-dev/moq/issues/1799), which presented media-aware and byte-opaque
+carriage as two options **neutrally** and asked for a direction decision instead of advocating one.
+Upstream's answer is the lane everything since has been measured against: verbatim per-PID carriage
+under an `mpegts` catalog section ([#1815](https://github.com/moq-dev/moq/pull/1815)), so the
+ancillary PIDs a real multiplex carries — DVB teletext, AC-3, all three SCTE-35 PIDs — survive as
+opaque tracks while video and audio stay typed and playable without TS support. That PR listed CLI
+wiring as out of scope, leaving the lane library-only, which is what
+[#1835](https://github.com/moq-dev/moq/issues/1835) →
+[#1842](https://github.com/moq-dev/moq/pull/1842) closed.
+
+### The harness that found most of what follows
+
+The MPEG-TS/IRD compliance harness this campaign uses to grade its own output was offered upstream as
+[#2024](https://github.com/moq-dev/moq/pull/2024): a round trip through a relay, TSDuck parsing the
+capture, and the model arithmetic — PCR interval and accuracy, mux-rate stability, continuity — done
+against what an IRD expects rather than against what plays. It was folded into the tree as
+[#2011](https://github.com/moq-dev/moq/pull/2011) and hardened from review in
+[#2043](https://github.com/moq-dev/moq/pull/2043), wired as `just test ts`.
+
+It earned its place immediately, and in the useful direction: the open-GOP break below was found by
+pointing the merged harness at a real capture, and its verdict on the source file was clean. The round
+trip was what failed.
 
 ### Open-GOP keyframe detection — closed
 
 A CNN International capture (open-GOP H.264 signalling recovery-point SEI, roughly one IDR every
 15 s) produced **no video rendition at all** through media-aware import, because keyframe detection
-keyed only on the IDR NAL type. Open-GOP is common on contribution feeds, not a niche quirk.
+keyed only on the IDR NAL type. Open-GOP is common on contribution feeds, not a niche quirk. Reported
+as [#2050](https://github.com/moq-dev/moq/issues/2050).
 
 Closed upstream by two changes the round-trip needs **together** — catalog-reservation gating
 ([#2072](https://github.com/moq-dev/moq/pull/2072)), which makes the exporter withhold PSI until every
@@ -35,26 +78,71 @@ Verified here rather than taken on trust ([T2](test-2-media-aware-transparency.m
 round-trips deterministically with every elementary stream, PID, `stream_type` and PMT descriptor
 intact, and all three SCTE-35 splice PIDs included.
 
+### The exporter locked its PSI on half a catalog — closed, by a better fix than the one proposed
+
+`export ts` built PAT and PMT as soon as a header and a video track had resolved, then aborted with
+`TS track layout changed after PAT/PMT was emitted` when a later track arrived. The race is decided by
+codec, not by timing luck: AAC registers its rendition on its first PES, H.264 waits for a keyframe's
+inline SPS, so an audio-first stream reliably locks PSI on an audio-only layout
+([#1979](https://github.com/moq-dev/moq/issues/1979)).
+
+The fix proposed here gated PSI on the PMT's declared elementary-stream count, carried in the catalog
+as `expected_tracks` ([#1980](https://github.com/moq-dev/moq/pull/1980)). Upstream's reading was that
+the problem was not MPEG-TS's — *"there's a lot of containers that are final, but we don't have a good
+way of signalling that or waiting"* — and closed it with catalog reservation gating
+([#2072](https://github.com/moq-dev/moq/pull/2072)): a reservation per PMT-declared track, held until
+its config resolves, with the catalog withheld until the last one drops. Same rule, no
+container-specific field in the catalog, and it is the gate the open-GOP fix above needs in order to
+be worth anything.
+
 ### The DVB service layer — closed
 
 The `mpegts` catalog modelled per-PID PMT info and verbatim elementary streams only, with no field for
 service identity or standalone SI, so `export ts` rebuilt just PAT and PMT. Service name and provider,
-service type, NIT, TSID, ONID and the PMT's own PID were all lost.
+service type, NIT, TSID, ONID and the PMT's own PID were all lost. Reported as
+[#2433](https://github.com/moq-dev/moq/issues/2433) and prototyped as
+[#2434](https://github.com/moq-dev/moq/pull/2434), which captured the transport/service identity from
+the PAT and carried SDT Actual and NIT Actual verbatim in a DVB-shaped `Service` record.
 
-[#2440](https://github.com/moq-dev/moq/pull/2440) threads a service record through the catalog and
-rebuilds the SI on export. Measured before and after in [T2](test-2-media-aware-transparency.md).
+Upstream declined the shape rather than the ask — *"I don't really want to support DVB specifically,
+but instead proxy PIDs?"* — and [#2440](https://github.com/moq-dev/moq/pull/2440) threads a service
+record through the catalog and rebuilds the SI on export, keyed by PID. Measured before and after in
+[T2](test-2-media-aware-transparency.md).
+
+**That generalisation is load-bearing later.** Because carriage is keyed by PID and not by table, an
+intercepted PID carries whatever sections it holds, including a table nobody has heard of — which is
+why the EIT question below turns out to be about one PID carrying two tables rather than about adding
+a field.
 
 ### EIT, and where carried SI should live — the question we priced
 
 #2440 left EIT and TDT/TOT out. Measuring the residual on a synthetic fixture — no capture held here
 carries EIT — split the two, because **they revise at opposite rates**: EIT repeats byte-identically
 between event transitions, so carrying it costs little, while every TDT/TOT section is new content and
-therefore a republish, for a table that says nothing but "now".
+therefore a republish, for a table that says nothing but "now". Reported with that census as
+[#2800](https://github.com/moq-dev/moq/issues/2800).
 
-That split led to [#2824](https://github.com/moq-dev/moq/pull/2824), which carried EIT present/following
-only, verified byte-identical here across a version roll (v0 ×27 then v1 ×28, no flapping, no stale
-version left behind) and with a purpose-built fixture for its `current_next_indicator` guard, which
-nothing in the existing captures exercised.
+**The fixtures had to be contributed before the behaviour could be argued about**, because the one PID
+under discussion is the one nothing in the tree exercised.
+[#2828](https://github.com/moq-dev/moq/pull/2828) synthesises an EIT from any clip using TSDuck alone,
+deriving the service triplet from the stream's own PAT and SDT and anchoring the EPG to its TDT — an
+EIT whose triplet disagrees with the SDT describes nothing, and that failure is invisible, since the
+packets are present, the sections parse, and a receiver is right to ignore them. It also pads a
+generated clip to CBR first and says so, because `tsp` replaces packets rather than creating them, so
+the table has to come out of existing stuffing; a real capture keeps its exact mux rate, which is what
+makes the census believable. [#2920](https://github.com/moq-dev/moq/pull/2920) adds the two shapes the
+snapshot-track work needed and nothing in-tree could produce — a sparse multi-day schedule and a
+pending-version section — and, on review, wires them into `just test` so something actually executes
+them, with a source-side positive control on every assertion so a broken generator fails the run
+instead of making it vacuous.
+
+The first attempt at carriage was [#2824](https://github.com/moq-dev/moq/pull/2824), EIT
+present/following in the catalog — and it took that shape because the ask as filed was wrong. Carriage
+is keyed by PID, and 0x0012 holds present/following *and* schedule, so "add 0x0012 to the allowlist" is
+not the one-line change it looked like, and a census that bounded only p/f could not price what it
+would let in. Verified here byte-identical across a version roll (v0 ×27 then v1 ×28, no flapping, no
+stale version left behind); **closed unmerged** when the design moved off the catalog and onto tracks,
+so that measurement grades a design step rather than shipped behaviour.
 
 The design question behind it — **does carried SI belong in the catalog or on its own track?** — was
 raised as [#2882](https://github.com/moq-dev/moq/issues/2882), and this campaign priced it rather than
@@ -124,6 +212,45 @@ are built locally, a receiver acquires the service layer mid-stream by design, a
 late is indistinguishable from tuning in just before an SDT repetition. Any gate lets one stale announce
 hold the programme dark, and no timeout constant makes that trade principled — while the measured 15 ms
 time-to-first-byte means the healthy case still leads with its tables, it simply no longer promises to.
+
+### PCR clustering — reported once it was shown a groomer cannot absorb it
+
+The exporter conserves the PCR *mean* and destroys the PCR *spacing*. A source profiled at a flat 24.4 ms
+grid, maximum 24.95 ms, nothing above 40 ms, comes back with the mean conserved to 0.7 ms, monotonic, and
+carrying *more* PCRs than the source sent — while 1,123 of its 1,307 intervals fall under a millisecond
+and the residual time collects into 107 gaps of up to 319.94 ms. PCR-bearing packets leave in
+near-simultaneous clusters. PCR values are timestamps, so none of this is the stripped stuffing.
+
+**This was known for months and deliberately not reported, because the campaign's own answer to it was a
+downstream CBR groomer and the assumption was that the groomer absorbed it.**
+[T18](test-18-delivery-latency.md) tested the assumption and it is false: the repetition figure is
+identical to three significant figures across a cushion ladder spanning eight times the depth, unchanged
+when groomer starvation is removed entirely (18,070 underruns to 5, stuffing to 0.0 %), and unchanged over
+a real internet path. The groomer reports `pcr_inserted=0`, so every PCR on the egress is one the lane
+delivered. A pass-through stage can only place the packets it receives.
+
+Filed as [#2937](https://github.com/moq-dev/moq/issues/2937), and the filing had to engage with a history
+rather than report a defect. Upstream had already built this fix and abandoned it: a dense uniform PCR ramp
+([#1989](https://github.com/moq-dev/moq/pull/1989)), folded into ~20 ms PCR-led windows
+([#1992](https://github.com/moq-dev/moq/pull/1992)) with delivery spreading
+([#1988](https://github.com/moq-dev/moq/pull/1988)) — all closed after an independent tester reported that
+no operating point on a Sencore IRD was both smooth and stable, because without null stuffing the gap
+between carrier and content rate surfaces either as ~20 % empty PCR-only windows or as an unbounded queue.
+
+**What this campaign contributes is that the dilemma has a resolution and it is not in the exporter.** Both
+horns were measured from the downstream side and a bounded CBR buffer absorbs both — a 3.2 % surplus is
+18,070 underruns the groomer fills with nulls at a standing depth of 87 ms, and a 0 % surplus is 5
+underruns at a depth that holds its commanded 824 ms. Neither collapses, and the stage costs 109 ms of
+delivery latency over the public internet. So the argument put upstream is a division of labour: the
+exporter owns PCR density in the time domain, since nothing downstream can synthesise a PCR it never
+received, and a CBR egress stage owns the byte domain, which it already does at 0 continuity errors and 0
+accuracy violations at the 481 ns gate. Density and delivery are separable; #1992 coupled them.
+
+The prediction that a 20–25 ms emission interval clears the gate is registered as a prediction, not a
+result — the rig re-runs unaltered against a build that emits more often. And the effect size varies by
+clip for reasons not established: 25.2 % of intervals above 40 ms on a synthetic CBR reference, 13.9 % and
+9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is 27 ms.
+That exception is unexplained and was reported as unexplained.
 
 ---
 
@@ -266,14 +393,40 @@ protocol.
 
 `moq export ts` exited the instant its session dropped, which was the single most consequential
 transport-resilience gap for primary distribution, since a broadcast subscriber must ride out relay
-maintenance unattended. Closed by [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast
-*linger*): the relay keeps the broadcast announced for the reconnect window and a re-attaching source
-splices back into the same broadcast, while a clean unannounce still tears down immediately. Measured
-surviving a relay kill and restart, resuming byte-identical output automatically.
+maintenance unattended. The reconnect loop stayed alive; the sink task was fatal, so the process died
+with `json: dropped` while nominally supervised
+([#2459](https://github.com/moq-dev/moq/issues/2459)). Closed by
+[#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast *linger*): the relay keeps the broadcast
+announced for the reconnect window and a re-attaching source splices back into the same broadcast,
+while a clean unannounce still tears down immediately. Measured surviving a relay kill and restart,
+resuming byte-identical output automatically.
 
 [#2647](https://github.com/moq-dev/moq/pull/2647) tightened it further, so the exporter re-attaches
 within seconds of a relay returning while a genuinely *dead* relay errors in tens of seconds instead
 of retrying silently — the axis that matters for a supervisor deciding to re-home a subscriber.
+
+### A cancelled write dropped bytes and said nothing — closed, in a different repository
+
+Exporting over the WebSocket fallback transport produced a flood of `WrongSize` / `FrameTooLarge` group
+evictions and then killed the process, while the identical broadcast over QUIC on the same path was
+clean. Reported as [#2265](https://github.com/moq-dev/moq/issues/2265) as two defects rather than one,
+because a framing fault and a fatal-on-one-bad-frame fault warrant separate fixes.
+
+The framing half root-caused out of `moq` entirely. `SendStream::write_buf` removed bytes from the
+caller's buffer and *then* awaited queue capacity, so dropping that future stranded the chunk: gone
+from the buffer, never queued, no error raised, the stream finishing cleanly **with a hole in the
+middle** that the peer decodes as a truncated or garbage frame
+([moq-dev/web-transport#323](https://github.com/moq-dev/web-transport/pull/323)). Callers hit it
+constantly rather than rarely, because the publisher races `write_all` against a priority-change
+channel that fires on every group boundary of every track while the outbound queue holds eight frames
+for a whole session — so on a link slower than the broadcast, the write is always parked and the cancel
+window is always open.
+
+**The trigger is egress backpressure, not WebSocket.** The fallback transport is only where this rig
+was slow enough to see it, which matters for reading §6: a client that abandons QUIC on a 200 ms timer
+lands on the transport where a corrupt frame was reachable. Both halves of the report closed with that
+fix — with the corrupt frames gone there was nothing left to be fatal about — so the resilience half
+was never addressed on its own terms. §2's audio work is the part of that argument that did land.
 
 ### Active/active source failover — shipped, bounded
 
@@ -344,13 +497,27 @@ hours, triggered by cluster peer churn. Fixed by
 [Architecture](../docs/architecture.md) §9.1: **relay monitoring must test liveness rather than
 process existence.**
 
-### A drill contributed back
+### A drill offered, and the coverage that landed instead
 
 The two method rules the redundancy work produced — grade beyond one full idle timeout, and never
-start a redundancy test's sources independently — are baked into the drill contributed upstream as
-[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`), which generates its own
-source clip so it depends on no private capture, grades failover and standby-join survival, and
-reports the join stall as a measured warning.
+start a redundancy test's sources independently — were baked into an end-to-end drill offered upstream
+as [#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`): two real relays, real
+publishers whose tracks the demuxer creates lazily, the QUIC idle timeout in the loop, and a
+load-bearing third subscriber that forces one relay to carry the broadcast via the other, without which
+the interesting case never arises. It generates its own source clip, so it depends on no private
+capture.
+
+**It was declined, and correctly**: upstream had by then covered the same behaviour with model unit
+tests, which run on every PR where a hand-run drill never does. The drill's value transferred anyway —
+run against the tree it reproduced our out-of-band numbers (resumption 14 s after killing the active
+publisher at a 10 s idle timeout, against ~11 s measured here, so detection dominates and the reselect
+itself is essentially free). What did land is
+[#2713](https://github.com/moq-dev/moq/pull/2713), which takes the drill's one load-bearing insight
+into those unit tests: every takeover, linger and reselect test subscribed to a *single* track, so
+nothing pinned that a reselect is decided and served **per track**. A broadcast contribution feed is
+multi-track by construction, and a takeover that re-splices video while audio silently stalls is a
+partial recovery a single-track test cannot tell from a whole one. Two tests, no production changes,
+with deliberately unequal group counts so the per-track resume boundaries differ.
 
 **Two of our four reports from that work were artefacts of our own harness**, and both are recorded
 with their method rules in [method-notes](method-notes.md) §1 and §5. That ratio is worth stating
@@ -425,11 +592,12 @@ as [#2730](https://github.com/moq-dev/moq/issues/2730).
 ### The empty namespace prefix — a specification inconsistency
 
 The subscriber opens discovery on an *empty* namespace prefix, which one relay rejects outright. The
-draft says a namespace of zero fields is a protocol violation, while the working group has stated it
-intends to allow an empty tuple for exactly this "give me everything" discovery case. **Neither
-implementation is wrong; the specification is**, and it is tracked as
-[moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457). Our contribution is
-a concrete interop data point for that issue.
+draft says a namespace of zero fields is a protocol violation, while the working group intends to allow
+an empty tuple for exactly this "give me everything" discovery case. **Neither implementation is wrong;
+the text they were built against is.** The working group settled that inconsistency in favour of the
+empty tuple in [moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457), which
+is closed — so this is now an implementation-convergence problem rather than an open specification
+question, and our contribution is a data point that the divergence outlived the resolution.
 
 ### A media-level interop profile — contributed
 
@@ -470,7 +638,123 @@ artefact of one implementation.**
 
 ---
 
-## 7. Documentation
+## 7. The carriage specification: MSFTS
+
+Almost everything above is about an *implementation*. `draft-gregoire-moq-msfts` is the other kind of
+target: it registers `m2ts` packaging in the MSF catalog, so it is where whole-transport-stream carriage
+is fixed for **anyone's** implementation rather than for one build. It was reviewed from a single
+declared position — a whole multiplex handed to a hardware IRD at the far end, the way SRT, Zixi and
+RIST carry it today — because a fidelity requirement means nothing without saying who is receiving.
+
+The review went in as [mondain/msfts#7](https://github.com/mondain/msfts/issues/7) and every point was
+turned into a self-contained draft change by the author. What the draft said, and what it says now:
+
+| Found | Changed |
+|---|---|
+| The per-programme retain list — nulls, a rewritten PAT, the selected PMT, the PIDs that PMT references — silently drops every SI table living on a fixed PID: NIT 0x0010, SDT/BAT 0x0011, EIT 0x0012, TDT/TOT 0x0014, and the ATSC PSIP equivalents. A publisher implementing it verbatim emits a stream with **no service identity, no EPG and no broadcast time** | [#11](https://github.com/mondain/msfts/pull/11) states the loss, adds retention guidance and an `m2tsSiPids` field declaring which SI PIDs survived |
+| Removing null packets is at the publisher's discretion, but it changes the byte distance between successive PCRs — which is what a CBR receiver uses to recover the mux clock, so a downstream device must re-derive a rate it was never told | [#10](https://github.com/mondain/msfts/pull/10) warns, and adds an advisory `m2tsMuxRate` |
+| Continuity counters and PIDs were *described* as remaining inside the carried packets. A description is not a prohibition, so a conforming publisher could rewrite either — both silent disqualifiers at an IRD, one breaking decode and the other breaking demultiplexing and conditional access | [#12](https://github.com/mondain/msfts/pull/12) makes both MUST NOT, and adds a non-normative note on inter-packet PCR timing |
+| No transparent whole-multiplex mode existed: a single-programme track was defined only as the *output of filtering* an MPTS | [#8](https://github.com/mondain/msfts/pull/8) adds `m2tsMpts`, named for its content rather than for publisher behaviour |
+| **Filtering an MPTS implies rewriting the SI, and that was unstated** ([#13](https://github.com/mondain/msfts/issues/13)) — a retained SDT or EIT carried verbatim out of a multiplex still advertises every programme in it, which is non-conformant for a derived single-programme track | [#19](https://github.com/mondain/msfts/pull/19) adds the rewrite requirement, closing the gap #11 left |
+| **A native SPTS had no first-class mode** ([#14](https://github.com/mondain/msfts/issues/14)) saying "this is already one programme; carry it unchanged". Applying the filter rules to it is unnecessary and harmful: no PAT rewrite is needed, and the rules guide a publisher to strip SI that was already correctly scoped | [#18](https://github.com/mondain/msfts/pull/18) adds verbatim single-programme carriage |
+
+### Three open, one of them answered in substance
+
+- **The 192-octet arrival-time prefix has no specified clock, units, bit layout or wrap behaviour**
+  ([#15](https://github.com/mondain/msfts/issues/15)). Two implementations therefore cannot
+  interoperate on its meaning, and a receiver cannot use it programmatically — which forfeits the one
+  thing it exists for: letting a downstream pacer reproduce the source's inter-packet timing, as a
+  timestamped-TS workflow does.
+- **`m2tsMuxRate` does not say who owns the clock**
+  ([#16](https://github.com/mondain/msfts/issues/16)). An egress should recover its output clock from
+  the carried PCR, which is authoritative, and treat the declared rate as a stuffing target rather than
+  a timing source; otherwise a reconstructed clock drifts against the carried PTS/DTS. The
+  188-versus-192-octet basis of the figure is also unstated. Both bite when the receiver is a device
+  locking a PLL to PCR.
+- **Null-packet removal is now declared, but not distinguishably**
+  ([#17](https://github.com/mondain/msfts/issues/17)). The required `m2tsModified` boolean added by
+  [#21](https://github.com/mondain/msfts/pull/21) tells a subscriber the publisher changed the stream,
+  with null-packet removal one of four things that sets it — so an egress deciding whether to re-stuff
+  to CBR no longer has to inspect, which is what the issue was filed for. It still cannot tell removal
+  apart from programme selection or a PAT rewrite. Open.
+
+**None of this is measurement, and the distinction matters.** The only `m2ts` carriage this campaign has
+run is a private loopback prototype ([T3](test-3-opaque-transparency.md)), and the public implementation
+strips nulls and derives an SPTS per programme — so *transparent* in a shipped `m2ts` publisher does not
+mean *byte-verbatim* either. What the review establishes is that the specification no longer permits the
+silent version of that.
+
+---
+
+## 8. What was asked for at the start, and what was withdrawn
+
+Four issues here are requirements rather than defects, filed in the campaign's first days before most
+of what is in this repository had been measured. **Three are now closed, and we closed all three
+ourselves.** That is a result rather than an admission: the asks were what a broadcaster assumes it
+needs, measurement said otherwise, and leaving three wrong requirements standing in someone else's
+backlog would have been the worse outcome.
+
+- **A broadcast contribution profile** ([#1799](https://github.com/moq-dev/moq/issues/1799)) — the
+  parent proposal, presenting media-aware and byte-opaque carriage as two options and asking for a
+  direction decision. Closed once its children resolved; the direction chosen is the lane this whole
+  campaign measures.
+- **An opaque, byte-verbatim TS lane** ([#1861](https://github.com/moq-dev/moq/issues/1861)) — filed on
+  the claim that *only* an opaque lane delivers contribution-grade fidelity, which was true of the lane
+  as it stood when filed and is not true now. Withdrawn on three grounds, and the middle one was the
+  surprise:
+  - #2440 carries the service layer, so of the gaps the issue listed only EIT was left — a much smaller
+    ask than a second lane, and filed as one.
+  - **The economics were backwards.** Byte-verbatim carriage looked like the neutral choice and
+    demux/re-mux the costly one. Measured over a WAN against SRT on the same path, the media-aware lane
+    puts **0.982×** the source TS rate on the wire where SRT puts **1.037×**, almost entirely because it
+    declines to carry null stuffing that a receiver regenerates locally for free
+    ([T9](test-9-performance.md), [T14](test-14-data-plane-comparison.md)). Verbatim carriage is exactly
+    what forgoes that saving.
+  - The one property still worth defending — two legs of a 1+1 pair being byte-identical, which
+    re-muxing obstructs twice over — was reached another way, by deriving every stream-position quantity
+    from the stream rather than from the process ([T12](test-12-dual-path-handoff.md)). So it is an
+    argument about how much machinery a redundant pair needs, not about which lane it can be built on.
+
+  What stays genuinely out of reach for a demux/re-mux lane is scrambled/CAS carriage and true MPTS.
+  Neither is measured here and neither is on this path, and both belong to an MSF-packaging discussion
+  (§7) rather than to an implementation's issue tracker.
+- **A generic TS egress sink with PCR-aware pacing** ([#1839](https://github.com/moq-dev/moq/issues/1839))
+  — UDP/RTP, FEC and ST 2022-7 outputs inside the tree. Half of it landed as a PTS-exposing export API
+  and PCR-paced SRT egress ([#1845](https://github.com/moq-dev/moq/pull/1845)), which is the pacing
+  primitive the request was really after. The rest was withdrawn: the maintainer declined an
+  import/export module per transport without a concrete customer ask, and the grooming stage does not
+  belong inside a transport library anyway. What replaced it is a transport-agnostic pacer with no moq
+  or QUIC dependency, for which a MoQ subscriber is merely one possible source
+  ([T13](test-13-downstream-grooming.md)).
+- **TR 101 290 monitoring requirements** ([#1838](https://github.com/moq-dev/moq/issues/1838)) —
+  **still open, and corrected rather than closed**, because the requirement is real while the issue as
+  filed aims half of it at the wrong stream. Three changes, and the third is the one worth having:
+  - **The PCR and mux-rate checks measure a stream no IRD ever sees**, and on a healthy chain they would
+    sit permanently in alarm: 0–26 % of PCR intervals at moq's egress exceed 40 ms depending on the clip,
+    and 1,523 of 1,524 PCRs fall outside ±500 ns ungroomed, against 0 % and 0 of 2,598 after grooming
+    ([T7](test-7-timing-integrity.md), [T13](test-13-downstream-grooming.md)). That is what object
+    delivery over a congestion-adaptive transport does to byte cadence, not a defect, and repairing it is
+    the groomer's job. Those checks belong out of scope on the moq side.
+  - **What grooming does not restore is the defensible egress list.** A CBR pacer shapes transmission
+    timing; it does not demux, rewrite PSI or touch continuity counters, so sync, PAT/PMT, continuity,
+    PID, transport-error, CRC and PTS faults seen at moq's egress are still true at the IRD.
+  - **TR 101 290 is blind to the worst failure this chain has.** A groomer asked only to hold a rate will
+    hold it against a dead upstream, emitting a byte-perfect CBR carrier — correct rate, valid TS,
+    PAT/PMT and accurate PCRs present — containing **no programme packets at all**, with every P1 and P2
+    check green; measured, an input-select receiver performed **zero** switches at every threshold from
+    50 to 500 ms ([T12](test-12-dual-path-handoff.md)). The requirement that answers it is
+    **programme-packet presence**, counting packets that are neither null *nor adaptation-field-only*,
+    because a groomer's own PCR insertions are neither null nor content and the naive version reads
+    healthy too.
+
+  At ingest the same issue leads with the wrong instrument for the same reason: after the resync fix, a
+  lost-sync importer emits a genuinely conformant stream (§2), so the highest-value ingest signals are
+  **moq-layer counters** — resyncs and bytes discarded, per track — surfaced alongside the ETSI list
+  rather than the ETSI list alone.
+
+---
+
+## 9. Documentation
 
 The upstream review of [#2830](https://github.com/moq-dev/moq/pull/2830) objected to a grooming recipe
 that invoked a tool with no supported installation path. That objection is what prompted

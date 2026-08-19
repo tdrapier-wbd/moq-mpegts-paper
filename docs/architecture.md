@@ -222,44 +222,53 @@ exactly where determinism is required (principle 4).
 This is the load-bearing evidence in the repository and it must be read with its domain attached.
 Full results and limits are in [Evidence](evidence.md) §3.2.
 
+Rows are ordered as a receiver meets them: what is delivered first, what the arithmetic says second.
+
 | | Measured | Domain |
 |---|---|---|
-| Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
+| Groomed, MoQ lane | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, at the ~1 s cushion the lane runs — and **unchanged at every cushion across an eightfold ladder**, and with groomer starvation removed altogether | **wire** |
+| Groomed, MoQ lane, live public-internet path | **0.06 %** of intervals above 40 ms — 8 gaps, 139 ms maximum *(one run)* | live chain, file-analysed |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
-| Groomed, MoQ lane | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, at the shallow cushion the lane runs | **wire** |
+| Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
 | Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors | **wire** |
 | Any lane | — | **hardware IRD: not run** |
 
 Three consequences follow and none of them is cosmetic.
 
-**File validation is optimistic, and the repository has always said so for P2.** Analysing a captured
-file checks PCR values against byte position and the nominal mux rate — it confirms the *arithmetic*
-of the re-stamp. It cannot capture the real-time behaviour that decides P1/P2 on hardware: the egress
-is produced by a software CBR pacer on a general-purpose OS and NIC, whose scheduling jitter is
-invisible in a re-captured file. PCR_accuracy in particular is a property of the wire timing at the
-physical output.
+**P1 PCR repetition is a measured failure as delivered, not a caveat, and no amount of buffer fixes
+it.** The groomer inherits the exporter's PCR spacing and delivers 131–159 intervals above 40 ms in 25 s.
+A stage that mints its own PCR schedule (a regenerating muxer) places PCRs freely and posts none; a
+pass-through stage that carries the exporter's inherits their spacing. That word "inherits" is exact and
+was tested: sweeping the cushion across eight times the depth, and separately removing groomer starvation
+entirely, moves the figure not at all, and the groomer reports `pcr_inserted=0`
+([Evidence](evidence.md) §3.2). **The MoQ lane is not P1-conformant on PCR repetition as delivered at any
+buffer depth**, the cause sits upstream of this architecture's edge gateway, and any claim of "0 %" that
+does not name the file domain is wrong.
 
-**The same caution applies to P1 PCR repetition, and there it is not a caution but a measured
-failure.** At the cushion the MoQ lane runs, the groomer inherits the exporter's PCR spacing and
-delivers 131–159 intervals above 40 ms in 25 s. A stage that mints its own PCR schedule (a
-regenerating muxer) places PCRs freely and posts none; a pass-through stage that carries the
-exporter's inherits their spacing. **The MoQ lane as currently configured is not P1-conformant on
-PCR repetition as delivered**, and any claim of "0 %" that does not name the file domain is wrong.
+**File validation is optimistic, which is why the two columns disagree.** Analysing a captured file
+checks PCR values against byte position and the nominal mux rate — it confirms the *arithmetic* of
+the re-stamp, and that is a precondition rather than a result. It cannot capture the real-time
+behaviour that decides P1/P2 on hardware: the egress is produced by a software CBR pacer on a
+general-purpose OS and NIC, whose scheduling jitter is invisible in a re-captured file. The
+repository has always said this of P2 PCR_accuracy, which is a property of wire timing at the
+physical output; the P1 result above is the same point, already measured rather than anticipated.
 
-**Buffer depth is what fixes it, and buffer depth is latency.** The segmented-HTTP arm reaches 0 on
-the wire by holding an 8 s cushion; the campaign's explanation is general — *what constrains PCR
-placement is not live operation but whether the stage always has a packet ready at the deadline*. So
-the choice for a pass-through groomer is: regenerate PCR (and lose the mux, per §4.1's tool grading),
-or hold enough buffer to always have a packet ready. **Where that point sits on the MoQ lane is
-unmeasured, and it is the open question in [Comparison](comparison.md) §5.1** — because if it is
-seconds, MoQ's latency advantage is spent by the stage that makes it presentable.
+**Buffer depth is what fixes it on the segmented plane, and it does nothing on the MoQ lane.** The
+segmented-HTTP arm reaches 0 on the wire by holding an 8 s cushion, which made *"the stage always has a
+packet ready at the deadline"* look like the general explanation. On the MoQ lane it is not the
+explanation: depth changes nothing there, because the exporter never hands the groomer a PCR-bearing
+packet near the deadline in the first place ([Evidence](evidence.md) §3.2). So the choice for a
+pass-through groomer on this lane is not buffer-versus-latency at all — it is **regenerate PCR (and lose
+the mux, per §4.1's tool grading), or fix the emission cadence upstream**. The architectural consequence
+is a good one: the edge gateway costs tens of milliseconds rather than seconds, and MoQ's latency
+advantage survives the stage that makes it presentable — measured at 109 ms across the public internet
+([Evidence](evidence.md) §3.11).
 
 > **The gate that decides this architecture.** A clean TR 101 290 P1/P2 pass on real hardware
 > decoders, sustained, including the ST 2022-7 determinism of §5.1 under loss. Until that evidence
 > exists, the grooming design is **structurally sound and file-validated, and measurably not
-> conformant on P1 PCR repetition on the wire at the depth currently run** — not "proven
-> broadcast-acceptable". This is the single most important validation for the whole architecture and
-> it has not been performed.
+> conformant on P1 PCR repetition on the wire at any depth** — not "proven broadcast-acceptable". This is
+> the single most important validation for the whole architecture and it has not been performed.
 
 ### 4.3 Correctness boundaries a groomer must handle, and which are untested
 
@@ -1018,11 +1027,15 @@ slips.
 Ranked by how much a negative answer would change the architecture.
 
 1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate. Grooming is
-   file-validated, structurally sound, and measurably not P1-conformant on PCR repetition on the wire
-   at the depth currently run. Not complete.
-2. **Does a MoQ chain stay sub-second while reaching P1 PCR repetition on the wire?** (§4.2,
-   [Comparison](comparison.md) §5.1.) The cheapest outstanding measurement and the one that decides
-   whether the transport choice has a rationale.
+   file-validated, structurally sound, and measurably not P1-conformant on PCR repetition on the wire —
+   at **every** depth, not merely the one currently run. Not complete.
+2. **Would a denser PCR emission cadence in the exporter clear the P1 repetition gate?** (§4.2,
+   [Comparison](comparison.md) §5.1.) This replaces "does the chain stay sub-second while conformant",
+   which is measured: it does stay sub-second — 109 ms across the public internet — and it is not
+   conformant, and the two are independent. Since the edge gateway inserts no PCRs of its own, the gate
+   can only be cleared upstream of it, which puts the highest-leverage remaining item outside this
+   architecture's control. It has been reported upstream with the measurements behind it
+   ([upstream contributions](../lab/upstream-contributions.md) §1).
 3. **Do the correctness boundaries in §4.3 hold?** Source-clock drift, PCR discontinuity and wrap,
    mid-stream PID change, and T-STD occupancy through the media-aware exporter. Named, never tested.
 4. **Does the 1+1 result survive two hosts, two clocks and multi-track content?** (§5.1.) Rate

@@ -31,6 +31,14 @@
 # FILTER_B replaces it on leg B alone, which is how the legs are made to diverge on purpose
 # (ts-stall.py stops one leg consuming until its budget expires).
 #
+# PUB_CHAIN replaces the publisher's `tsp` plugin chain, which by default only paces the file.
+# It is what lets the pair be graded on a stream carrying service information: an SI table is
+# emitted by the exporter from a snapshot its *own* subscription delivered, so a table whose
+# bytes advance — a clock above all — is a candidate for divergence that a static mux cannot
+# show. Pair `-P inject` with `-P timeref --start system` so each section is unique and true at
+# the moment it is sent; two legs emitting the same section then means they agree, rather than
+# meaning the source repeated itself.
+#
 # Usage: t12-armd-join-local.sh <moq> <moq-relay> <pacer-dir> <label> <source.ts> [join_s] [window_s] [rate_bps]
 
 set -euo pipefail
@@ -73,7 +81,26 @@ done
 [[ -r "$SRC" ]] || { echo "no such source: $SRC" >&2; exit 1; }
 
 rm -rf "$OUT"; mkdir -p "$OUT"
+
+# The dial-side flags were renamed `--client-*` -> `--connect-*` and the per-direction QUIC
+# knobs merged into one `--quic-*` set, so the relay's `--server-quic-gso` moved with them.
+# The rename is on `dev` and not on `main`, and a build from the middle of it accepted the old
+# names, warned, and applied nothing — which on macOS loopback leaves GSO on and the session
+# stalls with nothing logged. Detect the surface rather than assuming either.
+if "$MOQ" --connect https://localhost --help >/dev/null 2>&1; then
+	FLAGS_NEW=1
+	RELAY_GSO=(--quic-gso=false)
+else
+	FLAGS_NEW=0
+	RELAY_GSO=(--server-quic-gso=false)
+fi
+
+# Word-split deliberately: this is a tsp plugin chain, not one argument.
+# shellcheck disable=SC2206
+PUB_CHAIN_ARGS=(${PUB_CHAIN:--P regulate --pcr-synchronous})
+
 echo "==> $LABEL: $(basename "$MOQ"), src $(basename "$SRC"), join +${JOIN}s, window ${WINDOW}s, ${RATE} b/s"
+echo "==> flags $([[ $FLAGS_NEW == 1 ]] && echo '--connect-*' || echo '--client-*'), publisher chain: ${PUB_CHAIN_ARGS[*]}"
 
 PIDS=()
 cleanup() { for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; wait 2>/dev/null || true; }
@@ -117,15 +144,38 @@ sleep 1
 # RELAY_ARGS reaches the cache: retention is unbounded unless `--cache-duration` is set, and
 # with nothing ever expiring a leg that falls behind is never forced to skip. It is what
 # decides whether a stalled leg lags or loses media.
+# The config is copied out so a relay from a worktree build is not made to read, or to be
+# blamed for, whatever branch ~/moq-dev happens to be sitting on.
+cp ~/moq-dev/demo/relay/localhost.toml "$OUT/relay.toml"
+# `exec` so the recorded pid is the relay itself. Without it `$!` is the subshell, teardown
+# kills only that, and the relay survives to hold :4443 into the next run.
 # shellcheck disable=SC2086
-( cd ~/moq-dev && "$RELAY" demo/relay/localhost.toml --server-quic-gso=false ${RELAY_ARGS:-} ) >"$OUT/relay.log" 2>&1 &
-PIDS+=("$!")
+( cd "$OUT" && exec "$RELAY" relay.toml "${RELAY_GSO[@]}" ${RELAY_ARGS:-} ) >"$OUT/relay.log" 2>&1 &
+RELAY_PID="$!"
+PIDS+=("$RELAY_PID")
 for _ in $(seq 1 40); do
 	FP="$(curl -s http://localhost:4443/certificate.sha256 || true)"
 	[[ -n "$FP" ]] && break
 	sleep 0.25
 done
-[[ -n "${FP:-}" ]] || { echo "relay did not come up" >&2; exit 1; }
+[[ -n "${FP:-}" ]] || { echo "relay did not come up; see $OUT/relay.log" >&2; exit 1; }
+
+# A fingerprint proves *a* relay is on the port, not that it is ours. A previous run whose
+# teardown lost the process leaves one bound, this one fails with `Address already in use`,
+# and the fingerprint poll then succeeds against the survivor — so the run silently grades a
+# relay of unknown build and unknown remaining lifetime, and reads as a mid-run collapse when
+# the stranger exits. Refuse instead.
+if ! kill -0 "$RELAY_PID" 2>/dev/null; then
+	echo "our relay exited but :4443 answered: another relay holds the port." >&2
+	echo "  see $OUT/relay.log; clear it with pkill -f moq-relay" >&2
+	exit 1
+fi
+
+if [[ $FLAGS_NEW == 1 ]]; then
+	CONNECT=(--connect-tls-fingerprint "$FP" --connect https://localhost:4443 --quic-gso=false)
+else
+	CONNECT=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --client-quic-gso=false)
+fi
 
 BCAST_A="$BCAST"
 BCAST_B="${TWO_PUB:+${BCAST}b}"
@@ -136,8 +186,7 @@ export_ts() { # broadcast logfile
 	# run, so a run with no skip lines is one where the filter was demonstrably live, rather
 	# than one where the directive silently failed to match.
 	RUST_LOG="${RUST_LOG:-warn,moq_mux=debug}" \
-		"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$1" export ts --latency-max "$LATENCY_MAX" 2>>"$2"
+		"$MOQ" "${CONNECT[@]}" --broadcast "$1" export ts --latency-max "$LATENCY_MAX" 2>>"$2"
 }
 
 # SC2094: every stage appends to the one log; none of them reads it.
@@ -159,8 +208,7 @@ leg() { # rtp_port broadcast logfile [filter]
 }
 
 publish() { # fifo broadcast logfile
-	"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$2" import ts <"$1" >"$3" 2>&1
+	"$MOQ" "${CONNECT[@]}" --broadcast "$2" import ts <"$1" >"$3" 2>&1
 }
 
 leg "$PORT_A" "$BCAST_A" "$OUT/leg-a.log" "${FILTER:-}" &
@@ -175,13 +223,12 @@ if [[ -n "${TWO_PUB:-}" ]]; then
 	PIDS+=("$!")
 	publish "$OUT/fb" "$BCAST_B" "$OUT/pub-b.log" &
 	PIDS+=("$!")
-	tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
+	tsp -I file "$SRC" --infinite "${PUB_CHAIN_ARGS[@]}" -O file - 2>/dev/null |
 		tee "$OUT/fa" >"$OUT/fb" &
 	PIDS+=("$!")
 else
-	tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
-		"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-			--client-quic-gso=false --broadcast "$BCAST" import ts >"$OUT/pub.log" 2>&1 &
+	tsp -I file "$SRC" --infinite "${PUB_CHAIN_ARGS[@]}" -O file - 2>"$OUT/tsp.log" |
+		"$MOQ" "${CONNECT[@]}" --broadcast "$BCAST" import ts >"$OUT/pub.log" 2>&1 &
 	PIDS+=("$!")
 fi
 

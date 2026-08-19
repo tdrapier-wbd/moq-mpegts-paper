@@ -484,11 +484,14 @@ The relay's own switch is immediate (relay B logs `subscribe started` for all th
 millisecond the standby connects). *Rule: any redundancy test whose sources are started independently
 measures its own clock skew unless the feeds are timestamp-aligned.*
 
-Both rules are baked into the drill contributed upstream as
+Both rules are baked into the drill offered upstream as
 [#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`), which generates its own
 `ffmpeg` source clip (no private capture), grades failover and standby-join survival, reports the join
 stall as a measured `WARN`, and depends on `moq --origin` from #2473 (exiting with a diagnostic on
-builds without it).
+builds without it). It was declined in favour of model unit tests that run on every PR;
+[#2713](https://github.com/moq-dev/moq/pull/2713) carried its one load-bearing insight — that a
+reselect must be graded *per track* — into those tests instead. See
+[upstream-contributions.md](upstream-contributions.md) §3.
 
 ## Observations
 
