@@ -19,7 +19,9 @@ figure is *file* and the corresponding *wire* figure differs, both are given.
 
 **Evidence measured against unmerged upstream code is marked `[unmerged]`.** It is the measurement of
 a proposed fix, not of shipped behaviour, and one such fix in this campaign merged in a materially
-different form after review — changing its own result. Do not plan against these.
+different form after review — changing its own result. Do not plan against these. `[dev]` marks the
+weaker case: merged, but onto a development branch that has not converged with the release line, so the
+behaviour is settled while the version carrying it is not.
 
 **Single-run results are marked as such.** Several matrices below are one run per cell. They
 establish mechanism and ordering; they do not establish distributions.
@@ -42,8 +44,8 @@ Results come from four code bases and it matters which produced which.
 | Wire version exercised | moq-lite-04/05 | `moq-transport` draft-14 |
 | Elementary streams, original PIDs, SCTE-35 | preserved | preserved verbatim |
 | Service layer (SDT/NIT, PMT PID, TSID/ONID) | preserved | preserved verbatim |
-| EIT | round-trips section-for-section `[unmerged]` | preserved verbatim |
-| TDT/TOT | **not preserved, by design; nothing regenerates it** | preserved verbatim |
+| EIT | round-trips section-for-section | preserved verbatim |
+| TDT/TOT | carried, but **re-emitted on the exporter's own 30 s grid, so the clock arrives ~14 s late** | preserved verbatim |
 | CBR and PCR cadence | restored downstream by `mpegts-pacer` | preserved end to end by the prototype's own pacer |
 | Public-internet operation | yes | **no** |
 | Congestion controller | BBR (explicit) | quinn default (CUBIC) |
@@ -132,8 +134,8 @@ three SCTE-35 splice PIDs** with program-level CUEI registration. 0 continuity e
 errors. The DVB service layer — SDT service name, provider and type, NIT, PMT PID, TSID, ONID — is
 threaded through the catalog and preserved.
 
-**EIT round-trips, including the hard case** `[unmerged]` ([T17](../lab/test-17-si-snapshot-tracks.md)).
-Measured against an open upstream pull request carrying SI on per-table snapshot tracks, across four
+**EIT round-trips, including the hard case** `[dev]` ([T17](../lab/test-17-si-snapshot-tracks.md)).
+Measured against the upstream change carrying SI on per-table snapshot tracks, since merged, across four
 sub-tables of an 8-day EPG, the set of distinct sections on the egress equals the source's exactly —
 none missing, none added, sizes and `last_section_number` preserved — against **zero EIT packets on
 the same fixture from the merge base**.
@@ -156,23 +158,28 @@ track. An 8-day EPG is 29,912 B across four snapshot tracks per service, so a 40
 puts ~1.1 MiB across 160 tracks in front of the first TS packet: bounded, and bounded by the EPG's
 size.
 
-**One liveness risk comes with that design.** Export opens its output once every SI entry either
-holds a snapshot or has reached a terminal state, and terminal *failure* is handled deliberately. A
-track that neither succeeds nor fails is not covered: it leaves the gate shut and the exporter emits
-**no TS at all, media included**. Before SI moved to its own tracks it lived in the catalog and could
-not independently gate media.
+**That design carried a liveness risk, and measuring the join is what removed it.** As proposed, export
+opened its output only once every SI entry either held a snapshot or had reached a terminal state, so an
+entry that neither succeeded nor failed emitted **no TS at all, media included**. Because the join
+measurement showed the subscriptions resolving inside the first poll, the gate was deleted rather than
+given a timeout: nothing in SI is something a stream cannot begin without, since PAT and PMT are built
+locally and a receiver acquires the service layer mid-stream by design.
 
-**The one named residual is the clock.** TDT/TOT is not carried, by design, and nothing regenerates
-it downstream, so the egress carries no time table at all (measured: 0 packets on PID 0x0014). This
-matters more now that the EPG survives, because EIT event times are absolute UTC and a receiver with
-no wall clock has nothing to place the schedule against. Two findings bound the design argument.
-The incumbent tunnels **proxy** the clock and are right to: RIST and SRT forward TDT with inter-section
-gaps matching a no-transport control to two decimal places, because a constant-delay pipe that never
-repeats a section is late by its path and by nothing else ([T15](../lab/test-15-point-to-point-cadence.md)).
-But a stage that rebuilds the multiplex and re-emits SI on its own cadence is a different machine,
-and a clock synthesised from the host would misplace every EIT event by the offset between the two
-time bases. **The defensible design anchors on the source's time and advances it locally**, which is
-neither pure forwarding nor pure synthesis.
+**The clock is carried, and the residual is now its timing rather than its absence.** TDT/TOT is proxied
+from the source, and TOT's `local_time_offset` descriptors — DST transition dates and per-country
+offsets, which are operator policy rather than time — arrive byte-identical. That settles a design
+question the alternative could not have: a clock synthesised at the edge would misplace every EIT event
+by the offset between the two time bases, because EIT event times are absolute UTC and only the source's
+own clock stays coherent with the schedule it accompanies.
+
+What proxying does not fix is *when* the clock is emitted, and the two classes of stage differ sharply
+here. The incumbent tunnels forward each tick: RIST and SRT deliver TDT with inter-section gaps matching
+a no-transport control to two decimal places, because a constant-delay pipe is late by its path and by
+nothing else. A stage that rebuilds the multiplex stores a section and re-emits it on its own grid, so
+it is late by however long it held one — measured at **~14 s against a source true to 0.5 s** — and when
+the source ticks slower than that grid it re-sends a time it has already asserted, stepping a trusting
+receiver's clock *backwards* ([T15](../lab/test-15-point-to-point-cadence.md) measurement 4). The fix is
+narrow and upstream: treat the interval as a floor on repetition and emit when the value changes.
 
 **Real feeds broke naive import, and the gaps closed upstream.** Three defects, each measured before
 and after the fix:
@@ -795,9 +802,11 @@ reorders. The congestion-control experiment proper has one of six conditions run
 **Resource figures are loopback rigs** with subscribers co-resident with the relay, on a 2-vCPU
 instance, so they price neither the NIC nor congestion control doing real work.
 
-**Three results rest on unmerged upstream code**: EIT snapshot-track carriage, and two of the three
-exporter-determinism fixes. One fix in this campaign merged in a materially different form after
-review and changed its own result, which is the argument for the `[unmerged]` label.
+**Some results rest on upstream code that is not on the release line.** Two of the three
+exporter-determinism fixes are still unmerged; the SI carriage results — EIT, and the clock — are merged
+onto a development branch that has not converged with `main`, so the behaviour is settled while the
+version carrying it is not. One fix in this campaign merged in a materially different form after review
+and changed its own result, which is the argument for labelling both cases rather than neither.
 
 **No production relay cluster, and no federated mesh.** The resilience work is a two-relay lab.
 

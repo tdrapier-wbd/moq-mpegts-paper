@@ -84,35 +84,46 @@ question is settled in favour of tracks and implemented in
 ([T17](test-17-si-snapshot-tracks.md)) — including the sparse-schedule case that cannot be validated
 by counting sections.
 
-### TDT/TOT — open, and the argument moved
+### TDT/TOT — carriage closed, emission timing open
 
-Reported as [#2914](https://github.com/moq-dev/moq/issues/2914). The exclusion is deliberate and
-correctly argued upstream — a clock is not state, and an upstream multiplexer's time carries unknown
-delay — but nothing regenerates it downstream either, so the egress carries no time table at all.
+Reported as [#2914](https://github.com/moq-dev/moq/issues/2914), where the exclusion was deliberate and
+defended on the ground that a clock is not state and an upstream multiplexer's time carries unknown
+delay. Two findings from this campaign moved the argument, and one of them corrects a position this
+repository had itself supplied upstream:
 
-Two findings from this campaign bound the design argument, and one of them corrects our own earlier
-position:
-
-- **The incumbent tunnels proxy the clock and are right to.** RIST and SRT forward TDT with
-  inter-section gaps matching a no-transport control to two decimal places
-  ([T15](test-15-point-to-point-cadence.md)), because a constant-delay pipe that never repeats a
-  section is late by its path and by nothing else. That is a property of *that class of machine*, not
-  an argument about time tables, and it does not transfer to a stage that re-emits SI on a cadence of
-  its own.
 - **A clock synthesised from the host would break the EPG that now survives.** EIT event times are
   absolute UTC, so a clock and the schedule read against it must share one time base. Relaying EIT
   verbatim while minting TDT locally misplaces every event by the offset between the two clocks.
+- **TOT carries policy, not merely time.** DST transition dates and per-country offsets are the
+  operator's, and no exporter has a basis on which to invent them.
 
-So the defensible design anchors on the source's time and advances it locally — neither pure
-forwarding nor pure synthesis.
+Both tables are now proxied from the source, on a latest-value slot that also removed the content-hash
+identity a clock-like table would have churned through. Measured on the result: the tables arrive and
+TOT's descriptors are byte-identical to the source's.
 
-### A liveness risk introduced by the fix — open
+**What the fix did not settle is emission timing**, and this is the difference between the two classes of
+stage. A constant-delay tunnel forwards each tick — RIST and SRT deliver TDT with inter-section gaps
+matching a no-transport control to two decimal places ([T15](test-15-point-to-point-cadence.md)). A stage
+that rebuilds the multiplex re-emits a stored section on its own grid, so it is late by however long it
+held one (~14 s against a source true to half a second) and, below that grid's rate, re-sends a time it
+has already asserted — stepping a trusting receiver's clock backwards. Filed as
+[#2934](https://github.com/moq-dev/moq/issues/2934) with the narrow fix: treat the interval as a floor on
+repetition and emit on change.
 
-Export opens its output once every SI entry either holds a snapshot or has reached a terminal state,
-and terminal *failure* is handled deliberately: the track logs and keeps its last snapshot rather than
-killing the mux. **A track that neither succeeds nor fails is not covered.** It leaves the gate shut
-and the exporter emits no TS at all, media included, with nothing logged past the subscribe attempt.
-Before SI moved to its own tracks it lived in the catalog and could not independently gate media.
+### A liveness risk introduced by the fix — closed by deleting the gate
+
+As proposed, export opened its output only once every SI entry either held a snapshot or had reached a
+terminal state. Terminal *failure* was handled deliberately: the track logged and kept its last snapshot
+rather than killing the mux. **A track that neither succeeded nor failed was not covered**, leaving the
+gate shut and the exporter emitting no TS at all, media included, with nothing logged past the subscribe
+attempt. Before SI moved to its own tracks it lived in the catalog and could not independently gate media.
+
+The first fix bounded the wait; the second removed the gate entirely, which is the better answer and the
+one the join measurement supports. Nothing in SI is something a stream cannot begin without: PAT and PMT
+are built locally, a receiver acquires the service layer mid-stream by design, and an entry resolving
+late is indistinguishable from tuning in just before an SDT repetition. Any gate lets one stale announce
+hold the programme dark, and no timeout constant makes that trade principled — while the measured 15 ms
+time-to-first-byte means the healthy case still leads with its tables, it simply no longer promises to.
 
 ---
 

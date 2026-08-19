@@ -611,19 +611,21 @@ endpoint forces the fallback."**
 Measured ([Evidence](evidence.md) §3.1): every elementary stream, PID, `stream_type`, PMT descriptor
 and SCTE-35 splice PID round-trips intact; the DVB service layer — SDT service name, provider and
 type, NIT, PMT PID, TSID, ONID — is threaded through the catalog; and EIT, schedule included,
-round-trips section-for-section on an open upstream pull request that gives each table its own
-snapshot track.
+round-trips section-for-section, each table on its own snapshot track.
 
-**What the lane must regenerate rather than relay is the clock.** TDT/TOT is dropped by design, on
-the argument that an exporter mints wall time more accurately than it relays it. That argument is
-weaker than it looks, and this repository supplied the weak version of it: the incumbent tunnels
-forward TDT verbatim with no variance added, because a constant-delay pipe that never repeats a
-section is late by its path and by nothing else. But a stage that rebuilds the multiplex and re-emits
-SI on its own cadence is a different machine, and for that class the correct answer is neither pure
-forwarding nor pure synthesis — it is to anchor on the source's time and advance it locally. **Today
-nothing regenerates it downstream either, so the egress carries no time table at all**, which matters
-more now that the EPG survives: a receiver with no wall clock has nothing to place the schedule
-against ([Evidence](evidence.md) §3.1).
+**The clock is relayed rather than regenerated, and the residual is its timing.** The lane once dropped
+TDT/TOT on the argument that an exporter mints wall time more accurately than it relays it; that
+argument does not survive contact with the EPG, because EIT event times are absolute UTC and only the
+source's own clock stays coherent with the schedule it accompanies — and because TOT carries DST
+transition dates and per-country offsets that are operator policy, not time. Both tables are now
+proxied from the source, descriptors intact.
+
+What relaying does not settle is *when* the clock reaches the wire. A constant-delay tunnel forwards
+every tick and is late by its path alone. A stage that rebuilds the multiplex holds the newest section
+and re-emits it on its own grid, so it is late by however long it held one — **~14 s, against a source
+true to half a second** — and where the source ticks slower than that grid it re-sends a time it has
+already asserted, which steps a trusting receiver's clock backwards. That is an emission-timing fix, not
+a carriage one ([Evidence](evidence.md) §3.1).
 
 Two further residuals are observability rather than carriage. A stream recovered from an audio
 frame-sync error is **signalled nowhere** — no continuity error, no discontinuity indicator, no
@@ -1002,7 +1004,7 @@ slips.
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
 | Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | Inherits the source's PCR spacing, so wire-domain PCR repetition depends on buffer depth (§4.2) |
 | Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Byte-identity demonstrated for single-track content on one host only; rate coherence across independent clocks untested |
-| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default does not relay TDT/TOT, so the edge must mint wall time |
+| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
 | Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane; relays are not yet interchangeable *between* implementations |
 | Out-of-band, non-fate-sharing control plane (§1.1, [Control](control-plane.md)) | Data plane survives control-plane outages | Revocation needs a token backstop, not just a live signal |

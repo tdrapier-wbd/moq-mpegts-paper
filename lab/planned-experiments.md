@@ -232,11 +232,15 @@ What remains open:
 
 - **A lossy path.** In a sparse table a lost section and a skipped section number are
   indistinguishable, so a section lost before the cycle wraps should yield a snapshot quietly missing a
-  segment. That is reasoned, not measured; it wants a drop injected on the SI PID.
-- **The unbounded gate.** An SI track that neither succeeds nor fails holds all output indefinitely.
-  Reproducing it needs a stale announce naming a track that will not resolve, which is a rig in itself.
+  segment. That is reasoned, not measured; it wants a drop injected on the SI PID. Upstream has since
+  fixed a related defect by merging same-version sections rather than replacing them, so this arm is now
+  confirmation of a fix rather than the adjudication of an open question.
 - **Multi-service.** The 40-service figures are scaled from one service, not measured on an MPTS.
-- **TDT/TOT regeneration**, which nothing currently does, leaving the egress with no time table.
+- **The clock's emission timing.** Carriage is settled — TDT/TOT is proxied from the source and TOT's
+  descriptors survive byte-for-byte — but the exporter re-emits a stored section on its own 30 s timer,
+  so the delivered clock is ~14 s late and repeats a time it has already asserted when the source ticks
+  slower than the timer ([T15](test-15-point-to-point-cadence.md) measurement 4). Measured on a clean
+  loopback path only; what a lost snapshot group does to it is untested.
 
 ---
 

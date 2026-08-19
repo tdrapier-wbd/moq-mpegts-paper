@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Round-trip an EIT-bearing TS through the media-aware lane and report which SI survives.
 #
-# Answers the one question the code review could only infer: `import.rs` intercepts exactly
-# the PIDs in `catalog::SI_PIDS` (NIT 0x0010, SDT/BAT 0x0011) and everything else falls
-# through to the PES reader, so EIT (0x0012) and TDT/TOT (0x0014) should be dropped at the
-# gate. This measures it instead of reading it.
+# Answers what the code review could only infer: which PIDs `import.rs` intercepts, and what
+# reaches the far end. `catalog::SI_PIDS` has grown from NIT and SDT/BAT alone to include EIT
+# (0x0012, upstream #2909) and TDT/TOT (0x0014, #2929), so the expected result depends on the
+# build under test and this measures it rather than asserting it. On a build carrying both,
+# every SI PID above should survive; on an older one, only 0x0010 and 0x0011.
 #
 # Input is the synthetic fixture from make-eit-fixture.sh, because no capture we hold
 # carries EIT.

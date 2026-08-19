@@ -18,10 +18,11 @@ instead. Whether that rule reconstructs the table faithfully is an empirical que
 Two things follow that are worth measuring rather than asserting:
 
 1. **Does EIT round-trip, schedule included, section for section?**
-2. **What does the service layer cost a joining receiver?** Export holds *all* output — tables and
-   media alike — until every SI entry the catalog names has reduced its first snapshot, so SI moves
-   off the join *bandwidth* path and onto the join *blocking* path. The size of an EPG makes that
-   worth pricing: a full DVB planning horizon is eight days.
+2. **What does the service layer cost a joining receiver?** In the design as proposed, export held
+   *all* output — tables and media alike — until every SI entry the catalog named had reduced its first
+   snapshot, so SI moved off the join *bandwidth* path and onto the join *blocking* path. The size of an
+   EPG makes that worth pricing: a full DVB planning horizon is eight days. The measurement is what
+   retired the gate rather than tuning it (conclusion 4).
 
 ### Pass criteria (fixed before the runs)
 
@@ -213,41 +214,45 @@ before the cycle wraps yields a committed generation quietly missing a segment. 
 algorithm can do better — that is what sparseness costs — but it bounds how strong a fidelity
 guarantee this carriage can claim.
 
-**TDT/TOT is carried by neither side, by design on one and by omission on the other**, and the
-egress has no time table at all (measured: 0 packets on 0x0014). A DVB receiver behind `export ts`
-therefore has no clock, which grows more visible as the EPG survives, since a schedule needs a clock
-to be placed against. Reported upstream as [#2914](https://github.com/moq-dev/moq/issues/2914).
+**TDT/TOT was carried by neither side when this ran** — by design on the importer, by omission
+downstream — so the egress had no time table at all (measured: 0 packets on 0x0014), leaving a DVB
+receiver behind `export ts` with an EPG and no clock to place it against. Reported as
+[#2914](https://github.com/moq-dev/moq/issues/2914) and **since fixed upstream**: `export ts` proxies
+the source's time tables on a latest-value SI slot, and both TDT and TOT now reach the egress with
+TOT's `local_time_offset` descriptors byte-identical to the source's.
 
-The *reason* for the exclusion is weaker than it first appeared, and this lab supplied the weak
-version of it. Two findings since:
+Two arguments decided it against synthesis, and the second is the one that generalises:
 
-- **The incumbents proxy the clock and are right to.** RIST and SRT forward TDT verbatim with no
-  variance added ([T15](test-15-point-to-point-cadence.md) measurement 4), because a constant-delay
-  pipe that never repeats a section is late by its path and by nothing else. That is a property of
-  that class of machine, not an argument about time tables, and it does not transfer to a stage that
-  re-emits SI on a cadence of its own.
 - **A clock synthesised from the host would break the EPG this test just validated.** EIT event times
   are absolute UTC, so a clock and the schedule read against it must share one time base — which is
   why TSDuck's `timeref` shifts EIT event times alongside the tables it re-stamps. Relaying EIT
   verbatim while minting TDT locally misplaces every event by the offset between the two clocks.
+- **TOT carries policy, not just time.** DST transition dates and per-country offsets are the
+  operator's, and an exporter has no basis on which to invent them.
 
-So the defensible design anchors on the source's time and advances it locally, which is neither pure
-forwarding nor pure synthesis, and is what `timeref --start` does.
+Proxying is necessary but, for this class of stage, not sufficient. A remultiplexer stores a section
+and re-emits it on its own timer, so the clock it delivers is late by however long it held one:
+[T15](test-15-point-to-point-cadence.md) measurement 4 puts that at ~14 s against a source true to
+under a second, and shows the exporter repeating a time it has already asserted whenever the source
+ticks slower than the timer. The remaining work is emission timing, not carriage.
 
 ## Conclusions
 
 1. **EIT carriage works, and the hard case works.** The sparse EIT schedule — the part that cannot be
    validated by section counting, and the part reading the code left open — round-trips with every
    section intact across four sub-tables, against zero on the merge base.
-2. **The service layer is no longer the reason an MPEG-TS hand-off is lossy.** With NIT, SDT and now
-   EIT surviving, the remaining named gap in the DVB service layer over this lane is TDT/TOT, and the
-   right fix there is local regeneration rather than carriage.
+2. **The service layer is no longer the reason an MPEG-TS hand-off is lossy.** NIT, SDT, EIT and — since
+   #2929 — TDT/TOT all survive, so the DVB service layer has no carriage gap left over this lane. What
+   remains is a timing question about one of them: the clock arrives, later than the source sent it.
 3. **Neither cost that theory predicted is material.** Carriage is bitrate-neutral (0.985×) and the
    join gate costs 1 ms for four extra tracks. Both concerns were priced rather than argued, and both
    came out smaller than they went in.
-4. **The residual risk is liveness, not latency.** An SI track that neither succeeds nor fails holds
-   all output. This is worth a bounded gate upstream, and it is the one finding from this experiment
-   that asks for a code change.
+4. **The residual risk was liveness, not latency, and it was removed rather than bounded.** An SI track
+   that neither succeeded nor failed held all output. Upstream first bounded the wait and then deleted
+   the gate outright, on the ground that nothing in SI is something a stream cannot begin without: the
+   PAT and PMT are built locally, and a receiver acquires the service layer mid-stream by design. The
+   join measurement above is what made that safe to do — the subscriptions resolve within the first
+   poll, so the healthy case still leads the stream, it just no longer promises to.
 
 ## Corrections
 
