@@ -618,13 +618,25 @@ alongside the negotiated draft — because the client abandons QUIC for a WebSoc
 200 ms timer, so **any relay much further away than that is silently carried over TCP**, and the
 transport under test is not the one you think.
 
-### A flag-alias regression — reported
+### A flag-alias regression — reported, fixed, verified, closed
 
-Dial-side flags renamed on the development branch warn and then do not take effect: isolated one at a
-time, both the connect flag and a QUIC tuning flag fail independently, and in each case the warning
-fires naming the correct replacement, so the alias is parsed and only the propagation is missing.
-Reported as [#2913](https://github.com/moq-dev/moq/issues/2913). Found only because a merge-base
-control was run ([method-notes](method-notes.md) §1).
+Dial-side flags renamed on the development branch warned and then did not take effect: isolated one at a
+time, both the connect flag and a QUIC tuning flag failed independently, and in each case the warning
+fired naming the correct replacement, so the alias was parsed and only the propagation was missing.
+Reported as [#2913](https://github.com/moq-dev/moq/issues/2913). Found only because a merge-base control
+was run ([method-notes](method-notes.md) §1).
+
+**Fixed on the development branch, verified from this rig, and closed.** Both the client and the relay
+now reject the renamed settings outright and print the mapping instead of warning and applying nothing.
+The report argued that a hard error is *strictly better* than the compatibility shim rather than merely
+different, and that is the form the fix took: the failure mode being replaced was invisible — GSO stayed
+on, the session stalled on macOS loopback, and nothing was logged — so a shim that warns and no-ops is
+worse than no shim, because every existing script keeps running and stops working.
+
+One consequence outlives the fix. The relay's `--server-quic-gso` moved to `--quic-gso` in the same
+rename, so a rig that updates only the client half still fails at the relay, and the two named branches
+disagree about which spelling is correct. Scripts written since detect the surface (`moq --connect …
+--help`) rather than assuming either.
 
 ### Corroboration from an independent stack
 

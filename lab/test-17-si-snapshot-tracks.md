@@ -282,4 +282,5 @@ ticks slower than the timer. The remaining work is emission timing, not carriage
   missing. The base behaved identically, which is what exposed the rig rather than the PR. The method
   rule is pass criterion 5, and it earned its place: **run the control before believing a striking
   result, not after.** Both rigs now detect the flag surface instead of assuming one. Reported upstream
-  as [#2913](https://github.com/moq-dev/moq/issues/2913).
+  as [#2913](https://github.com/moq-dev/moq/issues/2913), and since fixed: the renamed settings are now
+  rejected outright with the mapping printed, rather than warned about and ignored.
