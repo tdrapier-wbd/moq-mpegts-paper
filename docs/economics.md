@@ -279,10 +279,15 @@ whether the far end needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
-| MoQ, media-aware | 0.982 *(measured; 0.973 with MTU discovery)* | sub-second **capability; unmeasured end to end** | relay fans out; last mile is N unicast copies | IETF draft, open implementations — but carriage **fails against every third-party relay** ([Evidence](evidence.md) §3.7) |
-| SRT | 1.037 *(measured, same path)* | sub-second | no native fan-out; N sessions or a re-origination tier | published spec, open source |
-| Zixi | ~1.03 *(estimated)* | sub-second | broadcaster fans out | proprietary, per-GB licence |
-| HLS with TS / DVB-DASH | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, ETSI TS 103 285 — **not standards-track, yet universally interoperable** |
+| MoQ, media-aware | 0.982 *(measured; 0.973 with MTU discovery)* | **109 ms** *(measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations — but carriage **fails against every third-party relay** ([Evidence](evidence.md) §3.7) |
+| SRT | 1.037 *(measured, same path)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
+| Zixi | ~1.03 *(estimated)* | sub-second *(vendor claim, not measured here)* | broadcaster fans out | proprietary, per-GB licence |
+| HLS with TS / DVB-DASH | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, ETSI TS 103 285 — **not standards-track, yet universally interoperable** |
+
+*The latency column is source-to-groomed-egress over the public internet from a common EC2 origin, each
+plane at its shallowest runnable groomer cushion, and it carries an important non-economic condition:
+the MoQ figure is not TR 101 290 P1-conformant on PCR repetition where the other two are
+([Evidence](evidence.md) §3.11). It is a delivery figure, not camera-to-display.*
 
 **No option breaks the linearity, and the common intuition that HTTP caching does is wrong.** A CDN
 edge cache fetches a segment once and serves it to N receivers over N unicast connections; a relay

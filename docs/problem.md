@@ -47,14 +47,14 @@ counterparty contractually accountable when it does — hence long sales cycles,
 incumbents that stay sticky well beyond the point where a challenger is technically competitive.
 
 **§1.4 — The topology is one-to-many but not internet-scale.** A national feed may fan out to tens or
-low hundreds of endpoints, not millions, so the properties that make a transport excellent at
-consumer-scale fan-out are not automatically the ones that matter here.
+hundreds of endpoints, sometimes low thousands, not millions, so the properties that make a transport
+excellent at consumer-scale fan-out are not automatically the ones that matter here.
 
 **§1.5 — A distributor no longer supplies its clients' receiving equipment.** This one is newer and
-decides more than it looks (*established*). The era of shipping a PowerVu or an XOS receiver
-to every affiliate is over — the receive estate is the client's capex and the client's choice. What
-survives from that era is the *contract*: a conformant transport stream, correctly paced, over ASI or
-IP, at an agreed demarcation point. This is developed in [Comparison](comparison.md) §4.1, where it
+decides more than it looks (*established*). The era of shipping an IRD to every affiliate is over — the
+receive estate is the client's capex and the client's choice. What survives from that era is the
+*contract*: a conformant transport stream, correctly paced, over ASI or IP, at an agreed demarcation
+point. This is developed in [Comparison](comparison.md) §4.1, where it
 turns out to determine which side of the demarcation the expensive engineering falls on.
 
 ---
@@ -173,10 +173,10 @@ chosen** — which is the observation the rest of this repository turns out to b
 
 | # | Requirement | Why | Where it is assessed |
 |---|---|---|---|
-| **R1** | **Bounded, stable latency.** Sub-second is desirable; for most primary distribution a few seconds is tolerable — but the budget must be bounded and stable, because a drifting buffer is itself a fault for downstream playout and ad insertion. "Tolerable" has to be answered per route, not once: a geostationary path delivers a fraction of a second, and a 2–5 s replacement consumes most of a downstream budget that was previously free, at every destination. | §1.1, §1.2 | [Comparison](comparison.md) §5 |
+| **R1** | **Bounded, stable latency.** Sub-second is desirable; for most primary distribution a few seconds is tolerable — but the budget must be bounded and stable, because a drifting buffer is itself a fault for downstream playout and ad insertion. "Tolerable" has to be answered per route, not once: a geostationary path delivers a fraction of a second, and a 2–5 s replacement consumes most of a downstream budget that was previously free, at every destination. | §1.1, §1.2 | [Comparison](comparison.md) §5, [Evidence](evidence.md) §3.11 |
 | **R2** | **Graceful behaviour under loss and congestion.** The transport must degrade predictably rather than stall, and must not convert a single lost packet into a multi-second gap. | §2 (best-effort substrate) | [Comparison](comparison.md) §3, [Evidence](evidence.md) §3.3 |
 | **R3** | **Faithful carriage of MPEG-2 transport streams.** Service identity (SDT), programme structure (PMT PIDs), SCTE-35 splice signalling, teletext/subtitling and continuity must survive transit intact. A transport that silently discards or reorders these is unusable for the installed base regardless of its performance. | §1.2 | [Comparison](comparison.md) §8, [Evidence](evidence.md) §3.1 |
-| **R4** | **A fan-out model.** One-to-many to tens or low hundreds of endpoints, without publisher-side replication or a per-endpoint tunnel the operator must run. | §1.4 | [Comparison](comparison.md) §2 |
+| **R4** | **A fan-out model.** One-to-many to tens or hundreds of endpoints, sometimes low thousands, without publisher-side replication or a per-endpoint tunnel the operator must run. | §1.4 | [Comparison](comparison.md) §2 |
 | **R5** | **IRD-conformant egress.** A conformant MPEG-2 transport stream over the supported interface (RTP/UDP, frequently multicast), TR 101 290 P1/P2 conformant — above all conformant PCR timing — with stable service signalling and, where the facility uses it, ST 2022-7 dual-path input. **No Internet-native transport delivers this without an edge stage**, and because the distributor does not supply the receiver, that stage sits on the distributor's side of the demarcation. | §1.2, §1.5 | [Architecture](architecture.md) §4, [Evidence](evidence.md) §3.2 |
 | **R6** | **Engineered redundancy meeting "no visible failure during contracted content".** In practice 1+1 with hitless selection at the receiver, because that is what the installed base already implements. | §1.1 | [Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4 |
 | **R7** | **Dynamic, revocable entitlement.** A feed reaches an endpoint only while that endpoint holds a valid grant, with a bounded worst-case revocation time — so rights windows, partner onboarding and emergency takedown are control-plane operations rather than manual receiver reconfiguration. | §3.2 | [Control](control-plane.md) |
@@ -226,10 +226,12 @@ changes.** These are the conditions the rest of the repository exists to test.
   this at the top), which is the largest untested assumption in the thesis and is not of the same
   kind as the engineering gaps.
 - **A route exists that needs sub-second delivery.** This is the condition on which MoQ
-  *specifically*, rather than Internet-native distribution generally, depends. Every other axis on
-  which the two data planes differ currently favours segmented HTTP, so if no real route needs
-  sub-second delivery then MoQ addresses a preference rather than a requirement
-  ([Comparison](comparison.md) §5).
+  *specifically*, rather than Internet-native distribution generally, depends — and it is now the *only*
+  condition, because the capability itself has stopped being in doubt: MoQ delivers a picture across the
+  public internet in 109 ms against segmented HTTP's 4,067 ms over the same path
+  ([Evidence](evidence.md) §3.11). Every other axis on which the two data planes differ favours segmented
+  HTTP, so if no real route needs sub-second delivery then MoQ addresses a preference rather than a
+  requirement, whatever its measured margin ([Comparison](comparison.md) §5).
 
 ---
 

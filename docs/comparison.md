@@ -9,11 +9,13 @@ nearly all the measured work sits, and which is common to both candidates — is
 [Architecture](architecture.md).
 
 **The conclusion, first.** For the majority of primary-distribution routes there are *two* viable
-Internet-native data planes rather than one. They differ structurally on one axis that could decide
-the choice (latency), and **that axis is the one this campaign has not measured end to end on either
-plane**. Everything that makes either of them *broadcast-grade* sits above the transport and is
-common to both. That is not a retreat from the thesis but a demonstration of it —
-[Problem](problem.md) §1 holds that the transport is the least interesting part of the transition.
+Internet-native data planes rather than one. They differ decisively on the one axis that can decide the
+choice, and it is now measured: **over one internet path in one window, MoQ delivers a picture in 109 ms
+and segmented HTTP in 4,067 ms** ([Evidence](evidence.md) §3.11). That settles which plane a route with a
+tight budget must use, and settles nothing else —
+segmented HTTP is ahead on most other axes, and everything that makes either of them *broadcast-grade*
+sits above the transport and is common to both. That is not a retreat from the thesis but a demonstration
+of it — [Problem](problem.md) §1 holds that the transport is the least interesting part of the transition.
 
 The comparison that matters is not against the point-to-point incumbents. SRT, Zixi and RIST are the
 obvious yardstick and the wrong one to lead with, because a transport that cannot fan out at all sets
@@ -205,7 +207,7 @@ handling, availability windows and a retry policy — and must hold at least `PA
 buffer. Simpler to write and already written are both real advantages; for an operator, already
 written usually wins.
 
-### 4.3 Grooming: unsolved off the shelf for both, and measurably harder for segmented HTTP
+### 4.3 Grooming: unsolved off the shelf for both, a heavier burden on segmented HTTP, and the better measured result there
 
 **Segmented HTTP inherits the grooming problem in full, and it is worse rather than equal — measured,
 at two orders of magnitude.** Each transport's ungroomed egress was captured at the same point with
@@ -224,9 +226,12 @@ fetches a completed segment at line rate and then waits for the next to exist. M
 in every second of the window; segmented HTTP alternates between nothing and 20–30 Mb/s.
 
 **One groomer covers both, provided it sizes its buffer from what it observes arriving.** Inserted
-into the identical chain, the same binary with no flag changed takes the segmented-HTTP egress to the
-same conformance the MoQ lane was graded to ([Evidence](evidence.md) §3.2). What it costs is
-7.5 s of programme held before the first byte, a 13.1 MB buffer and ~9 s to notice a dead origin.
+into the identical chain, the same binary with no flag changed takes the segmented-HTTP egress to
+TR 101 290 conformance **on the wire** — 0 intervals above 40 ms, 0 PCR violations at 481 ns
+([Evidence](evidence.md) §3.2). What it costs is 7.5 s of programme held before the first byte, a
+13.1 MB buffer and ~9 s to notice a dead origin. Note which way round this comes out: on the
+segmented plane the groomer clears a bar the MoQ lane does not currently clear, and it clears it with
+the buffer depth segment duration had already imposed. That is the coupling §5.1 is about.
 
 The third column is the point-to-point class, and it is a different kind of entry in two ways. RIST
 and SRT are **transparent** — measured identical to a plain-UDP control — so the 30.6 kB is what this
@@ -295,34 +300,44 @@ an open architectural decision, not a settled one**, and neither data plane is f
 
 ### 4.6 The honest verdict on this axis
 
-**It splits, and on the half that decides whether a hardware IRD locks, MoQ wins.** Two separate
-claims were being run together under "hand-off":
+**It splits three ways, and the third way is the one that decides whether a hardware IRD locks.**
+Three separate claims were being run together under "hand-off":
 
 - **Receiving** — turning the delivery back into a transport stream — favours segmented HTTP. Off the
   shelf on one side, single-implementation on the other, and an ABR-to-TS box is purchasable as the
   distributor's own edge stage where no MoQ equivalent exists at any price. Whether that box
   discharges the obligation to broadcast conformance is unmeasured (§4.4).
-- **Handing off cleanly** — presenting a paced, conformant stream at the demarcation — favours MoQ,
-  measurably: the same groomer has ~240× coarser bursts and 24 multi-second silences to absorb on the
-  segmented-HTTP side (§4.3). Off-the-shelf tools do it on neither.
+- **The burden on the groomer** favours MoQ, measurably: the same stage has ~240× coarser bursts and
+  24 multi-second silences to absorb on the segmented-HTTP side (§4.3). Off-the-shelf tools do the
+  job on neither.
+- **The stream that actually leaves the groomer** — which is what an IRD grades — favours segmented
+  HTTP, decisively. At the 8 s cushion its segment duration already imposes, the segmented arm delivers
+  0 PCR intervals above 40 ms on the wire; the MoQ lane delivers 131–159 in 25 s at its own cushion and
+  the same figure at every other cushion tried ([Evidence](evidence.md) §3.2). **The lighter burden and
+  the worse outcome turn out not to be the same fact**, which is what the measurement changed: MoQ hands
+  the groomer less to absorb, and separately the exporter hands it PCRs too rarely to place, whatever
+  time it is given.
 
-Since it is the second that the installed base actually requires, the axis no longer favours
-segmented HTTP overall. **"Easier to receive" and "easier to hand off cleanly" are different claims,
-and it is easy to run them together.**
+**"Easier to receive", "easier to groom" and "conformant once groomed" are three different claims,
+and running them together is what let this axis read as a MoQ win.** They resolve differently: MoQ leads
+on burden, segmented HTTP leads on the delivered result, and the failure on the MoQ side is a fixable
+carriage defect rather than a cost the plane has to pay (§5.1).
 
 This supports the repository's central position rather than undermining it. Because the obligation to
 hand off a clean paced TS does not transfer to the client on either data plane, that layer is
 required and owned on both — and it is now demonstrably *one* layer rather than two, since the same
-groomer reaches the same conformance behind either plane.
+binary with no flag changed sits behind either plane. What differs is the depth it has to run at, which is
+seconds on the segmented plane and tens of milliseconds on MoQ (§5).
 
 ---
 
 ## 5. Latency (R1)
 
-**This is the axis on which the two data planes differ most in structure, and it is the axis on which
-neither has been measured end to end.** Both halves of that sentence are load-bearing, and the second
-is stated first because earlier versions of this comparison reported the first as though it were the
-second.
+**This is the axis on which the two data planes differ most, and the difference is now measured rather
+than reasoned: 109 ms against 4,067 ms over one internet path in one window** ([Evidence](evidence.md)
+§3.11). Earlier versions of this section argued the gap from the specifications and reported the argument
+as though it were a measurement; what follows keeps the arithmetic, because it explains *why* the gap is
+structural, and then gives the numbers.
 
 **Segmented HTTP's floor is arithmetic, not implementation quality.** `PART-HOLD-BACK` MUST be at
 least twice, and SHOULD be at least three times, the part target duration, and part targets in
@@ -341,52 +356,59 @@ against a fully conformant origin, zero parts and zero blocking reloads from bot
 validator fetched 17–21 parts over the same origins ([Evidence](evidence.md) §3.9). An operator
 unwilling to buy an ABR-to-TS receiver gets classic HLS whatever the publisher emits.
 
-**MoQ's floor is structural; its delivery cadence is measured; its end-to-end latency is not.** The
-transport delivers objects with a median burst of 12.4 kB and a worst-case inter-burst gap of 149 ms,
-and neither figure moves when the source is made four times finer ([Evidence](evidence.md) §3.8).
-That is consistent with a sub-second transport and is not a measurement of one. **No glass-to-glass
-latency figure exists for either data plane anywhere in this campaign**: it is recorded as owed in
-[T8](../lab/test-8-srt-vs-moq.md) and as unmeasured in
-[T14](../lab/test-14-data-plane-comparison.md), and [Evidence](evidence.md) has no latency result.
-So MoQ's sub-second capability is a property of the protocol's construction and of its measured
-delivery granularity — not a result, and it should not be cited as one.
+**MoQ's floor is now measured, and it is 109 ms across the internet.** The same clip, tapped leaving an
+EC2 origin and again on the groomed egress here, crosses the public internet in a **109 ms median** — 15×
+lower than SRT and 37× lower than segmented HTTP over that path in the same window. On loopback it is
+127 ms, and there it also came in 4.7× lower than a plain-UDP control carrying no transport buffer at all
+([Evidence](evidence.md) §3.11). This replaces the structural
+argument that stood here: the sub-second claim is a result, and it may be cited as one, with the
+qualification that it is *delivery* latency — source to groomed egress — and does not include encoder or
+decoder delay, which no plane here varies.
 
-**And the edge stage's contribution is unmeasured on MoQ and large on segmented HTTP.** The groomer
-that satisfies R5 held **7.5 s of programme before emitting a byte** on the segmented plane
-([Evidence](evidence.md) §3.2). On MoQ the equivalent depth has never been established, for the
-reason in §5.1.
+**The edge stage's contribution is measured on both planes, and the asymmetry is stark.** The groomer that
+satisfies R5 held **7.5 s of programme before emitting a byte** on the segmented plane
+([Evidence](evidence.md) §3.2), and over the internet that plane's total runs from 4,067 ms at its
+shallowest runnable cushion to 9,286 ms at the depth that makes it P1-conformant. On MoQ the commanded
+cushion turns out not to be the depth in force at all — the lane's standing depth drains to ~90 ms whatever
+it is told, because the carrier outruns the null-stripped content arriving at it — so the edge stage adds
+tens of milliseconds, not seconds. **That is the finding that decides this section:** the stage every
+requirement in R5 needs does not cost the MoQ lane its advantage.
 
-### 5.1 The open coupling between latency and PCR conformance
+### 5.1 Latency and PCR conformance are not coupled, and that changes the verdict
 
-This is the most consequential unresolved question in the repository, and it was not visible until
-the grooming work on both planes could be read together.
+This was the most consequential unresolved question in the repository. It has been measured, and **the
+premise was wrong** ([T18](../lab/test-18-delivery-latency.md)).
 
-**Grooming buys PCR-repetition conformance with buffer depth, and buffer depth is latency.** Two
-points are measured and they are on different data planes:
+**The question.** Grooming appeared to buy PCR-repetition conformance with buffer depth, and buffer depth
+is latency. Two points were measured and they were on different data planes — a shallow cushion on MoQ
+giving 131–159 intervals above 40 ms, an 8 s cushion on segmented HTTP giving 0 — so the reasonable fear
+was that P1 conformance on the wire costs seconds of buffer on both planes, spent on MoQ out of the only
+axis on which MoQ leads.
 
-| Groomer cushion | Data plane | PCR intervals > 40 ms, on the wire |
-|---|---|---|
-| Shallow (the depths the MoQ lane runs) | MoQ | **131** in 25 s on one host, **159** on another, 227 ms maximum |
-| 8 s (derived from arrival) | Segmented HTTP | **0** |
+**The answer: on the MoQ lane the two axes are independent.** Sweeping the groomer's cushion across a
+ladder spanning eight times the depth moves the lane's repetition figure not at all — 489–491 intervals
+above 40 ms with a 228 ms maximum at every rung — and it stays at 502 when groomer starvation is removed
+altogether by matching the carrier to the arriving content rate. Over the internet it reads 504. The
+groomer inserts **no PCRs of its own** (`pcr_inserted=0`), so every PCR on the egress came from the lane.
 
-The campaign's own explanation is general, not specific to one plane: *"what constrains PCR placement
-is not live operation but whether the stage always has a packet ready at the deadline — which is what
-buffer depth buys"* ([T16](../lab/test-16-grooming-segmented-http.md)). If that holds on MoQ, then
-delivering TR 101 290 P1-conformant PCR repetition **on the wire** costs seconds of buffer on both
-planes. On segmented HTTP that cost is already sunk in the segment duration. On MoQ it would be spent
-out of the only axis on which MoQ leads.
+**The defect is therefore upstream of the edge stage, and it is narrow.** The exporter does not emit
+PCR-bearing packets often enough for any downstream groomer to place them. That is not a structural cost
+to be priced into a recommendation; it is a PCR emission interval in one implementation. T18 predicts —
+and does not test — that emitting at a broadcast mux's ~25 ms cadence would clear the gate at the depth
+the lane already runs, which is **109 ms of delivery latency across the internet**.
 
-**The curve between those two points has not been measured on the MoQ lane.** Until it is, the
-defensible statement is:
+So the defensible statement is now:
 
-> MoQ's transport is structurally capable of sub-second delivery and its measured delivery
-> granularity is consistent with that. Whether a MoQ chain can be simultaneously sub-second
-> end-to-end **and** TR 101 290 P1-conformant on the wire is **unmeasured and open**, and it is the
-> single measurement that would most change this comparison.
+> MoQ delivers a picture across the public internet in 109 ms, 15× lower than SRT over the same path.
+> It is **not** currently TR 101 290 P1-conformant on PCR repetition on the wire, at any buffer depth —
+> and that failure is a carriage defect in the exporter rather than the price of the latency. Whether
+> fixing the exporter's PCR cadence clears the gate is the single measurement that would most change this
+> comparison, and it is blocked only on upstream, where the defect has been reported with the
+> measurements behind it ([upstream contributions](../lab/upstream-contributions.md) §1).
 
-The protocol for closing it is in [planned-experiments](../lab/planned-experiments.md) — a cushion
-sweep on the existing rig, using the existing instrument and grading script. It is the cheapest
-outstanding measurement in the campaign and the one with the highest leverage.
+What remains genuinely open about the latency figures themselves: both paths measured were healthy, so
+nothing exercised the retransmission and jitter-buffer recovery the point-to-point tunnels exist for —
+the case that should favour them ([Evidence](evidence.md) §4).
 
 ### 5.2 The decision rule, restated
 
@@ -395,9 +417,11 @@ ABR-to-TS receiver is bought — segmented HTTP is the better engineering choice
 of the remaining axes: decisively so on interop, maturity and delivery economics, narrowly on the
 hand-off, against narrower MoQ advantages on entitlement and multi-programme carriage.
 
-**If they cannot, MoQ is the only Internet-native candidate with commodity delivery in prospect** —
-subject to §5.1, which is the open question of whether MoQ's structural advantage survives its own
-edge stage.
+**If they cannot, MoQ is the only Internet-native candidate with commodity delivery in prospect** — and
+its advantage now survives its own edge stage as a measurement rather than as a hope: 109 ms across the
+internet against segmented HTTP's 4,067 ms over the same path. What §5.1
+leaves is not a latency risk but a conformance one: the lane is not P1-conformant on PCR repetition on the
+wire, for a reason that is fixable upstream and independent of latency.
 
 Note what the rule does *not* decide: the grooming and egress layer is built either way (§4).
 
@@ -493,29 +517,68 @@ subscription ([Evidence](evidence.md) §3.10).
 
 ## 8. Carriage fidelity (R3)
 
-| | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane |
-|---|---|---|---|
-| Multi-programme mux | **normatively excluded** (§6) | one programme, reconstructed | **verbatim MPTS** |
-| PIDs, PES, `stream_type`, PAT/PMT | preserved | preserved | preserved |
-| SDT / NIT | **preserved** — measured | preserved ([Evidence](evidence.md) §3.1) | preserved |
-| EIT | **preserved** — measured | preserved, schedule included | preserved |
-| TDT / TOT | **preserved** — measured | carried, TOT descriptors intact, but **delivered ~14 s late** on the exporter's own emission grid | preserved |
-| Continuity counters | **preserved except a forced re-stamp on PAT/PMT** | regenerated by the exporter | preserved |
-| Null stuffing | **carried** — measured | not carried | carried if verbatim |
-| Byte-identical to source | **yes, except byte 3 of PAT/PMT** | no | yes |
+| | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane | SRT — the incumbent |
+|---|---|---|---|---|
+| Multi-programme mux | **normatively excluded** (§6) | one programme, reconstructed | **verbatim MPTS** | verbatim by construction; measured on one programme |
+| PIDs, PES, `stream_type`, PAT/PMT | preserved | preserved | preserved | **preserved** — measured over the wire |
+| PMT PID, PCR PID | **preserved, incl. non-default** — measured on three clips | preserved, since the service-layer carriage fix | preserved | **preserved** — measured |
+| TSID / ONID / service name, provider, type | **preserved** — measured | preserved, since the same fix | preserved | **preserved** — measured |
+| SDT / NIT | **preserved** — measured | preserved ([Evidence](evidence.md) §3.1) | preserved | **preserved** — measured |
+| EIT | **preserved** — measured | preserved, schedule included | preserved | not exercised (the clip carries no EIT) |
+| TDT / TOT | **preserved** — measured | carried, TOT descriptors intact, but **delivered ~14 s late** on the exporter's own emission grid | preserved | **preserved** — measured |
+| CAT | **preserved** — measured | not carried | preserved | not exercised (the clip carries no CAT) |
+| Continuity counters | **preserved except a forced re-stamp on PAT/PMT** | regenerated by the exporter | preserved | **preserved, 0 CC errors** — measured |
+| Null stuffing | **carried** — measured | not carried | carried if verbatim | **carried** — measured |
+| Mux rate | preserved | **none** — the egress has no byte clock | preserved if verbatim | **the source value exactly** — measured |
+| PSI cadence | source cadence, plus the injected pairs | **regenerated thinner** — 8.04 → 2.51 PAT/s, mean gap 124 → 399 ms against P1's 500 ms | unchanged from source | **identical to source** — measured |
+| Packets added to the mux | **one PAT/PMT pair per segment** — measured, and nothing else; **1.00 per segment head over the internet too** | rebuilt, not comparable | **none** | **none** — measured |
+| PCR repetition (P1), file domain | **unchanged from source** — measured | **not inherited from the source but produced by the lane** — clusters 86 % of intervals under 1 ms with gaps to 320 ms, from a source with none above 40 ms in 600 s; restored by the pacer *(on file only; 131–159 intervals above 40 ms in 25 s as delivered, §5.1)* | unchanged from source | **unchanged from source** — measured over the wire |
+| PCR accuracy (P2), file domain | **37–74 ns → 109–302 µs**, the injected pair priced; **302.1 µs against 302.4 predicted over the internet**, and **0 violations at 500 µs** bounding it; **0 violations once groomed** | **gate undefined** — a rate-less egress has no byte clock to grade against | unmeasured; byte-preserving by construction | **0 violations at 481 ns** — measured over the wire |
+| Byte-identical to source | **in payload, yes; as a mux, no** | no | yes | verbatim by construction; every field, count and cadence measured identical, not diffed byte-for-byte |
 
-**For a single programme, segmented HTTP carrying MPEG-TS is as verbatim as the opaque MoQ lane,
-which is the opposite of what the specification's wording suggests.** The reasoning that a segment
-"must begin with PAT then PMT" and is therefore a re-mux does not hold: prepending a PAT/PMT pair does
-not rebuild the multiplex, it inserts two packets and renumbers the continuity counters of those two
-PIDs. Measured against the source packet by packet, the only difference in a 1,200-packet window is
-byte 3 — the continuity counter — on one PAT and one PMT ([Evidence](evidence.md) §3.8).
+**Domains differ across these columns and the difference matters.** Segmented HTTP, the media-aware lane
+and SRT were all measured over the public internet on the current build, in one rig with matched windows
+and one instrument ([T4](../lab/test-4-remote-e2e-srt.md)); the segmented column's three-clip breadth
+(CAT, EIT, non-default PMT PIDs) is loopback ([T3](../lab/test-3-opaque-transparency.md)), and the real
+path reproduced its single-clip figures to 0.1 %, so the loopback breadth can be read as generalising.
+The opaque column is loopback and partly derived, because that lane's egress delivers nothing outside its
+original checkout. SRT is included as the *reference* rather than as a fourth candidate: it is the
+byte-faithful case the other three are read against.
 
-**What survives of MoQ's advantage on this axis is the multi-programme case alone**, where HLS's
+**For a single programme, segmented HTTP carrying MPEG-TS is as verbatim as the opaque MoQ lane on
+mux *content*, which is the opposite of what the specification's wording suggests.** The reasoning
+that a segment "must begin with PAT then PMT" and is therefore a re-mux does not hold: prepending a
+PAT/PMT pair does not rebuild the multiplex, it inserts two packets and renumbers the continuity
+counters of those two PIDs. Measured against the source packet by packet, the only difference in a
+1,200-packet window is byte 3 — the continuity counter — on one PAT and one PMT
+([Evidence](evidence.md) §3.1).
+
+**Where it stops being verbatim is the clock, and the price is arithmetic.** Scored against the
+opaque lane's own transparency inventory on three clips, the lane adds exactly one PAT/PMT pair per
+segment and no PID the source lacked — and 376 bytes inserted at a segment head displaces every later
+PCR in that segment relative to a constant-rate byte clock by the time those bytes take to transmit.
+Predicted at 300.8 / 109.4 / 302.4 µs across a 2.75× bitrate spread, measured at 297.7 / 109.4 /
+301.9. So file-domain PCR accuracy falls from tens of nanoseconds to hundreds of microseconds while
+PCR *repetition* is untouched ([Evidence](evidence.md) §3.1). A 1 s / 2 s / 6 s duration sweep then
+confirms the cost is per-segment rather than cumulative — 5.7× the injections moves the maximum error
+by 1 % — so **segment duration trades violation frequency against nothing else**, and the error an IRD
+would see is fixed by the clip's bitrate. **This is a demarcation finding, not a fidelity one**: the
+groomer the distributor owns on both planes closes it to zero violations at the P2 limit
+(§4.1, [Evidence](evidence.md) §3.2). What it forecloses is handing a segmented-HTTP egress to a
+receiver *ungroomed* on the strength of its being verbatim.
+
+**The P2 gate cannot be used to rank the three lanes, which is why the row above reads as it does.**
+It grades PCR values against the byte positions they arrive at, so it presupposes a mux rate; the
+media-aware lane's ungroomed egress has none, and graded anyway returns exactly the maximum PCR
+interval rather than an error ([Evidence](evidence.md) §3.1). The axis is therefore informative about
+segmented HTTP, silent about the media-aware lane until a groomer restores a clock, and unmeasured on
+the opaque lane.
+
+**What survives of MoQ's advantage on mux content is the multi-programme case alone**, where HLS's
 "Transport Stream Segments MUST contain a single MPEG-2 Program" bites. That is normative rather than
 demonstrated, it is an open measurement, and it now carries the whole row. Against the *media-aware*
-lane, segmented HTTP is straightforwardly better: it keeps stuffing, continuity counters and the wall
-clock that the exporter does not.
+lane, segmented HTTP is straightforwardly better: it keeps stuffing, the CAT, continuity counters and
+the wall clock that the exporter does not.
 
 **Fidelity is not free, and §9 prices it at ~7 % of the wire.** Carrying the stuffing and every TS
 packet header is what makes segmented HTTP verbatim *and* what makes it 1.056× the source TS rate
@@ -652,7 +715,7 @@ most stages are common, and where the two differ, **they are incomplete in oppos
 | **Publish / package** | `moq import ts` (media-aware) or the opaque `m2ts` lane under MSFTS | *classic:* `tsp -O hls`<br>*low-latency TS:* Apple `mediastreamsegmenter --format=transport` | distributor |
 | **Fan-out** | `moq-relay`; Cloudflare's implementation | any HTTP origin + cache, or a commodity CDN | distributor or CDN |
 | **Receive → TS** | `moq export ts` | *classic:* `tsp -I hls`, FFmpeg<br>*low-latency:* **nothing free exists** | recipient or distributor |
-| **Groom → conformant CBR** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) | **the same binary, no flags changed** — it sizes its buffer to seconds rather than milliseconds from the arrival it observes ([Evidence](evidence.md) §3.2) | **distributor, on both** |
+| **Groom → CBR, PCR re-stamped** | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — conformant on file, *not* on the wire at this lane's depth (§5.1) | **the same binary, no flags changed** — it sizes its buffer to seconds rather than milliseconds from the arrival it observes, and reaches conformance on the wire ([Evidence](evidence.md) §3.2) | **distributor, on both** |
 | **Egress FEC / ST 2022-7 / start gate** | private | private; identical requirement | **distributor, on both** |
 | **Analysis / conformance** | TSDuck, hardware TR 101 290 analyser | identical | distributor |
 | **Control plane** | provisioning, entitlement, observability | identical model, different projection target (§7) | distributor |
@@ -773,10 +836,14 @@ neither camp.
   that falls on the same side of it.** An advantage that lives in a third party's capex is
   optionality, not architecture.
 - **"A sequence of TS segments is a re-muxed stream, so byte-verbatim carriage is structurally
-  unavailable."** Reasoned from the requirement that a segment begin with a PAT and PMT, and wrong:
-  measured against the source, a segment differs in byte 3 on one PAT and one PMT, and in nothing
-  else. **The method rule: a "structurally impossible" claim derived from a specification is a
-  hypothesis about an implementation, and costs one afternoon to test.**
+  unavailable."** Reasoned from the requirement that a segment begin with a PAT and PMT, and wrong
+  about what it claimed: measured against the source, a segment differs in byte 3 on one PAT and one
+  PMT, and in nothing else. It was, however, pointing at something real that the refutation then
+  overshot — the pair is *inserted*, so the mux is verbatim in payload and not as a mux, and the two
+  packets cost file-domain PCR accuracy (§8). **The method rule: a "structurally impossible" claim
+  derived from a specification is a hypothesis about an implementation, and costs one afternoon to
+  test — and when it falls, check whether the mechanism it named survives without the impossibility
+  claim attached to it.**
 - **"Not carrying stuffing is not unique to MoQ, since a TS packager has no reason to retain it — so
   the wire rows would converge if measured."** They do not converge: the off-the-shelf packager keeps
   the stuffing and segmented HTTP lands 7.0 % above the media-aware lane. What the reasoning missed
@@ -811,29 +878,33 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Reliability under loss (R2) | neither | M+S | none — shared QUIC substrate; MoQ measured at parity with SRT (§3.1) |
 | Reliability of recovery (R2) | segmented HTTP | S | clear on the specification — availability window, idempotent retry, client-driven failover. **Not exercised under loss in this campaign** (§3.2) |
 | Reassembly to a transport stream | segmented HTTP | M | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |
-| Grooming to a clean hand-off (R5) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
-| Latency (R1) | **MoQ, structurally** | **S + —** | **unresolved. Segmented HTTP's 2–5 s floor is arithmetic and its ~6 s free-tooling floor is measured; MoQ's sub-second capability is structural and its glass-to-glass latency is unmeasured on both planes, as is whether it survives the groomer depth R5 needs** (§5, §5.1) |
+| Grooming *burden* (R5) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
+| Grooming *outcome* — a P1-conformant wire (R5) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. The groomer inserts no PCRs of its own, so the cause is the exporter emitting them too rarely — a fixable upstream defect rather than a cost the lane must pay** (§5.1) |
+| Latency (R1) | **MoQ, decisively** | **M** | **decisive and now measured: 109 ms across the public internet, against SRT's 1,618 ms and segmented HTTP's 4,067 ms over the same path in the same window — 15× and 37×. Segmented HTTP needs 9,286 ms to reach the depth that makes it conformant. The path term is the round trip and nothing more. Caveats: delivery latency rather than camera-to-display, and both paths measured were healthy** (§5, §5.1, [Evidence](evidence.md) §3.11) |
 | Interoperability (R3) | segmented HTTP | M+S | decisive, conditional on the single-programme envelope (§6) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
-| Carriage fidelity, one programme (R3) | neither | M | **measured a wash — segmented HTTP is byte-verbatim but for the PAT/PMT continuity counter, so MoQ's advantage narrows to the multi-programme case alone, which is untested** (§8) |
+| Carriage fidelity, one programme (R3) | neither, on mux content; **SRT on the clock, and it is the only one measured over a real path** | M | **a wash on content across three clips — service identity, PMT/PCR PID, CAT, TDT/TOT, all splice PIDs and stuffing all survive — so MoQ's content advantage narrows to the untested multi-programme case. Segmented HTTP alone is *additive*: one PAT/PMT pair per segment, costing 109–302 µs of file-domain PCR accuracy that grooming then closes. On the clock the incumbent wins outright: byte-faithful SRT reproduces the source mux rate, PSI cadence and PCR grid over the public internet with 0 P2 violations, where the media-aware lane preserves the mux as bytes and destroys it as a timed object** (§8) |
 | Wire volume | **MoQ** | M+derived | ~7.0 %, MTU-invariant — 0.982× against 1.056× over HTTP/3; §8's fidelity trade priced (§9) |
 | Delivery economics | segmented HTTP | S(published rates) | decisive, and it swamps the row above — commodity delivery at $0.005–0.010/GB against one MoQ supplier at $0.050 (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and existing staff skills against a pre-1.0 ecosystem |
 
 **What that adds up to.** For a route whose destinations can absorb two to five seconds and which
 carries a single programme, segmented HTTP carrying MPEG-TS over HTTP/3 is the better engineering
-choice today — on interop, maturity, delivery economics and recovery, none of which is close, and on
-carriage fidelity, where it turns out to be byte-verbatim. **MoQ's case is not general and should not
-be stated as though it were.** Measurement narrowed it and sharpened it at the same time. What is
-left is: an egress a groomer can actually pace, verbatim *multi-programme* carriage, a portable
-enforcement point with an observable session, push rather than manifest polling, ~7 % less wire
-volume — and a structural sub-second capability whose survival through the edge stage is the open
-question of §5.1.
+choice today — on interop, maturity, delivery economics and recovery, none of which is close; on
+carriage fidelity, where its mux content turns out to be verbatim; and on the conformance of the groomed
+stream itself. **MoQ's case is not general and should not be stated as though it were.** Measurement
+narrowed it and sharpened it at the same time. What is left is: an egress that hands a groomer less to
+absorb, verbatim *multi-programme* carriage, a portable enforcement point with an observable session, push
+rather than manifest polling, ~7 % less wire volume — and a **measured 109 ms** across the public
+internet, which is a 15× margin on the axis that decides the comparison for routes that cannot absorb
+seconds.
 
 **Two warnings about reading any single row.** MoQ moves ~7 % fewer bytes and today those bytes cost
-five to ten times as much, so the axis it wins is worth a rounding error against the axis it loses.
-And the latency row — the one that decides the comparison — is the only row in the table with no
-measurement behind it.
+five to ten times as much, so the axis it wins there is worth a rounding error against the axis it loses.
+And the two rows that decide the comparison now point in opposite directions for the same lane: MoQ wins
+latency decisively and loses the conformance of the groomed wire decisively, and those two facts are
+independent of each other (§5.1). A reader who treats either as the price of the other will reach the
+wrong conclusion, which is the mistake this document made until the latency work was done.
 
 **And the part that matters more than the verdict.** Every item that makes either data plane
 *broadcast-grade* is common to both: PCR and CBR grooming to TR 101 290, 1+1 with byte-identical legs
@@ -849,9 +920,11 @@ candidate data planes rather than as a case for one protocol, and why the measur
 
 Ranked by how much each would move the comparison.
 
-1. **Does a MoQ chain stay sub-second while reaching TR 101 290 P1 PCR repetition on the wire?**
-   §5.1. The cheapest outstanding measurement in the campaign and the one with the highest leverage,
-   because a negative answer removes the only axis on which MoQ leads.
+1. **Would a denser PCR emission cadence in the MoQ exporter clear the P1 repetition gate on the wire?**
+   §5.1. The question that replaces "does MoQ stay sub-second while conformant", which is measured and
+   answered: it stays sub-second (109 ms across the internet) and it is not conformant, and the two are
+   independent. Since the groomer inserts no PCRs of its own, the gate can only be cleared upstream. Still
+   the highest-leverage item, and now blocked on an upstream change rather than on apparatus.
 2. **Does a commercial ABR-to-TS gateway, operated as the distributor's own edge stage, produce
    TR 101 290 P1/P2-conformant output on real hardware?** §4.4. If yes, part of the broadcast-grade
    layer is purchasable on one data plane and not the other; if no, the reassembly advantage in §4.2
@@ -860,14 +933,22 @@ Ranked by how much each would move the comparison.
 3. **Does the sub-second requirement exist on identifiable routes, or is it a preference?** §5.2.
    This decides how much of primary distribution MoQ addresses at all.
 4. **Can a CDN carry a multi-programme TS segment in practice, and does anything downstream of the
-   cache object to it?** §8. This now carries the whole of MoQ's carriage-fidelity advantage, since
-   single-programme carriage measured as a wash.
+   cache object to it?** §8. This now carries the whole of MoQ's carriage-fidelity advantage on mux
+   *content*, since single-programme carriage measured as a wash. What it does not carry is the clock
+   half of §8, which is settled and small: the segment-head PAT/PMT injection costs file-domain PCR
+   accuracy on segmented HTTP and grooming closes it.
 5. **Should the edge gateway sit at each client's demarcation or in the distributor's regional
    PoPs?** §4.5. The choice sets how many destinations the transport actually serves, and therefore
    most of the delivery bill, on both data planes.
 6. **How does a segmented-HTTP leg behave when segments are genuinely lost rather than late?** §3.2.
-   Its recovery advantage is specification-based and has not been exercised.
-7. **Would relay portability, if achieved, change the economics enough to matter against a delivery
+   Its recovery advantage is specification-based and has not been exercised. Its *carriage* over a real
+   path now has been, and reproduced loopback to 0.1 % (§8).
+7. **Why does the media-aware lane cluster PCRs?** §8. The distribution — 86 % of intervals under 1 ms,
+   monotonic, mean conserved, gaps to 320 ms — points at group-wise reassembly, but the mechanism is
+   inferred from the output rather than confirmed in the exporter. It matters because if PSI density and
+   PCR spacing are both group-derived, one parameter moves both, and the groomer depth question in
+   §5.1 is really a question about group size.
+8. **Would relay portability, if achieved, change the economics enough to matter against a delivery
    market that is already commoditised?** MoQ's strongest economic argument is contingent on an
    interoperability fix ([Evidence](evidence.md) §3.7), and its prize is a market position segmented
    HTTP already occupies everywhere except the sub-second band.

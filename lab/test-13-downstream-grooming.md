@@ -5,11 +5,12 @@
 > **Read criterion 3 on the wire, not on the file.** The headline result of this experiment that
 > travels furthest is a negative one: `mpegts-pacer` posts **0** PCR intervals above 40 ms on a
 > captured file and **131 on the laptop rig and 159 on the EC2 box, with a 227.4 ms maximum, on the
-> wire**, at the cushion the MoQ lane runs. [T16](test-16-grooming-segmented-http.md) later showed the
-> constraint is buffer depth rather than live operation, reaching 0 on the wire at an 8 s cushion on
-> the *other* data plane. **The depth at which the MoQ lane would reach 0, and whether it is
-> compatible with sub-second delivery, is unmeasured** and is the campaign's highest-leverage
-> outstanding run ([planned-experiments](planned-experiments.md)).
+> wire**, at the cushion the MoQ lane runs. [T16](test-16-grooming-segmented-http.md) later reached 0 on
+> the wire at an 8 s cushion on the *other* data plane, which made buffer depth look like the constraint
+> here too. **It is not.** [T18](test-18-delivery-latency.md) swept this lane's cushion across eight times
+> the depth and removed groomer starvation entirely, and the figure did not move — because the groomer
+> inserts no PCRs of its own and the exporter emits them too rarely to place. The word "inherits" in the
+> scoring below is exact, and the defect is upstream of every tool graded here.
 
 
 `moq ... export ts` emits a transport stream with no stuffing and no wire cadence: MPEG-TS null
@@ -392,9 +393,12 @@ receiver:
 - **`mpegts-pacer`** remains the only stage measured here that satisfies all four criteria as scored,
   and it is the only one that keeps the mux intact. Its weakness is the one criterion 3's live column
   exposes: at the ~1 s cushion run here it inherits the exporter's PCR spacing, 159 intervals above
-  40 ms in 25 s. [T16](test-16-grooming-segmented-http.md) shows that is a buffer-depth choice rather
-  than a limit — with seconds of cushion the same stage posts 0 — so the trade is PCR repetition
-  against latency. That it satisfies the set at all is a statement about the state of the ecosystem, not a
+  40 ms in 25 s. On a *segmented* egress that is a buffer-depth choice rather than a limit — with seconds
+  of cushion the same stage posts 0 ([T16](test-16-grooming-segmented-http.md)) — but on the MoQ lane it
+  is neither a choice nor the groomer's: [T18](test-18-delivery-latency.md) swept the cushion across
+  eight times the depth, removed starvation entirely, and moved the figure not at all, because the
+  groomer inserts no PCRs of its own and the lane does not deliver them often enough to place. The word
+  "inherits" above is exact, and it is the whole defect. That it satisfies the set at all is a statement about the state of the ecosystem, not a
   recommendation: as the upstream review of
   [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation
   path at the time, and it is still one lab's unpublished tool.

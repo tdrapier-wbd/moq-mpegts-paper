@@ -300,12 +300,15 @@ wire, and concluded that a stage re-timing a stream as it arrives cannot place P
 reading a file. Arm B posts 0 on the wire. The distinction that holds is not file-versus-live but
 whether the stage always has a packet available at the deadline, which is what depth buys.
 
-**The consequence for the paper is on the other data plane, and it is not measured here.** If depth is
-what buys P1 PCR repetition, then the MoQ lane needs depth too — and depth is latency, which is the
-only axis on which MoQ leads. This arm cost 7.5 s of programme before the first byte to reach 0. Where
-the MoQ lane's curve crosses zero, and whether that point is compatible with sub-second delivery, is
-unmeasured and is now the campaign's highest-leverage outstanding run
-([planned-experiments](planned-experiments.md); [comparison](../docs/comparison.md) §5.1).
+**The consequence for the paper is on the other data plane, and it has since been measured — the premise
+was wrong.** If depth is what buys P1 PCR repetition, then the MoQ lane needs depth too, and depth is
+latency, which is the only axis on which MoQ leads. This arm cost 7.5 s of programme before the first byte
+to reach 0, so the obvious expectation was a trade. [T18](test-18-delivery-latency.md) swept the MoQ
+lane's cushion and found **no crossing point and no trade**: repetition holds at ~490 intervals above
+40 ms with a 228 ms maximum across a ladder spanning eight times the depth, and stays there when groomer
+starvation is removed altogether. The reason is upstream of the groomer — `pcr_inserted=0` on the
+rate-matched cell, so every PCR came from the lane, and the lane does not emit them often enough to
+place. On *this* plane depth is the variable, as measured above; on the media-aware lane it is not.
 
 ---
 

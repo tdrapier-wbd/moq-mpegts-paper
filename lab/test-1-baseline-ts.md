@@ -114,5 +114,5 @@ baseline. Reference established.
 ## References
 
 - Contribution-feed class (CNN International, open-GOP): [`docs/evidence.md`](../docs/evidence.md) §4.
-- P1 (file) vs wire (P2) accuracy caveat: [`docs/architecture.md`](../docs/architecture.md) §7.2.
+- File vs wire domain, and what each gate can decide: [`docs/architecture.md`](../docs/architecture.md) §4.2.
 - Pre-groom baseline used downstream: [`docs/evidence.md`](../docs/evidence.md) §3.

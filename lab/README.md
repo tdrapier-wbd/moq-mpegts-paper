@@ -23,8 +23,11 @@ It is deliberately distinct from the rest of the repository:
   something wrong, organised by theme rather than by experiment, because several of them bit more
   than once in different rigs. Per-test files point here rather than repeating them.
 - **[`upstream-contributions.md`](upstream-contributions.md)** — what was found, reported and
-  verified in other people's projects. Kept separate because it is a contribution record rather than
-  a measurement record, and it is a different argument from the one the paper makes.
+  verified in other people's projects: defects and the fixes graded against before-and-after builds,
+  test coverage and fixtures contributed, a review of the MSFTS carriage *specification*, and the
+  requirements this campaign filed early and then withdrew on its own measurements. Kept separate
+  because it is a contribution record rather than a measurement record, and it is a different argument
+  from the one the paper makes.
 
 > **On honesty.** The plan below is written to be *disproven*. Its value is the method and the pass
 > criteria, fixed before the numbers are known; the numbers themselves — including results that
@@ -87,6 +90,7 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 | T15 | RIST and SRT on T14's cadence instrument, and what each transport does to the clock | 7 (comparative lab) | extends T14; grades [comparison](../docs/comparison.md) §10.1; settles the clock design on [#2914](https://github.com/moq-dev/moq/issues/2914) | complete on a healthy path — RIST (Main and Simple) and SRT measured transparent, identical to a no-transport control, so their egress is their source's; MoQ's granularity is source-independent; on the clock, the pipes add nothing while the media-aware lane delivers a TDT ~14 s late and repeats one it has already sent when the source ticks slower than its 30 s timer; loss/RTT and a true CBR hardware source left open | [test-15-point-to-point-cadence.md](test-15-point-to-point-cadence.md) |
 | T16 | Grooming a segmented-HTTP egress | 4 (file), plus wire cadence | supports Gate 2 on the alternative data plane; closes [architecture](../docs/architecture.md) §4.5 and the unmeasured cell in [evidence](../docs/evidence.md) §3.2 | complete on a healthy path — the same groomer, sizing itself from arrival, takes T14 arm B1's egress to T13's MoQ-lane conformance with nothing dropped; the three flag-pinned control arms show why it needed deriving rather than documenting; 6 s segments and a lossy path left open | [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md) |
 | T17 | Standalone SI on snapshot tracks: EIT carriage and its join cost | 2/3 (carriage fidelity) | closes the EIT residual in [evidence](../docs/evidence.md) §3.1; prices the join question [#2882](https://github.com/moq-dev/moq/issues/2882) asked | complete, and the design it graded is merged — EIT round-trips section-for-section including the sparse schedule, carriage is bitrate-neutral (0.985×) and the export gate cost 1 ms, which is what retired the gate upstream rather than tuning it; the clock has since been added too, leaving its emission timing rather than its carriage as the open item ([T15](test-15-point-to-point-cadence.md) measurement 4) | [test-17-si-snapshot-tracks.md](test-17-si-snapshot-tracks.md) |
+| T18 | Delivery latency at equal conformance, on four data planes | 1 (latency) + supports Gate 2 | closes the campaign's last unmeasured axis and the open coupling in [comparison](../docs/comparison.md) §5.1 | complete on loopback and over the public internet, and it **refuted the premise it was designed to test** — latency and PCR conformance are independent on the media-aware lane. MoQ crosses the internet in **109 ms** against SRT's 1,618 ms and segmented HTTP's 4,067 ms, and fails P1 repetition at every buffer depth for a reason upstream of the groomer (`pcr_inserted=0`). A lossy path, a long path, and whether a denser exporter PCR cadence clears the gate are left open | [test-18-delivery-latency.md](test-18-delivery-latency.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -127,13 +131,15 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
   under loss, with the T-STD buffer model confirmed valid under drift/discontinuity. Until this
   exists, the grooming design is "structurally sound and file-validated," not "proven
   broadcast-acceptable."
-- **T8 — SRT vs MoQ (comparative, not pass/fail).** Latency competitive if MoQ + pacer glass-to-glass
+- **T8 — SRT vs MoQ (comparative, not pass/fail).** Latency competitive if MoQ + pacer delivery latency
   is within a stated margin of SRT at matched buffer; loss recovery competitive if recovery and
   delivered-rate curves are within a stated margin and the failure mode is no worse; egress quality at
   least matches (P1); overhead/CPU recorded as economic inputs. Feeds [economics](../docs/economics.md) §4 and §9.
+  **The latency criterion is met and then some** — [T18](test-18-delivery-latency.md) measures MoQ at
+  109 ms against SRT's 1,618 ms over the same internet path — but the P1 criterion is not.
 
-T8b, T9, T11, T13 and T16 were specified after this list was fixed; their pass criteria are stated the
-same way, in advance, at the top of their own files.
+T8b, T9, T11, T13, T16 and T18 were specified after this list was fixed; their pass criteria are stated
+the same way, in advance, at the top of their own files.
 
 ### Desk analyses
 
@@ -156,7 +162,7 @@ per-test file when executed. In priority order:
 | # | Test | Purpose | Gate |
 |---|---|---|---|
 | T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
-| T14 (remainder) | MoQ against segmented HTTP — the two blocked cells | Burst granularity (both arms), carriage fidelity and wire cost are measured in [test-14](test-14-data-plane-comparison.md). What remains: a commercial ABR-to-TS gateway on P1/P2, which now also gates glass-to-glass latency since arm B2 showed no *free* client fetches partial segments (needs hardware, and is the cell that moves the paper most); and MPTS through a real CDN (needs a CDN account — and now carries the whole of MoQ's carriage-fidelity advantage) | Gate 1 and Gate 2, on both data planes |
+| T14 (remainder) | MoQ against segmented HTTP — the two blocked cells | Burst granularity (both arms), carriage fidelity and wire cost are measured in [test-14](test-14-data-plane-comparison.md), and delivery latency in [test-18](test-18-delivery-latency.md). What remains: a commercial ABR-to-TS gateway on P1/P2, which also gates the segmented plane's *low-latency* arm since B2 showed no *free* client fetches partial segments (needs hardware, and is the cell that moves the paper most); and MPTS through a real CDN (needs a CDN account — and now carries the whole of MoQ's carriage-fidelity advantage) | Gate 1 and Gate 2, on both data planes |
 | T12/E | Restart one leg of a live pair | Stream clocking (T12 arm D) made two independently groomed chains byte-identical, and got a recovered or late-joining leg back onto its partner's numbering, slots and phase. What remains is byte-identity on independent restart, blocked by `moq export ts` numbering continuity counters per process — which also needs a grader that can score a pair that is not byte-identical. Plus a two-host variant, where the legs no longer share a clock | Gate 3 — completes the 1+1 story |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
 | T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
@@ -167,16 +173,22 @@ per-test file when executed. In priority order:
 - **No hardware IRD pass yet.** Gate 2 (T7/P2) is the load-bearing open test. Everything above it is
   necessary but not sufficient, and nothing in this campaign has ever been fed to a hardware decoder
   or graded by a hardware analyser.
-- **No latency measurement, on either data plane.** Glass-to-glass latency is owed by T8 and recorded
-  as unmeasured by T14. It is the axis on which the paper's data-plane comparison turns, so its
-  absence is a first-order limitation rather than a loose end
-  ([evidence](../docs/evidence.md) §3.1).
-- **The groomed MoQ egress is not P1-conformant on PCR repetition on the wire** at the cushion the
-  lane runs: 0 % of intervals above 40 ms on file, 131–159 in 25 s on the wire
-  ([T13](test-13-downstream-grooming.md)). [T16](test-16-grooming-segmented-http.md) reaches 0 on the
-  wire at an 8 s cushion on the *other* data plane, so the depth at which the MoQ lane would reach it
-  — and whether that depth is compatible with sub-second delivery — is unmeasured and is the campaign's
-  highest-leverage outstanding run ([planned-experiments](planned-experiments.md)).
+- **Latency is measured, but it is *delivery* latency and both paths were healthy.**
+  [T18](test-18-delivery-latency.md) grades every plane's source-to-groomed-egress latency against the
+  conformance of the same bytes, on loopback and from EC2 over the public internet: MoQ 109 ms, SRT
+  1,618 ms, segmented HTTP 4,067 ms, all in the same window. It does not include encoder or decoder delay, so there is still no
+  camera-to-display figure — and neither path was impaired or long, so nothing exercised the recovery the
+  point-to-point tunnels exist for, which is the case that should favour them.
+- **The groomed MoQ egress is not P1-conformant on PCR repetition on the wire, at any buffer depth.**
+  0 % of intervals above 40 ms on file against 131–159 in 25 s on the wire
+  ([T13](test-13-downstream-grooming.md)); [T16](test-16-grooming-segmented-http.md) reaches 0 on the
+  *other* data plane at an 8 s cushion. The obvious reading — that MoQ needs comparable depth, spending
+  its latency advantage — is **wrong**: [T18](test-18-delivery-latency.md) swept the cushion across eight
+  times the depth, removed groomer starvation entirely, and moved the figure not at all, because the
+  groomer inserts no PCRs of its own (`pcr_inserted=0`) and the exporter emits them too rarely to place.
+  Whether a denser exporter cadence clears the gate is now the campaign's highest-leverage outstanding
+  run, and it is blocked on upstream, where it is filed as
+  [#2937](https://github.com/moq-dev/moq/issues/2937) ([planned-experiments](planned-experiments.md)).
 - **The alternative data plane is only partly measured.** [comparison](../docs/comparison.md)
   grades MoQ against segmented HTTP carrying MPEG-TS. [T14](test-14-data-plane-comparison.md) has
   measured three of its rows — burst granularity, carriage fidelity and wire cost — and moved all three.
