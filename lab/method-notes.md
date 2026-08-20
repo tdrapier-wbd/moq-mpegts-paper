@@ -21,6 +21,40 @@ run reproduces the artefact. *(T15, and independently T9.)*
 > control through the same chain returned the same numbers to within a millisecond. Without that
 > control the rig's floor would have been published as a transport property.
 
+**Where a stage's own throughput could be the limit, the control that removes the subject entirely is
+not optional — a saturated instrument fails in the direction that looks like a finding.** *(T7,
+segmented arm.)*
+
+> One of four clips failed PCR repetition on the segmented lane, reproducibly, and the lane offered
+> two plausible mechanisms for it: the groomer's adaptive cushion ceiling, and the segment arrival
+> gap. Raising the ceiling and halving the segment duration each ruled one out without dislodging the
+> conclusion, because both left the lane in place. Feeding the groomer a local file at the same output
+> rate — no packager, no origin, no HTTP client, largest content gap 51 ms — produced a *worse* result
+> than any run through the lane. The clip was measuring where the pacing stage saturates. Two controls
+> that vary the subject cannot distinguish the subject from the instrument; only the one that deletes
+> it can.
+
+**Pinning a setting on one arm is half a control. The variable you know to be decisive is the one
+most likely to be left defaulted on the arm where its knob has a different name.** *(T5 / T8.)*
+
+> T5 pinned its media-aware arm's congestion controller to BBR precisely because T8 had shown the
+> controller decides a loss result, and left its segmented arm on the system default — which is CUBIC,
+> a fact that appears nowhere in a command line. The experiment then attributed the resulting
+> difference to the data plane and published "the two lanes' weaknesses are disjoint". Completing the
+> lane × controller matrix on the same rig showed the loss axis does not separate the lanes at all: at
+> a matched controller both hold full rate, and under CUBIC both collapse. Only the reordering half of
+> the original conclusion was a lane property. Where a knob exists in both arms under different names
+> and different layers — `--*-quic-congestion-control` against `net.ipv4.tcp_congestion_control` —
+> pin both and record both on the result line.
+
+**A setting is a default for what happens next, not a fact about what is being measured — read it
+back off the thing under test.** *(T8, segmented arm.)*
+
+> A `sysctl` changes the controller for sockets opened after it. Confirming it needs the controller
+> read back from the connections actually carrying the run, which on a segment-fetching lane means
+> sampling repeatedly: each fetch is a short-lived connection, so a single snapshot lands between them
+> and reports nothing — indistinguishable from the setting never having applied.
+
 **Run the control before believing a striking result, not after.** *(T17.)*
 
 > A round-trip against a proposed upstream fix captured zero bytes, which matched a predicted failure
@@ -355,6 +389,14 @@ yours.** *(T12.)*
 > delivered number plausible. The general fix is an identity check, not a liveness check: write a
 > token unique to the cell into the served tree and refuse to proceed until a fetch returns **that**
 > value, so "a server is up" can never be read as "my server is up".
+>
+> T7's segmented arm then re-encountered it on a rig written after that fix, from the other direction:
+> not a leftover server but two sweeps of the same script overlapping on its one port, each cell
+> grading whichever publisher happened to be serving. It produced a complete set of conformant,
+> plausible, wrong results — a clip's numbers can only be caught by noticing they carry another clip's
+> bitrate. **So the identity token belongs in every rig that binds a fixed port, and it needs a
+> companion: refuse to start on a port already in use, and hold a lock for the length of a sweep.**
+> A rule recorded as one experiment's correction gets read as that experiment's problem.
 
 **On a lane that two sources can serve at once, the failure is repeated time, not lost time — and
 neither a continuity check nor a PCR-interval check can see it.** *(T6.)*

@@ -156,6 +156,56 @@ to peers/relays** — so the switch is non-breaking, needs no protocol/version c
 interop. Because MoQ is hop-by-hop QUIC, `delay` can be enabled on just the lossy relay→subscriber
 hop, with the short relay-edge RTT as the retransmit loop.
 
+### The same knob on the segmented lane — and what it does to T5's verdict
+
+The finding above was measured on the media-aware lane, and [T5](test-5-network-impairment.md) then
+used it: it pinned its media-aware arm to BBR *because* the controller was known to decide a loss
+result. It left the segmented arm on the system default, which is CUBIC. So T5's loss column moved
+two variables at once — lane and controller — and attributed the difference to the one it had named.
+
+This runs the missing cells: the full lane × controller matrix on T5's own host, shaper, fixture and
+window, so all four boxes are directly comparable. Delivered rate as a fraction of source
+(`rate_ratio`), 40 s per cell, every cell confirming its controller by reading it back off the
+sockets carrying the run.
+
+| Commanded loss (+15 ms) | segmented / **CUBIC** | segmented / **BBR** | media-aware / **CUBIC** | media-aware / **BBR** |
+|---|---|---|---|---|
+| none | 1.040 | 1.040 | 0.962 | 0.962 |
+| 1 % | 1.005 | 0.968 | 0.762 | 0.962 |
+| 3 % | 0.900 | 0.971 | 0.337 | 0.962 |
+| 5 % | 0.594 | 0.968 | 0.172 | 0.961 |
+| 10 % | **0.170** | **1.040** | **0.128** | **0.961** |
+
+**Read down a column and the lanes are indistinguishable; read across a row and the controller is
+everything.** Under CUBIC both planes collapse together (0.170 and 0.128 at 10 %). Under BBR both
+hold full rate through the same ladder (1.040 and 0.961). The loss axis does not separate segmented
+HTTP from media-aware MoQ at all — it separates loss-based congestion control from delay-based, on
+whichever lane it is applied to.
+
+**So T5's headline needs splitting in two, and only half survives.** Its reordering result stands:
+that was measured at a pinned controller, and it is a genuine property of QUIC's in-order delivery
+that segment fetching does not share. Its loss result does not: "the media-aware lane is flat under
+loss where segmented HTTP falls to about half source rate by ~3 % applied and 0.17 at 8 %" compared
+TCP/CUBIC against QUIC/BBR, and at a matched controller the same rig puts segmented HTTP at 0.971 at
+a commanded 3 % and 1.040 at a commanded 10 %. The two planes do have disjoint weaknesses, but loss is
+not one of them.
+
+**The controllers did receive comparable loss, and the shaper's counters are not what shows it.**
+Those counters disagree with themselves here — at 10 % they credit the CUBIC cell with 7.30 % and the
+BBR cell with 1.23 %, while BBR's own sockets report 7.8 % of bytes retransmitted against CUBIC's
+8.8 %. Since a `netem` instance cannot apply a different policy to two flows given one command, and
+the sockets under measurement agree they were both losing roughly the commanded fraction, the
+counters are usable as evidence the filter matched the flow — their documented purpose on this rig —
+and not as an applied-loss measurement. The comparison is stated at commanded loss for that reason.
+
+Two lane properties are unchanged by the controller and worth recording, because they are the ones
+that really are lane-specific. The segmented arm posts **0 continuity errors and 0 PCR intervals
+above 40 ms in every cell of the matrix**, including the ones where it delivers 17 % of source rate:
+it sheds time, never data, exactly as T5 found. The media-aware arm posts 18–137 intervals above
+40 ms in every cell including the clean one, which is the exporter's PCR clustering
+([T13](test-13-downstream-grooming.md)) and not an impairment response — the count falls as loss
+rises only because fewer PCRs arrive to be spaced badly.
+
 ### All BBR generations vs the backends (CUBIC / BBRv1 / BBR2 / BBR3 side by side)
 
 Compared using two extra single-backend `moq-relay` binaries (`--no-default-features --features noq`

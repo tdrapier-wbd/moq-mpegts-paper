@@ -51,9 +51,18 @@ a single long run rather than new apparatus.
 **A lossy WAN path.** Both T18 environments were healthy, so nothing exercised the retransmission and
 jitter-buffer recovery the tunnels exist for — the case that should favour them against the media-aware
 lane. Impairment on the WAN legs is the arm that could change the ordering rather than confirm it, and
-[T5](test-5-network-impairment.md) has raised its value: on loopback the media-aware lane and segmented
-HTTP turn out to fail at opposite things, so a real path carrying both loss *and* reordering is where
-that inversion either holds or resolves.
+[T8](test-8-srt-vs-moq.md)'s controller matrix has sharpened what it should look for: on loopback,
+loss turns out not to separate the two lanes at all once both are given the same congestion
+controller, and **reordering is the only impairment that does**. So the arm worth running on a real
+path is the reordering one, and the loss ladder there is now a check on the controller choice rather
+than on the architecture. A path carrying both at once remains the case neither rig has produced.
+
+**Segmented HTTP over HTTP/3.** Long carried as the caveat that a shared QUIC substrate would erase
+the loss difference between the two planes. That hypothesis has now been confirmed by a cheaper route
+— matching the controller erases it on TCP — so this drops from load-bearing to confirmatory. It is
+also still blocked on the receive side rather than the origin: `tsp -I hls` speaks HTTP/1.1 and the
+box's `curl` is built without HTTP/3, so an h3 arm needs a client that both negotiates h3 and hands a
+transport stream onward.
 
 **Still blocked, and unchanged.** The segmented arm cannot reach the low end of its own envelope on free
 software — no free client fetches partial segments ([T14](test-14-data-plane-comparison.md) measurement
@@ -178,7 +187,15 @@ What remains open is in T16's own "still open" table. In rough order of value:
 - **6 s segments**, which T14 measurement 5 already publishes, against the groomer's 8 s default cushion
   ceiling. This is the one arm expected to fail as shipped, and therefore the one worth running.
 - **1 s segments**, where 2.5 × the observed lead lands under that ceiling, so the adaptive factor is
-  tested rather than clamped. T16 measured only that 8 s was adequate.
+  tested rather than clamped. T16 measured only that 8 s was adequate. [T7](test-7-timing-integrity.md)
+  has since run this at 27.5 Mbps as a diagnostic rather than as this cell: halving the segment
+  duration halved the source gap (3798 → 1878 ms) and did not change the conformance outcome, but that
+  clip was rate-limited by the test host, so the cell still wants running at a bitrate the rig can pace.
+- **A host that can pace ~30 Mbps without underrunning**, which is a rig upgrade and the precondition
+  for measuring the segmented lane above ~11.5 Mbps at all. T7's four-clip sweep is clean on the three
+  ~10 Mbps clips and inconclusive on the 27.5 Mbps one, and a local-file control at the same rate
+  fails worse than the lane does, so every high-bitrate segmented figure is currently bounded by the
+  instrument rather than by the subject.
 - **A lossy segmented path, downstream of the groomer.** [T5](test-5-network-impairment.md) has since
   put the segmented lane through a loss ladder and found the *ungroomed* egress byte-verbatim and
   P1-clean at every level, so what is left for T16 is narrower than it was: not whether segments

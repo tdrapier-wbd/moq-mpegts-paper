@@ -110,7 +110,7 @@ and settled it against the intuitive answer.
 |---|---|---|
 | **Carriage** | Media-aware and opaque lanes carry a full broadcast mux with 0 continuity errors; segmented HTTP preserves mux *content* on three clips — service identity, PMT PID, CAT, TDT/TOT, all splice PIDs — and adds one PAT/PMT pair per segment, costing file-domain PCR accuracy; a 1/2/6 s duration sweep confirms that cost is per-segment, not cumulative. Over the public internet, all three lanes graded together: **byte-faithful SRT is transparent on every criterion including the 481 ns P2 gate**; **segmented HTTP reproduces its loopback result to 0.1 % — 302.148 µs against 302.4 µs predicted, exactly 1.00 injected pair per segment head — so the injection is a property of the segmenter and not of the path**; the media-aware lane preserves the mux as bytes and not as a timed object (stuffing, mux rate, PSI density, PCR spacing) | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate. *The P2 gate cannot rank all three — it is undefined on a rate-less media-aware egress, though it is a real measurement on both byte-faithful lanes* |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**; a segmented-HTTP egress reaches the same standard on the **wire** with an 8 s cushion. On the MoQ lane, P1 PCR repetition on the wire **fails at every buffer depth and is not a depth problem**: the exporter emits PCRs too rarely for a groomer to place them (P1, `pcr_inserted=0`) | Anything at all on hardware; whether a denser exporter PCR cadence clears the gate |
-| **Loss** | CUBIC collapses, BBR restores parity with SRT. Against segmented HTTP the weaknesses are **disjoint and the ranking inverts** — MoQ/BBR holds 0.96 of rate to 10 % loss where segmented HTTP over TCP falls to 0.17, and under 25 % reordering they swap (0.98 against 0.19). Segmented HTTP never corrupts what it delivers, at any level | Congestion control on a provisioned path; a controller recommendation for a permanent trunk; the same ladder against a real CDN edge rather than one plain origin, and against an HTTP/3 profile |
+| **Loss** | CUBIC collapses, BBR restores parity with SRT — and the same is true of segmented HTTP, so **loss does not separate the two data planes**: at a matched controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13). **Reordering does separate them**, 0.98 against 0.19 on either controller, because QUIC's in-order delivery blocks. Segmented HTTP never corrupts what it delivers, at any level | Congestion control on a provisioned path; a controller recommendation for a permanent trunk; the same ladder against a real CDN edge rather than one plain origin |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, single-track, one host. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all, and two packagers of one feed are byte-identical by default | Two hosts, two clocks; multi-track identity; a hardware merge. On the segmented lane: a distributed segment store, and a standby joining mid-stream |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail |
@@ -385,6 +385,19 @@ at 481 ns over 2,496 PCRs (and 0 at 18 µs, a gate tighter than any other quoted
 0.068 against the ungroomed egress's 12.381, largest silence 17.2 ms against 4,011.9 ms — with
 **nothing dropped and nothing muted**, and no flag set beyond the output rate.
 
+**That result holds across clips, and it is bounded by bitrate rather than by content**
+([T7](../lab/test-7-timing-integrity.md)). Repeating it on the four reference clips — a synthetic
+exact-CBR stream, two real contribution captures and a 27.5 Mbps 4:2:2 broadcast mux — the three at
+~10 Mbps deliver **0 intervals above 40 ms, 0 `pcrverify` violations at ±500 ns, 0 continuity errors,
+and declared rate agreeing with PCR-implied rate to within a few parts per million**. The 27.5 Mbps clip does not, and the cause is the test
+host rather than the lane: fed the same clip at the same output rate straight from a local file, with
+no packager, origin or HTTP client anywhere in the chain, the groomer posts *more* violations than it
+does through the segmented lane. So the segmented lane's conformance is established to ~11.5 Mbps and
+**untested above it**, pending a host that can pace 30 Mbps without underrunning. Note also that the
+*ungroomed* segmented egress already carries 0 intervals above 40 ms on every clip, because a segment
+is a byte-verbatim slice: unlike the media-aware lane, this one gives the groomer no PCR damage to
+repair, and what grooming buys there is cadence and CBR.
+
 **On the segmented plane the constraint is buffer depth, not live operation.** T13 first read its 131
 live intervals as a property of re-timing a stream as it arrives, against 0 when reading a file. The
 segmented arm falsifies that reading by posting 0 *on the wire* while holding 8 s of cushion: what
@@ -470,7 +483,7 @@ mid-stream PID or PCR-PID change, and T-STD occupancy through the media-aware ex
 per-PID delivery — the last observed only as a compliance-tool shape warning and never root-caused
 ([Architecture](architecture.md) §4.3).
 
-### 3.3 How does the transport behave under loss? — Parity with SRT once the controller is chosen, and disjoint weaknesses against segmented HTTP
+### 3.3 How does the transport behave under loss? — The controller decides it, on every lane; only reordering separates the data planes
 
 **Loss resilience is set by the QUIC congestion controller, not by the protocol.** Under the default
 loss-based CUBIC, a head-to-head against SRT over a real EC2→home path collapses under uniform loss
@@ -496,33 +509,47 @@ head-of-line blocking, a loss-detection item rather than a CC or protocol flaw. 
 reorder far less than the emulator's model, so unbounded reordering is mainly a LEO or
 mobile-handover concern.
 
-**Against segmented HTTP the two lanes have disjoint weaknesses, and the ranking inverts.** Measured
-head-to-head on one host under one shaper — same clip, same window, media-aware lane pinned to BBR,
-loss reported as the fraction the shaper counted rather than the fraction commanded
-([T5](../lab/test-5-network-impairment.md)):
+**Against segmented HTTP, loss does not separate the two lanes and reordering does.** Measured
+head-to-head on one host under one shaper — same clip, same window, both lanes run at both
+controllers, each cell confirming its controller by reading it back off the sockets carrying the run
+([T8](../lab/test-8-srt-vs-moq.md); the reordering row from
+[T5](../lab/test-5-network-impairment.md)):
 
-| Applied impairment | Segmented HTTP over TCP | MoQ media-aware, BBR |
-|---|---|---|
-| 3 % loss | ~0.5 of source rate (0.45–0.54, n=3) | **0.96** |
-| 8–10 % loss | 0.17 | **0.96** |
-| 25 % reordering | **0.98** | 0.19 |
+| Commanded impairment | Segmented, **CUBIC** | Segmented, **BBR** | Media-aware, **CUBIC** | Media-aware, **BBR** |
+|---|---|---|---|---|
+| 1 % loss | 1.00 | **0.97** | 0.76 | **0.96** |
+| 3 % loss | 0.90 | **0.97** | 0.34 | **0.96** |
+| 5 % loss | 0.59 | **0.97** | 0.17 | **0.96** |
+| 10 % loss | 0.17 | **1.04** | 0.13 | **0.96** |
+| 25 % reordering | **0.98** | — | 0.19 | 0.19 |
 
-Both directions reproduce on a second run (0.49 and 0.15). The mechanism is the reliability model on
-each side: TCP reassembles in order, so reordering is free and loss costs throughput through congestion
-response; QUIC on BBR does not read loss as congestion but does read reordering as loss. **Segmented
-HTTP never corrupted what it delivered at any level — 0 continuity discontinuities and 0 PCR intervals
-above 40 ms in every cell, including the one delivering a sixth of the stream — so its failure mode is
-lateness rather than damage**, which is the one a bounded downstream buffer can absorb. The media-aware
-lane's own 7.9–9.2 % of PCR intervals above 40 ms is present in the unimpaired baseline too and does
-not move with impairment; it is the exporter defect of §3.2, not an impairment effect.
+**Read down a column and the data planes are indistinguishable; read across a row and the controller
+decides the result.** A loss-based controller reads a dropped packet as congestion and backs off
+whether the bytes are a QUIC stream or an HTTP response, and a delay-based one does not, equally on
+both. So the familiar claim that segment fetching degrades under loss where MoQ does not is a
+comparison of TCP's default controller against QUIC's tuned one; correcting it removes the loss axis
+as a discriminator between the two architectures entirely.
 
-*Measurement point P1, on the ungroomed egress. Loopback with a 15 ms one-way base delay, one clip, one
-40 s window, one replicate for most cells and two for the decisive ones. Two bounds matter for reading
-the loss column: the segmented arm was served by a **single unoptimised HTTP/1.1 origin, not a CDN
-edge**, which is the configuration its commercial case assumes; and over an HTTP/3 profile it would
-share MoQ's substrate, where the loss half of this result would likely not distinguish them at all.
-Neither caveat touches the reordering result, which is a property of TCP. Treat the ordering and the
-shape as the finding and the constants as indicative.*
+**What survives as a lane property is reordering**, because QUIC's in-order stream delivery converts
+it into head-of-line blocking that no controller removes — the media-aware lane reads 0.19 under both
+— while segment fetching cannot suffer it, each segment being an independent object with TCP
+reassembling beneath it.
+
+**Segmented HTTP never corrupted what it delivered at any level** — 0 continuity discontinuities and
+0 PCR intervals above 40 ms in every cell of the matrix, including the ones delivering a sixth of the
+stream — **so its failure mode is lateness rather than damage**, which is the one a bounded downstream
+buffer can absorb. The media-aware lane's own PCR intervals above 40 ms are present in the unimpaired
+baseline too and do not move with impairment; that is the exporter defect of §3.2, not an impairment
+effect.
+
+*Measurement point P1, on the ungroomed egress. Loopback with a 15 ms one-way base delay, one clip,
+one 40 s window, one replicate per cell. Stated at commanded loss rather than counted: the shaper's
+counters disagree with the sockets' own retransmission accounting on the segmented arm (1.2 % counted
+against 7.8 % of bytes retransmitted at a commanded 10 %), so they are used here as evidence the
+filter matched the flow and not as an applied-loss measurement — a `netem` instance cannot apply a
+different policy to two flows given one command. The segmented arm was served by a **single
+unoptimised HTTP/1.1 origin, not a CDN edge**, which is the configuration its commercial case assumes.
+Treat the ordering and the shape as the finding and the constants as indicative.*
 
 **Two failure modes are opposite, and for reconstruction the MoQ one is better.** Under loss the
 media-aware lane sheds *whole groups* and emits a syntactically clean TS — so **continuity-error

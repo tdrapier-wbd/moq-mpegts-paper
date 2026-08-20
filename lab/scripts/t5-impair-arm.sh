@@ -35,6 +35,11 @@ RELAY_PORT=${RELAY_PORT:-4499} # private relay for the moq control arm
 MOQ_BIN=${MOQ_BIN:-$HOME/bin-main-eab96019/moq}
 MOQ_RELAY=${MOQ_RELAY:-$HOME/bin-main-eab96019/moq-relay}
 CC=${CC:-delay} # `delay` = BBR, `loss` = CUBIC; see the moq arm below for why it is pinned
+# The segmented lane's controller, which T5 left at the system default and therefore
+# left unrecorded. That default is CUBIC, so T5's loss column compared QUIC/BBR
+# against TCP/CUBIC and could not say how much of the difference was the lane and how
+# much was the controller. Setting this pins the other half of that 2x2.
+TCP_CC=${TCP_CC:-}
 IFACE=lo
 
 # Source rate of the fixture, for the delivered-vs-source comparison that is the
@@ -78,8 +83,19 @@ cleanup() {
 	netem_clear
 	sudo ip link set dev $IFACE mtu "$LO_MTU_ORIG" 2>/dev/null || true
 	sudo ethtool -K $IFACE tso on gso on gro on 2>/dev/null || true
+	[ -n "$TCP_CC" ] &&
+		sudo sysctl -qw net.ipv4.tcp_congestion_control="$TCP_CC_ORIG" 2>/dev/null
 }
 trap cleanup EXIT
+
+TCP_CC_ORIG=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo cubic)
+if [ -n "$TCP_CC" ]; then
+	sudo modprobe "tcp_$TCP_CC" 2>/dev/null || true
+	sudo sysctl -qw net.ipv4.tcp_congestion_control="$TCP_CC" || {
+		echo "RESULT arm=$ARM spec=\"$SPEC\" status=tcp_cc_unavailable cc=$TCP_CC"
+		exit 1
+	}
+fi
 
 sudo ip link set dev $IFACE mtu "$LO_MTU"
 sudo ethtool -K $IFACE tso off gso off gro off 2>/dev/null || true
@@ -159,6 +175,22 @@ hls)
 	[ -f "$OUT/index.m3u8" ] || { echo "RESULT arm=$ARM spec=\"$SPEC\" status=no_playlist"; exit 1; }
 	cp "$OUT/index.m3u8" "$OUT/playlist-sample.m3u8"
 
+	# A sysctl is a default for sockets opened after it, not a fact about the sockets
+	# under measurement, so read the controller back off the origin's own connections
+	# while they are carrying the run. A cell that cannot show its controller on the
+	# wire is reporting a label, not a condition.
+	# Sampled repeatedly rather than once: a segment fetch is a short-lived
+	# connection, so a single snapshot usually lands between them and reports
+	# nothing, which is indistinguishable from the setting not having applied.
+	(
+		for _ in $(seq 1 $((SECS * 3))); do
+			ss -tin 2>/dev/null | grep -A1 ":$PORT"
+			sleep 0.33
+		done
+	) >"$OUT/ss.txt" 2>&1 &
+	SS_PID=$!
+	PIDS+=("$SS_PID")
+
 	timeout "$SECS" tsp --realtime \
 		-I hls "http://127.0.0.1:$PORT/index.m3u8" --live \
 		-O file "$CAP" >"$OUT/receive.log" 2>&1
@@ -199,6 +231,18 @@ moq)
 esac
 
 COUNTERS=$(netem_counters)
+# The fraction the shaper actually counted, which is the only loss figure two arms
+# can be compared at. T5's first pass compared arms on the commanded percentage and
+# was wrong by a factor of three for exactly this reason.
+APPLIED=$(python3 -c "
+import sys
+d = dict(p.split('=') for p in '''$COUNTERS'''.split())
+try:
+    s, dr = int(d['sent_pkt']), int(d['dropped_pkt'])
+    print('applied_loss=%.2f' % (100.0 * dr / (s + dr)) if s + dr else 'applied_loss=na')
+except Exception:
+    print('applied_loss=na')
+" 2>/dev/null || echo applied_loss=na)
 # A cell whose shaper is missing at the end did not run the condition on its label,
 # whatever its delivered numbers look like. Say so on the result line rather than
 # publishing a clean-looking row.
@@ -238,7 +282,17 @@ HTTP_NON200=$(grep '"GET' "$OUT/origin.log" 2>/dev/null | grep -vc ' 200 -$' || 
 RECV_ERR=$(grep -ciE 'error|cannot|failed|restart' "$OUT/receive.log" 2>/dev/null || true)
 : "${HTTP_GETS:=0}" "${HTTP_NON200:=0}" "${RECV_ERR:=0}"
 
-[ "$ARM" = moq ] && ARMTAG="moq/cc=$CC" || ARMTAG=$ARM
+if [ "$ARM" = moq ]; then
+	ARMTAG="moq/cc=$CC"
+	CCSEEN=$CC
+else
+	ARMTAG="hls${TCP_CC:+/cc=$TCP_CC}"
+	# whichever controller `ss` named on the origin's sockets, not the one commanded
+	CCSEEN=$(sed -n 's/.*[[:space:]]\(bbr\|cubic\|reno\)[[:space:]].*/\1/p' "$OUT/ss.txt" 2>/dev/null |
+		sort -u | paste -sd, -)
+	: "${CCSEEN:=unseen}"
+fi
 echo "RESULT arm=$ARMTAG spec=\"$SPEC\" secs=$SECS mtu=$LO_MTU bytes=$BYTES mbps=$MBPS rate_ratio=$RATIO" \
 	"cc_disc=$CCERR $PCR http_gets=$HTTP_GETS http_non200=$HTTP_NON200" \
-	"recv_log_errs=$RECV_ERR ${COUNTERS:-sent_pkt=na dropped_pkt=na} shaper=$SHAPER_OK"
+	"recv_log_errs=$RECV_ERR ${COUNTERS:-sent_pkt=na dropped_pkt=na} $APPLIED" \
+	"shaper=$SHAPER_OK cc_seen=$CCSEEN"

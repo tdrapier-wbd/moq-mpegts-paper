@@ -109,35 +109,42 @@ multicast.
 ## 3. Reliability (R5)
 
 Two questions hide inside this axis and they have different answers: *how does the transport behave
-under impairment*, and *how does the system recover when something fails*. On the first, the two are
-not comparable as better and worse — their weaknesses are disjoint and the ranking inverts depending on
-what the path does. The second favours segmented HTTP, and it is the more important of the two for a
-trunk.
+under impairment*, and *how does the system recover when something fails*. On the first, one
+impairment separates the two data planes and the other separates congestion controllers rather than
+lanes. The second favours segmented HTTP, and it is the more important of the two for a trunk.
 
-### 3.1 Under impairment: disjoint weaknesses, and the ranking inverts
+### 3.1 Under impairment: reordering separates the lanes, loss separates the controllers
 
-**On a shared substrate the two are indistinguishable; on the substrates actually deployed they fail at
-opposite things.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so over HTTP/3 it rides the same QUIC
-substrate with the same per-stream loss isolation and the mandatory RFC 9218 priority scheme, and there
-is no per-packet loss-resilience argument that distinguishes the two. QUIC is a necessary substrate for
-both and distinguishes neither; what distinguishes MoQ is the object and subscription model above it.
+**The argument that a shared substrate makes the two indistinguishable was right, and it did not need
+a shared substrate to be shown.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so over HTTP/3 it
+rides the same QUIC substrate with the same per-stream loss isolation and the mandatory RFC 9218
+priority scheme, and there is no per-packet loss-resilience argument that distinguishes the two. QUIC
+is a necessary substrate for both and distinguishes neither; what distinguishes MoQ is the object and
+subscription model above it. Measurement bears this out even on the substrates actually deployed:
+matching the congestion controller is enough to make the loss axis indistinguishable, with TCP on one
+side and QUIC on the other.
 
-That argument holds for the HTTP/3 profile and says nothing about the one in the field. Measured
-head-to-head on one host under one shaper, with classic HLS over TCP against the media-aware lane on
-BBR ([Evidence](evidence.md) §3.3):
+Measured head-to-head on one host under one shaper, across the full matrix of lane against congestion
+controller ([Evidence](evidence.md) §3.3), delivered rate as a fraction of source:
 
-| Applied impairment | Segmented HTTP over TCP | MoQ media-aware, BBR |
-|---|---|---|
-| 3 % loss | ~0.5 of source rate (0.45–0.54, n=3) | **0.96** |
-| 8–10 % loss | 0.17 | **0.96** |
-| 25 % reordering | **0.98** | 0.19 |
+| Commanded impairment | Segmented HTTP, **CUBIC** | Segmented HTTP, **BBR** | MoQ media-aware, **CUBIC** | MoQ media-aware, **BBR** |
+|---|---|---|---|---|
+| 3 % loss | 0.90 | **0.97** | 0.34 | **0.96** |
+| 10 % loss | 0.17 | **1.04** | 0.13 | **0.96** |
+| 25 % reordering | **0.98** | — | 0.19 | 0.19 |
 
-**Each lane is robust to precisely what the other is not, and the mechanism is the reliability model on
-both sides.** TCP reassembles in order, so reordering costs it nothing and loss costs it throughput
-through congestion response; QUIC with BBR does not read loss as congestion and holds rate through
-10 %, but does treat reordering as loss and turns it into head-of-line blocking. Neither result is a
-protocol defect and neither is fixable by choosing better — they are the two halves of what a reliable
-ordered stream has to trade.
+**Loss is a controller result, not a lane result.** Read down a column and the two data planes are
+indistinguishable; read across a row and the controller decides the outcome on either of them. A
+loss-based controller treats a dropped packet as a congestion signal and backs off whether the bytes
+are a QUIC stream or an HTTP response; a delay-based one does not, equally on both. The widely-repeated
+claim that segment fetching degrades under loss where MoQ does not is an artefact of comparing TCP's
+default controller against QUIC's tuned one.
+
+**Reordering is the real difference, and it belongs to the lane.** QUIC delivers a stream in order, so
+reordering becomes head-of-line blocking that no congestion controller removes — the media-aware lane
+reads 0.19 under both. Segment fetching cannot suffer it: each segment is an independent object and
+TCP reassembles beneath it. This is the one axis on which the choice of data plane is a genuine
+reliability decision rather than a tuning decision.
 
 **What segmented HTTP never did, at any impairment, is corrupt what it delivered:** 0 continuity
 discontinuities and 0 PCR intervals above 40 ms in every cell, including the one where it delivered a
@@ -145,11 +152,9 @@ sixth of the stream. It sheds *time*, not *bytes*, which is the failure a downst
 The media-aware lane's own PCR non-conformance sat unchanged at 7.9–9.2 % in every cell including the
 unimpaired baseline, because it is the exporter defect of §5.1 rather than anything impairment did.
 
-Two things bound this. The segmented arm was served by a single unoptimised origin over HTTP/1.1 rather
+One thing bounds this. The segmented arm was served by a single unoptimised origin over HTTP/1.1 rather
 than a tuned CDN edge, which is the configuration its commercial case assumes — a CDN could move the
-loss curve, and cannot move the reordering result, which belongs to TCP. And the media-aware figure is
-the lane at its best: under CUBIC rather than BBR its loss column collapses instead
-([Evidence](evidence.md) §3.3).
+loss curve further, and cannot move the reordering result, which belongs to the lane.
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
 
@@ -176,9 +181,10 @@ where current implementations are roughest.
 Two qualifications keep this honest. The countervailing MoQ property is that it reaches the same
 completeness with a much smaller buffer, which is the latency argument in §5 and not a reliability
 argument. And **the retry model has now been exercised under loss, with a split verdict**: it does not
-deliver resilience *of rate* — the lane falls to about half source rate at 3 % loss and 0.17 at 8 %, where
-the media-aware lane holds 0.96 (§3.1) — but it does deliver resilience *of content*, arriving
-byte-verbatim and P1-clean at every impairment level tested. Retry buys completeness, not throughput.
+deliver resilience *of rate* by itself, because rate under loss is set by the congestion controller
+underneath — the same lane reads 0.17 at 10 % loss on CUBIC and 1.04 on BBR (§3.1) — but it does
+deliver resilience *of content*, arriving byte-verbatim and P1-clean at every impairment level tested,
+including the cells where a sixth of the stream got through. Retry buys completeness, not throughput.
 The *failover* half has since been exercised too, and the serving-node case is the cleanest result
 either lane produced: an origin killed for ten seconds costs **no content at all**, because HTTP holds
 no session state, the next successful request is the recovery, and the store still holds what was
@@ -942,7 +948,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
-| Reliability under impairment (R5) | **depends on the path, and the ranking inverts** | **M** | **decisive in both directions and measured head-to-head: under loss the media-aware lane on BBR holds 0.96 of source rate to 10 % where segmented HTTP over TCP falls to about half at 3 % (0.45–0.54, n=3) and 0.17 at 8 %; under 25 % reordering they swap exactly, 0.98 against 0.19. Disjoint weaknesses, not a winner. On a shared HTTP/3 substrate the loss half would not distinguish them, which is untested** (§3.1) |
+| Reliability under impairment (R5) | **segmented HTTP, on the one impairment that separates them** | **M** | **measured head-to-head across the full lane × controller matrix: loss does not separate the lanes at all — given the same controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13), so the familiar "segment fetching degrades under loss" result is a controller comparison. Under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98, because QUIC's in-order delivery turns reordering into head-of-line blocking and no controller removes it** (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, but complete resilience of *content* — 0 continuity errors and 0 PCR intervals above 40 ms at every impairment level, so the lane sheds time rather than data.** Edge and Pathway selection remains specification-only, and the availability-window boundary was never reached (§3.2) |
 | Redundancy — serving node (R5) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning; the difference is that the media-aware exporter skips to the live edge and loses the media produced during the outage, where the segmented client refetches it from the store and loses nothing. But neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all — both abandon at the first failed playlist reload — so it took a purpose-written client to show (§3.2) |
 | Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |

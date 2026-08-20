@@ -146,7 +146,13 @@ loss is what the shaper counted, not what it was commanded; the two columns diff
 still offload slightly differently, and **the residual runs against the segmented lane's favour** — it
 receives less loss than the media-aware lane in every cell and still degrades further.
 
-| Condition | Applied loss (seg / MoQ) | Seg rate | Seg CC | Seg PCR > 40 ms | MoQ rate | MoQ CC | MoQ PCR > 40 ms |
+> **The two rate columns do not share a congestion controller: the segmented arm is TCP/CUBIC and the
+> media-aware arm is QUIC/BBR.** The loss rows therefore compare controllers as much as lanes, and the
+> matrix that separates them is in [T8](test-8-srt-vs-moq.md) — segmented HTTP given BBR reads 0.971 at
+> 3 % and 1.040 at 10 % on this same rig. Read the reordering row as a lane result and the loss rows as
+> a controller result.
+
+| Condition | Applied loss (seg / MoQ) | Seg rate (CUBIC) | Seg CC | Seg PCR > 40 ms | MoQ rate (BBR) | MoQ CC | MoQ PCR > 40 ms |
 |---|---|---|---|---|---|---|---|
 | baseline (15 ms) | 0 % / 0 % | **1.040** | 0 | **0.00 %** | 0.962 | 0 | 8.83 % |
 | +100 ms | 0 % / 0.04 % | 0.968 | 0 | 0.00 % | 0.934 | 0 | 8.89 % |
@@ -166,7 +172,8 @@ silently missing.*
 **Replicates of the two decisive cells.** The segmented lane at commanded 5 % loss reads **0.448, 0.493
 and 0.543** across three runs (2.8–3.2 % applied), and the media-aware lane under reordering reads
 **0.192 and 0.150**. So the segmented loss figure carries roughly ±10 % of spread and should be read as
-"about half rate", not as 0.45; both inversions reproduce comfortably outside that spread.
+"about half rate", not as 0.45. Both reproduce well outside that spread — but only the reordering
+figure is a lane result; the loss figure reproduces a *controller*, as the note above the table says.
 
 **The delay rows overstate a steady-state effect, and a longer window says by how much.** At 120 s
 rather than 40 s the segmented lane reads **0.992** at baseline and **0.932** at +200 ms, against 1.040
@@ -199,17 +206,21 @@ capture tool cleanly, so no local TSDuck file was produced.
    media-aware egress stayed bursty (~13 % PCR > 40 ms; on this pre-#2440 build also SI-stripped) and
    the opaque egress stayed IRD-shaped (0 % > 40 ms, full SI, CBR). The property that decides
    broadcast usability is set by the lane and downstream grooming, not by impairment.
-5. **The two lanes' weaknesses are disjoint, and the ranking inverts between them.** Under loss the
-   media-aware lane is flat — 0.960 at 10 % applied, indistinguishable from its own baseline — while
-   segmented HTTP falls to 0.448 at 3.2 % and 0.170 at 8.0 %. Under reordering the positions swap
-   exactly: segmented HTTP is untouched at 0.981 where the media-aware lane collapses to 0.192. Neither
-   lane is "more robust"; each is robust to what the other is not, and a route's dominant impairment
-   decides which one that favours.
-6. **The mechanism is the reliability model, on both sides of the inversion.** TCP retransmits and
-   reassembles in order, so reordering costs it nothing and loss costs it throughput through congestion
-   response. QUIC with BBR does not read loss as congestion, so it holds rate through 10 % — the T8
-   result, reproduced here on a different host and rig — but it does treat reordering as loss, and
-   in-order stream delivery converts that into head-of-line blocking.
+5. **Reordering separates the two lanes; loss does not.** Under reordering segmented HTTP is untouched
+   at 0.981 where the media-aware lane collapses to 0.192, and that comparison holds because both arms
+   were run at a pinned controller. The loss column of this sweep is **not** a lane comparison: it ran
+   the media-aware arm on BBR and the segmented arm on the system default, which is CUBIC. Completing
+   the matrix ([T8](test-8-srt-vs-moq.md)) puts segmented HTTP at 0.971 at 3 % and 1.040 at 10 % once
+   it too is given BBR, against the media-aware lane's 0.962 — indistinguishable. Under CUBIC both
+   collapse together. So the loss figures below record what a *controller* does on each lane, and the
+   inversion this experiment originally reported was half an artefact of its own asymmetry.
+6. **The mechanism is the reliability model on the reordering side, and the congestion controller on
+   the loss side.** QUIC's in-order stream delivery converts reordering into head-of-line blocking,
+   which segment fetching does not suffer; that is structural and belongs to the lane. Loss is
+   different: a loss-based controller reads a dropped packet as congestion and backs off on either
+   lane, and a delay-based one does not, on either lane. TCP's retransmit-and-reassemble is why
+   reordering costs the segmented lane nothing, but it is not why that lane loses throughput under
+   loss — CUBIC is.
 7. **Segmented HTTP loses time, never bytes — and that is the more useful failure mode.** Across every
    condition it recorded **0 continuity discontinuities and 0 PCR intervals above 40 ms**: the media
    that arrives is a byte-verbatim slice of the source carrying the source's own 24.4 ms PCR grid, even
@@ -264,26 +275,31 @@ Limits specific to the segmented-vs-media-aware head-to-head:
 
 ## Conclusion
 
-**Neither data plane is the more robust one. Their weaknesses are disjoint, and which one a route
-should prefer depends on whether that route loses packets or reorders them.** On one host under one
-shaper, the media-aware lane on BBR holds 0.96 of source rate through 10 % applied loss and collapses
-to 0.15–0.19 under 25 % reordering; segmented HTTP is untouched by the same reordering at 0.98 and
-falls to 0.45 at 3 % loss and 0.17 at 8 %. Both directions reproduce, and the residual calibration
-error runs against segmented HTTP's favour rather than for it.
+**One impairment separates the two data planes, and it is reordering, not loss.** On one host under
+one shaper the media-aware lane collapses to 0.15–0.19 of source rate under 25 % reordering while
+segmented HTTP is untouched at 0.98 — a structural consequence of QUIC's in-order stream delivery
+that segment fetching cannot suffer, and the one axis on which a route's choice of lane is a genuine
+engineering decision. **Loss separates congestion controllers instead.** Given the same controller
+both lanes behave the same way: on BBR both hold full rate through 10 % ([T8](test-8-srt-vs-moq.md)
+completes the matrix at 1.040 segmented and 0.961 media-aware), and on CUBIC both collapse to 0.13–0.17.
+The loss ladder in this experiment gave the two lanes different controllers, so the inversion it
+originally reported was in part its own asymmetry.
 
-**The specification-level expectation for segmented HTTP was wrong in one direction and right in
-another.** Its availability window and idempotent retry did not buy resilience *of rate* under loss —
-it degrades steeply where the media-aware lane does not. What they did buy is resilience *of content*:
-across every condition the lane delivered 0 continuity discontinuities and 0 PCR intervals above 40 ms,
-so it sheds time rather than data, and a bounded downstream buffer is the mitigation. The
-media-aware lane's failure under reordering is the one that needs a second path
-([T6](test-6-relay-resilience.md) / ST 2022-7) rather than a buffer.
+**The specification-level expectation for segmented HTTP was right about content and untested about
+rate.** Its availability window and idempotent retry buy resilience *of content*: across every
+condition, including the ones where it delivers 17 % of source rate, the lane records 0 continuity
+discontinuities and 0 PCR intervals above 40 ms, so it sheds time rather than data and a bounded
+downstream buffer is the mitigation. They buy nothing either way for resilience *of rate*, which
+belongs to the controller underneath. The media-aware lane's failure under reordering is the one that
+needs a second path ([T6](test-6-relay-resilience.md) / ST 2022-7) rather than a buffer or a
+controller.
 
 Operating envelope (media-aware, ungroomed, 5 s buffer): usable with 0 CC and maintained throughput
 up to **~1 % random loss and ≥ 200 ms added latency**, with in-order jitter tolerated; **starvation**
-sets in by ~3 % loss and **reordering** is the boundary condition. That loss collapse is a CUBIC
-default and is removed by BBR ([T8](test-8-srt-vs-moq.md)), which is what the head-to-head above
-measures. Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §3.3.
+sets in by ~3 % loss and **reordering** is the boundary condition. The loss half of that envelope is
+a CUBIC default on either lane and is removed by BBR on either lane
+([T8](test-8-srt-vs-moq.md)); **reordering is the part that is a property of the lane**. Recorded as
+a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §3.3.
 
 **What would settle the part that is still open** is the same ladder against a real CDN edge rather
 than a single unoptimised origin, and a loss ladder pushed far enough to find the depth at which the
@@ -291,6 +307,17 @@ segmented lane falls out of its own availability window — the failure this rig
 reached.
 
 ## Corrections
+
+**Believed:** with the shaper, host, fixture and window held identical, the remaining difference
+between the two arms is the data plane. **True:** the arms did not share a congestion controller. The
+media-aware arm was pinned to BBR *deliberately* — on T8's finding that the controller decides a loss
+result outright — and the segmented arm was left on the system default, which is CUBIC. The one
+variable known to dominate the loss axis was therefore the one variable not controlled, and the
+"disjoint weaknesses" conclusion inherited it: at a matched controller the loss ladder does not
+separate the lanes at all ([T8](test-8-srt-vs-moq.md)). **Rule:** pinning a setting on one arm is
+half a control; the pin has to be applied to every arm, including the arms where the equivalent knob
+has a different name and lives in a different layer. A default is a choice that does not appear in
+the command line, and an experiment that records only what it typed will not notice it.
 
 **Believed:** a `netem` percentage is the loss the flow experiences, so two arms given the same command
 are comparable. **True:** the drop decision lands on whatever buffer the qdisc is handed, which under
