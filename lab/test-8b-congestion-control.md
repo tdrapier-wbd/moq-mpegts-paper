@@ -33,6 +33,14 @@ buffer headroom that absorbs the next transient. This is why the "bufferbloat = 
 the upstream test does not map directly: that test optimises latency for a flow that can *fill* the
 pipe; ours is fixed-rate with a re-groomer, so **completeness under contention** is the axis.
 
+The **segmented-HTTP arm asks the same question of the third data plane**, and it is the condition
+that plane has not yet been put through. [T5](test-5-network-impairment.md) and
+[T8](test-8-srt-vs-moq.md) impair it non-congestively, where it never corrupts anything and simply
+sheds time; nothing so far has asked what it does when the pipe is *smaller than the feed* and there
+is no more time to shed. Because the answer turns out to depend entirely on the receiver, the arm is
+run under two clients — the off-the-shelf `tsp -I hls` and T6's minimal re-anchoring client — which is
+the only way to tell a property of the lane from a property of one implementation.
+
 This is a characterisation, not a gate: the thesis is decided by T7 (Gate 2).
 
 ## Environment
@@ -71,6 +79,7 @@ for a permanent fixed-rate trunk.
 | BBRv2 | quiche | single-backend relay (`--no-default-features --features quiche,websocket,uds`) |
 | BBRv3 | noq | single-backend relay (`--features noq,…`) — see caveat |
 | SRT | — | `tsp -O srt` / `tsp -I srt`, matched buffer, as the incumbent reference |
+| Segmented HTTP | TCP/CUBIC | `t8b-segmented.sh` — `tsp -O hls` + a Python origin in the publisher namespace, 2 s segments, 6-segment window. `RECV=tsp` (off-the-shelf) or `RECV=pull` (T6's re-anchoring client). |
 
 **BBRv3 caveat.** noq/BBRv3 carries a subtract-overflow panic under high loss
 ([noq #768](https://github.com/n0-computer/noq/issues/768)). A relay abort is an outage by definition
@@ -177,6 +186,69 @@ replicate is a secondary buffer-headroom read. 2–3 replicates per controller, 
 | BBRv2 (quiche) | 67–69 % | 0 | 225 / 291 (/ 265) ms | **stable, ~½ CUBIC** |
 | BBRv3 (noq) | **11–13 %** | 0 | 595 / 597 ms | **broken** — bloats *and* starves ([noq #768](https://github.com/n0-computer/noq/issues/768)) |
 | SRT (reference) | 90 % | **4279** | 583 ms | most bytes, but a damaged (unreconstructable) stream |
+| **Segmented HTTP** (`tsp` client) | **64 %** | **0** | **489 ms** | **clean until it stops — the session dies at 43 s** |
+| **Segmented HTTP** (re-anchoring client) | **99 %** | **0** | **486 ms** | **thins in whole segments; survives** |
+
+The segmented rows were measured in the same session as an SRT re-run that reproduced the published
+reference row to within noise (90 % of cap, 4,288 CC errors against 4,279, p50 582 ms against 583), so
+they sit on the same scale as the rows above them rather than merely alongside them.
+
+### C1, segmented lane — the client decides whether this lane degrades or dies
+
+Two clients, one lane, one condition, opposite outcomes. This is the whole result, and it is a result
+about receiver policy rather than about segment fetching.
+
+| | `tsp -I hls` | `t6-hls-pull.py` (re-anchors on failure) |
+|---|---|---|
+| Delivered | 3.18 Mb/s — **64 % of cap**, 32 % of source | 4.93 Mb/s — **99 % of cap**, 50 % of source |
+| Segments served | 8 consecutive, no gaps | 12 of an 18-segment span — **6 skipped** |
+| Continuity errors | 0 | 0 |
+| PCR intervals > 40 ms | 0 | 2, max 12.0 s — *the holes* |
+| Session at 60 s | **dead: 404 at 43 s** | alive, ~12 s behind the edge |
+
+Both replicates of each are identical to three significant figures.
+
+**`tsp` does not fall off the edge so much as walk backwards off it.** It fetches strictly in order
+and never skips, so a sustained shortfall means it slides steadily further back through the live
+window until the segment it asks for has already been deleted — then a 404, at 43 s. What it does with
+that 404 is worse than stopping: it does not check the status before handing the body to the demuxer,
+so the origin's HTML error page enters the transport stream
+(`MIME type is text/html, maybe not a valid transport stream`, then
+`synchronization lost after 126,800 packets`).
+
+**Given a client that re-anchors, the same lane thins exactly as MoQ does** — and delivers more. It
+skips 6 segments to stay near the edge, producing a clean TS with holes rather than damage: 0
+continuity errors, and two PCR discontinuities of 12 s that *are* the skips. It also fills the
+bottleneck almost perfectly at 99 % of cap, where MoQ manages 45–81 %, because a fetcher that never
+requests a stale object keeps the pipe busy.
+
+**Read the delivery advantage with its price attached.** The re-anchoring client is running roughly
+12 s behind the live edge and takes its content loss in 12 s holes; the MoQ rows are at
+`--latency-max 2s` and shed in group-sized pieces. Segmented HTTP is buying that completeness with
+about six times the latency and much coarser loss granularity, which for a broadcast hand-off is the
+wrong side of both trades even though the delivered fraction is higher.
+
+Sweeping the bottleneck against the source's 9.95 Mb/s, with the `tsp` client, locates where its
+particular failure begins:
+
+| Cap | Over-subscription | Delivered | % of cap | % of source | Segments served | Lag at 60 s | Session |
+|---|---|---|---|---|---|---|---|
+| 5 Mb/s | 2.0 : 1 | 3.18 Mb/s | 64 % | 32 % | 8, no gaps | 10 s behind | **404 at 43 s** |
+| 8 Mb/s | 1.24 : 1 | 6.64 Mb/s | 83 % | 67 % | 17, no gaps | 6 s behind | survives, still falling |
+| 12 Mb/s | 0.83 : 1 | 8.93 Mb/s | 74 % | 90 % | 22, no gaps | at the edge | survives, keeps up |
+
+**The 8 Mb/s row is the one to read carefully.** Surviving the window is not the same as being
+healthy: it lost about four segments of ground over 60 s against a nine-segment retention, so it is on
+the same trajectory as the 5 Mb/s cell with a longer fuse. A 60 s window is too short to call it a
+pass.
+
+Two properties in that ladder belong to the lane rather than to the client. **A strictly-ordered
+fetcher cannot use the bottleneck it is given** — 64 %, 83 % and 74 % of cap, including the
+over-provisioned cell; the re-anchoring client's 99 % shows the capacity was there to be taken. And
+**the lane bloats the queue even when over-provisioned**: p50 RTT is 337 ms at a 12 Mb/s cap against a
+100 ms base, because each segment fetch is a line-rate burst into the bottleneck buffer. A segmented
+trunk sharing a bottleneck with anything else will hurt it whether or not the trunk is short of
+capacity.
 
 ### C2–C6 — not yet run
 
@@ -208,6 +280,25 @@ permanent trunk.
   reconstructable. SRT keeps 90 % of the bytes but its ARQ cannot hold under sustained
   over-subscription, so the output carries **4279 CC errors** — a damaged, unreconstructable stream.
   For reconstruction, clean-but-thinned wins.
+- **On the segmented lane, congestion behaviour is a receiver property, not a transport property.**
+  The same lane under the same shortfall either dies at 43 s or thins cleanly at 99 % of the cap
+  depending only on what the client does with a 404. This is the sharpest instance in the campaign of
+  something the whole segmented arm keeps running into: **on a lane whose transport holds no session
+  state, almost every behaviour worth measuring has been pushed up into the client**, so a figure
+  attributed to "segmented HTTP" is very often a figure about one client's error handling. T6 found
+  the same thing for failover; here it is worth a factor of three in delivered rate and the difference
+  between a live feed and a dead one.
+- **Where MoQ and SRT trade content for liveness and integrity for content, in-order fetching refuses
+  both trades — and that refusal is what kills it.** An idempotent `GET` for an immutable object has
+  no thinning behaviour of its own, so a client that will not skip has nowhere to go under sustained
+  shortfall but backwards through the window. This is [T5](test-5-network-impairment.md)'s "sheds
+  time, not bytes" followed far enough to find what happens when there is no more time to shed. The
+  thinning has to be *implemented* by the receiver; on the media-aware lane it comes with the
+  transport.
+- **The re-anchoring client's higher delivered fraction is bought with latency and granularity, and
+  should not be quoted without them.** 99 % of the cap against MoQ's 45–81 % is real, but it is
+  measured ~12 s behind the live edge with content lost in 12 s holes, against MoQ's 2 s buffer and
+  group-sized losses. For a distribution hand-off that is the wrong side of both trades.
 - **Delivered fraction is noisy; the qualitative ordering is not.** With 2–3 replicates the goodput
   numbers swing ~20 points, so treat them as indicative; the completeness/stability *ranking* is the
   firm result.
@@ -222,7 +313,10 @@ For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not a
 - **Stable indefinitely (C6):** no drift, leak, or rare abort over a hours→days soak — an intermittent
   fault is a fail even if the median run looks fine.
 - **Fails gracefully when under-provisioned (C1):** degradation is *thinning* (missing content, clean
-  TS), not *damage* (continuity errors) or a session/relay abort.
+  TS), not *damage* (continuity errors) or a session/relay abort. **Scored: MoQ passes on every
+  controller except BBRv3; SRT fails on damage (4,279 continuity errors); segmented HTTP passes or
+  fails on the client — it thins cleanly under a receiver that re-anchors, and loses the session at
+  43 s under the one that does not.**
 - Queuing delay is judged **only** against the receive buffer: acceptable if it stays clear of
   `--latency-max` with headroom for a transient; a fail if it periodically approaches or exceeds it.
 
@@ -234,6 +328,20 @@ cap: **CUBIC reliably bloats but stays clean; BBRv2 (quiche) is the stable, comp
 damages.** **No controller recommendation for a permanent fixed-rate trunk follows from one
 under-provisioned condition** — the bimodality is a reason to run C2, not a disqualification. The
 question is with the maintainer on [#2432](https://github.com/moq-dev/moq/pull/2432).
+
+**Under congestion the three data planes fail three different ways — but only two of those failures
+belong to a transport.** MoQ thins and SRT damages, and each does so because of what its protocol
+does with a shortfall. Segmented HTTP does whatever its receiver does: `tsp -I hls` slides backwards
+through the live window and loses the session at 43 s, while a client that re-anchors on a 404 thins
+in whole segments at 99 % of the cap with a clean TS. **The lane is not fragile under congestion; the
+shipped client is.** That is the finding, and it is a different claim from the one the `tsp` row on
+its own would support.
+
+Two things still separate the lanes once the client is matched. The re-anchoring client's
+completeness is bought at ~12 s behind the live edge with content lost in 12 s holes, against MoQ's
+2 s buffer and group-sized losses — better numbers, worse properties for a hand-off. And the thinning
+that MoQ gets from its transport has to be built into the receiver here, which is precisely the work
+that the two available clients have not done.
 
 This is **not yet promoted to [`docs/evidence.md`](../docs/evidence.md)**, and the controller wording
 in [`docs/architecture.md`](../docs/architecture.md) §8.5 / [`docs/architecture.md`](../docs/architecture.md) §8.4 is **not**
@@ -249,6 +357,12 @@ path), then the C6 soak — the two conditions that actually test a permanent tr
 - Run **C6 (long-duration soak)** — the permanence requirement; pair with the T9 resource soak.
 - Add **replicates** (≥ 5) for delivered-fraction confidence; the delay/stability ranking is already
   clear at 2–3.
+- **Run the segmented lane long enough at 8 Mb/s to see the `tsp` client die**, since 60 s only shows
+  the trajectory. The prediction is a 404 at roughly the point four segments per minute of lost ground
+  consumes a nine-segment window, and it is worth having the number rather than the extrapolation.
+- **Hold the latency budget equal before quoting the 99 %.** The re-anchoring client sits ~12 s behind
+  the edge; capping it near MoQ's 2 s would say whether the delivery advantage survives a matched
+  liveness target or was only ever the extra buffer.
 
 ## References
 

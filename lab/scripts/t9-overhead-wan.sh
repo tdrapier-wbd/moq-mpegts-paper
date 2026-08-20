@@ -16,6 +16,9 @@
 #   srt      SRT carrying the same clip over the same path      — the comparison, measured
 #                                                                 rather than derived from
 #                                                                 framing arithmetic
+#   seg      Segmented HTTP carrying the same clip, same path   — the third data plane, on
+#                                                                 TCP, so the capture side
+#                                                                 differs (see -cap-tcp)
 #
 # usage: t9-overhead-wan.sh [leg ...]      (default: the four MoQ legs)
 set -uo pipefail
@@ -45,7 +48,9 @@ cleanup() {
 	remote <<-'EOF' || true
 		pkill -9 -f 't9\.wan\.[a-z]+\.hang' 2>/dev/null
 		pkill -9 -f 'O srt --listener 0.0.0.0:9010' 2>/dev/null
-		sudo pkill -9 -f 'tcpdump.*t9_oh_' 2>/dev/null
+		pkill -9 -f 'O hls .*t9seg' 2>/dev/null
+		pkill -9 -f 'http\.server 8080' 2>/dev/null
+		sudo pkill -9 -f '[t]cpdump.*t9_oh_' 2>/dev/null
 		bash ~/t8run/cc_relay.sh off
 	EOF
 }
@@ -170,6 +175,68 @@ run_srt() {
 	grep -v '^ ' "$OUT/srt.cap.txt"
 }
 
+# Segmented HTTP over the same path, same clip, same accounting. Like SRT it carries
+# the source verbatim, so its delivered rate should also come back at the source rate;
+# unlike SRT it pays TCP's header and a return path of real acknowledgements. The
+# capture is the TCP variant, because TCP's header length is not a constant.
+run_seg() {
+	local port=${SEG_PORT:-8080}
+	local segdur=${SEG_DUR:-2}
+	local ts="$OUT/seg.ts"
+
+	echo; echo "================ leg seg ================"
+	remote <<-EOF
+		pkill -9 -f 'O hls .*t9seg' 2>/dev/null
+		pkill -9 -f 'http.server $port' 2>/dev/null; sleep 1
+		rm -rf ~/t9seg; mkdir -p ~/t9seg
+		setsid bash -c "tsp -I file '$SRC_FULL' --infinite -P regulate --pcr-synchronous \
+		  -O hls ~/t9seg/seg.ts --playlist ~/t9seg/index.m3u8 --duration $segdur \
+		  --live 6 --live-extra-segments 3 --intra-close --align-first-segment" \
+		  >/tmp/t9wan_seg_pub.log 2>&1 </dev/null & disown
+		setsid bash -c "cd ~/t9seg && exec python3 -m http.server $port --bind 0.0.0.0" \
+		  >/tmp/t9wan_seg_origin.log 2>&1 </dev/null & disown
+		for i in \$(seq 1 60); do
+		  [ -f ~/t9seg/index.m3u8 ] && [ \$(grep -c '\.ts\$' ~/t9seg/index.m3u8) -ge 3 ] && break
+		  sleep 1
+		done
+		echo "hls origin launched (\$(grep -c '\.ts\$' ~/t9seg/index.m3u8 2>/dev/null) segments)"
+	EOF
+
+	rm -f "$ts"
+	tsp -I hls "http://$TLS_NAME:$port/index.m3u8" --live -O file "$ts" \
+		>"$OUT/seg.sub.log" 2>&1 &
+	SUB_PID=$!
+
+	sleep "$SETTLE"
+	remote <<-EOF >"$OUT/seg.cap.txt" 2>&1 &
+		bash ~/t9/t9-overhead-wan-cap-tcp.sh $SUB_IP $port $WINDOW seg
+	EOF
+	local cap_pid=$!
+
+	local s0 s1 t0 t1
+	sleep 3
+	s0=$(stat -f%z "$ts" 2>/dev/null || echo 0); t0=$(date +%s.%N)
+	sleep $((WINDOW - 5))
+	s1=$(stat -f%z "$ts" 2>/dev/null || echo 0); t1=$(date +%s.%N)
+	wait "$cap_pid"
+
+	kill -9 "$SUB_PID" 2>/dev/null; SUB_PID=""
+	remote <<-EOF
+		pkill -9 -f 'O hls .*t9seg' 2>/dev/null
+		pkill -9 -f 'http.server $port' 2>/dev/null
+	EOF
+
+	if [ "$s0" -eq 0 ] || [ "$s1" -le "$s0" ]; then
+		echo "LEG seg FAILED: no TS received"; tail -5 "$OUT/seg.sub.log"; return 1
+	fi
+	{
+		echo "TS_BYTES_DELIVERED $((s1 - s0))"
+		awk -v b=$((s1 - s0)) -v a="$t0" -v z="$t1" \
+			'BEGIN { printf "TS_SAMPLE_S %.3f\nTS_DELIVERED_MBPS %.4f\n", z - a, b * 8 / (z - a) / 1e6 }'
+	} >>"$OUT/seg.cap.txt"
+	grep -v '^ ' "$OUT/seg.cap.txt"
+}
+
 # Everything runs from main() so the whole file is parsed before any of it executes.
 # A script that backgrounds jobs while bash is still reading it incrementally can have
 # its file offset advanced by the child, and the parent then resumes mid-line.
@@ -182,6 +249,7 @@ main() {
 		gso)     run_leg gso     "" "" "$SRC_FULL" ;;
 		vidonly) run_leg vidonly "--server-quic-gso=false" "" "$SRC_VID" ;;
 		srt)     run_srt ;;
+		seg)     run_seg ;;
 		*) echo "unknown leg: $leg" ;;
 		esac
 	done

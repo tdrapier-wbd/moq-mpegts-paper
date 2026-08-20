@@ -110,7 +110,7 @@ and settled it against the intuitive answer.
 |---|---|---|
 | **Carriage** | Media-aware and opaque lanes carry a full broadcast mux with 0 continuity errors; segmented HTTP preserves mux *content* on three clips — service identity, PMT PID, CAT, TDT/TOT, all splice PIDs — and adds one PAT/PMT pair per segment, costing file-domain PCR accuracy; a 1/2/6 s duration sweep confirms that cost is per-segment, not cumulative. Over the public internet, all three lanes graded together: **byte-faithful SRT is transparent on every criterion including the 481 ns P2 gate**; **segmented HTTP reproduces its loopback result to 0.1 % — 302.148 µs against 302.4 µs predicted, exactly 1.00 injected pair per segment head — so the injection is a property of the segmenter and not of the path**; the media-aware lane preserves the mux as bytes and not as a timed object (stuffing, mux rate, PSI density, PCR spacing) | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate. *The P2 gate cannot rank all three — it is undefined on a rate-less media-aware egress, though it is a real measurement on both byte-faithful lanes* |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**; a segmented-HTTP egress reaches the same standard on the **wire** with an 8 s cushion. On the MoQ lane, P1 PCR repetition on the wire **fails at every buffer depth and is not a depth problem**: the exporter emits PCRs too rarely for a groomer to place them (P1, `pcr_inserted=0`) | Anything at all on hardware; whether a denser exporter PCR cadence clears the gate |
-| **Loss** | CUBIC collapses, BBR restores parity with SRT — and the same is true of segmented HTTP, so **loss does not separate the two data planes**: at a matched controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13). **Reordering does separate them**, 0.98 against 0.19 on either controller, because QUIC's in-order delivery blocks. Segmented HTTP never corrupts what it delivers, at any level | Congestion control on a provisioned path; a controller recommendation for a permanent trunk; the same ladder against a real CDN edge rather than one plain origin |
+| **Loss** | CUBIC collapses, BBR restores parity with SRT — and the same is true of segmented HTTP, so **loss does not separate the two data planes**: at a matched controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13). **Reordering does separate them**, 0.98 against 0.19 on either controller, because QUIC's in-order delivery blocks. Segmented HTTP does not corrupt what it delivers *while it stays inside the origin's availability window*; a deeper ladder pushes it out between 7.7 % and 12.2 % applied loss, after which it re-anchors and leaves 7–82 s content holes, past ~20 % loss without the origin returning any error at all | Congestion control on a provisioned path; a controller recommendation for a permanent trunk; the same ladder against a real CDN edge rather than one plain origin |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, single-track, one host. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all, and two packagers of one feed are byte-identical by default | Two hosts, two clocks; multi-track identity; a hardware merge. On the segmented lane: a distributed segment store, and a standby joining mid-stream |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail |
@@ -258,14 +258,23 @@ verbatim; 0 CC and transport errors; CBR and PCR conformance preserved when fed 
 loopback, file-fed, on a pinned obsolete draft, against a private implementation, and it has never
 been repeated.
 
-**Segmented HTTP is byte-verbatim for a single programme**, which is the opposite of what the
-specification's wording suggests. A published segment aligned against the source and compared packet
-by packet differs, in a 1,200-packet window, in **two packets, both PSI, each in byte 3 alone** — the
-continuity counter on the PAT and PMT the segmenter injects at each segment head, whose renumbering
-is forced. Every media, audio, teletext, splice and stuffing packet is byte-identical, and continuity
-is error-free across segment boundaries ([T14](../lab/test-14-data-plane-comparison.md)). The DVB
-service layer travels too — not because the specification provides for it, which it does not, but
-because nothing in the path parses the payload.
+**Segmented HTTP is byte-verbatim in its payload for a single programme**, which is the opposite of
+what the specification's wording suggests. A published segment aligned against the source and compared
+packet by packet differs, in a 1,200-packet window, in **two packets, both PSI, each in byte 3
+alone** — the continuity counter on the PAT and PMT the segmenter injects at each segment head, whose
+renumbering is forced. Every media, audio, teletext, splice and stuffing packet is byte-identical, and
+continuity is error-free across segment boundaries ([T14](../lab/test-14-data-plane-comparison.md)).
+The DVB service layer travels too — not because the specification provides for it, which it does not,
+but because nothing in the path parses the payload.
+
+**The packager itself is media-aware, and the distinction matters for what may be claimed.** `tsp -O hls`
+is not a byte splitter: it re-multiplexes, regenerates PSI and chooses segment boundaries by picture
+type, and on a *finite* input it truncates roughly the last 5 % rather than flushing it
+([T11](../lab/test-11-interop.md)). What the packet-by-packet comparison above establishes is that
+those mechanisms happen to be payload-preserving on a live feed, not that nothing parses the stream.
+So the accurate form of the claim is the one §8 of [comparison](comparison.md) uses — **verbatim in
+payload, not as a mux** — and "nothing in the path parses the payload" is true of the *cache and the
+network*, which is where the scaling argument needs it, and not of the packager.
 
 **Scored against the opaque lane's own inventory, segmented HTTP is transparent to what a mux
 contains and not to when it was sent** ([T3](../lab/test-3-opaque-transparency.md), three clips,
@@ -274,6 +283,21 @@ service name, provider and type, PMT PID (0x1000, 0x0020 and 0x0064 all held rat
 PCR PID, every elementary stream at its original PID including visual-impaired commentary audio,
 every SCTE-35 PID, null stuffing, **CAT and TDT/TOT**, no table re-versioned, 0 continuity errors, 0
 transport errors, and 0 PCR repetition intervals above 40 ms.
+
+**The EPG survives it too, and the two planes pass that test for opposite reasons.** None of the three
+clips carries EIT, so it is measured on a synthetic 8-day fixture through the same chain: all **69
+distinct sections arrive byte-identical**, sparse schedule sub-tables included, each still declaring
+the `last_section_number` it left with, at 1.003× the source's PID rate
+([T17](../lab/test-17-si-snapshot-tracks.md) §5). The media-aware lane passes the same test at 0.985×.
+The asymmetry is in how. An EIT schedule sub-table is *sparse* — it declares an extent covering days
+and transmits only the sections holding events — so a lane that reconstructs the table must decide when
+it is complete and cannot distinguish a section the source skipped from one it lost; the media-aware
+lane takes that on and gets it right by committing on transmission-cycle wrap. The segmented lane never
+parses PID 0x0012, so the problem does not arise. **Understanding the media is what creates the
+obligation to understand it correctly**, and this is the cleanest instance of it in the campaign. The
+cost lands on the other side: MoQ hands a joining receiver the whole EPG as snapshots in about a
+millisecond, where a segmented client waits out the carousel — tens of seconds at the ETSI cadence,
+with no HLS mechanism to shorten it.
 
 What it adds is **exactly one PAT/PMT pair per segment and nothing else** — no PID at egress that the
 source lacked — and that addition has a price the survival census cannot see. Two packets is 376
@@ -395,8 +419,8 @@ no packager, origin or HTTP client anywhere in the chain, the groomer posts *mor
 does through the segmented lane. So the segmented lane's conformance is established to ~11.5 Mbps and
 **untested above it**, pending a host that can pace 30 Mbps without underrunning. Note also that the
 *ungroomed* segmented egress already carries 0 intervals above 40 ms on every clip, because a segment
-is a byte-verbatim slice: unlike the media-aware lane, this one gives the groomer no PCR damage to
-repair, and what grooming buys there is cadence and CBR.
+carries the source's own PCR grid in its payload: unlike the media-aware lane, this one gives the
+groomer no PCR damage to repair, and what grooming buys there is cadence and CBR.
 
 **On the segmented plane the constraint is buffer depth, not live operation.** T13 first read its 131
 live intervals as a property of re-timing a stream as it arrives, against 0 when reading a file. The
@@ -444,9 +468,13 @@ over a stream carrying **231 continuity errors including on two of three SCTE-35
 measure of *when* bytes leave was satisfied; the failure is visible only in measures of *which* bytes
 left. Any grading of a pacing stage needs a packet-conservation column beside the timing ones.
 
-**Nothing off the shelf does the whole job, and the missing half is carriage.** Every candidate an
-engineer would reach for, graded against four criteria fixed in advance
-([T13](../lab/test-13-downstream-grooming.md)):
+**Whether anything off the shelf does the whole job depends on the data plane.** Every candidate an
+engineer would reach for was graded against four criteria fixed in advance, against both egresses
+([T13](../lab/test-13-downstream-grooming.md)). **Behind a MoQ egress nothing passes, and the missing
+half is carriage.** Behind a segmented egress, `tsp -P pcradjust -P regulate -O ip` passes all four
+with the mux carried byte-for-byte, because the packager already delivered the stuffing (4.57 %
+against the source's 4.59 %), the declared mux rate, and a PCR spacing with **0** intervals above
+40 ms where a MoQ egress arrives with 163. The MoQ-lane table:
 
 | Chain | Mux preserved | PCR ≤ 481 ns | No interval > 40 ms | Honest time, paced wire |
 |---|---|---|---|---|
@@ -473,10 +501,35 @@ packets**. So a fully off-the-shelf chain now passes three of four criteria and 
 carriage**: PIDs can be pinned back, SCTE-35 stream types cannot, AC-3 is relabelled and the NIT is
 dropped.
 
-**The two halves of grooming therefore separate cleanly, and only one is unsolved off the shelf:**
-tools that regenerate a mux can time it perfectly and cannot carry it, and tools that carry it cannot
-inflate it. The requirement is documentable with standard tools wherever signalling is not
-contractual; a mux carrying full signalling to a hardware receiver still needs a purpose-built stage.
+**The two halves of grooming therefore separate cleanly, and on the MoQ lane only one is unsolved off
+the shelf:** tools that regenerate a mux can time it perfectly and cannot carry it, and tools that
+carry it cannot inflate it. The requirement is documentable with standard tools wherever signalling is
+not contractual; a mux carrying full signalling to a hardware receiver still needs a purpose-built
+stage *on that lane*.
+
+**Stated that precisely, the gap is conditional, and the segmented lane is the case where the
+condition does not hold.** What defeats the off-the-shelf tools is not MPEG-TS grooming but two
+properties of `moq export ts`: it drops stuffing, so a groomer must inflate a stream, and it emits
+PCRs too rarely, so a stage that carries them rather than minting its own inherits non-conformant
+spacing. A segmented egress has neither property, and the same tools pass. The honest general
+statement is therefore about the exporter rather than the tooling: *an egress that drops stuffing and
+thins PCR needs a grooming stage no off-the-shelf tool can supply without damaging the mux; an egress
+that preserves both needs only a paced sender, and TSDuck is one.*
+
+**On the segmented lane the binding constraint is buffer depth instead, and it is a hard edge rather
+than a tuning choice.** A grooming stage fed 2 s segments must hold a cushion at least as deep as the
+segment period. At 8 s, both the TSDuck chain and the pacer deliver 0 PCR intervals above 40 ms, 0
+continuity errors and a rate flat to ±1 % per second. At 1 s the pacer starves twice in 25 s, going
+silent for **1.85 s** at a time — the same figure in three independent instruments — for **311
+continuity errors** and 14 % of the delivered rate. There is no partial-credit region between them.
+
+**Buffer depth does not buy PCR repetition on either lane, which removes a feared trade.** Depth is
+latency, and latency is MoQ's only advantage, so an earlier reading that credited T16's clean PCR
+record to its deep cushion implied that conformance had to be bought with MoQ's lead. It does not:
+[T18](../lab/test-18-delivery-latency.md) swept the MoQ cushion across eight times the depth with no
+movement at all, and the segmented TSDuck chain posts 0 while holding almost no buffer. What decides
+PCR repetition is the spacing the egress delivers. Depth only prevents a stage from *adding* faults by
+running dry.
 
 **What has not been exercised at all**: source-clock drift, PCR discontinuity and the 33-bit wrap,
 mid-stream PID or PCR-PID change, and T-STD occupancy through the media-aware exporter's clustered
@@ -535,12 +588,27 @@ it into head-of-line blocking that no controller removes — the media-aware lan
 — while segment fetching cannot suffer it, each segment being an independent object with TCP
 reassembling beneath it.
 
-**Segmented HTTP never corrupted what it delivered at any level** — 0 continuity discontinuities and
-0 PCR intervals above 40 ms in every cell of the matrix, including the ones delivering a sixth of the
-stream — **so its failure mode is lateness rather than damage**, which is the one a bounded downstream
-buffer can absorb. The media-aware lane's own PCR intervals above 40 ms are present in the unimpaired
-baseline too and do not move with impairment; that is the exporter defect of §3.2, not an impairment
-effect.
+**Segmented HTTP did not corrupt what it delivered anywhere in this ladder, and the ladder has a
+boundary** — 0 continuity discontinuities and 0 PCR intervals above 40 ms in every cell of the matrix
+including the ones delivering a sixth of the stream, **so inside the origin's availability window its
+failure mode is lateness rather than damage**, which is the one a bounded downstream buffer can absorb.
+Both halves of that sentence are load-bearing. Pushed past the window — a deeper ladder, to 40 % loss
+over 120 s windows rather than 10 % over 40 s — the client falls far enough behind that segments are
+deleted before it asks for them and it re-anchors to the live edge, skipping 3, 10 and 34 segments as
+the loss deepens. The holes are 7.2 s, 24 s and 82 s of programme, and the measured PCR gaps at those
+cells are 7.24 s, 24.57 s and 83.38 s, so the arithmetic closes on the segments that expired. Lateness
+converts to loss at the window edge, and where that edge sits is a function of the shortfall and how
+long it lasts, not of the loss rate alone.
+
+**Two properties of that failure matter more than the boundary itself.** It is *silent at the serving
+node* past about 20 % loss: an HTTP 404 requires the client to ask for a segment that has just been
+deleted, and beyond that point it instead reloads the playlist, finds the segment already gone from the
+list and skips — the cell that lost 82 s of programme received nothing but 200s. And the continuity
+counter *detects but cannot size* it: each re-anchor breaks continuity on every PID carrying it, giving
+6–11 events for one splice, and the packet totals beside them understate the hole by three orders of
+magnitude because a four-bit counter wraps. Only the PCR interval measures the damage. The media-aware
+lane's own PCR intervals above 40 ms are present in the unimpaired baseline too and do not move with
+impairment; that is the exporter defect of §3.2, not an impairment effect.
 
 *Measurement point P1, on the ungroomed egress. Loopback with a 15 ms one-way base delay, one clip,
 one 40 s window, one replicate per cell. Stated at commanded loss rather than counted: the shaper's
@@ -1009,8 +1077,17 @@ public internet at a 12.8 ms round trip:
 | SRT | 250 ms | 1,606 ms | 1,618 ms | 18 / 3,627 | 49.5 ms |
 | Segmented HTTP | 2 s | 3,497 ms | 4,067 ms | 13 / 3,486 | 131 ms |
 
-Continuity errors and PCR jitter above 481 ns were **zero on all nineteen loopback cells**, so repetition
-is the only conformance axis that separates the planes there.
+PCR jitter above 481 ns was zero on all nineteen loopback cells. **Continuity was not, and the column
+that originally said so was an instrument defect** — the matcher searched for a word the TSDuck
+continuity plugin never prints, so it returned zero on every input the campaign ever gave it. Re-graded
+from the same captured bytes: the MoQ arms are genuinely 0 at every cushion, and the **segmented arm
+posts 583 continuity events at a 2,000 ms cushion, 78 at 4,000 ms and 64 at 8,000 ms** — the groomer
+starving between segment arrivals, the same mechanism measured directly at 311 events on a 1 s cushion
+against 2 s segments. The UDP, SRT and RIST arms sit at a common ~90-event floor that is not yet
+attributed: RIST logs a receiver FIFO overflow that accounts for its own, SRT does not, and until a
+source-side capture is graded beside the egress those three figures bound a rig artefact together with
+a transport result and should not be read as either. The defect and its scope are recorded in
+[T18](../lab/test-18-delivery-latency.md) and [T5](../lab/test-5-network-impairment.md).
 
 **MoQ delivers a picture across the internet in 109 ms**, 15× lower than SRT and 37× lower than segmented
 HTTP over the same path in the same window. On loopback, where the ladder also carried a plain-UDP control
@@ -1115,23 +1192,29 @@ regenerates them.
 
 Ranked by how much a result would change the conclusions this repository draws.
 
+**The first two are ordered by sequence rather than by leverage, and the order is deliberate.** The
+hardware verdict is worth more, but taking the media-aware lane to an IRD *today* would test a stream
+already measured to fail P1 PCR repetition on the wire at every cushion — the result is known and the
+kit would be spent confirming it. The exporter fix is the precondition, not the lesser question.
+
 | # | Question | Blocked on | What it moves |
 |---|---|---|---|
-| 1 | **Does groomed output pass TR 101 290 P1/P2 on real hardware IRDs, sustained, including ST 2022-7 under loss?** | A hardware IRD and analyser | Everything. Until it passes, the grooming design is structurally sound and file-validated, not broadcast-acceptable |
-| 2 | **Would a denser exporter PCR cadence clear the P1 repetition gate on the MoQ lane?** (§3.2) | An upstream change to the exporter's PCR emission interval, now reported ([upstream contributions](../lab/upstream-contributions.md) §1); the rig then re-runs unaltered | The lane's last conformance failure. [T18](../lab/test-18-delivery-latency.md) established the failure is *not* a latency trade-off — the groomer places no PCRs of its own and the lane sends too few — so this is the cheapest remaining path to a plane that is both conformant and sub-second. **Cheapest high-leverage measurement outstanding once upstream moves** |
+| 1 | **Would a denser exporter PCR cadence clear the P1 repetition gate on the MoQ lane?** (§3.2) | An upstream change to the exporter's PCR emission interval, now reported ([upstream contributions](../lab/upstream-contributions.md) §1); the rig then re-runs unaltered | The lane's last conformance failure, and the precondition for row 2 being worth running on the media-aware lane at all. [T18](../lab/test-18-delivery-latency.md) established the failure is *not* a latency trade-off — the groomer places no PCRs of its own and the lane sends too few — so this is the cheapest remaining path to a plane that is both conformant and sub-second. **Cheapest high-leverage measurement outstanding once upstream moves** |
+| 2 | **Does groomed output pass TR 101 290 P1/P2 on real hardware IRDs, sustained, including ST 2022-7 under loss?** | A hardware IRD and analyser | Everything. Until it passes, the grooming design is structurally sound and file-validated, not broadcast-acceptable. Note that the segmented lane is ready for this test now and the media-aware lane is not, so the two arms need not wait on each other |
 | 3 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs, and a path with 80–150 ms of RTT | Both paths measured were healthy, so nothing exercised the recovery the point-to-point tunnels exist for — the case that should favour them. This is the arm that could change the ordering rather than confirm it |
 | 4 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's own edge stage?** | MEG- or TITAN-class hardware | Whether part of the broadcast-grade layer is purchasable on one data plane and not the other; also the only route to a low-latency TS-in-HLS receiver |
 | 5 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | The whole of MoQ's remaining carriage-fidelity advantage |
-| 6 | **Do the groomer's correctness boundaries hold** — source-clock drift, PCR discontinuity and wrap, mid-stream PID change, T-STD occupancy? | The hardware rig in row 1 | Whether steady-state conformance generalises |
+| 6 | **Do the groomer's correctness boundaries hold** — source-clock drift, PCR discontinuity and wrap, mid-stream PID change, T-STD occupancy? | The hardware rig in row 2 | Whether steady-state conformance generalises |
 | 7 | **Does the 1+1 result survive two hosts, two clocks and multi-track content?** | A second instance in another availability zone | [Architecture](architecture.md) §5.1's recommendation is currently scoped to one host and single-track content |
 | 8 | **Which congestion controller suits a permanent fixed-rate trunk?** | Running T8b's C2–C6 | An operational recommendation that currently cannot be made |
 | 9 | **What does the opaque lane cost on the wire, and does it survive a real path?** | Building the private lane in the measurement environment | Whether byte-verbatim carriage is a wash or a real cost against SRT |
 | 10 | **How much of MoQ's carriage advantage survives a different source?** | Two more source profiles | The largest caveat on the deciding line of the cost model |
 | 11 | **Does fixing the announce convention clear the pairings it blocks, and what are the three undiagnosed failures?** (§3.7) | Upstream adoption, and diagnosis | Relay portability, which underwrites the economic argument |
-| 12 | **Where does the segmented lane's completeness finally break, and does a real CDN edge change its loss curve?** (§3.3) | A ladder deep enough to push the client out of the availability window, and a tuned edge instead of one plain HTTP/1.1 origin | Answered in part: retry preserves *content* at every level tested (0 continuity errors, 0 PCR intervals above 40 ms) but not *rate* (0.17 of source at 8 % loss). The boundary where content breaks was never reached, and the origin measured is the weakest form of the deployed one |
+| 12 | **Does a real CDN edge change the segmented lane's loss curve?** (§3.3) | A tuned edge instead of one plain HTTP/1.1 origin | The completeness half is now answered: retry preserves *content* while the client stays inside the availability window, and not past it. A ladder to 40 % loss over 120 s windows crosses that edge between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s content holes — and past ~20 % loss the origin logs no error while it happens. Rate was never preserved (0.17 of source at 8 % loss). What remains is the origin: the one measured is the weakest form of the deployed one, and a CDN could plausibly move the loss curve — it cannot move the reordering result, which is TCP's |
 | 12a | **Why does the media-aware lane cluster PCRs sub-millisecond?** (§3.2) | Reading the exporter against the measured distribution | If PSI density and PCR spacing are both group-derived, one parameter moves both, and row 2's cadence change is a group-size change. T18 raised this row's value: PCR *emission* is now the lane's one remaining conformance defect, so how the exporter decides to emit is the question |
 | 12b | **Does RIST actually beat SRT on a real path?** | One long WAN run | On loopback the two are indistinguishable within 6 ms; over the WAN RIST reads 262–333 ms lower but its cells had a rising trend and had not settled, so the gap is not yet a finding. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 13 | **Does the relay's memory plateau hold over weeks rather than hours?** (§3.6) | A longer soak | A sizing line rather than a restart cycle |
+| 13a | **What does the segmented lane cost to run?** (§3.6) | An nginx origin rather than a single-threaded reference server, and a soak | The cost comparison is currently one lane characterised for resources and one characterised only for bytes. Segmented carriage overhead is measured (1.036× source TS); its per-role CPU and memory, its fan-out knee and its stability over days are not. The origin is the role the whole commercial argument for this lane rests on, and the one measured is `python3 -m http.server` |
 | 14 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
 
 Protocols for the runnable ones are in [planned-experiments](../lab/planned-experiments.md).

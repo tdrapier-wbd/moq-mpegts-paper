@@ -26,12 +26,14 @@ workload. Two caveats the prediction did not cover: growth continues at ~+8 MB/h
 than stopping, and the ceiling falls only 3.3× for a 9.8× slot reduction because ~20–30 MB of it is
 slot-independent. The 0.13.7 no-subscriber OOM leak is a separate, fixed defect. Fan-out envelope,
 bitrate sweep and protocol overhead are all measured on Linux. **Carriage overhead is not a MoQ penalty: measured on a real path the media-aware
-lane needs 0.982x the source TS rate of IP capacity against SRT's 1.037x, so MoQ carries the same
-service in 5.3 % less bandwidth** — 6.2 % less with MTU discovery on, which is a one-flag change worth
+lane needs 0.982x the source TS rate of IP capacity against SRT's 1.037x and segmented HTTP's 1.036x,
+so MoQ carries the same
+service in 5.3 % less bandwidth than either** — 6.2 % less with MTU discovery on, which is a one-flag change worth
 0.92 points and off by default. The overhead decomposes exactly: +2.79 % over the delivered TS, of
 which 2.54 points are IP+UDP headers and 0.25 is every QUIC, moq-lite and hang header combined. MoQ
 wins because it declines to carry the 4.57 % of null stuffing a byte pipe cannot refuse, and that is
-worth more than everything QUIC charges. Datagrams are full (88.4 % exactly 1200 B), the
+worth more than everything QUIC charges — segmented HTTP landing on SRT's figure rather than between
+the two confirms that stuffing, not protocol, is what this comparison measures. Datagrams are full (88.4 % exactly 1200 B), the
 stream-per-audio-access-unit pattern costs under 0.2 points, 1 % loss moves neither protocol by a
 point, and MoQ's only clear debit is a return path eight times SRT's (1.16 % of forward versus 0.13 %).
 **The previously recorded 1.12x was an artefact of the loopback rig** dividing a capture window by a
@@ -79,7 +81,10 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
   [`t9-overhead-wan-cap.sh`](scripts/t9-overhead-wan-cap.sh) (the capture and datagram histogram, run
   on the origin), [`t9-overhead-lo.sh`](scripts/t9-overhead-lo.sh) (the same accounting all on one
   host, which is what the superseded `overhead_ec2.sh` did wrongly) and
-  [`t9-netem-lane.sh`](scripts/t9-netem-lane.sh) (impairment, with drop-counter verification).
+  [`t9-netem-lane.sh`](scripts/t9-netem-lane.sh) (impairment, with drop-counter verification), and
+  [`t9-overhead-wan-cap-tcp.sh`](scripts/t9-overhead-wan-cap-tcp.sh) (the capture side for the
+  segmented leg — TCP's header length varies with options, so its wire size is read from the pcap
+  record's original frame length rather than reconstructed from the payload size).
   **The overhead legs must run off loopback and with `--server-quic-gso=false`**, or the kernel
   coalesces sends and the datagram distribution — the output that prices per-packet cost — is
   meaningless.
@@ -270,6 +275,7 @@ packets per 400,000).
 | **MoQ, media-aware, 1200 B (the deployed default)** | 9.500 Mbps | **9.765 Mbps** | **0.982x** | +2.79 % |
 | MoQ, media-aware, MTU discovery on (1452 B) | 9.518 Mbps | **9.675 Mbps** | **0.973x** | +1.65 % |
 | SRT, same path, same clip, byte-verbatim | 9.979 Mbps | 10.311 Mbps | 1.037x | +3.33 % |
+| Segmented HTTP, same path, same clip, stuffing carried | 9.946 Mbps | 10.306 Mbps | **1.036x** | +3.64 % |
 
 **MoQ carries this service in 5.3 % less bandwidth than SRT — 6.2 % less with MTU discovery on** — and
 in slightly less than the source TS rate itself. Two independent legs of the default configuration
@@ -279,6 +285,44 @@ The mechanism is entirely visible in the delivered column. SRT hands over 9.979 
 verbatim. MoQ hands over 9.500 Mbps, 4.5 % less, which is the null stuffing it declined to carry and
 which the downstream groomer regenerates locally. That saving is larger than everything QUIC charges
 for carrying the rest.
+
+### Segmented HTTP lands on SRT, for SRT's reason
+
+**Segmented HTTP needs 1.036x the source rate against SRT's 1.037x** — the two are the same number to
+the resolution of this measurement, and MoQ is 5.4 % below both. That is not a coincidence: the
+delivered column explains it exactly as it explains SRT. Both put the null stuffing on the path — the
+4.57 % that MoQ declines to carry — and both then add a per-packet header of roughly the same size.
+**Whether a lane carries stuffing decides this comparison; which transport it uses barely registers.**
+
+*(Carrying the stuffing is not the same as byte-verbatim carriage, and only the first is true here:
+[T11](test-11-interop.md) shows the HLS packager re-muxes rather than copying its input. It carries
+the nulls in proportion, which is what this measurement turns on.)*
+
+The header cost closes analytically. 99.16 % of downstream IP datagrams were **exactly 1492 bytes** —
+the path MTU, this access line being PPPoE — carrying a 1440-byte payload under 20 bytes of IPv4 and
+32 bytes of TCP with timestamps. 1492 ÷ 1440 is 1.0361 against the 1.0364 measured across 53,279
+segments, so nothing is unaccounted for. On a 1500-byte path it would be 1.0359: the same answer.
+
+**The return path is the one line where segmented HTTP beats both other lanes.** Its acknowledgements
+cost 0.0163 Mbps, 0.15 % of the forward rate, against SRT's 0.15 % and MoQ's 0.94 %. TCP's
+delayed-acknowledgement behaviour produced 2,073 pure ACKs where QUIC sent 5,992 datagrams, so the
+eight-times-SRT return path recorded above for MoQ is about six times segmented HTTP's too. It does
+not change any total — 0.8 points of a 5.4-point gap — but it is real and it runs the other way.
+
+Both other lanes on this table were re-measured in the same session on the same path, and both
+reproduced their published figures to within noise (MoQ 9.759 against 9.765 Mbps, SRT 10.312 against
+10.311), so the segmented row is directly comparable rather than merely adjacent.
+
+**One methodological difference, and it matters for anyone repeating this.** Every other rate in this
+section is a byte count divided by the capture's own first-to-last-packet span. That is right for a
+continuously-sending lane and wrong for this one: a segment fetcher is idle between bursts, so the
+first and last packets sit inside the capture window rather than at its edges, and the span
+understates the flow's duration by about 4 % — which inflates every rate divided by it by the same
+amount. Taken naively this lane reads as 10.75 Mbps and 1.081x, which would have made it look
+materially worse than SRT rather than tied with it. **The figure quoted above is instead the
+span-free one**: bytes on the wire per byte of payload carried (1.0364, identical across two
+independent runs to five significant figures) multiplied by the source rate. A ratio has no
+denominator to get wrong.
 
 Where MoQ's +2.79 % over the delivered payload goes, and it closes exactly:
 
@@ -424,10 +468,17 @@ Expressed as the IP rate needed to deliver the same 9.946 Mbps service:
 | | Forward IP | Return IP | vs source TS | Basis |
 |---|---:|---:|---:|---|
 | SRT, byte-verbatim | 10.311 Mbps | 0.014 Mbps | 1.037x | measured, same path |
+| Segmented HTTP, stuffing carried | 10.306 Mbps | 0.016 Mbps | 1.036x | measured, same path |
 | **MoQ, media-aware, 1200 B** | **9.765 Mbps** | 0.113 Mbps | **0.982x** | measured, same path |
 | **MoQ, media-aware, MTU discovery on** | **9.675 Mbps** | 0.112 Mbps | **0.973x** | measured, same path |
 | MoQ, opaque lane, verbatim (derived) | ~10.2 Mbps | — | ~1.03x | not measured |
 | MoQ, opaque lane, nulls stripped (derived) | ~9.8 Mbps | — | ~0.98x | not measured |
+
+**The three measured verbatim rows agree to within a point of each other and the two derived opaque
+rows land among them**, which is the useful shape: carriage cost is decided by whether a lane carries
+stuffing, not by which protocol carries it. SRT, segmented HTTP and an opaque verbatim MoQ lane all sit
+at ~1.03x; the media-aware lane sits at 0.98x because it is the only one that does not put the nulls on
+the path.
 
 **Not carrying stuffing is MoQ's structural bandwidth advantage over SRT**, and it is now a measured
 advantage rather than a derived one. It is bankable on a 1+1 pair as well:
@@ -1043,6 +1094,16 @@ are recorded because each carries a method lesson that changed how the rest of t
   the 5.3 % is specific to this clip.
 - **Per-role envelope for the groomer/pacer**, which the objective asks for and none of these runs
   covers.
+- **The segmented lane's resource envelope and fan-out knee.** Its carriage overhead is now measured;
+  its CPU, memory and scaling are not, and the gap is deliberate rather than an oversight. The origin
+  used throughout this campaign is `python3 -m http.server`, which is single-threaded and would price
+  Python rather than HTTP — a fan-out sweep against it would produce a knee that means nothing. Doing
+  this honestly needs a production origin (nginx or similar) and, to test the claim that actually
+  matters architecturally, a cache in front of it, because segmented HTTP's scaling argument is a CDN
+  argument and an origin-only measurement does not engage it. That is a rig build, not a run.
+- **A segmented-lane soak.** The stability question that dominates this experiment for MoQ — does any
+  role's RSS slope reach zero over ≥ 24 h — has not been asked of the packager, origin or client.
+  Worth pairing with whichever soak comes next rather than running alone.
 - ~~**The audio-sync abort on real content.**~~ **Done, and the defect is fixed upstream.** The
   bit-flipped MP2 header, the video-NAL control and the blast radius are all measured above; the fix
   ([#2751](https://github.com/moq-dev/moq/pull/2751)) was verified against both builds. What it left

@@ -258,7 +258,7 @@ python3 "$SCRIPTS/t18-latency.py" report "$SRCCSV" "$EGCSV" \
 echo
 echo "=== wire conformance of the same bytes ==="
 if [ -s "$OUT/$TAG-egress.ts" ]; then
-	CC=$(tsp -I file "$OUT/$TAG-egress.ts" -P continuity -O drop 2>&1 | grep -c 'discontinuity' || true)
+	CC=$(tsp -I file "$OUT/$TAG-egress.ts" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 	# pcrverify prints one summary line; take the count out of it rather than counting
 	# lines, which merely matches the word "jitter" in the summary itself.
 	JIT=$(tsp -I file "$OUT/$TAG-egress.ts" -P pcrverify --absolute --jitter-max 13 -O drop 2>&1 |

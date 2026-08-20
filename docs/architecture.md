@@ -208,8 +208,14 @@ and PCR re-insertion** so PCR values are byte-accurate against the reconstructed
 than merely approximately correct.
 
 Note that this is *re-timing*, not re-multiplexing: the TS packets themselves — PIDs, PES, SCTE-35,
-service signalling — are untouched. That distinction is what separates the one stage that passes all
-four grading criteria from every off-the-shelf alternative, each of which fails a different one
+service signalling — are untouched. That distinction is what separates a stage that passes all four
+grading criteria from the alternatives that re-mux, which each fail a different one.
+
+How much of (a)–(c) the stage has to do depends on the delivery lane it sits behind, and that changes
+which tools qualify. Behind a MoQ egress all three are required, and no off-the-shelf stage does (a)
+while leaving the mux intact, so the stage is custom. Behind a segmented-HTTP egress the packager has
+already preserved the stuffing, the declared mux rate and the PCR spacing, so only (b) is left and
+TSDuck supplies it — at the cost of a cushion at least as deep as the segment period
 ([Evidence](evidence.md) §3.2).
 
 **Placement at the edge rather than the publisher is deliberate**: grooming depends on the delivery
@@ -319,7 +325,7 @@ it appears to.
 
 | Gateway responsibility | On MoQ | On segmented HTTP |
 |---|---|---|
-| Reassemble to a transport stream | re-mux from tracks, or verbatim on the opaque lane | concatenate segments — **easier**, and byte-verbatim for a single programme |
+| Reassemble to a transport stream | re-mux from tracks, or verbatim on the opaque lane | concatenate segments — **easier**, and verbatim in payload for a single programme (the packager re-multiplexes; the payload survives it) |
 | Absorb delivery burstiness | 12.4 kB bursts, 149 ms worst-case silence | 2.95 MB bursts, 4.01 s worst-case silence → **seconds of buffer**, derived from arrival rather than configured |
 | Re-insert stuffing to the target mux rate | required: nulls are stripped in transit | not required: nulls are carried, which is also why it costs ~7 % more on the wire |
 | Byte-locked CBR pacing and PCR re-stamp | required | **required, identically** |
@@ -1022,7 +1028,7 @@ slips.
 | Decision | Rationale | Trade-off accepted |
 |---|---|---|
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
-| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | Inherits the source's PCR spacing, so wire-domain PCR repetition depends on buffer depth (§4.2) |
+| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | Inherits the source's PCR spacing exactly, so wire-domain PCR repetition is whatever the egress delivered and cannot be improved by the groomer — on MoQ that means inheriting the exporter's clustering, which a cushion swept eightfold does not touch (§4.2) |
 | Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Byte-identity demonstrated for single-track content on one host only; rate coherence across independent clocks untested |
 | Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |

@@ -114,6 +114,7 @@ def pcr_intervals(src):
 
 
 VERIFY_RE = re.compile(r"([\d,]+) PCR OK, ([\d,]+) with jitter")
+CC_EVENT = re.compile(r"missing [\d,]+ packets|discontinuity", re.IGNORECASE)
 
 
 def pcr_violations(src, ticks):
@@ -152,9 +153,17 @@ def continuity_errors(src):
     of it: T16 measured the two disagreeing on the same stream (220 against 231),
     so agreement here is a check on the instruments and a disagreement is a
     finding about the capture.
+
+    The plugin's per-event line reads
+
+        * continuity: packet index: 13,264, PID: 0x0079 (121), missing 14 packets
+
+    and never contains the word "discontinuity" — that word appears only in its
+    `--help`. Matching on it therefore returns 0 for every input, including badly
+    broken ones, which is what this function used to do; see the T5 Corrections.
     """
     txt = tsp(src, "-P", "continuity")
-    return sum(1 for line in txt.splitlines() if "discontinuity" in line.lower())
+    return sum(1 for line in txt.splitlines() if CC_EVENT.search(line))
 
 
 def segment_heads(path, pmtpid, window=4):

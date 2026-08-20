@@ -146,9 +146,17 @@ reads 0.19 under both. Segment fetching cannot suffer it: each segment is an ind
 TCP reassembles beneath it. This is the one axis on which the choice of data plane is a genuine
 reliability decision rather than a tuning decision.
 
-**What segmented HTTP never did, at any impairment, is corrupt what it delivered:** 0 continuity
+**What segmented HTTP did not do anywhere in this ladder is corrupt what it delivered:** 0 continuity
 discontinuities and 0 PCR intervals above 40 ms in every cell, including the one where it delivered a
-sixth of the stream. It sheds *time*, not *bytes*, which is the failure a downstream buffer can absorb.
+sixth of the stream. Inside the origin's availability window it sheds *time*, not *bytes*, which is the
+failure a downstream buffer can absorb. That window is a real edge rather than a formality: a deeper
+ladder crosses it between 7.7 % and 12.2 % applied loss, and past it the client re-anchors to the live
+edge and leaves holes of 7.2 s, 24 s and 82 s as the loss deepens. The mitigation is a buffer only while
+the shortfall is short enough that the client stays in the window. **Past that edge the lane also stops
+reporting**: a 404 only occurs if the client asks for a segment that has just been deleted, and beyond
+about 20 % loss it does not get the chance — it reloads the playlist, finds the segment gone from the
+list and skips. The cell that lost 82 s of programme received nothing but 200s, so an origin's error
+rate does not detect this and only a continuity or PCR check downstream will.
 The media-aware lane's own PCR non-conformance sat unchanged at 7.9–9.2 % in every cell including the
 unimpaired baseline, because it is the exporter defect of §5.1 rather than anything impairment did.
 
@@ -183,8 +191,10 @@ completeness with a much smaller buffer, which is the latency argument in §5 an
 argument. And **the retry model has now been exercised under loss, with a split verdict**: it does not
 deliver resilience *of rate* by itself, because rate under loss is set by the congestion controller
 underneath — the same lane reads 0.17 at 10 % loss on CUBIC and 1.04 on BBR (§3.1) — but it does
-deliver resilience *of content*, arriving byte-verbatim and P1-clean at every impairment level tested,
-including the cells where a sixth of the stream got through. Retry buys completeness, not throughput.
+deliver resilience *of content* while the client stays inside the origin's availability window,
+arriving byte-verbatim and P1-clean at every level of the impairment ladder including the cells where
+a sixth of the stream got through. Retry buys completeness inside that window, not throughput, and
+nothing at all outside it.
 The *failover* half has since been exercised too, and the serving-node case is the cleanest result
 either lane produced: an origin killed for ten seconds costs **no content at all**, because HTTP holds
 no session state, the next successful request is the recovery, and the store still holds what was
@@ -194,9 +204,11 @@ loses the media produced during the outage, where the segmented client refetches
 off-the-shelf TS client in the rig could use — both TSDuck's HLS input and FFmpeg's HLS demuxer
 abandon the stream at the first failed playlist reload, the latter with every retry option it
 offers already set — so it took a purpose-written client to show it (§3.3, [Evidence](evidence.md)
-§3.4). What remains specification-only is edge and Pathway selection under Content Steering, and the
-ladder never pushed the lane far enough behind for a segment to age out of its availability window,
-so the boundary where completeness finally breaks is still unmeasured
+§3.4). What remains specification-only is edge and Pathway selection under Content Steering. The
+boundary where completeness breaks is no longer unmeasured: a ladder to 40 % loss over 120 s windows
+pushes the client out of the availability window between 7.7 % and 12.2 % applied loss, and past it
+the lane delivers holes rather than lateness — 7.2 s, 24 s and 82 s as the loss deepens, and past about
+20 % loss with the origin returning nothing but 200s
 ([T5](../lab/test-5-network-impairment.md), [T6](../lab/test-6-relay-resilience.md)).
 
 ### 3.3 Where broadcast actually gets its reliability, and why it is common to both
@@ -277,7 +289,7 @@ handling, availability windows and a retry policy — and must hold at least `PA
 buffer. Simpler to write and already written are both real advantages; for an operator, already
 written usually wins.
 
-### 4.3 Grooming: unsolved off the shelf for both, a heavier burden on segmented HTTP, and the better measured result there
+### 4.3 Grooming: a heavier burden on segmented HTTP, the better measured result there, and the only lane an off-the-shelf stage can groom
 
 **Segmented HTTP inherits the grooming problem in full, and it is worse rather than equal — measured,
 at two orders of magnitude.** Each transport's ungroomed egress was captured at the same point with
@@ -322,14 +334,25 @@ with Apple's tools — and **no freely available client fetches them**, so the e
 actually sees is the classic one. Measured, the median burst falls only from 2.95 MB to 2.27 MB, and
 that reduction is explained by segment duration rather than by parts ([Evidence](evidence.md) §3.9).
 
-**What is not in doubt is that off-the-shelf tools do not do all of it.** Every candidate an engineer
-would reach for was graded against four criteria fixed in advance — mux preserved, PCR inside 481 ns,
-no interval above 40 ms, honest duration on a rate-controlled wire — and each fails a different one.
-TSDuck cannot restore stuffing at all, because `tsp` can overwrite existing null packets but cannot
-inflate a stream. FFmpeg's `-muxrate` produces the best PCR arithmetic measured and, on its own
-socket, an unusable wire; it retypes all three SCTE-35 PIDs and relabels AC-3. GStreamer's
-`mpegtsmux` loses every PSI table beyond PAT and PMT, the PMT's own PID, the teletext descriptor and
-two of three splice PIDs ([Evidence](evidence.md) §3.2).
+**On this lane, off-the-shelf tools do the whole job — and that is a difference between the two data
+planes rather than a fact about MPEG-TS.** Every candidate an engineer would reach for was graded
+against four criteria fixed in advance — mux preserved, PCR inside 481 ns, no interval above 40 ms,
+honest duration on a rate-controlled wire — against both egresses. Behind MoQ each fails a different
+one. Behind a segmented egress, `tsp -P pcradjust -P regulate -O ip` passes all four with the mux
+carried byte-for-byte.
+
+The reason is what the packager hands downstream. It slices the transport stream it was given, so the
+stream still carries the source's null stuffing (4.57 % against the source's 4.59 %), still declares
+the source's mux rate, and still has the source's PCR spacing (0 intervals above 40 ms, where a MoQ
+egress arrives with 163). Two of the three jobs a groomer exists to do are therefore already done, and
+the one that remains — owning a clock — is the one TSDuck does well. The failures the tools show on
+the MoQ lane are unchanged and simply do not arise here: `tsp` still cannot inflate a stream, but on
+this lane it is not asked to ([Evidence](evidence.md) §3.2).
+
+What this lane does demand instead is buffer depth. A grooming stage fed 2 s segments must hold a
+cushion at least as deep as the segment period, and below it the failure is not graceful: at a 1 s
+cushion the same stage went silent for 1.85 s at a time and posted 311 continuity errors, against a
+clean record at 8 s.
 
 **None of those failures is about MoQ** — they are properties of the tools, so they apply identically
 to a stream reassembled from HLS segments. A groomer that preserves a broadcast mux is required on
@@ -378,8 +401,10 @@ Three separate claims were being run together under "hand-off":
   distributor's own edge stage where no MoQ equivalent exists at any price. Whether that box
   discharges the obligation to broadcast conformance is unmeasured (§4.4).
 - **The burden on the groomer** favours MoQ, measurably: the same stage has ~240× coarser bursts and
-  24 multi-second silences to absorb on the segmented-HTTP side (§4.3). Off-the-shelf tools do the
-  job on neither.
+  24 multi-second silences to absorb on the segmented-HTTP side (§4.3). **Which stage can carry that
+  burden favours segmented HTTP**, and by more than the burden costs: off-the-shelf TSDuck grooms the
+  segmented egress to all four criteria with the mux intact, where the MoQ lane has no off-the-shelf
+  option that preserves a broadcast mux and needs a purpose-built stage (§4.3).
 - **The stream that actually leaves the groomer** — which is what an IRD grades — favours segmented
   HTTP, decisively. At the 8 s cushion its segment duration already imposes, the segmented arm delivers
   0 PCR intervals above 40 ms on the wire; the MoQ lane delivers 131–159 in 25 s at its own cushion and
@@ -597,7 +622,7 @@ subscription ([Evidence](evidence.md) §3.10).
 | PMT PID, PCR PID | **preserved, incl. non-default** — measured on three clips | preserved, since the service-layer carriage fix | preserved | **preserved** — measured |
 | TSID / ONID / service name, provider, type | **preserved** — measured | preserved, since the same fix | preserved | **preserved** — measured |
 | SDT / NIT | **preserved** — measured | preserved ([Evidence](evidence.md) §3.1) | preserved | **preserved** — measured |
-| EIT | **preserved** — measured | preserved, schedule included | preserved | not exercised (the clip carries no EIT) |
+| EIT | **preserved, schedule included** — all 69 sections of an 8-day EPG byte-identical, sparse sub-tables and declared extents intact, at 1.003× the source PID rate | preserved, schedule included | preserved | not exercised (the clip carries no EIT) |
 | TDT / TOT | **preserved** — measured | carried, TOT descriptors intact, but **delivered ~14 s late** on the exporter's own emission grid | preserved | **preserved** — measured |
 | CAT | **preserved** — measured | not carried | preserved | not exercised (the clip carries no CAT) |
 | Continuity counters | **preserved except a forced re-stamp on PAT/PMT** | regenerated by the exporter | preserved | **preserved, 0 CC errors** — measured |
@@ -612,8 +637,10 @@ subscription ([Evidence](evidence.md) §3.10).
 **Domains differ across these columns and the difference matters.** Segmented HTTP, the media-aware lane
 and SRT were all measured over the public internet on the current build, in one rig with matched windows
 and one instrument ([T4](../lab/test-4-remote-e2e-srt.md)); the segmented column's three-clip breadth
-(CAT, EIT, non-default PMT PIDs) is loopback ([T3](../lab/test-3-opaque-transparency.md)), and the real
+(CAT, non-default PMT PIDs) is loopback ([T3](../lab/test-3-opaque-transparency.md)), and the real
 path reproduced its single-clip figures to 0.1 %, so the loopback breadth can be read as generalising.
+The EIT row is loopback on a synthetic fixture on both MoQ and segmented columns, because no clip held
+here carries an EPG ([T17](../lab/test-17-si-snapshot-tracks.md)).
 The opaque column is loopback and partly derived, because that lane's egress delivers nothing outside its
 original checkout. SRT is included as the *reference* rather than as a fourth candidate: it is the
 byte-faithful case the other three are read against.
@@ -646,6 +673,18 @@ media-aware lane's ungroomed egress has none, and graded anyway returns exactly 
 interval rather than an error ([Evidence](evidence.md) §3.1). The axis is therefore informative about
 segmented HTTP, silent about the media-aware lane until a groomer restores a clock, and unmeasured on
 the opaque lane.
+
+**The EPG is where the two lanes pass for opposite reasons, and the asymmetry is worth naming because
+it recurs.** An EIT schedule sub-table is *sparse* — it declares a `last_section_number` covering a
+multi-day range and transmits only the sections that hold events — so a lane that reconstructs the
+table has to decide when it is complete, and cannot distinguish a section the source skipped from one
+it lost. The media-aware lane takes that on and gets it right, committing a generation when the
+transmission cycle wraps. The segmented lane never parses PID 0x0012: it copies the packets, so the
+problem does not arise. Both deliver all 69 sections of an 8-day EPG byte-identically
+([T17](../lab/test-17-si-snapshot-tracks.md)), and **understanding the media is what creates the
+obligation to understand it correctly**. The cost lands on the other side of the trade: MoQ hands a
+joining receiver the whole EPG as snapshots in about a millisecond, where a segmented client must wait
+out the carousel — tens of seconds at the ETSI cadence, with no HLS mechanism to shorten it.
 
 **What survives of MoQ's advantage on mux content is the multi-programme case alone**, where HLS's
 "Transport Stream Segments MUST contain a single MPEG-2 Program" bites. That is normative rather than
@@ -814,8 +853,11 @@ The last two rows are worth separating, because they are usually sold together a
 problem. **Pacing a constant-rate stream onto a socket is small, self-contained and solved off the
 shelf**: 366 lines of C11 that rewrite nothing produce a tighter wire than anything else graded
 ([Evidence](evidence.md) §3.2). **Rewriting a mux to be constant-rate — adding stuffing and
-re-placing PCR *without* renumbering PIDs or retyping SCTE-35 — is the half that remains a single
-free implementation**, and it is the half that decides whether a broadcast mux survives.
+re-placing PCR *without* renumbering PIDs or retyping SCTE-35 — is the half that decides whether a
+broadcast mux survives, and whether it needs a bespoke tool depends on the lane.** Behind a segmented
+egress it does not: the packager already delivered the stuffing and the PCR spacing, so TSDuck's
+`pcradjust` plus `regulate` is the whole answer. Behind MoQ it does, because that egress carries
+neither and nothing off the shelf can add them without re-multiplexing.
 
 **So the two data planes are incomplete in mirror-image ways.** Segmented HTTP has mature commercial
 receivers and no free low-latency one; MoQ has a free receiver and no commercial one, and carries
@@ -931,11 +973,14 @@ neither camp.
   otherwise a transport that merely passes its input through is credited with its source's virtues.
 
 A seventh belongs with them, and it is this repository's own: **"MoQ's sub-second capability is
-measured."** It was not. It is a structural property of the protocol and a reasonable inference from
-measured delivery granularity, and it was written as a result in two documents for several revisions.
-**The method rule: a claim that decides a comparison should carry a citation to the measurement that
-established it, and the absence of one is a finding about the comparison rather than a gap in its
-prose.**
+measured."** For several revisions it was not. It was a structural property of the protocol and a
+reasonable inference from measured delivery granularity, written as a result in two documents. It has
+since been measured properly — 109 ms across the public internet, 15× lower than SRT over the same path
+([T18](../lab/test-18-delivery-latency.md), §5) — so the claim is now true, which is exactly why it is
+kept here. **The method rule: a claim that decides a comparison should carry a citation to the
+measurement that established it, and the absence of one is a finding about the comparison rather than a
+gap in its prose.** A claim being correct is not a substitute for its having been checked, and the
+interval during which this one was right-but-unevidenced is the part worth remembering.
 
 ---
 
@@ -949,7 +994,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
 | Reliability under impairment (R5) | **segmented HTTP, on the one impairment that separates them** | **M** | **measured head-to-head across the full lane × controller matrix: loss does not separate the lanes at all — given the same controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13), so the familiar "segment fetching degrades under loss" result is a controller comparison. Under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98, because QUIC's in-order delivery turns reordering into head-of-line blocking and no controller removes it** (§3.1) |
-| Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, but complete resilience of *content* — 0 continuity errors and 0 PCR intervals above 40 ms at every impairment level, so the lane sheds time rather than data.** Edge and Pathway selection remains specification-only, and the availability-window boundary was never reached (§3.2) |
+| Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, and resilience of *content* only while the client stays inside the origin's availability window** — 0 continuity errors and 0 PCR intervals above 40 ms throughout a ladder to 10 % loss, so within the window the lane sheds time rather than data. A deeper ladder crosses the window between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s holes — and past ~20 % loss it does so without the origin returning a single error, so the failure is silent at the serving node. Edge and Pathway selection remains specification-only (§3.2) |
 | Redundancy — serving node (R5) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning; the difference is that the media-aware exporter skips to the live edge and loses the media produced during the outage, where the segmented client refetches it from the store and loses nothing. But neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all — both abandon at the first failed playlist reload — so it took a purpose-written client to show (§3.2) |
 | Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |
 | Reassembly to a transport stream | segmented HTTP | M | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |

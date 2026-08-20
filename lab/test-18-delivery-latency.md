@@ -173,8 +173,44 @@ placement in the stream rather than its arrival pattern.
 | hls | 4000 ms | 5015 | 5077 | 4965 | 2 / 3425 | 54.0 ms |
 | hls | 8000 ms | 9185 | 9230 | 9142 | 1 / 3352 | 45.6 ms |
 
-Continuity errors and PCR jitter above 481 ns were **zero on all nineteen cells**, so the conformance
-column that separates the arms is repetition alone.
+PCR jitter above 481 ns was zero on all nineteen cells. **Continuity was not**, and the column that
+originally reported it as zero everywhere was an instrument defect rather than a measurement — the
+matcher searched the plugin's output for the word "discontinuity", which it never prints (see the
+Corrections). Re-graded from the same captured bytes:
+
+| arm | 250 / 2000 ms | 500 / 4000 ms | 1000 / 8000 ms | 2000 ms |
+|---|---|---|---|---|
+| udp | 98 (442 pkts) | 91 (362) | 89 (380) | 92 (357) |
+| srt | 102 (479) | 92 (375) | 90 (388) | 99 (419) |
+| rist | 132 (672) | 83 (404) | 90 (386) | 100 (474) |
+| **moq** | **0** | **0** | **0** | **0** |
+| **hls** | **583 (3,962)** | **78 (555)** | **64 (443)** | — |
+
+Two of these are attributable and two are not, and the difference matters more than the numbers.
+
+**MoQ is the only arm that delivers the stream intact, and that is a real result** — QUIC is reliable
+end to end, so nothing is lost between publisher and groomer. It also disposes of the obvious worry
+about the tap: the capture socket is common to every arm, so an arm reading zero through it proves the
+instrument is not the source of the others' losses.
+
+**The segmented arm's continuity scales with cushion, and that is the starvation mechanism
+[T13](test-13-downstream-grooming.md) isolated.** TCP delivers every byte, so the losses cannot be in
+the lane; they are the groomer running dry between segment arrivals. 583 events at a 2000 ms cushion
+against 2000 ms segments, falling to 64 by 8000 ms, is the same curve T13 measured directly (311
+continuity errors at a 1 s cushion, 0 at 8 s). It is one more reading of the rule that a segmented
+lane's cushion must exceed its segment period.
+
+**The ~90-event floor on udp, srt and rist is not yet attributed, and the arms disagree with their own
+premise.** Plain UDP losing ~380 packets in 90 s on loopback is unremarkable. SRT and RIST landing on
+the *same* figure is not: both run a 1000 ms ARQ buffer whose purpose is to remove exactly this, and
+[T15](test-15-point-to-point-cadence.md) and measurement 1 both treat them as lossless on a healthy
+path. Only RIST explains itself — its receive log carries repeated `Rist data out fifo queue
+overflow`, so that arm's loss is a receiver FIFO overrunning rather than the tunnel failing. SRT logs
+nothing. Until a source-side capture is graded beside the egress on the same cell, these three figures
+bound a rig artefact and a transport result together and should not be quoted as either.
+
+None of this moves measurement 1–4's latency findings, which are timing rather than carriage, and none
+of it moves the repetition column.
 
 ### Measurement 1 — the floor, and what a tunnel costs on a healthy path
 
@@ -399,6 +435,18 @@ depth it already runs at — which, measured across the internet, is 109 ms.
 
 > The general method rules extracted from this section, together with those from every other
 > experiment, are collected in [method-notes.md](method-notes.md).
+
+- **The continuity column read zero on all nineteen cells because its matcher could not match.** It
+  counted lines of `tsp -P continuity` output containing the word "discontinuity". The plugin prints
+  `* continuity: packet index: …, PID: …, missing 14 packets`, and emits that word only in its
+  `--help`, so the count was structurally zero for every input including badly broken ones. Nothing
+  in the output looked wrong: a conformance column of zeros on a healthy rig is exactly what one
+  expects to see, which is why it survived a whole sweep. Re-graded from the same saved captures with
+  a corrected matcher, five of the nineteen cells are still zero and fourteen are not, with the
+  segmented arm posting 583 events at its shallowest cushion. **Method rule:** an instrument that
+  reports the value you expect is not thereby working — before publishing a column of zeros or
+  passes, feed it an input known to be bad and check that it says so. This defect was shared by six
+  rigs across the campaign and is recorded in full in the [T5 Corrections](test-5-network-impairment.md).
 
 **Believed: the MoQ lane's PCR failure was groomer starvation.** The groomer's `underruns` count equalled
 its inserted nulls exactly, and the commanded carrier exceeded the lane's content rate by the same 3.2 %,

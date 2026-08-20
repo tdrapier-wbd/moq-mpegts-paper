@@ -1,28 +1,20 @@
-# T13 — Off-the-shelf CBR/PCR grooming of a MoQ egress
+# T13 — Off-the-shelf CBR/PCR grooming of an MPEG-TS egress
 
 ## Objective
 
-> **Read criterion 3 on the wire, not on the file.** The headline result of this experiment that
-> travels furthest is a negative one: `mpegts-pacer` posts **0** PCR intervals above 40 ms on a
-> captured file and **131 on the laptop rig and 159 on the EC2 box, with a 227.4 ms maximum, on the
-> wire**, at the cushion the MoQ lane runs. [T16](test-16-grooming-segmented-http.md) later reached 0 on
-> the wire at an 8 s cushion on the *other* data plane, which made buffer depth look like the constraint
-> here too. **It is not.** [T18](test-18-delivery-latency.md) swept this lane's cushion across eight times
-> the depth and removed groomer starvation entirely, and the figure did not move — because the groomer
-> inserts no PCRs of its own and the exporter emits them too rarely to place. The word "inherits" in the
-> scoring below is exact, and the defect is upstream of every tool graded here.
+> **The grooming requirement is a property of the lane, not of MPEG-TS.** This experiment began on the
+> MoQ lane and concluded that no off-the-shelf stage does the whole job. That conclusion holds, and it
+> is narrower than it first read: it is caused by two things `moq ... export ts` does not deliver —
+> stuffing, and PCRs often enough — and neither is true of a segmented HTTP egress. Graded on the
+> segmented lane, the same TSDuck chain that is only *partial* on the MoQ lane passes all four criteria
+> with the mux intact. Read every result below against the lane it was measured on; the two are
+> tabulated side by side throughout.
 
-
-`moq ... export ts` emits a transport stream with no stuffing and no wire cadence: MPEG-TS null
-packets are not carried, so what arrives is content only, delivered in MoQ's object bursts. Anything
-downstream that expects a constant mux rate has to put both back. Every measurement in this campaign
-so far has done that with one tool ([`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)),
-which makes the grooming stage look like a dependency on a single implementation.
-
-This asks the question that matters to anyone adopting the chain: **can the grooming stage be built
-from tools an operator already has?** The candidates are the ones an engineer would reach for first —
-TSDuck's `regulate` and `pcradjust`, FFmpeg's `-muxrate`, and GStreamer's `mpegtsmux bitrate=` —
-graded against the same oracle as
+**Can the grooming stage be built from tools an operator already has?** Every measurement in this
+campaign has groomed with one tool ([`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)),
+which makes the stage look like a dependency on a single implementation. The candidates are the ones
+an engineer would reach for first — TSDuck's `regulate` and `pcradjust`, FFmpeg's `-muxrate`, and
+GStreamer's `mpegtsmux bitrate=` — graded against the same oracle as
 [T2](test-2-media-aware-transparency.md) and [T7](test-7-timing-integrity.md), with the pacer present
 only as a control.
 
@@ -37,11 +29,25 @@ documentation, which is where this started: the upstream review of
 [moq-dev/moq#2830](https://github.com/moq-dev/moq/pull/2830) rightly objected to a recipe that
 invoked a tool with no supported installation path.
 
+It also turns out to depend on what the data plane hands the groomer, which is why both lanes are
+measured rather than one:
+
+- **MoQ.** `moq ... export ts` emits content only. MPEG-TS null packets are not carried, so the stream
+  has no stuffing and declares no mux rate, and it arrives in MoQ's object bursts. A groomer has to put
+  the stuffing, the rate and the cadence back.
+- **Segmented HTTP.** The packager slices the transport stream it was given, nulls included, so what
+  `tsp -I hls` hands downstream still carries the source's stuffing and still declares the source's mux
+  rate. Only the cadence is missing — and it is missing more coarsely, because whole segments arrive at
+  once.
+
+That difference is measured rather than assumed, in the census that opens the results, and it is what
+splits the scoring.
+
 ### Pass criteria (fixed before the runs)
 
 A grooming stage is a candidate for a documented recipe if it does all four:
 
-1. **Preserves the mux.** Every PID, stream type and PSI table that `export ts` emitted arrives
+1. **Preserves the mux.** Every PID, stream type and PSI table the egress delivered arrives
    unchanged. A broadcast mux is a contract: SCTE-35 on a known PID with stream type 0x86, not
    "something equivalent".
 2. **PCR accurate.** 0 violations at the TR 101 290 P2 limit, measured as
@@ -77,6 +83,15 @@ A grooming stage is a candidate for a documented recipe if it does all four:
   nominal. That it differs from the file-domain capture's 9,507,216 b/s is expected — with the source's
   stuffing removed, what is left is variable, so the content rate is a property of the window measured,
   which is why each domain measures its own.
+- **Segmented-lane rig (same laptop).** `tsp -O hls` packages the same broadcast clip to 2 s segments
+  (`--intra-close --align-first-segment`, 6-segment live window) behind a loopback `python3 -m
+  http.server`, and `tsp -I hls --live` is the client. The file-domain input is a 60 s capture of that
+  client's output: 406,407 packets, 4.57 % stuffing, declared rate 9,957,489 b/s. The wire legs run
+  25 s each against a standing origin, one at a time, with each groomer writing to its own loopback
+  port. The pacer runs at two cushions here rather than one, because on this lane the cushion is the
+  variable that matters: 8 s, the depth [T12](test-12-dual-path-handoff.md) and
+  [T16](test-16-grooming-segmented-http.md) need, and 1 s, which is *below the segment period* and is
+  included to show what that costs.
 - **Egress-pacer rig (a second host).** The legs that test a datagram sender on its own run on the
   EC2 box (Ubuntu, 2 vCPU, kernel 7.0) rather than the laptop, because
   [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) does not build on macOS:
@@ -85,14 +100,17 @@ A grooming stage is a candidate for a documented recipe if it does all four:
   FFmpeg, the pacer — is therefore re-measured on the same box at the same rate rather than compared
   against the laptop figures above. Source is the same clip; the MoQ legs subscribe to the box's
   standing relay and loop publisher, `moq` 0.9.11-eab96019.
-- Rigs: [`t13-groom-matrix.sh`](scripts/t13-groom-matrix.sh) builds the file-domain variants,
-  [`t13-cadence.sh`](scripts/t13-cadence.sh) runs the live legs,
+- Rigs: [`t13-groom-matrix.sh`](scripts/t13-groom-matrix.sh) builds the file-domain variants for
+  either lane, [`t13-segmented-egress.sh`](scripts/t13-segmented-egress.sh) captures and censuses the
+  segmented egress that feeds it, [`t13-cadence.sh`](scripts/t13-cadence.sh) and
+  [`t13-cadence-segmented.sh`](scripts/t13-cadence-segmented.sh) run the live legs on each lane,
   [`t13-rawsend.sh`](scripts/t13-rawsend.sh) runs the egress-pacer legs, and
   [`t13-grade.py`](scripts/t13-grade.py) and [`t13-cadence.py`](scripts/t13-cadence.py) grade them.
 
 ## Procedure
 
-Nine chains in the file domain, each fed the identical ungroomed capture:
+Nine chains in the file domain, each fed the identical ungroomed capture — run once per lane, so the
+same table can be read for both:
 
 | Chain | What it tests |
 |---|---|
@@ -106,9 +124,14 @@ Nine chains in the file domain, each fed the identical ungroomed capture:
 | `mpegts-pacer` at the nominal rate | control |
 | `mpegts-pacer` at its own chosen rate | control |
 
-Then the four that were worth running live — the pinned FFmpeg, GStreamer, the TSDuck pass-through
-(`pcradjust` then `regulate` then `-O ip`), and the pacer — measured on the socket for delivered
-rate, gap distribution, and the PCR conformance of the stream *as received*.
+Then the four that were worth running live on the MoQ lane — the pinned FFmpeg, GStreamer, the TSDuck
+pass-through (`pcradjust` then `regulate` then `-O ip`), and the pacer — measured on the socket for
+delivered rate, gap distribution, and the PCR conformance of the stream *as received*.
+
+On the segmented lane the live legs are the two that the file domain leaves undecided, plus one
+diagnostic: the TSDuck pass-through, the pacer at an 8 s cushion, and the pacer at 1 s. The two
+regenerating muxers are not re-run live there — the file domain already disqualifies them on
+carriage, and nothing about the arrival shape can repair a PID that was renumbered.
 
 Then a third group, on the second host, isolating the egress stage. The pairs are the point: the same
 FFmpeg output sent by FFmpeg's own socket and by `rawsendmpeg2ts`, so the only difference is which
@@ -120,7 +143,36 @@ clip with no groomer in the chain at all, and TSDuck's own sender on that clip, 
 
 ## Results
 
-### File domain
+### What each lane hands a groomer
+
+Both egresses carry the same clip. This is the census that decides how much work is left to do, and
+the last two rows are the two that turn out to matter:
+
+| | source clip | MoQ `export ts` | segmented `tsp -I hls` |
+|---|---|---|---|
+| packets in the capture | 3,967,645 | 300,000 | 406,407 |
+| **stuffing (PID 0x1FFF)** | 4.59 % | **0 %** | **4.57 %** |
+| **declares a mux rate** | 9,945,951 b/s | **none** | **9,957,489 b/s** |
+| PCR outside 481 ns | — | 1,527 of 1,567 | 2,506 of 2,516 |
+| max PCR jitter | — | 307,767 µs | 302 µs |
+| **PCR intervals > 40 ms** | 0 | **163** | **0** |
+
+The stuffing row is the whole of T13's original problem: a groomer on the MoQ lane has to *inflate* a
+stream, and the observations below establish that `tsp` cannot. On the segmented lane there is nothing
+to inflate — the packager passed the source's nulls through, and 4.57 % against 4.59 % is the same
+stuffing minus what fell outside the capture window.
+
+The last row is the one that was not anticipated, and it removes T13's headline live failure from the
+segmented lane before any tool runs. MoQ's exporter emits PCRs too rarely, so any stage that carries
+them rather than minting its own inherits 163 intervals over the 40 ms limit. The segmented egress
+arrives with 0, because the source is a conformant broadcast mux and the packager preserved its PCR
+spacing.
+
+Both lanes fail the 481 ns gate on essentially every PCR before grooming, which is expected of either:
+neither delivers on a constant-rate wire, so PCR read against a constant-rate model is wrong on both.
+That is the part a groomer is *for*.
+
+### File domain, MoQ lane
 
 Broadcast mux, 300,000 packets. "Mb/s" is the rate the stream declares by its own PCR arithmetic;
 duration fidelity is the ratio of the groomed stream's own duration to the source's.
@@ -155,7 +207,43 @@ losing only the SDT and the PMT's PID — because a video-only feed has no signa
 genuinely constant content rate to re-stamp against. The nominal-rate `mux` variant fails the same way
 as on the broadcast mux, harder: duration fidelity 0.927.
 
-### Wire domain
+### File domain, segmented lane
+
+The same nine chains, same clip, same oracle, fed the 60 s segmented capture (406,407 packets) in
+place of the `export ts` one. Structure is relative to the segmented egress as delivered.
+
+| Chain | packets | stuffing | Mb/s | PCR > 481 ns | intervals > 40 ms | CC | max jitter | Structure |
+|---|---|---|---|---|---|---|---|---|
+| ungroomed segmented egress | 406,407 | 4.6 % | 9.948 | 2,506 | **0** | 0 | 302.3 µs | — |
+| TSDuck `regulate` | 406,407 | 4.6 % | 9.948 | **2,506** | 0 | 0 | 302.3 µs | preserved |
+| **TSDuck `pcradjust` @ content** | 406,407 | 4.6 % | 9.948 | **0** | **0** | 0 | **2.9 µs** | **preserved** |
+| TSDuck `mux` nulls + `pcradjust` @ nominal | 406,407 | 4.6 % | 9.959 *claimed* | 0 | 0 | 0 | 2.9 µs | preserved |
+| FFmpeg `-muxrate` | 411,577 | 5.6 % | 9.958 | 0 | 0 | 0 | 2.0 µs | **10 PIDs renumbered** |
+| FFmpeg `-muxrate`, PIDs pinned | 411,577 | 5.6 % | 9.958 | 0 | 0 | 0 | 2.0 µs | **NIT/CAT lost, 3 SCTE-35 retyped** |
+| GStreamer `mpegtsmux`, PIDs pinned | 408,640 | 4.2 % | 9.963 | 0 | 0 | 0 | 22.7 µs | **PSI and all 3 splice PIDs lost** |
+| GStreamer, SCTE-35 forwarded | 408,640 | 4.2 % | 9.963 | 0 | 0 | 0 | 22.7 µs | **the same, 1 of 3 splice PIDs back** |
+| pacer @ nominal *(control)* | 407,358 | 4.8 % | 9.959 | 0 | **5** | 0 | 6.5 µs | preserved |
+| pacer @ auto *(control)* | 446,285 | 13.1 % | 10.918 | 0 | **21** | 0 | 5.7 µs | preserved |
+
+**`tsp -P pcradjust` alone clears every file-domain criterion on this lane**, and does it while
+carrying the mux byte-for-byte: 0 violations at the P2 gate, 2.9 µs maximum jitter, no interval above
+40 ms, stuffing and declared rate unchanged from the egress. On the MoQ lane the identical command
+leaves 299 intervals above 40 ms, and the reason is entirely the census above — here there was nothing
+to insert and nothing to re-place.
+
+The two regenerating muxers damage the mux exactly as they do on the MoQ lane, which is the expected
+result and worth stating: their failure is a property of the tool, so it does not move when the lane
+does. The `mux` + `pcradjust` variant still inserts zero packets, but its dishonesty shrinks from 4.4 %
+to 0.11 % — it claims 9.959 Mb/s and carries 9.948 — because on this lane almost all the stuffing it
+was asked to add is already there.
+
+The pacer is the interesting inversion. On this lane it is *worse* than doing less: it strips the
+egress's nulls and re-stuffs to a nominal rate slightly above what the stream carries, and that
+redistribution puts 5 intervals over 40 ms where the untouched byte schedule had none. Told to choose
+its own rate it inflates to 13.1 % stuffing and posts 21. A stage that rebuilds a schedule which was
+already correct can only make it worse.
+
+### Wire domain, MoQ lane
 
 25 s per leg. Delivered rate is UDP payload, so the pacer's figure includes RTP headers.
 
@@ -179,6 +267,40 @@ delivered all of it untouched. FFmpeg rebuilt it: the NIT dropped, its own SDT i
 exporter's, and the same AC-3 and SCTE-35 retyping as on file. GStreamer discarded all of it — NIT,
 SDT and the exporter's PMT PID — and emitted its own PAT and PMT, because `tsdemux` presents no PSI
 to re-mux.
+
+### Wire domain, segmented lane
+
+25 s per leg, same instrument. The pacer legs are RTP, so their delivered rate includes RTP headers.
+
+| Leg | delivered | per-second range | gap p50 / p95 / max | 10 ms CoV | peak/mean | PCR > 481 ns as received | > 40 ms | max interval | CC | Structure |
+|---|---|---|---|---|---|---|---|---|---|---|
+| TSDuck `pcradjust` + `regulate` | 9.951 Mb/s | 9.84 – 10.04 | 5.7 µs / 9.94 ms / **85.8 ms** | **0.618** | **8.78** | **0** | **0** | 24.9 ms | 0 | preserved |
+| pacer @ **8 s** cushion *(control)* | 10.037 Mb/s | 10.02 – 10.06 | 1.16 ms / 2.12 ms / **9.8 ms** | **0.078** | **1.27** | **0** | **0** | 37.8 ms | 0 | preserved |
+| pacer @ **1 s** cushion | **8.570 Mb/s** | **0.00 – 10.06** | 1.16 ms / 1.95 ms / **1,848.5 ms** | 0.425 | 1.86 | 2 | **5** | **1,846.5 ms** | **311** | **FAIL** |
+
+Two results, and they are independent.
+
+**The criterion that fails on the MoQ lane passes here, for both stages.** The pass-through chain and
+the pacer each deliver 0 PCR intervals above 40 ms as received, where on the MoQ lane the same two
+deliver 136 and 131. Nothing about the tools changed. What changed is the census: this egress arrives
+with its PCR spacing intact, so a stage that carries it has something conformant to carry.
+
+**Below the segment period, a groomer starves, and the failure is total.** The 1 s cushion is smaller
+than the 2 s segments feeding it, so twice in 25 s the buffer ran dry and the socket went silent for
+1.85 s. That figure appears identically in three instruments — a 1,848.5 ms gap between datagrams, a
+1,846.5 ms PCR interval, and 1,845,984 µs of PCR jitter — which is what a genuine starvation looks
+like as opposed to an instrument artefact. It cost 311 continuity errors and 14 % of the delivered
+rate. The same stage at 8 s is clean on every column. **On a segmented lane the cushion is not a
+tuning parameter, it is a correctness precondition, and its floor is the segment duration.** That is
+the same threshold [T12](test-12-dual-path-handoff.md) needed for a byte-identical 1+1 pair and
+[T16](test-16-grooming-segmented-http.md) needed to reach 0 intervals above 40 ms.
+
+The pass-through chain's weakness on this lane is cadence, and only inside the second. Its per-second
+series is flat and its PCR record is clean, but the 10 ms statistics are an order of magnitude worse
+than the pacer's — CoV 0.618 against 0.078, an 8.78× peak-to-mean against 1.27×, and a worst silence
+of 85.8 ms against 9.8 ms. `regulate` holds almost no buffer, so the coarse structure of segment
+arrivals passes straight through it; on the MoQ lane, where arrivals are object-sized, the same chain
+manages CoV 0.353 and a 14.6 ms worst silence. The tool did not get worse, the input did.
 
 ### The egress stage on its own
 
@@ -235,9 +357,10 @@ looks like on a socket. The 11.000 Mb/s legs are the comparison to read.
 
 ### Against the pass criteria
 
-Each candidate chain, scored on the four criteria fixed above. No off-the-shelf chain passes all four.
-The closest now fails one criterion only, and it is carriage. The unpinned FFmpeg and the plain
-GStreamer remux fail criterion 1 harder than the forms listed, so they are not scored separately.
+Each candidate chain, scored on the four criteria fixed above. **On the MoQ lane no off-the-shelf
+chain passes all four**; the closest fails one criterion only, and it is carriage. The unpinned FFmpeg
+and the plain GStreamer remux fail criterion 1 harder than the forms listed, so they are not scored
+separately.
 
 | Chain | 1 mux preserved | 2 PCR ≤ 481 ns | 3 no interval > 40 ms | 4 honest time, paced wire | Verdict |
 |---|---|---|---|---|---|
@@ -253,27 +376,56 @@ Criterion 4's duration test is 1.000 within the arithmetic of adding stuffing, w
 readings above count as exact; what it is there to catch is the 0.956 of the nominal-rate `mux`
 variant, a stream running 4.4 % fast.
 
-Criterion 3 is scored on the file domain, where a stage places PCRs freely, and that scoring now
-flatters one class of stage at the other's expense. On the wire the two candidate chains separate
-completely: the regenerating chain delivers 0 intervals above 40 ms with a 20.4 ms maximum, and the
-pacer delivers 159, up to 227 ms. Neither is a defect. A stage that mints its own PCR schedule places
-PCRs wherever its `-pcr_period` says, and inherits nothing; a stage that carries the exporter's
-inherits their spacing, and MoQ's egress arrives with 55 intervals already above 40 ms and a 319.9 ms
-maximum. What decides it for a pass-through stage is buffer depth rather than live operation as such
-— [T16](test-16-grooming-segmented-http.md) reaches 0 on the wire by carrying seconds of cushion —
-so the choice is to regenerate PCR, or to hold enough buffer to always have a packet ready at the
-deadline. At the ~1 s cushion used here, the pacer does neither. Read criterion 3 on the live column
-when the question is what an IRD receives.
+**On the segmented lane the same scoring comes out differently, and the difference is criterion 3.**
+
+| Chain | 1 mux preserved | 2 PCR ≤ 481 ns | 3 no interval > 40 ms | 4 honest time, paced wire | Verdict |
+|---|---|---|---|---|---|
+| TSDuck `regulate` alone | pass | **fail** (2,506) | pass (0) | pass | **fail** — paces without grooming |
+| **TSDuck `pcradjust` (+ `regulate` for the wire)** | **pass** | **pass** | **pass** (0 file, 0 live, max 24.9 ms) | **pass** (9.951 Mb/s, per-second 9.84–10.04) | **pass**, with a cadence caveat below |
+| TSDuck `mux` nulls + `pcradjust` @ nominal | pass | pass | pass (0) | **fail** (claims 9.959, carries 9.948) | **fail** — still claims a rate it does not carry |
+| FFmpeg `-muxrate`, PIDs pinned | **fail** (NIT and CAT lost, 3 SCTE-35 PIDs retyped) | pass | pass | not re-run live | **fail** — carriage, as on the MoQ lane |
+| GStreamer `mpegtsmux`, SCTE-35 forwarded | **fail** (PSI, PMT PID, 2 of 3 splice PIDs) | pass | pass | not re-run live | **fail** — carriage, as on the MoQ lane |
+| `mpegts-pacer` @ 8 s cushion *(control)* | pass | pass | pass (5 file, **0 live**) | pass (CoV 0.078) | **pass** |
+| `mpegts-pacer` @ 1 s cushion | pass | **fail** (2) | **fail** (5, max 1,846 ms) | **fail** (8.570 Mb/s, 1.85 s silences) | **fail** — cushion below the segment period |
+
+The pass-through chain's criterion 4 is a pass on the terms fixed in advance — the delivered rate is
+genuinely rate-controlled, flat to ±1 % every second, with no silence approaching a segment period.
+The caveat that belongs with it is that its cadence inside the second is an order of magnitude coarser
+than the pacer's, with 85.8 ms worst-case silence. Whether that matters is a receiver question the
+campaign has not yet answered on hardware; it is well inside what the criterion asks and well outside
+what the pacer achieves.
+
+**What decides criterion 3 is the egress's PCR spacing, not buffer depth and not the file/wire
+distinction.** An earlier reading of this experiment attributed the pacer's live failure to cushion,
+because [T16](test-16-grooming-segmented-http.md) reached 0 on the wire while carrying seconds of it.
+Two measurements rule that out. [T18](test-18-delivery-latency.md) swept the MoQ lane's cushion across
+eight times the depth, removed starvation entirely, and did not move the figure. And on the segmented
+lane the TSDuck chain holds almost no buffer at all and still posts 0 — because this egress arrives
+with 0 intervals above 40 ms, where MoQ's arrives with 163. A pass-through stage inherits what it is
+given, exactly; a regenerating stage mints its own schedule and inherits nothing, which is why FFmpeg
+and GStreamer post 0 on both lanes while destroying the mux on both. Cushion enters only as a way to
+make things *worse*: too shallow and the stage starves, which is the 1 s row above, and that is a
+different defect with a different signature.
 
 ## Observations
 
+**The grooming requirement is set by the data plane, and the two lanes ask for different jobs.** This
+is the finding that reorganises the rest. On the MoQ lane a groomer must add stuffing, invent a
+nominal rate, re-place PCR and own a clock; nothing off the shelf does the first while carrying a
+broadcast mux, so the whole chain fails. On the segmented lane the packager already passed the
+source's nulls, its declared rate and its PCR spacing through, so the only job left is the clock — and
+`tsp -P pcradjust -P regulate -O ip` does it, mux intact, on every criterion. **The same command is a
+partial answer on one lane and a complete one on the other.** Any statement about what a grooming
+stage must do is incomplete without naming the egress it sits behind.
+
 **TSDuck cannot restore stuffing, by construction.** `mux` inserted exactly zero packets, with
-`--bitrate` and with `--inter-packet`, on both inputs. `tsp`'s pipeline can drop packets or overwrite
-existing stuffing but cannot inflate a stream, which its own plugin documentation states three ways
-over: `mux` "replaces all stuffing packets", `duplicate` reuses null packets, and `pcradjust`'s
-`--min-ms-interval` inserts a PCR by replacing "the next null packet". A MoQ egress has no nulls to
-replace, so there is nothing for these plugins to work with. This is why there is no pad-to-bitrate
-plugin to find.
+`--bitrate` and with `--inter-packet`, on both inputs and on both lanes. `tsp`'s pipeline can drop
+packets or overwrite existing stuffing but cannot inflate a stream, which its own plugin documentation
+states three ways over: `mux` "replaces all stuffing packets", `duplicate` reuses null packets, and
+`pcradjust`'s `--min-ms-interval` inserts a PCR by replacing "the next null packet". A MoQ egress has
+no nulls to replace, so there is nothing for these plugins to work with. This is why there is no
+pad-to-bitrate plugin to find — and why the limitation is invisible on the segmented lane, where the
+nulls are already there.
 
 **Passing every PCR check is not the same as being right.** The `mux` + `pcradjust` @ nominal variant
 posts a perfect PCR record — 0 violations at 481 ns — while delivering 47.4 s of content as 45.3 s.
@@ -281,10 +433,21 @@ It re-stamped PCR as though the stuffing it failed to insert were there, so the 
 9.958 Mb/s and carries 9.519. An IRD locked to that clock drains its buffer at 4.4 %. The pair of
 checks that catches it is duration fidelity plus the packet count; PCR conformance alone does not.
 
-**Fixing PCR repetition requires stuffing.** `pcradjust` leaves 299 intervals above 40 ms — more than
-the ungroomed stream's 163, because re-stamping redistributes time across a stream whose content is
-unevenly bunched once the nulls are gone. Inserting an extra PCR needs a null packet to overwrite,
-which is the same wall as above.
+**Fixing PCR repetition requires stuffing; not needing to fix it requires a lane that never broke it.**
+On the MoQ lane `pcradjust` leaves 299 intervals above 40 ms — more than the ungroomed stream's 163,
+because re-stamping redistributes time across a stream whose content is unevenly bunched once the
+nulls are gone. Inserting an extra PCR needs a null packet to overwrite, which is the same wall as
+above. On the segmented lane the identical command posts 0, and does so without inserting anything,
+because the spacing it inherited was already conformant. The repetition criterion is not really a test
+of the groomer at all: it is a test of what reached it.
+
+**A stage that rebuilds a correct schedule can only damage it.** The pacer at a nominal rate is the
+best-scoring stage on the MoQ lane and a mild regression on the segmented one, where it strips 4.6 %
+stuffing and re-inserts 4.8 % at a slightly higher rate, putting 5 intervals over 40 ms where the
+untouched byte schedule had none. At its own chosen rate it inflates to 13.1 % and posts 21. This is
+not a defect in the tool — it is being asked to solve a problem the lane does not have. The general
+form is worth keeping: on an egress that already carries a valid mux rate, the correct amount of
+re-stuffing is none, and a groomer's value there is confined to the wire.
 
 **A constant-rate stream is not a paced wire.** This is the finding that inverts the FFmpeg result.
 `-muxrate` produces the best PCR arithmetic of anything measured, and on the socket it is unusable:
@@ -325,11 +488,23 @@ at zero bytes indefinitely. Every GStreamer measurement here needs
 `max-size-buffers=0 max-size-time=0 max-size-bytes=134217728` on each branch. Worth stating in any
 recipe, because the failure is silent.
 
-**`regulate` is a pacer, not a groomer, and it is a good one.** It changed nothing about PCR
-conformance (1,527 violations before and after) but its live cadence holds 9.70–9.73 Mb/s per second
-with a bounded 2.06 peak-to-mean and no silence longer than 15 ms, lumpy only inside 10 ms windows,
-which is its regulation granularity and is tunable with `--packet-burst`. Paired with `pcradjust` it is
-the only pass-through chain here that is both PCR-conformant and rate-controlled.
+**`regulate` is a pacer, not a groomer, and it is a good one — but it is only as good as its input's
+burst size.** It changed nothing about PCR conformance on either lane (1,527 violations before and
+after on MoQ, 2,506 on segmented), and behind `pcradjust` it is the only pass-through chain here that
+is both PCR-conformant and rate-controlled. Its cadence, though, degrades with the coarseness of what
+arrives: on the MoQ lane it holds 9.70–9.73 Mb/s per second with a 2.06 peak-to-mean and no silence
+longer than 15 ms; on the segmented lane, fed 2 s segments, the same settings give an 8.78
+peak-to-mean and an 85.8 ms silence. It holds almost no buffer, so the arrival shape passes through
+it. `--packet-burst` tunes its granularity but not its depth, and depth is what a bursty lane needs.
+
+**A groomer with a cushion shallower than the burst period does not degrade, it stops.** The 1 s
+cushion against 2 s segments is the clearest failure in this experiment: 1.85 s of complete socket
+silence, twice in 25 s, 311 continuity errors, 14 % of the rate gone. There is no partial-credit
+region — the buffer either spans the gap between arrivals or it empties. The threshold is the segment
+duration and the campaign has now met it three times from different directions:
+[T12](test-12-dual-path-handoff.md) needed 8 s for a byte-identical 1+1 pair,
+[T16](test-16-grooming-segmented-http.md) needed it for PCR repetition, and this needs it for the wire
+to exist at all.
 
 **The wire half of grooming is a solved problem, and it is small.** The finding above — that a
 constant-rate stream is not a paced wire, and that the missing thing is a stage owning a clock — has
@@ -366,9 +541,27 @@ against 1.27 ms.
 
 ## Conclusion
 
-**There is no off-the-shelf stage that does both halves of the job, and the half still missing is
-carriage.** Each candidate fails a different criterion, and which failure is acceptable depends on the
-receiver:
+**Whether the grooming stage can be built off the shelf depends on the data plane, and for segmented
+HTTP the answer is yes.**
+
+`tsp -P pcradjust --bitrate <rate> -P regulate --bitrate <rate> -O ip`, behind a segmented egress,
+passes all four criteria: the mux survives byte-for-byte, PCR clears the P2 gate, no interval exceeds
+40 ms as received, and the wire is flat to ±1 % per second. It costs one qualification — cadence
+inside the second is coarse, an 8.78 peak-to-mean and 85.8 ms worst silence against the pacer's 1.27
+and 9.8 ms — and one operational rule, that any stage on this lane must hold a cushion at least as
+deep as the segment period or it will stop dead rather than degrade.
+
+**On the MoQ lane there is still no off-the-shelf stage that does both halves, and the half missing is
+carriage.** That is not a statement about MPEG-TS grooming; it is a statement about what `export ts`
+delivers. Two of its properties cause the entire result: it carries no stuffing, so a groomer must
+inflate a stream and no tool that preserves a broadcast mux can; and it emits PCRs too rarely, so any
+stage that carries them rather than minting its own inherits 163 intervals above the 40 ms limit. The
+segmented lane is the control that isolates this — same clip, same tools, same oracle, both properties
+absent, and the failure disappears. **The gap to state upstream is a MoQ exporter gap, not a grooming
+gap.**
+
+On the MoQ lane, each candidate fails a different criterion, and which failure is acceptable depends
+on the receiver:
 
 - **`tsp -P pcradjust --bitrate <content rate> -P regulate --bitrate <content rate> -O ip`** is the
   only pass-through option: the mux survives byte-for-byte, PCR passes the P2 gate, duration fidelity
@@ -390,25 +583,31 @@ receiver:
   PIDs can be pinned back, SCTE-35 stream types cannot, AC-3 is relabelled ATSC, the NIT is dropped
   and an SDT is synthesised. For a single-programme feed with no signalling contract this is now a
   complete answer; for a broadcast mux it is not, and no configuration of it is.
-- **`mpegts-pacer`** remains the only stage measured here that satisfies all four criteria as scored,
-  and it is the only one that keeps the mux intact. Its weakness is the one criterion 3's live column
-  exposes: at the ~1 s cushion run here it inherits the exporter's PCR spacing, 159 intervals above
-  40 ms in 25 s. On a *segmented* egress that is a buffer-depth choice rather than a limit — with seconds
-  of cushion the same stage posts 0 ([T16](test-16-grooming-segmented-http.md)) — but on the MoQ lane it
-  is neither a choice nor the groomer's: [T18](test-18-delivery-latency.md) swept the cushion across
-  eight times the depth, removed starvation entirely, and moved the figure not at all, because the
-  groomer inserts no PCRs of its own and the lane does not deliver them often enough to place. The word
-  "inherits" above is exact, and it is the whole defect. That it satisfies the set at all is a statement about the state of the ecosystem, not a
-  recommendation: as the upstream review of
+- **`mpegts-pacer`** is the only stage measured here that satisfies all four criteria on the MoQ lane,
+  and the only one that keeps the mux intact. Its weakness is the one criterion 3's live column
+  exposes: it inherits the exporter's PCR spacing, 159 intervals above 40 ms in 25 s. That is not a
+  cushion choice. [T18](test-18-delivery-latency.md) swept the cushion across eight times the depth,
+  removed starvation entirely, and moved the figure not at all, and the segmented legs above post 0
+  from a stage holding almost no buffer — so on both lanes the determinant is the egress, not the
+  depth. The groomer inserts no PCRs of its own and the MoQ lane does not deliver them often enough to
+  place; the word "inherits" is exact, and it is the whole defect. That it satisfies the set at all is
+  a statement about the state of the ecosystem, not a recommendation: as the upstream review of
   [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation
   path at the time, and it is still one lab's unpublished tool.
 
-The two halves of the job now separate cleanly, and only one of them is unsolved off the shelf. Any
-stage that owns a clock can produce a broadcast-grade wire, and one that does is 366 lines of C. What no
-off-the-shelf stage does is add stuffing and re-place PCR *while carrying a broadcast mux unchanged*:
-the tools that regenerate a mux can time it perfectly and cannot carry it, and the tools that carry it
-cannot inflate it. That is the gap to state in someone else's documentation, and it is narrower and
-more specific than "you need a groomer".
+The two halves of the job separate cleanly, and on the MoQ lane only one of them is unsolved off the
+shelf. Any stage that owns a clock can produce a broadcast-grade wire, and one that does is 366 lines
+of C. What no off-the-shelf stage does is add stuffing and re-place PCR *while carrying a broadcast mux
+unchanged*: the tools that regenerate a mux can time it perfectly and cannot carry it, and the tools
+that carry it cannot inflate it.
+
+Stated that precisely, the gap is visibly conditional — and the segmented lane is the case where the
+condition does not hold, because there is nothing to inflate and nothing to re-place. So the sentence
+for someone else's documentation is not "you need a groomer" and not "no off-the-shelf groomer
+exists", but: *an egress that drops stuffing and thins PCR requires a grooming stage that no
+off-the-shelf tool can provide without damaging the mux; an egress that preserves both requires only
+a paced sender, and TSDuck is one.* That framing survives on both lanes, and it points at the two
+exporter behaviours worth changing upstream rather than at a missing tool.
 
 For upstream documentation this supports stating the *requirement* precisely and naming the
 off-the-shelf options with their measured limits, rather than naming any single tool as the answer.
@@ -419,8 +618,13 @@ below does not reopen it.
 laptop and a 2-vCPU cloud instance. They say nothing about what a hardware IRD accepts, which remains
 [T7](test-7-timing-integrity.md)'s open Gate 2 — and the sender's own documentation is emphatic that a
 switch between sender and IRD invalidates the test, because multicast storm control fakes the pacing
-either way. The wire figures carry a general-purpose OS's scheduling jitter, and the two hosts'
-figures are not interchangeable: compare within a group, never across.
+either way. That gate matters more for the segmented conclusion than for the MoQ one: the
+pass-through chain passes every criterion fixed here while putting 85.8 ms silences on the wire, and
+whether a receiver tolerates those is precisely what has not been tested. The wire figures carry a
+general-purpose OS's scheduling jitter, and the three groups' figures are not interchangeable: compare
+within a group, never across. The segmented legs also use one packager (`tsp -O hls`) at one segment
+duration; [T11](test-11-interop.md) establishes that this packager re-muxes rather than slicing
+verbatim, so another packager could hand a groomer a different census than the one above.
 
 ## Corrections
 
@@ -455,6 +659,23 @@ figures are not interchangeable: compare within a group, never across.
   arithmetic, not suspicion — a 17 MB reference capture that censused as 2.4 M packets, because the
   process writing it had never stopped. **Method rule:** in a timing rig, assert the process census
   between legs rather than trusting a kill, and check that a file's size and its packet count agree.
+- **A negative result measured on one data plane was written as a property of MPEG-TS grooming.** For
+  most of its life this experiment was titled "grooming of a MoQ egress" and concluded that no
+  off-the-shelf stage does the job. Every measurement behind that was sound; the generalisation was
+  not. Two properties of `export ts` — no stuffing, and PCR emitted too rarely — cause the entire
+  result, and running the identical nine chains against a segmented egress makes the failure vanish,
+  with `tsp -P pcradjust` passing all four criteria and carrying the mux. **Method rule:** when an
+  experiment concludes that a class of tool cannot do something, name the input property that defeats
+  them and then find an input without it; if none exists the conclusion is about the tools, and if one
+  does the conclusion was about the input.
+- **PCR repetition on the wire was attributed to buffer depth on the strength of a coincidence.** T16
+  reached 0 intervals above 40 ms while carrying seconds of cushion, and this file read that as the
+  cause, recording it here as "a buffer-depth choice rather than a limit". Two later measurements
+  refute it: T18 swept the MoQ cushion eightfold with no effect, and the segmented pass-through leg
+  above posts 0 while holding almost no buffer. The common factor was never the cushion, it was which
+  egress the two runs were behind. **Method rule:** when two runs differ in more than one variable and
+  one of them is the one you have been tuning, do not credit it — the other variable here was the data
+  plane, and it was the whole effect.
 - **"No supported installation path" was true when written, and has since been fixed.** The pacer was
   library-only: every documented command was `cargo run --example`, and `cargo install` refused the
   crate outright for having no binary target. The egress adapter is now the crate's `mpegts-pacer`
@@ -467,8 +688,14 @@ figures are not interchangeable: compare within a group, never across.
 
 - [T2](test-2-media-aware-transparency.md) — media-aware carriage and the first grooming results.
 - [T7](test-7-timing-integrity.md) — TR 101 290 timing integrity, and the P1/P2 gates used here.
+- [T11](test-11-interop.md) — what the HLS packager does to a transport stream, which is what sets the
+  segmented lane's census here.
 - [T12](test-12-dual-path-handoff.md) — the dual-path chain these stages sit in, and why a groomer's
-  placement determinism matters for a 1+1 pair.
+  placement determinism matters for a 1+1 pair; the 8 s cushion this experiment also needs.
+- [T16](test-16-grooming-segmented-http.md) — grooming the segmented lane end to end, at the cushion
+  the wire legs here require.
+- [T18](test-18-delivery-latency.md) — the cushion sweep that rules buffer depth out as the cause of
+  the MoQ lane's PCR repetition.
 - [moq-dev/moq#2830](https://github.com/moq-dev/moq/pull/2830) — the upstream documentation review
   that prompted this experiment.
 - [EDIS-mx/rawsendmpeg2ts](https://github.com/EDIS-mx/rawsendmpeg2ts) — the datagram sender graded in

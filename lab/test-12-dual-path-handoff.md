@@ -15,6 +15,11 @@ before skew. T12 adds the four things a 1+1 claim needs: a dual RTP egress, a re
 a switch metric denominated in lost packets rather than seconds, and a measured differential-delay
 window.
 
+**A note on scope.** The arms below carry their legs over MoQ, because that is the lane the claim was
+first made for. The determinism that makes a pair mergeable belongs to the groomer rather than to the
+carriage, so it should hold on any data plane — and a section at the end puts that to the segmented
+lane. It holds there too, at eight times the cushion.
+
 ## Environment
 
 - One EC2 host (2 vCPU, 3.8 GB, Ubuntu, no swap), everything on loopback. `moq` 0.9.9 /
@@ -673,6 +678,55 @@ proxy is not a divergence source, and the pair needs nothing new to tolerate it.
   [#2779](https://github.com/moq-dev/moq/issues/2779).
 - **One run per cell**, 60 s each; only the arm A clean control was repeated (three times, all
   identical at 100 % yield and offset 0). Enough to establish mechanism, not distribution tails.
+
+## Arm D on the segmented lane: the same determinism, at eight times the cushion
+
+Arm D's mechanism should not care what carried the stream — a groomer that computes placement from
+the stream is indifferent to how the stream arrived. But the segmented lane delivers in
+segment-sized bursts rather than continuously, and a bursty source can starve a CBR groomer; a
+groomer that starves *mutes*, and two legs that mute at different instants are not byte-identical
+however deterministic their placement rules are. So the question is real, and
+[`t12-segmented-local.sh`](scripts/t12-segmented-local.sh) asks it in the two topologies that mean
+different things: one packager feeding two origins (how HLS redundancy is actually deployed, and the
+rig's positive control) and two fully disjoint packager/origin/client chains (the arm D equivalent,
+protecting the whole chain rather than the last hop).
+
+Same source, same 4 Mb/s carrier, same SSRC and sequence seed, same `--stream-clock` groomer, 60 s
+windows, graded by [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) at equal RTP timestamps.
+
+| Topology | Groomer cushion | Shared slots | Identical | Residue |
+|---|---:|---:|---:|---:|
+| One packager, two origins | 1 s | 12,935 | 99.9536 % | 6 slots |
+| Two disjoint chains | 1 s | 18,030 | 99.9279 % | 13 slots |
+| One packager, two origins | **8 s** | 19,698 | **100.0000 %** | **0** |
+| **Two disjoint chains** | **8 s** | **19,698** | **100.0000 %** | **0** |
+
+**At an 8 s cushion the segmented lane reproduces arm D exactly: two independent chains, byte-identical
+on every one of 19,698 datagrams.** A 1+1 pair carried this way is mergeable by an ST 2022-7 receiver,
+and the property is not MoQ's.
+
+**At arm D's own 1 s cushion it is not**, and the residue names the mechanism rather than leaving it to
+be guessed. The conflicts are almost all one leg carrying video where the other carried a null —
+20 slots of `0x0100 vs 0x1fff` against 7 the other way in the two-chain cell — and the per-PID totals
+close on it: leg B ends the run seven video packets short and seven nulls long. That is the groomer's
+`--on-stall mute` firing, on each leg at moments the other leg did not experience. The divergence is
+also spread across the run (the first conflict at 20.5 % through it, the last at 92.8 %), so it is a
+steady-state property of the lane and not a lock transient that a longer settle would remove.
+
+**The comparison with MoQ is the whole finding, and it is a cost rather than a disqualification.**
+Arm D reaches byte-identity on the media-aware lane at a 1 s cushion; the segmented lane needs 8 s to
+reach the same place. That is the same 8 s that [T16](test-16-grooming-segmented-http.md) needed for
+PCR conformance on this lane and the same burstiness [T8b](test-8b-congestion-control.md) measured as
+line-rate bursts into a bottleneck queue — one mechanism showing up in a third experiment, not three
+findings. **The segmented lane can carry broadcast-grade 1+1, and it buys that with about seven extra
+seconds of end-to-end latency**, which for a distribution hand-off is a real price and for a
+contribution hand-off may not be payable at all.
+
+Two limits on the claim. Neither segmented cell was subjected to arm D's injection matrix — no leg
+kill, no blackout, no differential delay — so what is established is the *clean-pair* determinism
+that arm D's control establishes, not the failure behaviour its nine injection rows do. And the
+8 s figure is a threshold that happened to work, not a measured minimum; the cushion was tested at
+1 s and 8 s, and where between them the residue reaches zero is not known.
 
 ## Corrections
 

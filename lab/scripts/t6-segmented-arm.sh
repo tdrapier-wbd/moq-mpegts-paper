@@ -522,7 +522,7 @@ PY
 CCERR=0
 CLOCK="pcr_fwd_leaps=0 pcr_rewinds=0 rewind_max_s=0"
 if [ "$BYTES" -gt 100000 ]; then
-	CCERR=$(tsp -I file "$CAP" -P continuity -O drop 2>&1 | grep -c 'discontinuity' || true)
+	CCERR=$(tsp -I file "$CAP" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 	tsp -I file "$CAP" -P pcrextract --pcr --csv -o "$OUT/pcr.csv" -O drop >/dev/null 2>&1 || true
 	# A lane that can be served by two sources at once fails by *repeating* time,
 	# not by losing it, and neither a continuity-counter check nor a PCR-interval

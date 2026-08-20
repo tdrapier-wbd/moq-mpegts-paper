@@ -99,7 +99,7 @@ grade() {
 		return
 	fi
 
-	ccerr=$(tsp -I file "$cap" -P continuity -O drop 2>&1 | grep -c 'discontinuity' || true)
+	ccerr=$(tsp -I file "$cap" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 	: "${ccerr:=0}"
 
 	# PCR accuracy at the P2 limit: ±500 ns is 13 PCR units at 27 MHz. Take the

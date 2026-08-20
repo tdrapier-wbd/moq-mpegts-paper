@@ -294,21 +294,27 @@ clean cadence necessarily buys slow failure detection with it. An operator takin
 primary distribution gets off-the-shelf reassembly and pays ~9 s of failure detection for it. That is a
 property of the data plane, not of the groomer, and not a defect to fix.
 
-**A shallow cushion, not live operation, is what limits PCR placement — and that generalises past this
-data plane.** T13 measured 0 PCR repetition intervals above 40 ms on a file against 131 in 25 s on the
-wire, and concluded that a stage re-timing a stream as it arrives cannot place PCRs as freely as one
-reading a file. Arm B posts 0 on the wire. The distinction that holds is not file-versus-live but
-whether the stage always has a packet available at the deadline, which is what depth buys.
+**What limits PCR placement is the egress, not live operation and not the cushion.** T13 measured 0 PCR
+repetition intervals above 40 ms on a file against 131 in 25 s on the wire, and concluded that a stage
+re-timing a stream as it arrives cannot place PCRs as freely as one reading a file. Arm B posts 0 on
+the wire, which disposes of the file-versus-live reading. It looked at the time as though depth were
+the replacement — Arm B carries seconds of cushion where the MoQ legs carried about one — and that was
+the wrong variable, because the two runs also differed in the data plane. Two later measurements
+separate them. [T18](test-18-delivery-latency.md) swept the MoQ lane's cushion across eight times the
+depth and found **no crossing point and no trade**: repetition holds at ~490 intervals above 40 ms with
+a 228 ms maximum, and stays there when groomer starvation is removed altogether. And
+[T13](test-13-downstream-grooming.md)'s segmented pass-through leg posts 0 while holding almost no
+buffer at all.
 
-**The consequence for the paper is on the other data plane, and it has since been measured — the premise
-was wrong.** If depth is what buys P1 PCR repetition, then the MoQ lane needs depth too, and depth is
-latency, which is the only axis on which MoQ leads. This arm cost 7.5 s of programme before the first byte
-to reach 0, so the obvious expectation was a trade. [T18](test-18-delivery-latency.md) swept the MoQ
-lane's cushion and found **no crossing point and no trade**: repetition holds at ~490 intervals above
-40 ms with a 228 ms maximum across a ladder spanning eight times the depth, and stays there when groomer
-starvation is removed altogether. The reason is upstream of the groomer — `pcr_inserted=0` on the
-rate-matched cell, so every PCR came from the lane, and the lane does not emit them often enough to
-place. On *this* plane depth is the variable, as measured above; on the media-aware lane it is not.
+The determinant is what the egress delivers. A segmented egress arrives with **0** intervals above
+40 ms, because the packager preserved a conformant broadcast mux's PCR spacing; a MoQ egress arrives
+with 163, because `export ts` emits PCRs too rarely, and `pcr_inserted=0` on the rate-matched cell
+confirms the groomer added none of its own. A stage that carries PCR inherits exactly what it was
+given. Depth does not buy placement on either lane — it only prevents a stage from *adding* intervals
+by running dry, which is a different defect with a different signature (T13's 1 s segmented leg:
+1.85 s of silence, 311 continuity errors). **The good news for the paper is that the trade feared here
+does not exist:** depth is latency, latency is MoQ's only lead, and repetition turns out not to be
+buyable with it on either plane.
 
 ---
 
@@ -329,9 +335,15 @@ somebody has to measure the arrival pattern; the result here is that the groomer
 the output rate alone.
 
 **The paper's two-plane framing gets stronger and its latency framing does not move.** One groomer
-serves both egresses, so "which data plane" is no longer a question about the grooming stage. What
-segmented HTTP still costs is 7.5 s before the first byte, 13.1 MB resident and ~9 s to notice a dead
-source — all three set by segment duration, none of them removable by a better groomer.
+serves both egresses, so no *custom* stage has to be written twice. The lanes are not equivalent in
+what they require of that stage, though, and the asymmetry runs the other way from the one this
+experiment was looking for: [T13](test-13-downstream-grooming.md) later graded the off-the-shelf
+candidates against a segmented egress and found that `tsp -P pcradjust -P regulate` passes all four
+criteria with the mux intact, because this lane hands a groomer the stuffing, the declared mux rate
+and the PCR spacing that `moq export ts` drops. On this plane the pacer is a better option; on the MoQ
+plane it is the only one. What segmented HTTP still costs is 7.5 s before the first byte, 13.1 MB
+resident and ~9 s to notice a dead source — all three set by segment duration, none of them removable
+by a better groomer.
 
 ### Still open
 

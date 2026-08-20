@@ -256,13 +256,27 @@ MBPS=$(awk -v b="$BYTES" -v s="$SECS" 'BEGIN{printf "%.2f", b*8/s/1e6}')
 RATIO=$(awk -v b="$BYTES" -v s="$SECS" -v r="$SRC_BPS" 'BEGIN{printf "%.3f", (b*8/s)/r}')
 
 CCERR=0
+CCPKT=0
 PCR="min=0 mean=0 max=0 over40=0 pct40=0"
 if [ "$BYTES" -gt 100000 ]; then
-	# `continuity` prints one line per discontinuity; on this lane the segments are
+	# `continuity` prints one line per break; on this lane the segments are
 	# byte-verbatim slices of the source, so a CC break really does mean lost data
 	# — unlike the media-aware lane, where the receiver re-muxes and CC is always
 	# sequential (T5 observation 2).
-	CCERR=$(tsp -I file "$CAP" -P continuity -O drop 2>&1 | grep -c 'discontinuity' || true)
+	#
+	# Match the plugin's actual wording. It prints
+	#   * continuity: packet index: 13,264, PID: 0x0079 (121), missing 14 packets
+	# and never the word "discontinuity", so the obvious grep for that word returns 0
+	# on every input including badly broken ones. This column read a flat 0 across the
+	# whole of T5 for that reason and not because nothing was lost; see the T5
+	# Corrections. Both wordings are matched so the count cannot silently go quiet
+	# again if the plugin's phrasing changes, and the packet total is carried
+	# alongside the event count because one break can hide thousands of packets.
+	CC_OUT=$(tsp -I file "$CAP" -P continuity -O drop 2>&1)
+	CCERR=$(printf '%s\n' "$CC_OUT" | grep -cE 'missing .* packets|discontinuity' || true)
+	CCPKT=$(printf '%s\n' "$CC_OUT" |
+		sed -nE 's/.*missing ([0-9,]+) packets.*/\1/p' | tr -d ',' |
+		awk '{ n += $1 } END { print n + 0 }')
 	tsp -I file "$CAP" -P pcrextract --pcr --csv -o "$OUT/pcr.csv" -O drop >/dev/null 2>&1 || true
 	if [ -s "$OUT/pcr.csv" ]; then
 		PCR=$(awk -F, 'NR>1{c=$7;if(p!=""){d=(c-p)/27000;if(d>0){n++;s+=d;if(d>m)m=d;
@@ -293,6 +307,6 @@ else
 	: "${CCSEEN:=unseen}"
 fi
 echo "RESULT arm=$ARMTAG spec=\"$SPEC\" secs=$SECS mtu=$LO_MTU bytes=$BYTES mbps=$MBPS rate_ratio=$RATIO" \
-	"cc_disc=$CCERR $PCR http_gets=$HTTP_GETS http_non200=$HTTP_NON200" \
+	"cc_disc=$CCERR cc_pkts=$CCPKT $PCR http_gets=$HTTP_GETS http_non200=$HTTP_NON200" \
 	"recv_log_errs=$RECV_ERR ${COUNTERS:-sent_pkt=na dropped_pkt=na} $APPLIED" \
 	"shaper=$SHAPER_OK cc_seen=$CCSEEN"

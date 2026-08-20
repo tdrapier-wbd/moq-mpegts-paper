@@ -24,6 +24,11 @@ Two things follow that are worth measuring rather than asserting:
    EPG makes that worth pricing: a full DVB planning horizon is eight days. The measurement is what
    retired the gate rather than tuning it (conclusion 4).
 
+Both are media-aware-lane questions. The fidelity one is not, so it is also put to segmented HTTP
+(§5) — partly because the paper had been asserting the answer there from the survival of *other* SI
+rather than measuring it, and partly because a lane that passes for a different reason is worth
+separating from one that passes for the same reason.
+
 ### Pass criteria (fixed before the runs)
 
 1. **Fidelity.** For every EIT sub-table, the set of distinct sections on the exported TS equals the
@@ -52,6 +57,7 @@ Two things follow that are worth measuring rather than asserting:
 | Relay | local, loopback, GSO disabled |
 | Source | CNN International EMEA HD, 9.95 Mbps CBR, H.264 + MP2 + AC-3 + teletext + 3× SCTE-35, NIT + SDT |
 | EIT fixture | synthetic — 8 days, 24 events/day, ~120 B of descriptor per event |
+| Segmented lane (§5) | [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh) unchanged: `tsp -O hls` (2 s segments, `--live 6 --live-extra-segments 3`) → `python3 -m http.server` → `tsp -I hls --live`, graded by [`eit-section-diff.py`](scripts/eit-section-diff.py) |
 
 The PR targets `dev`, not `main`, and the two have diverged; `dev` is the correct base and the only
 one against which the PR merges cleanly.
@@ -195,6 +201,53 @@ before its first TS packet — on the order of a couple of hundred milliseconds 
 acceptable, but bounded by the EPG's size, and nothing in the gate distinguishes an EPG from a table
 the stream cannot start without.
 
+### 5. The same fidelity question, asked of the segmented lane
+
+The four measurements above are all about a mechanism — snapshot tracks, a cycle-wrap commit rule, an
+export gate — that exists because the media-aware lane takes the mux apart. The other data plane does
+not take it apart, so the same pass criteria can be put to it and the answer should be uninteresting.
+It is worth taking anyway, for two reasons: [`docs/comparison.md`](../docs/comparison.md) has been
+claiming EIT survives the segmented lane on the strength of *other* SI surviving it, which is an
+inference and not a measurement; and the HLS packager is not the pass-through it is easy to assume it
+is ([T11](test-11-interop.md) — it re-multiplexes, regenerates PSI and chooses segment boundaries by
+picture type).
+
+Same fixture, same pass criteria, [T3](test-3-opaque-transparency.md)'s segmented rig unchanged
+(`tsp -O hls` → HTTP origin → `tsp -I hls --live`, 2 s segments, a 60 s equal-media window against an
+offset-aligned source cut), graded with
+[`eit-section-diff.py`](scripts/eit-section-diff.py):
+
+| sub-table | table_id | distinct sections src / egress | `last_section_number` src / egress | lost | gained |
+|---|---|---|---|---|---|
+| EIT p/f actual | 0x4E | 2 / 2 | 1 / 1 | none | none |
+| EIT schedule actual, days 0–3 | 0x50 | 32 / 32 | 248 / 248 | none | none |
+| EIT schedule actual, days 4–7 | 0x51 | 32 / 32 | 248 / 248 | none | none |
+| EIT schedule actual, day 8 | 0x52 | 3 / 3 | 16 / 16 | none | none |
+| **total** | | **69 / 69** | | **0** | **0** |
+
+The sets are equal by SHA-256 over the section bytes, not merely equal in count. Carriage cost is
+1.003× (PID 0x0012: 1,181 packets against 1,185 over equal-media windows, 298 → 299 per 100k),
+against the media-aware lane's 0.985×. Criteria 1, 2 and 3 met.
+
+**Both lanes pass, and the reason they pass is not the same reason — which is the finding.** The
+media-aware lane *reconstructs* the table: it must decide when a sparse sub-table is complete, it
+cannot distinguish a skipped section number from a lost one, and a section lost before the cycle wraps
+commits a generation quietly missing a segment. The segmented lane never parses PID 0x0012 at all. The
+packager regenerates PAT and PMT — one extra pair per segment head, the 25 injected pairs the census
+records — and copies every other PID through, so the EIT that arrives is the source's own packets and
+the sparse-table hazard has nowhere to live. That is the same asymmetry [T3](test-3-opaque-transparency.md)
+found in the mux as a whole, restated for the table that is hardest to carry: **the lane that
+understands the media inherits the obligation to understand it correctly.**
+
+**What the segmented lane does not have is a join answer, and that is the honest cost.** A MoQ
+subscriber is handed the whole EPG as snapshots when it joins — 69 sections for 1 ms, measured above.
+A segmented client waits for the carousel: here the full distinct set appeared within the first 2.7 s
+of egress (present at 2.72 s, incomplete at 2.27 s), which is a property of this fixture's injected
+cadence and not of the lane. A real EPG cycles far slower — ETSI TS 101 211 allows 30 s for the
+"later" schedule — so on a broadcast carousel that wait is tens of seconds, and no HLS mechanism
+shortens it because there is nowhere to put a snapshot. Snapshot tracks buy something real; they are
+just not buying fidelity, which is what §1 was asked to check.
+
 ## Observations
 
 **The export gate has no deadline, and an auxiliary table can now hold a programme dark.** Export
@@ -240,7 +293,12 @@ ticks slower than the timer. The remaining work is emission timing, not carriage
 
 1. **EIT carriage works, and the hard case works.** The sparse EIT schedule — the part that cannot be
    validated by section counting, and the part reading the code left open — round-trips with every
-   section intact across four sub-tables, against zero on the merge base.
+   section intact across four sub-tables, against zero on the merge base. The segmented lane carries
+   the same 69 sections byte for byte, so **neither data plane is now a reason to lose an EPG** — but
+   they earn that differently. The media-aware lane reconstructs the table and owns the sparse-table
+   commit problem that comes with it; the segmented lane copies the PID and never has the problem.
+   The cost lands on the other side: MoQ hands a joining receiver the whole EPG in a millisecond,
+   where a segmented client waits out the carousel.
 2. **The service layer is no longer the reason an MPEG-TS hand-off is lossy.** NIT, SDT, EIT and — since
    #2929 — TDT/TOT all survive, so the DVB service layer has no carriage gap left over this lane. What
    remains is a timing question about one of them: the clock arrives, later than the source sent it.

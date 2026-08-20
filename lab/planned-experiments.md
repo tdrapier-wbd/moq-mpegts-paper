@@ -10,11 +10,78 @@ to-do list that accumulates its own history stops being readable as a to-do list
 corrections and the reasoning behind them belong in `test-*.md` and
 [method-notes.md](method-notes.md).
 
-**Ordered by leverage, not by convenience.** The first two entries would change the paper's
-conclusions; the rest refine them.
+**Ordered by leverage, not by convenience.** The entries below hold the protocols; the ranking that
+decides which to run is stated once, immediately.
 
 Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
 `INSTRUCTIONS.local.md`.
+
+---
+
+## The next five runs, in order
+
+Every experiment names its own open items and most of them are worth doing eventually. This is the
+short list: the runs whose *result* would change a conclusion in [`docs/`](../docs/), separated by what
+they cost to set up, because two of the five need nothing this lab does not already have.
+
+**1. Denser exporter PCR emission ([#2937](https://github.com/moq-dev/moq/issues/2937)), then re-run
+T18 unaltered.** *Needs an upstream code change and nothing else.* This is the campaign's largest
+undecided verdict. The media-aware lane fails TR 101 290 P1 PCR repetition **on the wire at every
+cushion tested**, across a ladder spanning eight times the depth, and the groomer reports
+`pcr_inserted=0` — every PCR on the egress came from upstream, so the exporter does not emit them often
+enough for any groomer to place them ([T18](test-18-delivery-latency.md),
+[T13](test-13-downstream-grooming.md)). Until this moves, "MoQ delivers a conformant broadcast hand-off"
+is unproven at any latency, and the paper's hand-off axis rests on a defect rather than on the
+architecture. T18 predicts a pass at a 250 ms cushion — the 127 ms delivery latency already
+measured — which makes this a falsifiable prediction rather than a hope.
+
+**2. A hardware IRD and a TR 101 290 analyser, soaked (Gate 2).** *Needs broadcast kit — the one
+genuinely unavoidable purchase or loan.* Every conformance number in this campaign is graded by
+software written or configured by the same people who built the thing under test. That is enough to
+falsify a design and not enough to accept one. A ≥ 24 h soak (72 h preferred) against a real IRD
+settles PLL lock, the buffer model, slow clock drift and discontinuity handling at once, and it is the
+only way to test the boundaries a groomer meets outside steady state: source-clock drift, PCR
+33-bit wrap, mid-stream PID change. It also closes the one question [T12](test-12-dual-path-handoff.md)
+cannot answer in software — whether a real merge engine agrees with our reference receiver on an
+ST 2022-7 pair. Pair it with the T9 resource soak so one long run yields both verdicts.
+
+**3. A second EC2 instance in a different availability zone.** *Needs one more VM — the cheapest
+high-value item on this list.* Every redundancy result the campaign holds was measured on one host.
+That is not a detail: [T12](test-12-dual-path-handoff.md) arm D's determinism claim rests on two
+groomers agreeing about stream position, and on one box they also agree about wall time, so nothing
+measured so far separates "the legs agree about position" from "the legs share a clock" — which is
+exactly the property [`architecture.md`](../docs/architecture.md) §5.1 requires of two gateways on
+free-running oscillators. The same instance unblocks three other cells: the segmented lane's two-host
+segment store (both packagers writing identical names into a *consistent* store is free on one
+filesystem and is the actual engineering across two hosts), a standby packager joining an
+already-running feed, and T9's cross-machine fan-out knee, which is currently confounded by
+co-resident subscribers costing more CPU than the relay serving them. Run it after item 1 lands, so a
+two-host result grades path diversity rather than re-measuring filed defects.
+
+**4. A real CDN edge, replacing `python3 -m http.server` and local nginx.** *Needs a distribution
+account.* Three separate conclusions are currently bounded by the weakest possible origin. The
+segmented lane's loss curve was measured against a single unoptimised HTTP/1.1 server
+([T5](test-5-network-impairment.md)) — and its availability-window boundary, now located between 7.7 %
+and 12.2 % applied loss, is precisely the kind of figure a tuned edge should move. The cache result
+that carries the lane's scaling story is one local nginx ([T11](test-11-interop.md)). And multi-programme
+carriage — which now carries *the whole* of MoQ's remaining fidelity advantage on mux content, since
+single-programme carriage in TS segments turns out to be verbatim — can only be tested where a real
+cache decides whether to serve a payload the specification says should not exist.
+
+**5. T8b's provisioned-path conditions (C2–C6).** *Needs only time on the rig that already exists.*
+The controller ranking is currently scoped to one under-provisioned condition, and a permanent
+fixed-rate trunk is provisioned by definition — so the conditions that actually describe the
+deployment (transient congestion, coexistence with other traffic, AQM, provisioning margin, a
+multi-day soak) are the unrun ones. C1 established that the three planes fail in three different ways;
+C2–C6 decide whether any of them is *recommendable*.
+
+**What is deliberately not on this list**, because running it would confirm rather than move a result:
+more transparency clips through lanes already characterised across a 2.75× bitrate spread; the arm B1
+wire-cost leg on the EC2 path, whose HTTP-layer term is path-independent and whose framing multiplier
+is already measured elsewhere; per-track wire-byte attribution; and the segmented HTTP/3 arm, which was
+load-bearing only while a shared QUIC substrate was the leading explanation for the lanes' loss
+difference — [T8](test-8-srt-vs-moq.md) has since erased that difference by matching the controller on
+TCP, which is the cheaper route to the same answer.
 
 ---
 
@@ -235,7 +302,11 @@ What remains open:
   indistinguishable, so a section lost before the cycle wraps should yield a snapshot quietly missing a
   segment. That is reasoned, not measured; it wants a drop injected on the SI PID. Upstream has since
   fixed a related defect by merging same-version sections rather than replacing them, so this arm is now
-  confirmation of a fix rather than the adjudication of an open question.
+  confirmation of a fix rather than the adjudication of an open question. The segmented lane is the
+  control that makes it legible: it carries the same 69 sections without parsing them (§5), so it has
+  no commit rule to get wrong, and a loss ladder run against both at once separates a carriage failure
+  from a reconstruction failure. [`scripts/eit-section-diff.py`](scripts/eit-section-diff.py) grades
+  either lane unchanged.
 - **Multi-service.** The 40-service figures are scaled from one service, not measured on an MPTS.
 - **The clock's emission timing.** Carriage is settled — TDT/TOT is proxied from the source and TOT's
   descriptors survive byte-for-byte — but the exporter re-emits a stored section on its own 30 s timer,
@@ -331,6 +402,13 @@ A third, cheaper cell: `tsp -O hls` writes segments in place rather than writing
 client fetching mid-write is a live hazard that three clean runs did not provoke. Drive the fetch
 rate up against a shared-name pair and see whether it bites.
 
+A fourth, cheapest of all: **where between 1 s and 8 s the segmented pair becomes byte-identical.** At
+a 1 s groomer cushion two segmented legs agree on 99.95 % of datagrams and at 8 s on 100 %, so the
+determinism precondition is met — but eight times the MoQ lane's cushion is a latency cost stated
+without knowing how much of it is necessary. A bisection on `PACER_LAT` in
+[`scripts/t12-segmented-local.sh`](scripts/t12-segmented-local.sh) is one afternoon and turns a bound
+into a number.
+
 **Also unaddressed by T12:** SMPTE 2022-1 FEC; a full 10 Mbps mux rather than 2 Mbps on a 2-vCPU box;
 a carrier rate matched to the content rate, to resolve whether the 1.4 % PCR-interval floor measured
 there is an artefact of 55–60 % stuffing; and any hardware IRD merge, which is Gate 2.
@@ -418,6 +496,13 @@ and the audio-resync work are all executed and written up in
 5. **The publisher thread count**, which grows and decelerates without settling.
 6. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
    groomer/pacer envelope.
+7. **The segmented lane's own resource envelope, which has no equivalent of any of the above.** Its
+   carriage overhead is measured (1.036× source TS, [T9](test-9-performance.md)) and nothing else is:
+   no per-role CPU or RSS figure for packager, origin or client, no fan-out knee, and no soak. The
+   comparison is currently one lane characterised for cost and one lane characterised for bytes. It
+   wants an nginx origin rather than `python3 -m http.server`, because the origin is the role whose
+   scaling the whole commercial argument for this lane depends on, and the one measured is a
+   single-threaded reference implementation.
 7. **A full-feed publisher soak — both blockers now cleared, so this is ready to run.** Every long run
    to date used a video-only source, because looping a normal broadcast TS killed the publisher at the
    wrap. The origin host now runs a `main` build carrying the whole audio-resync and continuity series

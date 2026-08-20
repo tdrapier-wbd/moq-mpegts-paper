@@ -12,10 +12,23 @@ message. The IETF path itself carries media cleanly (MOQT-14 passes on a local r
 client-side convention, not a relay defect. Three relays fail earlier, at the connection or SETUP
 layer, and are not yet diagnosed. T11b and T11c not started.
 
+**The same fixture and oracle put through segmented HTTP pass against every third party tried** —
+FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
+0 errors and 0 warnings. Two clients through the cache cost the origin nine segment fetches rather
+than eighteen, which is the CDN scaling argument measured rather than asserted. **Six third parties,
+six passes, against nine relays and eight failures.** One correction falls out of it: the HLS packager
+is *not* byte-transparent — it re-muxes, and it silently truncated 5.0 % of a finite input.
+
 ## Objective
 
 "A MoQ relay is a neutral transport fabric" is load-bearing for this project, and every other test in
 this campaign exercises it only against `moq-dev` peers. T11 tests it against everyone else's.
+
+The claim is comparative, so the measurement has to be. Segmented HTTP's whole case rests on an
+interoperability assertion of the same shape — that any HTTP client reads it and any HTTP cache
+forwards it — and that assertion is repeated far more often than it is tested. **The segmented arm
+therefore asks the identical question with the identical fixture and oracle**, so the two tables can
+be read against each other rather than merely placed side by side.
 
 The secondary objective is a contribution: the work is shaped as a test client for
 [`moq-interop-runner`](https://github.com/englishm/moq-interop-runner) rather than a private rig, in
@@ -213,6 +226,77 @@ WebSocket for any relay more than ~100 ms away. That is a confound for interop m
 transport under test is not the one you think) and a concern for broadcast carriage, since WebSocket
 means TCP and head-of-line blocking. Worth raising separately.
 
+## The same question, asked of segmented HTTP — every third party carries it
+
+The MoQ table above is the interesting half of a comparison only if the other half is measured, and
+the fair way to measure it is with the same fixture, the same oracle and third-party software at each
+of the three places the MoQ arm hit a wall: the intermediary that has to forward the media, the client
+that has to read it, and the judge that decides whether it conformed.
+[`t11-segmented.sh`](scripts/t11-segmented.sh) does that. The fixture is packaged to a complete
+playlist so every client has the whole 20 s available and the comparison against source is exact.
+
+| Third party | Role | Result |
+|---|---|---|
+| TSDuck `tsp -I hls` | control — the toolkit that wrote the segments | **pass**, 4,750,948 B |
+| **FFmpeg** | independent HLS implementation | **pass**, remuxed to 4,123,592 B |
+| **VLC** | a third independent implementation | **pass**, remuxed to 4,143,144 B |
+| **`curl` in a `while` loop** | no HLS implementation at all | **pass**, byte-identical to the served segments |
+| **nginx `proxy_cache`** | an intermediary we did not write | **pass** — and see below |
+| **Apple `mediastreamvalidator`** | the reference conformance judge | **pass** — 9/9 segments, **0 errors, 0 warnings**, 0 parse errors, 0 load failures |
+
+**Six third parties, six passes, against nine MoQ relays and eight failures.** Every capture cleared
+the same twelve hard checks the MoQ arm clears — continuity, sync, TEI, PAT, PMT, service count and
+stream inventory all matching the source.
+
+Three of those rows carry more weight than the raw count.
+
+**The cache row is the one that matters architecturally**, because it is the segmented lane's answer
+to the eight relays that would not forward our media. An off-the-shelf nginx in front of the origin,
+configured with nothing but `proxy_cache`, forwarded the stream intact — and **two client passes cost
+the origin nine segment fetches, not eighteen**: nine misses and nine hits, the second client served
+entirely from cache. That is the CDN scaling argument reduced to a measurement rather than an
+assertion, and it took one `proxy_cache` directive against a MoQ fan-out story that requires a relay
+implementing the protocol.
+
+**The `curl` row is the floor of the interoperability claim.** A shell loop that reads the playlist,
+fetches each URL in order and concatenates the bodies recovers the media exactly — it is byte-identical
+to what the origin served. There is no HLS implementation in that arm at all. The client requirement
+for this lane really is "an HTTP client", which is the thing the lane is always claimed to have and
+this is what claiming it costs.
+
+**And the judge is not ours.** `validate-ts.sh` grading our own output is worth something, but Apple's
+`mediastreamvalidator` is the reference implementation of the specification with no stake in the
+result, and it reported zero errors and zero warnings while processing 100 % of the segments and
+correctly identifying `avc1` and `aac`. The MoQ arm has no counterpart to this, because MoQ has no
+reference conformance tool — which is itself a difference in the maturity of the two ecosystems rather
+than of the two protocols.
+
+### But the packager is not transparent, and that was assumed rather than checked
+
+The one thing this arm does **not** establish is byte-transparency, and looking for it turned up a
+defect. Concatenating the served segments and comparing against the fixture:
+
+| | Source fixture | Served segments |
+|---|---:|---:|
+| Packets | 26,612 | 25,271 |
+| Video PID 256 / audio 257 / nulls 8191 | 21,236 / 1,878 / 3,039 | 20,143 / 1,798 / 2,880 |
+| Playlist duration | 20.0 s | 19.004 s |
+
+**`tsp -O hls` dropped the last 1,340 packets — 5.0 % of the fixture, the final second of media — and
+declared the playlist complete with `#EXT-X-ENDLIST` while doing so.** The loss is at the tail, where
+the input ended between intra frames, so it is a finite-input behaviour and a live feed has no tail to
+lose; every other segmented arm in this campaign is unaffected. It is still a silent, unreported
+truncation of content the packager was given, and any use of this toolchain for file-based packaging
+would inherit it.
+
+The bytes also differ from the third packet onward, because the packager aligns the first segment to
+an intra frame and re-emits PSI rather than copying the input. **Every PID's count is scaled by the
+same ~0.948, so nothing is being selectively stripped** — the content is all there, in proportion,
+which is why the oracle passes — but the segmented lane as packaged by TSDuck is a *media-aware* lane,
+not an opaque one. That correction matters beyond this file: the intuition that segment fetching is
+byte-verbatim carriage is wrong at the packager, even though it is right on the wire, where every byte
+the packager emits is delivered unaltered (the `curl` and `tsp` arms agree to the byte).
+
 ### Why this matters beyond our own question
 
 The interop matrix today is control-plane only. Against moxygen, `setup-only` would report green
@@ -234,6 +318,14 @@ argument for the media-level profile proposed in #32.
       alongside the negotiated draft
 - [x] Isolate the cross-implementation failure — empty-prefix `SUBSCRIBE_NAMESPACE`, confirmed by a
       same-relay version A/B
+- [x] Segmented-HTTP arm: the same fixture and oracle through FFmpeg, VLC, `curl`, an nginx cache and
+      Apple's `mediastreamvalidator`
+- [ ] Report the packager's silent 5 % tail truncation on a finite input to TSDuck. It needs a minimal
+      reproducer first — the input ending between intra frames is the suspected trigger, and that
+      should be confirmed against a clip whose final GOP is complete before anything is filed.
+- [ ] Put the segmented arm through a real CDN rather than a local nginx. The cache result is the
+      architecturally load-bearing one and a single-node `proxy_cache` is the weakest possible form of
+      it: it shows the objects are cacheable, not that a distribution network will behave.
 - [ ] Contribute the empty-prefix data point to [moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457),
       which is where it belongs: the draft is internally inconsistent, so neither `moq-dev` (sending)
       nor moxygen (rejecting) is the party to report against

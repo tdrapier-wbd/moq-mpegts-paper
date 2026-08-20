@@ -80,6 +80,48 @@ rig, not a comparison.** *(T12.)*
 
 ## 2. Instruments, and reading what they tell you
 
+**A check that has only ever returned "clean" has not been shown to work. Feed it something broken
+before you publish the zeros.** *(T5, T6, T7, T8b, T18, T3 — one defect, six rigs.)*
+
+> Six rigs counted continuity errors by grepping `tsp -P continuity` output for the word
+> "discontinuity". The plugin prints
+> `* continuity: packet index: 13,264, PID: 0x0079 (121), missing 14 packets`, and uses that word
+> only in its `--help`. The count was therefore structurally zero on every input, and had been for
+> the life of the campaign. Nothing looked wrong, because a conformance column of zeros on a healthy
+> rig is exactly what a healthy rig should produce — the defect was invisible precisely where it was
+> most load-bearing. It survived into a T7 pass criterion, a T5 headline ("loses time, never bytes"),
+> a T6 observation built on the counter *not* firing, and a T18 sentence reading "zero on all
+> nineteen cells". Re-grading the retained captures with a working matcher left T7 and the MoQ arms
+> genuinely at zero and moved T18's segmented cell to 583 events and T6's dual-source cells to ~95.
+> *The cost of the check is one deliberately corrupted file per instrument, once. The cost of skipping
+> it is that every "0" the campaign published is worth exactly as much as the grep behind it —
+> including the ones that happen to be right, because a correct answer from a broken instrument is
+> still not a measurement.* Two corollaries worth keeping: prefer matching on the tool's **data**
+> (`missing N packets`) over matching on a **word from its prose**, since the prose is not an
+> interface; and where two instruments can be pointed at the same property, report both and treat
+> disagreement as a finding.
+
+**A counter that wraps detects an event and cannot size it. Never report its magnitude as the damage.**
+*(T5.)*
+
+> Past its availability window a segmented-HTTP client re-anchors to the live edge, skipping whole
+> minutes of programme. The continuity counter fires — correctly, once per PID carrying the splice, so
+> a single skip reads as 6–11 "events" — and then reports 33 missing packets for a hole of 34 segments,
+> which is over 200,000. A continuity counter is four bits; it reports the remainder modulo 16 and has
+> no way to say how many times it wrapped. The event count is the detector, the PCR interval is the
+> measure, and the packet total is neither. The general form: whenever a counter's range is smaller than
+> the fault it is watching for, it degrades from a measurement to an alarm, and the write-up has to
+> demote it in the same breath as it reports it.
+
+**Errors logged by a server are not an instrument for a client falling behind.** *(T5.)*
+
+> The obvious signal for "the client fell out of the availability window" is the origin's 404 rate, and
+> it works only in the narrow band where the client is slow enough to be overtaken but fast enough to
+> still be asking for the segment that was just deleted. Deeper into loss it reloads the playlist first,
+> finds the segment already gone from the list, and skips silently: the worst cell on the ladder lost
+> 82 s of programme with an origin log of nothing but 200s. A failure detected at one end of a path
+> because the other end complains is only detectable while the other end still knows to complain.
+
 **An instrument that reports its own confidence has to be read.** *(T12.)*
 
 > A merge oracle recovers the sequence offset between two legs by voting on payload identity. With
@@ -203,6 +245,19 @@ in it.** *(T9, then T14, then T16 — the same error, three rigs, three times.)*
 > *negative*. The fix that held was to form the ratio from two byte totals over the same media —
 > everything sent, over the payload sent — with no wall clock in it at all.
 
+**The span a capture measures for itself is only the flow's duration if the flow is continuous. On a
+bursty lane, first-to-last-packet is short and every rate divided by it is high.** *(T9 segmented —
+the same family as the rule above, arrived at from the opposite direction.)*
+
+> First-to-last-packet was adopted precisely *because* nominal windows were untrustworthy, and it is
+> right for a lane that sends without pause. A segment fetcher pauses: its first and last packets sit
+> inside the capture window rather than at its edges, so the span came out 4 % under the real flow
+> duration and the carriage figure read 1.081x instead of 1.036x — the difference between "materially
+> worse than SRT" and "tied with it". Two runs whose byte totals agreed to five significant figures
+> disagreed by 2 % on rate, which is the tell: when the numerator repeats and the quotient does not,
+> the denominator is the defect. The span-free ratio, wire bytes over payload bytes, was identical
+> across both runs.
+
 **Equal window length is not equal media. When two captures are compared packet for packet, assert
 the reference's homogeneity in the instrument rather than assuming it.** *(T3 — the content form of
 the artefact above, and the fourth rig to hit that artefact in some form.)*
@@ -261,6 +316,29 @@ against.** *(T9.)*
 ---
 
 ## 4. Attribution: naming a mechanism from the evidence
+
+**On a lane whose transport holds no session state, most of what you are about to measure lives in
+the client — so measure two of them before naming the lane.** *(T8b, T6.)*
+
+> Under a 2:1 shortfall, segmented HTTP either lost the session at 43 s or thinned cleanly at 99 % of
+> the bottleneck, depending only on whether the receiver re-anchored after a 404. Same origin, same
+> shaper, same clip, same window; a factor of three in delivered rate and the difference between a
+> live feed and a dead one. The first client's number, written up alone, would have read as
+> "segment fetching cannot survive congestion" — a claim about HTTP that the second client falsifies
+> in one run. Where MoQ's transport supplies the thinning, this lane requires the receiver to
+> implement it, so a figure attributed to "segmented HTTP" is very often a figure about one client's
+> error handling. T6 reached the same conclusion for failover.
+
+**When two runs differ in more than one variable, do not credit the one you have been tuning.**
+*(T13, T18.)*
+
+> T16 reached 0 PCR intervals above 40 ms on the wire while carrying seconds of cushion, where T13's
+> MoQ legs posted 131–159 at about 1 s. Cushion was the variable under active investigation, so it got
+> the credit, and T13 recorded the failure as "a buffer-depth choice rather than a limit". It was not:
+> T18 swept the MoQ cushion eightfold with no movement at all, and T13's segmented pass-through leg
+> posts 0 while holding almost no buffer. The two runs had differed in the *data plane* as well, and
+> that was the whole effect — one egress delivers PCRs often enough and the other does not. *The
+> variable you are holding in mind is the one most likely to be miscredited.*
 
 **Name a divergence mechanism from the bytes that differ, not from the most plausible cause.**
 *(T12.)*
@@ -547,6 +625,18 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 > undifferentiated gap made it look like an ecosystem that had not got round to TS, when it is really
 > a market — the missing half is the half that is sold as hardware. *"No tool does X" is usually "no
 > tool does one particular stage of X", and which stage decides who pays.*
+
+**A claim that a class of tool cannot do something is a claim about the input as much as the tools —
+name the input property that defeats them, then find an input without it.** *(T13.)*
+
+> "No off-the-shelf stage grooms a broadcast mux" stood for most of T13's life, backed by nine chains
+> against four criteria fixed in advance. Every measurement was sound and the generalisation was not.
+> The property doing the work was in the *egress*: `moq export ts` carries no stuffing, so a groomer
+> must inflate a stream and no tool that preserves a mux can. Run the identical nine chains against a
+> segmented egress, which passes the source's nulls through, and `tsp -P pcradjust` alone passes all
+> four criteria with the mux byte-for-byte intact. *If no input without the property exists, the
+> conclusion is about the tools; if one does, the conclusion was about the input all along — and the
+> useful version names the property, because that is the thing someone upstream can change.*
 
 **A claim about what a tool cannot be configured to do is a claim about its whole parameter space.**
 *(T16.)*

@@ -223,7 +223,7 @@ scp -q -o BatchMode=yes -i "$PEM" "$HOST:$REMOTE_DIR/$ARM-source.csv" "$SRCCSV"
 echo
 echo "=== wire conformance of the same bytes ==="
 if [ -s "$OUT/$TAG-egress.ts" ]; then
-	CC=$(tsp -I file "$OUT/$TAG-egress.ts" -P continuity -O drop 2>&1 | grep -c 'discontinuity' || true)
+	CC=$(tsp -I file "$OUT/$TAG-egress.ts" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 	JIT=$(tsp -I file "$OUT/$TAG-egress.ts" -P pcrverify --absolute --jitter-max 13 -O drop 2>&1 |
 		sed -n 's/.*OK, *\([0-9,]*\) with jitter.*/\1/p' | tr -d ',')
 	tsp -I file "$OUT/$TAG-egress.ts" -P pcrextract --pcr --csv \

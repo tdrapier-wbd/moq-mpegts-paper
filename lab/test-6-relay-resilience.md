@@ -536,10 +536,17 @@ between the two and the media sequence resetting `4 → 0 → 7 → 0`. The rece
 whatever it last read, and ends up with a stream that **repeatedly jumps backwards and forwards by
 about twenty seconds** — 5 rewinds of up to 23.7 s interleaved with 4 forward leaps of ~19 s.
 
-Two things about that deserve emphasis. The first is that **the continuity counter sees nothing**:
-`cc_disc=0` in every one of these cells, because CC is a property of each segment's own mux and
-every segment is internally valid. A conformance check that asks whether the clock moved cannot
-catch a stream in which the clock moved *backwards*. The second is that this is the exact failure
+Two things about that deserve emphasis. The first is that **the continuity counter cannot describe
+what happened**. Re-graded with a working matcher — the original one could not match the plugin's
+output at all, and reported a flat `cc_disc=0` here and everywhere else (see the
+[Corrections](#corrections)) — these cells post 95 to 96 continuity events over 707 to 716 packets.
+So the check does fire. What it reports is a few hundred missing packets, in a stream that actually
+travelled twenty seconds backwards and forwards five times. The magnitude is wrong by orders of
+magnitude and the nature is not conveyed at all, because CC is a property of each segment's own mux
+and every segment here is internally valid: the counter is measuring the seams between segments, not
+the timeline they were spliced into. **A conformance check that asks whether the counter advanced
+cannot grade a stream in which the clock moved backwards** — that requires the PCR rewind count, which
+is why this experiment requires one. The second thing is that this is the exact failure
 the media-aware lane refuses loudly — two publishers announcing one broadcast to one relay get
 `Error: moq: unroutable` and both are torn down immediately. Given a choice between an outage and
 undetected time-travel, the outage is the better failure, and the segmented lane picks the worse one
@@ -663,11 +670,11 @@ Segmented lane, same clip and host:
 | Origin restart — `tsp -I hls` receiver | none — receiver exits at the first refused connection | no resume | ❌ client has no retry |
 | Origin restart — FFmpeg receiver | none — `Failed to reload playlist`, exits | no resume | ❌ demuxer abandons despite every retry knob |
 | Origin restart — retrying client | = the outage (10.10 s), resumes on the first successful poll | **no content lost**; backlog refetched from the store | ✅ nothing to re-establish; HTTP holds no session state |
-| Active/active — two **independent** packagers, one namespace | n/a, never stops | **silently corrupt**: ±20 s oscillation, 5 rewinds ≤23.7 s, 0 CC errors | ❌ worse failure than the media-aware teardown |
-| Active/active — as above, media sequence aligned | n/a | unchanged (5 rewinds ≤22.2 s) | ❌ the defect is the timeline, not the numbering |
-| Active/active — **common source**, distinct segment names | n/a | time-aligned (0 forward leaps) but every second delivered twice (1.389×) | 🟡 identical content is not enough; identifiers must match |
-| Active/active — **common source, shared names** (hard kill) | **none measurable** — stall equals baseline and does not fall at the kill | 0 CC errors, 0 PCR rewinds, 1.012 of source rate | ✅ **hitless**, 3/3 runs identical to the byte |
-| Active/active — common source, shared names (graceful) | none measurable | as above; ENDLIST visible **1.10 s** before the survivor rewrites | 🟡 hitless for a client that ignores ENDLIST; a conformant one may stop |
+| Active/active — two **independent** packagers, one namespace | n/a, never stops | **silently corrupt**: ±20 s oscillation, 5 rewinds ≤23.7 s; 95 CC events / 707 packets, which describes none of it | ❌ worse failure than the media-aware teardown |
+| Active/active — as above, media sequence aligned | n/a | unchanged (5 rewinds ≤22.2 s; 96 CC events / 716 packets) | ❌ the defect is the timeline, not the numbering |
+| Active/active — **common source**, distinct segment names | n/a | time-aligned (0 forward leaps) but every second delivered twice (1.389×); 48 CC events / 441 packets | 🟡 identical content is not enough; identifiers must match |
+| Active/active — **common source, shared names** (hard kill) | **none measurable** — stall equals baseline and does not fall at the kill | **0 CC errors**, 0 PCR rewinds, 1.012 of source rate | ✅ **hitless**, 3/3 runs identical to the byte, and the only segmented cell that is genuinely clean |
+| Active/active — common source, shared names (graceful) | none measurable | 8 CC events / 29 packets; ENDLIST visible **1.10 s** before the survivor rewrites | 🟡 hitless for a client that ignores ENDLIST; a conformant one may stop |
 | Two packagers of one live feed (determinism precondition) | n/a | **17/17 segments byte-identical** | ✅ boundaries are content-chosen, not clock-chosen |
 
 ## Corrections
@@ -675,6 +682,20 @@ Segmented lane, same clip and host:
 > The general method rules extracted from this section, together with those from every other
 > experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
 > specific record of what this experiment got wrong.
+
+**The segmented arm's continuity column was a matcher that could not match.** It counted lines of
+`tsp -P continuity` output containing the word "discontinuity", which the plugin prints only in its
+`--help`; the per-event line reads `missing 14 packets`. Every `cc_disc` this rig reported was
+therefore a structural zero, and the finding built on it — that the counter "sees nothing" during the
+two-packager oscillation — was drawn from an instrument that could not have seen anything on any
+input. Re-graded from the same captures, the dual-source cells post 95–96 events and the shared-name
+hard-kill cells still post 0, so the *hitless* result stands and was accidentally right while the
+*blind counter* claim was wrong. The underlying argument survives in better shape: CC does fire, and
+what it reports — a few hundred missing packets — describes neither the magnitude nor the nature of a
+timeline that jumped backwards five times. **Method rule:** an instrument that returns the expected
+answer has not thereby been tested; feed it a known-bad input before trusting a column of zeros. The
+same defect was present in six rigs and is recorded in full in the
+[T5 Corrections](test-5-network-impairment.md).
 
 Four issues were reported upstream from this work. **Two were real defects; two were artefacts of our
 own harness.** The artefacts are the more useful record, because each yields a method rule that any

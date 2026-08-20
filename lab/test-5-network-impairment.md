@@ -34,6 +34,12 @@ as a third table, for the reason given under Environment.
   both arms, in a 40 s window, with a 15 ms base delay applied to the payload direction in every cell
   including the baselines. The media-aware arm runs against a **private** relay on a high port with the
   congestion controller pinned to `delay` (BBR), never the standing `:443`.
+- **Availability-window ladder (segmented HTTP only).** Rig:
+  [`t5-availability-ladder.sh`](scripts/t5-availability-ladder.sh). The same local chain, run to 40 %
+  loss in **120 s** windows rather than 40 s, and instrumented for HTTP status, segment-fetch order,
+  the client's lag behind the live edge and the maximum PCR interval — the four things the 40 s ladder
+  was too short to see. Origin retention is `--live 6 --live-extra-segments 3` at 2 s segments, so nine
+  segments, 18 s.
 
 > The subscriber home IP is `<subscriber-home-ip>` throughout.
 
@@ -181,6 +187,80 @@ and 0.840 over 40 s. Most of the delay penalty is therefore a one-off join cost 
 fetches serially, so a higher RTT delays the live edge it joins and the window never recovers the
 difference — with a residual sustained penalty of about 6 % at +200 ms.
 
+### Where the segmented lane stops losing time and starts losing bytes
+
+The ladder above stops at 10 % commanded loss and records no HTTP non-200 anywhere, which is why this
+experiment could say the lane sheds time rather than data. It could not say for how long. The origin
+retains nine segments — `--live 6` plus `--live-extra-segments 3`, so 18 s at 2 s segments — and a
+client delivering a fraction *f* of source rate falls behind at (1−*f*) × realtime, so a segment cannot
+have expired before the client reaches it until 18/(1−*f*) seconds have passed. At 40 s per cell the
+ladder was too short to reach its own boundary, and the zeros in the `http_non200` column recorded the
+window length rather than the lane's resilience.
+
+Run to 40 % loss over 120 s windows ([`t5-availability-ladder.sh`](scripts/t5-availability-ladder.sh)),
+the boundary appears immediately — and the failure past it is not degradation. Segments fetched are
+read from the origin's own access log, so the client's itinerary is visible rather than inferred:
+
+| Commanded | Applied | Rate ratio | Segments the client fetched | HTTP 404 | CC events / packets | Max PCR interval | Content hole |
+|---|---|---|---|---|---|---|---|
+| 10 % | 7.67 % | 0.057 | 2, 3, 4, 5 — sequential | 1 | 0 / 0 | 24.95 ms | **none** |
+| 15 % | 12.23 % | 0.037 | 2, **6**, 7 | 1 | 11 / 82 | **7,240 ms** | 3 segments |
+| 20 % | 18.27 % | 0.035 | 2, **13**, 14 | 1 | 7 / 47 | **24,569 ms** | 10 segments |
+| 30 % | 29.69 % | 0.020 | 2, **37** | **0** | 6 / 33 | **83,384 ms** | 34 segments |
+| 40 % | 39.91 % | 0.008 | 2 | 0 | 0 / 0 | 24.95 ms | none — one segment in 120 s |
+
+**The mechanism is a fetch that takes longer than a segment period.** At 7.7 % applied loss the client
+completed four segment fetches in 120 s, averaging 30 s each against a 2.4 s segment — twelve segment
+periods per segment. Once one fetch costs more than one period the client cannot catch up, so it drifts
+back from the live edge at close to realtime, and the origin's retention depth decides only how many
+periods of grace it gets before the segment it wants has been deleted. Nine retained segments is 18 s
+of grace against a drift of nearly a second per second, which is why the crossing happens early in
+every cell rather than progressively across the ladder.
+
+*What that arithmetic does not explain is why the 10 % cell fetched 2, 3, 4 and 5 in sequence before
+taking its 404, rather than being overtaken after the first.* Four consecutive segments should not have
+survived 90 s of live-edge advance. Either the early fetches were much faster than the cell average —
+plausible, since the client begins by pulling segments already on disk and TCP has not yet collapsed —
+or the packager's retention is deeper in practice than `--live 6 --live-extra-segments 3` implies. The
+cell is reported as measured and the discrepancy is not resolved; it does not affect the boundary,
+which is bracketed by the two cells either side of it.
+
+**Past the boundary the lane delivers holes, and the arithmetic closes on them.** `tsp -I hls` does not
+stop; it re-anchors to the live edge, so the stream continues and is missing everything in between. At
+a mean achieved segment of 2.4 s the three skips are 3, 10 and 34 segments — 7.2 s, 24 s and 82 s of
+programme — against measured PCR gaps of 7.24 s, 24.57 s and 83.38 s. The hole is exactly the segments
+that expired.
+
+**Two cells crossed the boundary without an HTTP error, which is the part that matters
+operationally.** A 404 only happens if the client asks for a segment that has just been deleted. Past
+about 20 % loss it does not get the chance: it reloads the playlist, the segment it wanted is no longer
+listed, and it re-anchors to what is. The 30 % cell skipped 82 s of programme having received **nothing
+but 200s**. An origin's error rate is therefore not an instrument for this failure — the worst cell on
+the ladder is the one with a clean HTTP log.
+
+**The hole does register as continuity errors, and they cannot size it.** Each re-anchor breaks the
+continuity counter on every PID that carries packets across it, which is where 11, 7 and 6 events come
+from — one splice counted once per affected PID, not eleven splices. The clip has thirteen PIDs, and
+how many register depends on which were mid-sequence at the cut. The packet totals (82, 47, 33) are the
+*apparent*
+gaps: a continuity counter is four bits, so a hole of 34 segments wraps it more than two thousand times
+and it reports the remainder. The count detects the discontinuity and understates it by three orders of
+magnitude. Only the PCR interval sizes it.
+
+**The 40 % row is the one that looks like a pass and is not.** It records no 404s, no continuity errors
+and a 24.95 ms maximum PCR interval — a perfect conformance record, over one segment delivered in two
+minutes. The client was too slow ever to be overtaken, so it never fell out of the window and never had
+to skip. A cell can post clean carriage precisely because it delivered almost nothing, which is why the
+rate ratio has to be read beside the conformance columns and never instead of them.
+
+**What this bounds.** "Segmented HTTP loses time, never bytes" holds, with the qualification that makes
+it useful: *while the client stays inside the origin's availability window*. That is not a property of
+the lane but a race between the delivered-rate shortfall and the retention depth, and it is losable —
+here between 7.7 % and 12.2 % applied loss under CUBIC, with a 9-segment window and a client that
+fetches serially. A deeper window, a smaller shortfall or a controller that does not collapse all move
+it; the shape of the failure past it does not change. What does not survive the crossing is the claim's
+second half: past the window this lane loses bytes, silently, in minutes.
+
 ### Real internet path (opaque, 443-swap)
 
 The moq-lite stack was briefly stopped, the opaque relay took port 443, and the local subscriber
@@ -221,21 +301,28 @@ capture tool cleanly, so no local TSDuck file was produced.
    lane, and a delay-based one does not, on either lane. TCP's retransmit-and-reassemble is why
    reordering costs the segmented lane nothing, but it is not why that lane loses throughput under
    loss — CUBIC is.
-7. **Segmented HTTP loses time, never bytes — and that is the more useful failure mode.** Across every
-   condition it recorded **0 continuity discontinuities and 0 PCR intervals above 40 ms**: the media
-   that arrives is a byte-verbatim slice of the source carrying the source's own 24.4 ms PCR grid, even
-   in the cell where it delivered 17 % of the stream. The lane's failure is that it falls behind the
-   live edge, not that it corrupts. For a downstream groomer that is the easier of the two problems,
-   because a bounded buffer absorbs late data and cannot repair damaged data.
+7. **Segmented HTTP loses time rather than bytes, for as long as it stays inside the availability
+   window.** Across every condition in this ladder it recorded **0 continuity discontinuities and 0 PCR
+   intervals above 40 ms**: the media that arrives is a byte-verbatim slice of the source carrying the
+   source's own 24.4 ms PCR grid, even in the cell where it delivered 17 % of the stream. Within the
+   window the lane's failure is that it falls behind the live edge, not that it corrupts, and for a
+   downstream groomer that is the easier of the two problems — a bounded buffer absorbs late data and
+   cannot repair damaged data. Past the window it becomes the harder problem: the client re-anchors and
+   the buffer is asked to absorb an 82 s hole, which it cannot. The section above locates the crossing
+   and observation 9 gives the arithmetic.
 8. **The media-aware lane's PCR non-conformance is not an impairment effect.** It sits at 7.89–9.18 %
    of intervals above 40 ms in *every* cell including the unimpaired baseline, and does not move with
    loss, delay or reordering. That is the exporter defect isolated in [T18](test-18-delivery-latency.md)
    — PCRs emitted too rarely and in clusters — showing up again on a third rig. Impairment neither
    causes it nor worsens it.
-9. **`http_non200` stayed at 0 up to 8 % loss**, so nothing aged out of the availability window even
-   when the client was delivering a sixth of the stream. The predicted segmented-lane failure — falling
-   so far behind that segments expire and produce hard gaps — was not reached within this ladder, which
-   is why the `cc_disc` column is 0 rather than large. Where that boundary sits is not established.
+9. **The availability window is a real edge, and this ladder is on the safe side of it by
+   construction.** `http_non200` stays at 0 up to 8 % loss across 40 s cells — but 40 s is shorter than
+   the 18 s window divided by the shortfall, so the cell ends before a segment can expire. Run for
+   120 s the same impairment reaches its first 404, and by 18.3 % applied loss the client is skipping
+   24 s of programme at a time. The boundary is established: between 7.7 % and 12.2 % applied loss on
+   this rig. Read every zero in the `http_non200` column of the main table as "not within this window",
+   not as "does not happen" — and note that past the boundary that column stops working entirely, since
+   the two worst cells took no HTTP errors at all.
 
 ## Limitations
 
@@ -285,13 +372,19 @@ completes the matrix at 1.040 segmented and 0.961 media-aware), and on CUBIC bot
 The loss ladder in this experiment gave the two lanes different controllers, so the inversion it
 originally reported was in part its own asymmetry.
 
-**The specification-level expectation for segmented HTTP was right about content and untested about
-rate.** Its availability window and idempotent retry buy resilience *of content*: across every
-condition, including the ones where it delivers 17 % of source rate, the lane records 0 continuity
+**The specification-level expectation for segmented HTTP was right about content, untested about rate,
+and bounded in a way the specification does not advertise.** Its availability window and idempotent
+retry buy resilience *of content* while the client remains inside that window: across every condition
+in the main ladder, including the ones delivering 17 % of source rate, the lane records 0 continuity
 discontinuities and 0 PCR intervals above 40 ms, so it sheds time rather than data and a bounded
-downstream buffer is the mitigation. They buy nothing either way for resilience *of rate*, which
-belongs to the controller underneath. The media-aware lane's failure under reordering is the one that
-needs a second path ([T6](test-6-relay-resilience.md) / ST 2022-7) rather than a buffer or a
+downstream buffer is the mitigation. **The window is finite, reachable, and crossed without an error
+being raised.** Once a single segment fetch costs more than a segment period the client cannot catch
+up, and after nine segments of grace it re-anchors to the live edge — measured here between 7.7 % and
+12.2 % applied loss under CUBIC, leaving 7–82 s holes that no downstream buffer can absorb, and in the
+worst two cells leaving them while the origin's log shows nothing but 200s. Retry buys nothing for
+resilience *of rate*,
+which belongs to the controller underneath. The media-aware lane's failure under reordering is the one
+that needs a second path ([T6](test-6-relay-resilience.md) / ST 2022-7) rather than a buffer or a
 controller.
 
 Operating envelope (media-aware, ungroomed, 5 s buffer): usable with 0 CC and maintained throughput
@@ -302,9 +395,12 @@ a CUBIC default on either lane and is removed by BBR on either lane
 a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §3.3.
 
 **What would settle the part that is still open** is the same ladder against a real CDN edge rather
-than a single unoptimised origin, and a loss ladder pushed far enough to find the depth at which the
-segmented lane falls out of its own availability window — the failure this rig predicted and never
-reached.
+than a single unoptimised origin. The availability-window question is otherwise answered: the section
+above reaches the boundary and characterises what is past it. One residual is worth an hour — the
+10 % cell fetched four consecutive segments before its first 404, which nine segments of retention
+should not have allowed, so either early fetches are much faster than the cell average or the
+packager retains more than it is asked to. Timestamping each GET rather than counting them would
+say which.
 
 ## Corrections
 
@@ -341,11 +437,30 @@ read 0.077 of source rate and the cell was nearly written up as a collapse under
 entirely the instrument. Setting `packets`/`bytes` allowances did not fully free the TCP arm either, so
 the jitter cell is reported as unresolved rather than as a number.
 
+**Believed:** the segmented arm recorded 0 continuity errors in every cell because nothing was lost.
+**True:** the counter could not have reported anything else. The arm script grepped `tsp -P continuity`
+output for the word `discontinuity`, which that plugin never prints — it prints `missing N packets` —
+so the column was structurally zero and would have read zero against a deliberately corrupted file.
+Re-graded, the cells that were genuinely clean are still clean, so the conclusion survives; it just was
+not evidence before. **Rule:** a check that has only ever returned "clean" has not been shown to work.
+Feed it something broken before publishing the zeros. The same defect was in five other scripts and is
+recorded once in [method-notes.md](method-notes.md).
+
+**Believed:** `http_non200 = 0` across the ladder showed the segmented lane never falls out of its
+availability window. **True:** it showed the cell was shorter than the window. Nine retained segments
+is 18 s of grace, and a client delivering a fraction *f* of source rate needs 18/(1−*f*) seconds to
+consume it — longer than the 40 s cell at every loss level the ladder ran. The column was measuring the
+experiment's own duration. **Rule:** before reporting that a bounded resource was never exhausted,
+compute how long exhausting it would take and check the window is longer than that.
+
 ## References
 
 - Congestion-control head-to-head that reframes the loss result: [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md).
 - The exporter PCR defect that appears in every cell of the media-aware arm: [test-18-delivery-latency.md](test-18-delivery-latency.md).
-- Rigs: [`t5-impair-arm.sh`](scripts/t5-impair-arm.sh), [`t5-impair-sweep.sh`](scripts/t5-impair-sweep.sh).
+- Rigs: [`t5-impair-arm.sh`](scripts/t5-impair-arm.sh), [`t5-impair-sweep.sh`](scripts/t5-impair-sweep.sh),
+  [`t5-availability-ladder.sh`](scripts/t5-availability-ladder.sh).
+- The segmented lane's congestion behaviour under a shaped bottleneck, where the same client dies
+  rather than re-anchoring: [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Shaper rules this experiment contributed: [method-notes.md](method-notes.md) §5.
 - LEO/Starlink handover candidate profile (not yet run): [planned-experiments.md](planned-experiments.md).
 - Findings: [`docs/evidence.md`](../docs/evidence.md) §3.3.
