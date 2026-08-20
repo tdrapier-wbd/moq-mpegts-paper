@@ -756,13 +756,25 @@ silent version of that.
 
 ---
 
-## 8. What was asked for at the start, and what was withdrawn
+## 8. What was asked for at the start, what was retracted, and on what evidence
 
 Four issues here are requirements rather than defects, filed in the campaign's first days before most
 of what is in this repository had been measured. **Three are now closed, and we closed all three
 ourselves.** That is a result rather than an admission: the asks were what a broadcaster assumes it
 needs, measurement said otherwise, and leaving three wrong requirements standing in someone else's
-backlog would have been the worse outcome.
+backlog would have been the worse outcome. A retraction is part of the contribution record, so each
+is logged with what was filed, what we did about it and the measurement that forced the change:
+
+| Filed | Asked for | What we did | What forced it |
+|---|---|---|---|
+| [#1799](https://github.com/moq-dev/moq/issues/1799) | a direction decision between media-aware and byte-opaque carriage | **closed by us** once its children resolved | the direction was settled by its children, not withdrawn |
+| [#1861](https://github.com/moq-dev/moq/issues/1861) | a second, byte-verbatim opaque lane | **retracted by us** | #2440 shrank the gap to EIT alone; the wire measurement reversed the economics; byte-identical 1+1 legs were reached another way |
+| [#1839](https://github.com/moq-dev/moq/issues/1839) | a generic TS egress sink with PCR-aware pacing | **partly landed, remainder retracted by us** | the pacing primitive shipped as [#1845](https://github.com/moq-dev/moq/pull/1845); the maintainer declined a module per transport, and the grooming stage does not belong in a transport library |
+| [#1838](https://github.com/moq-dev/moq/issues/1838) | TR 101 290 monitoring | **open, corrected in place rather than retracted** | half the checks were aimed at a stream no IRD sees; the requirement itself survives, restated |
+
+Only #1839's remainder turned on maintainer push-back, and even there the replacement was built
+outside the tree on its own merits. The rest were retracted because a measurement in this repository
+contradicted the ask.
 
 - **A broadcast contribution profile** ([#1799](https://github.com/moq-dev/moq/issues/1799)) — the
   parent proposal, presenting media-aware and byte-opaque carriage as two options and asking for a

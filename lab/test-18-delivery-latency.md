@@ -237,7 +237,8 @@ cushion the first third of the window reads 1945 ms and the last third 90 ms. Th
 not what the groomer holds.
 
 **But the same lane posts 25× more PCR repetition violations than the transparent arms, at every
-cushion, and depth does not move it.** 489–491 intervals above 40 ms out of ~3250, with a 228.0 ms maximum that is identical to three
+cushion, and depth does not move it.** 489–491 intervals above 40 ms out of ~3,250 PCRs in the 90 s
+cell, with a 228.0 ms maximum that is identical to three
 significant figures across a ladder spanning eight times the depth. Where the transparent arms are
 marginal — a dozen or two intervals at 47–60 ms, just over the gate — this is 15 % of all PCRs, at nearly
 six times the limit.
@@ -370,8 +371,8 @@ with the source on the EC2 origin in eu-west-1 and the receiver here, over the o
 12.8 ms round trip, which is the whole of the difference. MoQ comes out 16–18 ms *lower* than on
 loopback, because the loopback rig had source, transport and groomer contending for one laptop while
 here the source is on another continent's worth of cable and its own CPU. Neither plane's conformance
-moves at all: MoQ's repetition failure is 504 and 505 intervals against loopback's 489–491, with the
-same ~200 ms maximum. **The defect isolated in measurement 4 is a property of the lane, not of the
+moves at all: MoQ's repetition failure is 504 and 505 intervals out of ~3,310 PCRs against loopback's
+489–491 out of ~3,250, both in a 90 s cell, with the same ~200 ms maximum. **The defect isolated in measurement 4 is a property of the lane, not of the
 link.**
 
 **MoQ delivers a picture across the internet in 109 ms.** That is the number the paper has wanted and
@@ -467,7 +468,9 @@ framed as.** Delivery latency and PCR conformance are independent on the media-a
 picture in 127 ms on loopback and **109 ms across the internet** where SRT needs 1606 and 1618 ms and
 segmented HTTP needs 3497 and 4067 ms at their shallowest runnable settings — and it fails PCR repetition
 at every one of those settings, on both paths, for a reason that has nothing to do with depth or with the
-link: the exporter does not emit PCRs often enough for any downstream groomer to place them.
+link: the exporter emits very nearly the right number of PCRs and places them wrong, clustering 85 % of
+them within 11 µs of each other and leaving the residue in 100 ms–1.8 s holes no downstream groomer can
+fill (measurement 6).
 
 **What each plane costs, at the shallowest cushion it can be run at, over the real path:**
 
@@ -484,8 +487,8 @@ the data planes rather than of either environment.
 
 **The recommendation this changes is about where to spend upstream effort.** The paper has treated MoQ's
 conformance gap as the cost of its latency advantage and priced that trade into its verdicts. It is
-instead a PCR emission cadence in the exporter, and fixing it would let the lane pass the gate at the
-depth it already runs at — which, measured across the internet, is 109 ms.
+instead where the exporter places PCR, and fixing that would let the lane pass the gate at the depth it
+already runs at — which, measured across the internet, is 109 ms.
 
 ### Still open
 

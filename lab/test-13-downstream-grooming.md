@@ -4,11 +4,11 @@
 
 > **The grooming requirement is a property of the lane, not of MPEG-TS.** This experiment began on the
 > MoQ lane and concluded that no off-the-shelf stage does the whole job. That conclusion holds, and it
-> is narrower than it first read: it is caused by two things `moq ... export ts` does not deliver —
-> stuffing, and PCRs often enough — and neither is true of a segmented HTTP egress. Graded on the
-> segmented lane, the same TSDuck chain that is only *partial* on the MoQ lane passes all four criteria
-> with the mux intact. Read every result below against the lane it was measured on; the two are
-> tabulated side by side throughout.
+> is narrower than it first read: it is caused by two properties of `moq ... export ts` — it drops
+> stuffing, and it clusters its PCRs instead of spacing them — and neither is true of a segmented HTTP
+> egress. Graded on the segmented lane, the same TSDuck chain that is only *partial* on the MoQ lane
+> passes all four criteria with the mux intact. Read every result below against the lane it was
+> measured on; the two are tabulated side by side throughout.
 
 **Can the grooming stage be built from tools an operator already has?** Every measurement in this
 campaign has groomed with one tool ([`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)),
@@ -53,7 +53,10 @@ A grooming stage is a candidate for a documented recipe if it does all four:
 2. **PCR accurate.** 0 violations at the TR 101 290 P2 limit, measured as
    `pcrverify --absolute --jitter-max 13` (13 PCR units ≈ 481 ns). The plain `--jitter-max 500` that
    reads as 500 *micro*-seconds is a pre-check, not the gate.
-3. **PCR present often enough.** No intervals above 40 ms.
+3. **PCR spaced within the repetition limit.** No intervals above 40 ms. *(Reworded from "PCR present
+   often enough" — the gate itself is unchanged and was always the interval, but the original phrasing
+   implied a shortage of PCRs, and [T18](test-18-delivery-latency.md) measurement 6 showed the MoQ
+   exporter's failure is where it places them rather than how many it sends.)*
 4. **Honest about time.** Duration fidelity 1.000 against the source: the stream must carry the rate
    it claims. And on the wire, a delivered rate that is actually rate-controlled.
 
@@ -590,11 +593,12 @@ on the receiver:
   cushion choice. [T18](test-18-delivery-latency.md) swept the cushion across eight times the depth,
   removed starvation entirely, and moved the figure not at all, and the segmented legs above post 0
   from a stage holding almost no buffer — so on both lanes the determinant is the egress, not the
-  depth. The groomer inserts no PCRs of its own and the MoQ lane does not deliver them often enough to
-  place; the word "inherits" is exact, and it is the whole defect. That it satisfies the set at all is
-  a statement about the state of the ecosystem, not a recommendation: as the upstream review of
-  [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation
-  path at the time, and it is still one lab's unpublished tool.
+  depth. The groomer does place PCRs of its own, but only into slots it was already going to stuff, and
+  those do not fall in the gaps the exporter's clustering leaves ([T18](test-18-delivery-latency.md)
+  measurements 4 and 6); the word "inherits" is exact, and it is the whole defect. That it satisfies
+  the set at all is a statement about the state of the ecosystem, not a recommendation: as the
+  upstream review of [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported
+  installation path at the time, and it is still one lab's unpublished tool.
 
 The two halves of the job separate cleanly, and on the MoQ lane only one of them is unsolved off the
 shelf. Any stage that owns a clock can produce a broadcast-grade wire, and one that does is 366 lines

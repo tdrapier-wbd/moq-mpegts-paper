@@ -136,8 +136,8 @@ conformance is bought with depth and depth is latency. On the media-aware lane t
 be independent: repetition sits at ~490 intervals above 40 ms with a 228 ms maximum across a ladder
 spanning eight times the depth, and stays there when groomer starvation is removed entirely. The groomer
 inserted 137, 103, 28 and 0 PCRs of its own across that ladder for violation counts of 491, 489, 503 and
-502 — **the exporter does not emit PCRs often enough for any groomer to place them at affordable
-headroom**, and no cushion fixes that.
+502 — **the exporter clusters its PCRs, so the gaps a groomer would have to fill are not where its own
+insertion slots fall**, and no cushion fixes that.
 
 What T18 leaves open is listed in its own *Still open* table. Two entries belong here because they need
 setup rather than analysis:

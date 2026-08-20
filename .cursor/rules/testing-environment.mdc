@@ -10,7 +10,7 @@ alwaysApply: true
 - **`lab/`** — the *public* engineering notebook: the campaign plan and, per experiment, the objective, environment, procedure and **measured results**. Authoritative for the experimental record; results promoted to `docs/evidence.md` are summarised there, not moved out of the lab.
 - **`lab/*.local.md`** *(git-ignored)* — the internal digest: raw chronology, dated runs, throwaway commit hashes, superseded hypotheses, sensitive infrastructure detail.
 - **`interop/`** *(public)* — the media-level interop test client contributed to `moq-interop-runner`, with its fixture generator and oracle.
-- `docs/problem.md` → the requirement set (R1–R9), which everything else is scored against
+- `docs/problem.md` → the requirement set (R1–R8), which everything else is scored against
 - `docs/comparison.md` → the data-plane head-to-head and the verdict table
 - `docs/architecture.md` → the broadcast-grade layer: edge gateway, redundancy, carriage, fabric
 - `docs/control-plane.md` → control, entitlement, security — **design only, no evidence**

@@ -124,25 +124,23 @@ subscription model above it. Measurement bears this out even on the substrates a
 matching the congestion controller is enough to make the loss axis indistinguishable, with TCP on one
 side and QUIC on the other.
 
-Measured head-to-head on one host under one shaper, across the full matrix of lane against congestion
-controller ([Evidence](evidence.md) §3.3), delivered rate as a fraction of source:
+Both lanes were measured head-to-head on one host under one shaper, across the full matrix of lane
+against congestion controller; the delivered-rate matrix is in
+[Evidence](evidence.md) §3.3, and this is what it means for the choice between the two.
 
-| Commanded impairment | Segmented HTTP, **CUBIC** | Segmented HTTP, **BBR** | MoQ media-aware, **CUBIC** | MoQ media-aware, **BBR** |
-|---|---|---|---|---|
-| 3 % loss | 0.90 | **0.97** | 0.34 | **0.96** |
-| 10 % loss | 0.17 | **1.04** | 0.13 | **0.96** |
-| 25 % reordering | **0.98** | — | 0.19 | 0.19 |
-
-**Loss is a controller result, not a lane result.** Read down a column and the two data planes are
-indistinguishable; read across a row and the controller decides the outcome on either of them. A
-loss-based controller treats a dropped packet as a congestion signal and backs off whether the bytes
-are a QUIC stream or an HTTP response; a delay-based one does not, equally on both. The widely-repeated
+**Loss is a controller result, not a lane result.** Read that matrix down a column and the two data
+planes are indistinguishable — at 10 % loss both hold full rate on BBR (1.04 segmented, 0.96
+media-aware) and both collapse on CUBIC (0.17 and 0.13). Read across a row and the controller decides
+the outcome on either of them. A loss-based controller treats a dropped packet as a congestion signal
+and backs off whether the bytes are a QUIC stream or an HTTP response; a delay-based one does not,
+equally on both. The widely-repeated
 claim that segment fetching degrades under loss where MoQ does not is an artefact of comparing TCP's
 default controller against QUIC's tuned one.
 
 **Reordering is the real difference, and it belongs to the lane.** QUIC delivers a stream in order, so
-reordering becomes head-of-line blocking that no congestion controller removes — the media-aware lane
-reads 0.19 under both. Segment fetching cannot suffer it: each segment is an independent object and
+reordering becomes head-of-line blocking that no congestion controller removes — under 25 % reordering
+the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98. Segment fetching
+cannot suffer it: each segment is an independent object and
 TCP reassembles beneath it. This is the one axis on which the choice of data plane is a genuine
 reliability decision rather than a tuning decision.
 
@@ -428,11 +426,9 @@ seconds on the segmented plane and tens of milliseconds on MoQ (§5).
 
 ## 5. Latency (R4)
 
-**This is the axis on which the two data planes differ most, and the difference is now measured rather
-than reasoned: 109 ms against 4,067 ms over one internet path in one window** ([Evidence](evidence.md)
-§3.11). Earlier versions of this section argued the gap from the specifications and reported the argument
-as though it were a measurement; what follows keeps the arithmetic, because it explains *why* the gap is
-structural, and then gives the numbers.
+**This is the axis on which the two data planes differ most, and the difference is measured rather than
+reasoned: 109 ms against 4,067 ms over one internet path in one window** ([Evidence](evidence.md)
+§3.11). The arithmetic below explains *why* the gap is structural; the measurements follow it.
 
 **Segmented HTTP's floor is arithmetic, not implementation quality.** `PART-HOLD-BACK` MUST be at
 least twice, and SHOULD be at least three times, the part target duration, and part targets in
@@ -471,36 +467,26 @@ requirement in R3 needs does not cost the MoQ lane its advantage.
 
 ### 5.1 Latency and PCR conformance are not coupled, and that changes the verdict
 
-This was the most consequential unresolved question in the repository. It has been measured, and **the
-premise was wrong** ([T18](../lab/test-18-delivery-latency.md)).
+Grooming appeared to buy PCR-repetition conformance with buffer depth, and buffer depth is latency —
+which would have made P1 conformance on the wire something MoQ pays for out of the only axis on which
+it leads. **Measured, the two axes are independent** ([Evidence](evidence.md) §3.2,
+[T18](../lab/test-18-delivery-latency.md)). Sweeping the groomer's cushion across a ladder spanning
+eight times the depth moves the lane's repetition figure not at all, and it does not move either when
+groomer starvation is removed altogether; over the internet it reads 504 intervals above 40 ms. The
+groomer *was* placing PCRs of its own throughout, at four different rates, and none of it mattered.
 
-**The question.** Grooming appeared to buy PCR-repetition conformance with buffer depth, and buffer depth
-is latency. Two points were measured and they were on different data planes — a shallow cushion on MoQ
-giving 131–159 intervals above 40 ms, an 8 s cushion on segmented HTTP giving 0 — so the reasonable fear
-was that P1 conformance on the wire costs seconds of buffer on both planes, spent on MoQ out of the only
-axis on which MoQ leads.
+**The defect is therefore upstream of the edge stage, and it is narrower than a rate.** The exporter
+emits **31–36 PCRs a second against the source's 41**, and against the ~25/s a 40 ms ceiling
+arithmetically needs — so it does not send too few. It places 85 % of them within 11 µs of each other
+and leaves the residue in gaps of 100 ms to 1.84 s, where the source ran an even grid with *zero*
+intervals above 40 ms. A groomer cannot repair that from downstream, because its own insertions land
+wherever the carrier runs ahead of the content and that is not where the gaps are. So this is not a
+structural cost to be priced into a recommendation, and it is not a cadence to be raised; it is
+**where** one implementation puts its PCR. T18 predicts — and does not test — that emitting on an even
+~25 ms grid, against elapsed clock rather than against PES-unit boundaries, would clear the gate at the
+depth the lane already runs, which is **109 ms of delivery latency across the internet**.
 
-**The answer: on the MoQ lane the two axes are independent.** Sweeping the groomer's cushion across a
-ladder spanning eight times the depth moves the lane's repetition figure not at all — 489–491 intervals
-above 40 ms with a 228 ms maximum at every rung — and it stays at 502 when groomer starvation is removed
-altogether by matching the carrier to the arriving content rate. Over the internet it reads 504. And the
-groomer **was** placing PCRs of its own while all of that held still: it can only use slots it was
-already going to stuff, so its budget is the carrier's rate surplus, and across the ladder it inserted
-**137, 103, 28 and 0** at 4.1 % down to 0.0 % stuffing for violation counts of **491, 489, 503, 502**.
-
-**The defect is therefore upstream of the edge stage, and it is narrower than a rate.** Measured against
-the same clip carried by three byte-transparent lanes in one session, the exporter emits **31–36 PCRs a
-second against the source's 41**, and against the ~25/s a 40 ms ceiling arithmetically needs — so it does
-not send too few. It places 85 % of them within 11 µs of each other and leaves the residue in gaps of
-100 ms to 1.84 s, where the source ran an even 24.65 ms grid with *zero* intervals above 40 ms. A groomer
-cannot repair that from downstream because its own insertions land wherever the carrier runs ahead of the
-content, which is not where the gaps are. So this is not a structural cost to be priced into a
-recommendation, and it is not a cadence to be raised; it is **where** one implementation puts its PCR.
-T18 predicts — and does not test — that emitting on an even ~25 ms grid, against elapsed clock rather
-than against PES-unit boundaries, would clear the gate at the depth the lane already runs, which is
-**109 ms of delivery latency across the internet**.
-
-So the defensible statement is now:
+So the defensible statement is:
 
 > MoQ delivers a picture across the public internet in 109 ms, 15× lower than SRT over the same path.
 > It is **not** currently TR 101 290 P1-conformant on PCR repetition on the wire, at any buffer depth —
@@ -935,13 +921,16 @@ dual-subscribe as the primary redundancy mechanism ([Architecture](architecture.
 
 ---
 
-## 13. Six corrections the comparison forced
+## 13. Seven corrections the comparison forced
 
-Each of the six below is a plausible claim, each was load-bearing here, and each turned out to be
-false. They are recorded together because the *way* each failed generalises to other transport
-comparisons. Two fail in the direction that flatters MoQ, two in the direction that flatters the
+Each was a plausible claim, each was load-bearing here, and each turned out to be false. They are
+recorded together because the *way* each failed generalises to other transport comparisons. Of the
+first six, two fail in the direction that flatters MoQ, two in the direction that flatters the
 alternative, the fifth in both directions at once, and the sixth in favour of a transport that is in
-neither camp.
+neither camp. The seventh is this repository's own. What each yielded as a *measurement* rule, with
+the incident that produced it, is held once in
+[`lab/method-notes.md`](../lab/method-notes.md); what is recorded here is the correction and what it
+changes for the comparison.
 
 - **"HLS carrying TS is a new capability."** It is the opposite: MPEG-TS was HLS's original container
   and, until fragmented MP4 arrived a decade ago, its only one. Nor is HLS a carry-anything envelope
@@ -954,41 +943,33 @@ neither camp.
   a necessary substrate for both and distinguishes neither; what distinguishes MoQ is the object and
   subscription model above it.
 - **"Segmented HTTP's receive-side hand-off already ships, so that layer is solved for it."** This
-  counted the client's equipment as if it discharged the distributor's obligation. It does not. **The
-  method rule: when comparing two designs, draw the demarcation before comparing, and count only work
-  that falls on the same side of it.** An advantage that lives in a third party's capex is
-  optionality, not architecture.
+  counted the client's equipment as if it discharged the distributor's obligation. It does not. An
+  advantage that lives in a third party's capex is optionality, not architecture, and the demarcation
+  has to be drawn before the comparison rather than after it.
 - **"A sequence of TS segments is a re-muxed stream, so byte-verbatim carriage is structurally
   unavailable."** Reasoned from the requirement that a segment begin with a PAT and PMT, and wrong
   about what it claimed: measured against the source, a segment differs in byte 3 on one PAT and one
   PMT, and in nothing else. It was, however, pointing at something real that the refutation then
   overshot — the pair is *inserted*, so the mux is verbatim in payload and not as a mux, and the two
-  packets cost file-domain PCR accuracy (§8). **The method rule: a "structurally impossible" claim
-  derived from a specification is a hypothesis about an implementation, and costs one afternoon to
-  test — and when it falls, check whether the mechanism it named survives without the impossibility
-  claim attached to it.**
+  packets cost file-domain PCR accuracy (§8).
 - **"Not carrying stuffing is not unique to MoQ, since a TS packager has no reason to retain it — so
   the wire rows would converge if measured."** They do not converge: the off-the-shelf packager keeps
   the stuffing and segmented HTTP lands 7.0 % above the media-aware lane. What the reasoning missed
   is that the two properties are one: a packager that stripped stuffing to reach parity would forfeit
-  its §8 advantage. **The method rule: when an argument says two measurements should converge, check
-  whether the mechanism it proposes would cost something elsewhere in the same comparison.**
+  its §8 advantage. The saving was a trade seen from one side.
 - **"RIST reproduces the source's own cadence, so it hands a groomer the cleanest egress."** The
   premise is exactly right and the conclusion does not follow. Measured, RIST and SRT are
   *transparent* while MoQ *re-paces*, emitting 12.2–12.4 kB regardless of what it is fed. So
-  "reproduces the source" is a weaker property than "sets its own granularity". **The method rule:
-  when a comparison ranks transports by a property of their output, measure the input as well** —
-  otherwise a transport that merely passes its input through is credited with its source's virtues.
+  "reproduces the source" is a weaker property than "sets its own granularity", and a transport that
+  merely passes its input through had been credited with its source's virtues.
 
-A seventh belongs with them, and it is this repository's own: **"MoQ's sub-second capability is
-measured."** For several revisions it was not. It was a structural property of the protocol and a
-reasonable inference from measured delivery granularity, written as a result in two documents. It has
+**"MoQ's sub-second capability is measured."** For several revisions it was not. It was a structural
+property of the protocol and a reasonable inference from measured delivery granularity, written as a
+result in two documents — and it was the claim on which this comparison's latency axis turned. It has
 since been measured properly — 109 ms across the public internet, 15× lower than SRT over the same path
 ([T18](../lab/test-18-delivery-latency.md), §5) — so the claim is now true, which is exactly why it is
-kept here. **The method rule: a claim that decides a comparison should carry a citation to the
-measurement that established it, and the absence of one is a finding about the comparison rather than a
-gap in its prose.** A claim being correct is not a substitute for its having been checked, and the
-interval during which this one was right-but-unevidenced is the part worth remembering.
+kept here. A claim being correct is not a substitute for its having been checked, and the interval
+during which this one was right-but-unevidenced is the part worth remembering.
 
 ---
 

@@ -232,7 +232,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 
 | | Measured | Domain |
 |---|---|---|
-| Groomed, MoQ lane | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, at the ~1 s cushion the lane runs — and **unchanged at every cushion across an eightfold ladder**, and with groomer starvation removed altogether | **wire** |
+| Groomed, MoQ lane | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, at the ~1 s cushion the lane runs — and **unchanged at every cushion across an eightfold ladder**, and with groomer starvation removed altogether. *The ladder was run on a different rig over a longer window, so its counts are larger for the same defect; they are in [Evidence](evidence.md) §3.2* | **wire** |
 | Groomed, MoQ lane, live public-internet path | **0.06 %** of intervals above 40 ms — 8 gaps, 139 ms maximum *(one run)* | live chain, file-analysed |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |

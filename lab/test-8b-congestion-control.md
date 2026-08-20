@@ -54,6 +54,22 @@ the only way to tell a property of the lane from a property of one implementatio
 
 This is a characterisation, not a gate: the thesis is decided by T7 (Gate 2).
 
+### Pass criteria (agreed in advance)
+
+For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not about latency:
+
+1. **Complete and reconstructable.** On a provisioned path (C2–C5) the feed arrives with **0 continuity
+   errors after the pacer** and no session drop, and recovers from a transient without a gap that
+   breaks reconstruction.
+2. **Stable indefinitely (C6).** No drift, leak, or rare abort over a hours→days soak — an intermittent
+   fault is a fail even if the median run looks fine.
+3. **Fails gracefully when under-provisioned (C1).** Degradation is *thinning* (missing content, clean
+   TS), not *damage* (continuity errors) or a session/relay abort.
+4. **Queuing delay judged only against the receive buffer.** Acceptable if it stays clear of
+   `--latency-max` with headroom for a transient; a fail if it periodically approaches or exceeds it.
+
+Scored in *Verdict against the pass criteria* below.
+
 ## Environment
 
 > Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
@@ -468,12 +484,15 @@ needs: aggregate captured for every cell, `cake` alongside the FIFO (C4 predicts
 disappears with an AQM, and that prediction is cheap and load-bearing), CUBIC's aggregate to separate
 "delay-based collapse" from "MoQ collapse", and replicates.
 
-### C6 — running
+### C6 — specified, not yet reported
 
-The permanence soak is executing on this rig now: BBRv1/quinn at a 15 Mb/s cap for 14 hours, chosen
-because C1's unexplained bimodality is exactly what a 120 s window cannot rule on. It grades in flight
-rather than storing, since a 15 Mb/s feed is 162 GB a day, and it samples per-role RSS, a running packet
-total, continuity events and respawns once a minute.
+The permanence soak is BBRv1/quinn at a 15 Mb/s cap for 14 hours, chosen because C1's unexplained
+bimodality is exactly what a 120 s window cannot rule on. It grades in flight rather than storing, since
+a 15 Mb/s feed is 162 GB a day, and it samples per-role RSS, a running packet total, continuity events
+and respawns once a minute. Because relay memory rises under load by a mechanism
+[T9](test-9-performance.md) has already root-caused, the RSS arm is graded against that mechanism's
+predicted knee rather than against a flat line — see the pass criterion under *What to do next*.
+**No result is reported here yet**, so nothing in this file rests on it.
 
 ## Observations
 
@@ -532,29 +551,14 @@ total, continuity events and respawns once a minute.
   numbers swing ~20 points, so treat them as indicative; the completeness/stability *ranking* is the
   firm result.
 
-## Pass criteria (agreed in advance)
+## Verdict against the pass criteria
 
-For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not about latency:
-
-- **Complete and reconstructable:** on a provisioned path (C2–C5) the feed arrives with **0 continuity
-  errors after the pacer** and no session drop, and recovers from a transient without a gap that
-  breaks reconstruction. **Scored on C2: MoQ passes on integrity at every controller (0 CC) and
-  recovers on every controller, but only BBRv1 passes on completeness — CUBIC loses 6–15 % of the feed
-  through the transient and BBRv2 28–35 %, which is a hole, not deferred rate. SRT fails on damage
-  again (53 and 5 CC) while over-delivering.**
-- **Stable indefinitely (C6):** no drift, leak, or rare abort over a hours→days soak — an intermittent
-  fault is a fail even if the median run looks fine.
-- **Fails gracefully when under-provisioned (C1):** degradation is *thinning* (missing content, clean
-  TS), not *damage* (continuity errors) or a session/relay abort. **Scored: MoQ passes on every
-  controller except BBRv3; SRT fails on damage (4,279 continuity errors); segmented HTTP passes or
-  fails on the client — it thins cleanly under a receiver that re-anchors, and loses the session at
-  43 s under the one that does not.**
-- Queuing delay is judged **only** against the receive buffer: acceptable if it stays clear of
-  `--latency-max` with headroom for a transient; a fail if it periodically approaches or exceeds it.
-  **Scored: this is a property of the bottleneck queue, not of the lane.** Against a 500 ms FIFO every
-  controller runs 520–584 ms and eats the whole 2 s buffer's headroom; against `codel` or `cake` every
-  controller runs at 100–108 ms on a 100 ms base and the criterion is met with two orders of magnitude
-  of margin.
+| # | Criterion | Scored |
+|---|---|---|
+| 1 | Complete and reconstructable (C2–C5) | **On C2: MoQ passes on integrity at every controller (0 CC) and recovers on every controller, but only BBRv1 passes on completeness** — CUBIC loses 6–15 % of the feed through the transient and BBRv2 28–35 %, which is a hole, not deferred rate. SRT fails on damage again (53 and 5 CC) while over-delivering |
+| 2 | Stable indefinitely (C6) | **Not yet reported** — the soak is specified above and has produced no result this file relies on |
+| 3 | Fails gracefully when under-provisioned (C1) | **MoQ passes on every controller except BBRv3**; SRT fails on damage (4,279 continuity errors); segmented HTTP passes or fails on the client — it thins cleanly under a receiver that re-anchors, and loses the session at 43 s under the one that does not |
+| 4 | Queuing delay against the receive buffer | **A property of the bottleneck queue, not of the lane.** Against a 500 ms FIFO every controller runs 520–584 ms and eats the whole 2 s buffer's headroom; against `codel` or `cake` every controller runs at 100–108 ms on a 100 ms base and the criterion is met with two orders of magnitude of margin |
 
 ## Conclusion
 
@@ -630,13 +634,19 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
   collapse can be attributed to the impairment rather than inferred from it.
 - **Read the C6 soak out** when it completes: per-role RSS trend, respawn count, and continuity events
   with timestamps. It is the only condition addressing permanence, and the one that decides whether
-  BBRv1's C1 bimodality is a transient artefact or a standing fault.
+  BBRv1's C1 bimodality is a transient artefact or a standing fault. **Grade the relay's RSS slope
+  against [T9](test-9-performance.md)'s knee rather than against zero**, because a rising slope is the
+  expected behaviour here and not by itself a finding: the `quinn-proto` per-stream slot mechanism
+  predicts linear growth to a plateau at baseline + ~99 MB once ~10,000 uni slots are filled, then
+  ~+8 MB/h. What decides it is whether the slope *breaks* where the slot count predicts and where the
+  ceiling lands; a slope that holds straight through the predicted knee is a different mechanism and is
+  the reportable outcome.
 - Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear
   at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate
   spread.
 - **Never let a cleanup job run against a live results tree again.** A janitor deleting captures to
   protect the disk destroyed four of six C3 aggregates, which was the most valuable data in the matrix.
-  It should have excluded the cell in progress *and* whatever the condition needs summed.
+  It should have excluded any cell still running *and* whatever the condition needs summed.
 - **Run the segmented lane long enough at 8 Mb/s to see the `tsp` client die**, since 60 s only shows
   the trajectory. The prediction is a 404 at roughly the point four segments per minute of lost ground
   consumes a nine-segment window, and it is worth having the number rather than the extrapolation.

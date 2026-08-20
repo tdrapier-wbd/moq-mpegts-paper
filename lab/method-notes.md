@@ -337,7 +337,7 @@ the client — so measure two of them before naming the lane.** *(T8b, T6.)*
 > the credit, and T13 recorded the failure as "a buffer-depth choice rather than a limit". It was not:
 > T18 swept the MoQ cushion eightfold with no movement at all, and T13's segmented pass-through leg
 > posts 0 while holding almost no buffer. The two runs had differed in the *data plane* as well, and
-> that was the whole effect — one egress delivers PCRs often enough and the other does not. *The
+> that was the whole effect — one egress delivers PCRs on a grid and the other clusters them. *The
 > variable you are holding in mind is the one most likely to be miscredited.*
 
 **Name a divergence mechanism from the bytes that differ, not from the most plausible cause.**
@@ -705,7 +705,10 @@ implementation, and costs one afternoon to test.** *(T14.)*
 
 > "A sequence of TS segments is a re-muxed stream, so byte-verbatim carriage is structurally
 > unavailable." Measured, a segment differs from the source in byte 3 on one PAT and one PMT and in
-> nothing else. Inserting two packets is not re-muxing.
+> nothing else. Inserting two packets is not re-muxing. *And when such a claim falls, check whether the
+> mechanism it named survives without the impossibility attached to it:* here it did — the pair is
+> *inserted*, so the mux is verbatim in payload but not as a mux, and those two packets still cost
+> file-domain PCR accuracy.
 
 **When recording what a blocked measurement needs, name the constraint that actually binds.**
 *(T14.)*
@@ -759,3 +762,11 @@ substitute for one run.** *(T12.)*
 > arm a negative control. With RTP framing pinned and both legs co-started it aligns exactly in all
 > twelve cells. It fails on *conformance* instead — which is a more useful result and was found only
 > by running it.
+
+**When comparing two designs, draw the demarcation before comparing, and count only work that falls on
+the same side of it.** *(T14, found in editorial review.)*
+
+> "Segmented HTTP's receive-side hand-off already ships, so that layer is solved for it" counted the
+> client's own equipment as if it discharged the distributor's obligation. An advantage that lives in a
+> third party's capex is optionality, not architecture — and the same slip flatters whichever side of a
+> comparison happens to have the larger installed base.
