@@ -146,9 +146,9 @@ reads 0.19 under both. Segment fetching cannot suffer it: each segment is an ind
 TCP reassembles beneath it. This is the one axis on which the choice of data plane is a genuine
 reliability decision rather than a tuning decision.
 
-**What segmented HTTP did not do anywhere in this ladder is corrupt what it delivered:** 0 continuity
-discontinuities and 0 PCR intervals above 40 ms in every cell, including the one where it delivered a
-sixth of the stream. Inside the origin's availability window it sheds *time*, not *bytes*, which is the
+**What segmented HTTP did not do at any loss level in this ladder is corrupt what it delivered:** 0
+continuity discontinuities and 0 PCR intervals above 40 ms in every loss cell, including the one where
+it delivered a sixth of the stream. Inside the origin's availability window it sheds *time*, not *bytes*, which is the
 failure a downstream buffer can absorb. That window is a real edge rather than a formality: a deeper
 ladder crosses it between 7.7 % and 12.2 % applied loss, and past it the client re-anchors to the live
 edge and leaves holes of 7.2 s, 24 s and 82 s as the loss deepens. The mitigation is a buffer only while

@@ -169,11 +169,16 @@ receives less loss than the media-aware lane in every cell and still degrades fu
 | loss 5 % | 3.24 % / 5.05 % | **0.448** | 0 | 0.00 % | **0.961** | 0 | 8.83 % |
 | loss 10 % | 8.04 % / 9.98 % | **0.170** | 0 | 0.00 % | **0.960** | 0 | 8.83 % |
 | reorder 25 % | 0 % / 1.79 % | **0.981** | 0 | 0.00 % | **0.192** | 0 | 7.89 % |
-| in-order jitter | 0 % / 0 % | *0.077* | 0 | 0.79 % | *0.833* | 0 | 9.18 % |
+| in-order jitter | 0 % / 0 % | *0.077* | *10 / 94* | *0.80 %* | *0.833* | 0 | 9.18 % |
 
-*The jitter row is not a result. `slot` still meters the TCP lane even with `packets`/`bytes`
-allowances set, so 0.077 is an instrument ceiling; it is left in the table only so the cell is not
-silently missing.*
+*The jitter row is not a result about jitter. `slot` still meters the TCP lane even with
+`packets`/`bytes` allowances set, so 0.077 is an instrument ceiling; the row is kept so the cell is not
+silently missing. Its continuity errors and its 12,044 ms maximum PCR interval are real, and they are
+not jitter damage either — they are the availability-window failure of the next section, reached by a
+rate cap instead of by loss. A client held to 0.077 of source falls 18 s behind in under 20 s, so this
+40 s cell crossed the window where the loss cells at the same duration could not. The lane's
+completeness limit therefore depends on the size of the shortfall and not on what caused it, which is
+the section's claim arrived at by a second route.*
 
 **Replicates of the two decisive cells.** The segmented lane at commanded 5 % loss reads **0.448, 0.493
 and 0.543** across three runs (2.8–3.2 % applied), and the media-aware lane under reordering reads
@@ -258,8 +263,11 @@ it useful: *while the client stays inside the origin's availability window*. Tha
 the lane but a race between the delivered-rate shortfall and the retention depth, and it is losable —
 here between 7.7 % and 12.2 % applied loss under CUBIC, with a 9-segment window and a client that
 fetches serially. A deeper window, a smaller shortfall or a controller that does not collapse all move
-it; the shape of the failure past it does not change. What does not survive the crossing is the claim's
-second half: past the window this lane loses bytes, silently, in minutes.
+it; the shape of the failure past it does not change. **The main ladder's jitter cell crosses the same
+boundary without any loss at all** — held to 0.077 of source by a rate cap, it falls 18 s behind inside
+a 40 s cell and posts 10 continuity events and a 12 s PCR gap — which is the clearest evidence that
+what matters is the size of the shortfall rather than its cause. What does not survive the crossing is
+the claim's second half: past the window this lane loses bytes, silently, in minutes.
 
 ### Real internet path (opaque, 443-swap)
 
@@ -302,9 +310,12 @@ capture tool cleanly, so no local TSDuck file was produced.
    reordering costs the segmented lane nothing, but it is not why that lane loses throughput under
    loss — CUBIC is.
 7. **Segmented HTTP loses time rather than bytes, for as long as it stays inside the availability
-   window.** Across every condition in this ladder it recorded **0 continuity discontinuities and 0 PCR
-   intervals above 40 ms**: the media that arrives is a byte-verbatim slice of the source carrying the
-   source's own 24.4 ms PCR grid, even in the cell where it delivered 17 % of the stream. Within the
+   window.** Across every *loss* condition in this ladder it recorded **0 continuity discontinuities
+   and 0 PCR intervals above 40 ms**: the media that arrives carries the source's own bytes and its
+   24.4 ms PCR grid, even in the cell where it delivered 17 % of the stream. The one cell that does
+   record damage is the instrument-limited jitter row, and it records it because 0.077 of source rate
+   put the client outside the window inside the 40 s cell — the same failure the next section reaches
+   deliberately, not a different one. Within the
    window the lane's failure is that it falls behind the live edge, not that it corrupts, and for a
    downstream groomer that is the easier of the two problems — a bounded buffer absorbs late data and
    cannot repair damaged data. Past the window it becomes the harder problem: the client re-anchors and
@@ -374,9 +385,9 @@ originally reported was in part its own asymmetry.
 
 **The specification-level expectation for segmented HTTP was right about content, untested about rate,
 and bounded in a way the specification does not advertise.** Its availability window and idempotent
-retry buy resilience *of content* while the client remains inside that window: across every condition
-in the main ladder, including the ones delivering 17 % of source rate, the lane records 0 continuity
-discontinuities and 0 PCR intervals above 40 ms, so it sheds time rather than data and a bounded
+retry buy resilience *of content* while the client remains inside that window: across every loss
+condition in the main ladder, including the ones delivering 17 % of source rate, the lane records 0
+continuity discontinuities and 0 PCR intervals above 40 ms, so it sheds time rather than data and a bounded
 downstream buffer is the mitigation. **The window is finite, reachable, and crossed without an error
 being raised.** Once a single segment fetch costs more than a segment period the client cannot catch
 up, and after nine segments of grace it re-anchors to the live edge — measured here between 7.7 % and

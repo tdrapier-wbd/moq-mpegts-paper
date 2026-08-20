@@ -588,17 +588,20 @@ it into head-of-line blocking that no controller removes — the media-aware lan
 — while segment fetching cannot suffer it, each segment being an independent object with TCP
 reassembling beneath it.
 
-**Segmented HTTP did not corrupt what it delivered anywhere in this ladder, and the ladder has a
-boundary** — 0 continuity discontinuities and 0 PCR intervals above 40 ms in every cell of the matrix
-including the ones delivering a sixth of the stream, **so inside the origin's availability window its
-failure mode is lateness rather than damage**, which is the one a bounded downstream buffer can absorb.
+**Segmented HTTP did not corrupt what it delivered at any loss level in this ladder, and the ladder has
+a boundary** — 0 continuity discontinuities and 0 PCR intervals above 40 ms in every loss cell of the
+matrix including the ones delivering a sixth of the stream, **so inside the origin's availability
+window its failure mode is lateness rather than damage**, which is the one a bounded downstream buffer
+can absorb.
 Both halves of that sentence are load-bearing. Pushed past the window — a deeper ladder, to 40 % loss
 over 120 s windows rather than 10 % over 40 s — the client falls far enough behind that segments are
 deleted before it asks for them and it re-anchors to the live edge, skipping 3, 10 and 34 segments as
 the loss deepens. The holes are 7.2 s, 24 s and 82 s of programme, and the measured PCR gaps at those
 cells are 7.24 s, 24.57 s and 83.38 s, so the arithmetic closes on the segments that expired. Lateness
 converts to loss at the window edge, and where that edge sits is a function of the shortfall and how
-long it lasts, not of the loss rate alone.
+long it lasts, not of the loss rate alone — the impairment matrix's own rate-capped cell crosses the
+same boundary with no loss applied, at 0.077 of source rate, and posts continuity errors and a 12 s PCR
+gap for the same reason.
 
 **Two properties of that failure matter more than the boundary itself.** It is *silent at the serving
 node* past about 20 % loss: an HTTP 404 requires the client to ask for a segment that has just been
