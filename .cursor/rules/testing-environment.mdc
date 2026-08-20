@@ -26,7 +26,7 @@ When uncertain where something belongs, prefer `lab/` over `docs/`.
 | Location | Role | Contains | Never contains |
 |---|---|---|---|
 | `lab/*.md` *(public)* | Per-experiment engineering record. | objective, environment, procedure, exact commands, measured results, observations, conclusions, pass criteria fixed in advance | dated run-by-run chronology, "re-verified on…" sections, throwaway commit hashes, real IPs/paths (use `<EC2_IP>` placeholders) |
-| `lab/method-notes.md` *(public)* | Every measurement rule the campaign learned, organised by theme. | the rule, the experiment it came from, the one-paragraph incident that produced it | per-experiment narrative |
+| `lab/method-notes.md` *(public)* | Every measurement rule the campaign learned, organised by theme. This also includes gotchas from previous experiments which need to be factored in for any future experiments, to avoid repeating them. | the rule, the experiment it came from, the one-paragraph incident that produced it | per-experiment narrative |
 | `lab/upstream-contributions.md` *(public)* | What was found, reported and verified in other projects. | the defect, the report, the before/after verification, what remains open | resource or conformance measurements |
 | `lab/*.local.md` *(git-ignored)* | Internal digest. | the chronology, per-run provenance, superseded hypotheses, sensitive infra | — |
 | `docs/*.md` | The paper: stable engineering conclusions. | design & architecture that reflect current understanding | diary entries, TODOs, branch names, command history other than reproducible recipes, github issue numbers |

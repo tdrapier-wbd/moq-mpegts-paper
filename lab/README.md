@@ -117,7 +117,7 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
 - **T5 — Network impairment.** Loss behaviour is *graceful and bounded* (proportionate throughput
   reduction, recovery observed), not catastrophic; where loss exceeds recovery capacity within the
   buffer, the redundancy path (T6 / ST 2022-7) is the mitigation, not the transport alone.
-- **T6 — Relay resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under
+- **T6 — Serving-node resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under
   single-path loss (the two egress legs byte-identical and sequence-aligned); relay-failover recovery
   is bounded and documented, re-establishing without operator intervention; subscriber-reconnect join
   latency is bounded with defined catch-up behaviour. T6 met the second and third of those and
@@ -125,7 +125,10 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
   then met the first at a receiver** — 0 lost packets under blackout, 1 %/3 % loss and up to 200 ms
   differential delay — for a pair the receiver can merge, which now includes two independently
   groomed chains provided each groomer is stream-clocked, and with it protection of the publisher,
-  relay and exporter rather than the last hop alone.
+  relay and exporter rather than the last hop alone. The segmented arm answers the same three
+  questions oppositely: a pair sharing one feed and one naming scheme is hitless with **no**
+  receiver-side merge, and a dead origin costs no content — but a misconfigured pair is accepted
+  silently and delivers time-travel that passes every continuity check.
 - **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real
   hardware IRD, on the live wire (P2), sustained** (target ≥ 24 h), including ST 2022-7 behaviour
   under loss, with the T-STD buffer model confirmed valid under drift/discontinuity. Until this

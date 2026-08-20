@@ -538,6 +538,17 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
   ungraceful loss only) and does not cover a graceful source exit at all, so service continuity is
   delivered the way broadcasters already trust: **dual publishers → dual fan-out paths → dual
   receivers → dual groomers → ST 2022-7 selection at the receiver.**
+- **On a segmented carriage the same protection is far cheaper, and the reason is that the serving
+  node holds no state.** A pair of packagers fed from one source and writing one set of segment
+  names into a shared store is hitless with no receiver-side merge at all — the client never learns
+  which of the two served it, so losing one is not an event. Two packagers of one feed emit
+  byte-identical segments by default, because `--intra-close` puts the boundary at the next
+  intra-coded picture and the cut is therefore chosen by content rather than by an emit clock. What
+  this buys is worth being precise about: it removes the *merge*, not the doubling. The chain is
+  still doubled, and the engineering moves to keeping the segment store consistent across two hosts.
+  It also removes the safety net — a pair that does **not** share a feed and a naming scheme is
+  accepted silently and delivers repeated or skipped time that passes every continuity and
+  PCR-interval check, where the media-aware relay refuses the same mistake outright.
 
 ### 5.5 Failure scenarios
 

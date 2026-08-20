@@ -179,23 +179,52 @@ argument. And **the retry model has now been exercised under loss, with a split 
 deliver resilience *of rate* — the lane falls to about half source rate at 3 % loss and 0.17 at 8 %, where
 the media-aware lane holds 0.96 (§3.1) — but it does deliver resilience *of content*, arriving
 byte-verbatim and P1-clean at every impairment level tested. Retry buys completeness, not throughput.
-What is still specification-based is the *failover* half: a different edge, a different Pathway, a
-redundant variant. Nothing here exercised those, and the ladder never pushed the lane far enough behind
-for a segment to age out of its availability window, so the boundary where completeness finally breaks
-is unmeasured ([T5](../lab/test-5-network-impairment.md)).
+The *failover* half has since been exercised too, and the serving-node case is the cleanest result
+either lane produced: an origin killed for ten seconds costs **no content at all**, because HTTP holds
+no session state, the next successful request is the recovery, and the store still holds what was
+missed. The difference from the media-aware lane is not the speed of resumption — both resume within
+a few seconds of the node returning — but that the media-aware exporter skips to the live edge and
+loses the media produced during the outage, where the segmented client refetches it. The severe qualification is that this is a protocol property no
+off-the-shelf TS client in the rig could use — both TSDuck's HLS input and FFmpeg's HLS demuxer
+abandon the stream at the first failed playlist reload, the latter with every retry option it
+offers already set — so it took a purpose-written client to show it (§3.3, [Evidence](evidence.md)
+§3.4). What remains specification-only is edge and Pathway selection under Content Steering, and the
+ladder never pushed the lane far enough behind for a segment to age out of its availability window,
+so the boundary where completeness finally breaks is still unmeasured
+([T5](../lab/test-5-network-impairment.md), [T6](../lab/test-6-relay-resilience.md)).
 
 ### 3.3 Where broadcast actually gets its reliability, and why it is common to both
 
 Neither transport's own recovery is what a broadcaster relies on. Reliability comes from **1+1 with
 selection at the receiver**, and that is transport-independent. It was measured on MoQ: two
 independently groomed legs come out byte-identical for single-track content and the pair rides out
-the death of a publisher, a relay or an exporter ([Evidence](evidence.md) §3.4). Segmented HTTP gets
-the equivalent from the specification — redundant variant streams, and Content Steering with Pathway
-Cloning — and gets it *specified*, which MoQ's `--origin` reselect is not.
+the death of a publisher, a relay or an exporter ([Evidence](evidence.md) §3.4).
 
-So the redundancy layer is common and its design transfers to either data plane unchanged
-([Architecture](architecture.md) §5). That is the first of several places where the effort sits above
-the transport.
+The two lanes have now been drilled head to head on that question, and they diverge more sharply
+here than anywhere else in this comparison — in opposite directions, and for a structural reason.
+The media-aware relay owns source selection, so it must *detect* a dead source before it can
+reselect: failover is 30–33 s by default, reducible to about ten seconds and fragile below that, and
+hitless is not reachable by relay reselect at all. The segmented origin owns nothing, so there is
+nothing to fail over. An active/active pair fed from one source and writing one set of segment names
+fails over **with no measurable interruption** — no detection delay, no gap, the largest stall equal
+to the baseline's and not even falling at the kill instant, reproduced identically across three runs
+under a hard kill and holding under a graceful one. No receiver-side machinery is required for it,
+and the determinism that makes it safe comes free: two packagers of one feed emit byte-identical
+segments, because the cut point is the next intra-coded picture rather than an emit instant.
+
+The same statelessness produces the worse floor. A *misconfigured* pair — two sources that do not
+share a feed, or that do not agree on segment names — is accepted without complaint, and delivers
+either twenty-second time-travel or every second of media twice. Both pass a continuity-counter
+check and a PCR-interval check untouched, because those gates ask whether the clock moved and not
+which way. The media-aware relay refuses the same misconfiguration outright and tears the stream
+down. Given a choice between a loud outage and silent corruption a broadcaster wants the outage, so
+the segmented lane's advantage here is real but conditional on getting the pair right, which is a
+weaker guarantee than being unable to get it wrong ([T6](../lab/test-6-relay-resilience.md)).
+
+So the redundancy layer is common in *design* and its shape transfers to either data plane
+([Architecture](architecture.md) §5) — but its cost does not. On the media-aware lane a hitless pair
+has to be built at the receiver; on the segmented lane it falls out of a shared source and a naming
+convention.
 
 ---
 
@@ -914,7 +943,9 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
 | Reliability under impairment (R5) | **depends on the path, and the ranking inverts** | **M** | **decisive in both directions and measured head-to-head: under loss the media-aware lane on BBR holds 0.96 of source rate to 10 % where segmented HTTP over TCP falls to about half at 3 % (0.45–0.54, n=3) and 0.17 at 8 %; under 25 % reordering they swap exactly, 0.98 against 0.19. Disjoint weaknesses, not a winner. On a shared HTTP/3 substrate the loss half would not distinguish them, which is untested** (§3.1) |
-| Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, but complete resilience of *content* — 0 continuity errors and 0 PCR intervals above 40 ms at every impairment level, so the lane sheds time rather than data.** Failover across edges and Pathways remains specification-only, and the availability-window boundary was never reached (§3.2) |
+| Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, but complete resilience of *content* — 0 continuity errors and 0 PCR intervals above 40 ms at every impairment level, so the lane sheds time rather than data.** Edge and Pathway selection remains specification-only, and the availability-window boundary was never reached (§3.2) |
+| Redundancy — serving node (R5) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning; the difference is that the media-aware exporter skips to the live edge and loses the media produced during the outage, where the segmented client refetches it from the store and loses nothing. But neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all — both abandon at the first failed playlist reload — so it took a purpose-written client to show (§3.2) |
+| Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |
 | Reassembly to a transport stream | segmented HTTP | M | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |
 | Grooming *burden* (R3) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
 | Grooming *outcome* — a P1-conformant wire (R3) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. The groomer inserts no PCRs of its own, so the cause is the exporter emitting them too rarely — a fixable upstream defect rather than a cost the lane must pay** (§5.1) |

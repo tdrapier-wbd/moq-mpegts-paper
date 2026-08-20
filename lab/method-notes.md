@@ -347,6 +347,35 @@ yours.** *(T12.)*
 > exited, complete with a plausible step change in the pair's agreement. Two lines fix it: `exec` the
 > daemon inside the subshell so the recorded pid is the daemon, and after the fingerprint poll succeeds
 > check the daemon is still alive, refusing the run if something else holds the port.
+>
+> T6's segmented arm hit the same defect with an HTTP origin, and showed that a liveness check is not
+> enough even so. That cell's origin died on `Address already in use`; its client spent the drill
+> talking to the previous cell's server over the previous cell's document root — where nothing was
+> being killed — and the cell reported a clean *hitless failover* it had not earned, with every
+> delivered number plausible. The general fix is an identity check, not a liveness check: write a
+> token unique to the cell into the served tree and refuse to proceed until a fetch returns **that**
+> value, so "a server is up" can never be read as "my server is up".
+
+**On a lane that two sources can serve at once, the failure is repeated time, not lost time — and
+neither a continuity check nor a PCR-interval check can see it.** *(T6.)*
+
+> Every corrupt cell in T6's segmented arm reported **zero** continuity-counter discontinuities while
+> the delivered stream jumped backwards and forwards by twenty seconds. Both standard gates ask only
+> whether the clock *moved*: CC is a property of each segment's own mux and every segment was
+> internally valid, and a PCR-interval test measures spacing, which is correct on both sides of a
+> rewind. The tell is in the rate ratio — a receiver taking 1.17× or 1.39× of source rate is being
+> handed the same media twice — and the direct metric is an explicit count of PCR decreases. Add one
+> to any rig where two publishers, packagers or origins can be live simultaneously.
+
+**A metric that only fires on an anomaly is only ever exercised by one, so prove its arithmetic on a
+case where it fires.** *(T6.)*
+
+> The rewind counter above was first written against `pcrextract`'s "Value offset in PID" column,
+> which is unsigned, and it wrapped on precisely the event it existed to detect — reporting a
+> 6.8 × 10¹¹ second rewind. It read a perfectly sensible zero on every clean run, and the interval
+> statistics that share the parser were genuinely unaffected, because for a monotonic clock that
+> column differences identically to the PCR value column. A baseline in which the metric reads zero
+> is not evidence that the metric works.
 
 **Cancel a safety watchdog at teardown, or it fires into somebody else's cell.** *(T5.)*
 
@@ -444,6 +473,12 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 > media timeline lagging by exactly the join delay, so on splice the exporter is handed timestamps in
 > the past and emits nothing until the new source overtakes. The reported "8–9 s stall at standby
 > join" tracked the join delay with slope 1.
+>
+> The segmented arm of the same experiment repeated the mistake in a new costume, which is why the
+> rule is worth stating as *"same file" is not "same stream"*: two packagers each opening the clip
+> for themselves, twelve seconds apart, produced a receiver stream oscillating ±20 s, and none of
+> that was a property of the lane. Fan one regulated source into both legs — `gtee` into two FIFOs,
+> or a live multicast for a mid-stream joiner — and the forward leaps vanish entirely.
 
 **The merge window is the union of the legs' activity.** *(T12.)*
 

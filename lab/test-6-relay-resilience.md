@@ -1,15 +1,32 @@
-# T6 — Relay resilience & active/active source failover
+# T6 — Serving-node resilience & active/active source failover
 
 ## Objective
 
-Measure recovery time and stream continuity when a relay fails and when a subscriber reconnects,
-separate *transport resilience* (does a client survive a relay restart / dropped session?) from
-*service redundancy* (does an active/active pair fail over without the receiver noticing?), and
-establish the ST 2022-7 output-determinism precondition for a hitless dual-path pair.
+Measure recovery time and stream continuity when the serving node fails and when a receiver
+reconnects, separate *transport resilience* (does a client survive the serving node restarting or
+the session dropping?) from *service redundancy* (does an active/active pair fail over without the
+receiver noticing?), and establish the output-determinism precondition for a hitless dual-path pair.
+
+Both lanes are drilled, because the answers are opposite and the reasons are structural. The roles
+do not sit in the same places, so the mapping is worth stating once:
+
+| | media-aware lane | segmented lane |
+|---|---|---|
+| source | `moq import ts` publisher | `tsp -O hls` packager |
+| serving node | `moq-relay` | an HTTP origin over a segment store |
+| receiver | `moq export ts` | `tsp -I hls`, ffmpeg, or `t6-hls-pull.py` |
+| who selects the source | the relay | nobody — the sources share a namespace |
+
+The last row is the whole result. The media-aware relay holds session state and therefore has to
+*detect* a dead source before it can reselect, which puts a floor under recovery. The segmented
+origin holds none, so there is nothing to fail over: two packagers writing the same names into one
+store are already interchangeable, and the receiver never learns which one served it.
 
 > Of the four issues this experiment reported upstream, **two were real defects and two were
 > artefacts of our own harness**. Both artefacts, and the method rules that follow from them, are
 > recorded under [Corrections](#corrections) — they are the most transferable output of this drill.
+> The segmented arm then walked into one of those same artefacts a second time, which is recorded
+> there too.
 
 ## Environment
 
@@ -22,6 +39,23 @@ establish the ST 2022-7 output-determinism precondition for a hitless dual-path 
   `renumber_takeover.sh`, `src_failover.sh`, `relayA.toml`, `relayB.toml`). A one-row-per-second byte
   sampler on each subscriber output makes the failure instant visible.
 - ST 2022-7 determinism study: `mpegts-pacer` 0.1.0, TSDuck 3.44, FFmpeg 8.1 (Darwin 25.5.0).
+- **Segmented lane, loopback, same host and same clip.** TSDuck 3.44 `-O hls` packagers (2 s target
+  duration, `--intra-close --align-first-segment`, a six-segment window with three extra kept on
+  disk), a `python3 -m http.server` origin, and three receivers — `tsp -I hls --live`, FFmpeg 9.0.1,
+  and `lab/scripts/t6-hls-pull.py`. Drills are `lab/scripts/t6-segmented-arm.sh <drill>`; each runs
+  the whole lane inside one invocation with a one-row-per-second sampler on the receiver's output,
+  and prints a single `RESULT` line.
+  - **Three receivers, on purpose.** `tsp -I hls` has no retry option and FFmpeg's HLS demuxer
+    abandons the stream on a failed playlist reload even with `-reconnect`, `-seg_max_retry`,
+    `-max_reload` and `-m3u8_hold_counters` all set. A drill run only under those two grades their
+    error handling and reports it as a property of segmented HTTP. `t6-hls-pull.py` is the control
+    for that: the least capable thing that can still be called a receiver — one media playlist, no
+    ABR, no LL-HLS — whose only real feature is that a failed fetch is a retry rather than an exit.
+    It establishes what the protocol permits; the other two establish what is on the shelf.
+  - **Kill semantics are separated here too.** `KILL_SIG` selects SIGKILL or SIGTERM, because the
+    media-aware lane gives opposite answers to the two and the segmented lane has to be asked the
+    same question. `DUAL_NAMES` selects whether a hot pair writes distinct or identical segment
+    filenames, which turns out to decide the entire outcome.
 - **Builds.** The drill outcomes below are the current state on the **0.14.8 release** (`moq-relay`
   0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9). The same drills were run on each intervening release
   from 0.8.7 onward as the routing, detach and resume paths were rewritten upstream; the outcomes did
@@ -30,6 +64,8 @@ establish the ST 2022-7 output-determinism precondition for a hitless dual-path 
   older `--version` string than the release they are built from; trust the in-tree crate versions.
 
 ## Procedure
+
+### Media-aware lane
 
 Three drills:
 
@@ -54,6 +90,37 @@ until `DEFAULT_IDLE_TIMEOUT` = 30 s). The drill derives its window from `IDLE_BU
 For the graceful-exit case (`graceful_exit.sh`): `pubA` publishes a **finite** clip (so `tsp` reaches
 EOF and the importer finishes without truncation) and the standby joins at t=2 (so the timeline offset
 is negligible); `pubA` ends at t=25 with the standby announced since t=2.
+
+### Segmented lane
+
+The same three questions, via `t6-segmented-arm.sh <drill>`. Each drill runs packager(s), origin and
+receiver in one invocation over a 75 s window with the event at t=25 s, and the byte sampler makes
+the outage visible as stalled growth rather than inferred from a total.
+
+1. **`origin-restart`** — one packager, one origin, one receiver; kill the origin at t=25 and restart
+   it on the same port ten seconds later. Run under all three clients, because two of them do not
+   survive it.
+2. **`dual-source` / `dual-source-align`** — two packagers writing into one URL namespace, the
+   standby joining at t=12, active killed at t=25. `-align` gives the standby a
+   `--start-media-sequence` continuing the active's, to separate a numbering problem from a timeline
+   one. **Both are the naive configuration**: each packager opens the clip for itself, so the pair is
+   twenty seconds apart in the media timeline. Read them as a deployment mistake, not as the lane's
+   answer — see [Corrections](#corrections).
+3. **`dual-source-common`** — the valid pair. One `tsp regulate` source fanned by `gtee` into two
+   FIFOs, one packager on each, both co-started so both see byte 0. `DUAL_NAMES` selects distinct or
+   identical segment filenames and `KILL_SIG` selects SIGKILL or SIGTERM.
+4. **`endlist-race`** — a shared-name pair with one leg SIGTERMed, polling the shared playlist at
+   50 ms to measure how long the departing leg's `#EXT-X-ENDLIST` stays visible.
+5. **`determinism` / `determinism-live`** — two packagers of the same clip, and of one `gtee`-fanned
+   live feed, with rotation off so every segment survives; compare pairwise by SHA-256.
+
+**Grading.** `rate_ratio` is delivered bytes over the window against the 9.95 Mbps source, so 1.0
+means the receiver ended holding everything the source produced — a lane that recovers *content*
+after an outage scores 1.0 despite the gap, and a lane being served the same media twice scores
+above it. Alongside continuity errors, an explicit **PCR rewind** count is required here: the
+failure specific to a lane two sources can serve at once is repeated time, and no continuity or
+PCR-interval check can see it. The baseline's own 2–3 s stall is the segment cadence and is the
+noise floor.
 
 ## Results
 
@@ -102,7 +169,7 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   the gap. The gap = idle-timeout detection + reconnect backoff + re-announce: **automatic and
   bounded, not hitless**; the content gap is a clean object-boundary skip absorbed downstream.
 
-### Limitations observed
+### Limitations observed — media-aware lane
 
 - **Failure detection on a hard kill is gated by the QUIC idle timeout** (default 30 s,
   `--client-quic-idle-timeout`), so recovery is dominated by detection, not the ~1 s backoff. Idle
@@ -422,6 +489,155 @@ provoking it needs a specific wake ordering, which is why upstream's determinist
 Operational consequence: a clustered relay needs **liveness** monitoring (does it still accept and
 serve?), not just a process-alive check, because this failure keeps the process alive and unresponsive.
 
+### Segmented lane: the same questions, answered from the other side
+
+All figures are from a 75 s window with the event at t=25 s, the source at 9.95 Mbps, and
+`rate_ratio` measured against that source rate over the whole window — so a ratio of 1.0 means the
+receiver ended the window holding every byte the source produced during it, gap or no gap. The
+baseline's own noise floor is a 2–3 s stall, which is the 2 s segment cadence rather than an
+impairment; nothing below that is a finding.
+
+| Drill | Config | rate_ratio | max stall | CC disc | PCR rewinds | receiver alive |
+|---|---|---|---|---|---|---|
+| baseline | — | 1.012 | 2 s | 0 | 0 | ✅ |
+| origin restart (10 s down) | `tsp -I hls` | 0.354 | 49 s | 0 | 0 | ❌ **exits** |
+| origin restart (10 s down) | FFmpeg | 0.394 | 46 s | 0 | 0 | ❌ **exits** |
+| origin restart (10 s down) | retrying client | **1.012** | 10 s | 0 | 0 | ✅ |
+| active/active, independent sources | distinct names | 1.166 | 2 s | **0** | **5, ≤23.7 s** | ✅ |
+| active/active, independent sources | media-sequence aligned | 1.147 | 2 s | **0** | **5, ≤22.2 s** | ✅ |
+| active/active, common source | distinct names | 1.389 | 2 s | 0 | **5, ≤12.4 s** | ✅ |
+| active/active, common source, SIGKILL | shared names | **1.012** | 2 s | 0 | **0** | ✅ |
+| active/active, common source, SIGTERM | shared names | **1.002** | 3 s | 0 | **0** | ✅ |
+
+**A dead serving node costs nothing but the outage — to a client that retries.** HTTP holds no
+session state, so nothing has to be re-established: the next successful GET *is* the recovery. With
+the retrying client the origin was killed for 10 s and the client logged `playlist recovered after
+10.10 s`, resumed on its first successful poll, and then **refetched everything it had missed** from
+the segment store, ending the window at 1.012 of source rate with zero continuity errors. The outage
+was a delay, not a hole.
+
+The contrast with the media-aware relay restart is not really about how fast each resumes — that lane
+resumes about four seconds after the relay returns, which is the same order as one poll interval here.
+It is about what happens to the media produced while the node was down. The exporter skips to the live
+edge, so the outage is a **content hole**; the retrying client refetches the backlog from a store that
+kept accumulating, so the outage is a **delay**. One lane loses the content and the other does not.
+
+The qualification is severe and belongs next to the result. **Neither off-the-shelf TS client
+survives at all.** `tsp -I hls` exits at the first refused connection and never returns; FFmpeg
+prints `Failed to reload playlist 0` and exits, with every retry knob it offers already set. So this
+lane's resilience to a serving-node failure is available in the protocol and absent from both tools
+a broadcaster would reach for first — a packaging problem rather than a transport one, but a real
+one, and it is why the drill needed a client written for it.
+
+**Naive active/active does not collapse the stream — it silently corrupts it.** Two independently
+started packagers writing into one namespace both keep running, and the playlist becomes a
+single mutable file with a last-writer-wins update rule; the watcher shows ownership alternating
+between the two and the media sequence resetting `4 → 0 → 7 → 0`. The receiver survives, fetches
+whatever it last read, and ends up with a stream that **repeatedly jumps backwards and forwards by
+about twenty seconds** — 5 rewinds of up to 23.7 s interleaved with 4 forward leaps of ~19 s.
+
+Two things about that deserve emphasis. The first is that **the continuity counter sees nothing**:
+`cc_disc=0` in every one of these cells, because CC is a property of each segment's own mux and
+every segment is internally valid. A conformance check that asks whether the clock moved cannot
+catch a stream in which the clock moved *backwards*. The second is that this is the exact failure
+the media-aware lane refuses loudly — two publishers announcing one broadcast to one relay get
+`Error: moq: unroutable` and both are torn down immediately. Given a choice between an outage and
+undetected time-travel, the outage is the better failure, and the segmented lane picks the worse one
+by default.
+
+Aligning the standby's `EXT-X-MEDIA-SEQUENCE` to continue the active's changes nothing (5 rewinds,
+≤22.2 s). The defect is not the numbering, it is that the two packagers sit at different points in
+the same media timeline — which is the artefact this experiment's own [Corrections](#corrections)
+section warns about, re-encountered on a new lane.
+
+**Fed from one source, the pair is time-aligned but still duplicates everything.** With a single
+regulated stream fanned by `gtee` into both packagers, the forward leaps disappear entirely
+(`pcr_fwd_leaps=0`) — the two timelines now agree. What remains is pure duplication: the receiver
+ends the window at **1.389** of source rate, because a client keyed on URI cannot tell that
+`segA-000012.ts` and `segB-000012.ts` are the same media, so it fetches both. The residual "rewinds"
+are that second copy arriving. This is precisely the conclusion the media-aware lane reached about
+spec-level object dedup — identical *content* is not enough, the two sources must agree on
+*identifiers* — arrived at from the other direction.
+
+**Give the pair one source and one naming scheme and the failover is hitless.** With both packagers
+fed from `gtee` and writing the *same* segment filenames, killing the active is invisible:
+
+| run | signal | rate_ratio | max stall | where | CC disc | PCR rewinds |
+|---|---|---|---|---|---|---|
+| 1 | SIGKILL | 1.012 | 2 s | t=5 | 0 | 0 |
+| 2 | SIGKILL | 1.012 | 2 s | t=5 | 0 | 0 |
+| 3 | SIGKILL | 1.012 | 2 s | t=5 | 0 | 0 |
+| 4 | SIGTERM | 1.002 | 3 s | t=25 | 0 | 0 |
+
+The three hard-kill runs are identical to the byte (94,390,288 B each), which is itself a
+corroboration of the determinism result below. The largest stall equals the baseline's, and in the
+hard-kill runs it does not even fall at the kill instant — there is no recovery event to time,
+because there was no interruption to recover from. **No detection delay, no reselect, no gap**: the
+receiver never knew which of the two packagers served it, and killing one leaves the survivor
+writing the same files under the same names.
+
+Set against the media-aware lane, where source failover is one QUIC idle timeout (30–33 s by
+default, reliably reducible to ~10 s, fragile below that) and where the file states outright that
+*"sub-second / hitless is not reachable by relay reselect"*, this is the sharpest divergence in the
+campaign. It also needs no receiver-side machinery: no dual subscription, no ST 2022-7 merge, no
+second decode.
+
+**Graceful departure is a narrow race here, not an uncovered case.** `tsp -O hls` writes
+`#EXT-X-ENDLIST` on a clean EOF *and* on SIGTERM — that is, a departing leg announces the end of the
+*stream* rather than the end of *itself*, into a playlist its partner is still updating. Polling the
+shared playlist at 50 ms across a SIGTERM of one leg, ENDLIST is visible for **1.10 s** in a single
+window before the survivor's next rewrite removes it. Any conformant client that reads the playlist
+inside that window is entitled to stop; the retrying client used here ignores ENDLIST and sailed
+through, which is why the SIGTERM row above is clean. So the hazard is real but bounded by one
+playlist-rewrite interval, and it is designed out by letting the survivor own the playlist or by not
+emitting ENDLIST on a hot-standby departure. The media-aware equivalent is not a race at all: a
+graceful source exit is not failed over, and the subscriber terminates.
+
+**The determinism precondition passes on this lane, and passes for the reason that matters.**
+
+| Comparison | Segments | Byte-identical | Totals |
+|---|---|---|---|
+| two packagers, same file, co-started | 17 vs 17 | **17 / 17** | 48,480,312 B both |
+| two packagers, one live feed via `gtee` | 17 vs 17 | **17 / 17** | 48,480,312 B both |
+
+Both packagers cut the same feed in the same places and emit identical bytes. The reason is
+structural: with `--intra-close` the segment boundary is chosen by the *content* — the next
+intra-coded picture — and not by the packager's own emit clock. That is exactly where the
+media-aware live pacer originally failed: it gated its content-versus-null interleave on the
+wall-clock instant of each datagram, so 50 µs of scheduling jitter reshuffled the output and
+diverged two legs within ~30 ms. Keying placement to stream position rather than to an emit clock is
+what T12 later showed fixes it there; the segmented packager gets it for free because its only
+placement decision is where to cut, and the picture type decides that.
+
+#### What the segmented arm does not establish
+
+- **One filesystem stands in for a distributed store, and that is where the real engineering is.**
+  The hitless result requires both packagers to write the same names into the same store. On
+  loopback that is one directory; in a deployment it is two hosts writing a shared or replicated
+  object store, or two origins behind a load balancer with consistent naming. The measurement is of
+  the *client-visible* property given a consistent store — it does not measure the cost or the
+  failure modes of making the store consistent, which is the part a CDN already solves and a
+  broadcaster would have to buy or build.
+- **Concurrent in-place writes were not stressed.** Two packagers writing identical filenames wrote
+  the same bytes to the same paths at nearly the same instant, and no torn read occurred in any run
+  (no non-200s, no continuity errors). `tsp -O hls` does not write segments atomically, though, so
+  a client fetching mid-write is a live hazard that this rig did not provoke; production packagers
+  write to a temporary name and rename.
+- **The retrying client is a floor, not a product.** It has no ABR, no master playlist, no
+  discontinuity handling and no LL-HLS, and it ignores ENDLIST — which is why it survived the
+  graceful-exit race. It bounds what the protocol permits; it does not show that any deployable
+  player behaves this way.
+- **Recovery from a dead origin was measured with the packager still running.** Segments continued
+  to accumulate in the store throughout the outage, which is why nothing was lost. That is the right
+  analogue of the media-aware relay-restart drill (where the publisher also survives), but it is not
+  the case where the store itself is lost.
+- **The standby always joined at t=0 in the common-source drills.** A standby joining an
+  already-running feed — the production shape, and the case the media-aware lane drills as E2 —
+  needs a live fan-out this host would not provide; multicast did not work here. Whether a
+  mid-stream joiner's segment boundaries align with the incumbent's is therefore untested, and it is
+  the obvious next cell: content-chosen boundaries predict that they should, but that is a
+  prediction and not a measurement.
+
 ### Results table
 
 | Scenario | Recovery time | Continuity | Result |
@@ -439,6 +655,20 @@ serve?), not just a process-alive check, because this failure keeps the process 
 | `moq-lite-06` cost/standby routing | — | — | 🟡 opt-in; **necessary-not-sufficient** |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ |
 | ST 2022-7 single-path loss (hitless drill) | **0 lost packets** at the merged output | **hitless** — blackout, 1 %/3 % loss and up to 200 ms skew all covered | ✅ measured in [T12](test-12-dual-path-handoff.md) against a reference receiver, both for one groomer duplicated onto both paths and for two independent stream-clocked pacers; the on-hardware merge is Gate 2 |
+
+Segmented lane, same clip and host:
+
+| Scenario | Recovery time | Continuity | Result |
+|---|---|---|---|
+| Origin restart — `tsp -I hls` receiver | none — receiver exits at the first refused connection | no resume | ❌ client has no retry |
+| Origin restart — FFmpeg receiver | none — `Failed to reload playlist`, exits | no resume | ❌ demuxer abandons despite every retry knob |
+| Origin restart — retrying client | = the outage (10.10 s), resumes on the first successful poll | **no content lost**; backlog refetched from the store | ✅ nothing to re-establish; HTTP holds no session state |
+| Active/active — two **independent** packagers, one namespace | n/a, never stops | **silently corrupt**: ±20 s oscillation, 5 rewinds ≤23.7 s, 0 CC errors | ❌ worse failure than the media-aware teardown |
+| Active/active — as above, media sequence aligned | n/a | unchanged (5 rewinds ≤22.2 s) | ❌ the defect is the timeline, not the numbering |
+| Active/active — **common source**, distinct segment names | n/a | time-aligned (0 forward leaps) but every second delivered twice (1.389×) | 🟡 identical content is not enough; identifiers must match |
+| Active/active — **common source, shared names** (hard kill) | **none measurable** — stall equals baseline and does not fall at the kill | 0 CC errors, 0 PCR rewinds, 1.012 of source rate | ✅ **hitless**, 3/3 runs identical to the byte |
+| Active/active — common source, shared names (graceful) | none measurable | as above; ENDLIST visible **1.10 s** before the survivor rewrites | 🟡 hitless for a client that ignores ENDLIST; a conformant one may stop |
+| Two packagers of one live feed (determinism precondition) | n/a | **17/17 segments byte-identical** | ✅ boundaries are content-chosen, not clock-chosen |
 
 ## Corrections
 
@@ -484,7 +714,39 @@ The relay's own switch is immediate (relay B logs `subscribe started` for all th
 millisecond the standby connects). *Rule: any redundancy test whose sources are started independently
 measures its own clock skew unless the feeds are timestamp-aligned.*
 
-Both rules are baked into the drill offered upstream as
+**Re-walked — the segmented arm's first active/active drill measured its own start skew.** The rule
+directly above was written by this experiment, and the segmented arm broke it anyway: the first
+two-packager drill gave each packager its own `tsp -I file` read of the clip, started twelve seconds
+apart, so the pair sat twenty seconds apart in the media timeline and the ±20 s oscillation that
+produced is a property of the rig, not of segmented HTTP. It is kept in the results above because
+the naive configuration is a real deployment mistake with a genuinely interesting failure signature
+— silent, CC-clean corruption — but the question "does an active/active segmented pair fail over"
+is only answered by the `gtee` common-source variant. *Rule, restated because writing it down once
+was not enough: a redundancy drill must feed its sources from one stream, and "same file" is not
+"same stream".*
+
+**Rig — a previous cell's origin answered on the port and served the wrong directory.** One
+hard-kill cell reported a clean hitless result it had not earned: its own origin had failed to bind
+with `Address already in use`, and the client had spent the drill talking to the *previous* cell's
+server over the *previous* cell's document root, where nothing was being killed. The delivered
+numbers were entirely plausible — a good rate ratio, no continuity errors, no rewinds — and only the
+traceback in the origin's log gave it away. This is the same defect as T5's uncancelled `netem`
+watchdog wearing different clothes: a process that outlives its own cell and quietly serves the
+next one. The fix is a positive identity check rather than a liveness check — each cell writes a
+unique token into its document root and refuses to proceed until an HTTP fetch of that token returns
+*its own* value — plus a pre-flight that will not start on a port somebody else is holding.
+*Rule: "the server is up" is not "my server is up"; on a fixed port, prove identity, not liveness.*
+
+**Rig — the metric that catches a two-source lane was reading the wrong column.** Rewind detection
+initially differenced `pcrextract`'s "Value offset in PID" column, which is unsigned: on the one
+event the metric exists to catch it wrapped, reporting a 6.8 × 10¹¹ second rewind. Differencing the
+PCR value column gives the physically sensible 12–24 s. The intervals used elsewhere are unaffected
+— for a monotonic clock the two columns difference identically, which is exactly why the bug
+survived until a stream ran backwards. *Rule: a metric that only ever fires on an anomaly is only
+ever exercised by one, so check its arithmetic against a case where it fires rather than against the
+baseline where it reads zero.*
+
+Both of the original rules are baked into the drill offered upstream as
 [#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`), which generates its own
 `ffmpeg` source clip (no private capture), grades failover and standby-join survival, reports the join
 stall as a measured `WARN`, and depends on `moq --origin` from #2473 (exiting with a diagnostic on
@@ -495,6 +757,32 @@ reselect must be graded *per track* — into those tests instead. See
 
 ## Observations
 
+- **The two lanes fail redundancy in opposite places, and neither is uniformly better.** The
+  media-aware relay owns source selection, so it fails *safely and slowly*: a naive pair is refused
+  outright, and a correct pair fails over in one detection interval that cannot be driven below a
+  few seconds. The segmented origin owns nothing, so it fails *silently and instantly*: a naive pair
+  is accepted and produces CC-clean time-travel, and a correct pair fails over with no measurable
+  interruption at all. Whether that is an advantage depends entirely on whether the operator gets
+  the configuration right, which is a much weaker guarantee than the relay's.
+- **What the segmented lane needs for a hitless pair is cheap, and it is the same requirement the
+  media-aware lane has.** One source into both packagers, and agreement on segment identifiers. The
+  first is the common-source rule already established here for MoQ; the second is the naming
+  analogue of the Group ID / Object ID agreement that spec-level object dedup would demand. The
+  difference is that the segmented lane can satisfy both with a filename convention, whereas the
+  media-aware lane would need publisher-side determinism down to object segmentation and numbering.
+- **Segment boundaries being content-chosen is the property that makes it work.** Two packagers of
+  one feed emit byte-identical segments because the cut point is the next intra-coded picture, not
+  an emit instant. That is a structural advantage over a live pacer whose placement is wall-clock
+  gated, and it is why the determinism precondition that took T12 to satisfy on the media-aware lane
+  is satisfied here by default.
+- **A continuity-counter check cannot grade a lane that can be served by two sources at once.** Every
+  corrupt cell in the segmented arm reported zero CC discontinuities. Time running backwards is
+  invisible to CC and to any PCR-interval conformance test, both of which ask only whether the clock
+  moved. Any rig for a multi-source lane needs an explicit rewind counter.
+- **Resilience that only exists in the specification is not resilience.** Recovering from a dead
+  origin requires nothing of the protocol, and neither `tsp -I hls` nor FFmpeg does it. The lane's
+  best property in this experiment is one that no off-the-shelf TS client in the rig could actually
+  use.
 - Endpoint *reconnect* is solid (publisher and, since #2469, the exporter). Active/active *source*
   failover across a mesh ships (#2473) but is **bounded, not hitless** (one idle timeout), and does
   not cover a graceful source exit at all. This survived the cluster-extension (#2629), detach
@@ -526,8 +814,8 @@ reselect must be graded *per track* — into those tests instead. See
 
 ## Conclusion
 
-Transport resilience holds; active/active source failover now ships, bounded by detection, with a
-residual graceful-exit gap. The ST 2022-7 determinism precondition is characterised here (a single
+**On the media-aware lane** transport resilience holds; active/active source failover now ships,
+bounded by detection, with a residual graceful-exit gap. The ST 2022-7 determinism precondition is characterised here (a single
 deterministic/offline groom is byte-exact reproducible; two independent live pacers were not, at the
 time this was measured — see below). Every
 failover number in *this* file is a single-leg recovery time, so it is break-before-make by
@@ -539,8 +827,25 @@ to their own emit instants they diverge structurally rather than through PCR re-
 to stream position they are byte-identical. The full validated finding — including which of our reports were real vs
 harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
 
+**On the segmented lane the same three questions come out differently, and the reason is that the
+serving node holds no state.** A dead origin costs exactly its downtime and no content, because the
+next successful GET is the recovery and the store still holds what was missed — but neither
+`tsp -I hls` nor FFmpeg will do it, so that property is real in the protocol and absent from the
+tools. An active/active pair fed from one source and writing one set of segment names fails over
+**hitless**, reproducibly and with no receiver-side machinery, where the media-aware lane's floor is
+a detection interval of seconds; the determinism that makes this safe is free here, because segment
+boundaries are chosen by picture type rather than by an emit clock. The price is that the same lane
+accepts a *misconfigured* pair without complaint and delivers twenty-second time-travel that passes
+every continuity and PCR-interval check — the failure the media-aware relay refuses outright. So the
+segmented lane offers the better ceiling and the worse floor, and which one an operator gets is
+decided entirely by whether the pair shares a source and a naming scheme.
+
 ## References
 
 - Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §8.4–§6; [`docs/architecture.md`](../docs/architecture.md) §5 (ST 2022-7 §5.1); [`docs/architecture.md`](../docs/architecture.md) §8.4.
 - Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. Cluster/detach/resume rewrite: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
+- Segmented arm: [`lab/scripts/t6-segmented-arm.sh`](scripts/t6-segmented-arm.sh) (drills),
+  [`lab/scripts/t6-segmented-sweep.sh`](scripts/t6-segmented-sweep.sh) (the set),
+  [`lab/scripts/t6-hls-pull.py`](scripts/t6-hls-pull.py) (the retrying client). Method rules in
+  [method-notes.md](method-notes.md) §5.
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §3.4.

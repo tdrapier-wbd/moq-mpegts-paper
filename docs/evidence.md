@@ -60,6 +60,7 @@ Results come from four code bases and it matters which produced which.
 | `compliance.py` / `t13-grade.py` | Structural and shape checks, packet conservation | Decoder acceptance |
 | `t18-latency.py` | Delivery latency on the PES presentation timestamp, tapped at source and at groomed egress, plus a four-timestamp clock probe for the two-host case | Encoder and decoder delay, so it is not camera-to-display. The PTS is the one identifier that survives a media-aware remux *and* every byte-transparent arm, which is what makes one instrument grade all four planes |
 | Interop client (`interop/`) | Media-level carriage through a third-party relay | Anything about pacing or conformance — deliberately out of scope for a relay test |
+| `t6-hls-pull.py` | Serving-node and source-failover behaviour on the segmented lane, from a client that retries instead of exiting | Not a player: no ABR, no master playlist, no LL-HLS, and it ignores `EXT-X-ENDLIST`. It bounds what the protocol permits, which is the only way to separate that from what TSDuck and FFmpeg happen to implement — both abandon the stream on a failed playlist reload |
 | `tc`/`netem` | Loss, delay, reordering, shaped bottleneck | Real congestion. `netem` loss is Bernoulli where real loss is bursty and RTT-coupled, and `netem` "jitter" reorders. It also does not deliver the loss it is commanded unless segmentation offload is disabled at both the kernel and the application — and the error differs per transport, so it distorts *comparisons*, which is why every impairment figure here is labelled with the fraction the shaper counted |
 | Published price lists + `cost-model.py` | The economic model | Negotiated rates, which are not publishable |
 
@@ -110,7 +111,7 @@ and settled it against the intuitive answer.
 | **Carriage** | Media-aware and opaque lanes carry a full broadcast mux with 0 continuity errors; segmented HTTP preserves mux *content* on three clips — service identity, PMT PID, CAT, TDT/TOT, all splice PIDs — and adds one PAT/PMT pair per segment, costing file-domain PCR accuracy; a 1/2/6 s duration sweep confirms that cost is per-segment, not cumulative. Over the public internet, all three lanes graded together: **byte-faithful SRT is transparent on every criterion including the 481 ns P2 gate**; **segmented HTTP reproduces its loopback result to 0.1 % — 302.148 µs against 302.4 µs predicted, exactly 1.00 injected pair per segment head — so the injection is a property of the segmenter and not of the path**; the media-aware lane preserves the mux as bytes and not as a timed object (stuffing, mux rate, PSI density, PCR spacing) | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate. *The P2 gate cannot rank all three — it is undefined on a rate-less media-aware egress, though it is a real measurement on both byte-faithful lanes* |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**; a segmented-HTTP egress reaches the same standard on the **wire** with an 8 s cushion. On the MoQ lane, P1 PCR repetition on the wire **fails at every buffer depth and is not a depth problem**: the exporter emits PCRs too rarely for a groomer to place them (P1, `pcr_inserted=0`) | Anything at all on hardware; whether a denser exporter PCR cadence clears the gate |
 | **Loss** | CUBIC collapses, BBR restores parity with SRT. Against segmented HTTP the weaknesses are **disjoint and the ranking inverts** — MoQ/BBR holds 0.96 of rate to 10 % loss where segmented HTTP over TCP falls to 0.17, and under 25 % reordering they swap (0.98 against 0.19). Segmented HTTP never corrupts what it delivers, at any level | Congestion control on a provisioned path; a controller recommendation for a permanent trunk; the same ladder against a real CDN edge rather than one plain origin, and against an HTTP/3 profile |
-| **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, single-track, one host | Two hosts, two clocks; multi-track identity; a hardware merge |
+| **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, single-track, one host. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all, and two packagers of one feed are byte-identical by default | Two hosts, two clocks; multi-track identity; a hardware merge. On the segmented lane: a distributed segment store, and a standby joining mid-stream |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail |
 | **Latency** | Delivery latency measured on all four planes, on loopback and over the public internet, each graded against the conformance of the same bytes. **MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms; the path term is the round trip and nothing more (P2) | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path (its cells had not settled) |
@@ -544,7 +545,7 @@ and the experiment says so itself. The operational consequence is the one in
 backend-specific, and choose it against the route's own conditions rather than against either of
 these matrices.
 
-### 3.4 Can redundancy be made hitless? — Yes at a reference receiver, within a stated scope
+### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane it does not
 
 **Transport-level resilience is essentially free.** Two independent subscribers produce
 byte-identical continuous captures of one broadcast, so fan-out to N subscribers → N groomers → N
@@ -573,7 +574,45 @@ the consequence for broadcast is awkward: failover covers the *harder* failure m
 not the easier, far more common one — a SIGTERM to an encoder, a container rescheduled, a rolling
 restart.
 
-**So the load-bearing redundancy belongs at the receiver, and it is hitless — measured end to end**
+**The segmented lane answers the same three questions in the opposite direction, because its serving
+node holds no state** ([T6](../lab/test-6-relay-resilience.md), same clip and host, measurement point
+P0/P1). There is nothing to re-establish after a serving-node failure and nothing to reselect after a
+source failure, and both consequences are measured.
+
+| Question | Media-aware lane | Segmented lane |
+|---|---|---|
+| Serving node dies and returns | resumes ~4 s after the relay returns, but the outage is a **content hole** — the exporter skips to the live edge | resumes on the first successful poll and **loses no content** — 10.0 s outage, 1.012 of source rate over the window, backlog refetched from the store |
+| 1+1 source failover, hard kill | 30–33 s default, ~10 s tuned; hitless unreachable by relay reselect | **no measurable interruption**, 3/3 runs identical, largest stall equal to baseline and not at the kill instant |
+| Source exits gracefully | **not failed over** — subscriber terminates | hitless, but `EXT-X-ENDLIST` is visible for **1.10 s** before the survivor rewrites the playlist |
+| A misconfigured pair | refused outright (`unroutable`), both torn down | **accepted silently**: ±20 s of repeated and skipped time, or every second delivered twice |
+| Two live packagers/groomers of one feed | byte-identical only once keyed to stream position (T12) | **17/17 segments byte-identical**, by default |
+
+Three things in that table carry more weight than the headline. First, the hitless result is
+conditional on the pair sharing one source *and* one set of segment filenames: identical content
+under different names leaves a URI-keyed client fetching both copies, at 1.389 of source rate. That
+is the same conclusion MoQ's specification reaches about object dedup — matching bytes are not
+enough, identifiers must match too — arrived at from the other end. Second, **every corrupt cell
+reported zero continuity errors**, because a continuity counter and a PCR-interval test both ask only
+whether the clock advanced, not which way; the rate ratio and an explicit PCR-rewind count are what
+expose it. Third, the segmented lane's determinism is free rather than engineered: `--intra-close`
+puts the segment boundary at the next intra-coded picture, so the cut is chosen by content and not by
+the packager's emit clock — precisely the property a live pacer had to be redesigned to acquire.
+
+**The serving-node result carries a qualification severe enough to state alongside it.** Neither
+TSDuck's HLS input nor FFmpeg's HLS demuxer survives an origin restart at all: both abandon the
+stream at the first failed playlist reload, FFmpeg with `-reconnect`, `-seg_max_retry`, `-max_reload`
+and `-m3u8_hold_counters` all set. Demonstrating the protocol's behaviour required a purpose-written
+retrying client. So this lane's best redundancy property is real in the protocol and absent from the
+off-the-shelf TS tooling — a packaging problem rather than a transport one, but a real one.
+
+**Two limits bound the segmented result.** Both packagers wrote to one filesystem, which stands in
+for a shared or replicated segment store; the measurement is of the client-visible property *given* a
+consistent store, and says nothing about the cost of making one consistent across hosts. And the
+standby was always co-started, so a mid-stream joiner — the production shape — is untested. Content-chosen
+boundaries predict its segments would align, but that is a prediction.
+
+**On the media-aware lane the load-bearing redundancy therefore belongs at the receiver, and it is
+hitless — measured end to end**
 ([T12](../lab/test-12-dual-path-handoff.md), 42 cells, one run per cell). Two concurrently live
 delivery legs carrying one programme, terminated by a reference ST 2022-7 receiver, lose **zero** TS
 packets across a total blackout of one leg, 1 % and 3 % path loss, and differential delay to 200 ms.

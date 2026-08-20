@@ -295,6 +295,25 @@ so nothing measured so far separates "the legs agree about stream position" from
 clock". Run it once the exporter fixes land, so the two-host result grades path diversity rather than
 re-measuring defects already filed.
 
+**Segmented 1+1: the two cells the T6 arm could not run.** A pair sharing one feed and one naming
+scheme is hitless, and two packagers of one feed are byte-identical, but both were measured with the
+standby **co-started** and with one filesystem standing in for the segment store. Two cells follow
+from that, in order of leverage:
+
+1. **A standby that joins an already-running feed** — the production shape, and the case the
+   media-aware lane drills as E2. Content-chosen segment boundaries predict a mid-stream joiner cuts
+   at the same intra-coded pictures as the incumbent and so drops straight into the same naming
+   sequence, but that is a prediction. It needs a live fan-out the loopback rig did not provide;
+   multicast failed on the laptop, so run it on EC2 where T5's segmented arm already works.
+2. **Two hosts writing one store.** The whole result rests on both packagers writing identical names
+   into a consistent store; on one filesystem that is free, and across two hosts it is the actual
+   engineering. Worth pairing with the two-host T12 cells above, since both are blocked on the same
+   second instance.
+
+A third, cheaper cell: `tsp -O hls` writes segments in place rather than writing and renaming, so a
+client fetching mid-write is a live hazard that three clean runs did not provoke. Drive the fetch
+rate up against a shared-name pair and see whether it bites.
+
 **Also unaddressed by T12:** SMPTE 2022-1 FEC; a full 10 Mbps mux rather than 2 Mbps on a 2-vCPU box;
 a carrier rate matched to the content rate, to resolve whether the 1.4 % PCR-interval floor measured
 there is an artefact of 55–60 % stuffing; and any hardware IRD merge, which is Gate 2.
