@@ -324,6 +324,67 @@ span-free one**: bytes on the wire per byte of payload carried (1.0364, identica
 independent runs to five significant figures) multiplied by the source rate. A ratio has no
 denominator to get wrong.
 
+### The segmented lane's resource envelope, and the origin is not the constraint anyone assumed
+
+Carriage overhead was the only thing this experiment had ever measured about the segmented lane, which
+left the paper pricing one data plane for resources and the other for bytes. `t9-segmented-envelope.sh`
+closes that with the roles mapped onto MoQ's — packager for publisher, origin for relay, client for
+subscriber — on the same 2-vCPU box, same clip, same 60 s windows after a 25 s settle, CPU as a
+`utime+stime` delta expressed as a percentage of **one** core.
+
+| Role | Stage | CPU | RSS | fds | threads |
+|---|---|---:|---:|---:|---:|
+| packager | `tsp -O hls`, 2 s segments, 6-segment window | 0.78 % | 45.4 MB | 5 | 6 |
+| origin | `python3 -m http.server` | 0.15 % | 23.1 MB | 4 | 1 |
+| origin | nginx, one worker, `sendfile on` | **0.03 %** | **7.5 MB** | 15 | 2 |
+| client | `tsp -I hls --live` | 0.63 % | 48.8 MB | 3–5 | 5 |
+
+Then the origin's fan-out, driven by cheap fetchers rather than real clients — because a `tsp -I hls`
+client costs an order of magnitude more than serving it, and a sweep driven by real ones would
+reproduce this experiment's own earlier mistake of measuring the host:
+
+| N | python CPU | per client | nginx CPU | per client | Served | Delivered |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.10 % | 0.100 % | 0.02 % | 0.017 % | 9.75 Mbps | 0.98 |
+| 5 | 0.57 % | 0.113 % | 0.12 % | 0.023 % | 49.4 Mbps | 0.99 |
+| 10 | 1.08 % | 0.108 % | 0.20 % | 0.020 % | 99.2 Mbps | 1.00 |
+| 25 | 2.67 % | 0.107 % | 0.47 % | 0.019 % | 248 Mbps | 1.00 |
+| 50 | 5.30 % | 0.106 % | 0.95 % | 0.019 % | 498 Mbps | 1.00 |
+| 100 | 10.25 % | 0.102 % | **1.70 %** | **0.017 %** | **992 Mbps** | 1.00 |
+
+**There is no knee.** Both origins are linear to 100 concurrent clients and ~1 Gb/s of egress, with the
+delivered fraction never below 0.98, and the per-client cost is flatter at the top of the ladder than at
+the bottom. What ran out first was the load generator: the box reached 53.7 % of two cores at N = 100
+and 1.70 % of that was the origin.
+
+**Memory does not scale with viewers at all.** nginx held 7.436 MB at one client and 7.524 MB at a
+hundred — under a kilobyte each — and python 23.1 to 23.5 MB. Against the relay's ~1.7 MB *per
+subscriber* measured above, this is the sharpest structural difference the experiment has found between
+the two planes, and it is the one that generalises furthest: a segmented origin's state is the segment
+files, which every viewer shares, while a relay's state is per session.
+
+Set against the relay's own figure from the same box — **0.089 % of a core per Mbps of egress** — the
+serving tier costs:
+
+| Serving node | CPU per Mbps of egress | Relative | Memory per viewer |
+|---|---:|---:|---:|
+| `moq-relay` | 0.089 % | 1x | ~1.7 MB |
+| `python3 -m http.server` | 0.0103 % | **8.6x cheaper** | ~4 kB |
+| nginx | 0.0017 % | **52x cheaper** | ~0.9 kB |
+
+**Three qualifications, and the first is large enough to state before the number.** The origin here
+serves **cleartext HTTP over loopback**, while the relay's figure includes QUIC's AEAD on every packet.
+TLS is not a rounding error at a gigabit, so 52x is an upper bound on the architectural gap rather than
+an estimate of it — closing that is a one-line change to the rig and the single most useful follow-up
+here. Second, every client fetched the *same* segments, so the origin served page-cache hits throughout;
+a real edge carrying many streams would fault. Third, the two figures come from different measurement
+sessions on the same host and the same 9.9 Mb/s content, which is why they are quoted per Mbps.
+
+None of that touches the memory column, and the memory column is the part that decides an edge's viewer
+ceiling. **What this measurement removes is a specific worry rather than a general one:** that the
+segmented lane's scaling story rested on an origin nobody would deploy. It does not — the unoptimised
+reference origin served 992 Mb/s at a tenth of a core, and the production one at a sixtieth.
+
 Where MoQ's +2.79 % over the delivered payload goes, and it closes exactly:
 
 | Component | Rate | Share of delivered TS |

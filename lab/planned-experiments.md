@@ -24,16 +24,28 @@ Every experiment names its own open items and most of them are worth doing event
 short list: the runs whose *result* would change a conclusion in [`docs/`](../docs/), separated by what
 they cost to set up, because two of the five need nothing this lab does not already have.
 
-**1. Denser exporter PCR emission ([#2937](https://github.com/moq-dev/moq/issues/2937)), then re-run
-T18 unaltered.** *Needs an upstream code change and nothing else.* This is the campaign's largest
+**1. Evenly spaced exporter PCR emission ([#2937](https://github.com/moq-dev/moq/issues/2937)), then
+re-run T18 unaltered.** *Needs an upstream code change and nothing else.* This is the campaign's largest
 undecided verdict. The media-aware lane fails TR 101 290 P1 PCR repetition **on the wire at every
-cushion tested**, across a ladder spanning eight times the depth, and the groomer reports
-`pcr_inserted=0` — every PCR on the egress came from upstream, so the exporter does not emit them often
-enough for any groomer to place them ([T18](test-18-delivery-latency.md),
-[T13](test-13-downstream-grooming.md)). Until this moves, "MoQ delivers a conformant broadcast hand-off"
-is unproven at any latency, and the paper's hand-off axis rests on a defect rather than on the
-architecture. T18 predicts a pass at a 250 ms cushion — the 127 ms delivery latency already
-measured — which makes this a falsifiable prediction rather than a hope.
+cushion tested**, across a ladder spanning eight times the depth, while the groomer's own PCR insertions
+vary 137 → 0 across that ladder and change nothing — it can only place a PCR in a slot it was already
+going to stuff, and those do not fall in the exporter's gaps ([T18](test-18-delivery-latency.md),
+[T13](test-13-downstream-grooming.md)). **What has to change is placement, not rate**: measured against
+the same clip on three transparent lanes, the exporter emits 31–36 PCRs a second against the source's 41
+and a requirement of ~25, but puts 85 % of them within 11 µs of each other and leaves the residue in gaps
+of 100 ms to 1.84 s. Until this moves, "MoQ delivers a conformant broadcast hand-off" is unproven at any
+latency, and the paper's hand-off axis rests on a defect rather than on the architecture. T18 predicts a
+pass at a 250 ms cushion — the 127 ms delivery latency already measured — which makes this a falsifiable
+prediction rather than a hope.
+
+**1b. T8b's C3 re-run, with every cell's aggregate captured.** *Needs nothing this lab does not have, and
+about two hours.* Promoted into the top group because it is the only measurement in the campaign
+suggesting the media-aware lane has a **scaling** limit rather than a conformance one: three feeds
+sharing a congested 15 Mb/s bottleneck delivered 3.76 Mb/s in total — 25 % of the link — where three SRT
+feeds delivered 84 %. A distribution trunk carrying many services is the intended deployment, so if that
+survives scrutiny it is a first-order result; and C4 predicts most of it disappears under an AQM, which
+makes it cheap to settle either way. One replicate, one controller, one queue discipline, and four of the
+six cells lost their aggregate to a disk janitor — so it is currently suggestive and not a finding.
 
 **2. A hardware IRD and a TR 101 290 analyser, soaked (Gate 2).** *Needs broadcast kit — the one
 genuinely unavoidable purchase or loan.* Every conformance number in this campaign is graded by
@@ -58,15 +70,45 @@ already-running feed, and T9's cross-machine fan-out knee, which is currently co
 co-resident subscribers costing more CPU than the relay serving them. Run it after item 1 lands, so a
 two-host result grades path diversity rather than re-measuring filed defects.
 
-**4. A real CDN edge, replacing `python3 -m http.server` and local nginx.** *Needs a distribution
-account.* Three separate conclusions are currently bounded by the weakest possible origin. The
-segmented lane's loss curve was measured against a single unoptimised HTTP/1.1 server
-([T5](test-5-network-impairment.md)) — and its availability-window boundary, now located between 7.7 %
-and 12.2 % applied loss, is precisely the kind of figure a tuned edge should move. The cache result
-that carries the lane's scaling story is one local nginx ([T11](test-11-interop.md)). And multi-programme
-carriage — which now carries *the whole* of MoQ's remaining fidelity advantage on mux content, since
-single-programme carriage in TS segments turns out to be verbatim — can only be tested where a real
-cache decides whether to serve a payload the specification says should not exist.
+**4. An HTTP/3 client for the segmented lane, then a real CDN edge.** *The first needs a library build;
+only part of the second needs an account.* These were one item and they are not: separating them showed
+that most of what "a real CDN edge" was standing in for is reachable without one, and that the thing
+genuinely blocked is HTTP/3.
+
+*HTTP/3 first, because it is the comparison the paper is named for.* The segmented lane is graded against
+MoQ over QUIC while itself running over TCP, and the reason is a client library, not a protocol: macOS's
+system libcurl is built without HTTP/3, so `tsp -I hls` cannot negotiate it whatever an origin offers.
+The same is true of the EC2 box's curl 8.18.0 — but **that box's nginx 1.28.3 already carries
+`--with-http_v3_module`**, so the server half exists and only the client half is missing. On Linux that is
+buildable (curl against ngtcp2 or quiche, reached through `LD_LIBRARY_PATH`, or an HTTP/3 fetch engine
+behind a pull-style client rather than `tsp -I hls`). Until it exists, every segmented figure carries an
+unstated "over TCP", and the head-to-head compares a transport to a transport-plus-a-generation.
+
+*Then the origin, and one of its three claims has already moved.* The origin was never the constraint the
+list assumed: [T9](test-9-performance.md)'s segmented envelope now has both `python3 -m http.server` and
+nginx serving **100 concurrent clients at ~992 Mb/s with no knee**, the reference origin at a tenth of a
+core and nginx at a sixtieth, with memory flat in viewer count. So "the weakest possible origin" was not
+weak, and what remains needs sorting by what actually requires a third party:
+
+- **Does not need a CDN.** The segmented loss curve and its availability-window boundary
+  ([T5](test-5-network-impairment.md), between 7.7 % and 12.2 % applied loss) turn on segment *retention*
+  and on client re-anchoring policy, both of ours. A production origin and an edge cache in front of it
+  reproduce this, and the second EC2 instance of item 3 supplies the second tier over a real network.
+- **Needs a CDN only for scale and multi-tenancy.** [T11](test-11-interop.md)'s cache result is one local
+  nginx; a two-instance origin-plus-edge topology is a genuine two-tier cache and answers coalescing,
+  cache keys and stale handling. What it cannot supply is anycast, PoP selection, eviction pressure from
+  other tenants, and client counts in the thousands.
+- **Needs a *specific* CDN.** Multi-programme carriage through a cache is only an interesting question
+  where the edge is media-aware — a byte cache serves an unusual TS payload exactly as nginx does, so
+  asking it of a plain cache re-measures nginx. If the question is whether a commercial packaging edge
+  rejects a multi-programme segment, it has to be that product.
+
+**And the account is cheaper than the entry assumed.** This does not need a CDN relationship: CloudFront
+sits in the same AWS account as the existing EC2 origin, takes minutes to point at it as a custom origin,
+and the free tier covers a single-client experiment — which buys real anycast, real PoPs and real
+multi-tenancy without a procurement conversation. Budget for two things it will not do by default: it
+needs explicit `Cache-Control` from the origin to behave sensibly on a live playlist, and it bills per
+request, which 2 s segments generate briskly.
 
 **5. T8b's provisioned-path conditions (C2–C6).** *Needs only time on the rig that already exists.*
 The controller ranking is currently scoped to one under-provisioned condition, and a permanent
@@ -92,21 +134,26 @@ TCP, which is the cheaper route to the same answer.
 lane's PCR-repetition curve crosses zero as the groomer's cushion deepens, on the premise that
 conformance is bought with depth and depth is latency. On the media-aware lane the two axes turn out to
 be independent: repetition sits at ~490 intervals above 40 ms with a 228 ms maximum across a ladder
-spanning eight times the depth, and stays there when groomer starvation is removed entirely. The
-groomer reports `pcr_inserted=0`, so every PCR on the egress came from upstream — **the exporter does
-not emit PCRs often enough for any groomer to place them**, and no cushion fixes that.
+spanning eight times the depth, and stays there when groomer starvation is removed entirely. The groomer
+inserted 137, 103, 28 and 0 PCRs of its own across that ladder for violation counts of 491, 489, 503 and
+502 — **the exporter does not emit PCRs often enough for any groomer to place them at affordable
+headroom**, and no cushion fixes that.
 
 What T18 leaves open is listed in its own *Still open* table. Two entries belong here because they need
 setup rather than analysis:
 
-**The prediction, tested.** T18 predicts that an exporter emitting PCR-bearing packets at a broadcast
-mux's ~25 ms cadence would pass the gate at a 250 ms cushion — that is, at the 127 ms delivery latency
-already measured. Needs the upstream change, then T18's rig re-run unaltered. This is now the campaign's
-highest-leverage outstanding run. Filed as
-[#2937](https://github.com/moq-dev/moq/issues/2937), which also has to answer a history: upstream built
-this fix once and abandoned it after a real IRD would not lock, so the report's argument is that the
-failure belonged to the delivery model rather than to the PCR density, and that a bounded CBR stage
-downstream absorbs what the exporter was being asked to.
+**The prediction, tested.** T18 predicts that an exporter emitting PCR-bearing packets on an **even**
+~25 ms grid would pass the gate at a 250 ms cushion — that is, at the 127 ms delivery latency already
+measured. Needs the upstream change, then T18's rig re-run unaltered. This is still the campaign's
+highest-leverage outstanding run, and T18's measurement 6 sharpened what has to change: the exporter
+already emits 31–36 PCRs a second against a source's 41 and a requirement of ~25, so **the fix is
+placement and not rate** — a bounded interval against elapsed clock, rather than one PCR per PES unit as
+`export.rs` does today. Filed as [#2937](https://github.com/moq-dev/moq/issues/2937), which also has to
+answer a history: upstream built this fix once and abandoned it after a real IRD would not lock, so the
+report's argument is that the failure belonged to the delivery model rather than to PCR placement, and
+that a bounded CBR stage downstream absorbs what the exporter was being asked to. The placement framing
+helps there too — it adds no PCRs the source did not already justify, so it creates none of the empty
+PCR-only windows that sank the earlier attempt.
 
 **RIST against SRT on a real path.** The WAN legs have run: the path costs its round trip and nothing
 more, and MoQ delivers a picture across the internet in **109 ms**. One cell did not settle — RIST reads

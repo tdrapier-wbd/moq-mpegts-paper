@@ -308,9 +308,13 @@ buffer at all.
 
 The determinant is what the egress delivers. A segmented egress arrives with **0** intervals above
 40 ms, because the packager preserved a conformant broadcast mux's PCR spacing; a MoQ egress arrives
-with 163, because `export ts` emits PCRs too rarely, and `pcr_inserted=0` on the rate-matched cell
-confirms the groomer added none of its own. A stage that carries PCR inherits exactly what it was
-given. Depth does not buy placement on either lane — it only prevents a stage from *adding* intervals
+with 163, because `export ts` emits the right *number* of PCRs in the wrong *places* — 31–36 a second
+against a source's 41, but 85 % of them inside 11 µs of each other, with the residue collecting into
+gaps of 100 ms to 1.8 s ([T18](test-18-delivery-latency.md) measurement 6). The groomer's own insertions
+confirm it from the other side, running 137 → 0 across the stuffing ladder while the violation count
+does not move. A
+stage that carries PCR inherits exactly what it was given, and the few it can add of its own land where
+the carrier has spare slots rather than where the gaps are. Depth does not buy placement on either lane — it only prevents a stage from *adding* intervals
 by running dry, which is a different defect with a different signature (T13's 1 s segmented leg:
 1.85 s of silence, 311 continuity errors). **The good news for the paper is that the trade feared here
 does not exist:** depth is latency, latency is MoQ's only lead, and repetition turns out not to be

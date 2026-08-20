@@ -410,8 +410,8 @@ Three separate claims were being run together under "hand-off":
   0 PCR intervals above 40 ms on the wire; the MoQ lane delivers 131–159 in 25 s at its own cushion and
   the same figure at every other cushion tried ([Evidence](evidence.md) §3.2). **The lighter burden and
   the worse outcome turn out not to be the same fact**, which is what the measurement changed: MoQ hands
-  the groomer less to absorb, and separately the exporter hands it PCRs too rarely to place, whatever
-  time it is given.
+  the groomer less to absorb, and separately the exporter hands it PCRs already bunched into
+  sub-millisecond clusters, which no amount of time lets it re-space.
 
 **"Easier to receive", "easier to groom" and "conformant once groomed" are three different claims,
 and running them together is what let this axis read as a MoQ win.** They resolve differently: MoQ leads
@@ -483,22 +483,30 @@ axis on which MoQ leads.
 **The answer: on the MoQ lane the two axes are independent.** Sweeping the groomer's cushion across a
 ladder spanning eight times the depth moves the lane's repetition figure not at all — 489–491 intervals
 above 40 ms with a 228 ms maximum at every rung — and it stays at 502 when groomer starvation is removed
-altogether by matching the carrier to the arriving content rate. Over the internet it reads 504. The
-groomer inserts **no PCRs of its own** (`pcr_inserted=0`), so every PCR on the egress came from the lane.
+altogether by matching the carrier to the arriving content rate. Over the internet it reads 504. And the
+groomer **was** placing PCRs of its own while all of that held still: it can only use slots it was
+already going to stuff, so its budget is the carrier's rate surplus, and across the ladder it inserted
+**137, 103, 28 and 0** at 4.1 % down to 0.0 % stuffing for violation counts of **491, 489, 503, 502**.
 
-**The defect is therefore upstream of the edge stage, and it is narrow.** The exporter does not emit
-PCR-bearing packets often enough for any downstream groomer to place them. That is not a structural cost
-to be priced into a recommendation; it is a PCR emission interval in one implementation. T18 predicts —
-and does not test — that emitting at a broadcast mux's ~25 ms cadence would clear the gate at the depth
-the lane already runs, which is **109 ms of delivery latency across the internet**.
+**The defect is therefore upstream of the edge stage, and it is narrower than a rate.** Measured against
+the same clip carried by three byte-transparent lanes in one session, the exporter emits **31–36 PCRs a
+second against the source's 41**, and against the ~25/s a 40 ms ceiling arithmetically needs — so it does
+not send too few. It places 85 % of them within 11 µs of each other and leaves the residue in gaps of
+100 ms to 1.84 s, where the source ran an even 24.65 ms grid with *zero* intervals above 40 ms. A groomer
+cannot repair that from downstream because its own insertions land wherever the carrier runs ahead of the
+content, which is not where the gaps are. So this is not a structural cost to be priced into a
+recommendation, and it is not a cadence to be raised; it is **where** one implementation puts its PCR.
+T18 predicts — and does not test — that emitting on an even ~25 ms grid, against elapsed clock rather
+than against PES-unit boundaries, would clear the gate at the depth the lane already runs, which is
+**109 ms of delivery latency across the internet**.
 
 So the defensible statement is now:
 
 > MoQ delivers a picture across the public internet in 109 ms, 15× lower than SRT over the same path.
 > It is **not** currently TR 101 290 P1-conformant on PCR repetition on the wire, at any buffer depth —
 > and that failure is a carriage defect in the exporter rather than the price of the latency. Whether
-> fixing the exporter's PCR cadence clears the gate is the single measurement that would most change this
-> comparison, and it is blocked only on upstream, where the defect has been reported with the
+> fixing the exporter's PCR *placement* clears the gate is the single measurement that would most change
+> this comparison, and it is blocked only on upstream, where the defect has been reported with the
 > measurements behind it ([upstream contributions](../lab/upstream-contributions.md) §1).
 
 What remains genuinely open about the latency figures themselves: both paths measured were healthy, so
@@ -999,7 +1007,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |
 | Reassembly to a transport stream | segmented HTTP | M | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |
 | Grooming *burden* (R3) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
-| Grooming *outcome* — a P1-conformant wire (R3) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. The groomer inserts no PCRs of its own, so the cause is the exporter emitting them too rarely — a fixable upstream defect rather than a cost the lane must pay** (§5.1) |
+| Grooming *outcome* — a P1-conformant wire (R3) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. Measured against the same clip on transparent lanes, the exporter conserves the PCR count (31–36/s against the source's 41) and destroys the spacing (85 % of intervals under 1 ms) — a fixable upstream placement defect rather than a cost the lane must pay** (§5.1) |
 | Latency (R4) | **MoQ, decisively** | **M** | **decisive and now measured: 109 ms across the public internet, against SRT's 1,618 ms and segmented HTTP's 4,067 ms over the same path in the same window — 15× and 37×. Segmented HTTP needs 9,286 ms to reach the depth that makes it conformant. The path term is the round trip and nothing more. Caveats: delivery latency rather than camera-to-display, and both paths measured were healthy** (§5, §5.1, [Evidence](evidence.md) §3.11) |
 | Interoperability (R1) | segmented HTTP | M+S | decisive, conditional on the single-programme envelope (§6) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
@@ -1040,11 +1048,13 @@ candidate data planes rather than as a case for one protocol, and why the measur
 
 Ranked by how much each would move the comparison.
 
-1. **Would a denser PCR emission cadence in the MoQ exporter clear the P1 repetition gate on the wire?**
+1. **Would an evenly spaced PCR emission in the MoQ exporter clear the P1 repetition gate on the wire?**
    §5.1. The question that replaces "does MoQ stay sub-second while conformant", which is measured and
    answered: it stays sub-second (109 ms across the internet) and it is not conformant, and the two are
-   independent. Since the groomer inserts no PCRs of its own, the gate can only be cleared upstream. Still
-   the highest-leverage item, and now blocked on an upstream change rather than on apparatus.
+   independent. The gate can only be cleared upstream, and the change needed is *placement* rather than
+   rate — the exporter already emits 31–36 PCRs a second where ~25 would suffice, but 85 % of them within
+   11 µs of each other. Still the highest-leverage item, and blocked on an upstream change rather than on
+   apparatus.
 2. **Does a commercial ABR-to-TS gateway, operated as the distributor's own edge stage, produce
    TR 101 290 P1/P2-conformant output on real hardware?** §4.4. If yes, part of the broadcast-grade
    layer is purchasable on one data plane and not the other; if no, the reassembly advantage in §4.2

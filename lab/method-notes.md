@@ -382,10 +382,65 @@ insertion counter decides it — not the arithmetic that fits.** *(T18.)*
 > The groomer's PCR repetition failures on the media-aware lane were attributed to starvation, and the
 > arithmetic was persuasive: `underruns` equalled the nulls inserted exactly, and the commanded carrier
 > exceeded the lane's content rate by the same 3.2 %. Matching the carrier to content rate cut underruns
-> from 18,070 to 5 and left repetition at 502 violations, unchanged. The counter that settled it was
-> `pcr_inserted=0` — every PCR on the egress had come from upstream, so no amount of buffering could
-> change what was never sent. A defect that survives the removal of its supposed cause belongs to the
-> other stage.
+> from 18,070 to 5 and left repetition at 502 violations, unchanged. A defect that survives the removal of
+> its supposed cause belongs to the other stage.
+
+**A counter reading zero in the one configuration where the thing it counts is impossible is evidence
+about that configuration and nothing else. Vary the condition that enables the mechanism, and check the
+counter moves, before quoting it.** *(T18.)*
+
+> The attribution above was then published on the strength of `pcr_inserted=0` — read from the cell at
+> **0.0 % stuffing**. That groomer places a PCR only into a slot it was already going to stuff, so at zero
+> stuffing it has no slots and the counter cannot read anything else. A structural zero was quoted as a
+> measured one, in five documents and an upstream issue. Read across the whole ladder the counter varies
+> as designed — 137, 103, 28, 0 insertions at 4.1 %, 3.2 %, 0.8 %, 0.0 % stuffing — while the violation
+> count holds at 491, 489, 503, 502. The conclusion was right and its evidence was the wrong shape: four
+> insertion rates producing one result is a far stronger argument than no insertions at all, and it was
+> already sitting in the run logs.
+
+**A threshold-crossing count summarises a distribution and can point at the opposite of its cause. Before
+asking anyone to change a rate, plot the interval distribution and check the mean is actually deficient.**
+*(T18.)*
+
+> "Intervals above 40 ms" was the campaign's only PCR conformance instrument for a long time, and 375–414
+> of them per window read naturally as *too few PCRs*. It became the shorthand "the exporter emits PCRs
+> too rarely" in five documents. The distribution says the opposite: 31–36 PCRs a second against the
+> source's 41 and against the ~25/s the gate needs, with a median interval of **11 µs**, 85 % of intervals
+> under 1 ms, and every violation inside a 100 ms–1.8 s hole between bursts. Density was never the
+> deficiency and a denser cadence would have changed nothing. Loss and clustering are also
+> indistinguishable in the count and obvious in the distribution — a lossy SRT lane posts 538 crossings
+> with its median still at 24.8 ms and 0.0 % under 1 ms.
+
+**Keep a byte-transparent control in any rig that measures a conversion, carrying the same source in the
+same session.** *(T18, via T8b.)*
+
+> The defect above went eighteen months mis-summarised because the exporter was only ever measured through
+> a groomer and against a source profiled in a different session. What settled it was an unrelated
+> congestion rig that happened to write `moq export ts` straight to a file *and* carry the identical clip
+> on the same PID over SRT and two segmented clients — so "the source is conformant, the count survives,
+> the spacing does not" was readable three ways off one session. The control cost nothing; it was already
+> in the matrix for another reason.
+
+**A precise upstream report can be undone by an imprecise in-house paraphrase, and the paraphrase is what
+gets cited.** *(T18.)*
+
+> The filed issue said "it is not sparsity", gave the mean conserved to 0.7 ms, and asked for a bounded
+> *interval*. Every one of those is correct. The summaries written from it said "emits PCRs too rarely"
+> and "a denser cadence would clear the gate", and those propagated into four `docs/` files, the top-level
+> README and two other experiments — the versions a reader would actually act on. When restating a
+> finding in shorter form, restate the *mechanism*, not the symptom that made it visible.
+
+**A cleanup job must never run against a live results tree.** *(T8b.)*
+
+> A 68-cell matrix was writing a ~140 MB capture per cell onto a host with 3.3 GB free, so a janitor was
+> armed to delete captures older than three minutes. It protected the disk and destroyed the matrix's
+> most valuable data: C3 sums the outputs of *all* N receivers, and four of its six cells had their
+> second and third captures deleted before anyone summed them, leaving per-flow shares that cannot
+> distinguish "the flows shared unfairly" from "the flows collectively under-used the link". The two
+> cells that survived showed 25 % aggregate utilisation against SRT's 84 % — the single most consequential
+> number in the matrix, saved only by finishing last. **A janitor must be told what the analysis needs,
+> not just what is being written now; and a condition whose result is a sum over several files is the
+> case it will silently ruin.** Deriving the summary before deleting the input would also have caught it.
 
 **An unattributed residue is not a finding.** *(T12.)*
 

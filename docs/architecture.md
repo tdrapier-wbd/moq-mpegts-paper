@@ -246,8 +246,9 @@ it.** The groomer inherits the exporter's PCR spacing and delivers 131–159 int
 A stage that mints its own PCR schedule (a regenerating muxer) places PCRs freely and posts none; a
 pass-through stage that carries the exporter's inherits their spacing. That word "inherits" is exact and
 was tested: sweeping the cushion across eight times the depth, and separately removing groomer starvation
-entirely, moves the figure not at all, and the groomer reports `pcr_inserted=0`
-([Evidence](evidence.md) §3.2). **The MoQ lane is not P1-conformant on PCR repetition as delivered at any
+entirely, moves the figure not at all — while the groomer's own insertions vary 137 → 0 across that
+ladder, because it can only place a PCR in a slot it was going to stuff and those slots do not fall in
+the exporter's gaps ([Evidence](evidence.md) §3.2). **The MoQ lane is not P1-conformant on PCR repetition as delivered at any
 buffer depth**, the cause sits upstream of this architecture's edge gateway, and any claim of "0 %" that
 does not name the file domain is wrong.
 
@@ -1046,12 +1047,13 @@ Ranked by how much a negative answer would change the architecture.
 1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate. Grooming is
    file-validated, structurally sound, and measurably not P1-conformant on PCR repetition on the wire —
    at **every** depth, not merely the one currently run. Not complete.
-2. **Would a denser PCR emission cadence in the exporter clear the P1 repetition gate?** (§4.2,
+2. **Would an evenly spaced PCR emission in the exporter clear the P1 repetition gate?** (§4.2,
    [Comparison](comparison.md) §5.1.) This replaces "does the chain stay sub-second while conformant",
    which is measured: it does stay sub-second — 109 ms across the public internet — and it is not
-   conformant, and the two are independent. Since the edge gateway inserts no PCRs of its own, the gate
-   can only be cleared upstream of it, which puts the highest-leverage remaining item outside this
-   architecture's control. It has been reported upstream with the measurements behind it
+   conformant, and the two are independent. The change needed upstream is *where* PCR is placed rather
+   than how often it is sent — the exporter already emits 31–36 a second against a requirement of ~25,
+   with 85 % of intervals under 1 ms — and the gate can only be cleared there, which puts the
+   highest-leverage remaining item outside this architecture's control. It has been reported upstream with the measurements behind it
    ([upstream contributions](../lab/upstream-contributions.md) §1).
 3. **Do the correctness boundaries in §4.3 hold?** Source-clock drift, PCR discontinuity and wrap,
    mid-stream PID change, and T-STD occupancy through the media-aware exporter. Named, never tested.

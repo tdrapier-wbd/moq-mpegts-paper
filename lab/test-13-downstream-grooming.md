@@ -163,8 +163,8 @@ to inflate — the packager passed the source's nulls through, and 4.57 % agains
 stuffing minus what fell outside the capture window.
 
 The last row is the one that was not anticipated, and it removes T13's headline live failure from the
-segmented lane before any tool runs. MoQ's exporter emits PCRs too rarely, so any stage that carries
-them rather than minting its own inherits 163 intervals over the 40 ms limit. The segmented egress
+segmented lane before any tool runs. MoQ's exporter emits PCRs in clusters rather than on a grid, so any
+stage that carries them rather than minting its own inherits 163 intervals over the 40 ms limit. The segmented egress
 arrives with 0, because the source is a conformant broadcast mux and the packager preserved its PCR
 spacing.
 
@@ -554,8 +554,9 @@ deep as the segment period or it will stop dead rather than degrade.
 **On the MoQ lane there is still no off-the-shelf stage that does both halves, and the half missing is
 carriage.** That is not a statement about MPEG-TS grooming; it is a statement about what `export ts`
 delivers. Two of its properties cause the entire result: it carries no stuffing, so a groomer must
-inflate a stream and no tool that preserves a broadcast mux can; and it emits PCRs too rarely, so any
-stage that carries them rather than minting its own inherits 163 intervals above the 40 ms limit. The
+inflate a stream and no tool that preserves a broadcast mux can; and it emits PCRs in bursts rather than
+on a grid, so any stage that carries them rather than minting its own inherits 163 intervals above the
+40 ms limit. The
 segmented lane is the control that isolates this — same clip, same tools, same oracle, both properties
 absent, and the failure disappears. **The gap to state upstream is a MoQ exporter gap, not a grooming
 gap.**
@@ -662,7 +663,7 @@ verbatim, so another packager could hand a groomer a different census than the o
 - **A negative result measured on one data plane was written as a property of MPEG-TS grooming.** For
   most of its life this experiment was titled "grooming of a MoQ egress" and concluded that no
   off-the-shelf stage does the job. Every measurement behind that was sound; the generalisation was
-  not. Two properties of `export ts` — no stuffing, and PCR emitted too rarely — cause the entire
+  not. Two properties of `export ts` — no stuffing, and PCR emitted in clusters — cause the entire
   result, and running the identical nine chains against a segmented egress makes the failure vanish,
   with `tsp -P pcradjust` passing all four criteria and carrying the mux. **Method rule:** when an
   experiment concludes that a class of tool cannot do something, name the input property that defeats

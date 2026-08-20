@@ -1,10 +1,21 @@
 # T8b — congestion control for a permanent fixed-rate trunk
 
-> **State:** one under-provisioned *failure-mode* condition (C1) is executed on the namespace rig, at
-> 2–3 replicates per controller; the provisioned-path conditions (C2–C6) are **not yet run**. The
-> controller ranking below is therefore indicative and scoped to the under-provisioned case, which is
-> why it is **not promoted to `docs/evidence.md`**. The upstream discussion this test came from, and
-> where these numbers were reported, is [moq #2432](https://github.com/moq-dev/moq/pull/2432).
+> **State:** C1–C5 are executed on the namespace rig (68 cells) and C6, the soak, is running.
+> **The experiment does not name a congestion controller, and that is its result** — C1, C2 and C4
+> rank them in three different orders, and C5 shows why the question was the wrong one: what governs
+> this feed is the **provisioning margin** and the **bottleneck queue discipline**, both of which move
+> the outcome further than any controller choice. Below ~1.2× headroom delay climbs steeply; at or
+> above it every controller is comfortable and indistinguishable. An AQM removes bufferbloat outright
+> for every controller and transport at once (554–584 ms → 101–119 ms). What is stable across all five
+> conditions is the failure *mode*: the MoQ lane loses content and never integrity — **0 continuity
+> errors in every one of its ~40 cells** — while SRT inverts that and gets worse the better-behaved the
+> network is, reaching 17,652–22,365 errors under an AQM while taking the most bytes of any lane.
+> **The one place the media-aware lane loses badly is C3:** three feeds sharing a congested bottleneck
+> collectively used 25 % of it against SRT's 84 %, on one replicate that needs repeating. Two known
+> gaps: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their own
+> RTT says the specified queue never formed), and most of C3's aggregate was lost to a disk janitor
+> mid-run. The upstream discussion this test came from is
+> [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
 
@@ -193,6 +204,10 @@ The segmented rows were measured in the same session as an SRT re-run that repro
 reference row to within noise (90 % of cap, 4,288 CC errors against 4,279, p50 582 ms against 583), so
 they sit on the same scale as the rows above them rather than merely alongside them.
 
+**Read the "Character" column as a description of this condition and not as a verdict on a controller.**
+C2 inverts this ordering and C4 flattens it; the reasons are in those sections. What C1 establishes that
+survives is the rig, the segmented lane's client dependence below, and the thinning-versus-damage split.
+
 ### C1, segmented lane — the client decides whether this lane degrades or dies
 
 Two clients, one lane, one condition, opposite outcomes. This is the whole result, and it is a result
@@ -250,36 +265,250 @@ over-provisioned cell; the re-anchoring client's 99 % shows the capacity was the
 trunk sharing a bottleneck with anything else will hurt it whether or not the trunk is short of
 capacity.
 
-### C2–C6 — not yet run
+### C2 — Transient congestion on a provisioned path, and it reverses the C1 ranking
 
-The rig supports all of them (`t8b-netns.sh {bloat,codel,cake}`, N concurrent imports, and long
-windows). C2 (transient congestion) is the priority — it is the realistic threat to a provisioned
-permanent trunk.
+15 Mb/s cap (1.5× the feed), 100 ms base, 500 ms `bfifo`. A greedy TCP bulk flow arrives 40 s into a
+120 s window and leaves at 80 s, through the same bottleneck in the same direction. Two replicates each.
+The instrument is the receiver's output sampled once a second, so the transient is scored as three
+phases rather than averaged away; **recovery** is the first second past the transient with three
+consecutive seconds back at ≥ 95 % of the pre-transient rate.
+
+| Controller | Before | During | After | Recovery | CC | PCR > 40 ms | max |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| CUBIC (quinn) | 9.63 / 9.63 | 9.01 / 8.16 | 9.77 / 9.43 | 3 s / 7 s | 0 | 412 / 394 | 1.20 s |
+| **BBRv1 (quinn)** | 9.56 / 9.54 | **9.36 / 9.50** | 9.79 / 9.64 | **4 s / 1 s** | **0** | 414 / 414 | 0.54 s |
+| BBRv2 (quiche) | 9.28 / 9.33 | **6.69 / 6.10** | 9.06 / 8.97 | **11 s / 13 s** | 0 | 375 / 363 | 2.72 s |
+| SRT (reference) | 9.43 / 9.43 | **9.91 / 9.97** | 10.04 / 10.04 | 1 s / 1 s | **53 / 5** | 4 / 0 | 74 ms |
+
+**BBRv2 was C1's winner and is C2's worst by a wide margin.** Under a shaped bottleneck too small for
+the feed it was the one controller that was *stable* — full delivery at half CUBIC's queuing delay on
+every replicate — and that is the row this experiment previously recommended. Provision the path
+properly and put one competing flow on it, and it gives up **28–35 % of its rate** and takes **11–13
+seconds** to come back. CUBIC gives up 6–15 % and recovers in 3–7 s. BBRv1, the controller C1
+disqualified for bimodality, barely registers the transient at all: −2 % and −0.4 %, back inside 4 s and
+1 s.
+
+**So a failure-mode condition cannot rank controllers for a deployment, and C1 is now evidence for that
+rather than a ranking.** The two conditions do not disagree about any measurement; they disagree about
+which behaviour is being rewarded. A delay-based controller reading a full bottleneck buffer as a signal
+to yield is doing the right thing when the buffer is full because the link is too small, and the wrong
+thing when it is full because something else is briefly using it — the feed is not congestion-responsive,
+so yielding is content lost rather than rate deferred. BBRv2 yields hardest and therefore loses most.
+CUBIC, which needs actual loss before it backs off, holds more of the feed for the same reason it bloats.
+
+**Nothing on the MoQ lane corrupted anything, at any controller: 0 continuity errors in all six cells.**
+The transient costs *content* — a hole where groups were skipped, visible as a PCR interval up to 2.72 s —
+and never integrity. SRT again does the opposite and does it twice as clearly as in C1: it **gains** rate
+during the transient (9.91 and 9.97 against 9.43 before), because it is not congestion-responsive and
+simply declines to yield, and it pays for that with 53 and 5 continuity errors. Taking the most bytes and
+delivering a damaged stream is the same trade C1 recorded at 90 % and 4,279 errors, now visible at a
+provisioning level where every other lane is comfortable.
+
+**The PCR column is the exporter defect, not the transient.** 363–414 intervals above 40 ms on every MoQ
+cell is the clustering characterised in [T18](test-18-delivery-latency.md) and filed as
+[#2937](https://github.com/moq-dev/moq/issues/2937); what the transient adds is the *maximum*, which
+tracks the hole rather than the cadence. SRT's 0–4 is the same contrast T18 measured and for the same
+reason: it carries the source mux with its own PCR spacing.
+
+#### The segmented rows of C2 are withheld pending a re-run
+
+Four segmented cells ran and none is reportable, for a reason worth stating precisely rather than
+dismissing. The *outcome* looks exactly like the mechanism C1 identified: delivery falls from ~9–10 Mb/s
+to 2.4–3.0 Mb/s, the receiver's output file stops growing between t=41 s and t=49 s — within seconds of
+the competing flow's scheduled 40 s onset — and in three of the four it never restarts. Half of 15 Mb/s
+is less than the 10 Mb/s feed, so a client that fetches in order falls behind, leaves the origin's
+availability window, and dies on the 404. That is C1's finding arriving on a provisioned path.
+
+**What cannot be shown is that the queue those cells experienced was the queue the condition specifies.**
+Their standing RTT reads **p95 178–183 ms against 554–584 ms on every other cell in the same condition**,
+so on the only independent evidence the rig collected, the bottleneck buffer never filled — yet the same
+greedy flow demonstrably filled it for the six MoQ and SRT cells run minutes apart under identical
+shaping. Something about these cells is not what the label says, and until it is known which, a
+collapse that *looks* like the expected mechanism is the most dangerous kind of result to publish: it
+would confirm a prior on evidence that does not support it. The re-run records the competing flow's own
+throughput per cell, which is the measurement whose absence makes this undecidable. C1's segmented
+conclusion — that behaviour under contention on this lane is a property of the *client*, not the
+transport — is unaffected, since it was measured with the shortfall applied by the cap itself and needed
+no competing flow at all.
+
+### C4 — AQM, which deletes the queue, the controller ranking and most of the argument
+
+`codel` and `cake` in place of the 500 ms FIFO, 100 ms base, 5 Mb/s cap, no competing flow, two
+replicates each plus one BBRv3 cell per qdisc. **Read this as C1 with an AQM rather than as a provisioned
+path:** 5 Mb/s against a ~10 Mb/s feed is a 2× shortfall, so the condition isolates the queue discipline
+and holds the shortfall constant, and none of it speaks to a properly sized link. Delivered fraction is
+quoted against the cap, since against the source it is fixed at roughly half by construction.
+
+| lane | codel: of cap | CC | PCR > 40 ms | max | cake: of cap | CC | PCR > 40 ms | max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| CUBIC | 45 / 49 % | 0 | 51 / 56 | 4.68 s | 50 / 50 % | 0 | 60 / 58 | 3.04 s |
+| BBRv1 | 43 / 47 % | 0 | 55 / 55 | 4.68 s | 47 / 58 % | 0 | 57 / 69 | 4.68 s |
+| BBRv2 | 59 / 59 % | 0 | 69 / 72 | 3.32 s | 57 / 54 % | 0 | 67 / 65 | 3.32 s |
+| BBRv3 | 44 % | 0 | 51 | 7.10 s | 36 % | 0 | 46 | 3.50 s |
+| SRT | 88 / 88 % | **22,365 / 22,343** | 538 / 550 | 296 ms | 75 / 79 % | **17,815 / 17,652** | 547 / 552 | 494 ms |
+| segmented, `tsp` | 79 / 79 % | 0 | **0 / 0** | **25.0 ms** | 56 / 56 % | 0 | **0 / 0** | **25.0 ms** |
+| segmented, re-anchoring | 79 / 79 % | 11 / 11 | 1 / 1 | 10.18 s | 55 / 55 % | 21 / 21 | 2 / 2 | 9.97 s |
+
+**An AQM removes the bufferbloat completely, for every controller and every transport, and that is the
+single most consequential number here.** Standing RTT is **p50 100–108 ms against a 100 ms base, p95
+101–119 ms** — against 554–584 ms p95 on the FIFO under the same base in C1 and C2. The 520–570 ms
+queuing delay that this experiment spent C1 characterising, and that decided C1's controller ranking, is
+a property of the *queue discipline at the bottleneck*, not of the controller and not of the transport.
+Put `codel` or `cake` at the bottleneck and it is simply gone.
+
+**With the delay gone, the controller spread very nearly goes with it.** C1 separated the controllers by
+a factor of two-and-a-half in standing delay and ~20 points of delivery; here they sit inside 43–59 %
+with zero continuity errors everywhere, and the ordering that survives is weak — BBRv2 marginally ahead
+on both AQMs, BBRv3 last on both, CUBIC and BBRv1 indistinguishable. **Between C1, C2 and C4 the
+controller ranking has now come out in three different orders under three conditions, which retires the
+question rather than answering it:** for a fixed-rate feed the controller is a second-order term, and the
+first-order terms are how the link is provisioned and what the bottleneck queue does.
+
+**AQM is where SRT's failure mode stops being a trade and becomes a disqualification.** C1 recorded 4,279
+continuity errors under a FIFO; the same protocol under `codel` at the same shortfall takes **22,365**,
+and under `cake` **17,815**, reproducing to within 0.1 % and 1 % on the replicates. An AQM drops early
+and deliberately rather than tail-dropping a full buffer, and SRT's ARQ cannot keep up with it — so it
+still takes the most bytes of any lane (88 % of cap) and still delivers the least usable stream of any
+lane. Its PCR train degrades in the manner already noted: 538–552 intervals over 40 ms with the *median*
+interval unmoved, which is loss punching holes in an even grid rather than clustering.
+
+**MoQ's 0 continuity errors survive the AQM, and its cost moves entirely into the hole size.** Every MoQ
+cell, both AQMs, both replicates, all four controllers: zero. What the shortfall buys instead is a
+maximum PCR gap of **3.0–7.1 seconds**, i.e. multi-second holes where groups were dropped. Thinning
+rather than damage, at every queue discipline tried — that is now the most robust single result in this
+experiment.
+
+**The segmented lane's 0 PCR violations here are a symptom of lag, not a conformance win, and the
+distinction matters.** `tsp -I hls` posts 0 intervals over 40 ms and a 25.0 ms maximum — perfect, and it
+would be tempting to read as the lane keeping its timing under pressure. It is not: the client delivers a
+*contiguous* prefix of the stream and simply falls behind, which is [T5](test-5-network-impairment.md)'s
+"sheds time, not bytes" and the reason no gap appears in its PCR train. Its 79 % (codel) and 56 % (cake)
+are how far behind it got before the window closed, not how much it lost. The re-anchoring client is the
+control that proves it: given the same conditions it *does* skip, and its PCR maximum immediately becomes
+**9.97–10.18 s** with 11–21 continuity errors.
+
+**Two `cake` cells lost the RTT instrument** (`rtt_p50=NA`) with the delivery measurement intact. Nothing
+depends on those two readings, since the other twenty-four agree on the AQM result, but they are the
+reason the RTT claim above is stated as a range over the condition rather than per cell.
+
+### C5 — the provisioning margin, which is the number an operator actually sets
+
+The condition C2 and C4 make interesting: if the controller is second-order and an AQM deletes the queue,
+what remains is *how much headroom over content rate a fixed feed needs*. Caps of 15, 12, 11 and 10 Mb/s
+against a ~9.9 Mb/s source — 1.51×, 1.21×, 1.11× and 1.01× headroom — on the 500 ms FIFO, no competing
+flow, one replicate per cell. Delivered is against the source; delay is p50 against a 100 ms base.
+
+| headroom | CUBIC | BBRv1 | BBRv2 | SRT | segmented `tsp` | segmented re-anchor |
+|---|---|---|---|---|---|---|
+| **1.51×** | 95 % / 114 ms | 95 % / 114 ms | 93 % / 113 ms | 97 % / 114 ms | 99 % / **129 ms** | 92 % / 128 ms |
+| **1.21×** | 94 % / 138 ms | 95 % / 138 ms | 93 % / 135 ms | 97 % / 126 ms | 89 % / **336 ms** | 84 % / 333 ms |
+| **1.11×** | 94 % / 173 ms | 95 % / 171 ms | 90 % / 154 ms | 97 % / 130 ms | 84 % / **369 ms** | 80 % / 367 ms |
+| **1.01×** | 92 % / **517 ms** | 92 % / 315 ms | 93 % / **229 ms** | 90 % / 570 ms **(1,035 CC)** | 79 % / 407 ms | 76 % / 405 ms |
+
+**There is no content cliff on the MoQ lane anywhere in this ladder, which was not the expected answer.**
+The condition was designed to find where content loss begins, and delivery declines gently from 95 % to
+92 % as headroom falls from 1.51× to 1.01× — with **0 continuity errors in all twelve MoQ cells**. Running
+a fixed 9.9 Mb/s feed through a 10 Mb/s pipe costs three points of content and no integrity. What responds
+to the margin instead is **standing delay**, and it responds sharply: flat at 113–114 ms through 1.51×,
+138 ms at 1.21×, 154–173 ms at 1.11×, and then 229–517 ms at 1.01×.
+
+**So the deployable output of this whole experiment is a provisioning rule, not a controller.** Below
+about 1.2× headroom the FIFO begins to fill and the delay starts eating the receive buffer that absorbs
+the next transient; above it, every controller and both MoQ backends are indistinguishable and
+comfortable. That is a number an operator can act on, it is stable across the three conditions that
+measured it, and it makes the controller choice a tie-break rather than a decision.
+
+**The controllers separate only at 1.01×, and there they reproduce C1's ordering** — BBRv2 229 ms, BBRv1
+315 ms, CUBIC 517 ms — which is consistent rather than contradictory: C1 was also a thin-margin FIFO
+condition. The three-way disagreement across conditions is between *regimes*, not between replicates.
+
+**SRT's failure is a cliff where MoQ's is a slope.** It is the best lane in the ladder down to 1.11× —
+97 % delivered at 126–130 ms, better than any MoQ cell — and at 1.01× it breaks: 570 ms and **1,035
+continuity errors**. Graceful degradation against a sharp edge just above unity is the same
+thinning-versus-damage split, now located on the provisioning axis.
+
+**The segmented lane needs roughly 1.5× where MoQ needs 1.2×, and the reason is burst shape rather than
+average rate.** Its delay is already 129 ms at 1.51× and triples to 336 ms at 1.21×, where every MoQ cell
+is still at 138 ms — because each segment fetch is a line-rate burst into the bottleneck buffer
+irrespective of how much average headroom exists. It also delivers the least at every margin below 1.5×
+(89 %, 84 %, 79 %). This reproduces C1's independent reading of 337 ms at a 12 Mb/s cap to within 1 ms in
+a different session, which is the strongest cross-session agreement in the experiment. **A segmented trunk
+sharing a bottleneck hurts whatever shares it with, and needs provisioning against its bursts.**
+
+### C3 — coexistence, where the media-aware lane's one serious scaling result is
+
+N concurrent feeds through one 15 Mb/s bottleneck and one relay, 500 ms FIFO, 90 s, one replicate. The
+per-flow figure below is flow 1; the aggregate is the sum over all N receivers, and **it survives for
+only the two `n=3` cells** — the others were deleted by a disk janitor mid-run, which is a self-inflicted
+gap and the reason `n=2` is reported per-flow only.
+
+| cells | flow 1, of source | aggregate | of the 15 Mb/s cap | CC (flow 1) | RTT p50 |
+|---|---:|---:|---:|---:|---:|
+| MoQ BBRv1, n=2 | 46 % | not captured | — | 0 | 594 ms |
+| MoQ CUBIC, n=2 | 29 % | not captured | — | 0 | 522 ms |
+| MoQ BBRv1, n=3 | 12 % | **3.76 Mb/s** | **25 %** | 0 | 596 ms |
+| SRT, n=3 | 31 % | **12.67 Mb/s** | **84 %** | 7,833 | 592 ms |
+| MoQ CUBIC, n=3 | 20 % | not captured | — | 0 | 558 ms |
+| SRT, n=2 | 90 % | not captured | — | 1,562 | 582 ms |
+
+**Three MoQ feeds sharing a congested path collectively use a quarter of it; three SRT feeds use
+84 %.** That is the one result in this experiment where the media-aware lane loses on something other
+than a filed upstream defect, and it is not a fairness problem — it is a *utilisation* problem. Each
+flow's individual share being below the fair 1/N is expected under contention; the aggregate falling to
+3.76 Mb/s on a 15 Mb/s link is not. The mechanism is coherent: a delay-sensing controller behind a
+permanently saturated 500 ms FIFO (p50 596 ms) reads a very large delay, all three flows read it at once,
+and they back off together — so the more feeds share the path, the worse the total. SRT does not sense
+delay, does not yield, and fills the link at the cost of 7,833 continuity errors.
+
+**Read this as one replicate of one controller at one queue discipline, and as the strongest argument in
+the campaign for running C3 properly.** It is the first condition to suggest that trunking several
+media-aware feeds over one shared bottleneck is qualitatively worse than trunking one — which matters
+directly, because a distribution trunk carrying many services is the intended deployment. The re-run
+needs: aggregate captured for every cell, `cake` alongside the FIFO (C4 predicts most of this effect
+disappears with an AQM, and that prediction is cheap and load-bearing), CUBIC's aggregate to separate
+"delay-based collapse" from "MoQ collapse", and replicates.
+
+### C6 — running
+
+The permanence soak is executing on this rig now: BBRv1/quinn at a 15 Mb/s cap for 14 hours, chosen
+because C1's unexplained bimodality is exactly what a 120 s window cannot rule on. It grades in flight
+rather than storing, since a 15 Mb/s feed is 162 GB a day, and it samples per-role RSS, a running packet
+total, continuity events and respawns once a minute.
 
 ## Observations
 
-- **CUBIC bloats, reliably** — both backends fill the FIFO to ~520–570 ms on every replicate. Stable,
-  and (for us) irrelevant as a latency figure; it matters only that it does not damage the stream
-  (0 CC).
-- **For a permanent feed, stability decides it, not the best-case number.** BBRv2 (quiche) held
-  ~½ CUBIC's delay and full delivery on *every* run. BBRv1 (quinn) is **bimodal**: ~230 ms on two of
-  three runs but a full 591 ms bloat on the third. That intermittency is disqualifying for a 24/7/365
-  feed — a bloat spike past the `--latency-max` buffer becomes dropped groups, and over continuous
-  operation it *will* occur and eventually coincide with a transient. It is also consistent with the
-  maintainer's own "quinn BBR is kind of bugged" note (asked upstream on #2432).
+- **CUBIC bloats, reliably — and the bloat belongs to the FIFO, not to CUBIC.** Both backends fill the
+  500 ms FIFO to ~520–570 ms on every replicate, and C4 then shows every controller sitting at 100–108 ms
+  against a 100 ms base once the bottleneck runs `codel` or `cake`. So "CUBIC bloats" is really "a
+  tail-drop buffer bloats, and CUBIC is the controller that fills it fastest"; the deployment lever is
+  the queue discipline, which is usually someone else's to set.
+- **The controller is a second-order term for this feed, and it took three conditions to see it.** C1,
+  C2 and C4 rank the controllers in three different orders. Under an under-provisioned cap (C1) BBRv2 on
+  quiche is the stable, complete performer and BBRv1 on quinn is bimodal; on a provisioned path with a
+  transient (C2) BBRv2 is the worst row on the page — shedding 28–35 % of the feed and needing 11–13 s to
+  recover — while BBRv1 loses 0.4–2 % and recovers inside 4 s; under an AQM (C4) the spread closes to
+  43–59 % of cap with 0 CC everywhere and no ordering worth quoting. **What each condition actually
+  measures is how readily the controller yields, and for a feed that cannot slow down, yielding is content
+  lost.** Whether that is the right thing to do depends on whether the bottleneck is permanently too small,
+  briefly shared, or never allowed to fill — so it is a provisioning and queue-discipline question, and
+  the open question to the maintainer on #2432 (whether BBRv2 on quiche is supported for continuous
+  operation) matters less than it did.
 - **BBRv3 (noq) is out** — it both bloats and collapses delivery to ~12 %, the #768 overflow biting
   under sustained pressure. A controller that can abort the relay is an outage by definition here.
-- **The controller that survives this condition best is BBRv2 on quiche** — stable, complete, no
-  aborts on every replicate. **Read that at its actual strength: one condition, 2–3 replicates, and a
-  delivered fraction that swings ~20 points.** It is enough to say the ranking under a shaped
-  bottleneck is not the ranking under non-congestive loss; it is not enough to pin a controller for a
-  24/7/365 feed, and C2 is what would be. The open question to the maintainer on #2432 is whether
-  BBRv2 on quiche is a supported choice that can be run continuously.
-- **MoQ and SRT fail in opposite directions** — the T8 finding, now under congestion too. MoQ sheds
-  *whole groups* and emits a syntactically clean TS (0 CC, 45–81 % delivered) — thinned but
-  reconstructable. SRT keeps 90 % of the bytes but its ARQ cannot hold under sustained
-  over-subscription, so the output carries **4279 CC errors** — a damaged, unreconstructable stream.
-  For reconstruction, clean-but-thinned wins.
+- **BBRv1's C1 bimodality is still unexplained and still matters.** C2 shows it is the best-behaved
+  controller under a transient, which is an argument for running it, and C1 shows one replicate in
+  three bloating to 591 ms, which is an argument against — consistent with the maintainer's own "quinn
+  BBR is kind of bugged" note. The two are not in conflict: an intermittent fault that appears on a
+  third of short runs is exactly what a soak resolves and a 120 s window cannot, which is why C6 runs
+  BBRv1 rather than the C2 winner-on-paper.
+- **MoQ and SRT fail in opposite directions, and this is the result that holds in every condition.**
+  MoQ sheds *whole groups* and emits a syntactically clean TS — **0 continuity errors in every MoQ cell
+  of C1, C2 and C4**, across four controllers, three queue disciplines and two provisioning levels —
+  paying instead in content, visible as PCR gaps up to 7.1 s. SRT keeps the most bytes of any lane and
+  damages them: 4,279 continuity errors under a FIFO, and **17,652–22,365 under an AQM**, because early
+  deliberate drops defeat its ARQ where a full tail-drop buffer merely delayed it. **SRT's failure mode
+  gets four to five times worse on exactly the queue discipline a well-run network is most likely to
+  deploy**, which is the sharpest form of this finding the campaign has.
 - **On the segmented lane, congestion behaviour is a receiver property, not a transport property.**
   The same lane under the same shortfall either dies at 43 s or thins cleanly at 99 % of the cap
   depending only on what the client does with a 404. This is the sharpest instance in the campaign of
@@ -309,7 +538,10 @@ For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not a
 
 - **Complete and reconstructable:** on a provisioned path (C2–C5) the feed arrives with **0 continuity
   errors after the pacer** and no session drop, and recovers from a transient without a gap that
-  breaks reconstruction.
+  breaks reconstruction. **Scored on C2: MoQ passes on integrity at every controller (0 CC) and
+  recovers on every controller, but only BBRv1 passes on completeness — CUBIC loses 6–15 % of the feed
+  through the transient and BBRv2 28–35 %, which is a hole, not deferred rate. SRT fails on damage
+  again (53 and 5 CC) while over-delivering.**
 - **Stable indefinitely (C6):** no drift, leak, or rare abort over a hours→days soak — an intermittent
   fault is a fail even if the median run looks fine.
 - **Fails gracefully when under-provisioned (C1):** degradation is *thinning* (missing content, clean
@@ -319,15 +551,56 @@ For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not a
   43 s under the one that does not.**
 - Queuing delay is judged **only** against the receive buffer: acceptable if it stays clear of
   `--latency-max` with headroom for a transient; a fail if it periodically approaches or exceeds it.
+  **Scored: this is a property of the bottleneck queue, not of the lane.** Against a 500 ms FIFO every
+  controller runs 520–584 ms and eats the whole 2 s buffer's headroom; against `codel` or `cake` every
+  controller runs at 100–108 ms on a 100 ms base and the criterion is met with two orders of magnitude
+  of margin.
 
 ## Conclusion
 
-C1 establishes the rig and the qualitative picture under a deliberately under-provisioned
-cap: **CUBIC reliably bloats but stays clean; BBRv2 (quiche) is the stable, complete performer; BBRv1
-(quinn) is bimodal on one replicate of three; BBRv3 (noq) is broken by #768; and MoQ thins where SRT
-damages.** **No controller recommendation for a permanent fixed-rate trunk follows from one
-under-provisioned condition** — the bimodality is a reason to run C2, not a disqualification. The
-question is with the maintainer on [#2432](https://github.com/moq-dev/moq/pull/2432).
+**The controller that looks best depends on which condition you run, three conditions have produced
+three orders, and so this experiment does not yield a controller recommendation — it yields a reason not
+to trust one.** Under a cap permanently too small for the feed behind a tail-drop buffer (C1), BBRv2 on
+quiche is stable and complete where CUBIC bloats and BBRv1 is bimodal. On a properly provisioned path
+with a competing flow passing through (C2), BBRv2 sheds 28–35 % of the feed and takes 11–13 s to recover,
+CUBIC sheds 6–15 %, and BBRv1 — C1's bimodal reject — barely registers it. Put an AQM at the bottleneck
+(C4) and the spread closes to 43–59 % of cap with zero continuity errors everywhere and no ordering worth
+quoting. All three readings are sound, and the reason they disagree is the same each time: **a controller
+that yields to a full queue is right when the queue is full because the link is too small, wrong when it
+is full because a neighbour is briefly busy, and irrelevant when the queue is never allowed to fill.**
+For a feed that cannot slow down, the middle case turns politeness into missing content. BBRv3 (noq) is
+excluded in every condition by [#768](https://github.com/moq-dev/moq/issues/768).
+
+**The two things that did move the outcome are the provisioning margin and the bottleneck's queue
+discipline.** An AQM takes standing delay from 554–584 ms to 101–119 ms for every controller and every
+transport at once — a larger effect than any controller choice in any condition here — which reframes the
+"bufferbloat" framing this test inherited from upstream: the delay was the buffer's, and the controller
+only determined how fast it was filled. And C5 turns the margin into the one number this experiment can
+hand an operator: **provision at ≥ 1.2× content rate for the MoQ lane and ≥ 1.5× for a segmented one**,
+above which every controller is comfortable and below which delay climbs steeply toward the receive
+buffer that has to absorb the next transient. The segmented figure is higher for a structural reason —
+each segment fetch is a line-rate burst, so its queueing is set by burst shape rather than average
+headroom, which C5 and C1 independently measured at 336 and 337 ms.
+
+**The MoQ lane's one serious loss in this experiment is concurrency, and it is one replicate.** Three
+feeds through a single congested bottleneck collectively delivered 3.76 Mb/s of a 15 Mb/s link — 25 % —
+where three SRT feeds delivered 84 %. Individual shares below 1/N are expected; a *total* that collapses
+as feeds are added is not, and a delay-sensing controller behind a permanently full FIFO is a coherent
+mechanism for it. Since C4 shows an AQM removes the standing delay that would drive such a collapse,
+the obvious prediction is that this largely disappears under `codel` or `cake` — which is both cheap to
+test and the difference between an artefact of a deep tail-drop buffer and a real limit on trunking
+multiple services over one path. Until it is run, this is the experiment's most important open item.
+
+**What does not vary is the failure mode, and that is the transferable result.** Across three
+conditions, four controllers, three queue disciplines and two provisioning levels, the MoQ lane loses
+*content* and never *integrity* — **0 continuity errors in every MoQ cell run** — with the cost appearing
+as PCR gaps of up to 7.1 s where groups were skipped. SRT does the opposite everywhere, and for the same
+reason each time: not being congestion-responsive, it takes its share rather than yielding — it actually
+**gained** rate through the C2 transient — and pays in continuity errors. **Its damage scales with how
+well-behaved the network is**: 53 and 5 errors on a provisioned FIFO, 4,279 on an under-provisioned FIFO,
+and 17,652–22,365 under an AQM, because early deliberate drops defeat ARQ where a full tail-drop buffer
+only delayed it. Thinned-but-clean against complete-but-damaged is the real choice, and it is stable
+across every condition in a way that no controller ranking is.
 
 **Under congestion the three data planes fail three different ways — but only two of those failures
 belong to a transport.** MoQ thins and SRT damages, and each does so because of what its protocol
@@ -343,20 +616,27 @@ completeness is bought at ~12 s behind the live edge with content lost in 12 s h
 that MoQ gets from its transport has to be built into the receiver here, which is precisely the work
 that the two available clients have not done.
 
-This is **not yet promoted to [`docs/evidence.md`](../docs/evidence.md)**, and the controller wording
-in [`docs/architecture.md`](../docs/architecture.md) §8.5 / [`docs/architecture.md`](../docs/architecture.md) §8.4 is **not**
-changed on the strength of it. The load-bearing follow-up is C2 (transient congestion on a provisioned
-path), then the C6 soak — the two conditions that actually test a permanent trunk.
+The controller wording in [`docs/architecture.md`](../docs/architecture.md) §8.4 / §8.5 is **not**
+changed to name a controller, because the finding promoted from here is that no single condition can
+name one. What is promotable is the provisioning rule, the AQM result, and the failure-mode split.
 
 ## Next steps
 
-- Run **C2 (transient congestion / competing flow)** — the priority: does a competing flow or brief
-  capacity dip cost the feed any content, and does it recover cleanly?
-- Run **C3 (coexistence / fairness)** and **C4 (AQM)** on the provisioned path.
-- Run **C5** — two provisioning points to find where content loss begins per controller.
-- Run **C6 (long-duration soak)** — the permanence requirement; pair with the T9 resource soak.
-- Add **replicates** (≥ 5) for delivered-fraction confidence; the delay/stability ranking is already
-  clear at 2–3.
+- **Re-run C3 properly.** The highest-value item, because it is the only measurement suggesting the
+  media-aware lane has a real scaling limit: aggregate captured for *every* cell, `cake` beside the
+  FIFO to test whether the collapse is the buffer's, CUBIC's aggregate to separate a delay-based
+  collapse from a MoQ one, and replicates.
+- **Re-run the segmented C2 cells with the competing flow's own throughput recorded**, so a delivery
+  collapse can be attributed to the impairment rather than inferred from it.
+- **Read the C6 soak out** when it completes: per-role RSS trend, respawn count, and continuity events
+  with timestamps. It is the only condition addressing permanence, and the one that decides whether
+  BBRv1's C1 bimodality is a transient artefact or a standing fault.
+- Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear
+  at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate
+  spread.
+- **Never let a cleanup job run against a live results tree again.** A janitor deleting captures to
+  protect the disk destroyed four of six C3 aggregates, which was the most valuable data in the matrix.
+  It should have excluded the cell in progress *and* whatever the condition needs summed.
 - **Run the segmented lane long enough at 8 Mb/s to see the `tsp` client die**, since 60 s only shows
   the trajectory. The prediction is a 404 at roughly the point four segments per minute of lost ground
   consumes a nine-segment window, and it is worth having the number rather than the extrapolation.

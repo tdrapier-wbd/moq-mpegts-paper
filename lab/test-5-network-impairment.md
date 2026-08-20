@@ -324,8 +324,8 @@ capture tool cleanly, so no local TSDuck file was produced.
 8. **The media-aware lane's PCR non-conformance is not an impairment effect.** It sits at 7.89–9.18 %
    of intervals above 40 ms in *every* cell including the unimpaired baseline, and does not move with
    loss, delay or reordering. That is the exporter defect isolated in [T18](test-18-delivery-latency.md)
-   — PCRs emitted too rarely and in clusters — showing up again on a third rig. Impairment neither
-   causes it nor worsens it.
+   — the right *number* of PCRs emitted in sub-millisecond clusters with long gaps between them —
+   showing up again on a third rig. Impairment neither causes it nor worsens it.
 9. **The availability window is a real edge, and this ladder is on the safe side of it by
    construction.** `http_non200` stays at 0 up to 8 % loss across 40 s cells — but 40 s is shorter than
    the 18 s window divided by the shortfall, so the cell ends before a segment can expire. Run for

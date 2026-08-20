@@ -265,21 +265,89 @@ is a rig asymmetry and the obvious candidate for both the drained cushion and th
 
 Re-running the lane with the carrier matched to its content rate (9.75 Mb/s) separates the two:
 
-| cell | stuffing | underruns | latency median | settled | PCR > 40 ms | max |
-|---|---|---|---|---|---|---|
-| moq, 1000 ms, 10 Mb/s | 3.2 % | 18,070 | 126 ms | 87 | 489 / 3215 | 228.0 ms |
-| moq, 1000 ms, 9.75 Mb/s | 0.8 % | 4,297 | 171 ms | 128 | 503 / 3140 | 233.9 ms |
-| moq, 2000 ms, 9.75 Mb/s | **0.0 %** | **5** | 1027 ms | 824 | 502 / 3112 | 233.9 ms |
+| cell | stuffing | underruns | `pcr_inserted` | latency median | settled | PCR > 40 ms | max |
+|---|---|---|---|---|---|---|---|
+| moq, 250 ms, 10 Mb/s | 4.1 % | 23,151 | **137** | 90 ms | 87 | 491 / 3215 | 228.0 ms |
+| moq, 1000 ms, 10 Mb/s | 3.2 % | 18,070 | **103** | 126 ms | 87 | 489 / 3215 | 228.0 ms |
+| moq, 1000 ms, 9.75 Mb/s | 0.8 % | 4,297 | **28** | 171 ms | 128 | 503 / 3140 | 233.9 ms |
+| moq, 2000 ms, 9.75 Mb/s | **0.0 %** | **5** | **0** | 1027 ms | 824 | 502 / 3112 | 233.9 ms |
 
 **Starvation was the cause of the drained cushion and is not the cause of the PCR failure.** Removing it
 restores the cushion — latency now tracks the commanded depth, 824 ms settled at a 2000 ms cushion
 against 90 ms before — while repetition does not improve at all: 502 against 491, and a *worse* maximum.
 
-The groomer's own counters close the argument: that cell reports `pcr_inserted=0`. Every PCR on the
-egress therefore came from the arriving stream, so the egress spacing *is* the lane's spacing. The
-groomer is not failing to place PCRs; **the media-aware lane does not deliver them often enough to
-place**, which corroborates [T13](test-13-downstream-grooming.md)'s observation that MoQ's egress arrives
-with intervals already above 40 ms and a 319.9 ms maximum.
+The `pcr_inserted` column is what closes the argument, and it closes it by *varying* rather than by
+reading zero. This groomer places a PCR of its own only into a slot it was going to stuff anyway — a
+deliberate design property, so that grooming never displaces content — so its insertion budget *is* the
+rate surplus. Across the ladder that surplus falls from 4.1 % to 0.0 % and the insertions fall with it,
+137 → 103 → 28 → 0, exactly as the mechanism predicts. **The violation count does not move: 491, 489,
+503, 502.** The groomer was placing PCRs, at four different rates, and it made no difference to
+conformance at any of them.
+
+That is a stronger result than a groomer which placed none, and it says something the zero could not.
+137 insertions cannot cover ~490 gaps, and they were never going to: a stuffing slot falls wherever the
+carrier happens to run ahead of the content, which is uncorrelated with where the exporter left a gap.
+Closing ~490 gaps from downstream needs enough surplus that spare slots land inside all of them — and
+scaling from the measured 4.1 % → 137 puts that at a carrier running many times further above content
+rate, which is [#1992](https://github.com/moq-dev/moq/pull/1992)'s abandoned first horn (~20 % empty
+PCR-only windows) arrived at from the other direction. **So the division of labour is measured, not
+argued: PCR placement is the exporter's, because buying it downstream costs the carrier efficiency the
+downstream stage exists to provide.** This corroborates
+[T13](test-13-downstream-grooming.md)'s observation that MoQ's egress arrives with intervals already
+above 40 ms and a 319.9 ms maximum.
+
+### Measurement 6 — the defect is the *spacing*, not the density, and three transparent lanes prove it
+
+Everything above measures the exporter through a groomer, which is the deployable configuration but the
+wrong instrument for asking what the exporter itself emits. [T8b](test-8b-congestion-control.md)'s
+provisioned-path rig happens to supply the missing control: its MoQ arm writes `moq export ts` straight
+to a file with **no pacer in the path**, and its SRT and segmented arms carry the *same clip* on the
+*same PID* over transports already shown to be byte-transparent. So the source's own PCR train and the
+exporter's can be read off the same source in the same session.
+
+| lane | PCRs/s | median interval | < 1 ms | > 40 ms | > 100 ms | max |
+|---|---:|---:|---:|---:|---:|---:|
+| source via SRT | 40.9 | **24.648 ms** | 0.1 % | 4 | 0 | 74.1 ms |
+| source via segmented (`tsp`) | 41.0 | **24.648 ms** | 0.0 % | **0** | 0 | **25.0 ms** |
+| source via segmented (re-anchoring) | 41.0 | **24.648 ms** | 0.0 % | **0** | 0 | **25.0 ms** |
+| MoQ export, CUBIC | 35.6 | **0.011 ms** | 85.2 % | 412 | 397 | 1200.0 ms |
+| MoQ export, BBRv1 | 36.0 | **0.011 ms** | 85.3 % | 414 | 399 | 539.9 ms |
+| MoQ export, BBRv2 | 31.3 | **0.011 ms** | 84.9 % | 375 | 361 | 1840.0 ms |
+
+**The clip is conformant, comfortably, and the number of PCRs survives the round trip — only their
+positions do not.** The source carries an evenly spaced PCR every 24.65 ms, and two independent
+segmented readings confirm it end to end with a 25.0 ms maximum and *not one* interval above 40 ms. The
+exporter emits 31–36 PCRs a second against the source's 41 — the same order, and well above the ~25/s
+that a 40 ms ceiling arithmetically requires — but it places 85 % of them **within 11 µs of the one
+before**, and then leaves gaps of 100 ms to 1.84 s. An even train goes in; the same quantity of PCRs
+comes out in bursts.
+
+**That vindicates how [#2937](https://github.com/moq-dev/moq/issues/2937) was filed and condemns how this
+repository has been summarising it.** The issue itself says "it is not sparsity", reports the mean
+conserved to 0.7 ms, and asks for PCR-bearing packets "at a bounded interval" — all correct. But the
+shorthand that spread through `docs/` and the other lab files was "the exporter emits PCRs too rarely"
+and "a denser cadence would clear the gate", and that is false: adding PCRs to a stream whose median
+inter-PCR gap is already 11 µs puts them inside the existing clusters, where they are redundant, and does
+nothing to the 100 ms–1.8 s holes that are the actual violations. **The correct phrasing throughout is
+placement, never rate.** The exporter attaches its PCR to the
+adaptation field of the *first TS packet of each PES unit* and to no other packet
+(`rs/moq-mux/src/container/ts/export.rs`, the `first && (unit.is_pcr || unit.keyframe)` guard), so PCR
+cadence is a side-effect of unit boundaries and unit ordering, and there is no interval-based insertion
+path in the exporter at all. A stage that emits a PCR-bearing packet whenever the clock has advanced
+past a threshold — the thing `mpegts-pacer` does downstream and can only do inside stuffing slots —
+would remove the defect at source.
+
+**Loss and clustering are distinguishable in this distribution, which is what makes it a usable
+diagnostic.** T8b's `codel` cells put SRT through 22,365 continuity errors, and its PCR train degrades
+to 538 intervals over 40 ms with a 296 ms maximum — but its *median* stays at 24.8 ms and its sub-1 ms
+fraction stays at 0.0 %. Loss punches holes in an even train; the exporter re-bunches it. A single
+"intervals over 40 ms" count cannot tell those apart, and this campaign has quoted that count for both.
+
+The mechanism behind the sub-millisecond clusters is still not established. One PCR per PES unit on a
+25 fps clip predicts a 40 ms cadence, not 36/s at 11 µs spacing, so unit ordering or the
+`dts.unwrap_or(pts)` choice of clock is doing something the guard alone does not explain. That is the
+next thing to read, and it needs the per-unit DTS sequence logged against packet position rather than
+another distribution.
 
 ### Measurement 5 — the same instrument over a real path, and the path costs almost nothing
 
@@ -356,13 +424,16 @@ ladder spanning eight times the depth, and it is equally fixed when starvation i
 the groomer cannot do is place a PCR it never received.
 
 **That relocates the defect, and makes it cheaper to fix than a trade-off would be.** A latency-versus-
-conformance trade would be structural and would have to be priced into every recommendation. A PCR
-emission interval in the exporter is a bug with an owner: the lane already carries the clock, it simply
-emits it too rarely. The evidence here does not prove that a denser cadence would clear the gate — only
-that depth is not the binding constraint — but it makes the prediction testable at no cost: emit
-PCR-bearing packets at the ~25 ms cadence a broadcast mux uses, re-run this rig unaltered, and the lane
-should pass at a 250 ms cushion, which is **127 ms of delivery latency**. That is the outcome the paper
-hopes for and has never been able to claim.
+conformance trade would be structural and would have to be priced into every recommendation. PCR
+placement in the exporter is a bug with an owner: the lane already carries the clock, and measurement 6
+shows it carries very nearly the right *number* of clock samples — 31–36 a second against the source's
+41 — while putting 85 % of them within 11 µs of each other and leaving 100 ms–1.8 s holes between the
+bursts. **The lane is not emitting the clock too rarely; it is emitting it all at once.** So the fix is
+a placement rule rather than a rate: emit a PCR-bearing packet whenever the clock has advanced past a
+threshold, independent of PES-unit boundaries, which is the ~25 ms even cadence the same clip already
+shows on all three transparent lanes. Re-run this rig unaltered afterwards and the lane should pass at a
+250 ms cushion, which is **127 ms of delivery latency**. That is the outcome the paper hopes for and has
+never been able to claim, and it is still a prediction this experiment makes rather than tests.
 
 **SRT and RIST are the same product at this layer on a lossless link, and possibly not on a real one.**
 T15 found them indistinguishable in cadence; on loopback they are indistinguishable in latency to within
@@ -420,8 +491,8 @@ depth it already runs at — which, measured across the internet, is 109 ms.
 
 | Cell | Needs |
 |---|---|
-| *Why* the exporter clusters PCRs | reading the exporter against the distribution. The distribution itself is measured — [T4](test-4-remote-e2e-srt.md) has the ungroomed export at 1,123 of 1,307 intervals under 1 ms with 107 gaps to 319.94 ms, mean conserved — and this experiment adds that no downstream stage can repair it. Group-wise reassembly is inferred from the shape, not confirmed in the code |
-| Whether a denser PCR cadence actually clears the gate | the exporter change, then this rig re-run unaltered. This is the prediction the experiment makes and does not test. Reported as [#2937](https://github.com/moq-dev/moq/issues/2937), with the measurements above and the argument that #1992's failure was in its delivery model rather than its PCR density |
+| *Why* the exporter clusters PCRs | the per-unit DTS sequence logged against packet position. Measurement 6 locates *where* PCR is emitted (one adaptation field per PES unit, no interval path) and establishes that the source train is even and the density is preserved, so the cluster comes from unit ordering or from the `dts.unwrap_or(pts)` clock choice — but one PCR per unit on a 25 fps clip does not by itself predict 36/s at 11 µs spacing, so the mechanism is located, not explained |
+| Whether an **evenly spaced** PCR cadence clears the gate | the exporter change, then this rig re-run unaltered. This is the prediction the experiment makes and does not test. [#2937](https://github.com/moq-dev/moq/issues/2937) asks for the right thing — a bounded *interval* — and measurement 6 adds the control that rules out the density reading of it, since 31–36 PCRs/s already exceeds the ~25/s the gate requires |
 | Why one clip is immune | 0 % of intervals above 40 ms on a 27.5 Mb/s broadcast mux at a 27 ms native cadence, against 9–25 % on every other source. Unexplained, and it bounds how general the defect is |
 | **Whether RIST really beats SRT on a real path** | a window long enough for the RIST arms to settle. Their WAN medians sit 262–333 ms below their own loopback figures with a *rising* trend, so the apparent advantage is an unsettled arm, not a protocol property. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | A lossy path | impairment on the WAN legs. Both paths here were healthy, so nothing exercised the recovery the tunnels exist for — the case that should favour them |
@@ -453,8 +524,36 @@ its inserted nulls exactly, and the commanded carrier exceeded the lane's conten
 so starvation explained the numbers arithmetically. **True: starvation explains the drained cushion and
 none of the PCR failure.** Rate-matching the carrier cut underruns from 18,070 to 5 and left repetition
 at 502 violations. **Rule: when a groomer and its source could each explain a placement defect, the
-groomer's own insertion counter decides it** — `pcr_inserted=0` means every PCR came from upstream, and no
-amount of buffering will change what was never sent.
+groomer's own insertion counter decides it.**
+
+**Believed: `pcr_inserted=0` was that counter's verdict.** It was read from the rate-matched cell — the
+one cell in the ladder at **0.0 % stuffing**. This groomer inserts PCR only into slots it was already
+going to stuff, so at 0.0 % stuffing it has no slots and the counter cannot read anything but zero. The
+figure was quoted as proof the groomer could not help, when it was a measurement of the groomer having no
+opportunity to try. **True: read across the ladder, the counter varies with the surplus — 137, 103, 28, 0
+at 4.1 %, 3.2 %, 0.8 %, 0.0 % stuffing — while the violation count holds flat at 491, 489, 503, 502.**
+The conclusion is unchanged and the evidence for it is now the opposite shape: the groomer *did* place
+PCRs, at four different rates, and conformance did not move. **Rule: a counter reading zero in the one
+configuration where the thing it counts is impossible is evidence about that configuration and about
+nothing else. Before quoting a zero, vary the condition that makes the mechanism possible and check the
+counter moves.**
+
+**Believed: the exporter emits PCR too rarely, and the fix upstream is a denser cadence.** That was the
+inference from a count of intervals above 40 ms, and it spread as shorthand through `docs/evidence.md`,
+`docs/comparison.md`, `docs/architecture.md`, the top-level `README.md`, T13 and T16 — though *not* into
+[#2937](https://github.com/moq-dev/moq/issues/2937) itself, which was filed correctly as a clustering
+defect asking for a bounded interval. **True: the density is very nearly right and the spacing is
+wrong.** Measured against the same clip carried transparently by three other lanes, the
+exporter emits 31–36 PCRs a second where the source emits 41 and conformance needs ~25 — but with a
+median interval of 11 µs, 85 % of intervals below 1 ms, and the violations concentrated in 100 ms–1.8 s
+holes between bursts. A denser cadence would add PCRs inside the clusters and leave every violation in
+place. **Rule: a threshold-crossing count summarises a distribution and can point at the opposite of its
+cause. Before asking anyone to change a rate, plot the distribution of the intervals and check the mean
+is actually deficient.** The only reason this surfaced is that an unrelated rig (T8b) happened to capture
+the exporter with no groomer downstream and the same source on transparent lanes beside it — **so keep a
+transparent-lane control in any rig that measures a conversion.** The narrower lesson is about
+summarising: the upstream report was precise and the in-house paraphrase of it was not, which is the
+direction of drift worth watching, because the paraphrase is what the rest of the repository then cites.
 
 **Believed: one latency figure per transport would answer the question.** **True: the figure is a
 function of the grooming depth, and on a null-stripping lane it is a function of the rate surplus as
