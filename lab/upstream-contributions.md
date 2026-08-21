@@ -338,14 +338,34 @@ what makes two legs of a 1+1 pair byte-identical, **drops 45.9 % of content** an
 rather than a buffer size. End to end on the wire the lane is worse than before the fix: continuity 0 →
 824 errors, worst interval 228 → 375 ms, delivery latency 118 → 769 ms.
 
-**So the remaining ask is narrow and is not a re-litigation of #2937.** Either the stdout writer paces
-its output — placing each frame at the time the frame already carries and currently discards — or the
-PCR packet is emitted adjacent to the media bytes of the slot it labels, so position and value agree for
-a consumer that has only bytes. The first matches what an IRD expects off a wire; the second needs no
-timing at all. This is the same class of defect as
-[#2978](https://github.com/moq-dev/moq/issues/2978), which the maintainer's own adversarial review of
-#2967 raised against the SRT egress — a frame's pacing timestamp lost where bytes are handed on. Ours is
-that defect at the stdout boundary, where it is total rather than bounded by one chunk.
+**So the remaining ask is narrow, and reading the code makes it narrower than a pacing request.** #2967's
+own doc comments state a caller-side contract in as many words — each PCR is returned as its own frame
+stamped at its slot boundary *"so the caller's pacer places the PCR at"* its slot — and the burst is that
+contract working as designed, because `PCR_BACKFILL` fills every slot a coarse frame crossed and drains
+them over successive polls. **One in-tree caller honours the contract and the other drops it.**
+`moq-srt` derives `send_at = anchor + (ts - base)` from the frame timestamp and waits
+(`rs/moq-srt/src/server.rs:413`); `moq-cli`'s `run_ts` is `write_all(&frame.payload)` and never reads
+`frame.timestamp` (`rs/moq-cli/src/subscribe.rs`). So the report is not "add pacing to a transport
+library" — which we withdrew on [#1839](https://github.com/moq-dev/moq/issues/1839) and still would —
+but "your new code specifies a caller contract, one caller implements it, the other silently discards
+it, and what it discards is not recoverable downstream."
+
+That distinction is what keeps the report consistent with our own filed positions. On
+[#1838](https://github.com/moq-dev/moq/issues/1838) we argued that byte cadence at moq's egress is not a
+defect and that repairing it is the groomer's job, and that still holds: a groomer can fix *when* bytes
+leave, but it cannot reconstruct which media bytes a PCR was meant to sit beside once thirteen slots of
+clock have been written to one byte position. The fallback ask — emit the PCR packet adjacent to the
+media bytes of the slot it labels — needs no timing at all, but it is a larger change in `moq-mux` and is
+offered rather than pressed.
+
+**It is a new issue rather than a comment on either neighbour.**
+[#2978](https://github.com/moq-dev/moq/issues/2978) is the same class of defect and the maintainer found
+it himself in his adversarial review of #2967 — a frame's pacing timestamp lost where bytes are handed on
+— but it is scoped to `moq-srt`, is bounded by one 1316-byte chunk (~1 ms), and its own text puts it
+"orders of magnitude below the clusters #2937 measured". Filing ours there would get an unbounded loss on
+a different component mis-scoped as a minor variant of something already discounted. Reopening #2937
+would be worse: the fix did exactly what the issue asked for, inside the boundary the issue named. Draft
+in `docs/upstream/export-ts-pacing-issue.local.md`.
 
 The prediction that an even 20–25 ms interval clears the P1 gate **remains a prediction**: the clock
 arriving at the edge is even for the first time, but no conformant wire has yet been produced from it, so
