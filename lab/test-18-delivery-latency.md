@@ -344,11 +344,17 @@ to 538 intervals over 40 ms with a 296 ms maximum — but its *median* stays at 
 fraction stays at 0.0 %. Loss punches holes in an even train; the exporter re-bunches it. A single
 "intervals over 40 ms" count cannot tell those apart, and this campaign has quoted that count for both.
 
-The mechanism behind the sub-millisecond clusters is still not established. One PCR per PES unit on a
-25 fps clip predicts a 40 ms cadence, not 36/s at 11 µs spacing, so unit ordering or the
-`dts.unwrap_or(pts)` choice of clock is doing something the guard alone does not explain. That is the
-next thing to read, and it needs the per-unit DTS sequence logged against packet position rather than
-another distribution.
+**The mechanism is now established, and the defect is fixed upstream — but not the lane's.**
+[#2967](https://github.com/moq-dev/moq/pull/2967) names what this measurement could not: on reordered
+content the authored decode clock is a saw, and each B-frame that dips below it is nudged exactly one
+90 kHz tick — **11.1 µs** — past the previous DTS, which is the 11 µs median above, arrived at from the
+code rather than the distribution. The fix replaces the per-unit PCR with an absolute 25 ms grid, and
+[T19](test-19-pcr-grid-verification.md) confirms it exactly on this clip: every interval 25.000 ms, the
+sub-millisecond fraction 85.40 % → 0.00 %. **What T19 also establishes is that the numbers in the table
+above are still the deployable ones**, because the fix's spacing lives in per-frame timestamps that
+`moq export ts`'s stdout discards, so the exported *bytes* carry 87.2 % of PCR packets back-to-back and
+the lane's wire conformance regresses. Read this measurement as the diagnosis it is; read T19 for what
+the exporter now does and what it still does not.
 
 ### Measurement 5 — the same instrument over a real path, and the path costs almost nothing
 
@@ -494,8 +500,8 @@ already runs at — which, measured across the internet, is 109 ms.
 
 | Cell | Needs |
 |---|---|
-| *Why* the exporter clusters PCRs | the per-unit DTS sequence logged against packet position. Measurement 6 locates *where* PCR is emitted (one adaptation field per PES unit, no interval path) and establishes that the source train is even and the density is preserved, so the cluster comes from unit ordering or from the `dts.unwrap_or(pts)` clock choice — but one PCR per unit on a 25 fps clip does not by itself predict 36/s at 11 µs spacing, so the mechanism is located, not explained |
-| Whether an **evenly spaced** PCR cadence clears the gate | the exporter change, then this rig re-run unaltered. This is the prediction the experiment makes and does not test. [#2937](https://github.com/moq-dev/moq/issues/2937) asks for the right thing — a bounded *interval* — and measurement 6 adds the control that rules out the density reading of it, since 31–36 PCRs/s already exceeds the ~25/s the gate requires |
+| ~~*Why* the exporter clusters PCRs~~ **answered** | nothing. [#2967](https://github.com/moq-dev/moq/pull/2967) named it from the code: the authored decode clock is a saw on reordered content, and each B-frame dipping below it is nudged exactly one 90 kHz tick — **11.1 µs** — past the previous DTS, which is the median measured here |
+| Whether an **evenly spaced** PCR cadence clears the gate | **one more upstream change, then this rig re-run unaltered.** The exporter change asked for has landed and [T19](test-19-pcr-grid-verification.md) verifies it exactly — but only in the PCR values, because the spacing is carried as per-frame timestamps that stdout discards, so the PCR *packets* still leave bunched and the wire figure does not move. What remains is the exporter's output path. The prediction this experiment makes is still untested |
 | Why one clip is immune | 0 % of intervals above 40 ms on a 27.5 Mb/s broadcast mux at a 27 ms native cadence, against 9–25 % on every other source. Unexplained, and it bounds how general the defect is |
 | **Whether RIST really beats SRT on a real path** | a window long enough for the RIST arms to settle. Their WAN medians sit 262–333 ms below their own loopback figures with a *rising* trend, so the apparent advantage is an unsettled arm, not a protocol property. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | A lossy path | impairment on the WAN legs. Both paths here were healthy, so nothing exercised the recovery the tunnels exist for — the case that should favour them |

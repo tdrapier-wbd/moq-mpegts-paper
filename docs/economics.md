@@ -500,10 +500,12 @@ rate, and note that the sensitivity is on **the source**, not the protocol (§3)
 - **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity procurable
   from more than one supplier; a feed currently traverses only relays from the same implementation as
   the publisher.
-- **What does relay memory growth cost to operate around?** Now understood to plateau at roughly
-  100 MB per publisher connection rather than climb indefinitely, it is a sizing line rather than a
-  restart cycle — but one that scales with channels carried rather than audience, so it lands on
-  multi-channel relay density, and the stream-limit lever reduces it sub-proportionally with a
-  ~20–30 MB floor ([Evidence](evidence.md) §3.6).
+- **What does relay memory growth cost to operate around?** Now understood to plateau rather than climb
+  indefinitely, it is a sizing line rather than a restart cycle, and the stream-limit lever reduces it
+  sub-proportionally with a ~20–30 MB floor. **Whether it scales with channels carried or with
+  connections is open by a factor of two**: ~100 MB per publisher connection on a single-publisher rig,
+  but a 14 h soak with one publisher and one subscriber reached 2.03× that. On the first reading the cost
+  lands on multi-channel relay density; on the second it lands on audience too, which is a materially
+  different line ([Evidence](evidence.md) §3.6).
 - **How much of the operational-saving hypothesis survives running an immature platform to a broadcast
   SLA?** One on-call engineer outweighs the entire modelled transport line at single-route scale.

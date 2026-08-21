@@ -82,7 +82,7 @@ What differs is the *shape* of the replication point and who runs it.
 | Replication state | none — any edge can serve any object | per-subscriber, per-track, live | per-destination, live |
 | Who operates it | the commodity delivery market, from a dozen suppliers, today | one CDN today, at five to ten times commodity delivery; otherwise you | you, or a managed media service |
 | Adding a destination | a cache fill nobody provisions | a subscription and its relay state | a gateway output slot, and sometimes an instance |
-| Known hard ceilings | none at this scale | untested beyond our own rig; relay memory grows per ingested group and plateaus softly ([Evidence](evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow |
+| Known hard ceilings | none at this scale | untested beyond our own rig; relay memory grows per ingested group and plateaus softly, at a ceiling whose scaling term is open by a factor of two ([Evidence](evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow |
 | Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network | none | none |
 
 Three conclusions follow, and only the first is a differentiator.
@@ -416,6 +416,14 @@ and running them together is what let this axis read as a MoQ win.** They resolv
 on burden, segmented HTTP leads on the delivered result, and the failure on the MoQ side is a fixable
 carriage defect rather than a cost the plane has to pay (§5.1).
 
+**"Fixable" has since been demonstrated and the fix has not yet changed this ranking.** Upstream made
+the exporter's PCR values an exact 25 ms grid, eliminating the clustering outright at that stage. But the
+spacing exists as per-frame timestamps and `moq export ts` publishes a byte stream, so 87.2 % of PCR
+packets still leave back-to-back and a groomer that re-derives the clock from byte position reproduces
+the original distribution ([Evidence](evidence.md) §3.2). The defect is a boundary further out than
+either side of this comparison assumed, it is still upstream and still narrow, and the segmented lane
+keeps this row until the exported bytes carry the cadence.
+
 This supports the repository's central position rather than undermining it. Because the obligation to
 hand off a clean paced TS does not transfer to the client on either data plane, that layer is
 required and owned on both — and it is now demonstrably *one* layer rather than two, since the same
@@ -485,6 +493,15 @@ structural cost to be priced into a recommendation, and it is not a cadence to b
 **where** one implementation puts its PCR. T18 predicts — and does not test — that emitting on an even
 ~25 ms grid, against elapsed clock rather than against PES-unit boundaries, would clear the gate at the
 depth the lane already runs, which is **109 ms of delivery latency across the internet**.
+
+**That change has since been made upstream, and the prediction is still untested — for an instructive
+reason.** The exporter now emits an exact 25 ms grid and the clustering is gone from the PCR *values*
+completely. But the grid is expressed as per-frame timestamps, and the exporter publishes a byte stream,
+so 87.2 % of PCR *packets* still leave back-to-back and a groomer that re-derives the clock from their
+positions reproduces the original distribution almost exactly. The defect turned out to sit one boundary
+further out than either the report or this comparison assumed: not in how the muxer places PCR, but in
+the interface across which the placement is handed on ([Evidence](evidence.md) §3.2). It remains upstream
+and remains narrow.
 
 So the defensible statement is:
 
@@ -624,7 +641,7 @@ subscription ([Evidence](evidence.md) §3.10).
 | Mux rate | preserved | **none** — the egress has no byte clock | preserved if verbatim | **the source value exactly** — measured |
 | PSI cadence | source cadence, plus the injected pairs | **regenerated thinner** — 8.04 → 2.51 PAT/s, mean gap 124 → 399 ms against P1's 500 ms | unchanged from source | **identical to source** — measured |
 | Packets added to the mux | **one PAT/PMT pair per segment** — measured, and nothing else; **1.00 per segment head over the internet too** | rebuilt, not comparable | **none** | **none** — measured |
-| PCR repetition (P1), file domain | **unchanged from source** — measured | **not inherited from the source but produced by the lane** — clusters 86 % of intervals under 1 ms with gaps to 320 ms, from a source with none above 40 ms in 600 s; restored by the pacer *(on file only; 131–159 intervals above 40 ms in 25 s as delivered, §5.1)* | unchanged from source | **unchanged from source** — measured over the wire |
+| PCR repetition (P1), file domain | **unchanged from source** — measured | **not inherited from the source but produced by the lane** — clustered 86 % of intervals under 1 ms with gaps to 320 ms, from a source with none above 40 ms in 600 s; restored by the pacer *(on file only; 131–159 intervals above 40 ms in 25 s as delivered, §5.1)*. **On the post-`#2967` exporter the values are an exact 25 ms grid and the bunching moves to the PCR packets' byte positions, so the delivered figure does not clear** (§5.1) | unchanged from source | **unchanged from source** — measured over the wire |
 | PCR accuracy (P2), file domain | **37–74 ns → 109–302 µs**, the injected pair priced; **302.1 µs against 302.4 predicted over the internet**, and **0 violations at 500 µs** bounding it; **0 violations once groomed** | **gate undefined** — a rate-less egress has no byte clock to grade against | unmeasured; byte-preserving by construction | **0 violations at 481 ns** — measured over the wire |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | yes | verbatim by construction; every field, count and cadence measured identical, not diffed byte-for-byte |
 
@@ -988,7 +1005,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |
 | Reassembly to a transport stream | segmented HTTP | M | clear — off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) |
 | Grooming *burden* (R3) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
-| Grooming *outcome* — a P1-conformant wire (R3) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. Measured against the same clip on transparent lanes, the exporter conserves the PCR count (31–36/s against the source's 41) and destroys the spacing (85 % of intervals under 1 ms) — a fixable upstream placement defect rather than a cost the lane must pay** (§5.1) |
+| Grooming *outcome* — a P1-conformant wire (R3) | **segmented HTTP** | **M** | **decisive as measured, and no longer a trade against latency. Segmented HTTP reaches 0 intervals above 40 ms on the wire at the 8 s cushion its segment duration already imposes; the MoQ lane posts 489–504 at *every* cushion, unchanged by depth, by removing groomer starvation, or by the path. Measured against the same clip on transparent lanes, the exporter conserved the PCR count (31–36/s against the source's 41) and destroyed the spacing (85 % of intervals under 1 ms). Demonstrably fixable rather than a cost the lane must pay — upstream has since made the PCR values an exact 25 ms grid — but not yet fixed on the wire, because the exporter's byte-stream interface discards the spacing and 87.2 % of PCR packets still leave back-to-back** (§5.1) |
 | Latency (R4) | **MoQ, decisively** | **M** | **decisive and now measured: 109 ms across the public internet, against SRT's 1,618 ms and segmented HTTP's 4,067 ms over the same path in the same window — 15× and 37×. Segmented HTTP needs 9,286 ms to reach the depth that makes it conformant. The path term is the round trip and nothing more. Caveats: delivery latency rather than camera-to-display, and both paths measured were healthy** (§5, §5.1, [Evidence](evidence.md) §3.11) |
 | Interoperability (R1) | segmented HTTP | M+S | decisive, conditional on the single-programme envelope (§6) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
@@ -1032,10 +1049,12 @@ Ranked by how much each would move the comparison.
 1. **Would an evenly spaced PCR emission in the MoQ exporter clear the P1 repetition gate on the wire?**
    §5.1. The question that replaces "does MoQ stay sub-second while conformant", which is measured and
    answered: it stays sub-second (109 ms across the internet) and it is not conformant, and the two are
-   independent. The gate can only be cleared upstream, and the change needed is *placement* rather than
-   rate — the exporter already emits 31–36 PCRs a second where ~25 would suffice, but 85 % of them within
-   11 µs of each other. Still the highest-leverage item, and blocked on an upstream change rather than on
-   apparatus.
+   independent. **The muxer half is now fixed** — PCR values are an exact 25 ms grid and the
+   sub-millisecond clustering is gone — and the gate is still not met, because the spacing is carried as
+   per-frame timestamps that the exporter's byte-stream output discards, leaving 87.2 % of PCR packets
+   back-to-back. Still the highest-leverage item, still blocked on an upstream change rather than on
+   apparatus, and the change is now one step narrower than it was: pace the exporter's output writer, or
+   place each PCR packet beside the bytes of the slot it labels.
 2. **Does a commercial ABR-to-TS gateway, operated as the distributor's own edge stage, produce
    TR 101 290 P1/P2-conformant output on real hardware?** §4.4. If yes, part of the broadcast-grade
    layer is purchasable on one data plane and not the other; if no, the reassembly advantage in §4.2

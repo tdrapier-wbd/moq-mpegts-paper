@@ -313,6 +313,26 @@ against.** *(T9.)*
 > daily figure read as unbounded growth and was reported as failing a stability criterion. It
 > plateaus.
 
+**A per-something cost has to name the something, and the rig has to hold it at one.** *(T8b C6,
+refining the rule above.)*
+
+> The plateau was registered in advance as "baseline + ~99 MB per publisher connection". A 14 h soak
+> converged on 2.03× that on a rig carrying one publisher *and* one subscriber, which is what a
+> per-connection cost would produce and a per-publisher cost would not. The earlier fan-out legs could
+> not have caught it: they varied the subscriber count but ran far shorter than the knee, so they
+> measured the ramp and not the ceiling. **Varying a quantity over a window shorter than the phenomenon
+> measures the derivative, not the asymptote** — and a pre-registered prediction that omits which
+> quantity it scales in cannot be falsified cleanly by either.
+
+**Register the shape as well as the number, or a converging curve and a leak grade the same.** *(T8b
+C6.)*
+
+> The criterion asked whether the slope *broke* at a predicted knee. What happened was neither: the
+> slope decayed monotonically by 13× and had not converged at 14 h. Stating only a ceiling made a smooth
+> approach to twice that ceiling unclassifiable, when "asymptotic, still rising, at 2× the prediction"
+> is the informative answer. Add a reclaim or pressure counter beside any long RSS series, too, or a
+> decaying slope cannot be told from the kernel taking pages back.
+
 ---
 
 ## 4. Attribution: naming a mechanism from the evidence
@@ -770,3 +790,28 @@ the same side of it.** *(T14, found in editorial review.)*
 > client's own equipment as if it discharged the distributor's obligation. An advantage that lives in a
 > third party's capex is optionality, not architecture — and the same slip flatters whichever side of a
 > comparison happens to have the larger installed base.
+
+**When a defect is attributed to a component, name the boundary the measurement was taken at — a fix
+verified inside that boundary can be invisible outside it.** *(T19.)*
+
+> The PCR clustering was attributed to the exporter, and the exporter's fix is exact: an exact 25 ms
+> grid where 85 % of intervals had been sub-millisecond. But the spacing lives in per-frame timestamps
+> and the exporter's only public interface is stdout, which carries bytes. So the defect survived at
+> full strength one boundary further out, as clustered packet *positions* instead of clustered *values*,
+> and the lane's wire conformance regressed. "The exporter" and "the exporter's output interface" are
+> separate stages and a report should say which one it measured.
+
+**Grade an upstream fix on the deployed chain, not only on the claim it makes.** *(T19.)*
+
+> #2967's claim was true and independently confirmed at the exporter. Adopting it on that basis would
+> have shipped a build that takes continuity from 0 to 824 errors and delivery latency from 118 to
+> 769 ms. Only the end-to-end arm showed it, and it cost one 90 s run.
+
+**A measurement that is undefined as a verdict can still be sound as a diagnostic, if what is read is
+the distribution rather than the pass/fail.** *(T19.)*
+
+> `pcrverify --absolute` on a rate-less media-aware egress cannot yield a conformance verdict, and this
+> campaign has said so since T13. It still distinguished the two builds usefully: the pre-fix stream
+> missed by *varying* amounts, the post-fix stream by a *constant* 24,842 µs. Constant error is
+> arithmetically repairable downstream and varying error is not, which is a real difference that the
+> verdict column discards.

@@ -24,19 +24,28 @@ Every experiment names its own open items and most of them are worth doing event
 short list: the runs whose *result* would change a conclusion in [`docs/`](../docs/), separated by what
 they cost to set up, because two of the five need nothing this lab does not already have.
 
-**1. Evenly spaced exporter PCR emission ([#2937](https://github.com/moq-dev/moq/issues/2937)), then
-re-run T18 unaltered.** *Needs an upstream code change and nothing else.* This is the campaign's largest
-undecided verdict. The media-aware lane fails TR 101 290 P1 PCR repetition **on the wire at every
-cushion tested**, across a ladder spanning eight times the depth, while the groomer's own PCR insertions
-vary 137 → 0 across that ladder and change nothing — it can only place a PCR in a slot it was already
-going to stuff, and those do not fall in the exporter's gaps ([T18](test-18-delivery-latency.md),
-[T13](test-13-downstream-grooming.md)). **What has to change is placement, not rate**: measured against
-the same clip on three transparent lanes, the exporter emits 31–36 PCRs a second against the source's 41
-and a requirement of ~25, but puts 85 % of them within 11 µs of each other and leaves the residue in gaps
-of 100 ms to 1.84 s. Until this moves, "MoQ delivers a conformant broadcast hand-off" is unproven at any
-latency, and the paper's hand-off axis rests on a defect rather than on the architecture. T18 predicts a
-pass at a 250 ms cushion — the 127 ms delivery latency already measured — which makes this a falsifiable
-prediction rather than a hope.
+**1. PCR spacing that survives the exporter's output interface, then re-run T18 unaltered.** *Needs one
+more upstream code change and nothing else.* Still the campaign's largest undecided verdict, and now
+half-resolved. The muxer defect is fixed: [#2967](https://github.com/moq-dev/moq/pull/2967) gives the
+exporter an absolute 25 ms PCR grid, and [T19](test-19-pcr-grid-verification.md) verifies it exactly on
+our clip — 2,472 consecutive intervals all at 25.000 ms, sub-millisecond clustering 85.40 % → 0.00 %.
+**The wire did not follow**, because the grid is expressed as per-frame timestamps and `moq export ts`
+publishes a byte stream, so 87.2 % of PCR packets leave back-to-back and any groomer re-deriving the
+clock from their positions regenerates the original distribution (`tsp -P pcradjust`: 293 above 40 ms,
+87.9 % sub-millisecond). The remaining change is narrow and specific: **pace the exporter's stdout writer
+from the frame timestamps it already computes, or emit each PCR packet adjacent to the media bytes of the
+slot it labels.** Until one of those lands, "MoQ delivers a conformant broadcast hand-off" is unproven at
+any latency. T18's prediction of a pass at a 250 ms cushion is unaltered and now closer to testable than
+it has ever been — the clock arriving at the edge is even for the first time.
+
+**1a. Fix `mpegts-pacer` to survive a positionally bunched PCR train.** *Needs only our own code.* This is
+ours, not upstream's, and it is on the critical path: the groomer drops 45.9 % of content when handed the
+fixed exporter's output, because it derives an output slot from the source PCR and that derivation assumes
+PCR value and PCR position advance together ([T19](test-19-pcr-grid-verification.md) measurement 3). Even
+after item 1 lands, a groomer that fails this way on a merely *unusual* input is fragile — and the same
+assumption underwrites [T12](test-12-dual-path-handoff.md)'s byte-identity result, so it deserves an
+explicit guard and a regression fixture rather than an implicit precondition. The fixed export capture is
+that fixture.
 
 **1b. T8b's C3 re-run, with every cell's aggregate captured.** *Needs nothing this lab does not have, and
 about two hours.* Promoted into the top group because it is the only measurement in the campaign
@@ -110,12 +119,18 @@ multi-tenancy without a procurement conversation. Budget for two things it will 
 needs explicit `Cache-Control` from the origin to behave sensibly on a live playlist, and it bills per
 request, which 2 s segments generate briskly.
 
-**5. T8b's provisioned-path conditions (C2–C6).** *Needs only time on the rig that already exists.*
-The controller ranking is currently scoped to one under-provisioned condition, and a permanent
-fixed-rate trunk is provisioned by definition — so the conditions that actually describe the
-deployment (transient congestion, coexistence with other traffic, AQM, provisioning margin, a
-multi-day soak) are the unrun ones. C1 established that the three planes fail in three different ways;
-C2–C6 decide whether any of them is *recommendable*.
+**5. A capped-stream relay-memory arm, to settle what the slot ceiling scales in.** *Needs only time on
+the rig that already exists.* T8b's C6 soak converged on **2.03× the per-publisher-connection ceiling**
+[T9](test-9-performance.md) predicted, on a rig carrying exactly one publisher and one subscriber — which
+is what a per-*connection* cost would produce. The fan-out legs cannot arbitrate, because every one ran
+far shorter than the three-hour knee and so measured the ramp rather than the asymptote. If the cost is
+per connection, a 55-subscriber relay tends toward gigabytes where T9 measured 130 MB, which is a sizing
+error of a different order. One run settles it: `--server-quic-max-streams 1024`, the group count logged,
+and `/proc/pressure/memory` sampled beside RSS so a decaying slope can be told from kernel reclaim.
+
+*T8b's own provisioned-path conditions C2–C6 are now run and are no longer on this list.* The controller
+question resolved into a provisioning-margin and queue-discipline question, and C6's 14 h soak settled
+permanence. What remains of T8b is item 1b's C3 replicate.
 
 **What is deliberately not on this list**, because running it would confirm rather than move a result:
 more transparency clips through lanes already characterised across a 2.75× bitrate spread; the arm B1
@@ -142,18 +157,23 @@ insertion slots fall**, and no cushion fixes that.
 What T18 leaves open is listed in its own *Still open* table. Two entries belong here because they need
 setup rather than analysis:
 
-**The prediction, tested.** T18 predicts that an exporter emitting PCR-bearing packets on an **even**
-~25 ms grid would pass the gate at a 250 ms cushion — that is, at the 127 ms delivery latency already
-measured. Needs the upstream change, then T18's rig re-run unaltered. This is still the campaign's
-highest-leverage outstanding run, and T18's measurement 6 sharpened what has to change: the exporter
-already emits 31–36 PCRs a second against a source's 41 and a requirement of ~25, so **the fix is
-placement and not rate** — a bounded interval against elapsed clock, rather than one PCR per PES unit as
-`export.rs` does today. Filed as [#2937](https://github.com/moq-dev/moq/issues/2937), which also has to
-answer a history: upstream built this fix once and abandoned it after a real IRD would not lock, so the
-report's argument is that the failure belonged to the delivery model rather than to PCR placement, and
-that a bounded CBR stage downstream absorbs what the exporter was being asked to. The placement framing
-helps there too — it adds no PCRs the source did not already justify, so it creates none of the empty
-PCR-only windows that sank the earlier attempt.
+**The prediction, still untested — and the reason is now a measured one.** T18 predicts that an exporter
+emitting PCR-bearing packets on an **even** ~25 ms grid would pass the gate at a 250 ms cushion, that is
+at the 127 ms delivery latency already measured. [#2937](https://github.com/moq-dev/moq/issues/2937) was
+filed against that, [#2967](https://github.com/moq-dev/moq/pull/2967) delivered exactly the placement
+rule asked for, and [T19](test-19-pcr-grid-verification.md) confirms it at the exporter to the tick. The
+prediction still cannot be scored, because the grid does not reach the wire: it is expressed as per-frame
+timestamps and the exporter's output is a byte stream, so the PCR *packets* leave bunched and grooming
+either drops content or regenerates the original distribution. **What this run now needs is one more
+upstream change on the exporter's output path**, after which T18's rig re-runs unaltered. Still the
+campaign's highest-leverage outstanding run.
+
+The history #2937 had to answer is worth keeping, because it explains why the fix took the shape it did:
+upstream built this fix once and abandoned it after a real IRD would not lock, so the report argued that
+the failure belonged to the delivery model rather than to PCR placement, and that a bounded CBR stage
+downstream absorbs what the exporter was being asked to. The placement framing avoided the earlier
+attempt's trap — it adds no PCRs the source did not already justify, so it creates none of the empty
+PCR-only windows that sank it — and #2967 kept that property.
 
 **RIST against SRT on a real path.** The WAN legs have run: the path costs its round trip and nothing
 more, and MoQ delivers a picture across the internet in **109 ms**. One cell did not settle — RIST reads
@@ -515,11 +535,16 @@ Soaks, the fan-out envelope, the bitrate sweep, protocol overhead, the relay mem
 and the audio-resync work are all executed and written up in
 [test-9-performance.md](test-9-performance.md). What is left:
 
-1. **Run a leg long enough to resolve the soft plateau.** The knee reproduced where predicted, but
-   growth past it continues at ~+8 MB/h rather than stopping, and four hours cannot distinguish slow
-   convergence from a second, shallower leak. A 12-hour leg on the default slot count would settle it.
-   Related: the ceiling has a ~20–30 MB slot-independent term whose origin is unattributed — a third
-   slot count (say 4,096) would test whether the two-point fit holds as a line.
+1. **Settle what the ceiling scales in, which a 14 h leg has now put in doubt.** The knee reproduced
+   where predicted on a single-publisher rig, but [T8b](test-8b-congestion-control.md) C6 ran 14.006 h
+   with one publisher *and* one subscriber and converged asymptotically on **2.03×** the predicted
+   ceiling, its slope decaying from +24.60 to +1.82 MB/h without ever breaking. Two connections at twice
+   the figure is what a per-connection cost would produce, and the fan-out legs cannot arbitrate because
+   all of them ran shorter than the knee. **Run it capped** — `--server-quic-max-streams 1024`, the group
+   count logged, `/proc/pressure/memory` beside RSS — which separates a per-connection ceiling from
+   kernel reclaim from a second shallower leak in one leg. Related and still open: the ~20–30 MB
+   slot-independent term is unattributed, and a third slot count (say 4,096) would test whether the
+   two-point fit holds as a line.
 2. **Re-test the memory behaviour after any upstream fix**, using `gop14` as the sensitive case — at
    6,445 groups/h it shows a regression in half the time. The fix has to come from `quinn-proto` and no
    released version past 0.11.16 changes the recycling behaviour, so this may wait a long time.

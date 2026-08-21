@@ -9,6 +9,15 @@
 > egress. Graded on the segmented lane, the same TSDuck chain that is only *partial* on the MoQ lane
 > passes all four criteria with the mux intact. Read every result below against the lane it was
 > measured on; the two are tabulated side by side throughout.
+>
+> **The clustering is fixed upstream and criterion 3 is still not met on the MoQ lane.**
+> [#2967](https://github.com/moq-dev/moq/pull/2967) gives the exporter an exact 25 ms PCR grid, and
+> [T19](test-19-pcr-grid-verification.md) verifies it — but only in the PCR *values*, because the
+> spacing lives in per-frame timestamps that stdout discards, leaving 87.2 % of PCR packets back-to-back
+> in the exported bytes. The TSDuck chain below therefore still fails criterion 3 on that lane, and now
+> fails it by regenerating the original distribution from the byte positions: `tsp -P pcradjust` on the
+> fixed exporter's output yields 293 intervals above 40 ms and 87.9 % sub-millisecond. **The tools were
+> never the problem on this criterion and still are not.**
 
 **Can the grooming stage be built from tools an operator already has?** Every measurement in this
 campaign has groomed with one tool ([`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)),
@@ -56,7 +65,10 @@ A grooming stage is a candidate for a documented recipe if it does all four:
 3. **PCR spaced within the repetition limit.** No intervals above 40 ms. *(Reworded from "PCR present
    often enough" — the gate itself is unchanged and was always the interval, but the original phrasing
    implied a shortage of PCRs, and [T18](test-18-delivery-latency.md) measurement 6 showed the MoQ
-   exporter's failure is where it places them rather than how many it sends.)*
+   exporter's failure is where it places them rather than how many it sends. "Spacing" now has to be
+   read in both domains: [T19](test-19-pcr-grid-verification.md) found an exporter whose PCR **values**
+   are spaced exactly and whose PCR **packet positions** are not, and a groomer sees whichever domain
+   its input interface preserves.)*
 4. **Honest about time.** Duration fidelity 1.000 against the source: the stream must carry the rate
    it claims. And on the wire, a delivered rate that is actually rate-controlled.
 
@@ -166,10 +178,12 @@ to inflate — the packager passed the source's nulls through, and 4.57 % agains
 stuffing minus what fell outside the capture window.
 
 The last row is the one that was not anticipated, and it removes T13's headline live failure from the
-segmented lane before any tool runs. MoQ's exporter emits PCRs in clusters rather than on a grid, so any
-stage that carries them rather than minting its own inherits 163 intervals over the 40 ms limit. The segmented egress
-arrives with 0, because the source is a conformant broadcast mux and the packager preserved its PCR
-spacing.
+segmented lane before any tool runs. On the build these cells were measured on, MoQ's exporter delivered
+its PCRs in clusters rather than on a grid, so any stage that carries them rather than minting its own
+inherits 163 intervals over the 40 ms limit. The segmented egress arrives with 0, because the source is a
+conformant broadcast mux and the packager preserved its PCR spacing. *(The clustering is now fixed in the
+exporter's PCR values and not in the bytes it writes, so the inherited failure survives in a different
+domain — see the state block above and [T19](test-19-pcr-grid-verification.md).)*
 
 Both lanes fail the 481 ns gate on essentially every PCR before grooming, which is expected of either:
 neither delivers on a constant-rate wire, so PCR read against a constant-rate model is wrong on both.

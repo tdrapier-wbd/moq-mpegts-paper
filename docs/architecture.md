@@ -444,6 +444,15 @@ locked mux rate, with the emitted PCR, RTP sequence number and RTP timestamp all
 slot — makes what a leg sends a function of the broadcast rather than of when its process started.
 Two such groomers sharing no process, clock or messages emit one transport.
 
+**That model has a prerequisite worth stating, because an upstream change has already violated it
+once.** Deriving a slot from the source PCR assumes PCR *value* and PCR *position* advance together,
+which is what a conformant transport stream guarantees and what makes the derivation deterministic.
+Handed a stream whose PCR values are an even grid but whose PCR packets arrive bunched — which is
+exactly what the fixed MoQ exporter emits over a byte pipe ([Evidence](evidence.md) §3.2) — the
+derivation has no consistent rate to key off and the stage drops content rather than degrading. So the
+1+1 design depends on the egress being self-consistent in both domains, and that is a property to
+verify on any new upstream build before promoting it.
+
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
 | Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1,523 of 1,524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
@@ -802,11 +811,15 @@ and cost per Mbps *falls* as bitrate rises. One core carries roughly a gigabit
   on macOS loopback with UDP GSO disabled than on Linux with it enabled. Host tuning is a first-order
   deployment decision, and instance *family* matters before core count, because a cloud instance's
   sustained network allowance can discard more than half the relay's measured capacity.
-- **Size relay memory for publisher connections, not audience.** The relay retains roughly 9 KiB for
-  every group it ingests, in the QUIC library beneath it rather than in its own cache, and this is
-  flat in subscriber count and proportional to group rate. It plateaus at roughly 100 MB above
-  baseline per publisher connection, reached over the first few hours. No cache setting bounds it
-  ([Evidence](evidence.md) §3.6).
+- **Size relay memory for connections, and until one measurement lands, assume every connection and
+  not only the publisher's.** The relay retains roughly 9 KiB for every group it ingests, in the QUIC
+  library beneath it rather than in its own cache, proportional to group rate, and it plateaus over the
+  first few hours. **What it plateaus at is currently uncertain by a factor of two, in the direction that
+  matters**: characterised on a single-publisher rig it is ~100 MB above baseline per publisher
+  connection, but a 14 h soak carrying one publisher *and* one subscriber converged on 2.03× that, which
+  is what a per-*connection* cost would produce. At broadcast fan-out the two readings differ by orders of
+  magnitude, so size against the pessimistic one until a capped-stream arm separates them. No cache
+  setting bounds it either way ([Evidence](evidence.md) §3.6).
 
 Inter-region bandwidth scales with the number of *distinct tracks* crossing the boundary, not the
 number of subscribers, while per-region egress scales with local subscriber count. **That asymmetry
@@ -1029,7 +1042,7 @@ slips.
 | Decision | Rationale | Trade-off accepted |
 |---|---|---|
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
-| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | Inherits the source's PCR spacing exactly, so wire-domain PCR repetition is whatever the egress delivered and cannot be improved by the groomer — on MoQ that means inheriting the exporter's clustering, which a cushion swept eightfold does not touch (§4.2) |
+| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | Inherits the source's PCR spacing exactly, so wire-domain PCR repetition is whatever the egress delivered and cannot be improved by the groomer — on MoQ that means inheriting whatever the exporter's *bytes* carry, which a cushion swept eightfold does not touch, and which an exporter-side fix to PCR *values* alone did not change either (§4.2) |
 | Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Byte-identity demonstrated for single-track content on one host only; rate coherence across independent clocks untested |
 | Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
@@ -1051,10 +1064,14 @@ Ranked by how much a negative answer would change the architecture.
    [Comparison](comparison.md) §5.1.) This replaces "does the chain stay sub-second while conformant",
    which is measured: it does stay sub-second — 109 ms across the public internet — and it is not
    conformant, and the two are independent. The change needed upstream is *where* PCR is placed rather
-   than how often it is sent — the exporter already emits 31–36 a second against a requirement of ~25,
-   with 85 % of intervals under 1 ms — and the gate can only be cleared there, which puts the
-   highest-leverage remaining item outside this architecture's control. It has been reported upstream with the measurements behind it
-   ([upstream contributions](../lab/upstream-contributions.md) §1).
+   than how often it is sent, and **the muxer half of that has landed**: PCR values are now an exact
+   25 ms grid with the sub-millisecond clustering gone entirely. It did not clear the gate, because the
+   spacing is carried as per-frame timestamps and the exporter's only output is a byte stream, so the
+   PCR *packets* still leave bunched and a groomer re-deriving the clock from their positions
+   regenerates the original distribution. What remains is one change on the exporter's output path —
+   pace the stdout writer from the timestamps it already computes, or place each PCR packet beside the
+   media bytes of the slot it labels. Still the highest-leverage remaining item and still outside this
+   architecture's control ([upstream contributions](../lab/upstream-contributions.md) §1).
 3. **Do the correctness boundaries in §4.3 hold?** Source-clock drift, PCR discontinuity and wrap,
    mid-stream PID change, and T-STD occupancy through the media-aware exporter. Named, never tested.
 4. **Does the 1+1 result survive two hosts, two clocks and multi-track content?** (§5.1.) Rate

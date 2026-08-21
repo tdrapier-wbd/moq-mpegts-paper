@@ -72,11 +72,16 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   four distinct causes ([Evidence](docs/evidence.md) §3.7).
 - **The MoQ lane fails TR 101 290 P1 PCR repetition on the wire at *every* buffer depth** — 489–504
   intervals above 40 ms out of ~3,200–3,300 PCRs in a 90 s cell, unchanged by depth, by removing
-  groomer starvation, or by the path. The exporter conserves the number of PCRs and destroys their
+  groomer starvation, or by the path. The exporter conserved the number of PCRs and destroyed their
   spacing, emitting 85 % of them within 11 µs of each other and leaving gaps up to 1.8 s. It is an
   upstream placement defect, not the price of the lane's latency ([Evidence](docs/evidence.md) §3.2).
   A shorter 25 s window on the grooming rig reads 131–159 for the same defect: the counts scale with
   the observation window, not with the lane.
+  **The exporter half is now fixed and the lane's is not.** Upstream made PCR values an exact 25 ms
+  grid — clustering 85.40 % → 0.00 %, intervals above 40 ms 210 → 0 at the exporter — but the spacing
+  lives in per-frame timestamps that `moq export ts`'s stdout discards, so 87.2 % of PCR packets still
+  leave back-to-back and a groomer re-deriving the clock from byte position regenerates the original
+  distribution. End to end the lane regressed, so the deployable build is still the pre-fix one.
 - **Segmented HTTP fails silently once the client falls out of the origin's availability window.** It
   does not corrupt what it delivers inside that window; past it the client re-anchors and leaves holes
   of 7–82 s, with the origin returning nothing but 200s ([Evidence](docs/evidence.md) §3.3).
@@ -86,9 +91,14 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
 - **No hardware IRD has ever been fed by this chain.** Every conformance figure is file arithmetic, a
   socket capture on a general-purpose OS, or a reference software receiver. The make-or-break gate has
   never been attempted ([Evidence](docs/evidence.md) §4).
-- **Whether fixing the exporter's PCR placement clears the gate** — the question that now decides the
-  thesis, and the cheapest high-leverage measurement outstanding
+- **Whether an evenly spaced exporter cadence clears the gate** — the question that now decides the
+  thesis, and still the cheapest high-leverage measurement outstanding. Half of it is answered: the
+  clock reaching the edge is even for the first time, and what remains is one change on the exporter's
+  *output* path so the bytes carry the spacing the muxer already computes
   ([Evidence](docs/evidence.md) §5).
+- **Whether relay memory scales per connection or per publisher connection** — a 14 h soak converged on
+  2.03× the predicted per-publisher ceiling on a rig with one of each, and the two readings differ by
+  orders of magnitude at broadcast fan-out ([Evidence](docs/evidence.md) §3.6).
 - **The latency measurements were taken on healthy paths**, so nothing exercised the recovery the
   point-to-point tunnels exist for — the case that should favour them
   ([Evidence](docs/evidence.md) §4).

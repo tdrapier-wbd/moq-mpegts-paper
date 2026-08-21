@@ -1,6 +1,6 @@
 # T8b — congestion control for a permanent fixed-rate trunk
 
-> **State:** C1–C5 are executed on the namespace rig (68 cells) and C6, the soak, is running.
+> **State:** C1–C6 are executed — C1–C5 on the namespace rig (68 cells), C6 as a 14 h soak.
 > **The experiment does not name a congestion controller, and that is its result** — C1, C2 and C4
 > rank them in three different orders, and C5 shows why the question was the wrong one: what governs
 > this feed is the **provisioning margin** and the **bottleneck queue discipline**, both of which move
@@ -11,7 +11,10 @@
 > errors in every one of its ~40 cells** — while SRT inverts that and gets worse the better-behaved the
 > network is, reaching 17,652–22,365 errors under an AQM while taking the most bytes of any lane.
 > **The one place the media-aware lane loses badly is C3:** three feeds sharing a congested bottleneck
-> collectively used 25 % of it against SRT's 84 %, on one replicate that needs repeating. Two known
+> collectively used 25 % of it against SRT's 84 %, on one replicate that needs repeating. **C6 settles
+> permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so
+> C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
+> prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. Two known
 > gaps: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their own
 > RTT says the specified queue never formed), and most of C3's aggregate was lost to a disk janitor
 > mid-run. The upstream discussion this test came from is
@@ -151,7 +154,7 @@ interest is a *provisioned* path under contention.
 | C3 | Coexistence / fairness | provisioned, N ∈ {2,3} flows share the class | does the feed hold its share (starvation → dropped content) | not run |
 | C4 | AQM counterfactual | `codel` / `cake` at the same bottleneck | does AQM change the completeness/latency picture | not run |
 | C5 | Provisioning margin | cap ≈ 1.5× / 1.1× feed | where content loss *begins* per controller (an economics input) | not run |
-| C6 | Long-duration soak (permanence) | provisioned, hours→days | drift / leak / rare abort a short run misses | not run |
+| C6 | Long-duration soak (permanence) | provisioned, hours→days | drift / leak / rare abort a short run misses | **14.006 h, BBRv1/quinn at a 15 Mb/s cap** |
 
 ### 2. Run each cell
 
@@ -484,15 +487,64 @@ needs: aggregate captured for every cell, `cake` alongside the FIFO (C4 predicts
 disappears with an AQM, and that prediction is cheap and load-bearing), CUBIC's aggregate to separate
 "delay-based collapse" from "MoQ collapse", and replicates.
 
-### C6 — specified, not yet reported
+### C6 — permanence: the transport passes, and the memory prediction does not
 
-The permanence soak is BBRv1/quinn at a 15 Mb/s cap for 14 hours, chosen because C1's unexplained
-bimodality is exactly what a 120 s window cannot rule on. It grades in flight rather than storing, since
-a 15 Mb/s feed is 162 GB a day, and it samples per-role RSS, a running packet total, continuity events
-and respawns once a minute. Because relay memory rises under load by a mechanism
-[T9](test-9-performance.md) has already root-caused, the RSS arm is graded against that mechanism's
-predicted knee rather than against a flat line — see the pass criterion under *What to do next*.
-**No result is reported here yet**, so nothing in this file rests on it.
+BBRv1/quinn at a 15 Mb/s cap, **14.006 h unattended** (50,424 s, 829 one-minute samples), chosen because
+C1's unexplained bimodality is exactly what a 120 s window cannot rule on. Grades in flight rather than
+storing, since a 15 Mb/s feed is 162 GB a day.
+
+**The delivery arms pass without qualification.**
+
+| | Result |
+|---|---|
+| Continuity errors | **0** over 14 h |
+| Respawns | **0** — one publisher and one subscriber for the whole run |
+| Throughput | 9.512 Mb/s mean, no sample below half the median rate, so no stall |
+| Source loop wraps crossed | ~84, historically where `moq import` died |
+| Importer RSS | 110.1 MB mean, **+0.14 MB/h** over 13 h, 8 MB range |
+| Exporter RSS | 99.6 MB mean, **+0.06 MB/h**, 13 MB range |
+
+**So C1's bimodality is a transient, not a standing fault.** One replicate in three bloating to 591 ms
+over 120 s does not become an outage over 14 hours: the run neither lost integrity nor needed a restart,
+and BBRv1 remains the controller C2 says to prefer. That is the question C6 existed to answer.
+
+**Relay memory refutes the prediction this file registered in advance, and the miss is instructive.**
+The criterion said the slope would break at baseline + ~99 MB — T9's `quinn-proto` per-stream slot
+ceiling — and that a slope running straight through that knee would be the reportable outcome. Neither
+happened. The relay went from 19.7 MB to **220.2 MB, or baseline + 200.5 MB, which is 2.03× the
+predicted ceiling**, crossing it at 0.83 h and continuing for another thirteen hours. But it did not run
+straight either: the slope decayed monotonically and by a factor of thirteen.
+
+| Window | Relay RSS slope | Mean |
+|---|---:|---:|
+| 0–2 h | +24.60 MB/h | 115.5 MB |
+| 2–4 h | +12.17 MB/h | 151.5 MB |
+| 4–6 h | +9.30 MB/h | 171.3 MB |
+| 6–8 h | +5.98 MB/h | 184.5 MB |
+| 8–10 h | +5.21 MB/h | 195.3 MB |
+| 10–12 h | +3.98 MB/h | 203.9 MB |
+| 12–14 h | +3.53 MB/h | 211.8 MB |
+| final hour | +1.82 MB/h | 213.7 MB |
+
+Per-quarter growth is 139.4, 24.3, 13.6 and 9.1 MB: converging, but asymptotically rather than at a
+knee, and not converged when the run ended. **The 2.03× is the part worth keeping**, because this rig
+puts exactly two QUIC connections through the relay — `conn id=0` Publisher and `conn id=1` Subscriber,
+both confirmed in the relay log, with no third for 14 h — and 2.03 × a per-connection ceiling is what a
+per-*connection* rather than per-*publisher* cost would produce.
+
+**That reading is a hypothesis and this run cannot confirm it**, because it did not cap streams and did
+not record the group count. It matters enough to test, though: T9's fan-out legs measured ~1.7 MB per
+subscriber and were all far shorter than the 3.1 h knee, so they cannot rule out each subscriber
+connection eventually accumulating its own ~99 MB. If it does, a 55-subscriber relay tends toward
+gigabytes rather than the 130.3 MB T9 measured at that fan-out. **The cheap decisive control exists**:
+T9 already showed `--server-quic-max-streams 1024` plateauing at 91.4 MB against 189.5 MB, so a capped
+arm of this soak plus a logged group count separates the two readings in one run.
+
+One qualification on the instrument. The rig sampled RSS but not reclaim or pressure counters, so a
+decaying slope cannot be *fully* separated from the kernel reclaiming pages under load. Two things argue
+it is real: `avail_mb` fell 3,010 → 2,606 MB, which closes to within ~46 MB of the summed growth of all
+three roles, and 2.6 GB was still free at the end, so the run never entered a pressure regime. A future
+soak should log `/proc/pressure/memory` beside RSS and settle it outright.
 
 ## Observations
 
@@ -556,7 +608,7 @@ predicted knee rather than against a flat line — see the pass criterion under 
 | # | Criterion | Scored |
 |---|---|---|
 | 1 | Complete and reconstructable (C2–C5) | **On C2: MoQ passes on integrity at every controller (0 CC) and recovers on every controller, but only BBRv1 passes on completeness** — CUBIC loses 6–15 % of the feed through the transient and BBRv2 28–35 %, which is a hole, not deferred rate. SRT fails on damage again (53 and 5 CC) while over-delivering |
-| 2 | Stable indefinitely (C6) | **Not yet reported** — the soak is specified above and has produced no result this file relies on |
+| 2 | Stable indefinitely (C6) | **Passed on delivery, 14.006 h unattended**: 0 continuity errors, 0 respawns, no stall, ~84 source-loop wraps crossed, importer and exporter RSS flat to +0.14 and +0.06 MB/h. **Relay memory is the exception and it failed the prediction, not the criterion**: converged asymptotically on baseline + 200.5 MB, 2.03× the ceiling registered in advance, on a rig running exactly two QUIC connections |
 | 3 | Fails gracefully when under-provisioned (C1) | **MoQ passes on every controller except BBRv3**; SRT fails on damage (4,279 continuity errors); segmented HTTP passes or fails on the client — it thins cleanly under a receiver that re-anchors, and loses the session at 43 s under the one that does not |
 | 4 | Queuing delay against the receive buffer | **A property of the bottleneck queue, not of the lane.** Against a 500 ms FIFO every controller runs 520–584 ms and eats the whole 2 s buffer's headroom; against `codel` or `cake` every controller runs at 100–108 ms on a 100 ms base and the criterion is met with two orders of magnitude of margin |
 
@@ -632,15 +684,11 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
   collapse from a MoQ one, and replicates.
 - **Re-run the segmented C2 cells with the competing flow's own throughput recorded**, so a delivery
   collapse can be attributed to the impairment rather than inferred from it.
-- **Read the C6 soak out** when it completes: per-role RSS trend, respawn count, and continuity events
-  with timestamps. It is the only condition addressing permanence, and the one that decides whether
-  BBRv1's C1 bimodality is a transient artefact or a standing fault. **Grade the relay's RSS slope
-  against [T9](test-9-performance.md)'s knee rather than against zero**, because a rising slope is the
-  expected behaviour here and not by itself a finding: the `quinn-proto` per-stream slot mechanism
-  predicts linear growth to a plateau at baseline + ~99 MB once ~10,000 uni slots are filled, then
-  ~+8 MB/h. What decides it is whether the slope *breaks* where the slot count predicts and where the
-  ceiling lands; a slope that holds straight through the predicted knee is a different mechanism and is
-  the reportable outcome.
+- **Re-run C6 with streams capped and the group count logged**, which is now the highest-value memory
+  measurement in the campaign. C6 converged on 2.03× the predicted ceiling on two connections, so
+  whether the `quinn-proto` slot cost is per-connection or per-publisher is open — and the two answers
+  differ by orders of magnitude at broadcast fan-out. `--server-quic-max-streams 1024` plus a logged
+  group count and `/proc/pressure/memory` beside RSS settles it in one run.
 - Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear
   at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate
   spread.

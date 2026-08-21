@@ -213,7 +213,7 @@ late is indistinguishable from tuning in just before an SDT repetition. Any gate
 hold the programme dark, and no timeout constant makes that trade principled — while the measured 15 ms
 time-to-first-byte means the healthy case still leads with its tables, it simply no longer promises to.
 
-### PCR clustering — reported once it was shown a groomer cannot absorb it
+### PCR clustering — reported, fixed upstream in a day, and the fix moved the defect rather than removing it
 
 The exporter conserves the PCR *mean* and destroys the PCR *spacing*. A source profiled at a flat 24.4 ms
 grid, maximum 24.95 ms, nothing above 40 ms, comes back with the mean conserved to 0.7 ms, monotonic, and
@@ -299,16 +299,60 @@ flags, for [#1838](https://github.com/moq-dev/moq/issues/1838), that a monitor r
 above 40 ms" cannot distinguish this defect from ordinary loss, since a lossy SRT lane posts 538
 crossings with its median interval unmoved at 24.8 ms and 0.0 % of intervals under 1 ms.
 
-What remains open upstream is the mechanism itself: one PCR per unit on a 25 fps clip predicts a 40 ms
-cadence, not 36/s at an 11 µs median, so the unit ordering or the `dts.unwrap_or(pts)` clock choice is
-doing something the guard alone does not explain. The follow-up says so rather than guessing, and names
-the measurement that would settle it — per-unit DTS logged against packet position.
+**The fix landed within a day of the follow-up and it is exact.**
+[#2967](https://github.com/moq-dev/moq/pull/2967) merged as `61678fd32`, decoupling PCR from PES units
+entirely: it rides its own adaptation-field-only packets, one per 25 ms slot of an absolute media-time
+grid. Verified here on our clip and our instruments against the immediately preceding build
+([T19](test-19-pcr-grid-verification.md)): every one of 2,472 consecutive intervals is exactly
+**25.000 ms**, minimum and maximum alike; intervals above 40 ms go **210 → 0**; the sub-millisecond
+clustering goes **85.40 % → 0.00 %**; the PCR rides only the announced PID on payload-less packets that
+correctly do not advance the continuity counter. It also answers the mechanism the follow-up left open,
+from the code rather than the distribution: on reordered content the authored decode clock is a saw, and
+each B-frame dipping below it is nudged exactly one 90 kHz tick — **11.1 µs** — past the previous DTS,
+which is the 11 µs median measured.
 
-The prediction that an even 20–25 ms interval clears the gate is registered as a prediction, not a
-result — the rig re-runs unaltered against a build that spaces them. And the effect size varies by
-clip for reasons not established: 25.2 % of intervals above 40 ms on a synthetic CBR reference, 13.9 % and
-9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is 27 ms.
-That exception is unexplained and was reported as unexplained.
+**It repaired a second defect we never found.** The six reserved bits of the PCR field were being
+written as zeros where ISO 13818-1 requires ones. Eighteen experiments missed it because every
+instrument we pointed at the stream read the PCR *value* and none checked the field's padding; the PR
+found it while hand-laying the new packet. Our own before/after confirms it: `0x00` on every PCR in the
+control build, `0x3F` on every PCR in the fixed one. A related improvement worth recording is that
+TSDuck's reference bitrate for the exported stream goes from a meaningless 20.7 Gb/s to a credible
+9.57 Mb/s, because the clustered values had been poisoning every rate estimate derived from them —
+including any a monitoring probe would alarm on.
+
+**And it does not yet meet the requirement it closes, which is the part to take back upstream.** #2937
+was filed on the claim that no downstream CBR stage can repair the defect, so the test is the wire and
+not the muxer. #2967 returns each PCR as its own output `Frame` stamped at its slot boundary, and
+`moq export ts` writes to stdout, which carries no timestamps — so the computed spacing is discarded at
+the exporter's only public interface. Measured on the exported bytes, **87.2 % of consecutive PCR
+packets sit back-to-back**, in bursts to 13, with 11.9 % separated by more than 200 packets and gaps
+reaching 2,730 packets (411 ms of carrier at 10 Mb/s). The clustering changed domain: even values at
+clustered positions, where it was clustered values at even positions.
+
+The consequence is measured on two independent groomers, and it is why this is worth reporting rather
+than absorbing. Off-the-shelf `tsp -P pcradjust`, which re-stamps PCR from byte position, converts the
+clustered positions straight back into clustered values — **293 intervals above 40 ms and 87.9 %
+sub-millisecond**, the original distribution regenerated from scratch, and a near-exact match to the
+87.2 % of input packets that arrive back-to-back. Our own byte-locking groomer, whose placement model is
+what makes two legs of a 1+1 pair byte-identical, **drops 45.9 % of content** and it is structural
+rather than a buffer size. End to end on the wire the lane is worse than before the fix: continuity 0 →
+824 errors, worst interval 228 → 375 ms, delivery latency 118 → 769 ms.
+
+**So the remaining ask is narrow and is not a re-litigation of #2937.** Either the stdout writer paces
+its output — placing each frame at the time the frame already carries and currently discards — or the
+PCR packet is emitted adjacent to the media bytes of the slot it labels, so position and value agree for
+a consumer that has only bytes. The first matches what an IRD expects off a wire; the second needs no
+timing at all. This is the same class of defect as
+[#2978](https://github.com/moq-dev/moq/issues/2978), which the maintainer's own adversarial review of
+#2967 raised against the SRT egress — a frame's pacing timestamp lost where bytes are handed on. Ours is
+that defect at the stdout boundary, where it is total rather than bounded by one chunk.
+
+The prediction that an even 20–25 ms interval clears the P1 gate **remains a prediction**: the clock
+arriving at the edge is even for the first time, but no conformant wire has yet been produced from it, so
+the rig still has to re-run against a build whose *bytes* carry the spacing. And the effect size varies
+by clip for reasons not established: 25.2 % of intervals above 40 ms on a synthetic CBR reference, 13.9 %
+and 9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is
+27 ms. That exception is unexplained and was reported as unexplained.
 
 ---
 
@@ -630,6 +674,17 @@ stopping, and capping streams reduces the ceiling only 3.3× for a 9.8× slot re
 
 **No released version of the QUIC library removes it**, so plan for the overhead rather than waiting
 for it to go away.
+
+**A 14 h soak has since put the ceiling in doubt, in the direction that matters.**
+[T8b](test-8b-congestion-control.md) C6 ran one publisher and one subscriber through a relay for 14.006
+h and converged asymptotically on baseline + 200.5 MB — **2.03× the per-publisher-connection ceiling
+above** — with the slope decaying from +24.60 to +1.82 MB/h rather than breaking at a knee. Two
+connections, 2.03× the figure, is what a per-*connection* cost would produce, and if it is per
+connection then the fan-out arithmetic changes by orders of magnitude: our own fan-out legs measured
+~1.7 MB per subscriber but were all far shorter than the 3.1 h knee, so they cannot exclude each
+subscriber connection eventually accumulating its own ~99 MB. **This is a hypothesis, not a report** —
+that run capped nothing and logged no group count — and it is not going upstream until a capped arm with
+a logged group count has separated the two readings.
 
 ---
 
