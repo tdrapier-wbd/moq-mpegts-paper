@@ -364,8 +364,12 @@ it himself in his adversarial review of #2967 — a frame's pacing timestamp los
 — but it is scoped to `moq-srt`, is bounded by one 1316-byte chunk (~1 ms), and its own text puts it
 "orders of magnitude below the clusters #2937 measured". Filing ours there would get an unbounded loss on
 a different component mis-scoped as a minor variant of something already discounted. Reopening #2937
-would be worse: the fix did exactly what the issue asked for, inside the boundary the issue named. Draft
-in `docs/upstream/export-ts-pacing-issue.local.md`.
+would be worse: the fix did exactly what the issue asked for, inside the boundary the issue named.
+
+**Filed as [#2984](https://github.com/moq-dev/moq/issues/2984).** It leads with the fix being exact,
+credits the reserved-bits repair and the mechanism the PR explained, and states plainly that the
+end-to-end regression is the interaction rather than the change — because the end-to-end arm was run
+first here and would have been reported as a regression in #2967 had the no-groomer arm not followed it.
 
 The prediction that an even 20–25 ms interval clears the P1 gate **remains a prediction**: the clock
 arriving at the edge is even for the first time, but no conformant wire has yet been produced from it, so
@@ -850,6 +854,15 @@ is logged with what was filed, what we did about it and the measurement that for
 Only #1839's remainder turned on maintainer push-back, and even there the replacement was built
 outside the tree on its own merits. The rest were retracted because a measurement in this repository
 contradicted the ask.
+
+**That retraction has since been tested against a live temptation and held.** #2967's PCR grid does not
+reach the wire because the exporter's stdout writer discards the frame timestamps (§1), and the obvious
+report to write — "pace the exporter's output" — is #1839's declined half almost word for word, and would
+also contradict what we argued on #1838. [#2984](https://github.com/moq-dev/moq/issues/2984) was framed
+instead as a **caller-contract** defect: #2967's own doc comments specify a caller-side pacer, `moq-srt`
+implements it, `moq-cli`'s `run_ts` discards it. Same fix, different and defensible claim — and a
+demonstration that a retracted ask stays retracted even when a later measurement would have made it easy
+to re-file.
 
 - **A broadcast contribution profile** ([#1799](https://github.com/moq-dev/moq/issues/1799)) — the
   parent proposal, presenting media-aware and byte-opaque carriage as two options and asking for a
