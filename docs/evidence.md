@@ -981,16 +981,25 @@ because 20–30 MB of the ceiling is slot-independent. A separate and far more s
 gone: an older release grew ~21 MB/hour *with no subscribers at all* to an out-of-memory kill after six
 days, and no current build reproduces that.
 
-**What the ceiling scales in is now open, and it is the one number here that could be badly wrong.** A
-14 h soak ([T8b](../lab/test-8b-congestion-control.md) C6) carrying one publisher *and* one subscriber
-converged asymptotically on baseline + 200.5 MB — **2.03× the per-publisher-connection figure above** —
-with the slope decaying from +24.60 to +1.82 MB/h rather than breaking at the predicted knee. Two
-connections at 2.03× the ceiling is what a per-*connection* cost would produce. The fan-out row above
-cannot settle it: those legs varied the subscriber count but every one ran far shorter than the three-hour
-knee, so they measured the ramp and not the asymptote. **If the cost is per connection, a
-55-subscriber relay tends toward gigabytes rather than the 130 MB measured at that fan-out** — so until
-a capped-stream arm with a logged group count separates the two readings, size a high-fan-out relay
-against the per-connection reading and not the per-publisher one.
+**The ceiling is about twice the slot arithmetic, and that correction is the number to budget.** A 14 h
+soak ([T8b](../lab/test-8b-congestion-control.md) C6) converged asymptotically on baseline + 200.5 MB —
+**2.03× the figure above** — with the slope decaying from +24.60 to +1.82 MB/h rather than breaking at
+the predicted knee, and still not flat at 14 h. So the "soft plateau" noted above is not allocator drift:
+past the knee it adds another ~100 MB over thirteen hours. The slot count sets *when* growth slows and
+roughly half of *where* it lands.
+
+**It is not connection scaling, and that matters because it is the reading the arithmetic invites.** The
+soak carried one publisher and one subscriber, so 2× a per-publisher figure on two connections looks like
+a per-connection cost. The fan-out evidence contradicts it twice: the pre-knee slope is flat across 0, 1,
+2 and 4 subscribers, and a 4 h leg carrying four subscribers — five connections — reached baseline +
+108 MB at its knee and 189.5 MB at 4 h, which is neither five times anything nor materially above what
+two connections reach. The mechanism agrees, since the retained state is a pool for streams the *peer*
+may open and a subscriber connection is one the relay opens streams on. **So a high-fan-out relay should
+be sized at roughly 2× the slot ceiling per publisher, not per connection** — the earlier fear that
+55 subscribers implies gigabytes is not supported.
+
+What stays open is whether the second term is bounded at all and what it scales in, which a capped-stream
+arm with the group count and pressure counters logged settles in one run.
 
 *Two caveats apply throughout: these are loopback rigs with subscribers co-resident with the relay,
 so they price neither the NIC nor congestion control doing real work; and `moq import` costs about
@@ -1307,7 +1316,7 @@ exporter's **output path** carrying the spacing its muxer already computes (§3.
 | 12 | **Does a real CDN edge change the segmented lane's loss curve?** (§3.3) | A tuned edge instead of one plain HTTP/1.1 origin | The completeness half is now answered: retry preserves *content* while the client stays inside the availability window, and not past it. A ladder to 40 % loss over 120 s windows crosses that edge between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s content holes — and past ~20 % loss the origin logs no error while it happens. Rate was never preserved (0.17 of source at 8 % loss). What remains is the origin: the one measured is the weakest form of the deployed one, and a CDN could plausibly move the loss curve — it cannot move the reordering result, which is TCP's |
 | 13 | ~~**Why does the media-aware lane cluster PCRs sub-millisecond?**~~ **Answered** (§3.2) | — | On reordered content the authored decode clock is a saw: each B-frame dipping below it was nudged exactly one 90 kHz tick — 11.1 µs — past the previous DTS, which is the measured median. Named in [#2967](https://github.com/moq-dev/moq/pull/2967) from the code rather than the distribution, and the guess in this row was wrong: it was not group-derived and shares no parameter with PSI density |
 | 14 | **Does RIST actually beat SRT on a real path?** | One long WAN run | On loopback the two are indistinguishable within 6 ms; over the WAN RIST reads 262–333 ms lower but its cells had a rising trend and had not settled, so the gap is not yet a finding. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
-| 15 | **Is the relay's per-stream slot cost per publisher connection or per connection, and where does it actually plateau?** (§3.6) | A capped-stream soak arm with the group count and `/proc/pressure/memory` logged beside RSS | A sizing line rather than a restart cycle — and at broadcast fan-out the two readings differ by orders of magnitude. A 14 h soak converged asymptotically on **2.03×** the per-publisher-connection ceiling on a rig carrying exactly one publisher and one subscriber, which is what a per-*connection* cost would produce; the earlier fan-out legs measured ~1.7 MB per subscriber but ran far shorter than the 3.1 h knee, so they measured the ramp and cannot exclude it. **Cheapest decisive control outstanding** |
+| 15 | **Is the relay's ceiling above the slot arithmetic bounded, and what does the excess scale in?** (§3.6) | A capped-stream soak arm with the group count and `/proc/pressure/memory` logged beside RSS | A sizing line rather than a restart cycle. A 14 h soak converged asymptotically on **2.03×** the predicted slot ceiling, decaying monotonically but not flat at 14 h — so the plateau's "soft" component is real and roughly doubles the budget. Connection scaling is *not* the explanation and is ruled out by the fan-out evidence (flat slope across 0–4 subscribers; five connections reaching the same range as two), so the open part is whether the second term converges and whether it tracks groups, bytes or time. **Cheapest decisive control outstanding** |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin rather than a single-threaded reference server, and a soak | The cost comparison is currently one lane characterised for resources and one characterised only for bytes. Segmented carriage overhead is measured (1.036× source TS); its per-role CPU and memory, its fan-out knee and its stability over days are not. The origin is the role the whole commercial argument for this lane rests on, and the one measured is `python3 -m http.server` |
 | 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
 

@@ -527,18 +527,35 @@ straight either: the slope decayed monotonically and by a factor of thirteen.
 | final hour | +1.82 MB/h | 213.7 MB |
 
 Per-quarter growth is 139.4, 24.3, 13.6 and 9.1 MB: converging, but asymptotically rather than at a
-knee, and not converged when the run ended. **The 2.03× is the part worth keeping**, because this rig
-puts exactly two QUIC connections through the relay — `conn id=0` Publisher and `conn id=1` Subscriber,
-both confirmed in the relay log, with no third for 14 h — and 2.03 × a per-connection ceiling is what a
-per-*connection* rather than per-*publisher* cost would produce.
+knee, and not converged when the run ended.
 
-**That reading is a hypothesis and this run cannot confirm it**, because it did not cap streams and did
-not record the group count. It matters enough to test, though: T9's fan-out legs measured ~1.7 MB per
-subscriber and were all far shorter than the 3.1 h knee, so they cannot rule out each subscriber
-connection eventually accumulating its own ~99 MB. If it does, a 55-subscriber relay tends toward
-gigabytes rather than the 130.3 MB T9 measured at that fan-out. **The cheap decisive control exists**:
-T9 already showed `--server-quic-max-streams 1024` plateauing at 91.4 MB against 189.5 MB, so a capped
-arm of this soak plus a logged group count separates the two readings in one run.
+**What the 2.03× is, and what it is not.** It is not connection scaling, and the temptation to read it
+that way has to be resisted against evidence this campaign itself produced. This rig put exactly two QUIC
+connections through the relay — `conn id=0` Publisher, `conn id=1` Subscriber, confirmed in the relay log
+with no third for 14 h — so 2× a per-publisher figure on two connections *looks* like a per-connection
+cost. But [#2745](https://github.com/moq-dev/moq/issues/2745) already measured the thing that reading
+predicts and found the opposite twice over: the pre-knee slope is flat across N = 0, 1, 2 and 4
+subscribers at ~+28 MB/h, and a 4 h leg carrying **four** subscribers (five connections, default slots)
+reached baseline + 108.1 MB at its knee and 189.5 MB total at 4 h — nowhere near five times anything, and
+in the same range this two-connection run occupies. Strong linear per-connection scaling is therefore
+ruled out by data already posted upstream. The mechanism agrees: `quinn-proto` pre-allocates
+`StreamsState::recv` slots for streams the *peer* may open, and a subscriber connection is one the relay
+opens streams *on*, so its receive pool has little reason to fill.
+
+**The reading that fits both runs is the one we ourselves left open on #2745: the slot arithmetic is not
+the whole ceiling.** 10,000 slots × ~9.9 KiB ≈ 99 MB predicts where growth should stop, and both the 4 h
+leg and this one sail past it — the "soft plateau" flagged there as question 1, *"is there anything else
+expected to grow per-group once the slot table is full, or should we read that as noise plus allocator
+drift?"*, with an offer to run a 12 h leg. **This is that leg, and the answer is that it is not noise:**
+over the 13 h after the knee it adds another ~100 MB, doubling the predicted ceiling, while decaying
+monotonically by a factor of thirteen and still not flat at 14 h. So the operational figure is ~2× the
+slot arithmetic, arriving over ten-plus hours rather than three.
+
+**What remains genuinely open is narrower than "per connection or per publisher", and cheaper to
+settle.** It is whether that second term is bounded at all, and what it scales in. The controls exist:
+`--server-quic-max-streams 1024` (T9: plateaued at 91.4 MB against 189.5 MB) isolates the slot-dependent
+part, and a logged group count plus `/proc/pressure/memory` distinguishes a real second term from
+allocator drift and kernel reclaim. One capped 14 h arm answers it.
 
 One qualification on the instrument. The rig sampled RSS but not reclaim or pressure counters, so a
 decaying slope cannot be *fully* separated from the kernel reclaiming pages under load. Two things argue
@@ -684,11 +701,12 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
   collapse from a MoQ one, and replicates.
 - **Re-run the segmented C2 cells with the competing flow's own throughput recorded**, so a delivery
   collapse can be attributed to the impairment rather than inferred from it.
-- **Re-run C6 with streams capped and the group count logged**, which is now the highest-value memory
-  measurement in the campaign. C6 converged on 2.03× the predicted ceiling on two connections, so
-  whether the `quinn-proto` slot cost is per-connection or per-publisher is open — and the two answers
-  differ by orders of magnitude at broadcast fan-out. `--server-quic-max-streams 1024` plus a logged
-  group count and `/proc/pressure/memory` beside RSS settles it in one run.
+- **Re-run C6 with streams capped and the group count logged**, to bound the second term rather than
+  merely observe it. C6 converged on 2.03× the predicted ceiling and was still creeping at 14 h;
+  `--server-quic-max-streams 1024` plus a logged group count and `/proc/pressure/memory` beside RSS
+  separates the slot-dependent part from a genuine second term from kernel reclaim in one run. Worth
+  ~100 MB per channel of sizing accuracy — not the orders of magnitude it appeared to be worth while
+  per-connection scaling was still a live reading of the 2.03×.
 - Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear
   at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate
   spread.

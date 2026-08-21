@@ -811,15 +811,15 @@ and cost per Mbps *falls* as bitrate rises. One core carries roughly a gigabit
   on macOS loopback with UDP GSO disabled than on Linux with it enabled. Host tuning is a first-order
   deployment decision, and instance *family* matters before core count, because a cloud instance's
   sustained network allowance can discard more than half the relay's measured capacity.
-- **Size relay memory for connections, and until one measurement lands, assume every connection and
-  not only the publisher's.** The relay retains roughly 9 KiB for every group it ingests, in the QUIC
-  library beneath it rather than in its own cache, proportional to group rate, and it plateaus over the
-  first few hours. **What it plateaus at is currently uncertain by a factor of two, in the direction that
-  matters**: characterised on a single-publisher rig it is ~100 MB above baseline per publisher
-  connection, but a 14 h soak carrying one publisher *and* one subscriber converged on 2.03× that, which
-  is what a per-*connection* cost would produce. At broadcast fan-out the two readings differ by orders of
-  magnitude, so size against the pessimistic one until a capped-stream arm separates them. No cache
-  setting bounds it either way ([Evidence](evidence.md) §3.6).
+- **Size relay memory per channel carried, at about twice the slot arithmetic, and not per viewer.** The
+  relay retains roughly 9 KiB for every group it ingests, in the QUIC library beneath it rather than in
+  its own cache, proportional to group rate, and it plateaus over the first several hours. The slot
+  derivation gives ~100 MB above baseline per publisher connection; a 14 h soak converged asymptotically
+  on **2.03× that**, still creeping when it ended, so **budget ~200 MB per ingested channel**. Audience is
+  not a term in it: the growth rate is flat across 0–4 subscribers and five connections land in the same
+  range as two, which the mechanism predicts, since the retained state is a pool for streams the *peer*
+  may open and a subscriber connection is one the relay opens streams on. No cache setting bounds it
+  ([Evidence](evidence.md) §3.6).
 
 Inter-region bandwidth scales with the number of *distinct tracks* crossing the boundary, not the
 number of subscribers, while per-region egress scales with local subscriber count. **That asymmetry

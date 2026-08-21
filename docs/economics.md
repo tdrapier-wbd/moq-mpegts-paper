@@ -502,10 +502,10 @@ rate, and note that the sensitivity is on **the source**, not the protocol (§3)
   the publisher.
 - **What does relay memory growth cost to operate around?** Now understood to plateau rather than climb
   indefinitely, it is a sizing line rather than a restart cycle, and the stream-limit lever reduces it
-  sub-proportionally with a ~20–30 MB floor. **Whether it scales with channels carried or with
-  connections is open by a factor of two**: ~100 MB per publisher connection on a single-publisher rig,
-  but a 14 h soak with one publisher and one subscriber reached 2.03× that. On the first reading the cost
-  lands on multi-channel relay density; on the second it lands on audience too, which is a materially
-  different line ([Evidence](evidence.md) §3.6).
+  sub-proportionally with a ~20–30 MB floor. A 14 h soak puts the ceiling at **2.03× the slot
+  arithmetic** — ~200 MB rather than ~100 MB above baseline — decaying monotonically but not flat when it
+  ended. **The cost lands on multi-channel relay density and not on audience**: growth rate is flat across
+  0–4 subscribers, and five connections reach the same range as two, so this is a per-channel line
+  ([Evidence](evidence.md) §3.6).
 - **How much of the operational-saving hypothesis survives running an immature platform to a broadcast
   SLA?** One on-call engineer outweighs the entire modelled transport line at single-route scale.

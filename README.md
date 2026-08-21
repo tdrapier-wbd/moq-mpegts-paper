@@ -96,9 +96,10 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   clock reaching the edge is even for the first time, and what remains is one change on the exporter's
   *output* path so the bytes carry the spacing the muxer already computes
   ([Evidence](docs/evidence.md) §5).
-- **Whether relay memory scales per connection or per publisher connection** — a 14 h soak converged on
-  2.03× the predicted per-publisher ceiling on a rig with one of each, and the two readings differ by
-  orders of magnitude at broadcast fan-out ([Evidence](docs/evidence.md) §3.6).
+- **Whether the part of relay memory that the slot arithmetic does not explain is bounded** — a 14 h soak
+  converged on 2.03× the predicted ceiling, decaying monotonically but not flat when it ended, so the
+  budget is about double the derivation. Audience is not the variable: the growth rate is flat across 0–4
+  subscribers ([Evidence](docs/evidence.md) §3.6).
 - **The latency measurements were taken on healthy paths**, so nothing exercised the recovery the
   point-to-point tunnels exist for — the case that should favour them
   ([Evidence](docs/evidence.md) §4).

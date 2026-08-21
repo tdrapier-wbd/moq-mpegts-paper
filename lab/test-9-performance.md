@@ -14,8 +14,12 @@ group rate doubled the slope (+31.22 → +62.30 MB/h, ratio 1.995 against 2.000)
 connection has ever accepted — not moq state at all.**
 
 **That correction matters, and it is partly against us.** The growth **plateaus** once every uni slot
-is filled — `moq-relay` sets 10,000 per connection, so the ceiling is **~99 MB above baseline per
-publisher connection**, reached after ~10,000 ingested groups (~3.1 h at 3,222 groups/h). Every leg
+is filled — `moq-relay` sets 10,000 per connection, so the *slot* ceiling is **~99 MB above baseline per
+publisher connection**, reached after ~10,000 ingested groups (~3.1 h at 3,222 groups/h). **A later 14 h
+soak doubles the operational figure without changing that mechanism** ([T8b](test-8b-congestion-control.md)
+C6): the slot arithmetic predicts when growth slows and about half of where it lands, because a second,
+far slower term keeps adding past the knee to **2.03×** the ceiling, still not flat at 14 h. Audience is
+not a term in either — see the fan-out row below. Every leg
 here was shorter than that knee, so this file's earlier "linear, 650 MB/day, fails the stability
 criterion" reading was a measurement-window artefact. **Now confirmed on this rig:** the slope holds at
 ~+60 MB/h for three windows and breaks in exactly the window containing the predicted knee, to 13 % of
@@ -966,9 +970,15 @@ retained assembler capacity. Each property we measured falls out of that:
 #### The correction that matters: it is bounded
 
 Growth stops once every uni slot is filled. `moq-relay` raises the limit from moq-native's 1,024 to
-`DEFAULT_MAX_STREAMS = 10_000`, so the ceiling is **~10,000 × 9.9 KiB ≈ 99 MB above baseline, per
+`DEFAULT_MAX_STREAMS = 10_000`, so the slot ceiling is **~10,000 × 9.9 KiB ≈ 99 MB above baseline, per
 publisher connection** — reached after ~10,000 ingested groups, which at 3,222 groups/h is ~3.1 h and
 at `gop14`'s 6,445 is ~1.55 h.
+
+**"Stops" is too strong, and a 14 h leg is what showed it.** The soft residual noted below as an open
+question is a real second term, not allocator drift:
+[T8b](test-8b-congestion-control.md) C6 crossed +99 MB at 0.83 h and went on to **+200.5 MB (2.03×)**,
+its slope decaying monotonically 13× and still positive at 14 h. So read the slot ceiling as the *knee
+location* and roughly half the *final* figure; budget ~200 MB per ingested channel.
 
 **Every leg in this campaign was shorter than that knee.** The A/B and cap legs ran 2.5 h, the sweep
 and GOP legs 90 minutes. That is why the slope looked unbounded, and it is a straightforward

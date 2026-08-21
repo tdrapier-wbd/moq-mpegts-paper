@@ -317,12 +317,22 @@ against.** *(T9.)*
 refining the rule above.)*
 
 > The plateau was registered in advance as "baseline + ~99 MB per publisher connection". A 14 h soak
-> converged on 2.03× that on a rig carrying one publisher *and* one subscriber, which is what a
-> per-connection cost would produce and a per-publisher cost would not. The earlier fan-out legs could
-> not have caught it: they varied the subscriber count but ran far shorter than the knee, so they
-> measured the ramp and not the ceiling. **Varying a quantity over a window shorter than the phenomenon
-> measures the derivative, not the asymptote** — and a pre-registered prediction that omits which
-> quantity it scales in cannot be falsified cleanly by either.
+> converged on 2.03× that. The fan-out legs could not have caught it: they varied the subscriber count
+> but ran far shorter than the knee, so they measured the ramp and not the ceiling, and nothing had ever
+> run long enough to show that the ceiling was double the derivation. **Varying a quantity over a window
+> shorter than the phenomenon measures the derivative, not the asymptote** — and a pre-registered
+> prediction that omits which quantity it scales in cannot be falsified cleanly by either.
+
+**Before adopting the tidy explanation a new number suggests, test it against the measurements already
+in hand.** *(T8b C6.)*
+
+> The soak carried one publisher and one subscriber, and 2.03× a *per-publisher* ceiling on *two
+> connections* is exactly what a per-connection cost would produce. That reading was written up as the
+> leading hypothesis and it was wrong: the campaign's own earlier fan-out work had already measured the
+> growth rate flat across 0, 1, 2 and 4 subscribers, and a four-subscriber leg — five connections —
+> reaching the same range as two. Nothing new had to be run to rule it out, only re-read. **A coincidence
+> of ratios is not a mechanism**, and the cost of the error would have been an upstream report claiming
+> audience scaling against evidence we had published ourselves.
 
 **Set a soak's duration from the longest period in the system, not from a round number.** *(Gate 2 rig
 design, applying the rule above before the run rather than after it.)*

@@ -699,16 +699,31 @@ stopping, and capping streams reduces the ceiling only 3.3× for a 9.8× slot re
 **No released version of the QUIC library removes it**, so plan for the overhead rather than waiting
 for it to go away.
 
-**A 14 h soak has since put the ceiling in doubt, in the direction that matters.**
-[T8b](test-8b-congestion-control.md) C6 ran one publisher and one subscriber through a relay for 14.006
-h and converged asymptotically on baseline + 200.5 MB — **2.03× the per-publisher-connection ceiling
-above** — with the slope decaying from +24.60 to +1.82 MB/h rather than breaking at a knee. Two
-connections, 2.03× the figure, is what a per-*connection* cost would produce, and if it is per
-connection then the fan-out arithmetic changes by orders of magnitude: our own fan-out legs measured
-~1.7 MB per subscriber but were all far shorter than the 3.1 h knee, so they cannot exclude each
-subscriber connection eventually accumulating its own ~99 MB. **This is a hypothesis, not a report** —
-that run capped nothing and logged no group count — and it is not going upstream until a capped arm with
-a logged group count has separated the two readings.
+**A 14 h soak has since answered the question we left open there, and it is worth reporting because we
+offered the run.** The confirmation comment closed with two things that did not follow from the model,
+the first being the soft plateau — *"is there anything else expected to grow per-group once the slot table
+is full, or should we read that as noise plus allocator drift? We can run a 12 h leg if it's useful."*
+[T8b](test-8b-congestion-control.md) C6 is that leg at 14.006 h, and the answer is that it is **not**
+noise: growth past the knee adds another ~100 MB, converging asymptotically on baseline + 200.5 MB —
+**2.03× the ceiling** — with the slope decaying monotonically from +24.60 to +1.82 MB/h and still not flat
+when the run ended. So the operational figure is about twice the slot arithmetic, arriving over ten-plus
+hours rather than three.
+
+**The reading that has to be resisted is per-connection scaling**, and resisting it needed no new run.
+C6 carried one publisher and one subscriber, so 2× a per-publisher figure on two connections is exactly
+what a per-connection cost would produce. But the evidence against it is in #2745 already, posted by us:
+the pre-knee slope is flat across N = 0, 1, 2 and 4 subscribers, and the four-subscriber 4 h leg — five
+connections — reached baseline + 108.1 MB at its knee and 189.5 MB at 4 h, which is neither five times
+anything nor materially above what two connections reach. The mechanism agrees, since the retained pool
+is for streams the *peer* may open and a subscriber connection is one the relay opens streams on. Filing
+an audience-scaling claim would have contradicted our own published table.
+
+**Reported as a data point on the closed issue** ([comment
+`5367857020`](https://github.com/moq-dev/moq/issues/2745#issuecomment-5367857020)), not as a re-open: the
+conclusion there stands, the lever still works, and what changed is the constant a deployment budgets.
+The comment states the RSS-only instrument limit, closes off the per-connection reading explicitly so the
+tidy story is not left hanging, and offers the capped 14 h arm plus the third slot count the `A + B ×
+slots` fit still wants.
 
 ---
 

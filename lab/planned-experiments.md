@@ -131,14 +131,16 @@ multi-tenancy without a procurement conversation. Budget for two things it will 
 needs explicit `Cache-Control` from the origin to behave sensibly on a live playlist, and it bills per
 request, which 2 s segments generate briskly.
 
-**5. A capped-stream relay-memory arm, to settle what the slot ceiling scales in.** *Needs only time on
-the rig that already exists.* T8b's C6 soak converged on **2.03× the per-publisher-connection ceiling**
-[T9](test-9-performance.md) predicted, on a rig carrying exactly one publisher and one subscriber — which
-is what a per-*connection* cost would produce. The fan-out legs cannot arbitrate, because every one ran
-far shorter than the three-hour knee and so measured the ramp rather than the asymptote. If the cost is
-per connection, a 55-subscriber relay tends toward gigabytes where T9 measured 130 MB, which is a sizing
-error of a different order. One run settles it: `--server-quic-max-streams 1024`, the group count logged,
-and `/proc/pressure/memory` sampled beside RSS so a decaying slope can be told from kernel reclaim.
+**5. A capped-stream relay-memory arm, to bound the half of the ceiling the slot arithmetic does not
+explain.** *Needs only time on the rig that already exists.* T8b's C6 soak converged asymptotically on
+**2.03×** the ceiling [T9](test-9-performance.md) predicted, decaying from +24.60 to +1.82 MB/h and still
+not flat at 14 h. Connection scaling is *not* the explanation — the growth rate is flat across 0–4
+subscribers and a five-connection leg lands in the same range as a two-connection one — so what is
+unaccounted for is a second term that keeps adding ~100 MB over the ten hours past the knee. One run
+bounds it: `--server-quic-max-streams 1024` isolates the slot-dependent part (T9: 91.4 MB against
+189.5 MB), the group count says whether the excess tracks groups, and `/proc/pressure/memory` beside RSS
+tells a decaying slope from kernel reclaim. Lower leverage than it looked while audience scaling was on
+the table, but it is the difference between budgeting 100 MB and 200 MB per ingested channel.
 
 *T8b's own provisioned-path conditions C2–C6 are now run and are no longer on this list.* The controller
 question resolved into a provisioning-margin and queue-discipline question, and C6's 14 h soak settled
@@ -653,16 +655,16 @@ Soaks, the fan-out envelope, the bitrate sweep, protocol overhead, the relay mem
 and the audio-resync work are all executed and written up in
 [test-9-performance.md](test-9-performance.md). What is left:
 
-1. **Settle what the ceiling scales in, which a 14 h leg has now put in doubt.** The knee reproduced
-   where predicted on a single-publisher rig, but [T8b](test-8b-congestion-control.md) C6 ran 14.006 h
-   with one publisher *and* one subscriber and converged asymptotically on **2.03×** the predicted
-   ceiling, its slope decaying from +24.60 to +1.82 MB/h without ever breaking. Two connections at twice
-   the figure is what a per-connection cost would produce, and the fan-out legs cannot arbitrate because
-   all of them ran shorter than the knee. **Run it capped** — `--server-quic-max-streams 1024`, the group
-   count logged, `/proc/pressure/memory` beside RSS — which separates a per-connection ceiling from
-   kernel reclaim from a second shallower leak in one leg. Related and still open: the ~20–30 MB
-   slot-independent term is unattributed, and a third slot count (say 4,096) would test whether the
-   two-point fit holds as a line.
+1. **Bound the half of the ceiling the slot arithmetic does not explain.** The knee reproduced where
+   predicted, but [T8b](test-8b-congestion-control.md) C6 ran 14.006 h and converged asymptotically on
+   **2.03×** the predicted ceiling, its slope decaying from +24.60 to +1.82 MB/h without ever breaking and
+   without going flat. Audience is not the variable — growth is flat across 0–4 subscribers and a
+   five-connection leg reaches the same range as a two-connection one — so this is a second term on the
+   ingest side, and it is the difference between budgeting 100 MB and 200 MB per channel. **Run it
+   capped** — `--server-quic-max-streams 1024`, the group count logged, `/proc/pressure/memory` beside RSS
+   — which separates the slot-dependent part from kernel reclaim from a genuine second term in one leg.
+   Related and still open: the ~20–30 MB slot-independent term is unattributed, and a third slot count
+   (say 4,096) would test whether the two-point fit holds as a line.
 2. **Re-test the memory behaviour after any upstream fix**, using `gop14` as the sensitive case — at
    6,445 groups/h it shows a regression in half the time. The fix has to come from `quinn-proto` and no
    released version past 0.11.16 changes the recycling behaviour, so this may wait a long time.
