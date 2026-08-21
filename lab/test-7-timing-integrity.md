@@ -43,10 +43,14 @@ bitrate, chroma format, GOP structure and native PCR cadence are for.
    stream in both cases. `lab/scripts/t7-segmented-clip.sh`, driven for the four clips by
    `t7-segmented-sweep.sh`.
 3. **Hardware (P2) — not yet run.** Feed the live egress to a hardware IRD and TR 101 290 analyser;
-   confirm PLL lock and a clean P1/P2 result over a sustained soak (target ≥ 24 h, ideally 72 h);
-   run jointly with the T9 resource soak. Exercise the correctness boundaries a groomer must handle
-   beyond steady state: source-clock drift, PCR discontinuities / 33-bit wrap, mid-stream PID/PCR-PID
-   change. Corroborate with a second analyser (Elecard/R&S/Tektronix/Ateme) where access exists. See
+   confirm PLL lock and a clean P1/P2 result over a sustained soak of **≥ 72 h**, which is set by the
+   PCR base's 26.51 h wrap period rather than chosen — a 24 h run can contain no wrap at all
+   ([method-notes](method-notes.md) §3); run jointly with the T9 resource soak. Exercise the correctness
+   boundaries a groomer must handle beyond steady state: source-clock drift, PCR discontinuities /
+   33-bit wrap, mid-stream PID/PCR-PID change. **Each of those has a synthesisable substitute that
+   should be run against the groomer here first**, so a failure on hardware is attributable to the
+   receiver rather than to an untested precondition of ours. Corroborate with a second analyser
+   (Elecard/R&S/Tektronix/Ateme) where access exists. See
    [planned-experiments.md](planned-experiments.md).
 
 ## Results
@@ -72,7 +76,7 @@ P1 (file) figures are the range across four groomed clips; P2 remains the load-b
 | Mux-rate stability | Mbps/jitter | CBR | **exact CBR** (bitrate = pcrbitrate) | TBM |
 | TR 101 290 P1 | pass/fail | pass | **pass** (file-level)⁴ | **TBM** |
 | TR 101 290 P2 | pass/fail | pass | n/a (file) | **TBM** |
-| IRD PLL lock (sustained) | hh:mm | stable | n/a | TBM (≥ 24 h target) |
+| IRD PLL lock (sustained) | hh:mm | stable | n/a | TBM (≥ 72 h: the PCR base wraps at 26.51 h) |
 | Drift / discontinuity / wrap | pass/fail | pass | **0 disc. (steady state)²** | TBM |
 
 ¹ File arithmetic, not wire timing: `pcrverify` records 0 violations at ±500 ns on all four clips;

@@ -131,7 +131,8 @@ Observations / Conclusion / References. The pyramid tier and acceptance gate are
   receiver-side merge, and a dead origin costs no content — but a misconfigured pair is accepted
   silently and delivers time-travel that passes every continuity check.
 - **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real
-  hardware IRD, on the live wire (P2), sustained** (target ≥ 24 h), including ST 2022-7 behaviour
+  hardware IRD, on the live wire (P2), sustained** (≥ 72 h, set by the PCR base's 26.51 h wrap period
+  rather than chosen), including ST 2022-7 behaviour
   under loss, with the T-STD buffer model confirmed valid under drift/discontinuity. Until this
   exists, the grooming design is "structurally sound and file-validated," not "proven
   broadcast-acceptable."
@@ -165,7 +166,7 @@ per-test file when executed. In priority order:
 
 | # | Test | Purpose | Gate |
 |---|---|---|---|
-| T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 24 h) incl. ST 2022-7 under loss | **Gate 2** |
+| T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 72 h — the PCR base wraps at 26.51 h) incl. ST 2022-7 under loss | **Gate 2** |
 | T14 (remainder) | MoQ against segmented HTTP — the two blocked cells | Burst granularity (both arms), carriage fidelity and wire cost are measured in [test-14](test-14-data-plane-comparison.md), and delivery latency in [test-18](test-18-delivery-latency.md). What remains: a commercial ABR-to-TS gateway on P1/P2, which also gates the segmented plane's *low-latency* arm since B2 showed no *free* client fetches partial segments (needs hardware, and is the cell that moves the paper most); and MPTS through a real CDN (needs a CDN account — and now carries the whole of MoQ's carriage-fidelity advantage) | Gate 1 and Gate 2, on both data planes |
 | T12/E | Restart one leg of a live pair | Stream clocking (T12 arm D) made two independently groomed chains byte-identical, and got a recovered or late-joining leg back onto its partner's numbering, slots and phase. What remains is byte-identity on independent restart, blocked by `moq export ts` numbering continuity counters per process — which also needs a grader that can score a pair that is not byte-identical. Plus a two-host variant, where the legs no longer share a clock | Gate 3 — completes the 1+1 story |
 | T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |

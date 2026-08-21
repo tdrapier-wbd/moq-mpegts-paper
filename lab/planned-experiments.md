@@ -59,12 +59,15 @@ six cells lost their aggregate to a disk janitor — so it is currently suggesti
 **2. A hardware IRD and a TR 101 290 analyser, soaked (Gate 2).** *Needs broadcast kit — the one
 genuinely unavoidable purchase or loan.* Every conformance number in this campaign is graded by
 software written or configured by the same people who built the thing under test. That is enough to
-falsify a design and not enough to accept one. A ≥ 24 h soak (72 h preferred) against a real IRD
+falsify a design and not enough to accept one. A ≥ 72 h soak against a real IRD
 settles PLL lock, the buffer model, slow clock drift and discontinuity handling at once, and it is the
 only way to test the boundaries a groomer meets outside steady state: source-clock drift, PCR
 33-bit wrap, mid-stream PID change. It also closes the one question [T12](test-12-dual-path-handoff.md)
 cannot answer in software — whether a real merge engine agrees with our reference receiver on an
-ST 2022-7 pair. Pair it with the T9 resource soak so one long run yields both verdicts.
+ST 2022-7 pair. Pair it with the T9 resource soak so one long run yields both verdicts. **The soak is
+≥ 72 h rather than ≥ 24 h for a reason that is arithmetic** — the PCR base wraps every 26.51 h — and
+every boundary above has a substitute runnable here first, which is what turns a borrowed week into
+measurement rather than debugging.
 
 **3. A second EC2 instance in a different availability zone.** *Needs one more VM — the cheapest
 high-value item on this list.* Every redundancy result the campaign holds was measured on one host.
@@ -76,8 +79,17 @@ free-running oscillators. The same instance unblocks three other cells: the segm
 segment store (both packagers writing identical names into a *consistent* store is free on one
 filesystem and is the actual engineering across two hosts), a standby packager joining an
 already-running feed, and T9's cross-machine fan-out knee, which is currently confounded by
-co-resident subscribers costing more CPU than the relay serving them. Run it after item 1 lands, so a
-two-host result grades path diversity rather than re-measuring filed defects.
+co-resident subscribers costing more CPU than the relay serving them.
+
+**Half of it runs the day the instance exists and half of it does not, and the split is worth knowing
+before provisioning.** The *clean* 1+1 arms — two legs, two hosts, two free-running oscillators, graded
+for byte-identity — are blocked on nothing: they are the cells that separate "the legs agree about
+stream position" from "the legs share a clock", and that is the whole reason the second host is wanted.
+The *recovered-leg* and *late-join* cells remain blocked upstream on
+[#2779](https://github.com/moq-dev/moq/issues/2779) (still open), because an exporter that numbers
+continuity counters from process state cannot produce a byte-identical pair after a restart however many
+hosts it runs on — and they also need a grader `t12-merge-oracle.py` is not yet. So provision for the
+clean arms, and expect the churn arms to wait.
 
 **4. An HTTP/3 client for the segmented lane, then a real CDN edge.** *The first needs a library build;
 only part of the second needs an account.* These were one item and they are not: separating them showed
@@ -131,6 +143,9 @@ and `/proc/pressure/memory` sampled beside RSS so a decaying slope can be told f
 *T8b's own provisioned-path conditions C2–C6 are now run and are no longer on this list.* The controller
 question resolved into a provisioning-margin and queue-discipline question, and C6's 14 h soak settled
 permanence. What remains of T8b is item 1b's C3 replicate.
+
+*Items 2, 3 and 4 are blocked on apparatus, and the work that makes their windows worth having is
+runnable now — see [Rigs to build before the thing they measure arrives](#rigs-to-build-before-the-thing-they-measure-arrives).*
 
 **What is deliberately not on this list**, because running it would confirm rather than move a result:
 more transparency clips through lanes already characterised across a 2.75× bitrate spread; the arm B1
@@ -206,17 +221,120 @@ hardware the entry below requires. T18's segmented figures are therefore the cla
 
 ---
 
+## Rigs to build before the thing they measure arrives
+
+**Two things this campaign is waiting for are not purchases but *windows*:** a TR 101 290 analyser and
+IRD arrive on loan for days, and a real encoder feed is somebody else's schedule. A window spent finding
+out that the rig is wrong is a window spent twice, and the campaign has just paid a small version of that
+bill. [T19](test-19-pcr-grid-verification.md) found the groomer carrying an untested precondition — that
+a PCR's value and its position in the byte stream advance together — which nothing exposed until an
+upstream change violated it. Preconditions of that class do not announce themselves; the only way to
+find the next one is to violate it deliberately. Doing that here costs an afternoon, and doing it with a
+borrowed analyser on the bench costs a day of the loan.
+
+Hence the principle: **anything that can fail for a reason other than the subject should be made to fail
+before the window opens.** All three pieces below need nothing this lab does not already have, and each
+converts a question that would have to be asked on the day into one that is already answered.
+
+### A. Boundary-condition fixtures, and the groomer dry-run against them
+
+Gate 2's value is in the boundaries rather than the steady state, because the steady state is already
+measured on this rig at length. Each condition below is synthesisable with TSDuck today and gradeable
+with instruments that already exist, so each can be turned from a hardware-day *question* into a
+hardware-day *confirmation*. In leverage order:
+
+1. **The PCR 33-bit wrap, placed rather than waited for.** The base clock wraps every **26.51 h** (see
+   [method-notes](method-notes.md) §3), so it need not be soaked for: start the PCR just below the
+   boundary and it arrives in minutes. `mpegts-pacer` is *designed* for it — `Slot::slots_per_wrap`
+   keeps the slot index monotonic across the boundary and `forward_delta_handles_wrap` unit-tests the
+   modular arithmetic — but **what is proven is the arithmetic, not the pipeline**: no stream has been
+   run across a wrap end to end, through the scheduler's run-closing and the discontinuity threshold,
+   let alone through a MoQ round trip whose importer has its own timeline. This is the single cheapest
+   test on the list with a real chance of failing.
+2. **Source-clock drift, by deliberately mis-rating the replay.** The pacer locks its output rate
+   **once**, from a two-PCR warmup window plus a headroom fraction (`pacer.rs`), and derives its cushion
+   once as well; neither is re-estimated. Every long run in the campaign replayed a file on the same host
+   that paced it, so the source clock *was* the sink clock and the groomer has never met a source whose
+   rate is not its own. ISO 13818-1 permits ±810 Hz on 27 MHz — **±30 ppm**, or 2.6 s of accumulated
+   offset per day — against a headroom margin that is one-sided, so source-faster-than-estimate is the
+   dangerous direction and buffer occupancy is the thing to watch rather than throughput.
+   Arithmetically the margin is orders of magnitude larger than the drift and should hold; that is a
+   prediction, not a measurement, and registering it before the run is the point. Substitute: replay at
+   nominal × (1 ± 30 ppm) with `-P regulate`, and sample occupancy and derived latency, not just PCR.
+3. **A *signalled* discontinuity.** The pacer sets and honours the discontinuity indicator and has a
+   resume test, but only across its own resume — the one discontinuity the campaign has actually carried
+   is the loop wrap's *unsignalled* splice. A source that flags its discontinuities is the normal case
+   and the untested one.
+4. **Mid-stream PID change, PCR-PID change and PMT version increment.** Named in the Gate 2 protocol
+   below and never synthesised. These exercise the importer's track model as much as the groomer.
+
+**A failure in any of these is our defect, and is cheaper now than later.** Where a MoQ round trip is in
+the path, a failure may also be upstream's — which is a further argument for running them now, since a
+filed issue takes weeks and the hardware window does not wait.
+
+### B. The acceptance harness, dry-run against the software reference receiver
+
+The measurement set, the running order and the capture format should be fixed and rehearsed before the
+analyser arrives, against the reference receiver the campaign already uses. What that rehearsal is for
+is the rig, not the result:
+
+- **A control ahead of every subject, pre-scripted.** Feed the analyser the source clip straight from
+  disk through `rawsendmpeg2ts` before any MoQ lane touches it. That clip is measured conformant here,
+  so if the analyser flags it the rig is wrong and nothing downstream of that is interpretable. This is
+  the campaign's standing discipline; the reason it has to be *scripted* is that on the day there is no
+  time to design it.
+- **Machine-readable capture, decided in advance.** Whatever the analyser offers — CSV, syslog, SNMP
+  traps — one of them has to be logged to a file, because a 72 h soak read off a GUI is not a
+  measurement and cannot be re-graded later. Confirm the export path exists on the specific model
+  before it ships, since this is the one detail that cannot be worked around on site.
+- **A time budget, written down, soak first.** The soak is the long pole and must start on day one and
+  run unattended; the boundary drills from A are short and attended. If the analyser has two inputs
+  they interleave, and if it has one the drills follow the soak — which changes the order in which
+  questions get answered, so decide it before rather than during.
+- **Named in advance: what a *pass* looks like.** P1 and P2 sub-error by sub-error, plus PLL lock state
+  and the buffer-model verdict, which is analyser-specific and not part of TR 101 290 proper. A gate
+  fixed after seeing the output is not a gate.
+
+### C. The real-source rig, and what can honestly be substituted
+
+Every figure in the campaign comes from a looped file. Separating what a real encoder changes from what
+merely *looks* different is worth doing now, because it decides which questions need the source at all:
+
+- **Substitutable now, and listed in A:** the free-running clock (mis-rated replay), signalled
+  discontinuities, the wrap.
+- **Substitutable, and worth doing because it removes an artefact rather than adding one:** the loop
+  wrap splice. The looped file's wrap is a real continuity event that a real source does not have, so
+  some measured continuity behaviour is the rig's. A long single-pass replay of a long clip separates
+  the two without an encoder.
+- **Not substitutable.** Whether a *particular* encoder's PCR is itself conformant, which sets the floor
+  for everything downstream and which this campaign has never had to consider because its clip is
+  comfortably inside the gate; genuine scene-driven rate variation within CBR; and SI that changes
+  because something happened rather than because a fixture generator was run.
+
+The rig to have ready is therefore small: a capture point at the source, the same instruments pointed at
+it, and the source's own conformance graded *before* it is used as an input — so that the first real-feed
+result is not a lane verdict resting on an ungraded source.
+
+---
+
 ## Hardware TR 101 290 P1/P2 soak (T7, P2 — Gate 2)
 
 The load-bearing open test. Feed the live groomed egress to a hardware IRD + TR 101 290 analyser and
-confirm PLL lock and a clean P1/P2 result over a **sustained soak (target ≥ 24 h, ideally 72 h)** —
-short runs can pass by luck; only hours→days surface slow clock drift, buffer-model violations, and
-rare discontinuity handling. Run jointly with the resource soak below so one long run yields both
-verdicts. Exercise the boundaries a groomer must handle beyond steady state:
+confirm PLL lock and a clean P1/P2 result over a **sustained soak of ≥ 72 h** — short runs can pass by
+luck, and only hours→days surface slow clock drift, buffer-model violations and rare discontinuity
+handling. **72 h is arithmetic rather than ambition:** the PCR base wraps every 26.51 h, so a 24 h run
+spans 0.91 of a wrap period and can contain none of the events it is soaking for
+([method-notes](method-notes.md) §3). Run jointly with the resource soak below so one long run yields
+both verdicts. Exercise the boundaries a groomer must handle beyond steady state:
 
 - source-clock drift; PCR discontinuities / 33-bit wrap; mid-stream PID / PCR-PID change;
 - ST 2022-7 determinism under loss (the on-hardware hitless-switch drill), verifying the two egress
   legs stay byte-identical under *divergent* object-loss recovery, not only in the clean case.
+
+**Every one of those boundaries has a synthesisable substitute that should be run against the groomer
+before the hardware arrives**, so that a failure on the day is attributable to the receiver rather than
+to our own untested precondition — the fixtures, and the case for them, are in
+[Rigs to build before the thing they measure arrives](#rigs-to-build-before-the-thing-they-measure-arrives).
 
 Where access exists, corroborate with a second analyser (Elecard / R&S MTS4EA / Tektronix MTS / Ateme
 Titan). The precondition — which groomer topologies can produce a byte-identical pair — is already
@@ -606,7 +724,7 @@ awk '{n++;x=$1;y=$2;sx+=x;sy+=y;sxy+=x*y;sxx+=x*x}
 
 Pass criteria for any role: RSS growth slope statistically ≈ 0 over the soak, or a plateau with a
 stated ceiling; fd, socket and thread counts stable and returning to baseline after join/leave and
-relay-reconnect churn; bounded CPU with headroom. Pair the soak with the T7 ≥ 24 h PLL-lock soak so one
+relay-reconnect churn; bounded CPU with headroom. Pair the soak with the T7 ≥ 72 h PLL-lock soak so one
 long run yields both verdicts. Re-running the fan-out sweep across two machines needs
 N ∈ {1,5,10,25,50} subscribers on hosts separate from the relay, since a co-resident subscriber costs
 more CPU than the relay serving it and the knee then belongs to the box.

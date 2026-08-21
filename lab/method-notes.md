@@ -324,6 +324,17 @@ refining the rule above.)*
 > measures the derivative, not the asymptote** — and a pre-registered prediction that omits which
 > quantity it scales in cannot be falsified cleanly by either.
 
+**Set a soak's duration from the longest period in the system, not from a round number.** *(Gate 2 rig
+design, applying the rule above before the run rather than after it.)*
+
+> The PCR field's 33-bit base runs at 90 kHz, so it wraps every 2³³/90,000 s = 95,443.7 s = **26.51 h**.
+> The hardware soak has been specified throughout as "≥ 24 h, ideally 72 h" — and 24 h spans 0.91 of a
+> wrap period, so a conforming run of the stated minimum can contain no wrap at all and still be
+> reported as having soaked. The wrap is precisely the slow-clock event the soak exists to find. 72 h is
+> therefore not a preference but the shortest duration that guarantees two. The same reasoning says the
+> wrap should not be waited for at all where it can be *placed*: start the PCR just below the boundary
+> and the event arrives in minutes, which is a fixture rather than a soak.
+
 **Register the shape as well as the number, or a converging curve and a leak grade the same.** *(T8b
 C6.)*
 
