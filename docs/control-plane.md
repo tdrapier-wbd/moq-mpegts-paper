@@ -32,6 +32,15 @@ develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive co
 > management planes. "Value lives in the control plane" is therefore a *necessary* condition for
 > defensibility, not a sufficient one: it has to be materially better for *this* job, not merely
 > present. Nothing here demonstrates that it is.
+>
+> **And "value lives here" does not mean "a vendor captures it."** The design below is mostly
+> *mechanism*, which generalises; what makes it useful at a large broadcaster is integration with
+> conditional access, rights, scheduling, monitoring, compression, network and service-management
+> systems that differ at every operator. That work is the bulk of the value and it does not generalise,
+> so at the top of the market this layer is predominantly built rather than bought, and the vendor
+> market for it is real mainly further down ([Economics](economics.md) §8). **Read what follows as a
+> specification for something an operator builds**, with the token, key and enforcement machinery as
+> the part sensibly adopted rather than written.
 
 ---
 
@@ -248,6 +257,25 @@ edge.
 - **Compliance policy** — every routing modification and authorization grant is logged to an
   immutable ledger.
 
+**Where the business rules come from is the hard part, and it is deliberately not specified above.**
+None of those policies originates in this layer. At a mature broadcaster, "who may subscribe" is a
+conditional-access and rights question, "for how long" is a scheduling question, "under what geographic
+constraint" is a rights question again, "which links are eligible" is network management's, "what it
+costs whom" is finance's, and "who gets paged" is service management's. Each of those lives in a
+long-established, deliberately isolated system with its own data model. **A control plane that cannot
+read those systems automates nothing** — it relocates the manual step from a device to a form, and the
+operator still reconciles by hand.
+
+So the integration surface, not the policy engine, is what determines whether this layer delivers the
+operational reduction the thesis claims for it. It is also why this layer is predominantly built rather
+than bought at the top of the market: the engine generalises across operators and the integration does
+not ([Economics](economics.md) §8). The design consequence for everything above is to keep policy
+**sourced** rather than **authored** here — the control plane should hold a projection of decisions made
+in those systems, with provenance, so that a rights change or a schedule change propagates rather than
+needing re-entry. Authoring policy in the control plane creates a second source of truth for questions
+the business has already answered elsewhere, and reconciling those is the failure mode that makes
+platforms of this kind shelfware.
+
 ---
 
 ## 7. Security model
@@ -361,8 +389,16 @@ federation peer over-reaching its negotiated scope, and control-plane privilege 
 
 ## 9. Open questions
 
-- **Does any of this need to be built at all, or bought?** The market is crowded (see the evidence
-  note at the head of this document). The first question is not a design question.
+- **Which layers are bought and which are built?** No longer wholly open: the mechanism — token issue
+  and verification, key rotation, enforcement — generalises and should be adopted rather than written,
+  while policy and the integration with rights, scheduling and CA systems do not generalise and are
+  built ([Economics](economics.md) §8). What remains open is the middle: how much of orchestration and
+  observability a product can supply before its model has to be bent to the operator's, which is the
+  question that decides whether a vendor engagement is a purchase or a bespoke programme with a licence.
+- **Does the operational reduction the thesis claims actually materialise from integration?** This is
+  the load-bearing commercial assumption and nothing here tests it. The cost of the integration is
+  knowable in advance by counting interfaces; the saving is not, and a control plane that automates
+  provisioning while leaving reconciliation manual delivers neither.
 - **What is the right default TTL,** and should it vary by content value and by the reachability
   characteristics of the endpoint? Halving the TTL roughly doubles the renewal rate.
 - **How are rotated verification keys distributed to the edge** with strong enough consistency that a

@@ -91,6 +91,32 @@ continuity counters from process state cannot produce a byte-identical pair afte
 hosts it runs on — and they also need a grader `t12-merge-oracle.py` is not yet. So provision for the
 clean arms, and expect the churn arms to wait.
 
+**Provision it in a second AZ of the same region, and give it more CPU than the existing box.** Two
+separate decisions, and the reasoning differs.
+
+*Same region, different AZ, rather than a second region.* What the clean arms measure is whether two
+legs on **independent oscillators** stay byte-identical. A different AZ already buys that — separate
+hardware, separate power and cooling, separate clock — while keeping the inter-host RTT to a couple of
+milliseconds. A second *region* would add tens of milliseconds of differential delay on top, which
+confounds the question: a divergence could then be the clocks or the skew, and the whole point of the
+arm is to isolate the former. The decisive argument is the campaign's own habit of **synthesising the
+harder condition rather than waiting for it** — `netem` can add differential delay to a cross-AZ pair to
+model geographically separated origins, and nothing can subtract it from a cross-region pair. Start at
+the low-impairment topology and impair it. Cross-AZ is also the realistic primary/backup metro
+topology, and cheaper on inter-AZ transfer than cross-region.
+
+*Do not clone the 2-vCPU spec.* Cloning it would reproduce a **known instrument ceiling** rather than
+extend the rig. Three results are currently bounded by that host and not by anything under test: the
+segmented lane is unmeasured above ~11.5 Mbps ([T7](test-7-timing-integrity.md)), T12 could not run a
+full 10 Mbps mux and dropped to 2 Mbps because a relay, two exporters and two groomers at the DVB feed's
+9.9 Mb/s exhaust the box, and T9's fan-out knee is confounded by co-resident subscribers costing more
+CPU than the relay. A larger second instance addresses all three, and the asymmetry is harmless provided
+it is **verified non-binding**: record CPU headroom and drop counts per leg, and treat any 1+1 result
+where either leg was resource-bound as void. Check the **instance family** too, not just core count —
+[`economics.md`](../docs/economics.md) §3 notes a general-purpose 2-vCPU instance sustains under 1 Gbps
+against the ~2.2 Gbps its cores could forward, so sustained network allowance is the spec line that
+matters for the fan-out cells.
+
 **4. An HTTP/3 client for the segmented lane, then a real CDN edge.** *The first needs a library build;
 only part of the second needs an account.* These were one item and they are not: separating them showed
 that most of what "a real CDN edge" was standing in for is reachable without one, and that the thing

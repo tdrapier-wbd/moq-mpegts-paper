@@ -27,7 +27,7 @@ Stated as what would move the paper's conclusion, since a comparison has no pass
    the same measurement point, the hand-off axis stops favouring segmented HTTP.
 2. **Carriage fidelity.** If segmented HTTP loses PSI/SI tables or splice PIDs that the media-aware
    MoQ lane preserves, the carriage-fidelity row in §12 stands. If it loses less, the row moves.
-3. **Payload cost.** [economics](../docs/economics.md) §4.7 estimates segmented HTTP at ~1.05× source
+3. **Payload cost.** [economics](../docs/economics.md) §4.4 estimates segmented HTTP at ~1.05× source
    TS bytes against MoQ's measured 0.982×. The prediction under test is *near parity with MoQ if the
    packager strips stuffing*.
 
@@ -360,7 +360,7 @@ above that would confirm a multiplier rather than move the result.
 |---|---|
 | 1. Burst granularity | **Met, decisively, and it survived the escape route.** ~240× coarser bursts on arm B1, 24 multi-second silences against none; and ~185× on arm B2, because no free client fetches the parts that would have closed the gap. The hand-off axis no longer favours segmented HTTP. |
 | 2. Carriage fidelity | **Moved, against MoQ.** Arm B1 is verbatim for a single programme and loses less than the media-aware lane. |
-| 3. Payload cost | **Met, and the estimate was right for the wrong reason.** [economics](../docs/economics.md) §4.7 guessed ~1.05× and the wire figure is 1.056× at 1200 B — but its premise was that the packager strips stuffing, and TSDuck keeps it. The estimate's *number* survives; its *mechanism* does not. MoQ's ~7 % lead is the price of not being verbatim, and it is contingent on this clip's 4.57 % stuffing. |
+| 3. Payload cost | **Met, and the estimate was right for the wrong reason.** [economics](../docs/economics.md) §4.4 guessed ~1.05× and the wire figure is 1.056× at 1200 B — but its premise was that the packager strips stuffing, and TSDuck keeps it. The estimate's *number* survives; its *mechanism* does not. MoQ's ~7 % lead is the price of not being verbatim, and it is contingent on this clip's 4.57 % stuffing. |
 
 ---
 

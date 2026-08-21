@@ -42,7 +42,7 @@ BUNNY_STANDARD = [(None, 0.01)]   # NA/EU flat
 BUNNY_VOLUME = [(None, 0.005)]    # NA/EU flat
 # A CDN-operated MoQ relay: ASSUMPTION, not a published rate. Only Cloudflare has
 # announced one ($0.05/GB); these model a competitive market at a modest premium
-# over commodity CDN delivery on committed volume. See docs/economics.md §4.7.
+# over commodity CDN delivery on committed volume. See docs/economics.md §4.4.
 CDN_MOQ_RELAY_ASSUMED = [(None, 0.010)]
 CDN_MOQ_RELAY_FLOOR = [(None, 0.005)]
 

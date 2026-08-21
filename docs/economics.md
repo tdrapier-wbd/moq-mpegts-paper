@@ -4,7 +4,9 @@ Status: working draft.
 Layer: **cross-cutting** — the cost framework is data-plane agnostic; the data plane enters only as a
 wire multiplier and a delivery price.
 Scope: a cost framework for comparing Internet-native distribution against incumbent primary
-distribution, **and a numeric model of the always-on case built entirely from published rates**. The
+distribution, **a numeric model of the always-on case built entirely from published rates**, and the two
+ownership questions that follow a decision to proceed — whether to operate the fan-out or rent it (§7),
+and where vendor value actually sits once the control plane is priced honestly (§8). The
 full working, every rate card and the reproduction script are in
 [`lab/cost-model.md`](../lab/cost-model.md); this document states the model's inputs, its four
 results and what they do and do not support.
@@ -40,8 +42,7 @@ rather than sticker price, since redundancy, operations and integration dominate
 lifetime; and **operational optionality**, the provisioning speed and dynamic reach a per-route
 comparison misses.
 
-**Two conclusions from the model are worth stating before the detail, because they decide everything
-after it.**
+**Three conclusions are worth stating before the detail, because they decide everything after it.**
 
 **Cost is set almost entirely by commercial egress terms, not by engineering.** Published cloud
 egress sits about an order of magnitude above what the same delivery costs on a commodity CDN or,
@@ -52,6 +53,14 @@ percentages. Egress is roughly 90 % of a self-built transport bill.
 inside a footprint is free. Every candidate transport is unicast at the last mile, so the rate
 obtained moves the viable ceiling from tens of destinations to high hundreds, and no protocol removes
 the linearity. **A technology comparison is not where this is won or lost.**
+
+**And the two decisions that follow are about ownership rather than technology.** Renting fan-out from a
+CDN transfers the commodity half of the problem and leaves the broadcast-grade half — conformance,
+monitoring, entitlement, the receive estate — with the distributor on every data plane (§7). The control
+plane, the largest remaining build-or-buy line, is one a large broadcaster is pushed toward building,
+because its value is integration with systems no product can generalise over (§8). Together those move
+the vendor-addressable value away from transport and toward capacity, the hand-off stage, and the
+smaller end of the market.
 
 The position argued toward, as a hypothesis rather than a result: always-on trunk is the *hardest*
 case but achievable rather than permanently lost, and achievable further up the destination range
@@ -82,10 +91,10 @@ on economics that have nothing to do with transport.
 
 **The challenger's TCO** must sum at least: relay compute (scaling with *connection count*, only
 weakly with bandwidth); egress (the line that dominates); the control plane (does not scale with
-bitrate, but is a substantial build-or-buy decision and **where much of the vendor value in this
-market sits** — a model counting only egress and compute understates the build and overstates how
-substitutable the offering is); 24/7 operations and support to the broadcast standard; tooling and
-monitoring; the edge grooming and interop work; and the receiver at the far end.
+bitrate, but is the largest build-or-buy decision in the set, and for a large broadcaster it is
+substantially a **build** rather than a buy — §8); 24/7 operations and support to the broadcast standard;
+tooling and monitoring; the edge grooming and interop work; and the receiver at the far end. A model
+counting only egress and compute understates the build and overstates how substitutable the offering is.
 
 **Two lines are excluded from every figure below and can exceed all of them at low route counts:**
 staffing, and the control plane. At the single-route scale in §4, one on-call engineer costs more
@@ -455,7 +464,198 @@ rate, and note that the sensitivity is on **the source**, not the protocol (§3)
 
 ---
 
-## 7. Open questions
+## 7. Own the fan-out or rent it
+
+§6 asks whether to displace the incumbent. This section asks the question that comes immediately after a
+yes, and it is a different question with a different answer: **does the broadcaster operate the
+replication points itself over its own transit, or rent public infrastructure to do it?** In practice
+that is the choice between on-premise SRT or RIST tunnels on owned capacity, and segmented HTTP or MoQ
+fanned out by a CDN.
+
+### 7.1 The two choices are not independent, and that is the first thing to get right
+
+The instinct is to pick a transport and then decide where to run it. The market does not offer that
+freedom, and §4.6 explains why: a relay is a cache, so a CDN can operate MoQ or HTTP as an extension of
+what it already runs, while fanning out SRT means a stateful media gateway per stream per destination —
+a media-server business, not a delivery business. **So the data-plane choice largely determines the
+build-or-rent option set.**
+
+| Data plane | Can you rent the fan-out? | From how many suppliers |
+|---|---|---|
+| Segmented HTTP | yes, and it is a commodity | a dozen, at published rates |
+| MoQ | yes | **one**, at 5–10× commodity |
+| SRT / RIST | not to the destination — CDNs take it at the door as contribution ingest | you, or a managed media service at per-flow premium |
+
+Choosing SRT is therefore choosing to own the replication. Choosing segmented HTTP is choosing to be
+*able* to rent it, cheaply and from more than one supplier — the option itself has value even if it is
+not exercised. Choosing MoQ today is choosing between building it and a single supplier, which is why
+§4.6's economic case for MoQ is explicitly contingent on interop being solved.
+
+### 7.2 What renting actually transfers is the commodity half
+
+Renting fan-out is usually described as pushing complexity to a third party at a cost. That is the right
+instinct about the direction and it overstates the amount. Measured against what this campaign found a
+broadcast-grade path actually requires, a CDN takes fan-out, PoP operation, peering and the capacity
+risk. It does **not** take:
+
+- **the conformance hand-off** — the groomer that turns delivered objects or segments back into a
+  transport stream a hardware IRD accepts. §4.6 already notes the distributor owns the broadcast-grade
+  edge layer on either data plane. On the MoQ lane there is nothing to buy at all: behind a MoQ egress
+  nothing off the shelf passes, and the missing half is carriage ([Evidence](evidence.md) §3.2).
+- **TR 101 290 monitoring**, which a broadcaster's existing probes cannot perform inside someone else's
+  network — so renting fan-out also rents a blind spot.
+- **entitlement and the control plane** (§8), **the receive estate** (§2), and 24/7 operations to the
+  broadcast standard.
+
+**So the complexity transferred is bandwidth-shaped, and the complexity retained is broadcast-shaped.**
+Renting fan-out buys out of the part of the problem that is already a commodity and leaves the part
+that is hard. That is a real saving — it is most of the *bill* — but it is not most of the *engineering*,
+and a business case that treats it as buying a turnkey path will be wrong about headcount.
+
+### 7.3 The on-prem SRT case is stronger than this paper's direction implies
+
+Stated plainly, because the campaign's overall subject is MoQ and it would be easy to read the rest of
+this document as an argument against the incumbent approach:
+
+- **The hand-off problem does not exist.** Graded over a real path against the other two lanes by one
+  instrument, byte-faithful SRT is transparent on *every* criterion — all 13 PIDs at their source
+  numbers, SI and splice signalling, stuffing, the source mux rate exactly, an identical PSI cadence and
+  PCR grid, 0 continuity errors and **0 PCR-accuracy violations at the 481 ns P2 gate, measured
+  ungroomed** ([Evidence](evidence.md) §3.1). Other lanes can be brought through that gate; SRT is the
+  one that arrives through it with no grooming stage at all. **That removes the entire edge-conformance
+  workstream** — the one the MoQ lane cannot buy its way out of, and that segmented HTTP can only buy its
+  way out of.
+- **Primary distribution is the topology where rented fan-out is worth least.** §4.5 establishes that a
+  relay economises backhaul and uplink, not delivery, and that it pays only where receivers cluster.
+  Distribution to affiliates and head-ends means tens of destinations, not millions, and at tens of
+  destinations N point-to-point tunnels are entirely tractable. **The CDN's central advantage is
+  fan-out economics, and this workload has little fan-out.**
+- **The fixed costs are already sunk.** A large broadcaster has the NOC, the monitoring estate, the
+  transit relationships and the receive estate. Own transit and PoPs is the cheapest cost base per byte
+  in §4.6, and its stated limit — reach — is not binding for a broadcaster whose destinations sit inside
+  a footprint it already serves.
+
+**Two measured qualifications cut the other way.** SRT's continuity integrity degrades under a
+well-behaved AQM — 4,279 continuity errors under a FIFO but **17,652–22,365 under `codel`** at the same
+shortfall, where MoQ takes none in any cell of any condition
+([T8b](../lab/test-8b-congestion-control.md), not yet promoted to `evidence.md`) — so byte transparency
+is not the same as robustness, and the transparency is precisely what delivers a shortfall downstream as
+corrupted bytes rather than as absent ones. And SRT's latency advantage is a buffer setting rather than a
+protocol property, so it is paid for out of the resilience budget.
+
+### 7.4 The criteria that actually decide it
+
+Refining "capability, direction, appetite for engineering" into things a broadcaster can answer:
+
+| Question | If yes | If no |
+|---|---|---|
+| **Is the latency budget sub-second?** | own tunnels, or MoQ — the only hard technical discriminator in the set | segmented HTTP over a CDN wins on nearly everything else: commodity price, a dozen suppliers, interop, and an off-the-shelf path back to TS |
+| **Do you already own transit and PoPs where the destinations are?** | on-prem is the cheapest base per byte | the meet-me-point cost and lead time is the hidden line that decides it (§2) |
+| **Are there more than tens of destinations, clustered by region?** | rented fan-out starts to pay, because that is the topology where a relay economises backhaul (§4.5) | it buys little; the linearity is in the last mile either way |
+| **Are you willing to own a conformance stage no vendor sells?** | MoQ is available to you | segmented HTTP or SRT, where the hand-off is bought or unnecessary |
+| **Can you tolerate a single supplier for the replication tier?** | MoQ on a CDN is available today | segmented HTTP, or self-operate |
+| **Is the receive estate vendor-specific?** | it may decide the question on its own, independent of transport (§2) | the transport decision is actually free |
+
+**The pattern in those rows is that capability and appetite are not preferences but positions.** A
+broadcaster with its own transit, its own NOC and tens of clustered destinations is being told by its
+own cost structure to run SRT on its own infrastructure, and the burden of proof sits on anything that
+displaces it. The organisations for which rented fan-out is obviously right are those without that
+estate, those reaching beyond their footprint, and those whose destination counts or geographic spread
+make owning replication a new business rather than an extension of an existing one — which is also
+§6's "global or dynamic reach" row, reached from the other direction.
+
+---
+
+## 8. Where vendor value concentrates
+
+The conventional reading — and the one earlier drafts of this document carried — is that because the
+transport commoditises, the vendor value moves to the control plane. The first half is right and the
+second does not survive contact with how a mature broadcaster is actually built. Value does concentrate
+there; **it is largely captured by the operator that builds it rather than by a vendor that sells it.**
+
+### 8.1 The integration surface is the product, and it does not generalise
+
+A large broadcaster runs many long-lived, deliberately isolated systems: conditional access, rights,
+scheduling, compression, network management, monitoring, service management, finance. A control plane
+worth having interfaces with these, because that is what turns the work
+[control-plane.md](control-plane.md) specifies into something automated rather than a form somebody
+fills in. **The integration is therefore not an adjunct to the product; it is most of the value.**
+
+And integration does not generalise. Every one of those systems is a different vintage, a different
+vendor or in-house build, and a different data model at each broadcaster. An off-the-shelf control plane
+can supply the parts that are the same everywhere and cannot supply the parts that are the reason to buy
+it, so a vendor engagement at this end of the market resolves into a bespoke integration programme with
+a licence attached — priced as a product, delivered as professional services, and carrying the
+switching cost of both. **The category is mis-specified for this buyer rather than merely expensive.**
+
+### 8.2 But "no vendor value" is too coarse — the control plane has layers, and they differ
+
+| Layer | Generalises? | Who should supply it |
+|---|---|---|
+| **Mechanism** — token issue and verification, key rotation, authorisation enforcement, revocation semantics | yes; it is protocol and cryptography | open source or a vendor. The *enforcement point* is native and verified to exist, but the credential profile above it is a deployment choice rather than a wire primitive, so this layer is generalisable in principle and not yet standardised in practice ([Evidence](evidence.md) §3.10) |
+| **Orchestration** — provision a route, place a relay, configure a groomer, tear it down | partly; the primitives generalise, the topology and change process do not | vendor primitives, in-house policy |
+| **Observability** — probes and conformance checks generalise; sinks, thresholds, escalation and runbooks are the operator's | partly | vendor probes, in-house integration |
+| **Policy** — who is entitled to what, when, under which contract, and what happens when it changes | no; it lives inside the rights, scheduling and CA systems | in-house, necessarily |
+
+**The vendor-addressable layer is real and thin; the company-specific layer is thick.** That is a more
+useful conclusion than "zero", and it predicts the shape of a sensible build: buy or adopt the
+mechanism, build the policy and the integration, and expect the latter to dominate the estimate.
+
+**This campaign has already found exactly that division in the data plane, which is why it is worth
+trusting here.** The request for a generic egress sink with PCR-aware pacing was split in precisely this
+way: the *pacing primitive* was general, was accepted upstream and shipped; the *grooming stage* was
+judged not to belong in a transport library and was built outside it
+([lab/upstream-contributions.md](../lab/upstream-contributions.md) §8). Thin generalisable mechanism,
+thick operator-specific stage — the same shape in both planes, established by measurement in one of
+them.
+
+### 8.3 Why in-house is now tractable where it once was not
+
+The conclusion that a mature broadcaster must build its own control plane would have implied a capital
+programme a decade ago and does not now, for reasons that are specific rather than general optimism:
+the data plane beneath it is open source and standards-track, so none of the transport has to be built
+or licensed; the systems it must integrate now mostly expose APIs or a message bus, so integration is
+glue rather than middleware; and hosting it is operating expenditure at a scale that rounds to nothing
+beside the egress line in §4. **What remains is a substantial software engineering exercise, and the
+honest statement is that its cost has moved from capital to competence.** A broadcaster that cannot
+staff it has not avoided the problem by buying a product, because the product's integration half will
+be staffed from the same place.
+
+### 8.4 Where that leaves the value, including one correction
+
+- **Infrastructure providers — CDNs and hyperscalers — capture the durable value.** They sell fungible
+  capacity per unit, which is the one input nobody self-supplies past a certain reach, and §4 puts it at
+  roughly 90 % of a self-built transport bill. The caveat is §4.6's: for MoQ specifically there is one
+  supplier at 5–10× commodity, so the market premise the buyer is relying on is not yet met.
+- **Control-plane vendors have a real market, and it is not the giants.** A smaller organisation has
+  fewer systems to integrate, and more importantly often has no codified process for the work at all —
+  so the vendor's opinionated model *is* the product, and it is bought as a way of acquiring a process
+  rather than automating one. That is exactly why the same product cannot be sold upmarket: a mature
+  broadcaster already has the process, encoded across those isolated systems, and needs it honoured
+  rather than replaced.
+- **Data-plane vendor value has moved rather than disappeared, and this is a correction to the
+  conventional reading.** There is little left in *transport* — it is open, specified and increasingly
+  commoditised. But the campaign's own negative results are a product specification: nothing off the
+  shelf turns a MoQ egress into a conformant transport stream, and a mux carrying full signalling to a
+  hardware receiver still needs a purpose-built stage on that lane ([Evidence](evidence.md) §3.2). **The
+  value in the data plane sits at the hand-off, not in the carriage** — the edge appliance, the
+  IRD-facing gateway, the conformance stage — which is a smaller market than transport was, and a real
+  one.
+
+### 8.5 The consequence nobody is incentivised to fix
+
+If the largest operators build in-house and vendors serve the small end, then **the interoperability
+work has no commercial sponsor at the end of the market that could fund it.** This is not speculative:
+relay portability between implementations is absent in practice today, and §4.6 identifies it as one of
+three things that would falsify the strongest economic case for MoQ — a market cannot commoditise a
+product buyers cannot switch between. The broadcasters with the resources to fix interop are precisely
+the ones whose in-house builds make it a lower priority for them individually, and the vendors who would
+otherwise carry it serve customers too small to pay for it. **Cooperative or standards-body funding is
+the structural answer, and the absence of one is a risk to the thesis rather than a detail of it.**
+
+---
+
+## 9. Open questions
 
 **Commercial, and decisive.**
 

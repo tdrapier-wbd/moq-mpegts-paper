@@ -126,7 +126,7 @@ of the problem, the structure should show which part is which.
 | [Architecture](docs/architecture.md) | **Above the transport** | The reference architecture. The edge gateway and 1+1 redundancy come first because they are the substance and the measured part |
 | [Control, Entitlement and Security](docs/control-plane.md) | Above the transport | Provisioning, entitlement and the threat model. **Design only — nothing here has been built or measured** |
 | [Evidence](docs/evidence.md) | Cross-cutting | Method, instruments, results by question, and the limits of the evidence |
-| [Economics](docs/economics.md) | Cross-cutting | Cost framework, and a numeric model of the always-on case at published rates |
+| [Economics](docs/economics.md) | Cross-cutting | Cost framework, a numeric model of the always-on case at published rates, and the two ownership questions that follow: operate the fan-out or rent it, and where vendor value actually sits |
 | [Glossary](docs/glossary.md) | — | The two vocabularies side by side, in broadcast terms |
 
 **The engineering record** is the laboratory notebook in [`lab/`](lab/README.md): the campaign plan
