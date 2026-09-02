@@ -76,6 +76,18 @@ rig, not a comparison.** *(T12.)*
 > failure, and it is the architectural finding in miniature — but it means arm C validates the
 > receiver and the instrument, not the topology.
 
+**A parameter fixed once in the method section and never varied is an uncontrolled variable, and it is
+the first place to look when a result refuses to explain itself.** *(T8b C3.)*
+
+> C3's headline was that adding a second media-aware feed *reduced* total delivered throughput — a
+> utilisation defect with no mechanism, which survived the elimination of the congestion controller and
+> then of bufferbloat. It was the subscriber's `--latency-max`, pinned at 2 s across every cell of the
+> matrix because 2 s was the campaign's chosen operating point. Sweeping it 500 ms → 30 s moved the
+> `n=2` aggregate 4.29 → 10.35 Mb/s, above the single-flow rate. The number was a fact about a
+> configuration, and the configuration had been held constant so consistently that it had stopped being
+> visible as a choice. *Before hunting a mechanism in the network, list every value the rig was told
+> and vary the ones that were never in the matrix.*
+
 ---
 
 ## 2. Instruments, and reading what they tell you
@@ -230,6 +242,54 @@ arriving at it burns its cushion off, and its own status line will not say so.**
 > their mux's own stuffing and so ran at a 0.55 % surplus, six times less — an asymmetry that looked like
 > a transport difference. Quote a cushion with its surplus, and match a null-stripping lane's carrier to
 > content rate rather than to the original mux rate.
+
+**A fix acts in one domain. Test it in that domain, or the instrument will confidently answer a
+different question.** *(T19.)*
+
+> #2967 changed PCR *values* and #3006 changed the *time* the bytes are released. The campaign's rig
+> captured the export to a file and measured where the PCR packets sat among the bytes — the right
+> instrument for #2967's successor question and the wrong one for #3006, because writing to a file
+> flattens precisely the timing the fix creates. Run against #3006 it showed the positional bunching
+> unchanged, which reads as "the fix did nothing" and is in fact "this measurement cannot see the fix".
+> Grading it needed a different instrument altogether: read the export live off a pipe and timestamp
+> each PCR packet as it arrives, at which point the fix is plainly there — the on-grid share doubles and
+> gate failures halve. Three domains were in play at once here (value, byte position, arrival time), all
+> three called "PCR spacing", and a result in one is not a result in another. *Before measuring a fix,
+> say which of those the change acts on and check the rig observes it; a rig inherited from the previous
+> question is the likeliest way to get a confident null.*
+
+**Grade a stream against the values it asserts about itself, not against a nominal you supply.**
+*(T19.)*
+
+> The arrival oracle compared PCR inter-arrival against a nominal 25 ms, which works only because #2967
+> happens to emit a 25 ms grid: it needs the grid's period supplied from outside, it is silent about a
+> clock running at the wrong rate, and it cannot say whether a given PCR arrived when *it* said it would.
+> Rewritten to compare each interval against the difference between the two PCR *values*
+> ([`ts-pcr-timing.py`](scripts/ts-pcr-timing.py)), the same reader needs no reference clock, no source
+> file and no declared mux rate, and it becomes valid for any exporter at any cadence. It also yields a
+> statistic the nominal version could not: the *sign* of the error. *A self-referential test is both
+> more portable and more sensitive than one that needs a reference, whenever the stream carries a
+> statement about its own timing.*
+
+**The sign of a timing error tells you whether you are measuring the writer or the reader.** *(T19.)*
+
+> A Python reader on a shared box cannot distinguish its own scheduling delay from a late write, and
+> that was offered as the ceiling on a 7.45 % figure for a whole session. It need not have been: a
+> preempted reader lengthens one interval and shortens the next, so it produces late and early errors in
+> balance, while a writer flushing a backlog produces early ones only. The measured ratio was 626 early
+> to 136 late. *Before attributing jitter to the instrument, check whether the instrument's failure mode
+> is even the right shape; an asymmetry rules it out without needing a better host.*
+
+**Two invariants failing at once are one defect until you have checked they fail on different
+things.** *(T19.)*
+
+> Post-#3006 the exporter failed a release-timing check on 42 % of intervals and a byte-position check on
+> 56 % of packets, and these were carried as two findings with two possible causes. Cross-tabulating the
+> two per interval — one extra counter over data already in hand — showed 615 of the 626 early releases
+> were exactly the byte-adjacent packets and that none of the 136 late ones were, which collapses two
+> symptoms into one mechanism and pointed straight at the line of code responsible. *When a run reports
+> two failures over the same population, join them before you report them; the cross-tab is usually
+> free and it is the difference between two hypotheses and one cause.*
 
 ---
 
@@ -526,9 +586,54 @@ the variable the mechanism scales with.** *(T3.)*
 > 1/bitrate. The same maxima arriving unpredicted would have been filed as "sub-millisecond PCR error
 > at segment boundaries" and left there.
 
+**Run the falsification test even once you have stopped believing the prediction — a caveat retired by
+measurement eliminates a class of cause, and a caveat retired by argument eliminates nothing.**
+*(T8b C3/C4.)*
+
+> C4 predicted an AQM would remove C3's collapse. By the time the cells were run the prediction was
+> already doubted on other grounds, so the six-cell run looked like confirming what was known. It was
+> worth 12 minutes: `cake` cut RTT from ~550 ms to 100 ms, which proves the AQM did its job, and the
+> collapse survived at 48 % of cap. Bufferbloat is now *excluded* rather than *thought unlikely*, and
+> that is what left the latency budget as the only candidate standing. An unrun counterfactual stays in
+> the limits section forever and keeps every downstream conclusion provisional.
+
+**When a stage reports a bad input, ask whether the stage's own contract was ever written down.**
+*(T19, `mpegts-pacer`.)*
+
+> The groomer shed 45.9 % of the exporter's content and this was filed as a property of the lane. It was
+> also a defect in the groomer: it read one PCR interval as both a duration and a length, which is an
+> assumption about the source that no source is obliged to satisfy. On a fixture with a *perfect* value
+> grid and clustered positions it exited **zero** having discarded 67.2 % of the programme and added 106
+> discontinuities of its own. *An assumption that has always held is indistinguishable from an invariant
+> until the day it does not — and the failure it produces then is a success exit code.* The fix is to
+> make the assumption a measured quantity compared against something the configuration already
+> specifies, not to add a threshold.
+
 ---
 
 ## 5. Rig hygiene
+
+**Every statistic the experiment intends to report must be an output the cell prints. A number
+recovered afterwards from files that happened to survive is not a measurement, it is a salvage.**
+*(T8b C3.)*
+
+> C3's whole point was the *aggregate* over N concurrent flows — the per-flow share falling below the
+> fair 1/N is expected under contention, and only the sum says whether the link was used. The cell
+> subscribed the extra flows correctly and wrote each to `out.$i.ts`, but graded and printed only flow
+> one; the aggregate was obtained afterwards by stat-ing whatever captures were still on disk. When a
+> janitor armed mid-matrix deleted captures to protect the disk, it destroyed four of the six
+> aggregates, and the most valuable data in a 68-cell run was lost to a cleanup job. The repair is two
+> lines — sum the sizes at grade time and print `agg_bytes`/`agg_mbps` — after which no capture needs to
+> survive the cell at all and the cell can delete them itself. *Ask of each intended finding: which
+> printed field is it? If the answer is "we can work it out from the artefacts", it is not yet measured.*
+
+**Retire a caveat about the instrument by moving the instrument, not by arguing about it.** *(T19.)*
+
+> "This is a Python reader on two vCPU, so the absolute figure is an upper bound" was written into an
+> experiment's limits and quoted for a session. Settling it cost one host, one file copy and four
+> minutes: same binaries, same clip, same window, four times the cores — 7.45 % against 7.45 %, at zero
+> CPU pressure. *A host-bound caveat is usually cheaper to remove than to keep restating, and keeping it
+> quietly weakens every number it is attached to.*
 
 **Derive a rate target from a capture of the stage's own input, never from another stage's output —
 and treat an unexpectedly smooth result as a suspect one.** *(T13.)*
@@ -712,6 +817,21 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 ---
 
 ## 6. Claims, and their scope
+
+**Citing another component as the working reference for a contract is a behavioural claim about that
+component, and reading its source is not evidence for it.** *(T19.)*
+
+> The report that became #2984 rested on an asymmetry: #2967 documents a caller-side pacing contract,
+> `moq-srt` implements it, `moq-cli`'s `run_ts` discards it. The `moq-srt` half came from reading
+> `send_at = anchor + (ts - base)` and seeing it wait, which is the contract exactly. It was wrong.
+> Its subtraction was scale-strict, the exporter stamps PCR in microseconds and media at the source's
+> 90 kHz, and a cross-scale pair fell through to an error arm that assumed reordering and collapsed onto
+> the anchor — so media frames on that lane were never paced. The fix to *our* issue had to repair the
+> exemplar first. The report survived because its load-bearing half was a negative claim about
+> `run_ts`, which reading does establish: *code that never mentions `frame.timestamp` cannot be pacing
+> on it.* **Reading source is sound evidence that something is absent and weak evidence that something
+> present works.** When the argument leans on a second implementation being correct, either measure it
+> or say plainly that its correctness is assumed.
 
 **Split a capability claim by pipeline stage before publishing it.** *(T14.)*
 

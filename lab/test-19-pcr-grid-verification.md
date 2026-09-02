@@ -1,18 +1,41 @@
 # T19 — verifying the upstream PCR grid fix, and where it stops
 
-> **State:** complete, on the laptop rig, one clip, before/after against the same binaries' predecessor.
-> **The exporter's defect is fixed completely and the lane's is not.** `moq export ts` now emits a
-> flawless uniform PCR grid — every interval exactly 25.000 ms, 0 above the 40 ms P1 gate, and the 85 %
-> sub-millisecond clustering that [T18](test-18-delivery-latency.md) measurement 6 diagnosed is gone
-> entirely — and it fixes a second conformance defect this campaign never found. But the PCR packets'
-> *positions in the exported byte stream* are bunched where their values are not: **87.2 % sit
-> back-to-back**, in bursts up to 13, separated by gaps to 2,730 packets. The fix places each PCR in its
-> own output frame stamped at its slot boundary, and `moq export ts` writes to stdout, which carries no
-> timestamps — so the property holds inside the muxer and is unobservable to every byte-stream consumer.
-> **Any downstream stage that re-derives PCR from byte position therefore reproduces the original
-> defect**, measured: off-the-shelf `tsp -P pcradjust` yields 293 intervals above 40 ms and 87.9 %
-> sub-millisecond, the original shape. Our own byte-locking groomer drops **45.9 % of content**. End to
-> end on the wire the MoQ lane is *worse* than before the fix.
+> **State:** complete for [#2967](https://github.com/moq-dev/moq/pull/2967) on the laptop rig; extended
+> to [#3006](https://github.com/moq-dev/moq/pull/3006) on the EC2 primary, where the *time* domain is
+> measurable and the file domain is not.
+>
+> **Three domains, and the fix that closed two of them left the gate open.** #2967 put the PCR *values*
+> on a flawless grid — every interval exactly 25.000 ms, 0 above the 40 ms P1 gate, the 85 %
+> sub-millisecond clustering gone — and repaired a reserved-bit defect this campaign never found. It did
+> not move the PCR packets' *positions in the byte stream*, which stayed bunched, and because
+> `moq export ts` writes to stdout the grid was unobservable to every consumer.
+> [#3006](https://github.com/moq-dev/moq/pull/3006) closed that boundary by making the export a
+> real-time pipe: it paces each write on the frame's timestamp, so the spacing now reaches a consumer as
+> *arrival time*. Measured at the pipe, that **halves the P1 gate failures (18.26 % → 7.45 %) and
+> doubles the on-grid fraction (27.4 % → 56.9 %), with the median interval at 24.69 ms**.
+>
+> **It is a large improvement and it is not a pass.** 7.45 % of intervals still exceed 40 ms, to a worst
+> case of 277 ms, and 28.9 % arrive in a sub-millisecond burst — the distribution is now bimodal rather
+> than merely wrong, with roughly three stalls a second each followed by a burst of about four PCRs.
+> **That residue is the exporter's, not the instrument's:** the same arm on four times the cores returns
+> the same 7.45 % at zero CPU pressure, and the errors run 4.6:1 *early*, which no starved reader
+> produces. **Its cause is located** — the PCR grid is advanced by media-frame arrival rather than by the
+> passage of media time, so a backfilled run of slots falls due only once the frame that proves they
+> elapsed has landed, by which point every one of them is already late to write. The clustered positions
+> and the bursty releases are then one phenomenon and not two: 615 of the 626 early releases are exactly
+> the byte-adjacent packets (measurement 7).
+> **The byte-stream positions are unchanged and cannot be changed by a timing fix**, so any downstream
+> stage that re-derives PCR from byte position still reproduces the original defect: off-the-shelf
+> `tsp -P pcradjust` yielded 293 intervals above 40 ms and 87.9 % sub-millisecond, and our own
+> byte-locking groomer dropped 45.9 % of content. What #3006 buys is a lane whose cadence is recoverable
+> by a stage that reads the pipe in real time; what it does not buy is a conformant wire.
+>
+> **The residue is filed as [#3334](https://github.com/moq-dev/moq/issues/3334)** with the invariant
+> stated as a requirement rather than an implementation, and the instrument this experiment should have
+> had from the start is offered upstream as
+> [#3335](https://github.com/moq-dev/moq/pull/3335) (test tooling only). The half of the defect that is
+> *ours* — a groomer that read source PCR value cadence and positional cadence as interchangeable — is
+> fixed and guarded in `mpegts-pacer` (measurement 8).
 
 ## Objective
 
@@ -55,6 +78,28 @@ that gate be met:
 | Off-the-shelf groomer | TSDuck 3.44-4676, `tsp -P pcradjust` — T13's closest-passing off-the-shelf stage |
 | Rigs | [`t19-pcr-grid.sh`](scripts/t19-pcr-grid.sh) for the exporter's own output; [`t18-arm.sh`](scripts/t18-arm.sh) unaltered for the end-to-end arm |
 | Window | 60 s per exporter capture, 90 s per end-to-end arm, 250 ms groomer cushion |
+
+**Measurements 5 and 6 (#3006) ran on the EC2 primary**, not the laptop, because #3006 is a fix to
+release timing and the time domain needs a host that is not also running the operator's desktop.
+
+| | |
+|---|---|
+| Rig | EC2 primary, `c6in.large` (2 vCPU / 3.8 GB), Ubuntu 26.04, loopback |
+| **Build under test** | `moq 0.9.15` / `moq-relay 0.14.14` — the release pair, both ancestors of #3006's merge `489e3647` |
+| **Control build** | `moq 0.9.11-eab96019` / `moq-relay 0.14.11-eab96019`, the on-box source build, which predates #2967 |
+| Rigs | [`t19-arrival.sh`](scripts/t19-arrival.sh) + [`t19-pcr-arrival.py`](scripts/t19-pcr-arrival.py) for the time domain; [`t19-pcr-positions.py`](scripts/t19-pcr-positions.py) for byte position; [`ts-pcr-timing.py`](scripts/ts-pcr-timing.py) for all three at once; [`t18-arm.sh`](scripts/t18-arm.sh) unaltered end to end |
+| Window | 60 s file captures, 45 s arrival captures, 90 s end-to-end arms |
+
+**Measurement 7 ran on the EC2 secondary** — `c6in.2xlarge`, 8 vCPU, eu-west-1b, Ubuntu 26.04, the same
+TSDuck 3.44-4676 build installed from the same `.deb`, and the primary's own binaries and clip copied
+across (MD5-verified) so the host is the only variable. The box carried no other work.
+
+There is **no middle arm on this platform**, and it is not for want of trying: `moq-cli-v0.9.12` was
+tagged ten minutes *before* #2967 merged and so does not contain it, and `v0.9.13`/`v0.9.14` are tags
+with no published binaries and both postdate #3006. A #2967-only arm on Linux would need a source build
+at `61678fd32`; measurement 6's attribution comes from the laptop rig's #2967 numbers instead, and the
+comparison is stated as cross-platform where it is used. The loop publisher was stopped for every arm
+here, since its `ffmpeg -re` is CPU noise landing directly on a timing measurement.
 
 **The exporter is graded with no groomer in the path.** This campaign's groomer regenerates PCR, so
 putting it in the path measures the pair and would mask or manufacture the result either way. That is
@@ -195,6 +240,249 @@ approach the gate, the worst interval gets **65 % worse**, continuity goes from 
 delivery latency — the axis the entire case for this lane rests on — degrades **6.5×**. Criterion 4 was
 written to catch exactly this.
 
+## Measurement 5 — #3006: the ask was granted, and it moved the gate without clearing it
+
+[#3006](https://github.com/moq-dev/moq/pull/3006) is the fix measurement 2 asked for. `run_ts` now
+sleeps until each frame's paced instant before writing, on a `Pacer` extracted into `moq-mux`, with a
+`with_lead` budget of `--latency-max` for stdout. Run on the EC2 primary — Linux, two vCPU, both arms
+back to back under identical load — against the on-box pre-#2967 build as the control.
+
+**The file domain cannot grade it, and that is the first thing to get right.** #3006 changes *when* the
+bytes are released, not where they sit in the stream. Capturing the export to a file flattens exactly
+the timing the fix creates, so a positional histogram of the capture measures the mux layout and says
+nothing either way about pacing. It confirms the layout is untouched, as it must be:
+
+| domain | pre-#2967 (0.9.11) | post-#3006 (0.9.15) |
+|---|---:|---:|
+| PCR value interval, mean / min / max | 28.959 / 0.011 / 319.9 ms | **25.000 / 25.000 / 25.0 ms** |
+| values above the 40 ms gate | 9.89 % | **0 %** |
+| positional gap, median | 116 packets | **1 packet** |
+| positionally back-to-back | 0 % | 69.3 % |
+| PCR carriage | adaptation+payload | adaptation-only |
+| reserved bits | `0x00` | **`0x3F`** (conformant) |
+| continuity events | 0 | 0 |
+
+So the positional bunching persists, and no timing fix could have removed it. Reading a positional
+result as a verdict on #3006 would have been the same category error measurement 2 diagnosed, one
+domain further on.
+
+**Do not read 87.2 % → 69.3 % as an improvement.** Measurement 2's figure is macOS on `0.9.12`; this one
+is Linux on `0.9.15`, and there is no #2967-only arm on this platform to sit between them. The two
+numbers agree that the layout is bunched and differ by an amount this experiment cannot apportion
+between platform, build and clip. The within-platform comparison is the control column, where PCR rode
+payload packets and so was naturally spread — a median gap of 116 packets against the fixed build's 1.
+
+**The time domain is where the fix lives.** [`t19-arrival.sh`](scripts/t19-arrival.sh) pipes the export
+live into an oracle that timestamps every PCR-bearing packet as it arrives, at 188-byte read
+granularity, so a write burst reads as a run of sub-millisecond intervals and a paced write reads as the
+interval it was paced to. 45 s per arm:
+
+| PCR inter-arrival at the pipe | pre-#2967 (0.9.11) | post-#3006 (0.9.15) |
+|---|---:|---:|
+| mean / median | 26.64 / 21.46 ms | 24.84 / **24.69 ms** |
+| on the grid (22–28 ms) | 27.4 % | **56.9 %** |
+| above the 40 ms P1 gate | 18.26 % | **7.45 %** |
+| arrived in a burst (< 1 ms) | 1.48 % | 28.88 % |
+| worst interval | 232.5 ms | 277.1 ms |
+| standard deviation | 31.47 ms | 36.65 ms |
+
+**The fix works, and the gate still fails.** The median interval is now within 0.31 ms of the grid and
+the on-grid share doubles, which is the pacing arriving as designed. But the standard deviation *rises*,
+because the distribution has become bimodal rather than uniform: a large correct mode at 25 ms plus a
+burst mode below 1 ms, with 7.45 % of intervals still over 40 ms to a worst case of 277 ms. The residue
+has structure — roughly 135 stalls across the 45 s window, about three a second, each followed by a
+burst of about four PCRs — which is the shape of a per-group flush rather than of random jitter, and
+points at the group boundary as the remaining source.
+
+**The measurement's own ceiling had to be stated, and measurement 7 removes it.** The oracle is a Python
+reader on a two-vCPU host sharing the box with `tsp`, the importer, the relay and the export, so a
+scheduling delay in the reader is indistinguishable from a late write. Both arms ran under the same
+load, so the *comparison* always held; the absolute 7.45 % was read as an upper bound until the arm was
+re-run on four times the cores, which it now has been.
+
+## Measurement 6 — end to end with #3006: the deployed chain is unchanged
+
+[`t18-arm.sh`](scripts/t18-arm.sh) unaltered, `moq` arm, 250 ms cushion, 90 s, on the EC2 primary, both
+builds back to back with the loop publisher stopped.
+
+| moq arm, 250 ms cushion | pre-#2967 (0.9.11) | post-#3006 (0.9.15) |
+|---|---:|---:|
+| pictures matched | 3,112 / 3,112 (100 %) | 1,993 / 1,993 (100 %) |
+| delivery latency, median | **120.0 ms** | **771.6 ms** |
+| min / p95 / max | 35.2 / 191.0 / 243.0 ms | 643.1 / 799.9 / 916.2 ms |
+| continuity errors | **0** | **1,166** |
+| PCR repetition > 40 ms | 487 / 3,248 (15.0 %) | 349 / 3,315 (10.5 %) |
+| worst repetition interval | 228.0 ms | 392.7 ms |
+| PCR jitter > 481 ns | 0 | 0 |
+
+**This reproduces the #2967 regression rather than relieving it**, and it reproduces it closely enough
+to settle where the regression comes from. The laptop rig measured 118 → 769 ms and 0 → 824 continuity
+errors on #2967 *alone*, a build with no output pacing in it whatsoever. This run measures 120.0 →
+771.6 ms and 0 → 1,166 on a build that paces. Two platforms, two builds, one number: the latency
+regression is a property of the positional clustering meeting a groomer, and **#3006 neither causes nor
+cures it.** That also disposes of the reading the timing was inviting — that the export's new lead
+budget is what buys the extra 650 ms — because the arm without a lead budget had already paid it.
+
+The one thing that does move is repetition, from 15.0 % of intervals over the gate to 10.5 %: the
+groomer, fed a stream that now *arrives* on a cadence, regenerates a slightly better one. It is an
+improvement of the kind that matters only if it reaches zero, and it does not.
+
+## Measurement 7 — the residual is the exporter's, and both failures have one cause
+
+Measurement 5 left two things open: whether the 7.45 % was the exporter or a two-vCPU host, and what the
+residue's structure meant. Both are now settled, on the eight-vCPU secondary (`c6in.2xlarge`,
+eu-west-1b), with the primary's binaries copied across so only the host changes, and with the same 45 s
+window and the same publisher.
+
+| PCR inter-arrival at the pipe, post-#3006 | 2 vCPU (primary) | **8 vCPU (secondary)** |
+|---|---:|---:|
+| above the 40 ms P1 gate | 7.45 % | **7.45 %** |
+| on the grid (22–28 ms) | 56.9 % | 54.6 % |
+| median | 24.69 ms | 24.62 ms |
+| p95 / p99 | — | 102.80 / 227.31 ms |
+| worst interval | 277.1 ms | 283.5 ms |
+| host `%idle` during the arm | — | 92.8–97.5 % |
+| `/proc/pressure/cpu` `some avg10` | — | **0.00 throughout** |
+| reader's involuntary preemptions | — | **6 in 45 s (0.1/s)** |
+
+**The gate metric is identical to two decimal places on four times the cores**, with zero CPU pressure
+and a reader that was preempted six times while 135 gate failures occurred. The pre-#2967 control moves
+just as little (18.26 % → 18.38 %). The residual is the exporter's.
+
+**A second, independent argument says the same thing, and it does not depend on the host at all.** A
+starved *reader* lengthens one interval and shortens the next, so it produces late and early intervals
+in balance. Graded against each PCR's own asserted interval rather than against a nominal 25 ms, the
+post-#3006 arm is **626 early against 136 late** — a 4.6:1 asymmetry that no reader artefact produces.
+
+**Grading against the stream's own values is the instrument this experiment should have had from the
+start**, and it is now [`ts-pcr-timing.py`](scripts/ts-pcr-timing.py): one pass over the pipe, three
+independent verdicts, no reference clock and no declared mux rate. It is also checked in the direction
+that matters for a gate — **a real contribution capture that never went through moq passes every
+check** (1,318 PCRs, median interval 24.648 ms, worst 24.951 ms, 0 % adjacent at a median gap of 163
+packets), while the same command over a pre-#2967 export capture fails `pcr-value-interval` alone at
+the characteristic 0.011 ms median. Each build fails a different pair, which is what makes it a test of
+the defect rather than of an implementation:
+
+| | value | release | position |
+|---|---|---|---|
+| pre-#2967 (`0.9.11`) | FAIL (156/1,689 over 40 ms, median 0.011 ms) | FAIL (1,076/1,689; 919 late) | **PASS** (0 % adjacent, median gap 116) |
+| post-#3006 (`0.9.15`) | **PASS** (0/1,811, median and max 25.000 ms) | FAIL (762/1,811; 626 early) | FAIL (56.5 % adjacent, median gap 1) |
+
+**And the two remaining failures are one phenomenon.** Cross-tabulating each interval's release error
+against its byte gap, in the same pass:
+
+| | early | on time | late |
+|---|---:|---:|---:|
+| **adjacent** | **615** | 408 | 0 |
+| **spaced** | 11 | 641 | **136** |
+
+98 % of the early releases are the byte-adjacent ones and every late release is a spaced one. As a
+sequence: the grid stalls once at a spaced position, then the backfilled run drains at once as a burst
+of adjacent, early packets — ~136 stalls in 45 s, about three a second, ~4.6 PCRs a burst. The 408
+`adjacent + on time` cells are the slots whose instant had not yet passed, where #3006's pacer *did*
+sleep; that is the fix working, on the minority of slots where the information it needs still exists.
+
+**The mechanism is in the code, and it is one line's consequence.** `Export::poll_next` calls
+`write_pcr(timestamp)` with the timestamp of the *next pending media frame*, and `write_pcr` refuses any
+slot at or below `slot(that timestamp)`. `pick_next_track` only considers tracks that already hold a
+`pending` frame. So the grid can never advance past the media that has arrived: **the clock is a
+function of frame arrival, not of the passage of media time**, and it cannot lead the media it exists to
+lead. When a group lands and the minimum pending timestamp jumps, every intervening slot falls due at
+once, each correctly stamped at an instant that has already elapsed — so `Pacer::pace` returns a
+`send_at` behind `now` and the sleep is a no-op. Positionally the same emission model does the rest:
+`write_frame` packetizes a whole media frame into one `Frame` payload written by one `write_all`, so a
+PCR packet can only ever be placed *between* media frames and never among the bytes of the slot it
+labels.
+
+This retires the "group-boundary flush" hypothesis measurement 5 offered, in favour of a located cause,
+and it means **neither remaining failure can be fixed by a timing change**: the position needs a finer
+emission unit, and the release needs the grid to stop being gated on arrival. The upstream package is
+drafted in [`docs/upstream/pcr-output-position.local.md`](../docs/upstream/pcr-output-position.local.md).
+
+**One further reading, offered as a code reading and not as a measurement.** The same `pick_next_track`
+dependence on `pending` is what
+[#2829](https://github.com/moq-dev/moq/issues/2829) reports as audio/video interleave decided by arrival
+timing. If that holds, #2829 and the positional ask want one change rather than two, and
+[#2779](https://github.com/moq-dev/moq/issues/2779)'s continuity numbering is a third face of the same
+property — output derived from process state rather than from stream position. Untested here.
+
+## Measurement 8 — what the positional defect does to a downstream groomer, and the guard for it
+
+Measurement 3 recorded that the byte-locking groomer dropped 45.9 % of content on this lane. That was
+graded as a *lane* result. It is also a defect in the groomer, and the two are separable: the exporter
+places its PCR badly, and the groomer assumed it would not. Only the first belongs upstream
+(#3334); the second is ours to fix, and this measurement is the fix's before/after.
+
+The fixture is a post-#3006 export capture (`~/t19-pcrfix/exp-new/export.ts`, first 20 MB — 106,382
+packets, 16.5 s, 9.581 Mb/s of content). **It passes every check an instrument can make from the values
+alone**, which is what makes it the right regression case:
+
+| `ts-pcr-timing.py` on the fixture | |
+|---|---|
+| `pcr-value-interval` | **PASS** — 0/660 over the 40 ms gate, median *and* worst 25.000 ms |
+| `continuity` | **PASS** — 0 discontinuities |
+| `pcr-position` | **WARN** — 86.67 % of PCRs byte-adjacent, median gap 1.0 packet, worst 2,730 |
+
+Delivered at its media rate into the stream-clocked groomer at 11 Mb/s with a 300 ms cap — the
+configuration a 1+1 pair uses. **Regulating the input is load-bearing:** piping the file in at disk speed
+buries the positional defect under ordinary buffer overrun, which is a rig artefact and not the finding.
+
+```bash
+tsp -I file export.ts -P regulate --pcr-synchronous -O file - \
+  | mpegts-pacer - 11000000 --stream-clock --max-latency-ms 300 [--require-pcr-position] >out.ts
+```
+
+| | before the guard | with `--require-pcr-position` |
+|---|---|---|
+| exit status | **0 — "done."** | **1**, `SourcePcrPosition`, 0.4 s in |
+| content packets emitted | 32,455 of 106,382 | — |
+| **content discarded as late** | **71,504 (67.2 %)** | — |
+| stuffing | 72.4 % | — |
+| output `continuity` | **FAIL — 106 discontinuities** | not produced |
+| output `pcr-value-interval` | **FAIL — 43/533 over 40 ms, worst 263 ms** | not produced |
+| positional displacement reported | 3,294 packets (**450 ms**), 85 overrun intervals | 2,541 packets (**347 ms**), 1 interval |
+
+**The old behaviour is the bad one: it succeeds.** The groomer exited zero, reported a correct output
+rate and a PCR grid exact by construction, and had thrown away two thirds of the programme and
+introduced 106 discontinuities of its own. Nothing in its exit status, and nothing in a value-domain
+check of *either* its input or its output, says which stage caused that. This is the same failure as
+measurement 3 seen from inside, and 45.9 % against 67.2 % is the cap: a shallower buffer sheds more.
+
+**The mechanism is that one PCR interval was being read as two things at once.** Stream clocking maps a
+source PCR value to an absolute output slot, and then assumes the packets between two PCRs are about
+what that interval's media time is worth at the locked rate. Every source that muxes as it encodes
+satisfies that. The exporter does not: `write_frame` emits a whole coded frame as one payload and
+stamps the clock between frames, so the values are a perfect grid while 86.67 % of the packets carrying
+them are adjacent. Placement then runs ahead of where the bytes are, and content arrives for slots the
+pacer has already emitted as stuffing. **Source PCR value cadence and source PCR positional cadence are
+independent, and the groomer had them interchangeable.**
+
+The guard makes that assumption a measured quantity rather than an implicit one. Each interval's
+placement is compared against its own span; overruns are counted, and the high-water displacement is
+kept. **The displacement, not the overrun count, is the discriminating statistic** — any VBR peak
+overruns its own span, so a count is nearly always non-zero and says nothing. A peak's displacement is
+bounded and returns on the next trough; a source whose positions do not track its values displaces
+monotonically. Comparing displacement against `max_latency` is what makes the test correct rather than a
+threshold: a displacement the cushion absorbs is a peak the pacer handles, and one past the cushion is
+content that cannot arrive in time whatever else is configured. Default policy is `Report` — the
+counters print with the stats and pacing continues, so no stream that worked before now fails; `Fail`
+(`--require-pcr-position`) is for a contribution egress where a silently thinned feed is worse than
+none.
+
+**The displacement is the right order of magnitude for the damage seen elsewhere on this lane, and no
+more than that.** 347 ms at the point the guard trips and a 450 ms high-water over the run, against
+[T18](test-18-delivery-latency.md)'s 651 ms delivery-latency step on the fixed build. Same scale, which
+is what a common cause predicts; not a quantitative match, and it is not offered as one — the two are
+measured on different clips over different windows with different buffer configurations, so only the
+order carries.
+
+Five tests were added and all 81 pass ([`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)):
+three unit tests that a clustered source displaces the grid and is counted, that a rate peak is *not*
+read as a positional defect, and that clustering does not break byte identity; and two integration tests
+that a clustered source is refused under `Fail` and paced under `Report` when the buffer can absorb it.
+**No existing test changed and byte identity was not weakened** — the byte-identity test is asserted on
+the clustered source specifically, so the guard cannot be satisfied by relaxing placement.
+
 ## Conclusion
 
 **The fix is right, complete, and does not yet help.** Judged as what it says it is — a change to how
@@ -209,21 +497,30 @@ which breaks a byte-locking groomer outright and lets a re-stamping groomer rege
 distribution from scratch. The reason is a single interface fact: the spacing exists as per-frame
 timestamps inside the muxer, and stdout does not carry them.
 
-**So the remaining ask is small and specific, and it is not a re-litigation of #2937.** Either the
-exporter's stdout writer paces its output — placing each frame at the time the frame already says it
-belongs, which is information it has and discards — or it emits the PCR packet adjacent to the media
-bytes of the slot it labels, so position and value agree for a consumer that has only bytes. The first
-is the better fix and matches what a hardware IRD expects off a wire; the second needs no timing at all.
-This is the same class of defect as
-[#2978](https://github.com/moq-dev/moq/issues/2978), which the maintainer's own adversarial review of
-#2967 raised against the SRT egress: a frame's pacing timestamp lost at the boundary where bytes are
-handed on. Ours is that defect at the stdout boundary, where it is total rather than bounded by one chunk.
+**The ask measurement 2 made was granted, and it was the right ask that did not get the wanted
+result.** [#3006](https://github.com/moq-dev/moq/pull/3006) paces the stdout writer on each frame's
+timestamp, which is the first of the two fixes offered above and the better one. Measured at the pipe it
+does what it says: the median interval lands on the grid and gate failures halve. Measured on the
+deployed chain it changes almost nothing, and the reason is the second fix was the one this lane needed.
+**A groomer consumes bytes, not arrival times.** Re-derive PCR from byte position and the positional
+bunching — untouched, and untouchable by a timing fix — regenerates the original distribution; lock to
+byte position and the stream is unusable. The remaining ask is therefore the fallback offered above and
+not the one taken up: **emit the PCR packet adjacent to the media bytes of the slot it labels**, so
+position and value agree for a consumer that has only bytes. It needs no timing at all and it is a
+larger change in `moq-mux`.
+
+**The end-to-end regression is #2967's and #3006 does not repair it** — measurement 6 below, and the
+attribution is available because the two arms were run on different builds and different platforms and
+agree. #2967 alone on the laptop rig delivered 769 ms against a 118 ms control; #2967 plus #3006 on the
+EC2 primary delivers **771.6 ms against a 120.0 ms control**. A pacing fix cannot be the cause of a
+regression that was already fully present in a build with no pacing in it.
 
 **One conclusion is unaffected and worth stating plainly.** The 40 ms repetition gate is now reachable
 on this lane — the clock arriving at the edge is even for the first time, and T18's prediction that an
 evenly spaced exporter cadence would clear the gate at the depth the lane already runs is still the
-open question, not a refuted one. What T19 establishes is that reaching it needs one more change on the
-exporter's output path, and that until then the deployable configuration is the pre-fix build.
+open question, not a refuted one. What T19 establishes is that reaching it needs the *positional*
+change on the exporter's output path, and that until then the deployable configuration is the pre-fix
+build.
 
 ## Limits
 
@@ -240,9 +537,56 @@ exporter's output path, and that until then the deployable configuration is the 
   it, and nothing here confirms or denies it.
 - **P2 accuracy on a rate-less egress remains undefined** as a verdict; only the constant-versus-varying
   shape of the error is used, and only as a diagnostic.
+- **The arrival oracle's floor was the host and is no longer a live caveat**, because measurement 7 ran
+  the same arm on four times the cores. It remains true that a Python reader cannot distinguish its own
+  scheduling delay from a late write *in a single interval*; what measurement 7 establishes is that
+  across the window the reader's contribution is negligible, so the 7.45 % may now be quoted as the
+  exporter's rather than as an upper bound.
+- **Measurement 6's attribution is cross-platform.** The #2967-only figures come from the laptop rig and
+  the #2967+#3006 figures from EC2. The inference — that a pacing fix cannot cause a regression already
+  present without pacing — does not depend on the platforms matching, but the 769 versus 771.6 ms
+  agreement should be read as two consistent measurements rather than one repeated one.
+- **Measurements 5 and 6 have no #2967-only arm on their own platform**, for the release-tag reason in
+  the environment block. Every within-platform comparison here is pre-#2967 against post-#3006, so it
+  brackets both fixes together and cannot apportion between them on Linux alone.
 
 ## Corrections
 
+- **Believed:** the residue above the gate might be the two-vCPU host rather than the exporter, and the
+  bursts were a group-boundary flush. **True:** the gate metric is 7.45 % on two vCPU and 7.45 % on
+  eight, at zero CPU pressure, and the cause is that the PCR grid is advanced by frame arrival rather
+  than by media time — measurement 7. **Method rule:** when an instrument's floor is offered as a
+  caveat, the cheapest way to retire it is usually to move the instrument to a bigger host and change
+  nothing else; and a residue with structure has a mechanism, so look for it in the code before naming
+  it after the nearest event.
+- **Believed:** [#2978](https://github.com/moq-dev/moq/issues/2978) was explicitly left open by #3006.
+  **True:** it is closed as completed, on 2026-08-21, a day *before* #3006 merged — and #3006 went on to
+  rewrite the same file (`rs/moq-srt/src/server.rs`, −161 lines). Our note inverted both the state and
+  the order. **Method rule:** an issue's state is a fact with a timestamp, not an inference from the PR
+  that seemed to address it; read it from the tracker at the moment of writing.
+- **Believed:** `moq-srt` was an in-tree caller that honoured #2967's pacing contract, which is how
+  [#2984](https://github.com/moq-dev/moq/issues/2984) was framed — one caller implements the contract,
+  the other discards it. **True:** `moq-srt` had the *shape* of the contract and not the behaviour. Its
+  `pace` used the scale-strict `Timestamp::checked_sub`, whose error arm assumed a reordered frame; the
+  exporter stamps PCR frames in microseconds and media frames at the source's timescale (90 kHz for a TS
+  import), so a cross-scale pair fell through both subtractions and collapsed onto the anchor. **Media
+  frames on the SRT lane were not paced at all.** #3006 had to fix that to fix ours — computing offsets
+  in nanoseconds in the extracted `Pacer` — and says so: without it, pacing `run_ts` "would not have
+  fixed #2984 at all". The report's substance survives, because `run_ts` genuinely never read
+  `frame.timestamp` and that is the root cause #3006 names; what was wrong was the exemplar cited beside
+  it. **Method rule:** reading an implementation establishes its intent, not its behaviour. Citing
+  another component as the working reference for a contract is a claim about how that component behaves,
+  and it needs the same evidence as any other behavioural claim — here the code said
+  `send_at = anchor + (ts - base)` and was right about everything except which clock the two operands
+  were on.
+- **Believed:** measurement 3's 45.9 % shed was a property of the lane, so the groomer was a correct
+  instrument reporting a bad input. **True:** it was both. The exporter places PCR badly *and* the
+  groomer had source PCR value cadence and byte-position cadence as interchangeable, which is an
+  assumption about the source that no source is obliged to satisfy. On the fixture the groomer exited
+  **zero** having discarded 67.2 % of the programme and added 106 discontinuities of its own
+  (measurement 8). **Method rule:** when a stage reports a bad input, check whether the stage's own
+  contract was ever written down — an assumption that has always held is indistinguishable from an
+  invariant until the day it does not, and the failure it produces then is a *success* exit code.
 - **Believed:** the PCR defect was wholly upstream of the groomer, so fixing the exporter's placement
   would let the existing edge stage produce a conformant wire. **True:** the exporter and its *output
   interface* are separate stages, and fixing placement inside the muxer moved the defect to the
@@ -261,7 +605,17 @@ exporter's output path, and that until then the deployable configuration is the 
 
 - Upstream: [#2937](https://github.com/moq-dev/moq/issues/2937) (the report, closed by the fix),
   [#2967](https://github.com/moq-dev/moq/pull/2967) (the fix, merged `61678fd32`),
-  [#2978](https://github.com/moq-dev/moq/issues/2978) (the same class of defect on the SRT egress).
+  [#2984](https://github.com/moq-dev/moq/issues/2984) (the stdout boundary, filed from measurement 2),
+  [#3006](https://github.com/moq-dev/moq/pull/3006) (the pacing fix, merged `489e3647`, graded in
+  measurements 5 and 6 — and it repaired `moq-srt`'s own pacer on the way, see Corrections),
+  [#2978](https://github.com/moq-dev/moq/issues/2978) (the same class of defect on the SRT egress,
+  Luke's own, and **closed** — see Corrections),
+  [#3334](https://github.com/moq-dev/moq/issues/3334) (the residual output-position/release defect,
+  filed from measurement 7) and [#3335](https://github.com/moq-dev/moq/pull/3335) (`test/ts/pcr-timing.py`,
+  test tooling only). Hedged code-reading comments were left on
+  [#2829](https://github.com/moq-dev/moq/issues/2829) and
+  [#2779](https://github.com/moq-dev/moq/issues/2779) — offered as possibly the same underlying property,
+  not as established fact.
 - Diagnosed in [test-18-delivery-latency.md](test-18-delivery-latency.md) measurement 6; the gate is
   [test-13-downstream-grooming.md](test-13-downstream-grooming.md) criterion 3.
 - The byte-locking model the fix breaks is [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md).

@@ -458,7 +458,7 @@ verify on any new upstream build before promoting it.
 | Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1,523 of 1,524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
-| One *stream-clocked* groomer per leg | **yes** — byte-identical on every datagram, on a co-started **single-track** feed | as above | **the whole chain**, including publisher, relay and exporter death |
+| One *stream-clocked* groomer per leg | **yes** — byte-identical on every datagram, on a co-started **single-track** feed, including across two hosts with independent clocks | as above | **the whole chain**, including publisher, relay and exporter death |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -475,15 +475,20 @@ only; a stream-clocked pair protects the whole chain. Where deterministic groomi
 guaranteed for a feed, the honest fallback is 1+1 hot-standby with a brief switch artefact, not a
 claimed-hitless pair.
 
-**What the byte-identity result does and does not cover.** It is measured on a **single-track**
-source, on one host, with both legs sharing a wall clock, one run per cell. Three limits follow:
-multi-track content stops at 94–96 % identity because the exporter emits the earliest *available*
-frame rather than the earliest frame, so legs whose bytes arrive at different moments order the same
-media differently; **rate coherence between gateways on independent clocks is untested**, and two
-gateways pacing from free-running oscillators can drift apart until drift plus differential path
-delay exceeds the merge window; and path diversity is untested because skew was injected rather than
-natural. A real deployment needs a disciplined common egress rate, locked to a shared reference or to
-the source-derived CBR rate, though not packet-for-packet phase alignment.
+**What the byte-identity result does and does not cover.** The merge and injection matrix is measured
+on a **single-track** source with both legs on one host, one run per cell. **The independent-clock
+limit has since been closed**: one leg per host on two instances in two availability zones, with
+free-running oscillators, stays byte-identical on every shared datagram with zero residue, in each of
+two runs
+([Evidence](evidence.md) §3.4). So rate coherence between gateways on independent clocks is no longer
+a hypothesis — stream-derived placement holds it, which is what the model predicted and what a
+deployment depends on. Two limits survive: multi-track content stops at 94–96 % identity because the
+exporter emits the earliest *available* frame rather than the earliest frame, so legs whose bytes
+arrive at different moments order the same media differently; and **path diversity above the egress is
+untested**, because the two-host pair shares its publisher and relay and the one-host matrix injected
+its skew rather than incurring it. A real deployment still wants the common egress rate locked to the
+source-derived CBR rate, but it does not need packet-for-packet phase alignment, and it no longer needs
+a shared clock reference to obtain identity.
 
 **One further payoff shares the same prerequisite: stream-derived placement is what lets the platform
 stop carrying null stuffing over the WAN at all.** Stuffing exists to hold a constant carrier rate

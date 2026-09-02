@@ -58,7 +58,9 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
 - **A segmented 1+1 pair sharing one feed and one naming scheme fails over with no measurable
   interruption and no receiver-side merge**, where the media-aware floor is one detection interval. On
   the media-aware lane, two stream-clocked groomers are byte-identical and hitless through publisher,
-  relay and exporter death, against a reference receiver, on single-track content
+  relay and exporter death, against a reference receiver, on single-track content — and they stay
+  byte-identical **on two hosts in two availability zones with independent oscillators**, which is what
+  makes the pair mergeable without a shared clock reference
   ([Evidence](docs/evidence.md) §3.4).
 - **One groomer serves both data planes**, and on the segmented lane off-the-shelf TSDuck reaches all
   four grading criteria where the MoQ lane needs a purpose-built stage. Grooming restores exact CBR and
@@ -77,11 +79,15 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   upstream placement defect, not the price of the lane's latency ([Evidence](docs/evidence.md) §3.2).
   A shorter 25 s window on the grooming rig reads 131–159 for the same defect: the counts scale with
   the observation window, not with the lane.
-  **The exporter half is now fixed and the lane's is not.** Upstream made PCR values an exact 25 ms
-  grid — clustering 85.40 % → 0.00 %, intervals above 40 ms 210 → 0 at the exporter — but the spacing
-  lives in per-frame timestamps that `moq export ts`'s stdout discards, so 87.2 % of PCR packets still
-  leave back-to-back and a groomer re-deriving the clock from byte position regenerates the original
-  distribution. End to end the lane regressed, so the deployable build is still the pre-fix one.
+  **The exporter half is now fixed twice over and the lane's is not.** Upstream made PCR values an exact
+  25 ms grid — clustering 85.40 % → 0.00 %, intervals above 40 ms 210 → 0 at the exporter — and then
+  paced the stdout writer so the spacing reaches a consumer as arrival time, doubling the on-grid share
+  and halving gate failures at the pipe. But a groomer consumes **bytes, not arrival times**, and the
+  positional layout is untouched: **69.3 %** of PCR packets still leave back-to-back on the build
+  measured (three rigs read 56–87 %, and they are not comparable to each other), so a groomer
+  re-deriving the clock from byte position regenerates the original distribution. End to end the lane
+  reads 120 → 772 ms of latency and 0 → 1,166 continuity errors, unchanged by the pacing fix, so the
+  deployable build is still the pre-fix one.
 - **Segmented HTTP fails silently once the client falls out of the origin's availability window.** It
   does not corrupt what it delivers inside that window; past it the client re-anchors and leaves holes
   of 7–82 s, with the origin returning nothing but 200s ([Evidence](docs/evidence.md) §3.3).
@@ -93,8 +99,9 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   never been attempted ([Evidence](docs/evidence.md) §4).
 - **Whether an evenly spaced exporter cadence clears the gate** — the question that now decides the
   thesis, and still the cheapest high-leverage measurement outstanding. Half of it is answered: the
-  clock reaching the edge is even for the first time, and what remains is one change on the exporter's
-  *output* path so the bytes carry the spacing the muxer already computes
+  clock reaching the edge is even for the first time, and its *timing* now survives to the pipe. What
+  remains is the exporter placing each PCR packet beside the media bytes of the slot it labels, so
+  the spacing is legible to a stage that has only bytes
   ([Evidence](docs/evidence.md) §5).
 - **Whether the part of relay memory that the slot arithmetic does not explain is bounded** — a 14 h soak
   converged on 2.03× the predicted ceiling, decaying monotonically but not flat when it ended, so the

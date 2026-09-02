@@ -342,10 +342,13 @@ rather than a buffer size. End to end on the wire the lane is worse than before 
 own doc comments state a caller-side contract in as many words — each PCR is returned as its own frame
 stamped at its slot boundary *"so the caller's pacer places the PCR at"* its slot — and the burst is that
 contract working as designed, because `PCR_BACKFILL` fills every slot a coarse frame crossed and drains
-them over successive polls. **One in-tree caller honours the contract and the other drops it.**
-`moq-srt` derives `send_at = anchor + (ts - base)` from the frame timestamp and waits
+them over successive polls. **One in-tree caller has the shape of the contract and the other has
+nothing.** `moq-srt` derives `send_at = anchor + (ts - base)` from the frame timestamp and waits
 (`rs/moq-srt/src/server.rs:413`); `moq-cli`'s `run_ts` is `write_all(&frame.payload)` and never reads
-`frame.timestamp` (`rs/moq-cli/src/subscribe.rs`). So the report is not "add pacing to a transport
+`frame.timestamp` (`rs/moq-cli/src/subscribe.rs`). That `moq-srt` pacer turned out to be broken for
+media frames — the correction is in
+[test-19](test-19-pcr-grid-verification.md#corrections) — but the asymmetry the report rested on is the
+one #3006 confirmed as its root cause. So the report is not "add pacing to a transport
 library" — which we withdrew on [#1839](https://github.com/moq-dev/moq/issues/1839) and still would —
 but "your new code specifies a caller contract, one caller implements it, the other silently discards
 it, and what it discards is not recoverable downstream."
@@ -371,9 +374,84 @@ credits the reserved-bits repair and the mechanism the PR explained, and states 
 end-to-end regression is the interaction rather than the change — because the end-to-end arm was run
 first here and would have been reported as a regression in #2967 had the no-groomer arm not followed it.
 
+**#2984 was accepted and fixed in [#3006](https://github.com/moq-dev/moq/pull/3006)**, which paces the
+stdout writer on each frame's timestamp — the ask, granted as asked, with the root cause stated as ours
+was: `run_ts` never read `frame.timestamp`. Two things came out of the fix that are worth recording.
+It had to extract a `Pacer` into `moq-mux` and **repair `moq-srt`'s own pacer on the way**, because that
+implementation — the exemplar this report cited — collapsed cross-scale timestamp pairs onto the anchor
+and never paced media frames at all; the correction is in
+[test-19](test-19-pcr-grid-verification.md#corrections). And
+[#2978](https://github.com/moq-dev/moq/issues/2978), which we had recorded as left open by #3006 as the
+bounded sub-chunk case, is in fact **closed as completed on 2026-08-21, the day before #3006 merged** —
+so the scoping argument this report made for filing separately stands, but not for the reason we wrote
+down.
+
+**Graded, the fix does what it says and does not move the lane.** At the pipe the on-grid share doubles
+(27.4 % → 56.9 %) and gate failures halve (18.26 % → 7.45 %), median interval 24.69 ms. End to end the
+deployed chain is unchanged: 120.0 → 771.6 ms and 0 → 1,166 continuity errors, against the laptop rig's
+118 → 769 ms on #2967 *alone* — a build with no pacing in it, which is what rules out the new lead
+budget as the cause. **A groomer consumes bytes, not arrival times**, so the outstanding ask is now the
+fallback this report offered rather than the one taken up: emit each PCR packet adjacent to the media
+bytes of the slot it labels.
+
+**That ask now has a located root cause, and it is not the one the fallback assumed.** It is filed as
+[#3334](https://github.com/moq-dev/moq/issues/3334), drafted in
+[`docs/upstream/pcr-output-position.local.md`](../docs/upstream/pcr-output-position.local.md),
+and is not simply "please also fix the positions". Reading the current code,
+`Export::poll_next` advances the PCR grid only as far as `slot(next pending media frame's timestamp)`,
+and `pick_next_track` only considers tracks that already hold a pending frame — so **the clock is a
+function of frame arrival rather than of the passage of media time**, and cannot lead the media it
+exists to lead. A backfilled run therefore falls due only once the frame proving those slots elapsed has
+landed, by which point every slot in the run is already late to write; and because `write_frame` emits a
+whole media frame as one payload written by one `write_all`, a PCR packet can only ever be placed
+*between* media frames. Measurement 7 of [T19](test-19-pcr-grid-verification.md) shows the two
+consequences are one phenomenon — 615 of 626 early releases are exactly the byte-adjacent packets — and
+that the residue is the exporter's rather than the host's, identical at 7.45 % on two and on eight vCPU
+at zero CPU pressure.
+
+**Two things governed how it was filed, and both are about not spending someone else's attention badly.**
+It is a **new issue** rather than a comment: #2937 and #2984 are closed as completed and correctly so —
+#2967 delivered the contract #2937 asked for, and #3006 delivered #2984's — so a residual buried in either
+thread would be lost, and reopening a correctly closed issue misrepresents the work that closed it. And
+the report states the **invariant as a requirement** and then offers three implementation directions with
+their trade-offs, saying explicitly that the choice belongs to whoever owns the `Frame` contract. The
+code points at a finer emission unit; the issue does not press for it. Every code excerpt was re-read
+against current upstream `main` before posting rather than against the local worktree, which
+intentionally predates #2967.
+
+**The #2829/#2779 connection was posted as a code reading and marked as one.** Comments on
+[#2829](https://github.com/moq-dev/moq/issues/2829) and
+[#2779](https://github.com/moq-dev/moq/issues/2779) say the PCR-position finding *may* be another
+manifestation of the same underlying property — output derived from process state rather than from stream
+position — and say plainly that this is untested, that the mechanisms differ in their details, and that
+it should not be read as a claim that the three are one defect. If it holds, the three want one change
+rather than three; that is worth a maintainer knowing and is not worth asserting.
+
+**A test contribution went with it as a PR**, [#3335](https://github.com/moq-dev/moq/pull/3335), adding
+`test/ts/pcr-timing.py` and its README entry and **nothing else** — no core behavioural change, which
+is the line this campaign holds between reporting a defect and implementing someone else's fix:
+[`ts-pcr-timing.py`](scripts/ts-pcr-timing.py) grades value, release and position in one pass against
+the stream's own PCR values — no reference clock, no source file, no declared mux rate, `python3` only.
+It has a clear upstream home beside `test/ts/compliance.py`, the harness this campaign originated and
+which Luke committed as #2011/#2043. That harness states that its timing basis is the stream's own PCR
+clock and that it therefore *"needs no wall-clock capture"* — which is the right choice for what it
+grades and precisely why it cannot see #3006, whose whole effect is on wall-clock release. So **#3006's
+contract has no regression test upstream today**, and this is the gap. Each build fails a different pair of checks
+(pre-#2967 fails value and release and *passes* position; post-#3006 passes value and fails the other
+two), which is what makes it a test of the defect rather than an assertion about an implementation.
+It passes upstream's own gate — `just fix` then `just check` from a clean worktree — and the whitespace
+convention there is not ours, so the script was re-run after the formatter rewrote it.
+
+**The half of this defect that is ours was fixed on our side of the boundary, not asked for upstream.**
+The byte-locking groomer read source PCR value cadence and byte-position cadence as interchangeable,
+which is an assumption about the source that no source is obliged to satisfy, and on the T19 fixture it
+exited *zero* having shed 67.2 % of the programme. That is a `mpegts-pacer` defect and it is guarded
+there — T19 measurement 8. Upstream owns the placement; we own having assumed it.
+
 The prediction that an even 20–25 ms interval clears the P1 gate **remains a prediction**: the clock
-arriving at the edge is even for the first time, but no conformant wire has yet been produced from it, so
-the rig still has to re-run against a build whose *bytes* carry the spacing. And the effect size varies
+arriving at the edge is even and its timing now survives to a real-time consumer, but no conformant wire
+has yet been produced from it, so the rig still has to re-run against a build whose *byte positions*
+carry the spacing. And the effect size varies
 by clip for reasons not established: 25.2 % of intervals above 40 ms on a synthetic CBR reference, 13.9 %
 and 9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is
 27 ms. That exception is unexplained and was reported as unexplained.

@@ -728,6 +728,67 @@ that arm D's control establishes, not the failure behaviour its nine injection r
 8 s figure is a threshold that happened to work, not a measured minimum; the cushion was tested at
 1 s and 8 s, and where between them the residue reaches zero is not known.
 
+## Arm D across two hosts: the legs do not share a clock, and they are still byte-identical
+
+Every determinism result above was measured on one machine, and that was the standing hole in the
+claim. Two co-resident groomers agree about stream position, but they also agree about wall time and
+about the same crystal, so nothing separated *"placement is a function of the stream"* — the property
+the byte-locking model asserts and the reason a 1+1 pair is mergeable — from *"both legs happened to be
+driven by one oscillator"*. The distinction is the whole basis of the ST 2022-7 claim, and it needed a
+second host to test.
+
+**Environment.** Two EC2 instances in one region and two availability zones: leg A on the primary
+(`c6in.large`, 2 vCPU, eu-west-1a) and leg B on the secondary (`c6in.2xlarge`, 8 vCPU, eu-west-1b) —
+separate hardware, separate power and cooling, separate clock, and a couple of milliseconds apart. Same
+region deliberately: a second *region* would add tens of milliseconds of differential delay on top, and
+a divergence could then be the clocks or the skew, which is the confound the arm exists to remove.
+Rig [`t12-dual-host.sh`](scripts/t12-dual-host.sh), one role per host, arm D's pacer invocation
+unaltered — `--stream-clock`, `--sequence-seed 0`, matched SSRC and an explicit 4 Mb/s rate, because an
+auto rate is measured from one process's arrival window and two hosts would derive two different grids
+from the same stream. `moq 0.9.15` on both legs, so the exporter carries #2967 and #3006. Source
+`t12_2mbps_vidonly.ts`, 120 s window, each host recording its own leg from a local socket.
+
+**The publisher and the relay are shared.** This grades the determinism of two *egress* legs on
+independent clocks, which is what was blocked; it is not full path diversity, because both legs
+subscribe to one relay fed by one importer. That remains a separate arm.
+
+| | leg A (eu-west-1a) | leg B (eu-west-1b) |
+|---|---:|---:|
+| slots recorded | 46,844 | 46,844 |
+| slots carried by both | 46,759 | 46,759 |
+| **identical** | **46,759 (100.0000 %)** | |
+| identical, continuity counter masked | 46,759 (100.0000 %) | |
+| **residue beyond the counter** | **0** | |
+
+**Repeated under the same conditions, and it reproduces exactly.** A second run of the same arm — same
+hosts, same AZs, same 4 Mb/s explicit rate, same SSRC and seed, same `moq 0.9.15` — recorded **62,302,520
+bytes on each leg, byte-for-byte the same count**, and graded **46,844 of 46,844 slots shared, 100.0000 %
+identical, 0 residue**, counters included. All 46,844 are shared this time rather than 46,759: the
+`START_AT` hold put the two windows in step closely enough that there were no window edges to lose.
+Neither leg logged a stall, an underrun or a late drop, and loads were 0.27–0.33 on the primary against
+0.02 on the secondary, so it is again not resource-bound. Two runs, two hosts, two oscillators, one
+result.
+
+**Two independently groomed legs on two oscillators in two availability zones are byte-identical across
+46,759 datagrams, with zero residue.** Not identical-once-the-counter-is-masked, which is the weaker
+result the campaign has had to report before — the raw bytes match, including the continuity counters,
+because under `--stream-clock` the numbering is a function of the output slot and both legs seeded it
+identically. The 85 unshared slots are the window edges, where one recorder was running and the other
+was not.
+
+**The result is not resource-bound, which is the condition that would have voided it.** Sampled during
+the run, the primary was 86.4 % idle with the whole leg costing under 11 % of two vCPU, and the
+secondary 97.6 % idle; loads were 0.39–0.46 and 0.02–0.03 respectively, and neither pacer reported a
+stall, an underrun or a late drop. The asymmetry between a 2-vCPU and an 8-vCPU host is therefore
+verified non-binding rather than assumed so.
+
+**What this closes and what it does not.** It closes the substitution the campaign has been making
+since T6: that co-resident agreement stands in for clock-independent agreement. It does not close the
+churn cells — a leg that restarts and rejoins its partner still cannot be byte-identical while
+[#2779](https://github.com/moq-dev/moq/issues/2779) has the exporter numbering continuity counters from
+process state — and it is one run rather than a repeated one, so it establishes that the property holds
+on independent clocks rather than bounding how often it fails to.
+
 ## Corrections
 
 > Every general method rule this experiment produced is in [method-notes.md](method-notes.md), with

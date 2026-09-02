@@ -17,6 +17,14 @@
 #   SECS        window (default 120)
 #   COMPETE     none, or "<start>-<end>" seconds into the window for a greedy TCP flow
 #   NFLOWS      concurrent media flows of the same transport (default 1) — C3
+#   LATMAX      MoQ subscriber --latency-max (default 2s) — the C3 mechanism probe
+#
+# LATMAX exists to discriminate two explanations of C3's aggregate collapse. If each
+# subscriber is independently shedding groups that miss its own latency budget, the
+# aggregate must move with the budget. If the loss is below that — in the shared lane
+# rather than in the deliverers — the budget is not the knob and the aggregate will not
+# care. It is a parameter of the cell rather than a separate script so the sweep is graded
+# by exactly the code that graded the matrix.
 #
 # THE INSTRUMENT IS A TIME SERIES, not a total. On a provisioned path the interesting
 # quantity is not how much arrived but *when it stopped and whether it came back*, and a
@@ -45,6 +53,7 @@ SECS=${SECS:-120}
 COMPETE=${COMPETE:-none}
 NFLOWS=${NFLOWS:-1}
 SEGSECS=${SEGSECS:-2}
+LATMAX=${LATMAX:-2s}
 
 MOQ=${MOQ:-/home/ubuntu/bin-main-eab96019/moq}
 RELAY_QUINN=${RELAY_QUINN:-/home/ubuntu/moq-relay-quinn}
@@ -206,7 +215,7 @@ case "$TRANSPORT" in
 cubic | bbr1 | bbr2 | bbr3)
 	sub bash -c "timeout $SECS $MOQ --client-tls-disable-verify \
       --client-connect https://$PUBIP:4443/anon --broadcast $BCAST.1 export ts \
-      --latency-max 2s > $CAP" >"$RUN/sub.log" 2>&1 &
+      --latency-max $LATMAX > $CAP" >"$RUN/sub.log" 2>&1 &
 	;;
 srt)
 	sub bash -c "timeout $SECS tsp -I srt --caller $PUBIP:9011 --latency 2000 \
@@ -231,7 +240,7 @@ for i in $(seq 2 "$NFLOWS"); do
 	cubic | bbr1 | bbr2 | bbr3)
 		sub bash -c "timeout $SECS $MOQ --client-tls-disable-verify \
         --client-connect https://$PUBIP:4443/anon --broadcast $BCAST.$i export ts \
-        --latency-max 2s > $RUN/out.$i.ts" >"$RUN/sub.$i.log" 2>&1 &
+        --latency-max $LATMAX > $RUN/out.$i.ts" >"$RUN/sub.$i.log" 2>&1 &
 		KIDS+=("$!")
 		;;
 	srt)
@@ -263,6 +272,18 @@ sleep 2
 
 # ---- grade -----------------------------------------------------------------
 BYTES=$(stat -c%s "$CAP" 2>/dev/null || echo 0)
+
+# The aggregate over all N receivers, which is the whole point of C3: the per-flow
+# share below the fair 1/N is expected under contention, and only the sum says
+# whether the link was used. Measure it here rather than leaving it to be recovered
+# from the capture files afterwards — that is how the first C3 lost four of its six
+# aggregates to a disk janitor, because the number was never an output of the cell,
+# only a by-product of files that happened to still be lying around.
+AGG_BYTES=$BYTES
+for i in $(seq 2 "$NFLOWS"); do
+	AGG_BYTES=$((AGG_BYTES + $(stat -c%s "$RUN/out.$i.ts" 2>/dev/null || echo 0)))
+done
+AGG_MBPS=$(awk -v b="$AGG_BYTES" -v s="$SECS" 'BEGIN{printf "%.2f", b*8/s/1e6}')
 CCE=$(tsp -I file "$CAP" -P continuity -O drop 2>&1 |
 	grep -cE 'missing .* packets|discontinuity' || true)
 tsp -I file "$CAP" -P pcrextract --pcr --csv -o "$RUN/pcr.csv" -O drop >/dev/null 2>&1
@@ -305,11 +326,19 @@ read -r R_ALL R_PRE R_DUR R_POST RECOV < <(awk -F, -v cs="$C_START" -v ce="$C_EN
     printf "%.2f %.2f %.2f %.2f %s", all, pre, dur, post, rec
   }' "$SERIES")
 
-printf 'RESULT label=%s transport=%s cap_mbit=%s qdisc=%s nflows=%s compete=%s secs=%s bytes=%s mbps=%s pct_cap=%.0f pct_src=%.0f pre_mbps=%s dur_mbps=%s post_mbps=%s recover_s=%s cc=%s pcr_over40=%s pcr_max_ms=%s rtt_p50=%s rtt_p95=%s\n' \
-	"$LABEL" "$TRANSPORT" "$CAP_MBIT" "$QDISC" "$NFLOWS" "$COMPETE" "$SECS" "$BYTES" \
+printf 'RESULT label=%s transport=%s cap_mbit=%s qdisc=%s nflows=%s latmax=%s compete=%s secs=%s bytes=%s mbps=%s pct_cap=%.0f pct_src=%.0f agg_bytes=%s agg_mbps=%s agg_pct_cap=%.0f pre_mbps=%s dur_mbps=%s post_mbps=%s recover_s=%s cc=%s pcr_over40=%s pcr_max_ms=%s rtt_p50=%s rtt_p95=%s\n' \
+	"$LABEL" "$TRANSPORT" "$CAP_MBIT" "$QDISC" "$NFLOWS" "$LATMAX" "$COMPETE" "$SECS" "$BYTES" \
 	"$R_ALL" \
 	"$(awk -v g="$R_ALL" -v c="$CAP_MBIT" 'BEGIN{print g/c*100}')" \
 	"$(awk -v g="$R_ALL" -v s="$SOURCE_BPS" 'BEGIN{print g*1e6/s*100}')" \
+	"$AGG_BYTES" "$AGG_MBPS" \
+	"$(awk -v g="$AGG_MBPS" -v c="$CAP_MBIT" 'BEGIN{print g/c*100}')" \
 	"$R_PRE" "$R_DUR" "$R_POST" "$RECOV" \
 	"$CCE" "${PCROVER:-NA}" "${PCRMAX:-NA}" "${P50:-NA}" "${P95:-NA}" |
 	tee -a "$DIR/results.txt"
+
+# Reclaim the extra flows' captures now they have been counted, so a run of C3 cells
+# cannot fill the disk and no cleanup job ever needs to run against a live results
+# tree. Only the extra flows: flow 1's capture is what every other condition grades
+# from, and deleting it here would change those cells rather than this one.
+rm -f "$RUN"/out.*.ts

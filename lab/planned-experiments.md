@@ -18,173 +18,236 @@ Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific valu
 
 ---
 
-## The next five runs, in order
+## The ranking
 
-Every experiment names its own open items and most of them are worth doing eventually. This is the
-short list: the runs whose *result* would change a conclusion in [`docs/`](../docs/), separated by what
-they cost to set up, because two of the five need nothing this lab does not already have.
+Every experiment names its own open items and most of them are worth doing eventually. This is the list
+that decides what runs next, re-derived rather than carried forward, because three of the entries it
+used to lead with are now done and one of them changed what the rest are worth.
 
-**1. PCR spacing that survives the exporter's output interface, then re-run T18 unaltered.** *Needs one
-more upstream code change and nothing else.* Still the campaign's largest undecided verdict, and now
-half-resolved. The muxer defect is fixed: [#2967](https://github.com/moq-dev/moq/pull/2967) gives the
-exporter an absolute 25 ms PCR grid, and [T19](test-19-pcr-grid-verification.md) verifies it exactly on
-our clip — 2,472 consecutive intervals all at 25.000 ms, sub-millisecond clustering 85.40 % → 0.00 %.
-**The wire did not follow**, because the grid is expressed as per-frame timestamps and `moq export ts`
-publishes a byte stream, so 87.2 % of PCR packets leave back-to-back and any groomer re-deriving the
-clock from their positions regenerates the original distribution (`tsp -P pcradjust`: 293 above 40 ms,
-87.9 % sub-millisecond). The remaining change is narrow and specific: **pace the exporter's stdout writer
-from the frame timestamps it already computes, or emit each PCR packet adjacent to the media bytes of the
-slot it labels.** Until one of those lands, "MoQ delivers a conformant broadcast hand-off" is unproven at
-any latency. T18's prediction of a pass at a 250 ms cushion is unaltered and now closer to testable than
-it has ever been — the clock arriving at the edge is even for the first time.
+**What today's run removed from this list, and it is the top four entries.** The PCR output-position
+issue is filed ([#3334](https://github.com/moq-dev/moq/issues/3334)) with the conformance test offered
+as a PR ([#3335](https://github.com/moq-dev/moq/pull/3335)) and hedged comments on #2829/#2779. C3 ran
+under `cake` and the collapse survived it, so the AQM counterfactual is closed as a **falsification**
+rather than a caveat. The `latency-max` probe then attributed the collapse: it is per-subscriber deadline
+shedding, and at a 30 s budget there is no collapse at all. And the `mpegts-pacer` positional guard is
+in, with five tests and the fixture as its regression case.
 
-**1a. Fix `mpegts-pacer` to survive a positionally bunched PCR train.** *Needs only our own code.* This is
-ours, not upstream's, and it is on the critical path: the groomer drops 45.9 % of content when handed the
-fixed exporter's output, because it derives an output slot from the source PCR and that derivation assumes
-PCR value and PCR position advance together ([T19](test-19-pcr-grid-verification.md) measurement 3). Even
-after item 1 lands, a groomer that fails this way on a merely *unusual* input is fragile — and the same
-assumption underwrites [T12](test-12-dual-path-handoff.md)'s byte-identity result, so it deserves an
-explicit guard and a regression fixture rather than an implicit precondition. The fixed export capture is
-that fixture.
+**What that does to the rest of the list is more than remove four rows.** The campaign's largest
+unexplained result is gone, and the honest consequence is that **the largest remaining soft spot is not
+a measurement at all — it is a claim resting on a shared upstream.** Byte-identical 1+1 is the strongest
+positive result in the paper and the arm that produced it shares its publisher and relay, so it rises
+to the top. C3's residue is now a sizing ladder, which is cheap and no longer urgent.
 
-**1b. T8b's C3 re-run, with every cell's aggregate captured.** *Needs nothing this lab does not have, and
-about two hours.* Promoted into the top group because it is the only measurement in the campaign
-suggesting the media-aware lane has a **scaling** limit rather than a conformance one: three feeds
-sharing a congested 15 Mb/s bottleneck delivered 3.76 Mb/s in total — 25 % of the link — where three SRT
-feeds delivered 84 %. A distribution trunk carrying many services is the intended deployment, so if that
-survives scrutiny it is a first-order result; and C4 predicts most of it disappears under an AQM, which
-makes it cheap to settle either way. One replicate, one controller, one queue discipline, and four of the
-six cells lost their aggregate to a disk janitor — so it is currently suggestive and not a finding.
-
-**2. A hardware IRD and a TR 101 290 analyser, soaked (Gate 2).** *Needs broadcast kit — the one
-genuinely unavoidable purchase or loan.* Every conformance number in this campaign is graded by
-software written or configured by the same people who built the thing under test. That is enough to
-falsify a design and not enough to accept one. A ≥ 72 h soak against a real IRD
-settles PLL lock, the buffer model, slow clock drift and discontinuity handling at once, and it is the
-only way to test the boundaries a groomer meets outside steady state: source-clock drift, PCR
-33-bit wrap, mid-stream PID change. It also closes the one question [T12](test-12-dual-path-handoff.md)
-cannot answer in software — whether a real merge engine agrees with our reference receiver on an
-ST 2022-7 pair. Pair it with the T9 resource soak so one long run yields both verdicts. **The soak is
-≥ 72 h rather than ≥ 24 h for a reason that is arithmetic** — the PCR base wraps every 26.51 h — and
-every boundary above has a substitute runnable here first, which is what turns a borrowed week into
-measurement rather than debugging.
-
-**3. A second EC2 instance in a different availability zone.** *Needs one more VM — the cheapest
-high-value item on this list.* Every redundancy result the campaign holds was measured on one host.
-That is not a detail: [T12](test-12-dual-path-handoff.md) arm D's determinism claim rests on two
-groomers agreeing about stream position, and on one box they also agree about wall time, so nothing
-measured so far separates "the legs agree about position" from "the legs share a clock" — which is
-exactly the property [`architecture.md`](../docs/architecture.md) §5.1 requires of two gateways on
-free-running oscillators. The same instance unblocks three other cells: the segmented lane's two-host
-segment store (both packagers writing identical names into a *consistent* store is free on one
-filesystem and is the actual engineering across two hosts), a standby packager joining an
-already-running feed, and T9's cross-machine fan-out knee, which is currently confounded by
-co-resident subscribers costing more CPU than the relay serving them.
-
-**Half of it runs the day the instance exists and half of it does not, and the split is worth knowing
-before provisioning.** The *clean* 1+1 arms — two legs, two hosts, two free-running oscillators, graded
-for byte-identity — are blocked on nothing: they are the cells that separate "the legs agree about
-stream position" from "the legs share a clock", and that is the whole reason the second host is wanted.
-The *recovered-leg* and *late-join* cells remain blocked upstream on
-[#2779](https://github.com/moq-dev/moq/issues/2779) (still open), because an exporter that numbers
-continuity counters from process state cannot produce a byte-identical pair after a restart however many
-hosts it runs on — and they also need a grader `t12-merge-oracle.py` is not yet. So provision for the
-clean arms, and expect the churn arms to wait.
-
-**Provision it in a second AZ of the same region, and give it more CPU than the existing box.** Two
-separate decisions, and the reasoning differs.
-
-*Same region, different AZ, rather than a second region.* What the clean arms measure is whether two
-legs on **independent oscillators** stay byte-identical. A different AZ already buys that — separate
-hardware, separate power and cooling, separate clock — while keeping the inter-host RTT to a couple of
-milliseconds. A second *region* would add tens of milliseconds of differential delay on top, which
-confounds the question: a divergence could then be the clocks or the skew, and the whole point of the
-arm is to isolate the former. The decisive argument is the campaign's own habit of **synthesising the
-harder condition rather than waiting for it** — `netem` can add differential delay to a cross-AZ pair to
-model geographically separated origins, and nothing can subtract it from a cross-region pair. Start at
-the low-impairment topology and impair it. Cross-AZ is also the realistic primary/backup metro
-topology, and cheaper on inter-AZ transfer than cross-region.
-
-*Do not clone the 2-vCPU spec.* Cloning it would reproduce a **known instrument ceiling** rather than
-extend the rig. Three results are currently bounded by that host and not by anything under test: the
-segmented lane is unmeasured above ~11.5 Mbps ([T7](test-7-timing-integrity.md)), T12 could not run a
-full 10 Mbps mux and dropped to 2 Mbps because a relay, two exporters and two groomers at the DVB feed's
-9.9 Mb/s exhaust the box, and T9's fan-out knee is confounded by co-resident subscribers costing more
-CPU than the relay. A larger second instance addresses all three, and the asymmetry is harmless provided
-it is **verified non-binding**: record CPU headroom and drop counts per leg, and treat any 1+1 result
-where either leg was resource-bound as void. Check the **instance family** too, not just core count —
-[`economics.md`](../docs/economics.md) §3 notes a general-purpose 2-vCPU instance sustains under 1 Gbps
-against the ~2.2 Gbps its cores could forward, so sustained network allowance is the spec line that
-matters for the fan-out cells.
-
-**4. An HTTP/3 client for the segmented lane, then a real CDN edge.** *The first needs a library build;
-only part of the second needs an account.* These were one item and they are not: separating them showed
-that most of what "a real CDN edge" was standing in for is reachable without one, and that the thing
-genuinely blocked is HTTP/3.
-
-*HTTP/3 first, because it is the comparison the paper is named for.* The segmented lane is graded against
-MoQ over QUIC while itself running over TCP, and the reason is a client library, not a protocol: macOS's
-system libcurl is built without HTTP/3, so `tsp -I hls` cannot negotiate it whatever an origin offers.
-The same is true of the EC2 box's curl 8.18.0 — but **that box's nginx 1.28.3 already carries
-`--with-http_v3_module`**, so the server half exists and only the client half is missing. On Linux that is
-buildable (curl against ngtcp2 or quiche, reached through `LD_LIBRARY_PATH`, or an HTTP/3 fetch engine
-behind a pull-style client rather than `tsp -I hls`). Until it exists, every segmented figure carries an
-unstated "over TCP", and the head-to-head compares a transport to a transport-plus-a-generation.
-
-*Then the origin, and one of its three claims has already moved.* The origin was never the constraint the
-list assumed: [T9](test-9-performance.md)'s segmented envelope now has both `python3 -m http.server` and
-nginx serving **100 concurrent clients at ~992 Mb/s with no knee**, the reference origin at a tenth of a
-core and nginx at a sixtieth, with memory flat in viewer count. So "the weakest possible origin" was not
-weak, and what remains needs sorting by what actually requires a third party:
-
-- **Does not need a CDN.** The segmented loss curve and its availability-window boundary
-  ([T5](test-5-network-impairment.md), between 7.7 % and 12.2 % applied loss) turn on segment *retention*
-  and on client re-anchoring policy, both of ours. A production origin and an edge cache in front of it
-  reproduce this, and the second EC2 instance of item 3 supplies the second tier over a real network.
-- **Needs a CDN only for scale and multi-tenancy.** [T11](test-11-interop.md)'s cache result is one local
-  nginx; a two-instance origin-plus-edge topology is a genuine two-tier cache and answers coalescing,
-  cache keys and stale handling. What it cannot supply is anycast, PoP selection, eviction pressure from
-  other tenants, and client counts in the thousands.
-- **Needs a *specific* CDN.** Multi-programme carriage through a cache is only an interesting question
-  where the edge is media-aware — a byte cache serves an unusual TS payload exactly as nginx does, so
-  asking it of a plain cache re-measures nginx. If the question is whether a commercial packaging edge
-  rejects a multi-programme segment, it has to be that product.
-
-**And the account is cheaper than the entry assumed.** This does not need a CDN relationship: CloudFront
-sits in the same AWS account as the existing EC2 origin, takes minutes to point at it as a custom origin,
-and the free tier covers a single-client experiment — which buys real anycast, real PoPs and real
-multi-tenancy without a procurement conversation. Budget for two things it will not do by default: it
-needs explicit `Cache-Control` from the origin to behave sensibly on a live playlist, and it bills per
-request, which 2 s segments generate briskly.
-
-**5. A capped-stream relay-memory arm, to bound the half of the ceiling the slot arithmetic does not
-explain.** *Needs only time on the rig that already exists.* T8b's C6 soak converged asymptotically on
-**2.03×** the ceiling [T9](test-9-performance.md) predicted, decaying from +24.60 to +1.82 MB/h and still
-not flat at 14 h. Connection scaling is *not* the explanation — the growth rate is flat across 0–4
-subscribers and a five-connection leg lands in the same range as a two-connection one — so what is
-unaccounted for is a second term that keeps adding ~100 MB over the ten hours past the knee. One run
-bounds it: `--server-quic-max-streams 1024` isolates the slot-dependent part (T9: 91.4 MB against
-189.5 MB), the group count says whether the excess tracks groups, and `/proc/pressure/memory` beside RSS
-tells a decaying slope from kernel reclaim. Lower leverage than it looked while audience scaling was on
-the table, but it is the difference between budgeting 100 MB and 200 MB per ingested channel.
-
-*T8b's own provisioned-path conditions C2–C6 are now run and are no longer on this list.* The controller
-question resolved into a provisioning-margin and queue-discipline question, and C6's 14 h soak settled
-permanence. What remains of T8b is item 1b's C3 replicate.
-
-*Items 2, 3 and 4 are blocked on apparatus, and the work that makes their windows worth having is
-runnable now — see [Rigs to build before the thing they measure arrives](#rigs-to-build-before-the-thing-they-measure-arrives).*
-
-**What is deliberately not on this list**, because running it would confirm rather than move a result:
-more transparency clips through lanes already characterised across a 2.75× bitrate spread; the arm B1
-wire-cost leg on the EC2 path, whose HTTP-layer term is path-independent and whose framing multiplier
-is already measured elsewhere; per-track wire-byte attribution; and the segmented HTTP/3 arm, which was
-load-bearing only while a shared QUIC substrate was the leading explanation for the lanes' loss
-difference — [T8](test-8-srt-vs-moq.md) has since erased that difference by matching the controller on
-TCP, which is the cheaper route to the same answer.
+**Ranked on four things**, in this order: whether the result could change a conclusion in
+[`docs/`](../docs/); whether it removes a material caveat; what it costs to set up; and whether it
+produces an upstream contribution.
 
 ---
 
+### MUST DO NOW
+
+**1. The full 1+1 — two publishers, two relays, two paths.** *Both hosts exist; no new apparatus.* This
+is first because it is now the only caveat left on **the strongest positive result the campaign has**.
+Byte-identical redundant egress is what makes the media-aware lane credible for primary distribution —
+46,844 of 46,844 slots identical, twice, continuity counters included — and the arm that measured it
+shares its publisher and its relay. So what is graded is clock-independent determinism of two egress
+legs, not path diversity above them, and the architectural recommendation in
+[`architecture.md`](../docs/architecture.md) §5.1 is scoped accordingly whether or not the scoping is
+read.
+
+Two independent publishers of the same source and two independent relays, one chain per host, graded by
+the same merge oracle at equal sequence numbers with the continuity counters included. The interesting
+outcome is the *negative* one: any per-process value that leaks into the wire — and
+[T19](test-19-pcr-grid-verification.md) has already found three classes of output derived from process
+state rather than stream position — breaks identity here and cannot break it in the shared-upstream arm.
+It would also exercise [#3312](https://github.com/moq-dev/moq/pull/3312)'s subscription resumption
+across routes sharing a first hop.
+
+---
+
+### HIGH VALUE
+
+**2. A capped-stream relay-memory arm.** *Only time on the rig that exists.* C6 converged
+asymptotically on **2.03×** the ceiling [T9](test-9-performance.md) predicted, decaying +24.60 →
++1.82 MB/h and still not flat at 14 h. Connection scaling is ruled out — flat across 0–4 subscribers,
+a five-connection leg in the same range as two — so a second term is adding ~100 MB over the ten hours
+past the knee. One run bounds it: `--server-quic-max-streams 1024` isolates the slot-dependent part
+(T9: 91.4 MB against 189.5 MB), a logged group count says whether the excess tracks groups, and
+`/proc/pressure/memory` beside RSS tells a decaying slope from kernel reclaim. It is the difference
+between budgeting 100 MB and 200 MB per ingested channel.
+
+**Its upstream standing is weaker than it looks, and that is the reason to cap the streams rather than
+argue.** [#2745](https://github.com/moq-dev/moq/issues/2745) is **closed as not-planned**: the maintainer
+root-caused the retention to `quinn-proto` recycling one receive-stream state per stream ever accepted,
+which is not moq state and is bounded by `max_streams`. Our 14 h leg — posted there after the close, and
+unanswered — measured 2.03× that bound, so either the ceiling model is incomplete or a second term
+exists that is moq's. The capped arm is what distinguishes those, and only if it shows the excess
+surviving a 1024-slot cap is there anything to re-file.
+
+**3. T9's cross-machine fan-out knee.** *The secondary exists and is provisioned for exactly this.*
+Every relay cost figure in the campaign is measured with the subscribers co-resident with the relay,
+and they cost more CPU than the relay serving them — so the knee currently on record is the host's, not
+the relay's. Drive the subscribers from the 8-vCPU box against the relay on the primary and it becomes
+the relay's. This removes a caveat from the relay-versus-origin cost comparison, which is a load-bearing
+number in [`economics.md`](../docs/economics.md).
+
+**4. The segmented lane's two-host segment store.** *Both hosts exist.* The segmented lane's equivalent
+of the 1+1 result, and the half that has never been tested: both packagers writing identical names into
+a *consistent* store is free on one filesystem and is the actual engineering across two hosts.
+
+**5. C3's latency knee, as a ladder rather than a mechanism hunt.** *Nothing new needed; ~20 minutes.*
+The mechanism is settled — the shed is per-subscriber deadline shedding, and it tracks `--latency-max`
+from 4.29 Mb/s at 500 ms to 10.35 at 30 s at `n=2`, past the uncontended single-flow rate. What the sweep
+does not say is where the knee is: it is already at 62 % of cap by 8 s, so four points span the whole
+transition. Add 1, 3, 4 and 6 s at `n=2` and `n=3` under `cake` and the answer is a curve an operator can
+size a trunk from, plus the discriminator for *what* sets it — the RTT, the group duration, or the relay's
+own buffering, which predict knees in different places. Lower than the arms above only because it
+sharpens a result rather than removing a caveat from a published claim.
+
+**6. An HTTP/3 client for the segmented lane.** *Needs a library build, not an account.* The segmented
+lane is graded against MoQ over QUIC while itself running over TCP, and the reason is a client library
+rather than a protocol: macOS's system libcurl and the EC2 box's curl 8.18.0 are both built without
+HTTP/3, so `tsp -I hls` cannot negotiate it whatever an origin offers. **That box's nginx 1.28.3 already
+carries `--with-http_v3_module`**, so the server half exists and only the client half is missing; on
+Linux it is buildable (curl against ngtcp2 or quiche via `LD_LIBRARY_PATH`, or an HTTP/3 fetch engine
+behind a pull-style client rather than `tsp -I hls`). Until it exists every segmented figure carries an
+unstated "over TCP", and the head-to-head compares a transport to a transport-plus-a-generation.
+
+---
+
+### USEFUL BUT DEFER
+
+**7. A CloudFront edge in front of the existing origin.** Cheaper than this list long assumed — same AWS
+account, minutes to point at the EC2 origin as a custom origin, free tier covers a single-client
+experiment, no CDN relationship needed. It buys real anycast, real PoPs and real multi-tenancy. Deferred
+because [T9](test-9-performance.md) removed most of what it was standing in for: both origins serve 100
+concurrent clients at ~992 Mb/s with no knee, so "the weakest possible origin" was never the constraint.
+Budget for two things it will not do by default — it needs explicit `Cache-Control` from the origin to
+behave on a live playlist, and it bills per request, which 2 s segments generate briskly.
+
+**8. A standby packager joining an already-running feed.** The production shape, and the cell a
+co-started pair cannot measure. Cheap on the two hosts; deferred behind items 5 and 6, which establish
+the steady state it is a perturbation of.
+
+**9. Differential delay on a real pair.** `netem` on the cross-AZ path models geographically separated
+origins — which is why one region was the right choice, since impairment can be added to a low-delay
+pair and cannot be subtracted from a cross-region one. It models rather than measures, so it ranks below
+the arms that measure something new.
+
+**10. Cloudflare with a provisioned scope (T11a).** The strongest available test of relay neutrality,
+because it is third-party production infrastructure rather than a lab peer. The anonymous attempt
+negotiated draft 18 cleanly and returned no data, which is the expected outcome without publish and
+subscribe tokens, so it has not yet tested anything. Needs an account and a scope; that is the only
+reason it is not higher.
+
+**11. A `moq2ts` broadcast through a `moq-dev` relay (T11b).** Runnable now, weaker result. `moq2ts` is
+publisher-only, so the question is only whether the relay forwards objects whose catalog it cannot
+parse, plus whether an early `PUBLISH` poisons namespace registration (the open direction of the
+preannounce split in `moqxr` PR #21).
+
+**12. A broadcast profile for `moq-interop-runner`.** Extends shared infrastructure rather than building
+a private rig, and gives the transparent-TS profile a neutral conformance target. Deferred rather than
+dropped: [#3335](https://github.com/moq-dev/moq/pull/3335) is the same instinct aimed at a repository
+that will act on it sooner.
+
+**13. C3 replicates.** One per cell today. The per-flow split is known not to reproduce and the
+aggregate is, so two more replicates would put an error bar on the only number being quoted — but the
+qualitative result is already clear at one and item 5 is the better use of the same rig time.
+
+---
+
+### BLOCKED
+
+**14. A hardware IRD and a TR 101 290 analyser, soaked ≥ 72 h (Gate 2).** *The one genuinely
+unavoidable purchase or loan, and still the highest-value blocked item.* Every conformance number in
+this campaign is graded by software written or configured by the same people who built the thing under
+test: enough to falsify a design, not enough to accept one. A soak settles PLL lock, the buffer model,
+slow clock drift and discontinuity handling at once, and it is the only way to test the boundaries a
+groomer meets outside steady state. It also closes the one question
+[T12](test-12-dual-path-handoff.md) cannot answer in software — whether a real merge engine agrees with
+our reference receiver on an ST 2022-7 pair. **≥ 72 h for an arithmetic reason:** the PCR base wraps
+every 26.51 h. Pair it with the T9 resource soak so one borrowed week yields both verdicts, and note
+that every boundary above has a substitute runnable here first — which is what turns a borrowed week
+into measurement rather than debugging.
+
+**15. T12's churn arms.** The recovered-leg and late-join cells wait on
+[#2779](https://github.com/moq-dev/moq/issues/2779), because an exporter numbering continuity counters
+from process state cannot produce a byte-identical pair after a restart however many hosts it runs on.
+They also need a grader `t12-merge-oracle.py` is not yet. Item 1's comment on #2779 is the only thing we
+can do to move this.
+
+**16. The full interop suite against a `moq2ts` subscriber (T11c).** Blocked until they publish one.
+Worth planning the matrix now so the run is ready when it lands: it is the comparison that would settle
+which lane preserves what, particularly whether their null-stripping and SPTS-from-MPTS behaviour costs
+conformance where ours does.
+
+**17. A true CBR hardware source (T15's residual).** The transparency result makes a real CBR source the
+interesting variable rather than a nicety, and nothing in the lab produces one.
+
+**18. The segmented plane's low-latency arm at equal conformance.** No client we have realises it; the
+only receiver that could is a commercial ABR-to-TS gateway, which is the same apparatus block as item 14
+in a different guise.
+
+**19. Multi-programme carriage through a media-aware edge (MPTS).** Only interesting where the edge is
+media-aware — a byte cache serves an unusual TS payload exactly as nginx does, so asking it of a plain
+cache re-measures nginx. If the question is whether a commercial packaging edge rejects a
+multi-programme segment, it has to be that product. T17's 40-service figures remain scaled from one
+service rather than measured on an MPTS.
+
+---
+
+### NO LONGER WORTH DOING
+
+- **T19's arrival oracle on a bigger host** — run; 7.45 % on two vCPU and 7.45 % on eight, at zero CPU
+  pressure. The caveat it existed to retire is retired.
+- **The clean two-host 1+1 arm** — run twice, byte-identical both times, 0 residue. What remains is item
+  1, which is a different arm.
+- **Recovering C3's aggregates** — all six recovered, and the cell now prints them, so the failure mode
+  cannot recur.
+- **C3 under an AQM** — run. `cake` cut RTT from ~550 ms to 100 ms and the collapse survived at 48 %/40 %
+  of cap, so C4's prediction is falsified rather than untested. Do not re-run it as a rescue.
+- **Hunting a lower-layer mechanism for C3** — the `latency-max` sweep discriminated: the shed tracks the
+  budget over a 2.4× range at 0 continuity errors, so there is nothing left for a shared-lane mechanism
+  to explain. Item 5 is the sizing residue, and it is a different question.
+- **Filing the PCR output-position finding, and the conformance test** — filed as
+  [#3334](https://github.com/moq-dev/moq/issues/3334) and [#3335](https://github.com/moq-dev/moq/pull/3335),
+  with hedged comments on #2829/#2779. Nothing more is ours until a maintainer replies.
+- **The `mpegts-pacer` positional guard** — in, with five tests and the T19 capture as the regression
+  fixture. The groomer now measures the assumption it used to make.
+- **More transparency clips through lanes already characterised** across a 2.75× bitrate spread.
+- **The arm B1 wire-cost leg on the EC2 path**, whose HTTP-layer term is path-independent and whose
+  framing multiplier is measured elsewhere; and per-track wire-byte attribution.
+- **The segmented HTTP/3 arm *as an explanation for the lanes' loss difference*.** That motivation is
+  dead: [T8](test-8-srt-vs-moq.md) erased the difference by matching the controller on TCP, which was
+  the cheaper route to the same answer. Item 8 is a different question — like-for-like transport
+  generation in the head-to-head — and is still wanted.
+
+---
+
+### What to bundle, because prompt count is the scarce resource
+
+Grouped so nothing in a group contaminates anything else in it. Each group is one run.
+
+**Group A — the two-host run, and it is now the lead group.** Items 1, 3 and 4 — the full 1+1 with
+independent publishers and relays, the fan-out knee, and the two-host segment store. All three need both
+boxes and none can share a host with a timing measurement. Run the 1+1 **first** while both boxes are
+quiet, since it is the one whose result is a byte comparison and therefore the one a busy host can
+silently spoil; run the fan-out knee **last**, because it deliberately saturates a box.
+
+**Group B — the cheap ladder, and it can share a run with almost anything.** Item 5 (C3's latency knee).
+It runs in network namespaces on the primary against a stopped loop publisher, needs no new apparatus,
+and its grading is a per-cell aggregate rather than a timing comparison — so it is the right filler for a
+window whose main item is posting, reviewing or building.
+
+**Group C — the long run.** Item 2 alone. A memory soak measures the machine it runs on, so it cannot
+share a window with anything, and it wants hours rather than minutes. Start it at the end of a session
+and read it at the start of the next.
+
+**Do not bundle:** item 6 (an HTTP/3 client is a build task with an open-ended failure mode, and it will
+eat a window on its own), or anything from the BLOCKED list, whose windows are set by apparatus rather
+than by us.
+
+---
 ## Delivery latency at equal conformance — measured, see T18
 
 **Both the cushion sweep and the latency cell this file used to own are now measured in
@@ -580,21 +643,18 @@ offset and a 12 s skew that did not exist. Either give the oracle a masked-compa
 exporter fix; meanwhile use [`t12-seqskew.py`](scripts/t12-seqskew.py), which measures phase without
 correlating.
 
-**Two-host and meshed variants.** Both T12 legs ran on one host, sharing a clock, which flatters the
-rate coherence [architecture](../docs/architecture.md) §5.1 requires of two gateways on free-running
-oscillators; and both traversed the same physical path, so T12 graded the hand-off, not path
-diversity. This matters more now than it did: arm D's identity claim rests on two groomers agreeing
-about stream position, and on one host they agree about wall time as well. Repeat the arm C and arm D
-cells across two hosts, and optionally with relay B dialling relay A as a cluster peer
-(`~/t6-redundancy/relayA.toml`/`relayB.toml`), to check that relay reselect neither helps nor
-interferes once the receiver is doing the switching.
+**Meshed variants — what the two-host arm left open.** The clock question is settled: arm D run with
+one groomer per host, eu-west-1a and eu-west-1b, on independent oscillators, is byte-identical across
+every shared slot, twice. So the legs agree about *stream position* and not merely about wall time.
 
-The second host is a **second EC2 instance in a different AWS availability zone**, which is wanted in
-its own right as the secondary relay. Until it exists this is blocked: the local re-run in
-[T12](test-12-dual-path-handoff.md#what-the-fixes-are-worth-measured-on-the-pair) shares a host too,
-so nothing measured so far separates "the legs agree about stream position" from "the legs share a
-clock". Run it once the exporter fixes land, so the two-host result grades path diversity rather than
-re-measuring defects already filed.
+What that arm still shares is everything above the groomers — one publisher, one relay, one physical
+path — so it grades clock-independent determinism of two egress legs and **not** path diversity. The
+arm that grades path diversity needs two publishers of the same feed and two relays, optionally with
+relay B dialling relay A as a cluster peer (`~/t6-redundancy/relayA.toml`/`relayB.toml`) to check that
+relay reselect neither helps nor interferes once the receiver is doing the switching. That is the
+arm to run next, and it is also the one that would exercise
+[#3312](https://github.com/moq-dev/moq/pull/3312)'s subscription resumption across routes sharing a
+first hop.
 
 **Segmented 1+1: the two cells the T6 arm could not run.** A pair sharing one feed and one naming
 scheme is hitless, and two packagers of one feed are byte-identical, but both were measured with the
@@ -631,10 +691,10 @@ there is an artefact of 55–60 % stuffing; and any hardware IRD merge, which is
 ## Congestion control for a permanent fixed-rate trunk (extends T8)
 
 Promoted to its own protocol with a runnable rig — see
-[test-8b-congestion-control.md](test-8b-congestion-control.md). The under-provisioned
-failure-mode run (C1) is done; the provisioned-path conditions (transient congestion, coexistence,
-AQM, provisioning margin, soak) are pending. Until those run, the T8 controller ranking is scoped to
-non-congestive impairment only.
+[test-8b-congestion-control.md](test-8b-congestion-control.md). All conditions C1–C6 are run,
+including C3's six aggregates. What remains of T8b is the `cake` arm and the mechanism probe behind
+C3's aggregate collapse, now attributed to the subscriber's latency budget; the controller ranking is no longer scoped to
+non-congestive impairment.
 
 ---
 

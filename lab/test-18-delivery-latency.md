@@ -351,10 +351,13 @@ content the authored decode clock is a saw, and each B-frame that dips below it 
 code rather than the distribution. The fix replaces the per-unit PCR with an absolute 25 ms grid, and
 [T19](test-19-pcr-grid-verification.md) confirms it exactly on this clip: every interval 25.000 ms, the
 sub-millisecond fraction 85.40 % → 0.00 %. **What T19 also establishes is that the numbers in the table
-above are still the deployable ones**, because the fix's spacing lives in per-frame timestamps that
-`moq export ts`'s stdout discards, so the exported *bytes* carry 87.2 % of PCR packets back-to-back and
-the lane's wire conformance regresses. Read this measurement as the diagnosis it is; read T19 for what
-the exporter now does and what it still does not.
+above are still the deployable ones.** A second upstream fix has since paced `moq export ts`'s stdout
+writes, so the spacing does now reach a real-time consumer as arrival time — but the exported *bytes*
+still carry PCR packets back-to-back, a groomer reads positions rather than arrival times, and re-running
+this arm on the fixed build reads **771.6 ms against this table's 120.0 ms control, with 1,166 continuity
+errors against 0**. Read this measurement as the diagnosis it is; read
+[T19](test-19-pcr-grid-verification.md) measurements 5 and 6 for what the exporter now does and what it
+still does not.
 
 ### Measurement 5 — the same instrument over a real path, and the path costs almost nothing
 

@@ -10,14 +10,19 @@
 > conditions is the failure *mode*: the MoQ lane loses content and never integrity — **0 continuity
 > errors in every one of its ~40 cells** — while SRT inverts that and gets worse the better-behaved the
 > network is, reaching 17,652–22,365 errors under an AQM while taking the most bytes of any lane.
-> **The one place the media-aware lane loses badly is C3:** three feeds sharing a congested bottleneck
-> collectively used 25 % of it against SRT's 84 %, on one replicate that needs repeating. **C6 settles
+> **C3 is where the media-aware lane loses, and it is now explained.** Sharing a congested bottleneck at
+> a 2 s subscriber budget, MoQ's *aggregate* falls from 9.44 Mb/s at one flow to 4.89 at two and 4.02 at
+> three while SRT's rises to 12.65 and holds — but the collapse is neither the controller (loss-based
+> CUBIC collapses identically to delay-sensing BBRv1) nor bufferbloat (it survives `cake`, which cut RTT
+> from ~550 ms to 100 ms). **It is the subscriber's own release deadline:** widening `--latency-max` from
+> 500 ms to 30 s at `n=2` moves the aggregate 4.29 → 10.35 Mb/s, above the single-flow rate, at 0
+> continuity errors throughout. N subscribers independently shed groups that miss their budget, so the
+> ladder measures a 2-second trunk rather than a ceiling on the transport. **C6 settles
 > permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so
 > C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
-> prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. Two known
-> gaps: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their own
-> RTT says the specified queue never formed), and most of C3's aggregate was lost to a disk janitor
-> mid-run. The upstream discussion this test came from is
+> prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap
+> remains: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their
+> own RTT says the specified queue never formed). The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
@@ -150,10 +155,10 @@ interest is a *provisioned* path under contention.
 | # | Condition | Setup | What it isolates | State |
 |---|---|---|---|---|
 | C1 | Under-provisioned (failure mode) | `bloat`, cap < feed (~2:1) | how each CC/transport fails when the link cannot carry the feed | **run** |
-| C2 | Transient congestion / competing flow **(priority)** | provisioned cap + a competing flow or brief dip below feed rate | does the feed stay complete, and how fast it recovers; post-transient bloat | not run |
-| C3 | Coexistence / fairness | provisioned, N ∈ {2,3} flows share the class | does the feed hold its share (starvation → dropped content) | not run |
-| C4 | AQM counterfactual | `codel` / `cake` at the same bottleneck | does AQM change the completeness/latency picture | not run |
-| C5 | Provisioning margin | cap ≈ 1.5× / 1.1× feed | where content loss *begins* per controller (an economics input) | not run |
+| C2 | Transient congestion / competing flow **(priority)** | provisioned cap + a competing flow or brief dip below feed rate | does the feed stay complete, and how fast it recovers; post-transient bloat | **run** (four segmented cells withheld) |
+| C3 | Coexistence / fairness | provisioned, N ∈ {2,3} flows share the class | does the feed hold its share (starvation → dropped content) | **run** on FIFO and on `cake`, plus a `--latency-max` sweep at `n=2` |
+| C4 | AQM counterfactual | `codel` / `cake` at the same bottleneck | does AQM change the completeness/latency picture | **run** |
+| C5 | Provisioning margin | cap ≈ 1.5× / 1.1× feed | where content loss *begins* per controller (an economics input) | **run** |
 | C6 | Long-duration soak (permanence) | provisioned, hours→days | drift / leak / rare abort a short run misses | **14.006 h, BBRv1/quinn at a 15 Mb/s cap** |
 
 ### 2. Run each cell
@@ -190,6 +195,12 @@ tsp -I file t8b_bbr1.ts -P analyze -O drop | grep -E 'bitrate|packets'
 # queuing delay only as a buffer-headroom check
 ./scripts/t8b-rtt-probe.sh summary idle.csv rtt_cubic.csv rtt_bbr1.csv rtt_bbr2.csv
 ```
+
+Every intended statistic is a printed field of the cell. For C3 that means the *aggregate* over all N
+receivers — `agg_bytes`, `agg_mbps`, `agg_pct_cap` — summed at grade time by
+[`t8b-provisioned.sh`](scripts/t8b-provisioned.sh), which then deletes the extra flows' captures itself.
+The first pass printed flow 1 only and left the aggregate to be recovered from whatever captures were
+still on disk, which is how a disk janitor came to destroy four of six of them.
 
 ## Results
 
@@ -456,36 +467,108 @@ sharing a bottleneck hurts whatever shares it with, and needs provisioning again
 
 ### C3 — coexistence, where the media-aware lane's one serious scaling result is
 
-N concurrent feeds through one 15 Mb/s bottleneck and one relay, 500 ms FIFO, 90 s, one replicate. The
-per-flow figure below is flow 1; the aggregate is the sum over all N receivers, and **it survives for
-only the two `n=3` cells** — the others were deleted by a disk janitor mid-run, which is a self-inflicted
-gap and the reason `n=2` is reported per-flow only.
+N concurrent feeds of one transport through one 15 Mb/s bottleneck and one relay, 500 ms FIFO, 90 s per
+cell. The aggregate is the sum over all N receivers and is now a printed field of the cell rather than a
+number recovered from surviving captures — which is what the first pass got wrong, and why four of its
+six aggregates were destroyed by a disk janitor. **All six are recovered.** The `n=1` column is C5's
+cell at the identical cap and queue, so the ladder is one condition throughout.
 
-| cells | flow 1, of source | aggregate | of the 15 Mb/s cap | CC (flow 1) | RTT p50 |
-|---|---:|---:|---:|---:|---:|
-| MoQ BBRv1, n=2 | 46 % | not captured | — | 0 | 594 ms |
-| MoQ CUBIC, n=2 | 29 % | not captured | — | 0 | 522 ms |
-| MoQ BBRv1, n=3 | 12 % | **3.76 Mb/s** | **25 %** | 0 | 596 ms |
-| SRT, n=3 | 31 % | **12.67 Mb/s** | **84 %** | 7,833 | 592 ms |
-| MoQ CUBIC, n=3 | 20 % | not captured | — | 0 | 558 ms |
-| SRT, n=2 | 90 % | not captured | — | 1,562 | 582 ms |
+| aggregate delivered, of the 15 Mb/s cap | n=1 | n=2 | n=3 |
+|---|---:|---:|---:|
+| **MoQ, CUBIC** | 9.44 Mb/s (63 %) | **5.39 Mb/s (36 %)** | **4.48 Mb/s (30 %)** |
+| **MoQ, BBRv1** | 9.44 Mb/s (63 %) | **4.89 Mb/s (33 %)** | **4.02 Mb/s (27 %)** |
+| **SRT** | 9.63 Mb/s (64 %) | **12.65 Mb/s (84 %)** | **12.53 Mb/s (84 %)** |
+| MoQ continuity errors | 0 | 0 | 0 |
+| SRT continuity errors | 0 | 6,249 | 3,886 |
 
-**Three MoQ feeds sharing a congested path collectively use a quarter of it; three SRT feeds use
-84 %.** That is the one result in this experiment where the media-aware lane loses on something other
-than a filed upstream defect, and it is not a fairness problem — it is a *utilisation* problem. Each
-flow's individual share being below the fair 1/N is expected under contention; the aggregate falling to
-3.76 Mb/s on a 15 Mb/s link is not. The mechanism is coherent: a delay-sensing controller behind a
-permanently saturated 500 ms FIFO (p50 596 ms) reads a very large delay, all three flows read it at once,
-and they back off together — so the more feeds share the path, the worse the total. SRT does not sense
-delay, does not yield, and fills the link at the cost of 7,833 continuity errors.
+At `n=1` nothing is congested — a 9.95 Mb/s feed cannot fill a 15 Mb/s cap, so 63 % is the source's own
+ceiling and all three transports sit on it. From `n=2` the offered load exceeds the cap and the lanes
+separate completely.
 
-**Read this as one replicate of one controller at one queue discipline, and as the strongest argument in
-the campaign for running C3 properly.** It is the first condition to suggest that trunking several
-media-aware feeds over one shared bottleneck is qualitatively worse than trunking one — which matters
-directly, because a distribution trunk carrying many services is the intended deployment. The re-run
-needs: aggregate captured for every cell, `cake` alongside the FIFO (C4 predicts most of this effect
-disappears with an AQM, and that prediction is cheap and load-bearing), CUBIC's aggregate to separate
-"delay-based collapse" from "MoQ collapse", and replicates.
+**Adding a second media-aware feed reduces the total delivered below what a single feed delivered on its
+own** — 9.44 Mb/s at one flow, 4.89 at two — while SRT's total *rises* to 12.65 and then holds at 84 % of
+the cap however many feeds share it. This remains the one result in the experiment where the
+media-aware lane loses on something other than a filed upstream defect, and it is a *utilisation*
+problem rather than a fairness one: each flow's share falling below the fair 1/N is expected under
+contention; the sum falling below the single-flow figure is not.
+
+**The controller is not the cause.** The explanation once on record was that a delay-sensing controller
+behind a permanently saturated 500 ms FIFO reads a very large delay, every flow reads it at once, and they
+all back off together. Loss-based CUBIC does not sense delay, and it collapses to **30 % against BBRv1's
+27 %** at three flows and 36 % against 33 % at two — inside the spread between them at every N. So the
+collapse is common to both QUIC controllers and absent from SRT on the same queue at the same RTT
+(p50 549–594 ms across all six cells).
+
+#### C3 under `cake` — the AQM counterfactual, and it does not rescue the lane
+
+The same nine cells — three transports by three flow counts — with one thing changed: the leaf queue at
+the bottleneck is `cake` instead of the 500 ms FIFO, which is C4's AQM. Cap, window, clip, flow counts, transports and the grading are C3's, and
+the loop publisher was stopped for both ladders.
+
+| aggregate, of the 15 Mb/s cap | n=1 | n=2 | n=3 | | n=1 | n=2 | n=3 |
+|---|---:|---:|---:|---|---:|---:|---:|
+| | **FIFO** | | | | **cake** | | |
+| **MoQ, CUBIC** | 9.44 (63 %) | 5.39 (36 %) | 4.48 (30 %) | | 9.44 (63 %) | **7.17 (48 %)** | **6.04 (40 %)** |
+| **MoQ, BBRv1** | 9.44 (63 %) | 4.89 (33 %) | 4.02 (27 %) | | 9.44 (63 %) | **5.77 (38 %)** | **5.25 (35 %)** |
+| **SRT** | 9.63 (64 %) | 12.65 (84 %) | 12.53 (84 %) | | 9.71 (65 %) | **12.64 (84 %)** | **13.29 (89 %)** |
+| MoQ continuity errors | 0 | 0 | 0 | | 0 | 0 | 0 |
+| SRT continuity errors | 0 | 6,249 | 3,886 | | 0 | **26,211** | **27,256** |
+| RTT p50 / p95 (ms) | 522–596 / 594–602 | | | | **100 / 101** | | |
+
+**The AQM did its job and the collapse survived it.** RTT is the proof that `cake` worked: p50 falls from
+522–596 ms to 100 ms — the base 2×50 ms and essentially nothing else — so ~450–500 ms of standing queue
+was removed from every cell. The aggregate improves by about a third in relative terms (CUBIC `n=2`
+5.39 → 7.17) and stays far below the single-flow rate: at `n=2` and `n=3` two and three media-aware feeds
+still deliver **less in total than one feed delivered unopposed**. C4's prediction that removing the
+queueing pathology would remove this was therefore wrong, and that is worth having as a falsification
+rather than an untested caveat: whatever causes C3 is not bufferbloat.
+
+Two side results. SRT's scaling is unchanged (84 → 84 → 89 %) and the separation from MoQ is intact —
+**13.29 against 6.04 Mb/s at `n=3`, a factor of 2.2**. But SRT's continuity errors rise **four- to sevenfold** under
+the AQM, to 26,211 and 27,256, while MoQ records zero in all four of its contended cells. So SRT's larger total is
+not more delivered programme; it is the same shortfall taken as corruption instead of as absence.
+
+#### The mechanism: the shed tracks the subscriber's latency budget
+
+With bufferbloat eliminated the remaining candidates were independent per-deliverer shedding driven by the
+latency budget, or a loss below the deliverers in the shared lane. Only the first predicts that the
+aggregate moves when the budget moves. MoQ `n=2` under `cake`, everything as above, varying only the
+subscribers' `--latency-max` (both flows together — moving one would make it a claim about one flow of N):
+
+| `--latency-max` | 500 ms | 2 s | 8 s | 30 s |
+|---|---:|---:|---:|---:|
+| **MoQ, CUBIC** aggregate | 4.29 Mb/s (29 %) | 5.50 Mb/s (37 %) | **9.30 Mb/s (62 %)** | **10.35 Mb/s (69 %)** |
+| **MoQ, BBRv1** aggregate | 4.75 Mb/s (32 %) | — | — | **10.43 Mb/s (70 %)** |
+| continuity errors | 0 | 0 | 0 | 0 |
+
+**The shed tracks the budget, and at a deep enough budget there is no collapse at all.** The aggregate
+rises monotonically by a factor of **2.4** across the sweep on one controller and 2.2 on the other, and at
+30 s the `n=2` aggregate (10.35 Mb/s) *exceeds* the `n=1` single-flow rate (9.44). Continuity stays at
+zero throughout, which is what says this is shedding rather than damage: the subscriber is discarding
+whole groups that missed its deadline, cleanly, exactly as `--latency-max` specifies.
+
+So C3 is not an unexplained utilisation defect. It is the release deadline binding: under contention each
+subscriber independently drops groups that arrive too late for its own budget, N subscribers do so
+independently, and the sum of what survives falls below what one unopposed subscriber delivered. The knob
+is the budget, and it is a deployment choice rather than a protocol property. **What the ladder at
+`--latency-max 2s` measures is a 2-second trunk, not a ceiling on the transport** — and it puts SRT's
+larger total in its place. SRT ran at `--latency 2000`, the same budget, and met the shortfall by
+discarding individual late packets rather than whole groups, which is what its 26,211 and 27,256
+continuity errors are. Both lanes shed at the same deadline; one sheds in units a decoder can survive
+and the other in units it cannot.
+
+**What is still open** is why the *marginal* cost is so steep at a short budget — 500 ms costs more than
+half the aggregate — and whether the knee sits at the RTT, at the group duration, or at the relay's own
+buffering. That is a narrower question than the one this cell opened with.
+
+**Two things do not reproduce well, and both bound how hard these numbers can be pushed.** Per-flow shares
+move freely between runs: SRT's flow 1 was 90 % of source at `n=2` in the first pass and 35 % in the
+second; BBRv1's was 46 % and then 26 %. And the *aggregate* reproduces only to about ±15 %: the two cells
+run at CUBIC `n=2` under `cake` at `--latency-max 2s` — the matrix cell and the sweep's own 2 s point —
+gave **7.17 and 5.50 Mb/s**. So the aggregate is the reproducible *quantity* where the split is not, but a
+single cell is worth roughly one significant figure. The sweep's 2.4× trend is well outside that; a
+one-third difference between FIFO and `cake` at a single N is not, which is why the conclusion above rests
+on the sign and the ladder rather than on any one pair.
 
 ### C6 — permanence: the transport passes, and the memory prediction does not
 
@@ -655,14 +738,19 @@ buffer that has to absorb the next transient. The segmented figure is higher for
 each segment fetch is a line-rate burst, so its queueing is set by burst shape rather than average
 headroom, which C5 and C1 independently measured at 336 and 337 ms.
 
-**The MoQ lane's one serious loss in this experiment is concurrency, and it is one replicate.** Three
-feeds through a single congested bottleneck collectively delivered 3.76 Mb/s of a 15 Mb/s link — 25 % —
-where three SRT feeds delivered 84 %. Individual shares below 1/N are expected; a *total* that collapses
-as feeds are added is not, and a delay-sensing controller behind a permanently full FIFO is a coherent
-mechanism for it. Since C4 shows an AQM removes the standing delay that would drive such a collapse,
-the obvious prediction is that this largely disappears under `codel` or `cake` — which is both cheap to
-test and the difference between an artefact of a deep tail-drop buffer and a real limit on trunking
-multiple services over one path. Until it is run, this is the experiment's most important open item.
+**The MoQ lane's one serious loss in this experiment is concurrency — and it is the subscriber's release
+deadline, not the transport's ceiling.** At a 2 s budget, aggregate delivery falls from 9.44 Mb/s at one
+feed to 4.89 at two and 4.02 at three while SRT rises to 12.65 and holds at 84 % of the cap. Three
+candidate causes were tested and two were eliminated: it is not the controller (loss-based CUBIC
+collapses to within the BBRv1 spread at both flow counts, 36 %/30 % against 33 %/27 %) and it is not
+bufferbloat (`cake` cut RTT from ~550 ms to 100 ms and the collapse survived, at 48 %/40 % of cap).
+What does move it is `--latency-max`: at `n=2` under `cake`, 500 ms → 30 s takes the aggregate from
+4.29 to 10.35 Mb/s — past the uncontended single-flow rate — at zero continuity errors throughout.
+**So the shed is each subscriber independently discarding groups that missed its own deadline**, N of
+them at once, and the ladder above measures a 2-second trunk rather than a limit of the lane. An
+operator who can spend buffer does not have this problem; one who cannot must provision for it. What
+remains open is narrower than the question this cell opened with: why the marginal cost of a short
+budget is so steep, and whether the knee sits at the RTT, the group duration or the relay's buffering.
 
 **What does not vary is the failure mode, and that is the transferable result.** Across three
 conditions, four controllers, three queue disciplines and two provisioning levels, the MoQ lane loses
@@ -695,10 +783,13 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
 
 ## Next steps
 
-- **Re-run C3 properly.** The highest-value item, because it is the only measurement suggesting the
-  media-aware lane has a real scaling limit: aggregate captured for *every* cell, `cake` beside the
-  FIFO to test whether the collapse is the buffer's, CUBIC's aggregate to separate a delay-based
-  collapse from a MoQ one, and replicates.
+- **Locate the latency knee in C3.** The budget sweep is coarse (500 ms, 2 s, 8 s, 30 s) and the
+  aggregate is already at 62 % of cap by 8 s. Points at 1, 3, 4 and 6 s at `n=2` and `n=3` would say
+  whether the knee tracks the RTT, the group duration, or the relay's own buffering — the only C3
+  question left, and the one an operator would actually ask when sizing a trunk.
+- **Add replicates to C3.** The aggregate reproduces to about ±15 % (7.17 against 5.50 Mb/s for the same
+  cell run twice), so any claim resting on a difference smaller than a third needs two more replicates
+  before it is worth stating.
 - **Re-run the segmented C2 cells with the competing flow's own throughput recorded**, so a delivery
   collapse can be attributed to the impairment rather than inferred from it.
 - **Re-run C6 with streams capped and the group count logged**, to bound the second term rather than
@@ -710,9 +801,13 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
 - Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear
   at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate
   spread.
-- **Never let a cleanup job run against a live results tree again.** A janitor deleting captures to
-  protect the disk destroyed four of six C3 aggregates, which was the most valuable data in the matrix.
-  It should have excluded any cell still running *and* whatever the condition needs summed.
+- **Never let a cleanup job run against a live results tree again — and the durable fix is not a better
+  janitor.** A janitor deleting captures to protect the disk destroyed four of six C3 aggregates, the
+  most valuable data in the matrix. The reason it could is that the aggregate was never an output of the
+  cell: the extra flows were subscribed and written to disk, but only flow 1 was graded and printed, so
+  the aggregate existed solely as a by-product of files that happened to survive. The cell now sums them
+  at grade time and prints `agg_bytes`/`agg_mbps`/`agg_pct_cap`, then deletes the extra captures itself
+  — after which no cleanup job needs to touch the tree and peak disk for a C3 pass is one cell's worth.
 - **Run the segmented lane long enough at 8 Mb/s to see the `tsp` client die**, since 60 s only shows
   the trajectory. The prediction is a 404 at roughly the point four segments per minute of lost ground
   consumes a nine-segment window, and it is worth having the number rather than the extrapolation.
