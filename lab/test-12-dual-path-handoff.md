@@ -654,6 +654,16 @@ proxy is not a divergence source, and the pair needs nothing new to tolerate it.
   needs a host that can carry the pair without skipping.
 - **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7
   receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2.
+  Its selection rules are now tested against fourteen adversarial conditions
+  (`t12-oracle-selftest.py`, 53 assertions), each labelled by what it establishes: eight match what
+  ST 2022-7 requires, one is **unspecified** because differing payloads at equal sequence numbers
+  already violate the standard's packet-identity precondition and always taking leg A is a
+  reproducibility choice, three are **not modelled** because PCR wrap, a source-clock offset and this
+  implementation's own offset voting cannot be reached by a sequence-number selector, and one is a
+  **blind spot** — an intra-leg duplicate whose payload *differs* is resolved first-wins in silence and
+  moves no reported figure. Selection is graded in the byte domain only: the oracle never prefers the
+  earlier arrival, so it cannot say how deep a receiver's buffer had to be to absorb the skew it
+  reports. Passing those tests is not a conformance claim and is not offered as one.
 - **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean
   control, where [T7](test-7-timing-integrity.md) measured 0 % at a carrier rate matched to the
   content. This rig runs 4 Mbps of carrier for 1.9 Mbps of content, so the leading hypothesis is

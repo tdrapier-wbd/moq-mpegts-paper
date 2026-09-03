@@ -40,11 +40,21 @@
 > **The positional ask has since been granted, and it verifies `[unmerged]`.**
 > [#3351](https://github.com/moq-dev/moq/pull/3351) slices the export on the PCR grid instead of on media
 > frames. Against its own merge-base on one host, adjacency falls **50.31 % → 0 %** and releases outside
-> ±10 ms fall **491/799 → 0 to 4/745**, p95 **70.3 → 1.5 to 1.9 ms** (measurement 9). The buffer it
-> introduces converges to **480 ms against a 500 ms `--latency-max`** and then holds to 0.017 ms/s, so the
-> lag is a constant offset rather than a drift. **What is verified is the pipe, not the wire:** whether a
-> byte-locking groomer downstream now produces a conformant stream is untested and needs a merged build,
-> so the deployable configuration is still the pre-fix one.
+> ±10 ms fall **491/799 → 0 to 4/745**, p95 **70.3 → 1.5 to 1.9 ms** (measurement 9). The lag it
+> introduces converges to **480 ms against a 500 ms `--latency-max`** and then holds to 0.017 ms/s, so it
+> is a constant offset rather than a drift; *which* mechanism holds it there is open, since a mux buffer
+> filling and `Pacer::absorb` mistaking reorder depth for delivery lag predict the same curve on a
+> B-frame source (corrections). **What is verified is the pipe, not the wire:** whether a byte-locking
+> groomer downstream now produces a conformant stream is untested and needs a merged build, so the
+> deployable configuration is still the pre-fix one. #3351 remains **open and unmerged** at `87502b85e`,
+> checks green, no maintainer reply; the merged-build wire re-run is blocked on nothing else.
+>
+> **The instrument itself now has a test, which it did not when any of the above was measured.**
+> `ts-pcr-fixtures.py` synthesises all nine PCR boundary conditions and `ts-pcr-selftest.py` asserts the
+> verdict each must produce, 38 assertions. **The 33-bit wrap is placed 400 ms into a fixture** rather
+> than soaked 26.51 h for, which is what the eventual 72-hour hardware run needed to avoid a 27-hour
+> preliminary. Building it found two further analyser defects, both of it failing conforming input
+> (corrections).
 
 ## Objective
 
@@ -626,6 +636,31 @@ build.
   that allowance is the bound; and separating a transient from a steady state needs a window longer than
   the transient, which a 20 s window here is not (290 ms still climbing at 8.7 ms/s, against 480 ms
   holding at −0.017 ms/s over 120 s).
+- **Believed:** the 480 ms plateau is the exporter's mux buffer filling once and then holding, as the
+  fix intends. **True:** that is *one* of two mechanisms which predict the same curve, and this
+  measurement does not separate them. CodeRabbit's review of `pace.rs` on #3351 observes that `absorb`
+  routes reordered frames through the same path as delivery lag, so a frame deliberately placed before
+  the anchor contributes its *reorder depth* as though it were lag, sliding the anchor until slack
+  reaches `lead`. The clip used here has B-frames (108 of 150 frames sampled), so the mechanism applies,
+  and "monotone growth to roughly `lead`, then flat" is exactly what both predict — a 480 ms plateau
+  against a 500 ms budget fits either. **Method rule:** a quantity converging on a configured limit is
+  evidence that *something* is bounded by that limit, never of which thing; when two mechanisms share a
+  curve, name the arm that separates them before attributing it. Here that arm is a source encoded
+  `bframes=0`, where a filling buffer still reaches ~480 ms and reorder absorption does not. Not run:
+  the instruction for this session was not to re-test the PR branch, and it belongs in the merged-build
+  run in any case. The attribution in the comment posted on #3351 is stated more confidently than this
+  evidence supports.
+- **Believed:** the analyser was ready to grade the boundary conditions, having been fixed six times
+  over. **True:** it had two further defects, both of it failing conforming input, and both found only
+  once legal fixtures existed rather than broken ones. A *signalled* discontinuity failed twice over —
+  as a continuity error and as an 820 ms repetition-limit breach — though ISO 13818-1 2.4.3.3 permits
+  the counter jump and 2.4.3.4 permits the clock jump with it, and the jump was additionally at risk of
+  being unwrapped as a 33-bit rollover. Separately, `--live` returned a *hard pass* labelled "not
+  measured" when it held too few PCRs to grade, so a producer dying after two packets reported success;
+  on this rig the exporter exits early on nearly every run, so that was a live route to a false pass on
+  the very verification it exists for. **Method rule:** most defects in a conformance instrument are it
+  rejecting legal input, and a suite built only from broken streams cannot find them; and "not measured"
+  must never share an exit code with "passed".
 - **Believed:** the residue above the gate might be the two-vCPU host rather than the exporter, and the
   bursts were a group-boundary flush. **True:** the gate metric is 7.45 % on two vCPU and 7.45 % on
   eight, at zero CPU pressure, and the cause is that the PCR grid is advanced by frame arrival rather

@@ -1,0 +1,21 @@
+# Lint settings for this repository's Python instruments.
+#
+# Matched to upstream moq-dev's own ruff configuration, because `lab/scripts/ts-pcr-timing.py`
+# is contributed there as test/ts/pcr-timing.py and the two copies must not diverge on style
+# any more than on behaviour. Without a config here, `ruff check` falls back to its default
+# rule set, which reports hundreds of findings that upstream's gate does not and buries the
+# few that matter.
+#
+# The one departure: tab indentation is not flagged. Most scripts in lab/scripts/ are
+# tab-indented by convention and the contributed file is space-indented to match upstream,
+# so the repository genuinely holds both and a rule against either would be noise.
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["W191", "E101"]
+
+[tool.ruff.format]
+quote-style = "double"

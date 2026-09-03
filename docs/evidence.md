@@ -62,7 +62,7 @@ the segmented lane's retrying puller, are listed in §1.1 with what each cannot 
 |---|---|---|
 | TSDuck `analyze`, `continuity`, `pcrextract`, `pcrverify` | Structure, PID census, continuity, PCR interval and accuracy | Wire timing. `pcrverify` on a file checks PCR against byte position, i.e. the arithmetic of the re-stamp |
 | `t13-cadence.py` (64 kB pipe reads, or per-datagram capture) | Burst size, gap distribution, coefficient of variation | Absolute rate on loopback — loopback inflates burst *rate*; burst *size* and inter-burst silence are structural |
-| `t12-merge-oracle.py` + `t12-maskcmp.py` + `t12-seqskew.py` | ST 2022-7 merge behaviour, byte identity, skew | A hardware IRD's merge engine. It is a reference implementation of the selection rules. The oracle also degrades to noise on a pair that is not byte-identical, which is why the mask and skew tools exist |
+| `t12-merge-oracle.py` + `t12-maskcmp.py` + `t12-seqskew.py` | ST 2022-7 merge behaviour, byte identity, skew | A hardware IRD's merge engine. It is a reference implementation of the selection rules, tested against fourteen adversarial conditions (`t12-oracle-selftest.py`) which label where it matches the standard, where the standard requires nothing, where the rule does not apply and where it is blind — not a conformance claim. It also degrades to noise on a pair that is not byte-identical, which is why the mask and skew tools exist |
 | `compliance.py` / `t13-grade.py` | Structural and shape checks, packet conservation | Decoder acceptance |
 | `t18-latency.py` | Delivery latency on the PES presentation timestamp, tapped at source and at groomed egress, plus a four-timestamp clock probe for the two-host case | Encoder and decoder delay, so it is not camera-to-display. The PTS is the one identifier that survives a media-aware remux *and* every byte-transparent arm, which is what makes one instrument grade all four planes |
 | Interop client (`interop/`) | Media-level carriage through a third-party relay | Anything about pacing or conformance — deliberately out of scope for a relay test |
@@ -677,10 +677,32 @@ does not buy PCR repetition on either lane: the MoQ cushion swept across eight t
 nothing, and the segmented TSDuck chain posts 0 while holding almost no buffer. What decides PCR
 repetition is the spacing the egress delivers.
 
-**What has not been exercised at all**: source-clock drift, PCR discontinuity and the 33-bit wrap,
-mid-stream PID or PCR-PID change, and T-STD occupancy through the media-aware exporter's clustered
-per-PID delivery — the last observed only as a compliance-tool shape warning and never root-caused
-([Architecture](architecture.md) §4.3).
+**What has not been exercised through the pipeline**: source-clock drift, PCR discontinuity and the
+33-bit wrap, mid-stream PID or PCR-PID change, and T-STD occupancy through the media-aware exporter's
+clustered per-PID delivery — the last observed only as a compliance-tool shape warning and never
+root-caused ([Architecture](architecture.md) §4.3).
+
+**All but T-STD occupancy are now reproducible as stimuli, and the instrument that will grade them is
+itself tested.** Each of normal progression, the 33-bit wrap, source-clock drift, a signalled
+discontinuity, a mid-stream PCR-PID change, loss then recovery, legal duplicate packets, abnormal
+spacing and clustered byte positions has a synthetic fixture, an expected verdict and an automated
+assertion (`ts-pcr-fixtures.py`, `ts-pcr-selftest.py`: 38 assertions, ten file fixtures and three paced
+ones). **The wrap is placed rather than waited for** — the counter starts 20 slots below the boundary
+and crosses it 400 ms in — which is what makes it gradeable at all, since reaching one by running costs
+26.51 h and the eventual hardware soak needs 72 h to see a single instance. Two qualifications carry:
+this is the *instrument's* accept-and-reject behaviour, not the pipeline's, so a fixture passing says
+nothing yet about what the exporter and groomer do with the same condition; and the drift arm is paced
+by Python on a non-realtime host, so its ±25 ms tolerance is looser than the ±10 ms used against the
+real exporter and it establishes only that a correctly paced stream does not trip the check.
+
+Building those fixtures corrected two defects in the analyser, both of it failing conforming input. A
+*signalled* discontinuity was counted twice as a defect, once as a continuity error and once as an
+820 ms repetition-limit breach, though ISO 13818-1 2.4.3.3 permits the counter jump and 2.4.3.4 permits
+the clock jump that accompanies it; intervals spanning a declared new time base are now excluded from
+the value and release checks and reported separately. Separately, a `--live` capture holding too few
+PCRs to mean anything returned a *hard pass*, so a producer that died after two packets reported
+success. No published figure changes: the affected paths are the accept path on conditions no capture in
+this campaign contained, and the continuity numbers quoted throughout come from TSDuck.
 
 ### 3.3 How does the transport behave under loss? — The controller decides it, on every lane; only reordering separates the data planes
 
@@ -1404,6 +1426,25 @@ exporter and host across two availability zones — and holds byte-identically o
 source. **On a multi-track mux over independent chains it does not** (75.56 %): the legs carry the same
 packets in a different order, which is upstream's interleave rather than the groomer's placement. One
 run per cell elsewhere in the matrix.
+
+**What the oracle's own tests establish, and what they do not.** The selection rules now have fourteen
+adversarial conditions driven directly against the oracle's functions, 53 assertions, covering a late
+leg, a gap on one leg, a gap on both, loss then recovery, conflicting payloads at equal sequence
+numbers, intra-leg duplicates, differing RTP headers over identical payload, the RTP sequence number
+wrapping 65535 to 0, PCR wrap, a source-clock offset and a leg delivering only stuffing. Each is
+labelled by what it establishes, and the labels matter more than the pass. **Eight match what ST 2022-7
+requires.** **One is unspecified**: at equal sequence numbers with differing payloads the standard's
+packet-identity precondition is already violated, so no selection rule applies, and the oracle taking
+leg A deterministically is a choice made for reproducibility rather than a rule being implemented.
+**Three are not modelled** — PCR wrap and a source-clock offset cannot reach a selector that keys on
+sequence number, and the sequence-offset voting is this implementation's own device, not something a
+receiver has to do. **One is a blind spot**: an intra-leg duplicate whose payload *differs* is resolved
+first-wins in silence and moves no figure the oracle reports, so a leg renumbering onto a live sequence
+number would read clean in every column above. Selection is graded in the byte domain only; the oracle
+never prefers the earlier arrival, so it cannot say how deep a receiver's buffer had to be to absorb
+the skew it reports. **None of this makes the oracle reference compliant, and it is not offered as
+evidence that it is** — ST 2022-7 conformance is decided by a receiver, and that gate (§4.2 of
+[Architecture](architecture.md)) is blocked for want of one.
 
 **Impairment matrices are one run per condition**, on an over-provisioned path, with `netem` models
 that approximate loss as Bernoulli where real loss is bursty and RTT-coupled, and whose "jitter"

@@ -291,6 +291,64 @@ things.** *(T19.)*
 > two failures over the same population, join them before you report them; the cross-tab is usually
 > free and it is the difference between two hypotheses and one cause.*
 
+**Half the defects in a conformance instrument are it failing conforming input, and only a legal
+fixture finds those. Build the stimulus for every condition the standard permits, not just the ones
+it forbids.** *(T19, `ts-pcr-timing.py` — eight defects, five of them this shape.)*
+
+> Of the defects review and fixture-building found in the PCR analyser, five were the tool rejecting
+> streams ISO 13818-1 explicitly allows: a legal duplicate packet (2.4.3.3), a signalled
+> `discontinuity_indicator` counter jump, the clock jump the same flag licenses (2.4.3.4), a PCR
+> repeating its value in a duplicate, and a capture crossing the 33-bit rollover. Every one would have
+> been reported as a defect *in the stream*, on a hard check, by an instrument whose own tests were all
+> of the form "does it catch a break". The asymmetry is structural: a suite built from defects only ever
+> exercises the reject path, so the accept path is whatever the implementation happens to do. **The
+> pass expectations are the ones worth writing first**, because a false positive costs a soak its
+> credibility while a false negative merely costs it a finding.
+
+**An instrument's "not measured" and its "passed" must never be the same exit code. A producer that
+died is the case the gate exists for.** *(T19, `check_release` — found by a reviewer, not by us.)*
+
+> `check_release` returned a *hard pass* labelled "not measured (no arrival stamps)" whenever it had
+> fewer than three timestamped PCRs. For a file that is correct: a file carries no arrival times and
+> there is nothing to grade. For a live capture it inverted the instrument, because a producer that
+> emitted two packets and exited produced a green run — and the exporter under test exits early on
+> nearly every run of this rig, so the route was live rather than theoretical. The fix is a floor on
+> both the sample count and the share of the requested window it spans. The general rule is that
+> *absence of evidence has to be its own verdict*, distinct from pass and from fail, and reachable only
+> in the domain where it is true.
+
+**A fixture must break exactly one thing, and a generator emitting legal streams gets its own
+bookkeeping wrong silently. Verify the stimulus arrived before trusting the verdict.**
+*(T19, `ts-pcr-fixtures.py`.)*
+
+> The first draft of the PCR spacing and position fixtures both reported continuity errors, because
+> counters were computed per fixture instead of maintained across the packets each emitted. Those
+> fixtures were about intervals and byte positions; the counter noise was the generator's. A self-test
+> asserting on a polluted signal proves nothing, so counters are now maintained by construction and a
+> counter failure means the fixture intended one. Worse, the loss fixture *hid its own stimulus*:
+> excising exactly 15 packets left the counter landing on the value it would have had anyway, so the
+> loss was invisible to the check meant to catch it. **A loss of an exact multiple of 16 packets on a
+> PID is undetectable by continuity counter** — a property of MPEG-TS worth knowing rather than a bug,
+> and the reason holes are sized from the clock instead. Each fixture now asserts a detail field
+> proving its condition was reached, not merely that some check moved.
+
+**Where an instrument's behaviour is a choice rather than a requirement, the test has to say which.
+"It passes its tests" and "it implements the standard" are different claims.** *(T12, the ST 2022-7
+selection oracle.)*
+
+> Every 1+1 result rests on `t12-merge-oracle.py`, which had no unit test, so its documented behaviour
+> and the standard's requirements were indistinguishable in the record. Labelling fourteen adversarial
+> conditions separated them: eight where it does what ST 2022-7 requires, one where the input already
+> violates a precondition of the standard so *nothing* is required and always taking leg A is a
+> reproducibility choice, three where the rule cannot reach a sequence-number selector at all (PCR
+> wrap, source-clock offset, and offset voting which is this implementation's own invention), and one
+> outright blind spot. The blind spot is the return on the exercise: an intra-leg duplicate whose
+> payload *differs* is silently resolved first-wins and moves no figure the oracle reports, so a leg
+> renumbering onto a live sequence number would have looked clean in every published column. **Self-
+> authored tests establish that an implementation is stable and self-consistent, never that it
+> conforms**; conformance is decided by the thing the standard is written for, which here is a
+> receiver, and that gate stays open.
+
 ---
 
 ## 3. Ratios, windows and intervals

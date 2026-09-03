@@ -344,6 +344,16 @@ measured on this rig at length. Each condition below is synthesisable with TSDuc
 with instruments that already exist, so each can be turned from a hardware-day *question* into a
 hardware-day *confirmation*. In leverage order:
 
+**The stimuli and the instrument are now built; what remains is the pipeline.** `ts-pcr-fixtures.py`
+generates every condition in this section, and `ts-pcr-selftest.py` asserts the verdict each must
+produce, so the analyser's own accept-and-reject behaviour is a tested quantity rather than an
+assumption — which it was not, and building it found two more defects in the analyser, both of it
+failing conforming input. The wrap in item 1 is **placed 400 ms into a fixture**, which is the whole
+mechanism this section asked for. Read the items below as *what has still never been run through the
+groomer and a MoQ round trip*, because that is now the only part missing: a fixture passing the
+analyser says nothing about what the pipeline does with the same condition, and items 1 to 4 all rest
+on the pipeline rather than on the instrument.
+
 1. **The PCR 33-bit wrap, placed rather than waited for.** The base clock wraps every **26.51 h** (see
    [method-notes](method-notes.md) §3), so it need not be soaked for: start the PCR just below the
    boundary and it arrives in minutes. `mpegts-pacer` is *designed* for it — `Slot::slots_per_wrap`
@@ -351,7 +361,9 @@ hardware-day *confirmation*. In leverage order:
    modular arithmetic — but **what is proven is the arithmetic, not the pipeline**: no stream has been
    run across a wrap end to end, through the scheduler's run-closing and the discontinuity threshold,
    let alone through a MoQ round trip whose importer has its own timeline. This is the single cheapest
-   test on the list with a real chance of failing.
+   test on the list with a real chance of failing. The stimulus exists: `ts-pcr-fixtures.py wrap`
+   starts 20 slots below the boundary and crosses it 400 ms in, and the analyser is asserted to unwrap
+   it rather than read it as a backwards clock. Feeding it to the groomer is the outstanding step.
 2. **Source-clock drift, by deliberately mis-rating the replay.** The pacer locks its output rate
    **once**, from a two-PCR warmup window plus a headroom fraction (`pacer.rs`), and derives its cushion
    once as well; neither is re-estimated. Every long run in the campaign replayed a file on the same host
@@ -365,9 +377,15 @@ hardware-day *confirmation*. In leverage order:
 3. **A *signalled* discontinuity.** The pacer sets and honours the discontinuity indicator and has a
    resume test, but only across its own resume — the one discontinuity the campaign has actually carried
    is the loop wrap's *unsignalled* splice. A source that flags its discontinuities is the normal case
-   and the untested one.
+   and the untested one. `ts-pcr-fixtures.py discontinuity` supplies it, and it is worth noting what
+   that fixture already caught: the analyser was failing a legal signalled splice twice over, so had
+   this been run against hardware first, the instrument would have called a conforming stream broken.
 4. **Mid-stream PID change, PCR-PID change and PMT version increment.** Named in the Gate 2 protocol
-   below and never synthesised. These exercise the importer's track model as much as the groomer.
+   below and never synthesised through the pipeline. `ts-pcr-fixtures.py pid-change` moves the PCR to a
+   second PID mid-stream, which the analyser catches on that check alone; the PMT version increment is
+   still unbuilt, since it is a PSI condition rather than a PCR one. These exercise the importer's track
+   model as much as the groomer, and the exporter has been seen doing it for real, reporting
+   "TS track layout changed after PAT/PMT was emitted" mid-run.
 
 **A failure in any of these is our defect, and is cheaper now than later.** Where a MoQ round trip is in
 the path, a failure may also be upstream's — which is a further argument for running them now, since a
