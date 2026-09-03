@@ -409,6 +409,22 @@ consequences are one phenomenon — 615 of 626 early releases are exactly the by
 that the residue is the exporter's rather than the host's, identical at 7.45 % on two and on eight vCPU
 at zero CPU pressure.
 
+**The ask was granted, and verifying it is the strongest confirmation this report has had.**
+[#3351](https://github.com/moq-dev/moq/pull/3351) slices the export on the PCR grid instead of on media
+frames, closing #3334 and folding in #3335's harness as the evidence. Graded here against **its own
+merge-base**, one host, one variable: adjacency **50.31 % → 0 %**, releases outside ±10 ms
+**491/799 → 0 to 4/745**, p95 **70.3 → 1.5 to 1.9 ms**, continuity 0 on both. The control reproduces the
+mechanism above exactly, with 43.4 % of its PCR packets both adjacent *and* early, which is the single
+cause appearing as one measured quantity in a build the maintainer did not write the fix against. The
+buffer the fix introduces converges to **480 ms against a 500 ms `--latency-max`** and then holds to
+0.017 ms/s over 40 s; the publisher alone drifts ±0.8 ms per decile, so the lag is the exporter's and it
+is a constant offset rather than a rate error. The maintainer's own recorded limit, that byte position
+stays uniform on one rendition but goes lumpy across two, is the same defect this campaign measured from
+the other side on [#2829](https://github.com/moq-dev/moq/issues/2829) with the two-host merge oracle
+(single rendition 46,778/46,778 identical; a 7-stream mux 75.56 %, the residue reordering rather than
+damage). Reported on the PR with the numbers, the control, and the caveat that this grades the pipe and
+not the wire.
+
 **Two things governed how it was filed, and both are about not spending someone else's attention badly.**
 It is a **new issue** rather than a comment: #2937 and #2984 are closed as completed and correctly so —
 #2967 delivered the contract #2937 asked for, and #3006 delivered #2984's — so a residual buried in either
@@ -443,6 +459,19 @@ continuity figures quoted in T19 come from TSDuck, and the tool's report on a re
 capture is unchanged. One suggestion was declined with a reason: counting *non-positive* intervals as
 defects fails a conforming stream, because a legal duplicate repeats its PCR exactly and yields an
 interval of zero. The first attempt at that fix did exactly that, and the duplicate fixture caught it.
+
+**One of those six fixes was itself wrong, and grading #3351 is what exposed it.** The new drift bound
+was given a 250 ms default, which is derived from nothing and sits *below* the 500 ms that
+`export ts --latency-max` entitles the sender to hold, so it failed a correct pipeline three runs out of
+three. The defect was conceptual, not arithmetic: a sender that buffers builds a standing lag once and
+then runs at the media rate, and a pipe running slow never stops accumulating, but both present as
+"accumulated drift" and only the second is a defect. Corrected at `bbe2ec5`: the total is bounded at the
+budget the sender may hold, defaulting to 500 ms to match `--latency-max` and documented as something to
+set to it, and the tail's drift rate is reported beside it, which is what separates the two shapes. A
+pipe whose per-interval error sits inside any percentage allowance but which never stops accumulating
+still fails on the total, so the term keeps its teeth. Reported as a correction on #3335 rather than
+quietly amended. The same commit folds in #3351's `--release-pct-max` so the two copies of the file do
+not diverge, and #3351 was told to take `bbe2ec5` because its copy predates the whole review.
 
 **A test contribution went with it as a PR**, [#3335](https://github.com/moq-dev/moq/pull/3335), adding
 `test/ts/pcr-timing.py` and its README entry and **nothing else** — no core behavioural change, which

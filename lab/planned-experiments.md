@@ -59,6 +59,18 @@ arrival. Measured, located and posted to [#2829](https://github.com/moq-dev/moq/
 `pick_next_track`, not on another cell here. The open question worth apparatus is therefore the one
 below it: whether a *hardware* IRD merges the pair the software oracle accepts.
 
+**1b. The end-to-end re-run against a grid-sliced export, the moment
+[#3351](https://github.com/moq-dev/moq/pull/3351) merges.** *Newly unblocked, and the cheapest
+high-leverage measurement on the list.* The positional fix is written and verified **at the pipe**
+(T19 measurement 9: adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms against its own merge-base). What
+it does not tell us is the thing the whole PCR line of work was filed under: **whether a byte-locking
+groomer downstream of it produces a conformant wire.** T19 measurements 3, 4 and 6 re-run unaltered and
+answer it — the lane was 120 → 772 ms and 0 → 1,166 continuity errors on the merged build, and this is
+the change that should move both. It also decides open question 1 in
+[Evidence](../docs/evidence.md), the P1 repetition gate. Do not run it against the PR branch as the
+deployable answer: a build that has not landed cannot retire a caveat about the deployable
+configuration.
+
 ---
 
 ### HIGH VALUE
@@ -207,7 +219,10 @@ service rather than measured on an MPTS.
   to explain. Item 5 is the sizing residue, and it is a different question.
 - **Filing the PCR output-position finding, and the conformance test** — filed as
   [#3334](https://github.com/moq-dev/moq/issues/3334) and [#3335](https://github.com/moq-dev/moq/pull/3335),
-  with hedged comments on #2829/#2779. Nothing more is ours until a maintainer replies.
+  with hedged comments on #2829/#2779. The maintainer then **wrote the fix**,
+  [#3351](https://github.com/moq-dev/moq/pull/3351), which verifies against its own merge-base
+  (adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms) and is reported on the PR. What this *adds* to
+  the list is the end-to-end re-run it unblocks, below.
 - **The `mpegts-pacer` positional guard** — in, with five tests and the T19 capture as the regression
   fixture. The groomer now measures the assumption it used to make.
 - **More transparency clips through lanes already characterised** across a 2.75× bitrate spread.

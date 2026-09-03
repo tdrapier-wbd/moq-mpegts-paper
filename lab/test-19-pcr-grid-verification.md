@@ -30,12 +30,21 @@
 > byte-locking groomer dropped 45.9 % of content. What #3006 buys is a lane whose cadence is recoverable
 > by a stage that reads the pipe in real time; what it does not buy is a conformant wire.
 >
-> **The residue is filed as [#3334](https://github.com/moq-dev/moq/issues/3334)** with the invariant
+> **The residue was filed as [#3334](https://github.com/moq-dev/moq/issues/3334)** with the invariant
 > stated as a requirement rather than an implementation, and the instrument this experiment should have
 > had from the start is offered upstream as
 > [#3335](https://github.com/moq-dev/moq/pull/3335) (test tooling only). The half of the defect that is
 > *ours* — a groomer that read source PCR value cadence and positional cadence as interchangeable — is
 > fixed and guarded in `mpegts-pacer` (measurement 8).
+>
+> **The positional ask has since been granted, and it verifies `[unmerged]`.**
+> [#3351](https://github.com/moq-dev/moq/pull/3351) slices the export on the PCR grid instead of on media
+> frames. Against its own merge-base on one host, adjacency falls **50.31 % → 0 %** and releases outside
+> ±10 ms fall **491/799 → 0 to 4/745**, p95 **70.3 → 1.5 to 1.9 ms** (measurement 9). The buffer it
+> introduces converges to **480 ms against a 500 ms `--latency-max`** and then holds to 0.017 ms/s, so the
+> lag is a constant offset rather than a drift. **What is verified is the pipe, not the wire:** whether a
+> byte-locking groomer downstream now produces a conformant stream is untested and needs a merged build,
+> so the deployable configuration is still the pre-fix one.
 
 ## Objective
 
@@ -483,6 +492,52 @@ that a clustered source is refused under `Fail` and paced under `Report` when th
 **No existing test changed and byte identity was not weakened** — the byte-identity test is asserted on
 the clustered source specifically, so the guard cannot be satisfied by relaxing placement.
 
+## Measurement 9 — the positional ask, granted and verified `[unmerged]`
+
+**Objective.** [#3351](https://github.com/moq-dev/moq/pull/3351) claims to close
+[#3334](https://github.com/moq-dev/moq/issues/3334) by slicing the TS export on the PCR grid rather than
+on media frames. Verify it independently, against a control that isolates the change, and establish
+whether the standing lag the design introduces is bounded.
+
+**Environment.** Laptop rig, loopback relay, release profile, default `--latency-max` (500 ms). Upstream's
+own live arm (`test/ts/run.sh --live`: an ffmpeg CBR clip with a 20 ms PCR, published through
+`tsp -P regulate --pcr-synchronous --wait-min 5`), graded by `ts-pcr-timing.py --live`. The only variable
+is the `moq` binary: #3351's head against **its own merge-base**, both built from one worktree and one
+target directory, sharing a single relay binary.
+
+**Procedure.** `TSC_MOQ=<arm> test/ts/run.sh --live`, at 20 s, 45 s and 120 s windows. Nothing else
+timing-sensitive on the host.
+
+**Results.**
+
+| Check | merge-base | #3351 |
+|---|---|---|
+| `pcr-position`, share adjacent to the previous PCR | **50.31 %** | **0 %** (0.25 % on one run) |
+| `pcr-release-timing`, intervals outside ±10 ms | **491/799** (356 early, 135 late) | **0 to 4 / 745** |
+| release error p95 \| worst | **70.3 ms** \| 91.4 ms | **1.5 to 1.9 ms** \| 3.9 ms |
+| `continuity` | 0 | 0 |
+| `pcr-value-interval` | 25.000 ms | 25.000 ms |
+
+The control reproduces #3334 as filed, down to its shape: **43.4 % of its PCR packets are both adjacent
+to the previous one and released early**, which is the clustering and the no-op sleep appearing as one
+quantity. On #3351 both are gone and all six checks pass.
+
+**The standing lag is real, bounded, and converges.** Slicing on the grid makes the exporter run behind
+the media clock by the depth of its mux buffer. Measured over 120 s (4,738 intervals), as drift
+accumulated per tenth of the sample: **+232.8, +99.5, +115.1, +33.2** ms, then **−0.4, +0.5, −0.4, +1.0,
+−0.3, +0.3**. The lag builds to **480 ms over the first ~48 s and then stops**, adding **+0.7 ms across
+the remaining 70 s** (a tail rate of −0.017 ms/s), against a `--latency-max` of 500 ms. So it converges
+just under the budget rather than merely being bounded by it in principle.
+
+**The rig does not supply that ramp.** Grading the publisher alone, with no `moq` in the path, gives a
+signed mean of **−0.019 ms** per interval and **±0.8 ms of drift per decile** across deciles 1 to 9, all
+of its −42.9 ms total landing in two startup intervals. The lag is the exporter's, and by design.
+
+**What this does not yet establish.** The measurement is at the pipe (P1-equivalent, on the laptop rig),
+on a single-rendition generated clip. It does not show that a byte-locking groomer now produces a
+conformant wire, which is the requirement #2937 was filed under and what measurements 3, 4 and 6 grade.
+That end-to-end re-run is the outstanding item, and it needs a merged build.
+
 ## Conclusion
 
 **The fix is right, complete, and does not yet help.** Judged as what it says it is — a change to how
@@ -504,10 +559,18 @@ does what it says: the median interval lands on the grid and gate failures halve
 deployed chain it changes almost nothing, and the reason is the second fix was the one this lane needed.
 **A groomer consumes bytes, not arrival times.** Re-derive PCR from byte position and the positional
 bunching — untouched, and untouchable by a timing fix — regenerates the original distribution; lock to
-byte position and the stream is unusable. The remaining ask is therefore the fallback offered above and
-not the one taken up: **emit the PCR packet adjacent to the media bytes of the slot it labels**, so
-position and value agree for a consumer that has only bytes. It needs no timing at all and it is a
-larger change in `moq-mux`.
+byte position and the stream is unusable. The remaining ask was therefore the fallback offered above
+rather than the one first taken up: **emit the PCR packet adjacent to the media bytes of the slot it
+labels**, so position and value agree for a consumer that has only bytes. It needs no timing at all and
+it is a larger change in `moq-mux`.
+
+**That ask has now been granted and verified at the pipe** (measurement 9,
+[#3351](https://github.com/moq-dev/moq/pull/3351), `[unmerged]`): slicing the export on the grid puts
+adjacency at 0 % and release error inside ±10 ms, against a merge-base control that still fails both. The
+conclusion above therefore holds for every *merged* build and is superseded only once #3351 lands. What
+remains untested is the sentence that matters most here, because it is the one #2937 was filed under: a
+positional fix at the exporter should let a byte-locking groomer produce a conformant wire, and
+measurements 3, 4 and 6 have not been re-run against it.
 
 **The end-to-end regression is #2967's and #3006 does not repair it** — measurement 6 below, and the
 attribution is available because the two arms were run on different builds and different platforms and
@@ -552,6 +615,17 @@ build.
 
 ## Corrections
 
+- **Believed:** a hard bound on accumulated PCR release drift at 250 ms was a conservative default, so
+  the instrument was ready to grade a fix. **True:** the bound belongs to the sender, not the analyst.
+  `export ts --latency-max` entitles the exporter to hold 500 ms of buffer, so a correct pipeline
+  building a legitimate standing lag failed three runs out of three while its per-interval error sat at
+  a p95 of 1.7 ms. Two shapes were also being conflated: a lag that settles and a pipe running slow both
+  present as accumulated drift, and only the second is a defect. Corrected at `bbe2ec5` (bound set to
+  the sender's budget, tail drift rate reported beside the total) and reported as a correction on #3335.
+  **Method rule:** an accumulating quantity almost always has an owner with a declared allowance, and
+  that allowance is the bound; and separating a transient from a steady state needs a window longer than
+  the transient, which a 20 s window here is not (290 ms still climbing at 8.7 ms/s, against 480 ms
+  holding at −0.017 ms/s over 120 s).
 - **Believed:** the residue above the gate might be the two-vCPU host rather than the exporter, and the
   bursts were a group-boundary flush. **True:** the gate metric is 7.45 % on two vCPU and 7.45 % on
   eight, at zero CPU pressure, and the cause is that the PCR grid is advanced by frame arrival rather

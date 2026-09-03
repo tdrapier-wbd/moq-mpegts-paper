@@ -414,6 +414,23 @@ C6.)*
 > is the informative answer. Add a reclaim or pressure counter beside any long RSS series, too, or a
 > decaying slope cannot be told from the kernel taking pages back.
 
+**A bound on an accumulating quantity has to come from the thing that is allowed to accumulate it.
+Pick the number and the check grades the number.** *(T19 measurement 9, grading #3351.)*
+
+> A hard bound on accumulated PCR release drift was added with a 250 ms default, chosen because it
+> looked small. A sender that buffers is *entitled* to build a standing lag up to its own latency
+> budget, which defaults to 500 ms, so the check failed a correct pipeline three runs out of three
+> while its per-interval error sat at a p95 of 1.7 ms. *An accumulating quantity almost always has an
+> owner with a declared allowance — a buffer, a budget, a window — and that allowance is the bound;
+> anything else measures the instrument's taste.*
+>
+> Two shapes were also being conflated under one name. A lag that settles and a pipe running slow both
+> present as accumulated drift, and only the second is a defect. Separating them needs the *rate* over
+> the tail of the sample rather than the total, and a sample longer than the lag takes to build: the
+> same pipeline reads 290 ms of drift still climbing at 8.7 ms/s over a 20 s window, and 480 ms holding
+> at −0.017 ms/s over 120 s. *A window shorter than the transient cannot distinguish the transient from
+> the steady state, and will report the transient as the steady state with no indication that it has.*
+
 ---
 
 ## 4. Attribution: naming a mechanism from the evidence
