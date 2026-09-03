@@ -119,7 +119,7 @@ every "not established" entry recurs in §4 or §5.
 | **Carriage** | All three lanes carry a full broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, the media-aware lane by stuffing, mux rate, PSI density and PCR spacing | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and the segmented lane reaches the same standard **on the wire**. The MoQ lane fails P1 repetition on the wire at every buffer depth, and it is not a depth problem | Anything at all on hardware; whether an **evenly spaced** exporter PCR cadence clears the gate | §3.2 |
 | **Loss** | The controller decides the result on both data planes; **loss does not separate them and reordering does**. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable** — what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline: not the controller, not bufferbloat | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge | §3.3 |
-| **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **including on two hosts in two availability zones with independent oscillators**. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | Multi-track identity; a hardware merge; path diversity above the shared relay. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
+| **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile | §3.5, §3.6 |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
 | **Latency** | Delivery latency on all four planes, loopback and public internet, each graded against the conformance of the same bytes. **MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path | §3.11 |
@@ -893,7 +893,7 @@ identity and whole-chain protection.**
 | Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells; but 1,523 of 1,524 PCRs outside ±500 ns, so not a transport an IRD will lock to | the whole chain |
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | nothing mergeable; input-select still works |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | **the last hop only** |
-| One *stream-clocked* groomer per leg | **yes** — byte-identical on every datagram, single-track, co-started, and on two hosts with independent clocks | **the whole chain**, including publisher, relay and exporter death |
+| One *stream-clocked* groomer per leg | **yes on single-track content** — byte-identical on every datagram, co-started, and with publisher, relay, exporter and host all independent. **No on a multi-track mux** (75.56 %), where the exporter's arrival-ordered interleave differs between chains | **the whole chain**, including publisher, relay and exporter death |
 
 **The middle row fails structurally, not through re-stamped PCR** — and that mattered, because the
 standing hypothesis was that two groomers would agree on content and differ only in PCR bytes a
@@ -918,8 +918,26 @@ with zero residue** — not identical-once-the-counter-is-masked but identical i
 counters, because under stream clocking the numbering is a function of the output slot too. **Run
 twice**: 46,759 of 46,844 slots shared the first time and all 46,844 the second, 100.0000 % identical
 in both. Neither leg was resource-bound in either run, which is the condition that would have voided
-it. The publisher and relay are shared, so this establishes clock-independent determinism of the two
-*egress* legs and not full path diversity above them.
+it.
+
+**Removing the shared publisher and relay as well does not change the single-track result, and it does
+change the multi-track one.** With one publisher, one relay, one exporter and one groomer *per host* —
+no component shared but the file, verified byte-identical on both hosts along with every binary — a
+single-track feed is again **46,778 of 46,778 shared datagrams byte-identical, counters and RTP headers
+included, zero residue**, with the unshared slots being 66 window edges on each side and nothing else.
+That is the claim at full strength: placement and numbering are functions of stream position alone, so a
+1+1 pair needs no shared publisher, relay, host or clock. **The same topology on a seven-stream mux
+reaches 75.56 %.** The legs are not carrying different media — every media PID carries an identical
+packet count, 99.9528 % of packets are common as a multiset, and 98.414 % align once displacement is
+allowed — they are carrying the same packets in a *different order*, because `pick_next_track` chooses
+among the tracks whose next frame has arrived rather than from the media timeline
+([#2829](https://github.com/moq-dev/moq/issues/2829)). Of the 238 packets per leg with no counterpart,
+236 carry a PCR our groomer regenerated from a slot the interleave moved. Neither host was
+resource-bound (leg cost 14.2–15.2 % of a core, box idle 64.1 % and 94.8 %, no stalls).
+
+**So byte-level mergeability is a property of single-track content, not of 1+1 in general.** A broadcast
+mux delivered over two independent chains must be merged above the transport, carried as one 1+1 pair
+per elementary stream, or wait on the interleave being fixed upstream.
 
 > **A caveat on P1 that this rig cannot resolve.** On the rig that produced these cells, **1.4–1.6 %
 > of PCR intervals exceed 40 ms in every cell including the clean control**. The experiment attributes
@@ -964,7 +982,10 @@ not reach is byte-identity, and the residual divergence is three values the expo
   carried video. A fix has merged and takes a single-track pair to **100 %**.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the
   earliest frame, so legs whose bytes arrive at different moments order the same media differently.
-  Ordinary multi-track content therefore stops at **94–96 %** even when co-started.
+  Ordinary multi-track content therefore stops at **94–96 %** even when co-started, and at **75.56 %**
+  once the two chains are fully independent. The legs carry the *same packets* (99.95 % common as a
+  multiset, identical counts on every media PID) in a different order, so this is a reordering defect
+  and not a fidelity one.
 
 The counter is no longer a question of feasibility, only of adoption and cost. Restarting each PID's
 counter at the video keyframe boundary and padding every span to a multiple of 16 packets takes the
@@ -1365,10 +1386,11 @@ three, and its per-packet framing derived rather than measured.
 **The 1+1 result is a software receiver.** Two concurrently live legs into a reference implementation of
 the ST 2022-7 selection rules, not a hardware IRD's merge engine. The merge and injection matrix was
 measured with both legs on one host, so its skew is injected rather than natural. The determinism
-precondition has since been re-measured across two hosts in two availability zones and holds
-byte-identically in each of two runs — but that arm shares its publisher and relay, so **path diversity
-above the egress remains untested**. Byte-identity is measured on a **single-track** source; multi-track
-content holds at 94–96 %. One run per cell elsewhere in the matrix.
+precondition has since been re-measured with no shared component at all — separate publisher, relay,
+exporter and host across two availability zones — and holds byte-identically on a **single-track**
+source. **On a multi-track mux over independent chains it does not** (75.56 %): the legs carry the same
+packets in a different order, which is upstream's interleave rather than the groomer's placement. One
+run per cell elsewhere in the matrix.
 
 **Impairment matrices are one run per condition**, on an over-provisioned path, with `netem` models
 that approximate loss as Bernoulli where real loss is bursty and RTT-coupled, and whose "jitter"
@@ -1418,7 +1440,7 @@ exporter's **output path** carrying the spacing its muxer already computes (§3.
 | 4 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's own edge stage?** | MEG- or TITAN-class hardware | Whether part of the broadcast-grade layer is purchasable on one data plane and not the other; also the only route to a low-latency TS-in-HLS receiver |
 | 5 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | The whole of MoQ's remaining carriage-fidelity advantage |
 | 6 | **Do the groomer's correctness boundaries hold** — source-clock drift, PCR discontinuity and wrap, mid-stream PID change, T-STD occupancy? | The hardware rig in row 2 | Whether steady-state conformance generalises |
-| 7 | **Does the 1+1 result survive multi-track content, and path diversity above the egress?** | Nothing for the clock half — **that half is answered** (§3.4): two legs on two hosts in two availability zones, independent oscillators, byte-identical across 46,759 datagrams with zero residue. What remains needs a multi-track source, and a second publisher and relay rather than a shared pair | [Architecture](architecture.md) §5.1's recommendation is no longer scoped to one host; it is still scoped to single-track content and to a shared upstream |
+| 7 | **Can a multi-track 1+1 pair be merged at the byte?** | **Nothing further to measure; the question is now upstream's to answer** (§3.4). Path diversity above the egress is answered: with publisher, relay, exporter and host all independent, a single-track pair is byte-identical across 46,778 datagrams with zero residue. A seven-stream mux over the same topology reaches 75.56 %, and the cause is located — `pick_next_track` orders by which track's frame has arrived, not by the media timeline ([#2829](https://github.com/moq-dev/moq/issues/2829)) | [Architecture](architecture.md) §5.1's recommendation is no longer scoped to one host or to a shared upstream. It remains scoped to **single-track content**, and lifting that scope depends on an upstream fix rather than on further measurement here |
 | 8 | **Which congestion controller suits a permanent fixed-rate trunk?** | Nothing, on the controller question or on C3. **C3's collapse is now attributed**: it is not the controller (CUBIC collapses inside BBRv1's spread) and not bufferbloat (it survives `cake`, which cut RTT ~550 → 100 ms), but the subscriber's own release deadline — at `n=2` under `cake`, widening `--latency-max` 500 ms → 30 s moves the aggregate 4.29 → 10.35 Mb/s, above the uncontended single-flow rate, at 0 continuity errors throughout. What remains is a sizing question: where the knee sits, and whether it tracks RTT, group duration or relay buffering | **Answered, and the answer is that the question was wrong**: three conditions produce three orders, and what governs the feed is the provisioning margin, the bottleneck queue discipline and the receiver's latency budget — each of which moves the outcome further than any controller choice. BBRv1 is the operational pick on the strength of C2 and a 14 h C6 soak (0 continuity errors, 0 respawns) |
 | 9 | **What does the opaque lane cost on the wire, and does it survive a real path?** | Building the private lane in the measurement environment | Whether byte-verbatim carriage is a wash or a real cost against SRT |
 | 10 | **How much of MoQ's carriage advantage survives a different source?** | Two more source profiles | The largest caveat on the deciding line of the cost model |

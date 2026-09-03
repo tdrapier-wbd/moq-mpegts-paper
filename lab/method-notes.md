@@ -418,6 +418,19 @@ C6.)*
 
 ## 4. Attribution: naming a mechanism from the evidence
 
+**A comparison at fixed positions cannot tell reordering from corruption. Compare the two as
+multisets before concluding the content differs.** *(T12 arm D, independent upstream.)*
+
+> The full-mux cell read 24.28 % residue against a slot-by-slot oracle, which invites the conclusion
+> that a quarter of the stream was wrong. It was not: 99.9528 % of packets were common to both legs as
+> a multiset, every media PID carried an identical packet count, and an edit-script alignment matched
+> 98.414 % once displacement was allowed. One displaced packet de-phases every comparison after it, so
+> a positional metric reports the *consequence* at full size and says nothing about the cause. The
+> three views answer different questions and the cheap ones come first: the multiset says whether the
+> same bytes are present, the alignment says how far they moved, and only then does the positional
+> figure mean anything. Without them the finding would have been filed as damage rather than as
+> ordering, and the upstream report would have been wrong.
+
 **On a lane whose transport holds no session state, most of what you are about to measure lives in
 the client — so measure two of them before naming the lane.** *(T8b, T6.)*
 
@@ -612,6 +625,27 @@ measurement eliminates a class of cause, and a caveat retired by argument elimin
 ---
 
 ## 5. Rig hygiene
+
+**Before grading two pipelines for determinism, hash every artefact they are supposed to share.**
+*(T12 arm D, independent upstream.)*
+
+> The independent-upstream arm gives each host its own copy of the source, its own `moq`, its own
+> relay and its own groomer. Every one of those is a way for the arm to grade the artefacts instead of
+> the pipeline: a source file that differs by a byte, or a groomer copied before the last rebuild,
+> produces a divergence indistinguishable from the one the experiment exists to look for. Four
+> checksums taken up front cost seconds and convert a negative result from arguable to conclusive.
+> The secondary's groomer is a *copy* and nothing on that host reports it stale, which is exactly the
+> case the check catches.
+
+**An instrument that reads zero has not measured zero until it has been shown reading non-zero.**
+*(T12 arm D.)*
+
+> `t12-dual-host.sh` reported 0.0 % leg CPU through a whole live run, because `ps -o %cpu -p` reads
+> the wrapper shell. The repair, reading the process group with `-g`, was written, reviewed and
+> deployed, and it *also* returned 0.0 %: neither `-g` nor `--pgid` selects by process group id on
+> procps-ng 4.0.4. Two sampler generations reported the same plausible-looking figure and neither had
+> measured anything. A rig that reports a resource figure should be run once against a known load
+> before its nulls are believed.
 
 **Every statistic the experiment intends to report must be an output the cell prints. A number
 recovered afterwards from files that happened to survive is not a measurement, it is a salvage.**

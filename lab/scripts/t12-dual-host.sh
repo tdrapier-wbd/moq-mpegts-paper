@@ -12,6 +12,14 @@
 #   ROLE=a  the publisher and leg A. Publishes SRC to the relay and grooms one leg.
 #   ROLE=b  leg B only. Subscribes to the same broadcast from the other host.
 #
+# OWN_UPSTREAM=1 changes what is shared. By default the two roles share one relay fed by
+# one importer, so the arm grades two egress legs on independent clocks and nothing above
+# them. With OWN_UPSTREAM=1 each host runs its *own* relay and its *own* publisher against
+# its own copy of the same source file, and subscribes over loopback -- so the two chains
+# have no component in common at all, and the arm grades path diversity above the egress.
+# Both roles then need SRC, and the two copies must be byte-identical or the comparison
+# grades the files rather than the pipeline.
+#
 # Both roles must agree on RATE, SSRC and SEQ_SEED, or the legs lock different
 # grids and the comparison is meaningless rather than negative. The legs need not
 # start together: t12-rtpcmp.py pairs datagrams by RTP timestamp, which under
@@ -41,6 +49,14 @@ ROLE=${ROLE:?set ROLE to a or b}
 
 MOQ=${MOQ:?set MOQ to the moq client binary}
 PACER=${PACER:?set PACER to the directory holding the pacer egress binary}
+
+# A relay and a publisher per host, rather than one of each shared between them.
+OWN_UPSTREAM=${OWN_UPSTREAM:-0}
+RELAY_PORT=${RELAY_PORT:-4443}
+if [ "$OWN_UPSTREAM" = 1 ]; then
+	RELAY_BIN=${RELAY_BIN:?OWN_UPSTREAM=1 needs RELAY_BIN}
+	RELAY_URL=${RELAY_URL:-https://127.0.0.1:$RELAY_PORT/anon}
+fi
 RELAY_URL=${RELAY_URL:?set RELAY_URL, e.g. https://<host>:443/anon}
 BCAST=${BCAST:-t12.dualhost}
 SECS=${SECS:-90}
@@ -108,8 +124,30 @@ sleep 1
 
 C=(--client-tls-disable-verify --client-connect "$RELAY_URL")
 
-if [ "$ROLE" = a ]; then
-	SRC=${SRC:?role a needs SRC}
+# This host's own relay, when the arm is grading independent upstreams. It binds loopback
+# only: with a publisher and a subscriber per host there is no cross-host traffic left, so
+# exposing it would add a path the arm does not use and a security group it does not need.
+if [ "$OWN_UPSTREAM" = 1 ]; then
+	"$RELAY_BIN" --server-bind "127.0.0.1:$RELAY_PORT" --tls-generate localhost \
+		--auth-public "" >"$OUT/relay.log" 2>&1 &
+	RLY=$!
+	PIDS+=("$RLY")
+	for _ in $(seq 1 30); do
+		ss -lun 2>/dev/null | grep -q ":$RELAY_PORT" && break
+		sleep 0.5
+	done
+	kill -0 "$RLY" 2>/dev/null || {
+		echo "relay exited early:" >&2
+		head -20 "$OUT/relay.log" >&2
+		exit 1
+	}
+	echo "==> own relay up on 127.0.0.1:$RELAY_PORT"
+fi
+
+# Role a always publishes. Under OWN_UPSTREAM both roles do, each against its own copy of
+# the source, because the point of the arm is that no stage is shared.
+if [ "$ROLE" = a ] || [ "$OWN_UPSTREAM" = 1 ]; then
+	SRC=${SRC:?this role needs SRC}
 	WAITMIN=${WAITMIN:-5}
 	(tsp --realtime -I file "$SRC" --infinite \
 		-P regulate --pcr-synchronous --wait-min "$WAITMIN" -O file - |
@@ -171,17 +209,48 @@ fi
 
 # Per-process CPU, because a 1+1 result measured on a resource-bound leg is void
 # rather than negative, and on a 2-vCPU host that is a live risk.
+# Cumulative CPU time of the leg's whole process group, in clock ticks. `ps -o %cpu`
+# cannot do this: -p reads the wrapper shell, which burns nothing and reports 0.0 for a
+# leg that is saturating a core, and neither -g nor --pgid selects by process group id on
+# procps-ng. The pgrp is field 5 of /proc/<pid>/stat and utime/stime are 14 and 15, but
+# comm is parenthesised and may contain spaces, so the fields are counted from after the
+# last ") " rather than split from the start of the line.
+group_ticks() {
+	awk -v pg="$1" '
+		{ p = 0
+		  for (j = 1; j <= length($0) - 1; j++) if (substr($0, j, 2) == ") ") p = j
+		  if (p == 0) next
+		  n = split(substr($0, p + 2), f, " ")
+		  if (n >= 13 && f[3] == pg) t += f[12] + f[13] }
+		END { print t + 0 }' /proc/[0-9]*/stat 2>/dev/null
+}
+
 (
-	echo "t,load1,leg_cpu_pct,avail_mb"
+	echo "t,load1,leg_cpu_pct,idle_pct,avail_mb"
+	# The leg's own cost beside whole-box idle. The leg figure says what the groomer
+	# took; the idle figure says whether there was any left to take, and a 1+1 null
+	# is only a result if there was.
+	HZ=$(getconf CLK_TCK)
+	PREV_T=$(group_ticks "$LEG")
+	read -r _ u nn s PREV_IDLE rest </proc/stat
+	PREV_BUSY=$((u + nn + s))
+	for r in $rest; do PREV_BUSY=$((PREV_BUSY + r)); done
 	for _ in $(seq 1 "$((SECS / 5))"); do
 		sleep 5
 		L=$(awk '{print $1}' /proc/loadavg)
-		# The whole process group, not $LEG: $LEG is the bash that owns the
-		# pipeline and burns no CPU itself, so reading it reports 0.0 for a
-		# leg that is in fact saturating a core.
-		P=$(ps -o %cpu= -g "$LEG" 2>/dev/null | awk '{s+=$1} END{printf "%.1f", s}')
+		T=$(group_ticks "$LEG")
+		P=$(awk -v d="$((T - PREV_T))" -v hz="$HZ" 'BEGIN{printf "%.1f", 100*d/hz/5}')
+		PREV_T=$T
+		read -r _ u nn s IDLE rest </proc/stat
+		BUSY=$((u + nn + s))
+		for r in $rest; do BUSY=$((BUSY + r)); done
+		DI=$((IDLE - PREV_IDLE))
+		DB=$((BUSY - PREV_BUSY))
+		I=$(awk -v i="$DI" -v b="$DB" 'BEGIN{t=i+b; printf "%.1f", (t>0)? 100*i/t : 0}')
+		PREV_IDLE=$IDLE
+		PREV_BUSY=$BUSY
 		A=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
-		echo "$(date +%s),$L,${P:-NA},$A"
+		echo "$(date +%s),$L,$P,$I,$A"
 	done
 ) >"$OUT/resource.csv" 2>/dev/null &
 PIDS+=("$!")

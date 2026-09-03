@@ -58,9 +58,11 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
 - **A segmented 1+1 pair sharing one feed and one naming scheme fails over with no measurable
   interruption and no receiver-side merge**, where the media-aware floor is one detection interval. On
   the media-aware lane, two stream-clocked groomers are byte-identical and hitless through publisher,
-  relay and exporter death, against a reference receiver, on single-track content — and they stay
-  byte-identical **on two hosts in two availability zones with independent oscillators**, which is what
-  makes the pair mergeable without a shared clock reference
+  relay and exporter death, against a reference receiver, **on single-track content** — and there they
+  stay byte-identical with *no shared component at all*: separate publisher, relay, exporter and host,
+  in two availability zones. **On a multi-track mux the same pair does not**, because the exporter
+  decides the audio/video interleave from frame arrival, so two independent chains render the same
+  media in different orders. The claim is scoped to single-track content, not to 1+1 in general
   ([Evidence](docs/evidence.md) §3.4).
 - **One groomer serves both data planes**, and on the segmented lane off-the-shelf TSDuck reaches all
   four grading criteria where the MoQ lane needs a purpose-built stage. Grooming restores exact CBR and

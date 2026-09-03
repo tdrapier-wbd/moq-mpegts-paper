@@ -46,22 +46,18 @@ produces an upstream contribution.
 
 ### MUST DO NOW
 
-**1. The full 1+1 — two publishers, two relays, two paths.** *Both hosts exist; no new apparatus.* This
-is first because it is now the only caveat left on **the strongest positive result the campaign has**.
-Byte-identical redundant egress is what makes the media-aware lane credible for primary distribution —
-46,844 of 46,844 slots identical, twice, continuity counters included — and the arm that measured it
-shares its publisher and its relay. So what is graded is clock-independent determinism of two egress
-legs, not path diversity above them, and the architectural recommendation in
-[`architecture.md`](../docs/architecture.md) §5.1 is scoped accordingly whether or not the scoping is
-read.
+**1. ~~The full 1+1 — two publishers, two relays, two paths.~~ Done.** A publisher, relay, exporter and
+groomer per host across two availability zones, sharing nothing but a verified-identical source file:
+**single-track content is 46,778 of 46,778 shared datagrams identical, counters included**, so the
+strongest positive result the campaign has now stands with no shared component at all. **A seven-stream
+mux over the same topology reaches 75.56 %**, and the residue is reordering rather than damage — the
+same packets, 99.95 % common as a multiset, in a different order, because the exporter interleaves by
+arrival. Measured, located and posted to [#2829](https://github.com/moq-dev/moq/issues/2829); see
+[T12](test-12-dual-path-handoff.md).
 
-Two independent publishers of the same source and two independent relays, one chain per host, graded by
-the same merge oracle at equal sequence numbers with the continuity counters included. The interesting
-outcome is the *negative* one: any per-process value that leaks into the wire — and
-[T19](test-19-pcr-grid-verification.md) has already found three classes of output derived from process
-state rather than stream position — breaks identity here and cannot break it in the shared-upstream arm.
-It would also exercise [#3312](https://github.com/moq-dev/moq/pull/3312)'s subscription resumption
-across routes sharing a first hop.
+**What this leaves is not a measurement.** Multi-track byte identity now depends on an upstream fix to
+`pick_next_track`, not on another cell here. The open question worth apparatus is therefore the one
+below it: whether a *hardware* IRD merges the pair the software oracle accepts.
 
 ---
 
@@ -228,11 +224,10 @@ service rather than measured on an MPTS.
 
 Grouped so nothing in a group contaminates anything else in it. Each group is one run.
 
-**Group A — the two-host run, and it is now the lead group.** Items 1, 3 and 4 — the full 1+1 with
-independent publishers and relays, the fan-out knee, and the two-host segment store. All three need both
-boxes and none can share a host with a timing measurement. Run the 1+1 **first** while both boxes are
-quiet, since it is the one whose result is a byte comparison and therefore the one a busy host can
-silently spoil; run the fan-out knee **last**, because it deliberately saturates a box.
+**Group A — the two-host group, with its lead item now done.** Items 3 and 4 — the fan-out knee and the
+two-host segment store. Both need both boxes and neither can share a host with a timing measurement. The
+full 1+1 that led this group is complete, which frees the window: run the fan-out knee **last**, because
+it deliberately saturates a box.
 
 **Group B — the cheap ladder, and it can share a run with almost anything.** Item 5 (C3's latency knee).
 It runs in network namespaces on the primary against a stopped loop publisher, needs no new apparatus,

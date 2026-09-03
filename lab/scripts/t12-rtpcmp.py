@@ -67,6 +67,28 @@ def mask_cc(p):
     return p[:3] + bytes([p[3] & 0xF0]) + p[4:]
 
 
+def first_difference(label, slot, pa, pb):
+    """Where the two legs first stop agreeing, to the byte.
+
+    A percentage says how much diverged; it does not say what. The earliest differing byte
+    names the field, and the field names the mechanism: byte 3 alone is the continuity
+    counter, bytes 6-11 of an adaptation field are a PCR, and a differing byte 1-2 means the
+    legs did not even put the same PID in that slot.
+    """
+    qa, qb = packets(pa), packets(pb)
+    for i, (x, y) in enumerate(zip(qa, qb)):
+        if x == y:
+            continue
+        off = next(k for k in range(TS) if x[k] != y[k])
+        print(f"\n  first {label} at RTP timestamp {slot}:")
+        print(f"    TS packet {i} of {len(qa)} in the datagram, PID A {pid(x):#06x} / B {pid(y):#06x}")
+        print(f"    first differing byte: offset {off} in the packet, {i * TS + off} in the payload")
+        print(f"      A {x[max(0, off - 2) : off + 6].hex(' ')}")
+        print(f"      B {y[max(0, off - 2) : off + 6].hex(' ')}")
+        return
+    print(f"\n  first {label} at RTP timestamp {slot}: differing packet count ({len(qa)} vs {len(qb)})")
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if len(args) != 2:
@@ -82,17 +104,23 @@ def main():
     identical = masked_identical = 0
     residue_pid = Counter()
     residue_kind = Counter()
+    first_raw = None  # earliest slot differing at all, counter included
+    first_res = None  # earliest slot differing beyond the counter
     for seq in common:
         pa, pb = a[seq], b[seq]
         if pa == pb:
             identical += 1
             masked_identical += 1
             continue
+        if first_raw is None:
+            first_raw = (seq, pa, pb)
         ma = [mask_cc(p) for p in packets(pa)]
         mb = [mask_cc(p) for p in packets(pb)]
         if ma == mb:
             masked_identical += 1
             continue
+        if first_res is None:
+            first_res = (seq, pa, pb)
         for x, y in zip(ma, mb):
             if x == y:
                 continue
@@ -108,6 +136,11 @@ def main():
     print(f"  identical, counter masked    {masked_identical:>8,}  ({100.0 * masked_identical / n:7.4f} %)")
     res = n - masked_identical
     print(f"  residue (beyond the counter) {res:>8,}  ({100.0 * res / n:7.4f} %)")
+
+    if first_raw:
+        first_difference("divergence", *first_raw)
+    if first_res and (not first_raw or first_res[0] != first_raw[0]):
+        first_difference("residue beyond the counter", *first_res)
 
     if res:
         print("\n  residue by kind (per differing TS packet):")

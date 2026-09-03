@@ -444,6 +444,18 @@ locked mux rate, with the emitted PCR, RTP sequence number and RTP timestamp all
 slot — makes what a leg sends a function of the broadcast rather than of when its process started.
 Two such groomers sharing no process, clock or messages emit one transport.
 
+**Measured at full strength, and it holds for one track and not for a mux.** With a separate publisher,
+relay, exporter, groomer and host per leg in two availability zones, so that the two chains share
+nothing but the source file, a single-track feed is byte-identical on every shared datagram, continuity
+counters and RTP headers included. A seven-stream mux over the same topology is not: 75.56 %. The legs
+are not carrying different media (every media PID carries an identical packet count, and 99.95 % of
+packets are common as a multiset) but a *different order* of the same packets, because the exporter
+picks the next track from those whose frame has arrived rather than from the media timeline
+([Evidence](evidence.md) §3.4). **So the constraint on the groomer is necessary but not sufficient: the
+stage above it must also order deterministically, and today it does so only when there is a single track
+to order.** Until that changes, a multi-track 1+1 pair must be carried as one pair per elementary stream
+or merged above the transport rather than at the byte.
+
 **That model has a prerequisite worth stating, because an upstream change has already violated it
 once.** Deriving a slot from the source PCR assumes PCR *value* and PCR *position* advance together,
 which is what a conformant transport stream guarantees and what makes the derivation deterministic.
@@ -458,7 +470,8 @@ verify on any new upstream build before promoting it.
 | Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1,523 of 1,524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
-| One *stream-clocked* groomer per leg | **yes** — byte-identical on every datagram, on a co-started **single-track** feed, including across two hosts with independent clocks | as above | **the whole chain**, including publisher, relay and exporter death |
+| One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
+| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -482,11 +495,14 @@ free-running oscillators, stays byte-identical on every shared datagram with zer
 two runs
 ([Evidence](evidence.md) §3.4). So rate coherence between gateways on independent clocks is no longer
 a hypothesis — stream-derived placement holds it, which is what the model predicted and what a
-deployment depends on. Two limits survive: multi-track content stops at 94–96 % identity because the
-exporter emits the earliest *available* frame rather than the earliest frame, so legs whose bytes
-arrive at different moments order the same media differently; and **path diversity above the egress is
-untested**, because the two-host pair shares its publisher and relay and the one-host matrix injected
-its skew rather than incurring it. A real deployment still wants the common egress rate locked to the
+deployment depends on. **Path diversity above the egress is no longer untested**: with a publisher,
+relay, exporter and groomer per host and nothing shared but the source file, single-track identity is
+unchanged at 100 % on every shared datagram. One limit survives, and it is now the only one: **a
+multi-track mux over independent chains reaches 75.56 %**, because the exporter emits the earliest
+*available* frame rather than the earliest frame, so legs whose bytes arrive at different moments order
+the same media differently. They carry the same packets — 99.95 % common as a multiset — in a different
+order, which is a reordering defect rather than a fidelity one, and it is upstream's
+([Evidence](evidence.md) §3.4). A real deployment still wants the common egress rate locked to the
 source-derived CBR rate, but it does not need packet-for-packet phase alignment, and it no longer needs
 a shared clock reference to obtain identity.
 

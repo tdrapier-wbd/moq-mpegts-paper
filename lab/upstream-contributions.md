@@ -427,6 +427,23 @@ position — and say plainly that this is untested, that the mechanisms differ i
 it should not be read as a claim that the three are one defect. If it holds, the three want one change
 rather than three; that is worth a maintainer knowing and is not worth asserting.
 
+**Review found six real defects in that test tooling, and they were worth having.** Two automated
+reviewers (Codex and CodeRabbit) went over #3335; the substantive findings were all correct and are
+fixed at `faac801`, each with a before/after test against a purpose-built fixture rather than by
+inspection. `parse_pcr` read six PCR bytes without checking `adaptation_field_length` covered them, so a
+short field yielded a value assembled from stuffing and reported a **95,441,900 ms** interval. The
+`continuity` check — a *hard* check — failed two constructions ISO 13818-1 2.4.3.3 permits, the
+duplicate packet and the `discontinuity_indicator` jump, so a conforming stream failed the run. PCR
+values were not unwrapped across the 33-bit rollover, and a backwards PCR was invisible because only the
+upper bound was tested. Accumulated release drift was documented as bounded, reported in the detail and
+never gated the verdict: it passed at 251 ms. And `--live` blocked in `read()` past its deadline, so a
+producer holding the pipe open without writing suspended `--seconds` indefinitely — the likeliest state
+while diagnosing the very stall the tool exists to catch. **No campaign number is affected**: the
+continuity figures quoted in T19 come from TSDuck, and the tool's report on a real 393,311-packet
+capture is unchanged. One suggestion was declined with a reason: counting *non-positive* intervals as
+defects fails a conforming stream, because a legal duplicate repeats its PCR exactly and yields an
+interval of zero. The first attempt at that fix did exactly that, and the duplicate fixture caught it.
+
 **A test contribution went with it as a PR**, [#3335](https://github.com/moq-dev/moq/pull/3335), adding
 `test/ts/pcr-timing.py` and its README entry and **nothing else** — no core behavioural change, which
 is the line this campaign holds between reporting a defect and implementing someone else's fix:
@@ -687,10 +704,20 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   always 14 or 15 short of a multiple of 16.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the
   earliest frame, so legs whose bytes arrive at different moments order the same media differently.
-  Multi-track content therefore stops at 94–96 % even when co-started. Filed as
+  Multi-track content therefore stops at 94–96 % even when co-started, and at 75.56 % once the two
+  chains are fully independent. Filed as
   [#2829](https://github.com/moq-dev/moq/issues/2829). **Open**, and the counter fix above is
   conditional on it: the counter becomes an index within a span, so wherever the legs order media
   differently the renumbering diverges with it.
+  **Now measured on fully independent chains and posted to the issue.** A publisher, relay, exporter and
+  groomer per host across two availability zones, sharing nothing but a verified-identical source file:
+  a single-track feed is byte-identical on all 46,778 shared datagrams, and a seven-stream mux over the
+  same topology reaches 75.56 %. The legs carry the *same packets in a different order* — every media
+  PID has an identical packet count, 99.9528 % of packets are common as a multiset, and 98.414 % align
+  once displacement is allowed. Re-read against `main` `5eea9e3c8`, `pick_next_track` takes the minimum
+  of `(timestamp, pid, name)` over the tracks that have a *pending* frame, so the tiebreak is
+  deterministic and the candidate set is not. The invariant was stated as a requirement — the emission
+  order should be a function of the media timeline — with the design left to the maintainer.
 
 ### A takeover livelock — closed
 

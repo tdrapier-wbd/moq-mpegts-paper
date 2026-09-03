@@ -630,7 +630,7 @@ proxy is not a divergence source, and the pair needs nothing new to tolerate it.
 | Arm C: 100 % yield, and 0 lost / 0 CC / no PCR degradation across every path injection | **pass** — rig valid |
 | Arm A feasible only at 100 % yield | **pass** when co-started (12/12 cells); fails on mid-stream join |
 | Arm B feasible only at 100 % yield | **fail** — 30–53 %; mechanism measured and structural |
-| Arm D feasible only at 100 % yield | **pass** co-started, including across every upstream-chain failure. A leg that joins or recovers separately reached 97–98 % when the campaign ran, and what blocked 100 % was upstream of the groomer: the continuity counter accounted for all but 2.90 %, the SI cadence for the rest. [#2825](https://github.com/moq-dev/moq/pull/2825) has since merged and the same cell reaches 100 % on a single-track source, with the counter masked |
+| Arm D feasible only at 100 % yield | **pass on single-track content, fail on a multi-track mux.** Co-started, including across every upstream-chain failure, and 100 % with counters included even when publisher, relay, exporter and host are all independent. A full mux with an independent upstream reaches only 75.56 %: the legs carry the same packets (99.95 % common as a multiset) in a different order, because the exporter interleaves by arrival ([#2829](https://github.com/moq-dev/moq/issues/2829)). A leg that joins or recovers separately reached 97–98 % when the campaign ran, and what blocked 100 % was upstream of the groomer: the continuity counter accounted for all but 2.90 %, the SI cadence for the rest |
 | Graceful exit: `SIGTERM` to publisher A, 0 lost packets under seq-merge | **pass** (arms A and D). Arm B's merged output also loses nothing, but the pair is not mergeable, so the criterion does not apply to it |
 | Input-select: bounded and reported | reported: 1–4 CC errors, gap ≈ `k`, and `k` ≥ 250 ms on ungroomed legs |
 | Skew: reported as measured | 0.23 ms clean; injected delay tracked to 60 µs up to 200 ms; a stream-clocked leg joining 20 s late lands a median 10 ms from its partner, and −26 to −30 ms as its release latency is varied |
@@ -748,9 +748,9 @@ auto rate is measured from one process's arrival window and two hosts would deri
 from the same stream. `moq 0.9.15` on both legs, so the exporter carries #2967 and #3006. Source
 `t12_2mbps_vidonly.ts`, 120 s window, each host recording its own leg from a local socket.
 
-**The publisher and the relay are shared.** This grades the determinism of two *egress* legs on
-independent clocks, which is what was blocked; it is not full path diversity, because both legs
-subscribe to one relay fed by one importer. That remains a separate arm.
+**The publisher and the relay are shared in the cell below.** It grades the determinism of two *egress*
+legs on independent clocks, which is what was blocked. Full path diversity is graded in the next section,
+which removes the shared publisher and relay as well.
 
 | | leg A (eu-west-1a) | leg B (eu-west-1b) |
 |---|---:|---:|
@@ -786,8 +786,71 @@ verified non-binding rather than assumed so.
 since T6: that co-resident agreement stands in for clock-independent agreement. It does not close the
 churn cells — a leg that restarts and rejoins its partner still cannot be byte-identical while
 [#2779](https://github.com/moq-dev/moq/issues/2779) has the exporter numbering continuity counters from
-process state — and it is one run rather than a repeated one, so it establishes that the property holds
-on independent clocks rather than bounding how often it fails to.
+process state.
+
+## Arm D with a fully independent upstream: determinism is a property of single-track content
+
+The cell above still shared a publisher and a relay, so it graded two *egress* legs and nothing above
+them. This one removes every shared component: **one publisher, one relay, one exporter and one groomer
+per host**, each host reading its own copy of the source. The two chains have nothing in common but the
+file. That is the topology a real 1+1 deployment has, and it is the arm every determinism result to date
+was standing in for.
+
+**Environment.** The same two instances and availability zones as above. Both hosts verified to hold
+byte-identical copies of the source and byte-identical binaries before the run — the source
+(`md5 364ce82c…` full mux, `7c3d0428…` video-only), `moq` and `moq-relay` 0.9.15/0.14.14
+(`md5 44e21312…`, `73083fb8…`) and the groomer (`md5 f7b1dc6e…`) — because otherwise the arm grades the
+artefacts rather than the pipeline. Each host's relay binds loopback only: with a publisher and a
+subscriber per host there is no cross-host traffic left to carry. Rig
+[`t12-dual-host.sh`](scripts/t12-dual-host.sh) with `OWN_UPSTREAM=1`, graded by
+[`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) at equal RTP timestamps, continuity counters included.
+
+| | single-track (video only) | full mux (7 elementary streams) |
+|---|---:|---:|
+| slots carried by both | 46,778 | 72,035 |
+| **byte-identical, counters included** | **46,778 (100.0000 %)** | **54,428 (75.5577 %)** |
+| identical with the counter masked | 46,778 (100.0000 %) | 54,542 (75.7160 %) |
+| **residue beyond the counter** | **0** | **17,493 (24.2840 %)** |
+
+**On single-track content an independent upstream changes nothing: 46,778 of 46,778 shared datagrams are
+byte-identical, RTP headers and continuity counters included, with zero residue.** The two recordings are
+the same size to the byte (62,302,520), the unshared slots are 66 window edges on each side and nothing
+else, and the RTP sequence number agrees on every shared slot. This is the strongest form of the claim
+the campaign can make: placement and numbering are functions of stream position alone, so a 1+1 pair
+needs no shared publisher, no shared relay, no shared host and no shared clock.
+
+**On a multi-track mux it does not hold, and the residue names the mechanism.** The legs are not carrying
+different media. Over the shared span they carry the *same number of packets on every media PID* — video
+381,419 each, MPEG-1 audio 10,396, AC-3 8,208, teletext 1,564, the three SCTE-35 PIDs 62/63/63 — and
+treating each leg as a multiset of packets, **99.9528 % are common** (504,007 of 504,245). Aligned as
+sequences with an edit script rather than compared position by position, **98.414 %** of the first
+120,000 packets match with the counter masked, across **416 local edit regions**. What differs is the
+*order*.
+
+Of the 238 packets per leg with no counterpart, **236 carry a PCR**. Those are ours: the groomer
+regenerates PCR from the output slot, and the slot moved because the interleave moved the packet into it.
+The remaining pair is one PAT and one PMT emitted by leg A where leg B emitted stuffing, which is the
+SI-cadence mint rather than the interleave.
+
+**The cause is upstream and is already known.** `pick_next_track`
+(`rs/moq-mux/src/container/ts/export.rs:707`, re-read against `main` at `5eea9e3c8`) filters to tracks
+that have a *pending* frame and takes the minimum of `(timestamp, pid, name)`. The tiebreak is fully
+deterministic, so the non-determinism is not in the choice but in the candidate set: it holds exactly
+those tracks whose next frame had arrived when the choice was made. Two independent chains do not present
+the same set at the same points, so they interleave differently. This is
+[#2829](https://github.com/moq-dev/moq/issues/2829), and the measurement above is posted there; a
+single-track source has no interleave decision to make, which is precisely why it reaches 100 %.
+
+**Neither host was resource-bound, which is the condition that would have voided a null.** The leg cost
+14.2–14.4 % of a core on the 2-vCPU primary at 64.1–65.5 % box idle, and 14.8–15.2 % on the 8-vCPU
+secondary at 94.8–94.9 % idle; loads were 1.13–1.27 and 0.55–0.65. No leg logged a stall, an underrun or
+a late drop.
+
+**What this means for 1+1.** A byte-level merge across two independent chains is available today for
+single-track content and not for a broadcast mux. The choice is therefore between carrying each
+elementary stream as its own 1+1 pair, merging above the transport rather than at the byte, or fixing
+the interleave upstream. Nothing here is a groomer defect: the groomer places by stream position and
+carries faithfully whatever order it was handed.
 
 ## Corrections
 
@@ -795,6 +858,14 @@ on independent clocks rather than bounding how often it fails to.
 > the rest of the campaign's. What follows is the specific record of what T12 got wrong, kept because
 > each item changed a number that had already been written down.
 
+- **Believed**, and written down before the independent-upstream arm was graded: removing the shared
+  publisher and relay would break byte identity, because two importers and two exporters would mint
+  their per-process values independently. **True:** on single-track content it changes nothing at all
+  (46,778 of 46,778, counters included). The prediction was right only for the multi-track cell, and
+  for the right reason there. The lesson is that "derived from process state" is not the same as
+  "differs between processes": two of the three minted quantities have nothing to vary when the source
+  carries one track, so the defect is invisible until the content can expose it. Choose the fixture
+  that can show the defect, and do not read a null on a fixture that cannot as evidence of absence.
 - **Believed:** the exporter's continuity counter was the single remaining obstacle to a
   byte-identical 1+1 pair. **True:** it is one of three values the exporter mints per process,
   alongside the SI cadence and the audio/video interleave. The evidence for the second defect was in
