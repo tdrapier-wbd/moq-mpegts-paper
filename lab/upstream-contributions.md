@@ -473,6 +473,27 @@ still fails on the total, so the term keeps its teeth. Reported as a correction 
 quietly amended. The same commit folds in #3351's `--release-pct-max` so the two copies of the file do
 not diverge, and #3351 was told to take `bbe2ec5` because its copy predates the whole review.
 
+**Two more followed at `e7f1e3cc`, and they came from building fixtures for the conditions the
+standard *permits*.** Four of the original six were the analyser failing conforming input, and its own
+tests were all of the form "does it catch a break", so the accept path was whatever the implementation
+happened to do. Given a legal fixture per condition, two more fell out. A **signalled discontinuity**
+failed twice over: 2.4.3.3 licenses the counter jump, which the earlier fix handled, but 2.4.3.4
+licenses the *clock* jump with it, so the value check read a splice as an 820 ms repetition breach and
+the release check as seconds of lateness, with the unwrap logic close to absorbing it as a rollover.
+Intervals spanning a declared new time base are now dropped from both and counted separately, and
+drift is summed over graded intervals so it telescopes identically on an unspliced sample. Separately,
+**Codex's insufficient-sample finding on #3351 was correct**: `check_release` returned a hard pass
+labelled "not measured" below three timestamped PCRs, which is right for a file and inverted for a
+pipe, where too few stamps means the producer died rather than that the stream was clean. On this rig
+the exporter exits early on most runs, so a truncated capture carrying the timing gate green was a
+live route rather than a hypothetical, and on the merged-build verification it would have been a false
+pass on the very question the run exists to answer. Live now floors both the sample count and the share
+of the window it spans. `just fix` and `just check` clean, each verified against its own fixture, and a
+real broadcast capture plus the x264 source used to grade #3351 return identical verdicts before and
+after — so nothing already measured moves. The two automated reviewers on #3351 had meanwhile re-found
+**four of the six earlier defects independently**, which is the strongest argument available for that
+PR taking this branch's copy of the file.
+
 **A test contribution went with it as a PR**, [#3335](https://github.com/moq-dev/moq/pull/3335), adding
 `test/ts/pcr-timing.py` and its README entry and **nothing else** — no core behavioural change, which
 is the line this campaign holds between reporting a defect and implementing someone else's fix:
