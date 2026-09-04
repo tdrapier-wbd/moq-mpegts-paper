@@ -751,10 +751,17 @@ both. So the familiar claim that segment fetching degrades under loss where MoQ 
 comparison of TCP's default controller against QUIC's tuned one; correcting it removes the loss axis
 as a discriminator between the two architectures entirely.
 
-**What survives as a lane property is reordering**, because QUIC's in-order stream delivery converts
-it into head-of-line blocking that no controller removes — the media-aware lane reads 0.19 under both
-— while segment fetching cannot suffer it, each segment being an independent object with TCP
-reassembling beneath it.
+**What survives as a lane property is reordering**, because in-order stream delivery converts it into
+head-of-line blocking that no controller removes — the media-aware lane reads 0.19 under both — while
+segment fetching absorbed it, each segment being a bounded independent object completed ahead of the
+play point.
+
+**That cell is not substrate-matched, and it is the only headline result of which that is true.** It
+had TCP beneath the segmented lane and QUIC beneath the media-aware one, because no HLS client
+available here negotiates HTTP/3. Over HTTP/3 a segment is a QUIC stream and is also delivered in
+order, so the substrate half of the explanation would not apply and only the bounded-object half
+would. **The result is therefore scoped to segmented HTTP over TCP**, and the H3 arm is listed as an
+open question rather than assumed to reproduce.
 
 **Segmented HTTP did not corrupt what it delivered at any loss level in this ladder, and the ladder has
 a boundary** — 0 continuity discontinuities and 0 PCR intervals above 40 ms in every loss cell of the
@@ -1446,6 +1453,16 @@ the skew it reports. **None of this makes the oracle reference compliant, and it
 evidence that it is** — ST 2022-7 conformance is decided by a receiver, and that gate (§4.2 of
 [Architecture](architecture.md)) is blocked for want of one.
 
+**No segmented arm ran over HTTP/3, so every segmented figure here is HTTP/1.1 over TCP.** The
+origin was `python3 -m http.server`, or nginx where the wire cost was measured, and the client was
+TSDuck's `hls` input or FFmpeg, neither of which negotiates H3 against the libcurl available. Most of
+the segmented result does not turn on this: interop, economics, maturity, availability-window
+behaviour and carriage fidelity are properties of the object model and the specification, and the
+wire-cost figures for H3 and H2 are labelled *derived* wherever they appear. **The reordering cell is
+the exception** — it is the one head-to-head in the paper where the two lanes sat on different
+substrates and the difference between the substrates is part of the explanation. It is scoped to TCP
+in §3.3 and carried as an open question rather than generalised.
+
 **Impairment matrices are one run per condition**, on an over-provisioned path, with `netem` models
 that approximate loss as Bernoulli where real loss is bursty and RTT-coupled, and whose "jitter"
 reorders. The congestion-control experiment proper has all six conditions run, still at one replicate
@@ -1499,11 +1516,12 @@ exporter's **output path** carrying the spacing its muxer already computes (§3.
 | 9 | **What does the opaque lane cost on the wire, and does it survive a real path?** | Building the private lane in the measurement environment | Whether byte-verbatim carriage is a wash or a real cost against SRT |
 | 10 | **How much of MoQ's carriage advantage survives a different source?** | Two more source profiles | The largest caveat on the deciding line of the cost model |
 | 11 | **Does fixing the announce convention clear the pairings it blocks, and what are the three undiagnosed failures?** (§3.7) | Upstream adoption, and diagnosis | Relay portability, which underwrites the economic argument |
-| 12 | **Does a real CDN edge change the segmented lane's loss curve?** (§3.3) | A tuned edge instead of one plain HTTP/1.1 origin | The completeness half is now answered: retry preserves *content* while the client stays inside the availability window, and not past it. A ladder to 40 % loss over 120 s windows crosses that edge between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s content holes — and past ~20 % loss the origin logs no error while it happens. Rate was never preserved (0.17 of source at 8 % loss). What remains is the origin: the one measured is the weakest form of the deployed one, and a CDN could plausibly move the loss curve — it cannot move the reordering result, which is TCP's |
+| 12 | **Does a real CDN edge change the segmented lane's loss curve?** (§3.3) | A tuned edge instead of one plain HTTP/1.1 origin | The completeness half is now answered: retry preserves *content* while the client stays inside the availability window, and not past it. A ladder to 40 % loss over 120 s windows crosses that edge between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s content holes — and past ~20 % loss the origin logs no error while it happens. Rate was never preserved (0.17 of source at 8 % loss). What remains is the origin: the one measured is the weakest form of the deployed one, and a CDN could plausibly move the loss curve. Whether it moves the *reordering* result is a separate question and belongs to row 18, because that result was measured on TCP |
 | 13 | ~~**Why does the media-aware lane cluster PCRs sub-millisecond?**~~ **Answered** (§3.2) | — | On reordered content the authored decode clock is a saw: each B-frame dipping below it was nudged exactly one 90 kHz tick — 11.1 µs — past the previous DTS, which is the measured median. Named in [#2967](https://github.com/moq-dev/moq/pull/2967) from the code rather than the distribution, and the guess in this row was wrong: it was not group-derived and shares no parameter with PSI density |
 | 14 | **Does RIST actually beat SRT on a real path?** | One long WAN run | On loopback the two are indistinguishable within 6 ms; over the WAN RIST reads 262–333 ms lower but its cells had a rising trend and had not settled, so the gap is not yet a finding. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 15 | **Is the relay's ceiling above the slot arithmetic bounded, and what does the excess scale in?** (§3.6) | A capped-stream soak arm with the group count and `/proc/pressure/memory` logged beside RSS | A sizing line rather than a restart cycle. A 14 h soak converged asymptotically on **2.03×** the predicted slot ceiling, decaying monotonically but not flat at 14 h — so the plateau's "soft" component is real and roughly doubles the budget. Connection scaling is *not* the explanation and is ruled out by the fan-out evidence (flat slope across 0–4 subscribers; five connections reaching the same range as two), so the open part is whether the second term converges and whether it tracks groups, bytes or time. **Cheapest decisive control outstanding** |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin rather than a single-threaded reference server, and a soak | The cost comparison is currently one lane characterised for resources and one characterised only for bytes. Segmented carriage overhead is measured (1.036× source TS); its per-role CPU and memory, its fan-out knee and its stability over days are not. The origin is the role the whole commercial argument for this lane rests on, and the one measured is `python3 -m http.server` |
 | 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
+| 18 | **Does segmented HTTP keep its reordering advantage over HTTP/3?** (§3.3, §4) | An HLS client that negotiates H3, or a caddy/nginx-quic origin fronted by a fetcher built for the purpose — the blocker is the client, not the origin | **Ranked with rows 1–3 on leverage and listed last only to keep the numbering stable.** The one impairment axis that separates the two data planes was measured with TCP under the segmented lane and QUIC under the media-aware one. Over HTTP/3 the substrate is shared, so the substrate half of the explanation lapses and only the bounded-object half remains. If the 0.98 holds, the verdict row stands as written and is strengthened; if it falls toward 0.19, segmented HTTP's only measured impairment advantage is an artefact of the substrate it was tested on rather than a property of the lane, and §14's reliability row changes side. It is also the row that decides whether this paper may describe the segmented lane as an HTTP/3 architecture at all |
 
 Protocols for the runnable ones are in [planned-experiments](../lab/planned-experiments.md).

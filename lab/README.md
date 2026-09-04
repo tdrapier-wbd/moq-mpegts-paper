@@ -161,8 +161,15 @@ top of the script, so re-pricing against a different tariff or a negotiated rate
 
 ## Roadmap — specified but not yet run
 
-Protocols are drafted in [planned-experiments.md](planned-experiments.md); each becomes its own
-per-test file when executed. In priority order:
+Protocols are drafted in [planned-experiments.md](planned-experiments.md), prioritised there as P0/P1/P2
+by what a result could change; each becomes its own per-test file when executed. **The programme has
+been reorganised around permanent operation rather than around whether MoQ works**, so alongside the
+per-experiment remainders below it now carries eleven reliability families (F1–F11): substrate-matched
+impairment, 24 h and 7 day soaks on both lanes, silent media-plane failure, a failure-injection matrix
+scored in media lost rather than in recovery time, the scaling model, each lane's distributed
+redundancy, capacity degradation, interoperability, observability and isolation under abuse.
+
+The per-experiment remainders, in priority order:
 
 | # | Test | Purpose | Gate |
 |---|---|---|---|
@@ -221,9 +228,11 @@ per-test file when executed. In priority order:
   concurrently live legs into a receiver that selects between them, which is the form a head-end
   expects at a hand-off — but the receiver is a reference implementation of the selection rules rather
   than a hardware IRD's merge engine. The merge matrix has both legs on one host, so its skew is
-  injected rather than natural; the determinism precondition is separately confirmed across two hosts
-  in two availability zones, but that pair shares its publisher and relay, so path diversity above the
-  egress is still untested.
+  injected rather than natural. Path diversity above the egress is no longer untested: with a
+  publisher, relay, exporter and groomer per host across two availability zones, sharing nothing but
+  the source file, single-track content stays byte-identical over 46,778 of 46,778 shared datagrams
+  with zero residue. **A seven-stream mux over the same topology reaches 75.56 %**, the residue being
+  the same packets in a different order rather than damage, for a reason located upstream.
 - **`netem` is an emulator.** T5/T8 complement but do not replace the real public-internet EC2 path.
 - **Draft-14 pin.** The opaque lane and T3 are against a pinned, now-behind draft (`moq-transport`
   0.14.2); migration to later drafts is a tracked dependency and its own re-test

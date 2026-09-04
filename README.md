@@ -24,11 +24,15 @@ such a replacement has to do ([Problem](docs/problem.md)), and which data plane 
 
 ## The answer
 
-**The transport is not the decision.** Both candidate data planes ride QUIC, both are unicast at the
-last mile, both land within 7 % of the same wire volume, and — measured — both need the same edge
-stage before a hardware IRD will lock to them, which neither specification mentions and which the
+**The transport is not the decision.** Both candidate data planes are specified to ride QUIC — MoQ by
+construction, low-latency HLS because it requires HTTP/2 or HTTP/3 — both are unicast at the last
+mile, both land within 7 % of the same wire volume, and, measured, both need the same edge stage
+before a hardware IRD will lock to them, which neither specification mentions and which the
 distributor owns because it no longer supplies its clients' receivers
-([Comparison](docs/comparison.md) §4 and §14, [Evidence](docs/evidence.md) §3.2, §3.5).
+([Comparison](docs/comparison.md) §4 and §14, [Evidence](docs/evidence.md) §3.2, §3.5). The shared
+substrate is the *specified* arrangement rather than the measured one: no HLS client available here
+speaks HTTP/3, so every segmented figure in this paper was taken over TCP, which is scoped where it
+matters and matters on exactly one row ([Evidence](docs/evidence.md) §4).
 
 **Segmented HTTP is ahead today where it counts commercially** — universally interoperable, sells over
 commodity delivery now, the more robust recovery model, an off-the-shelf path back to a transport
@@ -105,6 +109,11 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   remains is the exporter placing each PCR packet beside the media bytes of the slot it labels, so
   the spacing is legible to a stage that has only bytes
   ([Evidence](docs/evidence.md) §5).
+- **The segmented lane was never measured over HTTP/3**, only over HTTP/1.1 on TCP, because no HLS
+  client available here negotiates it. Most rows do not turn on this and the H3 wire cost is labelled
+  derived, but the reordering result that gives segmented HTTP its impairment win had TCP under one
+  lane and QUIC under the other, so the one axis that separates the two data planes is unmeasured in
+  the configuration the verdict recommends ([Evidence](docs/evidence.md) §3.3, §4).
 - **Whether the part of relay memory that the slot arithmetic does not explain is bounded** — a 14 h soak
   converged on 2.03× the predicted ceiling, decaying monotonically but not flat when it ended, so the
   budget is about double the derivation. Audience is not the variable: the growth rate is flat across 0–4

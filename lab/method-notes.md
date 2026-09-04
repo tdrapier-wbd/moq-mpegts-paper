@@ -1065,3 +1065,34 @@ the distribution rather than the pass/fail.** *(T19.)*
 > missed by *varying* amounts, the post-fix stream by a *constant* 24,842 µs. Constant error is
 > arithmetically repairable downstream and varying error is not, which is a real difference that the
 > verdict column discards.
+
+**A head-to-head is only a lane result if the lanes were on the same substrate; otherwise it is a
+substrate result wearing a lane's name.** *(Editorial audit of T5/T8 against the §14 verdict.)*
+
+> Reordering is the one impairment on which the two data planes separate, 0.98 against 0.19, and the
+> paper carried it as a property of the lane. It was measured with TCP under the segmented arm and QUIC
+> under the media-aware one, because no HLS client available here negotiates HTTP/3 — and the
+> configuration the verdict recommends is segmented HTTP *over HTTP/3*, which puts QUIC under both and
+> removes half the stated explanation. Nothing was measured wrongly; the scope was written wider than
+> the measurement. **Before a comparative row is generalised, list what differed between the arms
+> besides the thing under test, and check that the recommendation does not change one of them.**
+
+**"Later evidence supersedes earlier conclusions" is only half a rule; the other half is that it
+supersedes them only as far as it actually reaches.** *(Editorial audit, relay memory.)*
+
+> The early reading was "linear, 650 MB/day, unbounded". The later evidence retired it properly:
+> growth is flat in subscriber count, tracks ingested groups, and plateaus. But the plateau itself was
+> observed once, at 14 h, still creeping at +1.82 MB/h when the run ended — so "bounded" is the
+> direction the evidence points and not a thing the evidence establishes. The correction had to replace
+> the stale claim in several places while *keeping* the qualification in all of them, and the temptation
+> at each one was to write the cleaner sentence. **A supersession that drops the new result's own limits
+> has traded one overstatement for another.**
+
+**A file that records what is outstanding decays faster than one that records what happened, because
+it is only correct until the next run.** *(Editorial audit, `planned-experiments.md`.)*
+
+> Four entries described the arm to run next when that arm had already run, one of them contradicted
+> twenty lines above by the file's own ranking. Nothing was wrong when written. The rule that keeps a
+> to-do list honest is not "update it when things change" but **"an entry must name the document it
+> could falsify"** — an entry that cannot name one has either been answered already or was never
+> load-bearing, and both are reasons to delete it.

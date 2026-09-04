@@ -137,12 +137,21 @@ equally on both. The widely-repeated
 claim that segment fetching degrades under loss where MoQ does not is an artefact of comparing TCP's
 default controller against QUIC's tuned one.
 
-**Reordering is the real difference, and it belongs to the lane.** QUIC delivers a stream in order, so
-reordering becomes head-of-line blocking that no congestion controller removes — under 25 % reordering
-the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98. Segment fetching
-cannot suffer it: each segment is an independent object and
-TCP reassembles beneath it. This is the one axis on which the choice of data plane is a genuine
-reliability decision rather than a tuning decision.
+**Reordering is the real difference — and it is the one result whose substrate the recommendation
+changes.** In-order delivery turns reordering into head-of-line blocking that no congestion controller
+removes: under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented
+HTTP's 0.98. Segment fetching survived it because each segment is a bounded, independent object,
+completed and buffered ahead of the play point, so blocking inside one fetch delays a segment the
+client already has time to absorb rather than stalling a live edge.
+
+**But that measurement had TCP under one lane and QUIC under the other, and the recommended
+configuration puts QUIC under both.** Every segmented arm in this study was served over HTTP/1.1 on
+TCP; no HLS client available to it speaks HTTP/3. Over HTTP/3 a segment becomes a QUIC stream, which
+is also delivered in order — so the *substrate* half of the explanation disappears and only the
+*object* half remains. The object half is the one that should carry the result, and the reasoning that
+it survives is sound. It is nonetheless reasoning: **the single impairment axis that separates the two
+data planes has not been measured in the configuration the verdict recommends.** It is the cheapest
+outstanding experiment in this paper and the one most able to move a verdict row (§15).
 
 **Trunking several feeds down one congested path is a third result, and it is a latency decision rather
 than either.** Two or three media-aware feeds sharing a 15 Mb/s bottleneck at a 2 s subscriber budget
@@ -1018,7 +1027,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
-| Reliability under impairment (R5) | **segmented HTTP, on the one impairment that separates them** | **M** | **measured head-to-head across the full lane × controller matrix: loss does not separate the lanes at all — given the same controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13), so the familiar "segment fetching degrades under loss" result is a controller comparison. Under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98, because QUIC's in-order delivery turns reordering into head-of-line blocking and no controller removes it** (§3.1) |
+| Reliability under impairment (R5) | **segmented HTTP, on the one impairment that separates them** | **M** | **measured head-to-head across the full lane × controller matrix: loss does not separate the lanes at all — given the same controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13), so the familiar "segment fetching degrades under loss" result is a controller comparison. Under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98, because in-order delivery turns reordering into head-of-line blocking and no controller removes it. **Scope: that cell had TCP under the segmented lane and QUIC under the media-aware one, and no segmented arm in this study ran over HTTP/3** — over HTTP/3 the substrate is shared and only the bounded-object argument survives, untested** (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, and resilience of *content* only while the client stays inside the origin's availability window** — 0 continuity errors and 0 PCR intervals above 40 ms throughout a ladder to 10 % loss, so within the window the lane sheds time rather than data. A deeper ladder crosses the window between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s holes — and past ~20 % loss it does so without the origin returning a single error, so the failure is silent at the serving node. Edge and Pathway selection remains specification-only (§3.2) |
 | Redundancy — serving node (R5) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning; the difference is that the media-aware exporter skips to the live edge and loses the media produced during the outage, where the segmented client refetches it from the store and loses nothing. But neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all — both abandon at the first failed playlist reload — so it took a purpose-written client to show (§3.2) |
 | Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |
@@ -1034,10 +1043,18 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and existing staff skills against a pre-1.0 ecosystem |
 
 **What that adds up to.** For a route whose destinations can absorb two to five seconds and which
-carries a single programme, segmented HTTP carrying MPEG-TS over HTTP/3 is the better engineering
-choice today — on interop, maturity, delivery economics and recovery, none of which is close; on
-carriage fidelity, where its mux content turns out to be verbatim; and on the conformance of the groomed
-stream itself. **MoQ's case is not general and should not be stated as though it were.** Measurement
+carries a single programme, segmented HTTP carrying MPEG-TS is the better engineering choice today —
+on interop, maturity, delivery economics and recovery, none of which is close; on carriage fidelity,
+where its mux content turns out to be verbatim; and on the conformance of the groomed stream itself.
+
+**One qualification belongs on that sentence and is easy to lose.** The segmented lane's intended
+production form is HTTP/3, and every segmented measurement here was taken over HTTP/1.1 on TCP,
+because no HLS client available to this study negotiates H3. For most rows that is conservative or
+irrelevant — wire cost is derived for H3 and stated as derived, and interop, economics, maturity and
+carriage fidelity do not turn on the substrate. For **one** row it is not: the reordering result that
+gives segmented HTTP its impairment win was measured with TCP under it, and the recommended
+configuration would put QUIC under it. The verdict is stated for the lane as *measured*; whether it
+survives the lane as *deployed* is the first experiment the programme should run. **MoQ's case is not general and should not be stated as though it were.** Measurement
 narrowed it and sharpened it at the same time. What is left is: an egress that hands a groomer less to
 absorb, verbatim *multi-programme* carriage, a portable enforcement point with an observable session, push
 rather than manifest polling, ~7 % less wire volume — and a **measured 109 ms** across the public
@@ -1058,6 +1075,62 @@ in broadcast terms, and interop with the MPEG-TS installed base. Neither specifi
 of it. That is why this is framed as an evaluation of Internet-native primary distribution on two
 candidate data planes rather than as a case for one protocol, and why the measured work in
 [Evidence](evidence.md) transfers between them.
+
+### 14.1 The framework the final conclusion has to satisfy
+
+The verdict above is a scorecard of what has been measured. The conclusion this study is working
+toward is a different object: **not which data plane is better, but whether each is viable for
+permanent primary distribution, and under what conditions each is preferable.** Those are separable
+answers — both may be viable, and the interesting output is then the boundary between them rather than
+a winner.
+
+Setting the framework down before the remaining evidence arrives is deliberate. It fixes what would
+count as an answer while the answer is still unknown, which is the only time that decision can be made
+honestly.
+
+**Viability is a gate, not a score.** A data plane is viable for primary distribution if it clears
+every one of these; failing one is disqualifying regardless of how it reads elsewhere.
+
+| Gate | Cleared when | MoQ today | Segmented HTTP today |
+|---|---|---|---|
+| **Conformant egress** | Groomed output passes TR 101 290 P1/P2 on hardware, sustained | **Not cleared.** Fails P1 PCR repetition on the wire at every cushion; the fix is written upstream and unmerged | **Cleared in software** at an 8 s cushion (0 intervals > 40 ms); hardware unverified |
+| **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Partial.** 14 h clean on delivery; relay memory converging but not flat, publisher threads still growing | **Unknown.** Never soaked |
+| **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Recovery is fast but lossy — the exporter resumes at the live edge and discards the outage | **Partial.** Refetches losslessly inside the availability window, silently holed past it |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**, byte-identical across independent hosts; not for a multi-programme mux | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
+| **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Audience is not a memory term; the measured knee is the host's, not the relay's | **Indicated.** Cache offload measured at one node, not at a CDN |
+| **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
+
+**Preference is a comparison, and it is conditional on the route.** Where both gates clear, these are
+the dimensions on which one should be chosen over the other, each stated as the question that decides
+it rather than as a claim:
+
+- **Latency budget of the route.** Below ~2 s, only MoQ is in contention on the numbers measured
+  (109 ms against 4,067 ms, and 9,286 ms at the depth that makes the segmented lane conformant). Above
+  ~5 s the axis stops discriminating. The band between is where a low-latency segmented configuration
+  would compete, and no free receiver realises it.
+- **Number of programmes per feed.** Multi-programme carriage is MoQ's remaining fidelity advantage
+  and it is normatively excluded on HLS. If the route carries an MPTS the question may not be open.
+- **Whether the destination estate is fixed or open.** Segmented HTTP interoperates with everything;
+  MoQ interoperates within one implementation. This is the widest measured margin in the study and it
+  is the one least likely to be closed by an experiment here.
+- **Delivery volume and its price.** Commodity delivery at $0.005–0.010/GB against one MoQ supplier at
+  $0.050/GB swamps MoQ's ~7 % wire-volume advantage by an order of magnitude. At what volume the
+  supplier market changes is a commercial question, not a measurement.
+- **The impairment profile of the path.** The one axis on which the lanes genuinely separate, and the
+  one whose measurement is not substrate-matched — see §3.1. Until the HTTP/3 arm runs, this dimension
+  cannot be used to choose.
+- **Redundancy topology available.** Whether the operator can run independent chains end to end
+  (favours MoQ's byte-identical 1+1) or would rather rely on multiple delivery paths to one object
+  store (favours segmented HTTP, if F7 demonstrates it).
+- **Operational estate.** Existing HTTP tooling, staff skills and vendor support against a pre-1.0
+  ecosystem with no operational precedent.
+
+**Three conclusions this framework is designed to permit, and which must not be foreclosed.** That
+both are viable and the choice is a route-by-route engineering decision. That neither is viable
+without an edge stage the distributor owns, which is already the strongest measured finding and is
+common to both. And that one is viable and the other is not — which, on today's evidence, would be
+decided by the conformance gate rather than by any comparative row, and is the reason the merged-build
+PCR verification outranks every comparison in the programme.
 
 ---
 
@@ -1090,8 +1163,11 @@ Ranked by how much each would move the comparison.
    PoPs?** §4.5. The choice sets how many destinations the transport actually serves, and therefore
    most of the delivery bill, on both data planes.
 6. **How does a segmented-HTTP leg behave when segments are genuinely lost rather than late?** §3.2.
-   Its recovery advantage is specification-based and has not been exercised. Its *carriage* over a real
-   path now has been, and reproduced loopback to 0.1 % (§8).
+   The retry model itself has been exercised: a ladder to 40 % loss crosses the availability window
+   between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7.2 s, 24 s and
+   82 s holes, silently past ~20 %. What remains specification-only is *edge and Pathway selection* —
+   whether a second edge, a redundant origin or a Content Steering pathway can serve what the first
+   could not. Its *carriage* over a real path has been measured, and reproduced loopback to 0.1 % (§8).
 7. **Why does the media-aware lane cluster PCRs?** §8. The distribution — 86 % of intervals under 1 ms,
    monotonic, mean conserved, gaps to 320 ms — points at group-wise reassembly, but the mechanism is
    inferred from the output rather than confirmed in the exporter. It matters because if PSI density and

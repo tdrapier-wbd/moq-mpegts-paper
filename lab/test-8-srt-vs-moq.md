@@ -292,16 +292,18 @@ After the CBR pacer: exact CBR **10.955 Mbps** (12.8 % stuffing), PCR mean 18.94
   loss-signal interpretation, not a CC-quality verdict. Table 4 caps the pipe but only with a bare
   `netem rate` token bucket, CUBIC vs SRT only. The congestion-control test proper (shaped bottleneck,
   all controllers, scored on completeness) has an [under-provisioned failure-mode result in
-  T8b](test-8b-congestion-control.md); its provisioned-path conditions are not yet run.
+  T8b](test-8b-congestion-control.md), whose C1–C6 conditions have since run, provisioned path
+  included.
 
 ## Conclusion
 
 Delivered-quality and resilience are measured; the CUBIC→BBR delta is the headline: a one-flag,
 non-breaking change moves QUIC from "loss-fragile" to "SRT-comparable" on degraded paths, while
 keeping MoQ's architectural wins. Residual gaps: pathological *reordering* (a QUIC loss-detection/HOL
-item, not CC) and media-aware SI transparency (opaque lane / #2440 closes it). Glass-to-glass latency
-remains **TBM** (lowering latency was explicitly not the objective here — robust delivery under
-degradation was). **The back-to-back wire-byte comparison has since been run, in
+item, not CC) and media-aware SI transparency (opaque lane / #2440 closes it). Lowering latency was
+explicitly not the objective here — robust delivery under degradation was — and *delivery* latency has
+since been measured in [T18](test-18-delivery-latency.md) at 109 ms across the public internet;
+glass-to-glass remains unmeasured. **The back-to-back wire-byte comparison has since been run, in
 [T9](test-9-performance.md) rather than here**: both protocols carrying the same clip over one path
 put MoQ's media-aware lane at 0.982x the source TS rate against SRT's 1.037x, and at 1 % forward loss
 both rose by about the loss rate with the ranking unchanged. What this rig is still the right host for

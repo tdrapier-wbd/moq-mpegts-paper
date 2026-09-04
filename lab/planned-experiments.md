@@ -10,193 +10,212 @@ to-do list that accumulates its own history stops being readable as a to-do list
 corrections and the reasoning behind them belong in `test-*.md` and
 [method-notes.md](method-notes.md).
 
-**Ordered by leverage, not by convenience.** The entries below hold the protocols; the ranking that
-decides which to run is stated once, immediately.
+**Prioritised by what a result could change, not by how interesting it is.** The ranking is stated once,
+immediately, as P0/P1/P2; the reliability families it introduces are specified in full under [The
+production-reliability programme](#the-production-reliability-programme); and the older per-experiment
+protocols follow, each reduced to what is outstanding.
 
 Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
 `INSTRUCTIONS.local.md`.
 
 ---
 
-## The ranking
+## The programme
 
 Every experiment names its own open items and most of them are worth doing eventually. This is the list
-that decides what runs next, re-derived rather than carried forward, because three of the entries it
-used to lead with are now done and one of them changed what the rest are worth.
+that decides what runs next.
 
-**What today's run removed from this list, and it is the top four entries.** The PCR output-position
-issue is filed ([#3334](https://github.com/moq-dev/moq/issues/3334)) with the conformance test offered
-as a PR ([#3335](https://github.com/moq-dev/moq/pull/3335)) and hedged comments on #2829/#2779. C3 ran
-under `cake` and the collapse survived it, so the AQM counterfactual is closed as a **falsification**
-rather than a caveat. The `latency-max` probe then attributed the collapse: it is per-subscriber deadline
-shedding, and at a 30 s budget there is no collapse at all. And the `mpegts-pacer` positional guard is
-in, with five tests and the fixture as its regression case.
+**The campaign has changed shape, and the ranking has to change with it.** Until now it asked whether
+MoQ can carry a broadcast mux at all, and the entries that led this list were the ones that would
+answer that. That question is largely answered, and a second architecture — segmented HTTP carrying
+MPEG-TS, over HTTP/3 rather than the TCP everything here was measured on — has become a serious
+candidate rather than a comparison point. **The question the programme now serves is which of the two
+can be run permanently, at scale, by an operations team, for years.** That is a different question from
+the one the existing entries were designed for, and it is dominated by sustained reliability,
+deterministic recovery, continuous media integrity and operational predictability rather than by
+latency.
 
-**What that does to the rest of the list is more than remove four rows.** The campaign's largest
-unexplained result is gone, and the honest consequence is that **the largest remaining soft spot is not
-a measurement at all — it is a claim resting on a shared upstream.** Byte-identical 1+1 is the strongest
-positive result in the paper and the arm that produced it shares its publisher and relay, so it rises
-to the top. C3's residue is now a sizing ladder, which is cheap and no longer urgent.
+**Three tiers, and the tier is decided by what a result could change, not by how interesting it is.**
 
-**Ranked on four things**, in this order: whether the result could change a conclusion in
-[`docs/`](../docs/); whether it removes a material caveat; what it costs to set up; and whether it
-produces an upstream contribution.
+- **P0 — could change a viability conclusion for either architecture.** If the result comes out one
+  way, a `docs/` conclusion changes side or a lane stops being recommendable. Nothing else competes
+  for a run window while a P0 is runnable.
+- **P1 — establishes where one architecture is superior.** The comparative body of the paper. These
+  sharpen or reverse a verdict *row*; they do not decide viability.
+- **P2 — completeness.** Worth having, unlikely to change a conclusion. A P2 that starts looking like
+  it could change one has been mis-tiered; move it.
 
----
+Two standing rules keep this from becoming a wishlist. **An experiment earns a place only if a named
+document says something it could falsify** — the falsifiable claim is quoted in the entry. And **an
+entry is deleted once nothing of it is outstanding**, results going to the `test-*.md` file that owns
+them.
 
-### MUST DO NOW
-
-**1. ~~The full 1+1 — two publishers, two relays, two paths.~~ Done.** A publisher, relay, exporter and
-groomer per host across two availability zones, sharing nothing but a verified-identical source file:
-**single-track content is 46,778 of 46,778 shared datagrams identical, counters included**, so the
-strongest positive result the campaign has now stands with no shared component at all. **A seven-stream
-mux over the same topology reaches 75.56 %**, and the residue is reordering rather than damage — the
-same packets, 99.95 % common as a multiset, in a different order, because the exporter interleaves by
-arrival. Measured, located and posted to [#2829](https://github.com/moq-dev/moq/issues/2829); see
-[T12](test-12-dual-path-handoff.md).
-
-**What this leaves is not a measurement.** Multi-track byte identity now depends on an upstream fix to
-`pick_next_track`, not on another cell here. The open question worth apparatus is therefore the one
-below it: whether a *hardware* IRD merges the pair the software oracle accepts.
-
-**1b. The end-to-end re-run against a grid-sliced export, the moment
-[#3351](https://github.com/moq-dev/moq/pull/3351) merges.** *Newly unblocked, and the cheapest
-high-leverage measurement on the list.* The positional fix is written and verified **at the pipe**
-(T19 measurement 9: adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms against its own merge-base). What
-it does not tell us is the thing the whole PCR line of work was filed under: **whether a byte-locking
-groomer downstream of it produces a conformant wire.** T19 measurements 3, 4 and 6 re-run unaltered and
-answer it — the lane was 120 → 772 ms and 0 → 1,166 continuity errors on the merged build, and this is
-the change that should move both. It also decides open question 1 in
-[Evidence](../docs/evidence.md), the P1 repetition gate. Do not run it against the PR branch as the
-deployable answer: a build that has not landed cannot retire a caveat about the deployable
-configuration.
+The families introduced for the reliability programme are specified in full under
+[The production-reliability programme](#the-production-reliability-programme); the tiers below carry
+the ranking and the one-paragraph reason, and point at the specification.
 
 ---
 
-### HIGH VALUE
+### P0 — could change a viability conclusion
 
-**2. A capped-stream relay-memory arm.** *Only time on the rig that exists.* C6 converged
+**P0-1. The end-to-end re-run against a grid-sliced export, the moment
+[#3351](https://github.com/moq-dev/moq/pull/3351) merges.** *Blocked only on the merge; the rig is
+built and unaltered.* The positional fix is written and verified **at the pipe** (T19 measurement 9:
+adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms against its own merge-base). What it does not tell
+us is the thing the whole PCR line of work was filed under: **whether a byte-locking groomer downstream
+of it produces a conformant wire.** T19 measurements 3, 4 and 6 re-run unaltered and answer it: on the
+last build to carry a merged PCR fix, the timing fixes alone took the lane from 120 to 772 ms and from
+0 to 1,166 continuity errors, and the positional change is the one that should move both back. It
+decides open question 1 in [Evidence](../docs/evidence.md), the P1 repetition gate, and with it whether
+the MoQ lane can be made IRD-conformant at all. Do not run it against the PR branch as the deployable answer: a build that
+has not landed cannot retire a caveat about the deployable configuration.
+
+**P0-2. The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.** *Needs a
+client library build, not an account.* **Falsifies:** [Comparison](../docs/comparison.md) §14's
+reliability-under-impairment row, and with it the only impairment axis on which the two data planes
+separate. That row rests on 0.98 for segmented HTTP against 0.19 for MoQ under 25 % reordering — with
+TCP under one lane and QUIC under the other, because macOS's system libcurl and the EC2 box's curl
+8.18.0 are both built without HTTP/3, so `tsp -I hls` cannot negotiate it whatever an origin offers.
+Over HTTP/3 a segment is a QUIC stream and is also delivered in order, so half the explanation lapses
+and only the bounded-object half survives. **That box's nginx 1.28.3 already carries
+`--with-http_v3_module`**, so the server half exists and only the client half is missing; on Linux it
+is buildable (curl against ngtcp2 or quiche via `LD_LIBRARY_PATH`, or an HTTP/3 fetch engine behind a
+pull-style client rather than `tsp -I hls`). Until it exists every segmented figure carries an unstated
+"over TCP" and the paper cannot honestly describe the lane it recommends. Specified as
+[F1](#f1-substrate-matched-impairment).
+
+**P0-3. Comparable long-duration soaks — 24 h, then 7 days, on both lanes.** *The largest gap in the
+paper relative to the use case.* **Falsifies:** every claim that either lane can be run *permanently*.
+The longest run on record is 14 h on one MoQ topology; the segmented lane has never been soaked at all,
+and its origin is the role its entire commercial argument rests on. A demonstration that a transfer
+succeeds for forty-five seconds is not evidence about a service that must not stop for a year. Specified
+as [F2](#f2-permanence-soak).
+
+**P0-4. Silent media-plane failure — detection, both lanes.** *Cheap, and no apparatus beyond what
+exists.* **Falsifies:** [Architecture](../docs/architecture.md) §9.1's monitoring design. Both lanes
+already have an *observed* silent failure — the segmented client that lost 82 s of programme while the
+origin logged nothing but 200s, and a relay that stayed running at 100 % CPU and stopped serving — but
+neither has been tested as a designed experiment, and the property they test is the one a
+primary-distribution operator is most exposed to: the connection is healthy and the programme is not
+advancing. Specified as [F3](#f3-silent-media-plane-failure).
+
+**P0-5. A hardware IRD and a TR 101 290 analyser, soaked ≥ 72 h (Gate 2).** *Blocked on apparatus; P0
+on leverage.* Every conformance number in this campaign is graded by software written or configured by
+the same people who built the thing under test: enough to falsify a design, not enough to accept one.
+A soak settles PLL lock, the buffer model, slow clock drift and discontinuity handling at once, and it
+closes the one question [T12](test-12-dual-path-handoff.md) cannot answer in software — whether a real
+merge engine agrees with our reference receiver on an ST 2022-7 pair. **≥ 72 h for an arithmetic
+reason:** the PCR base wraps every 26.51 h. Pair it with P0-3 so one borrowed week yields both verdicts.
+Every boundary it tests now has a substitute runnable here first, which is what turns a borrowed week
+into measurement rather than debugging. Protocol below under *Hardware TR 101 290 P1/P2 soak*.
+
+---
+
+### P1 — establishes where one architecture is superior
+
+**P1-1. The failure-injection and recovery matrix, both lanes, scored in media rather than in
+sessions.** The single largest comparative gap. Infrastructure failures have been probed one at a time
+and reported as recovery *times*; what a distributor buys is programme continuity, and the two are not
+the same number. Specified as [F4](#f4-failure-injection-and-recovery).
+
+**P1-2. The scaling model, both lanes.** Not a maximum observed once. For MoQ the fan-out knee on
+record is the *host's*, because every relay cost figure was measured with subscribers co-resident with
+the relay and they cost more CPU than the relay serving them; drive them from the 8-vCPU box and the
+knee becomes the relay's. For segmented HTTP the question is the split between origin and cache as
+client count rises, which one nginx with `proxy_cache` in front of it indicates and does not establish.
+Removes a caveat from a load-bearing number in [`economics.md`](../docs/economics.md). Specified as
+[F5](#f5-the-scaling-model).
+
+**P1-3. A capped-stream relay-memory arm.** *Only time on the rig that exists.* C6 converged
 asymptotically on **2.03×** the ceiling [T9](test-9-performance.md) predicted, decaying +24.60 →
 +1.82 MB/h and still not flat at 14 h. Connection scaling is ruled out — flat across 0–4 subscribers,
 a five-connection leg in the same range as two — so a second term is adding ~100 MB over the ten hours
 past the knee. One run bounds it: `--server-quic-max-streams 1024` isolates the slot-dependent part
 (T9: 91.4 MB against 189.5 MB), a logged group count says whether the excess tracks groups, and
 `/proc/pressure/memory` beside RSS tells a decaying slope from kernel reclaim. It is the difference
-between budgeting 100 MB and 200 MB per ingested channel.
-
-**Its upstream standing is weaker than it looks, and that is the reason to cap the streams rather than
-argue.** [#2745](https://github.com/moq-dev/moq/issues/2745) is **closed as not-planned**: the maintainer
+between budgeting 100 MB and 200 MB per ingested channel. **Its upstream standing is weaker than it
+looks, and that is the reason to cap the streams rather than argue.**
+[#2745](https://github.com/moq-dev/moq/issues/2745) is **closed as not-planned**: the maintainer
 root-caused the retention to `quinn-proto` recycling one receive-stream state per stream ever accepted,
-which is not moq state and is bounded by `max_streams`. Our 14 h leg — posted there after the close, and
-unanswered — measured 2.03× that bound, so either the ceiling model is incomplete or a second term
-exists that is moq's. The capped arm is what distinguishes those, and only if it shows the excess
-surviving a 1024-slot cap is there anything to re-file.
+which is not moq state and is bounded by `max_streams`. Our 14 h leg — posted there after the close,
+and unanswered — measured 2.03× that bound, so either the ceiling model is incomplete or a second term
+exists that is moq's. Only if the excess survives a 1024-slot cap is there anything to re-file. Note
+this is a *sizing* question now, not a stability one: the audience term was measured and is zero.
 
-**3. T9's cross-machine fan-out knee.** *The secondary exists and is provisioned for exactly this.*
-Every relay cost figure in the campaign is measured with the subscribers co-resident with the relay,
-and they cost more CPU than the relay serving them — so the knee currently on record is the host's, not
-the relay's. Drive the subscribers from the 8-vCPU box against the relay on the primary and it becomes
-the relay's. This removes a caveat from the relay-versus-origin cost comparison, which is a load-bearing
-number in [`economics.md`](../docs/economics.md).
+**P1-4. MoQ's distributed redundancy model.** The paper has a 1+1 result at the *egress* and no model
+above it. Multiple relays, publisher redundancy, receiver-side relay selection, and what a relay or
+path failure costs in programme rather than in reconnect time. Specified as
+[F6](#f6-moq-distributed-resilience).
 
-**4. The segmented lane's two-host segment store.** *Both hosts exist.* The segmented lane's equivalent
-of the 1+1 result, and the half that has never been tested: both packagers writing identical names into
-a *consistent* store is free on one filesystem and is the actual engineering across two hosts.
+**P1-5. Segmented HTTP's distributed redundancy model.** The mirror of P1-4, and the lane's strongest
+theoretical claim: that independent addressable objects and multiple paths give near-seamless failover
+without a session to re-establish. It is asserted from the specification and demonstrated on one
+filesystem. Includes the two-host segment store — both packagers writing identical names into a
+*consistent* store is free on one filesystem and is the actual engineering across two hosts — and the
+CloudFront edge. Specified as [F7](#f7-segmented-distributed-resilience).
 
-**5. C3's latency knee, as a ladder rather than a mechanism hunt.** *Nothing new needed; ~20 minutes.*
-The mechanism is settled — the shed is per-subscriber deadline shedding, and it tracks `--latency-max`
-from 4.29 Mb/s at 500 ms to 10.35 at 30 s at `n=2`, past the uncontended single-flow rate. What the sweep
-does not say is where the knee is: it is already at 62 % of cap by 8 s, so four points span the whole
-transition. Add 1, 3, 4 and 6 s at `n=2` and `n=3` under `cake` and the answer is a curve an operator can
-size a trunk from, plus the discriminator for *what* sets it — the RTT, the group duration, or the relay's
-own buffering, which predict knees in different places. Lower than the arms above only because it
-sharpens a result rather than removing a caveat from a published claim.
+**P1-6. Sustained capacity degradation.** *Nothing new needed for the MoQ half; ~20 minutes.* C3's
+mechanism is settled — the shed is per-subscriber deadline shedding, tracking `--latency-max` from
+4.29 Mb/s at 500 ms to 10.35 at 30 s at `n=2`, past the uncontended single-flow rate — but the sweep
+does not say where the knee is, and it is already at 62 % of cap by 8 s. The comparative half is new:
+the same bandwidth ladders against the segmented lane, scored on what an operator actually needs, which
+is the worst impairment absorbable without losing programme. Specified as [F8](#f8-congestion-and-capacity).
 
-**6. An HTTP/3 client for the segmented lane.** *Needs a library build, not an account.* The segmented
-lane is graded against MoQ over QUIC while itself running over TCP, and the reason is a client library
-rather than a protocol: macOS's system libcurl and the EC2 box's curl 8.18.0 are both built without
-HTTP/3, so `tsp -I hls` cannot negotiate it whatever an origin offers. **That box's nginx 1.28.3 already
-carries `--with-http_v3_module`**, so the server half exists and only the client half is missing; on
-Linux it is buildable (curl against ngtcp2 or quiche via `LD_LIBRARY_PATH`, or an HTTP/3 fetch engine
-behind a pull-style client rather than `tsp -I hls`). Until it exists every segmented figure carries an
-unstated "over TCP", and the head-to-head compares a transport to a transport-plus-a-generation.
+**P1-7. Interoperability, separated from standardisation.** Three legs, all previously ranked and all
+still wanted: Cloudflare with a provisioned scope (T11a) as the strongest available test of relay
+neutrality, since the anonymous attempt negotiated draft 18 cleanly and returned no data, which is the
+expected outcome without publish and subscribe tokens; a `moq2ts` broadcast through a `moq-dev` relay
+(T11b), publisher-only, so the question is only whether the relay forwards objects whose catalog it
+cannot parse and whether an early `PUBLISH` poisons namespace registration; and a broadcast profile for
+`moq-interop-runner`, which extends shared infrastructure rather than building a private rig. The
+segmented half is the harder one to design honestly and is specified as
+[F9](#f9-interoperability-in-practice).
 
 ---
 
-### USEFUL BUT DEFER
+### P2 — completeness
 
-**7. A CloudFront edge in front of the existing origin.** Cheaper than this list long assumed — same AWS
-account, minutes to point at the EC2 origin as a custom origin, free tier covers a single-client
-experiment, no CDN relationship needed. It buys real anycast, real PoPs and real multi-tenancy. Deferred
-because [T9](test-9-performance.md) removed most of what it was standing in for: both origins serve 100
-concurrent clients at ~992 Mb/s with no knee, so "the weakest possible origin" was never the constraint.
-Budget for two things it will not do by default — it needs explicit `Cache-Control` from the origin to
-behave on a live playlist, and it bills per request, which 2 s segments generate briskly.
+**P2-1. Operational observability and supportability, assessed comparably.** Largely a structured
+review rather than a measurement, and it should say so. Specified as [F10](#f10-observability).
 
-**8. A standby packager joining an already-running feed.** The production shape, and the cell a
-co-started pair cannot measure. Cheap on the two hosts; deferred behind items 5 and 6, which establish
-the steady state it is a perturbation of.
+**P2-2. Resource-exhaustion and isolation.** Whether one bad receiver can degrade others. Reviewed
+rather than exploited. Specified as [F11](#f11-isolation-under-abuse).
 
-**9. Differential delay on a real pair.** `netem` on the cross-AZ path models geographically separated
-origins — which is why one region was the right choice, since impairment can be added to a low-delay
-pair and cannot be subtracted from a cross-region one. It models rather than measures, so it ranks below
-the arms that measure something new.
+**P2-3. A standby packager joining an already-running feed.** The production shape, and the cell a
+co-started pair cannot measure. Cheap on the two hosts; sits behind P1-5, which establishes the steady
+state it is a perturbation of.
 
-**10. Cloudflare with a provisioned scope (T11a).** The strongest available test of relay neutrality,
-because it is third-party production infrastructure rather than a lab peer. The anonymous attempt
-negotiated draft 18 cleanly and returned no data, which is the expected outcome without publish and
-subscribe tokens, so it has not yet tested anything. Needs an account and a scope; that is the only
-reason it is not higher.
+**P2-4. Differential delay on a real pair.** `netem` on the cross-AZ path models geographically
+separated origins — which is why one region was the right choice, since impairment can be added to a
+low-delay pair and cannot be subtracted from a cross-region one. It models rather than measures.
 
-**11. A `moq2ts` broadcast through a `moq-dev` relay (T11b).** Runnable now, weaker result. `moq2ts` is
-publisher-only, so the question is only whether the relay forwards objects whose catalog it cannot
-parse, plus whether an early `PUBLISH` poisons namespace registration (the open direction of the
-preannounce split in `moqxr` PR #21).
-
-**12. A broadcast profile for `moq-interop-runner`.** Extends shared infrastructure rather than building
-a private rig, and gives the transparent-TS profile a neutral conformance target. Deferred rather than
-dropped: [#3335](https://github.com/moq-dev/moq/pull/3335) is the same instinct aimed at a repository
-that will act on it sooner.
-
-**13. C3 replicates.** One per cell today. The per-flow split is known not to reproduce and the
+**P2-5. C3 replicates.** One per cell today. The per-flow split is known not to reproduce and the
 aggregate is, so two more replicates would put an error bar on the only number being quoted — but the
-qualitative result is already clear at one and item 5 is the better use of the same rig time.
+qualitative result is already clear at one and P1-6 is the better use of the same rig time.
 
 ---
 
-### BLOCKED
+### Blocked on apparatus
 
-**14. A hardware IRD and a TR 101 290 analyser, soaked ≥ 72 h (Gate 2).** *The one genuinely
-unavoidable purchase or loan, and still the highest-value blocked item.* Every conformance number in
-this campaign is graded by software written or configured by the same people who built the thing under
-test: enough to falsify a design, not enough to accept one. A soak settles PLL lock, the buffer model,
-slow clock drift and discontinuity handling at once, and it is the only way to test the boundaries a
-groomer meets outside steady state. It also closes the one question
-[T12](test-12-dual-path-handoff.md) cannot answer in software — whether a real merge engine agrees with
-our reference receiver on an ST 2022-7 pair. **≥ 72 h for an arithmetic reason:** the PCR base wraps
-every 26.51 h. Pair it with the T9 resource soak so one borrowed week yields both verdicts, and note
-that every boundary above has a substitute runnable here first — which is what turns a borrowed week
-into measurement rather than debugging.
-
-**15. T12's churn arms.** The recovered-leg and late-join cells wait on
+**B-1. T12's churn arms.** The recovered-leg and late-join cells wait on
 [#2779](https://github.com/moq-dev/moq/issues/2779), because an exporter numbering continuity counters
 from process state cannot produce a byte-identical pair after a restart however many hosts it runs on.
-They also need a grader `t12-merge-oracle.py` is not yet. Item 1's comment on #2779 is the only thing we
-can do to move this.
+They also need a grader `t12-merge-oracle.py` is not yet. The comment on #2779 is the only thing we can
+do to move this.
 
-**16. The full interop suite against a `moq2ts` subscriber (T11c).** Blocked until they publish one.
+**B-2. The full interop suite against a `moq2ts` subscriber (T11c).** Blocked until they publish one.
 Worth planning the matrix now so the run is ready when it lands: it is the comparison that would settle
 which lane preserves what, particularly whether their null-stripping and SPTS-from-MPTS behaviour costs
 conformance where ours does.
 
-**17. A true CBR hardware source (T15's residual).** The transparency result makes a real CBR source the
-interesting variable rather than a nicety, and nothing in the lab produces one.
+**B-3. A true CBR hardware source (T15's residual).** The transparency result makes a real CBR source
+the interesting variable rather than a nicety, and nothing in the lab produces one.
 
-**18. The segmented plane's low-latency arm at equal conformance.** No client we have realises it; the
-only receiver that could is a commercial ABR-to-TS gateway, which is the same apparatus block as item 14
+**B-4. The segmented plane's low-latency arm at equal conformance.** No client we have realises it; the
+only receiver that could is a commercial ABR-to-TS gateway, which is the same apparatus block as P0-5
 in a different guise.
 
-**19. Multi-programme carriage through a media-aware edge (MPTS).** Only interesting where the edge is
+**B-5. Multi-programme carriage through a media-aware edge (MPTS).** Only interesting where the edge is
 media-aware — a byte cache serves an unusual TS payload exactly as nginx does, so asking it of a plain
 cache re-measures nginx. If the question is whether a commercial packaging edge rejects a
 multi-programme segment, it has to be that product. T17's 40-service figures remain scaled from one
@@ -204,19 +223,26 @@ service rather than measured on an MPTS.
 
 ---
 
-### NO LONGER WORTH DOING
+### No longer worth doing
 
 - **T19's arrival oracle on a bigger host** — run; 7.45 % on two vCPU and 7.45 % on eight, at zero CPU
   pressure. The caveat it existed to retire is retired.
-- **The clean two-host 1+1 arm** — run twice, byte-identical both times, 0 residue. What remains is item
-  1, which is a different arm.
+- **The clean two-host 1+1 arm** — run twice, byte-identical both times, 0 residue.
+- **The full 1+1 with two publishers, two relays and two paths** — run. A publisher, relay, exporter and
+  groomer per host across two availability zones, sharing nothing but a verified-identical source file:
+  **single-track content is 46,778 of 46,778 shared datagrams identical, counters included**, so the
+  strongest positive result in the paper stands with no shared component at all. A seven-stream mux over
+  the same topology reaches 75.56 %, the residue being the same packets in a different order because the
+  exporter interleaves by arrival. Located and posted to
+  [#2829](https://github.com/moq-dev/moq/issues/2829); multi-track identity is now an upstream fix rather
+  than another cell here. See [T12](test-12-dual-path-handoff.md).
 - **Recovering C3's aggregates** — all six recovered, and the cell now prints them, so the failure mode
   cannot recur.
 - **C3 under an AQM** — run. `cake` cut RTT from ~550 ms to 100 ms and the collapse survived at 48 %/40 %
   of cap, so C4's prediction is falsified rather than untested. Do not re-run it as a rescue.
 - **Hunting a lower-layer mechanism for C3** — the `latency-max` sweep discriminated: the shed tracks the
   budget over a 2.4× range at 0 continuity errors, so there is nothing left for a shared-lane mechanism
-  to explain. Item 5 is the sizing residue, and it is a different question.
+  to explain. P1-6 is the sizing residue, and it is a different question.
 - **Filing the PCR output-position finding, and the conformance test** — filed as
   [#3334](https://github.com/moq-dev/moq/issues/3334) and [#3335](https://github.com/moq-dev/moq/pull/3335),
   with hedged comments on #2829/#2779. The maintainer then **wrote the fix**,
@@ -230,8 +256,9 @@ service rather than measured on an MPTS.
   framing multiplier is measured elsewhere; and per-track wire-byte attribution.
 - **The segmented HTTP/3 arm *as an explanation for the lanes' loss difference*.** That motivation is
   dead: [T8](test-8-srt-vs-moq.md) erased the difference by matching the controller on TCP, which was
-  the cheaper route to the same answer. Item 8 is a different question — like-for-like transport
-  generation in the head-to-head — and is still wanted.
+  the cheaper route to the same answer. **P0-2 is a different question and is now the higher-ranked
+  one** — not why the lanes differ under *loss*, where they do not, but whether they still differ under
+  *reordering* once both sit on QUIC, which is the axis on which they do.
 
 ---
 
@@ -239,23 +266,327 @@ service rather than measured on an MPTS.
 
 Grouped so nothing in a group contaminates anything else in it. Each group is one run.
 
-**Group A — the two-host group, with its lead item now done.** Items 3 and 4 — the fan-out knee and the
-two-host segment store. Both need both boxes and neither can share a host with a timing measurement. The
-full 1+1 that led this group is complete, which frees the window: run the fan-out knee **last**, because
-it deliberately saturates a box.
+**Group A — the two-host group.** P1-2's fan-out knee and P1-5's two-host segment store. Both need both
+boxes and neither can share a host with a timing measurement. Run the fan-out knee **last**, because it
+deliberately saturates a box.
 
-**Group B — the cheap ladder, and it can share a run with almost anything.** Item 5 (C3's latency knee).
-It runs in network namespaces on the primary against a stopped loop publisher, needs no new apparatus,
-and its grading is a per-cell aggregate rather than a timing comparison — so it is the right filler for a
-window whose main item is posting, reviewing or building.
+**Group B — the cheap ladder, and it can share a run with almost anything.** P1-6's MoQ half. It runs in
+network namespaces on the primary against a stopped loop publisher, needs no new apparatus, and its
+grading is a per-cell aggregate rather than a timing comparison — so it is the right filler for a window
+whose main item is posting, reviewing or building.
 
-**Group C — the long run.** Item 2 alone. A memory soak measures the machine it runs on, so it cannot
-share a window with anything, and it wants hours rather than minutes. Start it at the end of a session
-and read it at the start of the next.
+**Group C — the long runs, and there are now two of them.** P1-3's capped-stream memory arm, and P0-3's
+soak. A soak measures the machine it runs on, so neither can share a window with anything, and both want
+days rather than minutes. Start at the end of a session and read at the start of the next. P0-3's two
+lanes must run on *separate* hosts or in separate windows; a segmented origin and a MoQ relay sharing a
+box measure each other.
 
-**Do not bundle:** item 6 (an HTTP/3 client is a build task with an open-ended failure mode, and it will
-eat a window on its own), or anything from the BLOCKED list, whose windows are set by apparatus rather
+**Group D — the injection matrix.** P1-1 and P0-4 share a harness: both interrupt a component and grade
+the media that came out. Build the grader once. P0-4 is the subset where the component does not die, so
+it costs one more arm rather than one more rig.
+
+**Do not bundle:** P0-2 (an HTTP/3 client is a build task with an open-ended failure mode, and it will
+eat a window on its own), or anything from the blocked list, whose windows are set by apparatus rather
 than by us.
+
+---
+
+## The production-reliability programme
+
+The families the tiers above point at. Each is specified the same way — **question, hypothesis where
+one is worth stating, setup, metric, decision criterion, why it matters to primary distribution, and
+what existing evidence already answers** — because the last of those is what stops the programme
+re-measuring what it has.
+
+**One measurement convention governs the whole family and is worth stating once.** Every metric here is
+expressed in *programme*, not in *sessions*. "Recovered in 4 s" is not a result; "lost 3.2 s of media
+and 41 continuity errors, then ran clean" is. A lane that reconnects instantly and resumes at the live
+edge, discarding what it missed, has failed a test that a lane reconnecting slowly and refetching has
+passed, and only a media-domain metric can tell them apart. This is the same distinction
+[T6](test-6-relay-resilience.md) already found the hard way between the media-aware exporter, which
+skips to the live edge, and the segmented client, which refetches from the store.
+
+**And one scoping rule.** Both lanes must be impaired at the same point in the topology and graded by
+the same instrument, or the comparison measures the rig. Where a lane has no equivalent of a component
+— there is no MoQ "origin" and no segmented "relay" — the equivalence is stated in the entry rather
+than assumed.
+
+### F1. Substrate-matched impairment
+
+- **Question.** Does segmented HTTP keep its reordering advantage when it runs over HTTP/3 rather than
+  TCP?
+- **Hypothesis.** It keeps most of it. Head-of-line blocking inside one QUIC stream delays a bounded
+  object the client fetched ahead of its play point, where the same blocking on MoQ stalls the live
+  edge. The advantage should narrow rather than vanish, and the size of the narrowing is the result.
+- **Setup.** The T5/T8 impairment rig unchanged, with the segmented arm served by the EC2 nginx 1.28.3
+  already built `--with-http_v3_module` and fetched by an H3-capable client — curl against ngtcp2 or
+  quiche behind a pull-style fetcher, since `tsp -I hls` cannot negotiate H3 against the available
+  libcurl. Re-run the reordering column at 5 %, 15 % and 25 %, and one loss column as a control that
+  the new client is not itself the variable.
+- **Metric.** Delivered-rate ratio against source, continuity errors, PCR intervals above 40 ms.
+- **Decision criterion.** If segmented-over-H3 holds ≥ 0.9 at 25 % reordering, the verdict row stands
+  and is strengthened. If it falls below ~0.5, the row changes side and the advantage was the
+  substrate. Between the two, the row becomes a quantified narrowing rather than a win.
+- **Why it matters.** It is the only impairment axis on which the two data planes differ at all, and
+  the paper recommends the lane in a configuration it has not measured.
+- **Existing evidence.** [T5](test-5-network-impairment.md) and [T8](test-8-srt-vs-moq.md) give the TCP
+  column: 0.98 segmented against 0.19 MoQ at 25 %, on both controllers. Loss is already known not to
+  separate the lanes once the controller is matched, so only the reordering column needs re-running.
+
+### F2. Permanence soak
+
+- **Question.** Does either lane remain in a *stable operating state* as uptime grows, or does it merely
+  survive?
+- **Hypothesis.** Survival is not in doubt on either. What the soak is looking for is monotonic drift in
+  something that is supposed to be stationary — resident memory, thread count, file descriptors,
+  end-to-end latency, buffer occupancy — and the MoQ lane already has two candidates: a relay ceiling
+  still creeping at 14 h and a publisher thread count that grew 22 → 86 over 26 h, decelerating but not
+  stopping.
+- **Setup.** 24 h first, then 7 days, one lane per host. MoQ: publisher → relay → exporter → groomer.
+  Segmented: packager → origin → client → groomer. Same clip, same rate, same groomer, both on the WAN
+  path rather than loopback, because a loopback soak measures the host. Sample every 60 s.
+- **Metric.** Continuously: TS continuity errors, PCR interval distribution and accuracy, PTS/DTS
+  relationships, PSI/SI cadence, TDT/TOT presence and age, media-sequence or object progression,
+  delivery latency, jitter, groomer buffer occupancy, per-role CPU and RSS, thread and fd counts,
+  session or connection churn, reconnects, and restarts. Every one of them as a *time series*; the
+  endpoint value alone would have hidden all three drifts already found.
+- **Decision criterion.** Pass is: zero continuity errors, no PCR regression against the 1 h baseline,
+  and every resource series either flat or converging with the asymptote stated. Any series still rising
+  at a rate that would exhaust the host inside a year is a fail whether or not the run completed.
+- **Why it matters.** This is the use case. A permanent feed is not a long demo, and the failure modes
+  that matter are the ones with a time constant longer than a test.
+- **Existing evidence.** [T8b](test-8b-congestion-control.md) C6 is 14.006 h on one MoQ topology: 0
+  continuity errors, 0 respawns, 9.512 Mb/s mean, relay RSS converging asymptotically on baseline +
+  200.5 MB and still +1.82 MB/h in the final hour. [T9](test-9-performance.md) has 26.5 h phased soaks
+  on an older build. **The segmented lane has never been soaked**, which makes its half of this the
+  larger gap of the two.
+
+### F3. Silent media-plane failure
+
+- **Question.** How does each lane detect that the connection is healthy and the programme is no longer
+  advancing, and how long does it take?
+- **Hypothesis.** Neither detects it at the transport layer, because at the transport layer nothing is
+  wrong. Detection has to come from the media plane, and the two lanes have different natural signals:
+  MoQ has object arrival and subscription state, segmented HTTP has playlist freshness and media-sequence
+  progression. The segmented lane is expected to be the worse case, because a cache can serve the last
+  good segment indefinitely and there is no connection to drop.
+- **Setup.** Induce, per lane, without killing the process: a publisher whose input stalls while its
+  session stays up; a packager that stops writing new segments while the origin keeps serving the old
+  playlist; a relay that holds the subscription open and forwards nothing; a cache pinned on a stale
+  playlist while the origin has moved on. `SIGSTOP` on the encoder and a frozen input file give the
+  first two without code.
+- **Metric.** Time from the last advancing media until each candidate detector fires, for each detector
+  separately: PCR progression at the groomer, media-sequence or object progression, wall-clock age of
+  the newest media against the wall clock, and expected-versus-actual media time. Plus what the
+  *transport* said throughout, which is the point.
+- **Decision criterion.** A lane passes if at least one detector fires within one groomer cushion of
+  the stall and does so without a false positive across the F2 soak. A detector that cannot distinguish
+  a stall from normal segment-duration silence has failed, which is the specific trap on the segmented
+  lane.
+- **Why it matters.** It is the failure a primary-distribution operator is least protected against: an
+  alarm set on process liveness or connection state reports green while the programme is off air.
+- **Existing evidence.** Both lanes have an observed instance and neither has a designed test.
+  [T5](test-5-network-impairment.md): past ~20 % loss the segmented client lost 82 s of programme while
+  the origin returned nothing but 200s, so origin error rate cannot detect it.
+  [T9](test-9-performance.md)/[T6](test-6-relay-resilience.md): a relay takeover livelock left the
+  process alive at 100 % CPU with no accepts for hours. [Architecture](../docs/architecture.md) §9.1
+  designs against both; the design is untested.
+
+### F4. Failure-injection and recovery
+
+- **Question.** How much programme is lost or corrupted before continuous delivery is restored, for each
+  failure, on each lane?
+- **Setup.** Two axes. *Transport*: loss, reordering, jitter, bandwidth reduction, and outages of
+  500 ms, 5 s, 30 s and 5 min, applied with `netem`/`tc` at the same point on both lanes. *Infrastructure*:
+  kill and restart the publisher, the relay, the origin, the packager, the edge cache, and the network
+  path; then two at once. Equivalences to declare: the MoQ relay and the segmented cache are the
+  mid-path node; the MoQ publisher and the segmented packager are the source node; MoQ has no origin
+  and segmented HTTP has no subscription state, and those asymmetries are results rather than gaps in
+  the matrix.
+- **Metric.** Per injection: seconds of media lost, continuity errors, PCR discontinuities and PTS
+  regressions, wall-clock recovery time, time to *stable* operation as distinct from first byte, and
+  whether an operator had to intervene. Recovery time alone is explicitly not the headline.
+- **Decision criterion.** Ranked by media lost, not by recovery time. A 30 s outage that costs 30 s of
+  programme is a worse result than a 60 s outage that costs none, and the ladder exists to find where
+  each lane crosses from the second behaviour to the first.
+- **Why it matters.** Contracted content has no allowance for a hole. The distinction between shedding
+  time and losing bytes is the one a downstream buffer can or cannot absorb.
+- **Existing evidence.** Substantial, and this family should reuse rather than repeat it.
+  [T6](test-6-relay-resilience.md) has origin restart and relay return: the MoQ exporter resumes in ~4 s
+  and *loses the media produced during the outage* by skipping to the live edge, where a retrying
+  segmented client refetches it and loses nothing — though neither TSDuck's HLS input nor FFmpeg's
+  demuxer survives an origin restart at all. Relay-failure detection is 30–33 s by default and ~10 s
+  tuned. [T5](test-5-network-impairment.md) has the loss and reordering ladders and the availability
+  window at 7.7–12.2 % applied loss. What is missing is the outage ladder, the simultaneous failures,
+  and a single grader applying one media-domain metric across all of it.
+
+### F5. The scaling model
+
+- **Question.** What is the shape of the cost curve as receivers increase, and where does each lane
+  place the load?
+- **Hypothesis.** MoQ places it on the relay and grows with channels rather than with audience;
+  segmented HTTP places it on the cache and leaves origin load roughly flat. Both are indicated and
+  neither is established as a *model*.
+- **Setup.** MoQ: subscribers driven from the 8-vCPU secondary against a relay on the primary — the
+  point being that every existing figure has them co-resident, so the knee on record is the host's. Ramp
+  to saturation, attributing CPU, RSS, fds and threads per role. Segmented: the same client ramp against
+  origin-only, then origin behind nginx `proxy_cache`, then behind a CloudFront distribution, recording
+  origin requests separately from edge requests at each step.
+- **Metric.** Per-role CPU, RSS and network against receiver count; per-subscriber delivered rate; for
+  the segmented lane, the origin-request count as a fraction of client requests — the cache offload
+  ratio, which is the whole scaling argument in one number.
+- **Decision criterion.** A fitted curve with its breakpoint identified and the binding resource named,
+  for each lane. "It reached N" is not the deliverable; the deliverable is what an operator multiplies.
+- **Why it matters.** Fan-out at near-zero marginal cost is R2, the requirement the incumbent IP
+  architectures fail, and the reason the problem is open at all.
+- **Existing evidence.** [T9](test-9-performance.md) has per-subscriber egress holding 9.49–9.65 Mbps to
+  N = 55 and 527 Mbps aggregate before collapsing at N = 70 — **host-limited, on loopback**; relay RSS
+  35.9 → 130.3 MB over the same ramp, and ~3.22 MB of fixed baseline per subscriber. Both origins serve
+  100 concurrent clients at ~992 Mb/s with no knee. Memory *growth* is settled and is not an audience
+  term: flat at ~28 MB/h from 0 to 8 subscribers, driven by ingested groups at ~9 KiB each.
+  [T11](test-11-interop.md) has the cache offload indicated at one node — two clients cost the origin
+  nine fetches rather than eighteen.
+
+### F6. MoQ distributed resilience
+
+- **Question.** Can MoQ be given a redundancy model that keeps the *programme* continuous, rather than
+  one that reconnects the session quickly?
+- **Hypothesis.** Not with relay reselection alone. The measured floor is one detection interval, and
+  the exporter resumes at the live edge, so a reselect costs whatever the detection took. Continuity has
+  to come from a receiver holding two subscriptions at once, which is the 1+1 result generalised above
+  the egress.
+- **Setup.** Two relays fed by one publisher; then two publishers of the same source feeding two relays;
+  a receiver subscribed to both, selecting per ST 2022-7. Fail each element in turn — one relay, one
+  path, one publisher — and then the receiver's preferred leg.
+- **Metric.** Programme continuity across the failure, graded by the merge oracle in the byte domain:
+  media lost, continuity errors, PCR discontinuity. Reconnect time recorded but subordinate.
+- **Decision criterion.** Hitless means no media lost and no continuity error at the merged output. Any
+  other outcome is reported as the number of seconds of programme it cost, and compared against F7's
+  equivalent.
+- **Why it matters.** R6 asks for "no visible failure during contracted content", and the installed base
+  implements that as 1+1 with receiver-side selection. A lane whose only answer is fast reconnection
+  does not meet it.
+- **Existing evidence.** The egress half is strong and should not be re-run: single-track legs are
+  byte-identical across two hosts in two availability zones with no shared component, 46,778/46,778 with
+  zero residue ([T12](test-12-dual-path-handoff.md)); multi-track reaches 75.56 % for a located upstream
+  reason. Relay-reselect failover is 30–33 s default, ~10 s tuned, and hitless is unreachable by it
+  ([T6](test-6-relay-resilience.md)). What is untested is everything between the publisher and the
+  egress: multiple relays, multiple paths, publisher redundancy, and receiver-side selection *between
+  relays* rather than between groomed legs.
+
+### F7. Segmented distributed resilience
+
+- **Question.** Can segmented HTTP exploit independent addressable objects and multiple delivery paths
+  to achieve seamless or near-seamless primary-distribution failover?
+- **Hypothesis.** Yes for a *serving-node* failure, because the object is addressable from anywhere and
+  the client has a window in which to ask again. Probably not for a *packaging* failure, and the
+  interesting cases are the partial ones — playlist available and segment not, segment available and
+  playlist stale, replicas inconsistent — where the lane's statelessness stops helping.
+- **Setup.** Two packagers writing identical names into a store shared across two hosts, which is the
+  step never taken: on one filesystem consistency is free and across two it is the engineering. Then
+  induce, one at a time: edge failure with the origin up; origin failure with the edge warm; a playlist
+  that references a segment the store does not have; a segment present with a stale playlist; premature
+  deletion inside the availability window; and two replicas that disagree. Content Steering last, since
+  it needs a client that implements it.
+- **Metric.** Media lost and continuity errors at the groomed output; origin-versus-edge request
+  attribution during each failure; whether the client detected the inconsistency or served it.
+- **Decision criterion.** Seamless means zero media lost with no operator action. The specific failure
+  to look for is not a stall but a *silent* one: the misconfigured pair in T6 delivered ±20 s of
+  time-travel that passed every continuity and PCR check, and this family must be able to catch that
+  class or it is not grading the right thing.
+- **Why it matters.** It is the lane's strongest theoretical claim and the basis on which the paper
+  currently gives it the redundancy and recovery rows. Those rows rest on the specification plus one
+  filesystem.
+- **Existing evidence.** [T6](test-6-relay-resilience.md): a shared-feed active/active pair with shared
+  names fails over with no measurable interruption, 3/3 runs, no receiver merge needed — **on one
+  filesystem, with the standby always co-started**; a *misconfigured* pair is accepted silently and
+  delivers time-travel. [T11](test-11-interop.md): objects are cacheable, measured at a single nginx
+  node. [T5](test-5-network-impairment.md): the availability window is real and has a measured edge.
+  Multi-CDN, Content Steering and edge/Pathway selection remain specification-only.
+
+### F8. Congestion and capacity
+
+- **Question.** What is the maximum impairment duration and severity each lane absorbs without losing
+  programme?
+- **Setup.** A shaped bottleneck stepped 20 → 8 Mb/s for 5 s, 20 → 12 Mb/s for 60 s, and 20 → 8 Mb/s
+  permanently, applied identically to both lanes, under `cake` so bufferbloat is not the variable. For
+  MoQ, add the `--latency-max` ladder at 1, 3, 4 and 6 s at n = 2 and n = 3, which is the knee C3's
+  mechanism implies and did not locate.
+- **Metric.** Backlog growth, buffer occupancy, latency growth and its recovery, media lost, continuity
+  errors, and resource growth *during* the impairment — the last because a lane that absorbs a shortfall
+  by buffering is spending memory to do it.
+- **Decision criterion.** The headline is one number per lane: the longest impairment absorbed with zero
+  media lost. Secondary is whether recovery returns to the pre-impairment operating point or to a new
+  one, since a permanently deeper buffer is a latency regression that survives the fault.
+- **Why it matters.** R4 asks for a bounded *and stable* budget, and R5 for degradation that does not
+  turn one lost packet into a multi-second gap. A trunk is provisioned against this curve.
+- **Existing evidence.** [T8b](test-8b-congestion-control.md) has the under-provisioned case on both
+  lanes: `tsp -I hls` delivers 64 % and 404s at 43 s where a re-anchoring client delivers 99 %, so the
+  segmented outcome is receiver policy rather than lane behaviour; provision ≥ 1.5× segmented against
+  ≥ 1.2× MoQ. C3's aggregate collapse is attributed to per-subscriber deadline shedding, tracking
+  `--latency-max` 4.29 → 10.35 Mb/s from 500 ms to 30 s at 0 continuity errors throughout. The step
+  ladders and the segmented comparison are new.
+
+### F9. Interoperability in practice
+
+- **Question.** Distinguishing specification maturity from demonstrated multi-vendor interoperability,
+  where does each lane actually stand?
+- **Setup.** Segmented: the same TS-carrying HLS origin against independent client implementations, and
+  the same client against independent packagers, scored on whether the transport stream survives
+  round-trip rather than on whether playback starts. MoQ: the T11 legs — Cloudflare with a provisioned
+  scope, `moq2ts` through a `moq-dev` relay, and a broadcast profile contributed to
+  `moq-interop-runner`.
+- **Metric.** Round-trip media fidelity against the T1 criteria: PIDs, `stream_type`, PMT descriptors,
+  SCTE-35, DVB service identity, continuity. Plus, separately, whether the pairing connects at all.
+- **Decision criterion.** Report the two axes separately and never collapse them. Connecting is not
+  interoperating; the paper's existing result is precisely that eight MoQ relays negotiated cleanly and
+  forwarded no media.
+- **Why it matters.** R1. And because the comparison here is genuinely inverted — the mature,
+  universally-interoperable lane is specified informationally, and the standards-track one has no
+  demonstrated cross-implementation media interop — which is a result about what standardisation
+  predicts, and is worth stating carefully rather than as a slogan.
+- **Existing evidence.** [T11](test-11-interop.md): 6/6 third-party segmented clients pass; the MoQ
+  relay matrix does not. The segmented result is scoped to a single programme; multi-programme through
+  a real CDN is B-5.
+
+### F10. Observability
+
+- **Question.** Can an operations team run hundreds of permanent feeds and determine quickly why one has
+  stopped delivering correctly?
+- **Setup.** Structured comparison rather than a measurement, and it must be labelled as such. For each
+  lane: what telemetry exists natively, what has to be built, what a failure looks like in each domain,
+  how far a fault can be localised from telemetry alone, what tooling a broadcast engineer already owns
+  that applies, and what the deployment and upgrade surface is. Grounded wherever possible in a fault
+  actually induced in F3 and F4, answering "what would the operator have seen?".
+- **Metric.** Per induced fault: which telemetry moved, how long before it moved, and whether it
+  localised the fault to a component.
+- **Decision criterion.** Judgement, stated as judgement. The reportable output is the list of faults
+  for which *no* telemetry on a lane distinguishes the failing component — that list is a finding.
+- **Why it matters.** R8, and it is a reliability property rather than a convenience: a fault that
+  cannot be localised is a fault that stays.
+- **Existing evidence.** [Architecture](../docs/architecture.md) §9 has the design and the two-domain
+  correlation problem. `--stats-enabled` is off by default on the relay. The segmented lane's diagnostic
+  surface is HTTP logs and manifest probes, which is mature and indirect.
+
+### F11. Isolation under abuse
+
+- **Question.** Can one receiver degrade the service other receivers get, on either lane?
+- **Setup.** Against a running feed with well-behaved subscribers: a subscription storm; subscriptions
+  to many nonexistent tracks; a client opening and abandoning sessions rapidly; a client requesting
+  segments that do not exist; a slow reader that never drains. Measure the *other* subscribers
+  throughout.
+- **Metric.** Delivered rate and continuity at the well-behaved receivers, and relay or origin resource
+  growth attributable to the abusive one.
+- **Decision criterion.** Any measurable degradation of an unrelated feed is a finding and belongs in
+  the paper regardless of severity. The purpose is not a security assessment; it is to establish whether
+  either lane has an obvious operational weakness at scale.
+- **Why it matters.** Multi-tenancy is assumed by both economic models. A relay holding per-subscription
+  state is structurally more exposed than a cache serving idempotent GETs, and the paper should either
+  show that or stop implying it.
+- **Existing evidence.** Relay state is per-subscriber and per-track by construction
+  ([Comparison](../docs/comparison.md) §2); relay memory growth is *not* an audience term, which bounds
+  one obvious attack. [Control plane](../docs/control-plane.md) is design-only and carries no
+  measurement. Nothing has been tested adversarially.
 
 ---
 ## Delivery latency at equal conformance — measured, see T18
@@ -671,18 +1002,21 @@ offset and a 12 s skew that did not exist. Either give the oracle a masked-compa
 exporter fix; meanwhile use [`t12-seqskew.py`](scripts/t12-seqskew.py), which measures phase without
 correlating.
 
-**Meshed variants — what the two-host arm left open.** The clock question is settled: arm D run with
-one groomer per host, eu-west-1a and eu-west-1b, on independent oscillators, is byte-identical across
-every shared slot, twice. So the legs agree about *stream position* and not merely about wall time.
+**Meshed variants — what the independent-upstream arm left open.** Both the clock question and the
+path-diversity question are settled. Arm D run with a publisher, relay, exporter and groomer per host
+across eu-west-1a and eu-west-1b, sharing nothing but a verified-identical source file, is
+byte-identical across 46,778 of 46,778 shared datagrams with zero residue on single-track content, and
+reaches 75.56 % on a seven-stream mux for a located upstream reason
+([#2829](https://github.com/moq-dev/moq/issues/2829)). So the legs agree about *stream position*, not
+merely about wall time, with no shared component above the egress.
 
-What that arm still shares is everything above the groomers — one publisher, one relay, one physical
-path — so it grades clock-independent determinism of two egress legs and **not** path diversity. The
-arm that grades path diversity needs two publishers of the same feed and two relays, optionally with
-relay B dialling relay A as a cluster peer (`~/t6-redundancy/relayA.toml`/`relayB.toml`) to check that
-relay reselect neither helps nor interferes once the receiver is doing the switching. That is the
-arm to run next, and it is also the one that would exercise
-[#3312](https://github.com/moq-dev/moq/pull/3312)'s subscription resumption across routes sharing a
-first hop.
+What that leaves is the *mesh*, which is a different topology rather than a deeper version of the same
+one: relay B dialling relay A as a cluster peer
+(`~/t6-redundancy/relayA.toml`/`relayB.toml`) to check that relay reselect neither helps nor interferes
+once the receiver is doing the switching, and the receiver holding two relay subscriptions rather than
+two groomed legs. That is [F6](#f6-moq-distributed-resilience), and it is also the arm that would
+exercise [#3312](https://github.com/moq-dev/moq/pull/3312)'s subscription resumption across routes
+sharing a first hop.
 
 **Segmented 1+1: the two cells the T6 arm could not run.** A pair sharing one feed and one naming
 scheme is hitless, and two packagers of one feed are byte-identical, but both were measured with the
@@ -720,9 +1054,11 @@ there is an artefact of 55–60 % stuffing; and any hardware IRD merge, which is
 
 Promoted to its own protocol with a runnable rig — see
 [test-8b-congestion-control.md](test-8b-congestion-control.md). All conditions C1–C6 are run,
-including C3's six aggregates. What remains of T8b is the `cake` arm and the mechanism probe behind
-C3's aggregate collapse, now attributed to the subscriber's latency budget; the controller ranking is no longer scoped to
-non-congestive impairment.
+including C3's six aggregates, the `cake` arm — under which the collapse survived, falsifying the
+bufferbloat explanation — and the `--latency-max` probe that attributed it to per-subscriber deadline
+shedding. **Nothing of the original protocol is outstanding.** What extends it now is the capacity
+ladder in [F8](#f8-congestion-and-capacity), which asks a different question: not which controller,
+but how much impairment either lane absorbs without losing programme.
 
 ---
 
@@ -801,15 +1137,16 @@ and the audio-resync work are all executed and written up in
    exercise the first commit's confirmation path, which no content we have reaches.
 5. **The publisher thread count**, which grows and decelerates without settling.
 6. **A cross-machine fan-out** to find the relay's own knee, overhead under loss versus SRT, and the
-   groomer/pacer envelope.
+   groomer/pacer envelope. Now the MoQ half of [F5](#f5-the-scaling-model).
 7. **The segmented lane's own resource envelope, which has no equivalent of any of the above.** Its
    carriage overhead is measured (1.036× source TS, [T9](test-9-performance.md)) and nothing else is:
    no per-role CPU or RSS figure for packager, origin or client, no fan-out knee, and no soak. The
    comparison is currently one lane characterised for cost and one lane characterised for bytes. It
    wants an nginx origin rather than `python3 -m http.server`, because the origin is the role whose
    scaling the whole commercial argument for this lane depends on, and the one measured is a
-   single-threaded reference implementation.
-7. **A full-feed publisher soak — both blockers now cleared, so this is ready to run.** Every long run
+   single-threaded reference implementation. Now the segmented half of [F5](#f5-the-scaling-model) and
+   of [F2](#f2-permanence-soak).
+8. **A full-feed publisher soak — both blockers now cleared, so this is ready to run.** Every long run
    to date used a video-only source, because looping a normal broadcast TS killed the publisher at the
    wrap. The origin host now runs a `main` build carrying the whole audio-resync and continuity series
    (#2751, #2823, #2891), and its standing loop publisher was rebuilt to replay the file's own bytes
@@ -844,6 +1181,13 @@ relay-reconnect churn; bounded CPU with headroom. Pair the soak with the T7 ≥ 
 long run yields both verdicts. Re-running the fan-out sweep across two machines needs
 N ∈ {1,5,10,25,50} subscribers on hosts separate from the relay, since a co-resident subscriber costs
 more CPU than the relay serving it and the knee then belongs to the box.
+
+**This method block now serves both lanes.** [F2](#f2-permanence-soak) and [F5](#f5-the-scaling-model)
+apply it unchanged to the segmented roles — packager, origin, client — which is the point: a comparison
+of resource behaviour is only worth having if the same sampler and the same slope test produced both
+sides of it. The media-domain series F2 adds on top (continuity, PCR, PSI cadence, media-sequence
+progression) are graded by the existing `compliance.py` and `ts-pcr-timing.py` instruments rather than
+by anything new.
 
 **Carriage overhead: the opaque lane and loss above 1 % remain.** The media-aware lane and SRT are
 measured on a real path ([T9](test-9-performance.md)). Two rules for whoever runs the rest, on top of

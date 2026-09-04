@@ -964,12 +964,14 @@ while the protection is gone.
 **Relay liveness, not process health.** A relay can stay *running* and stop *serving*. Two observed
 failure modes make this concrete: a takeover livelock that pinned every worker thread inside one
 poll, leaving the process alive at 100 % CPU with no logs, no health endpoint and no accepts for
-hours; and unbounded memory growth ending in an OOM kill. Neither is caught by a liveness check that
-only asks whether the process exists. **Probe the relay the way a client would — complete a session
-and read a byte** — and alarm on RSS *trend* alongside CPU pinned at a whole-core multiple. The trend
-alarm must be tuned to expect the bounded per-connection growth in §8.3, which levels off after a few
-hours: alarm on a climb that continues well past that, and set thresholds above the ceiling rather
-than at it, because the plateau is soft.
+hours; and, on 0.13.7, memory growth that ran to an OOM kill at 3.2 GB after six days with no
+subscribers attached. Neither is caught by a liveness check that only asks whether the process
+exists. **Probe the relay the way a client would — complete a session and read a byte** — and alarm
+on RSS *trend* alongside CPU pinned at a whole-core multiple. On current builds the growth is bounded
+rather than runaway, so the trend alarm must be tuned to expect the **per-ingested-channel** plateau
+in §8.3: alarm on a climb that continues well past the first several hours, and set thresholds above
+the ceiling rather than at it, because the plateau is soft and the measured figure is about twice the
+slot arithmetic predicts.
 
 ### 9.2 Runbooks
 
@@ -993,7 +995,7 @@ than at it, because the plateau is soft.
 
 **Configuration checklist before a route carries contracted content:** congestion controller pinned
 explicitly rather than left to the backend default and chosen against the route's own conditions
-(§8.5); relay memory bound explicitly and its per-connection ceiling budgeted (§8.3); groomer silence
+(§8.5); relay memory bound explicitly and its per-ingested-channel ceiling budgeted (§8.3); groomer silence
 detection enabled on every groomed leg (§5.3); dual-domain monitoring correlated; failover,
 revocation and regional-failure drills executed and timed against the real topology.
 
@@ -1004,7 +1006,7 @@ the groomer*, and they are worth naming because they are unfamiliar to a broadca
 
 | Concern | On MoQ | On segmented HTTP |
 |---|---|---|
-| Liveness signal | subscription state; relay memory and per-connection ceiling | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
+| Liveness signal | subscription state; relay memory against its per-ingested-channel ceiling | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
 | Silent failure mode | a publisher with no subscriber dies at ~30 s to the QUIC idle timeout | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
 | Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal*, so an alarm below the segment duration chatters and one above it is slow. Measured, the groomer derives ~9 s against the MoQ lane's ~1 s |
 | Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
@@ -1064,7 +1066,7 @@ slips.
 |---|---|---|
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
 | Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | Inherits the source's PCR spacing exactly, so wire-domain PCR repetition is whatever the egress delivered and cannot be improved by the groomer — on MoQ that means inheriting whatever the exporter's *bytes* carry, which a cushion swept eightfold does not touch, and which an exporter-side fix to PCR *values* alone did not change either (§4.2) |
-| Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Byte-identity demonstrated for single-track content on one host only; rate coherence across independent clocks untested |
+| Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Byte-identity holds for single-track content across two hosts, two availability zones and a fully independent chain per leg (46,778/46,778 datagrams, zero residue), so rate coherence across independent clocks is settled. **It does not hold on a multi-track mux** — 75.56 %, the residue being upstream's arrival-ordered interleave rather than damage (§5.1) |
 | Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
 | Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the *operator's* to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable *between* implementations |
@@ -1094,9 +1096,14 @@ Ranked by how much a negative answer would change the architecture.
    media bytes of the slot it labels. Still the highest-leverage remaining item and still outside this
    architecture's control ([upstream contributions](../lab/upstream-contributions.md) §1).
 3. **Do the correctness boundaries in §4.3 hold?** Source-clock drift, PCR discontinuity and wrap,
-   mid-stream PID change, and T-STD occupancy through the media-aware exporter. Named, never tested.
-4. **Does the 1+1 result survive two hosts, two clocks and multi-track content?** (§5.1.) Rate
-   coherence between independently clocked gateways is the specific untested property.
+   mid-stream PID change, and T-STD occupancy through the media-aware exporter. Each now has a
+   reproducible stimulus and an instrument asserted to grade it correctly, the 33-bit wrap placed
+   rather than waited 26.5 h for; what none of them has yet met is the exporter and the groomer, so
+   the boundaries are *reachable* rather than tested.
+4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Rate coherence between independently
+   clocked gateways is settled — single-track content is byte-identical across two hosts in two
+   availability zones with no shared component — and what remains is the multi-track case, where the
+   legs carry the same packets in a different order for a reason located upstream.
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves
    most of the delivery bill.
 6. **Relay portability between implementations (§8).** This architecture treats the relay as a
