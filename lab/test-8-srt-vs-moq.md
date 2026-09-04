@@ -182,13 +182,17 @@ hold full rate through the same ladder (1.040 and 0.961). The loss axis does not
 HTTP from media-aware MoQ at all — it separates loss-based congestion control from delay-based, on
 whichever lane it is applied to.
 
-**So T5's headline needs splitting in two, and only half survives.** Its reordering result stands:
-that was measured at a pinned controller, and it is a genuine property of QUIC's in-order delivery
-that segment fetching does not share. Its loss result does not: "the media-aware lane is flat under
-loss where segmented HTTP falls to about half source rate by ~3 % applied and 0.17 at 8 %" compared
-TCP/CUBIC against QUIC/BBR, and at a matched controller the same rig puts segmented HTTP at 0.971 at
-a commanded 3 % and 1.040 at a commanded 10 %. The two planes do have disjoint weaknesses, but loss is
-not one of them.
+**So T5's headline needs splitting in two, and — on later evidence — neither half survives.** Its loss
+result does not: "the media-aware lane is flat under loss where segmented HTTP falls to about half
+source rate by ~3 % applied and 0.17 at 8 %" compared TCP/CUBIC against QUIC/BBR, and at a matched
+controller the same rig puts segmented HTTP at 0.971 at a commanded 3 % and 1.040 at a commanded 10 %.
+Its reordering result was read here as the surviving half, on the grounds that *that* cell was measured
+at a pinned controller and reflects a genuine property of QUIC's in-order delivery which segment
+fetching does not share. The controller was indeed pinned; the packet size was not. T5's two arms met
+the shaper with ~34 kB and ~931 B packets, and `netem` reorders per packet, so equalising them puts the
+segmented lane at 0.44 on TCP and 0.18 on HTTP/3 against 0.13 media-aware
+([T20](test-20-segmented-http3.md)). **The two planes do not have disjoint weaknesses on this matrix at
+all** — on a shared substrate they trade cells rather than separating.
 
 **The controllers did receive comparable loss, and the shaper's counters are not what shows it.**
 Those counters disagree with themselves here — at 10 % they credit the CUBIC cell with 7.30 % and the

@@ -957,6 +957,61 @@ artefact of one implementation.**
 
 ---
 
+## 6b. FFmpeg: an HLS client that asks for HTTP/3 and carries the media over HTTP/1.1
+
+Not every upstream in this campaign is a MoQ implementation. Building the HTTP/3 acquisition path for
+[T20](test-20-segmented-http3.md) turned up a defect in FFmpeg that matters well beyond this paper,
+because it silently invalidates any measurement of HLS over HTTP/3 taken with the obvious command.
+
+**The defect.** FFmpeg master carries a `libcurl` protocol (`--enable-libcurl`,
+`libavformat/libcurl.c`) whose `http_version` option accepts `3` and `3only`. The HLS demuxer builds
+the option set for its child connections with `ffio_copy_url_options()`, which copies a fixed
+whitelist of names from the parent:
+
+```c
+"headers", "user_agent", "cookies", "http_proxy", "referer", "rw_timeout", "icy", "prefer_libcurl"
+```
+
+`prefer_libcurl` is present, so segments are fetched *by libcurl*. `http_version` is absent, so they
+are fetched at libcurl's *default* version. Running
+
+```bash
+ffmpeg -prefer_libcurl 1 -http_version 3only -i https://origin/index.m3u8 ...
+```
+
+the origin logs the playlist as `proto=HTTP/3.0 alpn=h3`, while FFmpeg's own trace of the next segment
+reads `ALPN: curl offers http/1.1` / `ALPN: server accepted http/1.1`. **The playlist goes over
+HTTP/3 and every media byte goes over HTTP/1.1, and nothing in the client reports it.**
+
+`tls_verify` and `ca_file` are missing from the same list, which is the only reason the defect
+surfaced: against a self-signed origin the segment connection fails verification and the run dies with
+`Error when loading first segment`. Against a publicly trusted origin it does not fail — it succeeds,
+over TCP, quietly.
+
+**The fix**, verified here, is a three-name addition to that whitelist:
+
+```c
+"headers", "user_agent", "cookies", "http_proxy", "referer", "rw_timeout", "icy", "prefer_libcurl",
+"http_version", "tls_verify", "ca_file", NULL };
+```
+
+**Verification.** With the patch, an nginx vhost carrying **no TCP listener** serves a full 60 s HLS
+acquisition in which the origin logs 54 of 54 requests as `HTTP/3.0 alpn=h3`, and a packet capture of
+the run holds 109,657 UDP datagrams and zero TCP. Without it the same command cannot complete at all
+against that origin, and completes over TCP against a trusted one. The media output with the patch is
+byte-identical (md5 `7f3402ea…`) to the same client's HTTP/1.1 arm, so the patch changes the transport
+and nothing else.
+
+**Why it is worth reporting.** This is the paper's own subject reproduced inside a tool: a lane that
+reports one substrate and carries another, with no diagnostic anywhere in the path. Any published
+comparison of HLS over HTTP/3 built on FFmpeg's HLS demuxer and this option is, unless the authors
+checked ALPN at the origin, a measurement of HTTP/1.1.
+
+**Status: not yet filed.** The patch is local to this campaign's build and is documented in T20's
+environment block so the experiment reproduces.
+
+---
+
 ## 7. The carriage specification: MSFTS
 
 Almost everything above is about an *implementation*. `draft-gregoire-moq-msfts` is the other kind of

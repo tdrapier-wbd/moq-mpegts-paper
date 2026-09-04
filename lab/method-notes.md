@@ -1067,15 +1067,18 @@ the distribution rather than the pass/fail.** *(T19.)*
 > verdict column discards.
 
 **A head-to-head is only a lane result if the lanes were on the same substrate; otherwise it is a
-substrate result wearing a lane's name.** *(Editorial audit of T5/T8 against the §14 verdict.)*
+substrate result wearing a lane's name.** *(Editorial audit of T5/T8 against the §14 verdict, settled
+by [T20](test-20-segmented-http3.md).)*
 
-> Reordering is the one impairment on which the two data planes separate, 0.98 against 0.19, and the
+> Reordering was the one impairment on which the two data planes separated, 0.98 against 0.19, and the
 > paper carried it as a property of the lane. It was measured with TCP under the segmented arm and QUIC
-> under the media-aware one, because no HLS client available here negotiates HTTP/3 — and the
-> configuration the verdict recommends is segmented HTTP *over HTTP/3*, which puts QUIC under both and
-> removes half the stated explanation. Nothing was measured wrongly; the scope was written wider than
-> the measurement. **Before a comparative row is generalised, list what differed between the arms
-> besides the thing under test, and check that the recommendation does not change one of them.**
+> under the media-aware one, while the configuration the verdict recommends is segmented HTTP *over
+> HTTP/3* — which puts QUIC under both and removes half the stated explanation. The audit's ask was
+> only to re-run the cell on a shared substrate. Doing so found the other half of the explanation was
+> also unsound: the arms differed in packet size as well as in transport, and that, not the transport,
+> was carrying the result. **Before a comparative row is generalised, list what differed between the
+> arms besides the thing under test, and check that the recommendation does not change one of them** —
+> and note that the audit found one such difference where there were two.
 
 **"Later evidence supersedes earlier conclusions" is only half a rule; the other half is that it
 supersedes them only as far as it actually reaches.** *(Editorial audit, relay memory.)*
@@ -1096,3 +1099,33 @@ it is only correct until the next run.** *(Editorial audit, `planned-experiments
 > to-do list honest is not "update it when things change" but **"an entry must name the document it
 > could falsify"** — an entry that cannot name one has either been answered already or was never
 > load-bearing, and both are reasons to delete it.
+
+**An impairment specified per packet is only comparable across lanes that carry the same media in
+comparable packets. Normalise MTU and offloads on every arm, and report the measured packet-size
+distribution beside any per-packet result.** *(T20, re-running T5's reordering cell.)*
+
+> T5's reordering cell was the paper's single strongest lane result: segmented HTTP 0.98 against MoQ's
+> 0.19. It ran on loopback at the default 65536-byte MTU, with segmentation offload disabled on the MoQ
+> arm — correctly, because `netem` mishandles super-packets, and *on that arm only, because that was
+> the arm that needed it*. The captures show what the shaper then saw: **1,209 packets averaging
+> 34,380 B on the segmented lane against 29,062 averaging 931 B on the media-aware one, for the same
+> media**. `reorder 25 %` is a per-packet probability, so the lane that won met ~24× fewer events.
+> Equalise MTU and offloads and the segmented lane falls to 0.44 on TCP and 0.18 on HTTP/3, against
+> 0.13 — the separation was the rig's. **A correction applied to one arm because only that arm needed
+> it is itself an asymmetry**, and the way to catch it is to measure the packet-size distribution on
+> every arm rather than to reason about which arm the fix was for. The residual matters too and does not
+> go away: even normalised, the QUIC arms send ~1.5× the packets for the same media, so "same shaper
+> setting" is still not "same impairment" and the figure has to say which it is.
+
+**A client option naming a transport is a request, not a measurement; prove the substrate from the
+server and the wire.** *(T20, HLS over HTTP/3.)*
+
+> FFmpeg propagates only a fixed whitelist of I/O options to a demuxer's child connections, and
+> `http_version` is not on it. `-http_version 3only` therefore fetches the *playlist* over HTTP/3 and
+> every *media segment* over HTTP/1.1, with no warning anywhere: the client believes it asked, and
+> 100 % of the media bytes go over TCP. It was visible only because the origin logs ALPN per request.
+> **The rule the rig now follows is that the transport is established by the origin, not requested by
+> the client** — the H3 arm's vhost has no TCP listener at all, so a fallback fails loudly instead of
+> succeeding quietly — and is corroborated by two further instruments that cannot collude with the
+> client's configuration: the origin's per-request ALPN log and a packet capture counting UDP against
+> TCP.

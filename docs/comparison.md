@@ -113,7 +113,7 @@ under impairment*, and *how does the system recover when something fails*. On th
 impairment separates the two data planes and the other separates congestion controllers rather than
 lanes. The second favours segmented HTTP, and it is the more important of the two for a trunk.
 
-### 3.1 Under impairment: reordering separates the lanes, loss separates the controllers
+### 3.1 Under impairment: loss separates the controllers, and once the lanes are substrate-matched nothing cleanly separates the lanes
 
 **The argument that a shared substrate makes the two indistinguishable was right, and it did not need
 a shared substrate to be shown.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so over HTTP/3 it
@@ -137,21 +137,31 @@ equally on both. The widely-repeated
 claim that segment fetching degrades under loss where MoQ does not is an artefact of comparing TCP's
 default controller against QUIC's tuned one.
 
-**Reordering is the real difference — and it is the one result whose substrate the recommendation
-changes.** In-order delivery turns reordering into head-of-line blocking that no congestion controller
-removes: under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented
-HTTP's 0.98. Segment fetching survived it because each segment is a bounded, independent object,
-completed and buffered ahead of the play point, so blocking inside one fetch delays a segment the
-client already has time to absorb rather than stalling a live edge.
+**Reordering was the one axis that separated the lanes. It has now been measured on a shared
+substrate, and it does not.** The earlier cell read 0.98 for segmented HTTP against 0.19 for the
+media-aware lane, and the explanation offered for it — that each segment is a bounded, independent
+object, completed and buffered ahead of the play point — was reasonable and is not what produced the
+number. That cell gave the segmented lane loopback's default 65536-byte packets while the media-aware
+lane, correctly but on one arm only, had segmentation offload disabled: **1,209 packets averaging
+34,380 bytes against 29,062 averaging 931 bytes, for the same media.** `netem` reorders a *fraction of
+packets*, so the lane that won met roughly 24× fewer reordering events. Re-run with packet sizes
+equalised across all three arms ([Evidence](evidence.md) §3.3,
+[T20](../lab/test-20-segmented-http3.md)):
 
-**But that measurement had TCP under one lane and QUIC under the other, and the recommended
-configuration puts QUIC under both.** Every segmented arm in this study was served over HTTP/1.1 on
-TCP; no HLS client available to it speaks HTTP/3. Over HTTP/3 a segment becomes a QUIC stream, which
-is also delivered in order — so the *substrate* half of the explanation disappears and only the
-*object* half remains. The object half is the one that should carry the result, and the reasoning that
-it survives is sound. It is nonetheless reasoning: **the single impairment axis that separates the two
-data planes has not been measured in the configuration the verdict recommends.** It is the cheapest
-outstanding experiment in this paper and the one most able to move a verdict row (§15).
+| 25 % reordering, 3 replicates | Segmented / TCP | Segmented / **HTTP/3** | Media-aware / QUIC |
+|---|---|---|---|
+| Equal packet sizes | 0.44 | **0.18** | **0.13** |
+| As originally measured | 0.995 | 0.995 | 0.125 |
+
+The original conditions reproduce exactly, so the measurement was sound and the reading of it was
+wrong. **On HTTP/3 the two lanes overlap** and reordering no longer distinguishes them; on TCP the
+segmented lane keeps a real but much smaller advantage than the one previously claimed.
+
+**The substrate change is a trade, and it runs the segmented lane's way on the other two axes.**
+Moving it to HTTP/3 costs it reordering and wins it loss — 0.10 on TCP against **0.70** on HTTP/3 at
+~20 % applied loss — and the 30 s outage, 0.51 against **0.76**. Unimpaired, the two substrates
+produce byte-identical output. So HTTP/3 is not a downgrade for segmented HTTP; it moves where the
+lane is strong, and the verdict can no longer rest on a single impairment axis.
 
 **Trunking several feeds down one congested path is a third result, and it is a latency decision rather
 than either.** Two or three media-aware feeds sharing a 15 Mb/s bottleneck at a 2 s subscriber budget
@@ -182,9 +192,19 @@ rate does not detect this and only a continuity or PCR check downstream will.
 The media-aware lane's own PCR non-conformance sat unchanged at 7.9–9.2 % in every cell including the
 unimpaired baseline, because it is the exporter defect of §5.1 rather than anything impairment did.
 
-One thing bounds this. The segmented arm was served by a single unoptimised origin over HTTP/1.1 rather
-than a tuned CDN edge, which is the configuration its commercial case assumes — a CDN could move the
-loss curve further, and cannot move the reordering result, which belongs to the lane.
+One thing bounds this. The segmented arm in that ladder was served by a single unoptimised origin over
+HTTP/1.1 rather than a tuned CDN edge, which is the configuration its commercial case assumes, so a CDN
+could move the loss curve further. The substrate half of that question is now settled and moves it a
+long way on its own: on HTTP/3 the same lane holds 0.70 at ~20 % applied loss where TCP holds 0.10.
+
+**Under sustained capacity shortfall the two lanes fail differently, and that is now measured rather
+than argued.** Holding a 20 Mb/s lane at 8 Mb/s against a 9.95 Mb/s stream, both segmented arms deliver
+0.79–0.81 — essentially everything the reduced pipe can carry, taking the shortfall as growing lateness
+— while the media-aware lane delivers 0.46, discarding groups that miss the subscriber's release
+deadline. Transient degradations (5 s below rate, or 60 s at 12 Mb/s, which is still above the stream
+rate) are absorbed by all three. **The choice under a lasting shortfall is therefore between lateness
+with recoverable objects and bounded latency with discarded programme**, and it is a policy decision
+rather than a quality ranking.
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
 
@@ -1027,7 +1047,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
-| Reliability under impairment (R5) | **segmented HTTP, on the one impairment that separates them** | **M** | **measured head-to-head across the full lane × controller matrix: loss does not separate the lanes at all — given the same controller both hold full rate to 10 % (1.04 and 0.96 on BBR) and both collapse under CUBIC (0.17 and 0.13), so the familiar "segment fetching degrades under loss" result is a controller comparison. Under 25 % reordering the media-aware lane reads 0.19 on either controller against segmented HTTP's 0.98, because in-order delivery turns reordering into head-of-line blocking and no controller removes it. **Scope: that cell had TCP under the segmented lane and QUIC under the media-aware one, and no segmented arm in this study ran over HTTP/3** — over HTTP/3 the substrate is shared and only the bounded-object argument survives, untested** (§3.1) |
+| Reliability under impairment (R5) | **neither, once substrate-matched — they trade cells** | **M** | **measured head-to-head across the lane × controller matrix and then re-measured on a shared substrate. Loss does not separate the lanes given the same controller (1.04 and 0.96 on BBR to 10 %; 0.17 and 0.13 on CUBIC), so the familiar "segment fetching degrades under loss" result is a controller comparison. **Reordering, the one axis that did separate them, no longer does**: the 0.98-against-0.19 cell gave the segmented lane 34 kB packets against the media-aware lane's 931 B ones and `netem` reorders per packet, so equalised it reads 0.44 on TCP, **0.18 on HTTP/3 and 0.13 media-aware — overlapping**. On the shared substrate the segmented lane instead wins loss (0.70 against 0.10 on TCP at ~20 % applied) and the 30 s outage (0.76 against 0.51), and under *sustained* under-capacity it delivers 0.79 against the media-aware lane's 0.46 by taking lateness where the other discards programme** (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP | M+S | **retry now exercised under loss, and it splits: no resilience of *rate*, and resilience of *content* only while the client stays inside the origin's availability window** — 0 continuity errors and 0 PCR intervals above 40 ms throughout a ladder to 10 % loss, so within the window the lane sheds time rather than data. A deeper ladder crosses the window between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s holes — and past ~20 % loss it does so without the origin returning a single error, so the failure is silent at the serving node. Edge and Pathway selection remains specification-only (§3.2) |
 | Redundancy — serving node (R5) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning; the difference is that the media-aware exporter skips to the live edge and loses the media produced during the outage, where the segmented client refetches it from the store and loses nothing. But neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all — both abandon at the first failed playlist reload — so it took a purpose-written client to show (§3.2) |
 | Redundancy — 1+1 source failover (R5) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured. A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. Conditional because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright** (§3.3) |
@@ -1047,14 +1067,16 @@ carries a single programme, segmented HTTP carrying MPEG-TS is the better engine
 on interop, maturity, delivery economics and recovery, none of which is close; on carriage fidelity,
 where its mux content turns out to be verbatim; and on the conformance of the groomed stream itself.
 
-**One qualification belongs on that sentence and is easy to lose.** The segmented lane's intended
-production form is HTTP/3, and every segmented measurement here was taken over HTTP/1.1 on TCP,
-because no HLS client available to this study negotiates H3. For most rows that is conservative or
-irrelevant — wire cost is derived for H3 and stated as derived, and interop, economics, maturity and
-carriage fidelity do not turn on the substrate. For **one** row it is not: the reordering result that
-gives segmented HTTP its impairment win was measured with TCP under it, and the recommended
-configuration would put QUIC under it. The verdict is stated for the lane as *measured*; whether it
-survives the lane as *deployed* is the first experiment the programme should run. **MoQ's case is not general and should not be stated as though it were.** Measurement
+**One qualification belonged on that sentence and has now been discharged.** The segmented lane's
+intended production form is HTTP/3, and the impairment cells have since been re-run on it, against an
+origin with no TCP listener at all. The outcome does not change the recommendation but does change its
+grounds: segmented HTTP no longer wins the impairment row on reordering — equalised, that axis does not
+separate the lanes — and instead wins loss, outage recovery and behaviour under sustained
+under-capacity, while losing nothing unimpaired, where the two substrates are byte-identical. **The
+recommendation now rests on interop, maturity, delivery economics and recovery**, which is a broader
+and more durable base than the single impairment cell it used to rest on. What is still measured only
+over HTTP/1.1 is everything outside those impairment cells; wire cost remains derived for H3 and stated
+as derived, and interop, economics, maturity and carriage fidelity do not turn on the substrate. **MoQ's case is not general and should not be stated as though it were.** Measurement
 narrowed it and sharpened it at the same time. What is left is: an egress that hands a groomer less to
 absorb, verbatim *multi-programme* carriage, a portable enforcement point with an observable session, push
 rather than manifest polling, ~7 % less wire volume — and a **measured 109 ms** across the public

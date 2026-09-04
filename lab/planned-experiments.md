@@ -70,19 +70,22 @@ decides open question 1 in [Evidence](../docs/evidence.md), the P1 repetition ga
 the MoQ lane can be made IRD-conformant at all. Do not run it against the PR branch as the deployable answer: a build that
 has not landed cannot retire a caveat about the deployable configuration.
 
-**P0-2. The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.** *Needs a
-client library build, not an account.* **Falsifies:** [Comparison](../docs/comparison.md) §14's
-reliability-under-impairment row, and with it the only impairment axis on which the two data planes
-separate. That row rests on 0.98 for segmented HTTP against 0.19 for MoQ under 25 % reordering — with
-TCP under one lane and QUIC under the other, because macOS's system libcurl and the EC2 box's curl
-8.18.0 are both built without HTTP/3, so `tsp -I hls` cannot negotiate it whatever an origin offers.
-Over HTTP/3 a segment is a QUIC stream and is also delivered in order, so half the explanation lapses
-and only the bounded-object half survives. **That box's nginx 1.28.3 already carries
-`--with-http_v3_module`**, so the server half exists and only the client half is missing; on Linux it
-is buildable (curl against ngtcp2 or quiche via `LD_LIBRARY_PATH`, or an HTTP/3 fetch engine behind a
-pull-style client rather than `tsp -I hls`). Until it exists every segmented figure carries an unstated
-"over TCP" and the paper cannot honestly describe the lane it recommends. Specified as
-[F1](#f1-substrate-matched-impairment).
+**P0-2. ~~The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.~~ Done —
+[T20](test-20-segmented-http3.md).** It falsified the row it was aimed at, and for a reason nobody
+had ranked: the 0.98-against-0.19 separation was a **packet-size artefact**, not a substrate one.
+Equalised, the cell reads 0.44 segmented/TCP, 0.18 segmented/HTTP/3 and 0.13 media-aware, with the
+last two overlapping. The substrate change also *won* the segmented lane the loss cell and the 30 s
+outage cell. [Comparison](../docs/comparison.md) §14's reliability row and
+[Evidence](../docs/evidence.md) §3.3 are updated.
+
+**What P0-2 leaves behind, and it is not small.** The H3 receiver is `ffmpeg -c copy -f mpegts`, which
+re-muxes and therefore regenerates continuity counters and PCR: on the H3 and H1 arms those columns
+grade the receiver, not the wire. **A byte-faithful HTTP/3 HLS receiver is now the outstanding
+instrument** — `tsp -I hls` is byte-faithful but cannot negotiate H3, and FFmpeg can negotiate H3 but
+cannot pass bytes through. Until one exists, no *carriage-fidelity* claim can be made about the
+segmented lane over HTTP/3, only delivered-rate and programme-loss claims. Building it is a fetcher
+that reads the playlist over H3 and concatenates segments verbatim; it is a small job and it upgrades
+every cell T20 measured.
 
 **P0-3. Comparable long-duration soaks — 24 h, then 7 days, on both lanes.** *The largest gap in the
 paper relative to the use case.* **Falsifies:** every claim that either lane can be run *permanently*.
@@ -254,11 +257,11 @@ service rather than measured on an MPTS.
 - **More transparency clips through lanes already characterised** across a 2.75× bitrate spread.
 - **The arm B1 wire-cost leg on the EC2 path**, whose HTTP-layer term is path-independent and whose
   framing multiplier is measured elsewhere; and per-track wire-byte attribution.
-- **The segmented HTTP/3 arm *as an explanation for the lanes' loss difference*.** That motivation is
-  dead: [T8](test-8-srt-vs-moq.md) erased the difference by matching the controller on TCP, which was
-  the cheaper route to the same answer. **P0-2 is a different question and is now the higher-ranked
-  one** — not why the lanes differ under *loss*, where they do not, but whether they still differ under
-  *reordering* once both sit on QUIC, which is the axis on which they do.
+- **The segmented HTTP/3 arm.** Run — [T20](test-20-segmented-http3.md). Both the original motivation
+  (explaining the lanes' loss difference, killed earlier by [T8](test-8-srt-vs-moq.md) matching the
+  controller) and its successor (whether the lanes still differ under *reordering* once both sit on
+  QUIC) are now answered: they do not. What survives is the byte-faithful H3 receiver noted under
+  P0-2, which is an instrument gap rather than an open question.
 
 ---
 
@@ -285,9 +288,10 @@ box measure each other.
 the media that came out. Build the grader once. P0-4 is the subset where the component does not die, so
 it costs one more arm rather than one more rig.
 
-**Do not bundle:** P0-2 (an HTTP/3 client is a build task with an open-ended failure mode, and it will
-eat a window on its own), or anything from the blocked list, whose windows are set by apparatus rather
-than by us.
+**Do not bundle:** anything from the blocked list, whose windows are set by apparatus rather than by
+us. *(P0-2 was on this list as an open-ended build task; it is done, and the build took about an hour
+of the window — the open-ended part turned out to be the FFmpeg option-propagation defect, not the
+QUIC stack.)*
 
 ---
 
@@ -311,27 +315,24 @@ the same instrument, or the comparison measures the rig. Where a lane has no equ
 — there is no MoQ "origin" and no segmented "relay" — the equivalence is stated in the entry rather
 than assumed.
 
-### F1. Substrate-matched impairment
+### F1. Substrate-matched impairment — run, see [T20](test-20-segmented-http3.md)
 
-- **Question.** Does segmented HTTP keep its reordering advantage when it runs over HTTP/3 rather than
-  TCP?
-- **Hypothesis.** It keeps most of it. Head-of-line blocking inside one QUIC stream delays a bounded
-  object the client fetched ahead of its play point, where the same blocking on MoQ stalls the live
-  edge. The advantage should narrow rather than vanish, and the size of the narrowing is the result.
-- **Setup.** The T5/T8 impairment rig unchanged, with the segmented arm served by the EC2 nginx 1.28.3
-  already built `--with-http_v3_module` and fetched by an H3-capable client — curl against ngtcp2 or
-  quiche behind a pull-style fetcher, since `tsp -I hls` cannot negotiate H3 against the available
-  libcurl. Re-run the reordering column at 5 %, 15 % and 25 %, and one loss column as a control that
-  the new client is not itself the variable.
-- **Metric.** Delivered-rate ratio against source, continuity errors, PCR intervals above 40 ms.
-- **Decision criterion.** If segmented-over-H3 holds ≥ 0.9 at 25 % reordering, the verdict row stands
-  and is strengthened. If it falls below ~0.5, the row changes side and the advantage was the
-  substrate. Between the two, the row becomes a quantified narrowing rather than a win.
-- **Why it matters.** It is the only impairment axis on which the two data planes differ at all, and
-  the paper recommends the lane in a configuration it has not measured.
-- **Existing evidence.** [T5](test-5-network-impairment.md) and [T8](test-8-srt-vs-moq.md) give the TCP
-  column: 0.98 segmented against 0.19 MoQ at 25 %, on both controllers. Loss is already known not to
-  separate the lanes once the controller is matched, so only the reordering column needs re-running.
+- **Question, as asked.** Does segmented HTTP keep its reordering advantage when it runs over HTTP/3
+  rather than TCP?
+- **Hypothesis, as written.** "It keeps most of it… the advantage should narrow rather than vanish."
+- **Outcome.** Wrong twice over. It does not narrow, it goes: 0.18 over HTTP/3 against the
+  media-aware lane's 0.13, overlapping across replicates, which is below the "row changes side"
+  threshold this entry set at ~0.5. And the premise was wrong too — the advantage was never a
+  substrate property. Equalising packet sizes drops the segmented lane to **0.44 on TCP as well**,
+  because the original cell gave it 34 kB packets against the media-aware lane's 931 B ones while
+  `netem` reorders per packet.
+- **What the decision criterion could not have caught.** This entry specified the arm to add and not
+  the property to control. Had the H3 arm been run without normalising MTU and offloads, it would have
+  returned 0.995 — "the advantage survives, strengthened" — and the artefact would have been confirmed
+  rather than found. **The residual rule is in [method-notes](method-notes.md)**: report the measured
+  packet-size distribution beside any per-packet impairment result.
+- **What replaces it.** Not a re-run. The instrument gap under P0-2: a byte-faithful HTTP/3 HLS
+  receiver, without which the H3 arm cannot carry a carriage-fidelity claim, only a delivered-rate one.
 
 ### F2. Permanence soak
 

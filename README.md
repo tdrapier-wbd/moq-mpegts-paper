@@ -30,9 +30,9 @@ mile, both land within 7 % of the same wire volume, and, measured, both need the
 before a hardware IRD will lock to them, which neither specification mentions and which the
 distributor owns because it no longer supplies its clients' receivers
 ([Comparison](docs/comparison.md) §4 and §14, [Evidence](docs/evidence.md) §3.2, §3.5). The shared
-substrate is the *specified* arrangement rather than the measured one: no HLS client available here
-speaks HTTP/3, so every segmented figure in this paper was taken over TCP, which is scoped where it
-matters and matters on exactly one row ([Evidence](docs/evidence.md) §4).
+substrate is now the measured arrangement on the rows where it matters: the segmented lane's impairment
+cells have been re-run over HTTP/3, against an origin with no TCP listener at all, and the figures
+outside those cells remain HTTP/1.1 measurements ([Evidence](docs/evidence.md) §4).
 
 **Segmented HTTP is ahead today where it counts commercially** — universally interoperable, sells over
 commodity delivery now, the more robust recovery model, an off-the-shelf path back to a transport
@@ -55,9 +55,12 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   lower than SRT and 37× lower than segmented HTTP over the same path in the same window, and on
   loopback lower even than a plain-UDP control carrying no transport buffer at all. The path costs its
   round trip and nothing more ([Evidence](docs/evidence.md) §3.11).
-- **Loss does not separate the two data planes; reordering does.** At a matched congestion controller
-  both hold full rate through 10 % loss and both collapse under CUBIC, while under 25 % reordering the
-  media-aware lane reads 0.19 against segmented HTTP's 0.98 on either controller
+- **Once both lanes are on QUIC, no impairment axis cleanly separates them.** At a matched congestion
+  controller both hold full rate through 10 % loss and both collapse under CUBIC. Reordering used to
+  separate them — 0.98 against 0.19 — but that cell gave the segmented lane 34 kB packets against the
+  media-aware lane's 931 B ones while `netem` reorders *per packet*; equalised it reads 0.44 on TCP,
+  **0.18 on HTTP/3 against 0.13, overlapping**. The substrate change instead wins the segmented lane
+  loss (0.70 against 0.10 at ~20 % applied) and 30 s outage recovery (0.76 against 0.51)
   ([Evidence](docs/evidence.md) §3.3).
 - **A segmented 1+1 pair sharing one feed and one naming scheme fails over with no measurable
   interruption and no receiver-side merge**, where the media-aware floor is one detection interval. On
@@ -109,11 +112,12 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   remains is the exporter placing each PCR packet beside the media bytes of the slot it labels, so
   the spacing is legible to a stage that has only bytes
   ([Evidence](docs/evidence.md) §5).
-- **The segmented lane was never measured over HTTP/3**, only over HTTP/1.1 on TCP, because no HLS
-  client available here negotiates it. Most rows do not turn on this and the H3 wire cost is labelled
-  derived, but the reordering result that gives segmented HTTP its impairment win had TCP under one
-  lane and QUIC under the other, so the one axis that separates the two data planes is unmeasured in
-  the configuration the verdict recommends ([Evidence](docs/evidence.md) §3.3, §4).
+- **The segmented lane's *impairment* cells are now measured over HTTP/3; everything else about it is
+  still HTTP/1.1 over TCP.** The H3 wire cost remains labelled derived, and interop, economics,
+  maturity and carriage fidelity do not turn on the substrate. What the H3 lane cannot yet do is grade
+  *carriage*: its receiver re-muxes, so continuity and PCR on that arm measure the receiver rather than
+  the wire, and a byte-faithful HTTP/3 receiver has still to be built
+  ([Evidence](docs/evidence.md) §3.3, §4).
 - **Whether the part of relay memory that the slot arithmetic does not explain is bounded** — a 14 h soak
   converged on 2.03× the predicted ceiling, decaying monotonically but not flat when it ended, so the
   budget is about double the derivation. Audience is not the variable: the growth rate is flat across 0–4

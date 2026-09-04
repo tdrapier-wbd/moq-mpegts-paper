@@ -340,10 +340,12 @@ The blocker recorded here previously was "a caching HTTP/3 origin, currently not
 1.31.3 with `--with-http_v3_module` and Caddy 2.11.4 are now both installed, and **that was not the
 constraint.** Two others are, and neither is fixed by installing a server:
 
-- **No HLS client here speaks HTTP/3.** macOS's system libcurl is built without it, so TSDuck's `hls`
-  input cannot negotiate H3 however the origin is configured. The origin was therefore run as
-  HTTP/1.1, which is the *upper* bound on header cost — H3 would compress those headers with QPACK —
-  so the 1.0006× is conservative against segmented HTTP by under 0.02 points.
+- **No HLS client *on this host* speaks HTTP/3.** macOS's system libcurl is built without it, so
+  TSDuck's `hls` input cannot negotiate H3 however the origin is configured. The origin was therefore
+  run as HTTP/1.1, which is the *upper* bound on header cost — H3 would compress those headers with
+  QPACK — so the 1.0006× is conservative against segmented HTTP by under 0.02 points. One has since
+  been built on the EC2 secondary ([T20](test-20-segmented-http3.md)); it does not change this cell,
+  whose second constraint below is the binding one.
 - **Loopback cannot price a packet.** `lo0`'s MTU is 16384, so datagram and segment counts here bear
   no relation to a real path, and `tcpdump` needs privileges this environment does not have. A real
   H3 client would not have fixed this.
@@ -474,9 +476,10 @@ before publishing it.*
 
 **A blocked cell was attributed to the wrong blocker.** Wire cost was recorded as needing "a caching
 HTTP/3 origin, currently not installed". Both nginx and Caddy were then installed and the cell was
-still blocked, for two reasons neither of which a server install addresses: no HLS client available
-here negotiates HTTP/3, and loopback's 16384 B MTU makes any packet count meaningless regardless of
-client. *Lesson: when recording what a measurement needs, name the constraint that actually binds.
+still blocked, for two reasons neither of which a server install addresses: no HLS client on this host
+negotiates HTTP/3, and loopback's 16384 B MTU makes any packet count meaningless regardless of client.
+The first was later removed by building one ([T20](test-20-segmented-http3.md)); the second still binds
+this cell, which is the point. *Lesson: when recording what a measurement needs, name the constraint that actually binds.
 "Tool X is not installed" is a guess about the blocker unless the measurement has been attempted far
 enough to hit it, and a guess sends the next session shopping instead of measuring.*
 

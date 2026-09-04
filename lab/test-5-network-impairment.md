@@ -168,7 +168,7 @@ receives less loss than the media-aware lane in every cell and still degrades fu
 | loss 3 % | 1.44 % / 2.93 % | 0.838 | 0 | 0.00 % | **0.962** | 0 | 8.83 % |
 | loss 5 % | 3.24 % / 5.05 % | **0.448** | 0 | 0.00 % | **0.961** | 0 | 8.83 % |
 | loss 10 % | 8.04 % / 9.98 % | **0.170** | 0 | 0.00 % | **0.960** | 0 | 8.83 % |
-| reorder 25 % | 0 % / 1.79 % | **0.981** | 0 | 0.00 % | **0.192** | 0 | 7.89 % |
+| reorder 25 % *(superseded — the arms did not carry comparable packets; see Corrections)* | 0 % / 1.79 % | *0.981* | 0 | 0.00 % | *0.192* | 0 | 7.89 % |
 | in-order jitter | 0 % / 0 % | *0.077* | *10 / 94* | *0.80 %* | *0.833* | 0 | 9.18 % |
 
 *The jitter row is not a result about jitter. `slot` still meters the TCP lane even with
@@ -294,9 +294,13 @@ capture tool cleanly, so no local TSDuck file was produced.
    media-aware egress stayed bursty (~13 % PCR > 40 ms; on this pre-#2440 build also SI-stripped) and
    the opaque egress stayed IRD-shaped (0 % > 40 ms, full SI, CBR). The property that decides
    broadcast usability is set by the lane and downstream grooming, not by impairment.
-5. **Reordering separates the two lanes; loss does not.** Under reordering segmented HTTP is untouched
-   at 0.981 where the media-aware lane collapses to 0.192, and that comparison holds because both arms
-   were run at a pinned controller. The loss column of this sweep is **not** a lane comparison: it ran
+5. **Neither axis separates the two lanes, though it took two corrections to establish that.** The
+   reordering cell reads 0.981 segmented against 0.192 media-aware, and both arms were on a pinned
+   controller — but they were not carrying comparable packets. Offload was disabled on the media-aware
+   arm and not on the segmented one, which left the segmented arm on loopback's 65536-byte MTU: ~34 kB
+   packets against ~931 B ones for the same media, and `netem` reorders *per packet*. Equalise them and
+   the cell reads 0.44 segmented ([T20](test-20-segmented-http3.md)). The loss column of this sweep is
+   **not** a lane comparison either: it ran
    the media-aware arm on BBR and the segmented arm on the system default, which is CUBIC. Completing
    the matrix ([T8](test-8-srt-vs-moq.md)) puts segmented HTTP at 0.971 at 3 % and 1.040 at 10 % once
    it too is given BBR, against the media-aware lane's 0.962 — indistinguishable. Under CUBIC both
@@ -373,11 +377,14 @@ Limits specific to the segmented-vs-media-aware head-to-head:
 
 ## Conclusion
 
-**One impairment separates the two data planes, and it is reordering, not loss.** On one host under
-one shaper the media-aware lane collapses to 0.15–0.19 of source rate under 25 % reordering while
-segmented HTTP is untouched at 0.98 — a structural consequence of QUIC's in-order stream delivery
-that segment fetching cannot suffer, and the one axis on which a route's choice of lane is a genuine
-engineering decision. **Loss separates congestion controllers instead.** Given the same controller
+**Neither impairment axis separates the two data planes; this experiment's reordering cell separated
+two packet sizes.** The media-aware lane collapses to 0.15–0.19 of source rate under 25 % reordering
+while segmented HTTP reads 0.98, and that was carried here as a structural consequence of QUIC's
+in-order stream delivery. It is not. The arms met the shaper with ~34 kB and ~931 B packets
+respectively, because offload was disabled on one arm only, and `netem` reorders per packet — so the
+winning arm met roughly 24× fewer reordering events for the same media. Given comparable packets the
+segmented lane reads **0.44 on TCP and 0.18 on HTTP/3, against the media-aware lane's 0.13**
+([T20](test-20-segmented-http3.md)). **Loss separates congestion controllers instead.** Given the same controller
 both lanes behave the same way: on BBR both hold full rate through 10 % ([T8](test-8-srt-vs-moq.md)
 completes the matrix at 1.040 segmented and 0.961 media-aware), and on CUBIC both collapse to 0.13–0.17.
 The loss ladder in this experiment gave the two lanes different controllers, so the inversion it
@@ -435,6 +442,18 @@ off loss that it had largely not received. **Rule:** disable the kernel offloads
 application's own (quinn coalesces its own datagrams), then label every row with the fraction the
 shaper counted rather than the fraction it was commanded.
 
+**Believed:** with offload disabled on the media-aware arm, the reordering cell compared two lanes.
+**True:** it compared two packet sizes. The offload fix above was applied where the problem had been
+found — the media-aware arm, where quinn's own coalescing was also in play — and the segmented arm was
+left on loopback's default 65536-byte MTU. For the same 45 s of media the shaper therefore saw 1,209
+packets averaging 34,380 B on one arm and 29,062 averaging 931 B on the other, and `netem`'s
+`reorder 25 %` is a *per-packet* decision: the segmented arm was given ~24× fewer chances to be
+damaged, and each event displaced 37× more media. Normalise MTU and offloads on both arms and the
+segmented lane drops to 0.44 while the media-aware lane is unchanged at 0.13; restore this cell's
+asymmetry and its numbers return exactly ([T20](test-20-segmented-http3.md)). **Rule:** an impairment
+specified per packet is a claim about packets, so report the packet count and mean size each arm
+actually presented to the shaper beside the delivered ratio. Equal commands are not equal conditions.
+
 **Believed:** a safety watchdog that removes shaping after 30 minutes is free insurance. **True:** it
 outlives its own cell and fires into a later one, deleting that cell's qdisc partway through; the cell
 then completes and reports a plausible, clean result for a condition it never experienced. This is
@@ -467,6 +486,7 @@ compute how long exhausting it would take and check the window is longer than th
 ## References
 
 - Congestion-control head-to-head that reframes the loss result: [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md).
+- Substrate-matched re-run that retires the reordering result: [test-20-segmented-http3.md](test-20-segmented-http3.md).
 - The exporter PCR defect that appears in every cell of the media-aware arm: [test-18-delivery-latency.md](test-18-delivery-latency.md).
 - Rigs: [`t5-impair-arm.sh`](scripts/t5-impair-arm.sh), [`t5-impair-sweep.sh`](scripts/t5-impair-sweep.sh),
   [`t5-availability-ladder.sh`](scripts/t5-availability-ladder.sh).
