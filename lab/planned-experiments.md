@@ -58,17 +58,22 @@ the ranking and the one-paragraph reason, and point at the specification.
 
 ### P0 — could change a viability conclusion
 
-**P0-1. The end-to-end re-run against a grid-sliced export, the moment
-[#3351](https://github.com/moq-dev/moq/pull/3351) merges.** *Blocked only on the merge; the rig is
-built and unaltered.* The positional fix is written and verified **at the pipe** (T19 measurement 9:
-adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms against its own merge-base). What it does not tell
-us is the thing the whole PCR line of work was filed under: **whether a byte-locking groomer downstream
-of it produces a conformant wire.** T19 measurements 3, 4 and 6 re-run unaltered and answer it: on the
-last build to carry a merged PCR fix, the timing fixes alone took the lane from 120 to 772 ms and from
-0 to 1,166 continuity errors, and the positional change is the one that should move both back. It
-decides open question 1 in [Evidence](../docs/evidence.md), the P1 repetition gate, and with it whether
-the MoQ lane can be made IRD-conformant at all. Do not run it against the PR branch as the deployable answer: a build that
-has not landed cannot retire a caveat about the deployable configuration.
+**P0-1. ~~The end-to-end re-run against a grid-sliced export.~~ Done —
+[T19](test-19-pcr-grid-verification.md) measurement 10.** [#3351](https://github.com/moq-dev/moq/pull/3351)
+merged as `4cf216149` and the re-run answers open question 1 in [Evidence](../docs/evidence.md): **an
+evenly spaced exporter cadence does not clear the P1 repetition gate.** At the pipe the fix is complete
+— adjacency 0 %, release error p95 1.70 ms, upstream's own gate green on the merged build. On the wire,
+against #3351's own merge-base, it drops 36 % fewer packets and halves stuffing but leaves **12.2 % of
+intervals above 40 ms, 811 continuity errors and 2,126 ms of latency** against a 118 ms pre-fix control.
+
+**What P0-1 leaves behind is a sizing question, not an upstream one.** The residue is that a coded
+frame's bytes belong to its own 40 ms, so a 417 kB I-frame is 357 ms of carrier — a mux schedule the
+source's CBR muxer supplied against a T-STD buffer and that decode timestamps do not carry. It has to
+be bought downstream: the displacement is bounded at **761 ms** and a groomer cushioned past it conserves
+**99.6 %** of the programme at 0 continuity errors and exact CBR, but still misses the gate at 10.4 %.
+So the live chain has not been re-run at a cushion past the displacement, and that — not another
+upstream change — is the next measurement on this line. It is **P1**, because it trades the axis the
+lane exists for and cannot make the lane conformant on its own.
 
 **P0-2. ~~The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.~~ Done —
 [T20](test-20-segmented-http3.md).** It falsified the row it was aimed at, and for a reason nobody
@@ -249,9 +254,9 @@ service rather than measured on an MPTS.
 - **Filing the PCR output-position finding, and the conformance test** — filed as
   [#3334](https://github.com/moq-dev/moq/issues/3334) and [#3335](https://github.com/moq-dev/moq/pull/3335),
   with hedged comments on #2829/#2779. The maintainer then **wrote the fix**,
-  [#3351](https://github.com/moq-dev/moq/pull/3351), which verifies against its own merge-base
-  (adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms) and is reported on the PR. What this *adds* to
-  the list is the end-to-end re-run it unblocks, below.
+  [#3351](https://github.com/moq-dev/moq/pull/3351), which merged as `4cf216149` and verifies both
+  against its own merge-base and on a merged build (adjacency 50.31 % → 0 %, release p95 70.3 → 1.7 ms).
+  The end-to-end re-run it unblocked is **done** (P0-1 above) and answers open question 1: no.
 - **The `mpegts-pacer` positional guard** — in, with five tests and the T19 capture as the regression
   fixture. The groomer now measures the assumption it used to make.
 - **More transparency clips through lanes already characterised** across a 2.75× bitrate spread.

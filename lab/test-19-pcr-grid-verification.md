@@ -2,7 +2,8 @@
 
 > **State:** complete for [#2967](https://github.com/moq-dev/moq/pull/2967) on the laptop rig; extended
 > to [#3006](https://github.com/moq-dev/moq/pull/3006) on the EC2 primary, where the *time* domain is
-> measurable and the file domain is not.
+> measurable and the file domain is not; and closed for
+> [#3351](https://github.com/moq-dev/moq/pull/3351) on the merged build (measurement 10).
 >
 > **Three domains, and the fix that closed two of them left the gate open.** #2967 put the PCR *values*
 > on a flawless grid — every interval exactly 25.000 ms, 0 above the 40 ms P1 gate, the 85 %
@@ -37,17 +38,30 @@
 > *ours* — a groomer that read source PCR value cadence and positional cadence as interchangeable — is
 > fixed and guarded in `mpegts-pacer` (measurement 8).
 >
-> **The positional ask has since been granted, and it verifies `[unmerged]`.**
-> [#3351](https://github.com/moq-dev/moq/pull/3351) slices the export on the PCR grid instead of on media
-> frames. Against its own merge-base on one host, adjacency falls **50.31 % → 0 %** and releases outside
-> ±10 ms fall **491/799 → 0 to 4/745**, p95 **70.3 → 1.5 to 1.9 ms** (measurement 9). The lag it
-> introduces converges to **480 ms against a 500 ms `--latency-max`** and then holds to 0.017 ms/s, so it
-> is a constant offset rather than a drift; *which* mechanism holds it there is open, since a mux buffer
-> filling and `Pacer::absorb` mistaking reorder depth for delivery lag predict the same curve on a
-> B-frame source (corrections). **What is verified is the pipe, not the wire:** whether a byte-locking
-> groomer downstream now produces a conformant stream is untested and needs a merged build, so the
-> deployable configuration is still the pre-fix one. #3351 remains **open and unmerged** at `87502b85e`,
-> checks green, no maintainer reply; the merged-build wire re-run is blocked on nothing else.
+> **The positional ask was granted, [#3351](https://github.com/moq-dev/moq/pull/3351) has merged, and
+> the wire re-run it unblocked is a fail** (measurement 10). At the pipe the fix is everything it claims:
+> adjacency **87.2 % → 0.0 %**, releases outside ±10 ms **2/4,779** at a p95 of **1.70 ms**, and upstream's
+> own gate passes on the merged build. On the wire the lane still does not reach the gate. Against
+> **#3351's own merge-base**, at a matched exporter budget, it *wins* content — the byte-locking groomer
+> drops **211,957 → 134,769** packets and stuffing falls **49.9 % → 28.8 %** — and *loses* latency,
+> **776.8 → 2,126.2 ms** against a 118 ms pre-fix control. Continuity is 811 errors and **12.2 % of
+> intervals still exceed 40 ms**. Three of the four pass criteria fail, so **the deployable
+> configuration is still the pre-fix build.**
+>
+> **The residual is not upstream's to fix, and that is the substantive finding.** #3351 places each
+> slot's bytes at the media time the slot asserts, which is correct. But a coded frame's bytes belong to
+> *its own* 40 ms however large the frame is, so a 417 kB I-frame lands as ~1,400 packets in one 25 ms
+> slot — while the source's CBR mux had spread those same bytes over many frame periods against a T-STD
+> buffer. **A media-aware lane cannot recover a mux schedule from decode timestamps, because the
+> schedule was never in them.** The smoothing has to be supplied downstream, and it can be: replayed at
+> source rate into a groomer whose cushion exceeds the measured displacement (**761 ms**), the merged
+> build conserves **99.6 %** of the programme at 0 continuity errors and exact CBR. It still misses the
+> repetition gate, at 10.4 %.
+>
+> **The ~480 ms standing lag is neither B-frame reorder depth nor the latency budget** — the ambiguity
+> measurement 9 left open is closed. An otherwise-identical `bframes=0` clip still carries **428.6 ms**
+> of it against `bframes=3`'s 481.2 ms, and moving `--latency-max` across 500 ms / 1 s / 2 s moves it
+> between 428.6, 414.9 and 451.5 ms. It is a fixed filling offset of roughly 420–490 ms.
 >
 > **The instrument itself now has a test, which it did not when any of the above was measured.**
 > `ts-pcr-fixtures.py` synthesises all nine PCR boundary conditions and `ts-pcr-selftest.py` asserts the
@@ -97,6 +111,18 @@ that gate be met:
 | Off-the-shelf groomer | TSDuck 3.44-4676, `tsp -P pcradjust` — T13's closest-passing off-the-shelf stage |
 | Rigs | [`t19-pcr-grid.sh`](scripts/t19-pcr-grid.sh) for the exporter's own output; [`t18-arm.sh`](scripts/t18-arm.sh) unaltered for the end-to-end arm |
 | Window | 60 s per exporter capture, 90 s per end-to-end arm, 250 ms groomer cushion |
+
+**Measurement 10 (the merged #3351) ran on the laptop rig**, all arms in one session so the four builds
+are the only variable.
+
+| | |
+|---|---|
+| **Build under test** | `moq 0.10.0-f8236680b` — `origin/main` carrying #3351's merge `4cf216149`, pinned to `~/bin-3351/` |
+| **Isolating control** | `moq 0.10.0-8ed756a31` — #3351's own merge-base (`4cf216149^`), pinned to `~/bin-3351base/` |
+| Prior controls | `~/bin-2967` (`0.9.12-61678fd32`) and `~/bin-main` (`0.9.10-eab960192`) |
+| Groomer | `mpegts-pacer` 0.1.0 at `71e242d`, the build carrying the positional guard |
+| B-frame control clips | 140 s, upstream's own ffmpeg line, `bframes=3` and `bframes=0`, `has_b_frames` 2 and 0 |
+| Graders | upstream's `test/ts/pcr-timing.py` (merged by #3351), plus this repository's `t19-pcr-grid.sh`, `t19-pcr-positions.py` and `ts-pcr-timing.py` |
 
 **Measurements 5 and 6 (#3006) ran on the EC2 primary**, not the laptop, because #3006 is a fix to
 release timing and the time domain needs a host that is not also running the operator's desktop.
@@ -200,7 +226,9 @@ is.
 
 ## Measurement 3 — the groomer: the lane is worse than before the fix
 
-Two groomers, both fed the captured exporter output, file domain, no timing involved.
+Two groomers, both fed the captured exporter output, file domain, no timing involved. *Read the 45.9 %
+with the cushion correction at the end of this file: the loss is bounded and a groomer buffered past the
+displacement recovers it. Measurement 10 re-runs this table against the merged #3351.*
 
 | | control export | **fixed export** |
 |---|---:|---:|
@@ -237,7 +265,8 @@ packets and pushes stuffing to 63.7 %.
 
 ## Measurement 4 — end to end on the wire, which is the number that counts
 
-[`t18-arm.sh`](scripts/t18-arm.sh) unaltered, `moq` arm, 250 ms cushion, 90 s, both builds.
+[`t18-arm.sh`](scripts/t18-arm.sh) unaltered, `moq` arm, 250 ms cushion, 90 s, both builds. *Measurement
+10 re-runs this against the merged #3351 and its own merge-base.*
 
 | | control (`0.9.10`) | **fixed (`#2967`)** | T18's recorded baseline |
 |---|---:|---:|---:|
@@ -502,7 +531,7 @@ that a clustered source is refused under `Fail` and paced under `Report` when th
 **No existing test changed and byte identity was not weakened** — the byte-identity test is asserted on
 the clustered source specifically, so the guard cannot be satisfied by relaxing placement.
 
-## Measurement 9 — the positional ask, granted and verified `[unmerged]`
+## Measurement 9 — the positional ask, granted and verified at the pipe
 
 **Objective.** [#3351](https://github.com/moq-dev/moq/pull/3351) claims to close
 [#3334](https://github.com/moq-dev/moq/issues/3334) by slicing the TS export on the PCR grid rather than
@@ -543,10 +572,150 @@ just under the budget rather than merely being bounded by it in principle.
 signed mean of **−0.019 ms** per interval and **±0.8 ms of drift per decile** across deciles 1 to 9, all
 of its −42.9 ms total landing in two startup intervals. The lag is the exporter's, and by design.
 
-**What this does not yet establish.** The measurement is at the pipe (P1-equivalent, on the laptop rig),
-on a single-rendition generated clip. It does not show that a byte-locking groomer now produces a
-conformant wire, which is the requirement #2937 was filed under and what measurements 3, 4 and 6 grade.
-That end-to-end re-run is the outstanding item, and it needs a merged build.
+**What this does not establish** is the wire. The measurement is at the pipe, on a single-rendition
+generated clip, and the requirement #2937 was filed under is that a byte-locking groomer downstream
+produce a conformant stream. Measurement 10 grades that.
+
+## Measurement 10 — the merged build on the wire: content improves, the gate does not open
+
+**Objective.** #3351 merged as `4cf216149`. Re-run measurements 3, 4 and 6 against a merged build and
+decide the requirement, not the claim.
+
+**Build provenance, because the PR head moved after measurement 9 graded it.** `origin/main`
+`f8236680b` contains `4cf216149`; `git diff` over `rs/moq-mux/` between the merged head `9c870e64d` and
+the merge commit is empty, and nothing has touched `rs/moq-mux/src/container/ts/` or `pace.rs` in `main`
+since. The PR head measurement 9 tested was `87502b85e`, which was **force-updated** before merge — the
+exporter itself is identical across that move, but the re-verification was run from `main` regardless.
+Binaries pinned to `~/bin-3351/` (`moq 0.10.0-f8236680b`). Three controls, all measured in the same
+session on the same host: `~/bin-main` (0.9.10, pre-fix), `~/bin-2967` (0.9.12), and — to separate
+#3351 from eight weeks of unrelated `main` — **`~/bin-3351base/` (`0.10.0-8ed756a31`, #3351's own
+merge-base**, `4cf216149^`).
+
+**The merged build passes upstream's own gate**, which is what licenses reading everything below as a
+property of our content rather than of our build. `test/ts/run.sh --live` at 120 s: release timing
+**0/4,731** outside ±10 ms, p95 1.498 ms; `pcr-position` 0.04 % adjacent, median gap 4 packets, **worst
+115**; drift 494.7 ms at −0.008 ms/s.
+
+### The exporter on a real contribution clip
+
+60 s captures, `~/CNNiEMEA2.ts`, [`t19-pcr-grid.sh`](scripts/t19-pcr-grid.sh) and
+[`t19-pcr-positions.py`](scripts/t19-pcr-positions.py). The value domain is unchanged from #2967 and
+still exact: 2,378 intervals, min = mean = max = 25.000 ms, 0 above 40 ms, 0 sub-millisecond, PCR on PID
+111 only, adaptation-only packets, reserved bits `0x3F`, 0 continuity events.
+
+| PCR byte position | #2967 | **merged #3351** |
+|---|---:|---:|
+| back-to-back (gap = 1) | **87.2 %** | **0.0 %** (1 of 2,432) |
+| clustered (gap ≤ 5) | 87.9 % | 30.9 % |
+| median gap | 1.0 packet | 7.0 packets |
+| p95 \| worst gap | — \| 2,730 | 1,545 \| **4,641** |
+| the same gaps as intervals, above 40 ms | 11.81 % | **11.14 %** |
+
+**Adjacency is fixed and the gate figure is not**, and the second is the one a groomer feels. Upstream's
+own clip gives a worst gap of 115 packets; ours gives 4,641. The mechanism is visible in the packet
+sequence and in `Export::emit`: the exporter lays a span's bytes across the slots the span covers,
+proportionally — which is right — but **a coded frame's bytes belong to its own 40 ms however large the
+frame is.** Measured on this clip, 59.2 % of contiguous video runs exceed one 25 ms slot's worth of
+bytes and carry 94.8 % of the video; the largest is 2,274 packets, 417 kB, **357 ms of carrier for
+40 ms of media.** The source's CBR mux had spread exactly those bytes across many frame periods against
+a T-STD buffer, and that schedule is not recoverable from decode timestamps because it was never in
+them.
+
+### Measurement 3 re-run — the file-domain groomers
+
+Both groomers fed the merged export, 10 Mb/s, as before.
+
+| | #2967 | **merged #3351** |
+|---|---:|---:|
+| **`mpegts-pacer` `regenerate`** | | |
+| Dropped | 180,486 (**45.9 %**) | 156,886 (**40.8 %**) |
+| Stuffing | 56.5 % | 50.6 % |
+| Continuity errors out | **849** | **0** |
+| Intervals > 40 ms out | 172 (6.20 %) | 176 (6.55 %) |
+| Max interval out | 410.6 ms | 343.4 ms |
+| **`tsp -P pcradjust`** | | |
+| Continuity errors out | 0 | 0 |
+| Intervals > 40 ms out | 293 | 287 (11.80 %) |
+| Intervals < 1 ms out | **2,172 (87.9 %)** | **751 (30.88 %)** |
+| Max interval out | 430.3 ms | 780.2 ms |
+
+`pcradjust`'s sub-millisecond output tracks input adjacency down from 87.9 % to 30.9 %, which is the two
+figures being one measurement seen from either end, as before. Neither groomer reaches the gate.
+
+### The displacement is bounded, and sizing the buffer past it conserves the programme
+
+The positional guard (measurement 8), same fixture size, same 11 Mb/s stream-clocked configuration.
+Both arms are deterministic — two replicates returned the identical displacement to the packet.
+
+| | #2967 | **merged #3351** |
+|---|---:|---:|
+| overrun intervals | 85 | 104 |
+| **positional displacement** | 3,294 packets (**450 ms**) | 5,567 packets (**761 ms**) |
+
+**#3351 makes the displacement worse, because moving the PCR packets off the media bytes and onto the
+grid widens the gap they have to describe.** But it is bounded, and a cushion past it recovers
+everything — which measurements 3 and 8 could not see, having been run at one cushion:
+
+| cushion (stream-clocked, 11 Mb/s) | 300 ms | 800 ms | **1500 ms** | 2500 ms | 4000 ms |
+|---|---:|---:|---:|---:|---:|
+| content placed, of 106,382 | 18,248 | 21,452 | **105,959** | 105,714 | 105,714 |
+| late drops | 84,508 | 84,930 | **423** | 668 | 668 |
+
+At 1,500 ms the merged build conserves **99.6 %** of the programme with **0 continuity errors**, exact
+CBR (`bitrate` = `pcrbitrate` = 11,000,004 b/s) and **0 PCRs outside ±500 ns**. The #2967 control
+recovers there too, at 98.8 %. **The 45.9 % and 67.2 % losses recorded in measurements 3 and 8 were
+therefore a cushion result as much as a lane result**, and the correction is at the end of this file.
+What survives the buffer is the repetition gate: even at 1,500 ms the output carries **71/680 intervals
+over 40 ms, worst 633 ms**.
+
+### Measurements 4 and 6 re-run — end to end on the wire
+
+[`t18-arm.sh`](scripts/t18-arm.sh) unaltered, `moq` arm, 250 ms cushion, 90 s, all in one session.
+`--latency-max` is held at **500 ms** across the last two columns, because the rig's 3 s default lets
+#3351's standing lag ramp for longer than the window and reads as unbounded growth when it is not
+(corrections).
+
+| | pre-fix `0.9.10` | #2967 `0.9.12` | merge-base `8ed756a31` | **merged `f8236680b`** |
+|---|---:|---:|---:|---:|
+| pictures matched | 3,112/3,112 | 1,993/1,993 | 2,103/2,103 | 2,493/2,493 |
+| delivery latency, median | **119.9 ms** | 768.0 ms | **776.8 ms** | **2,126.2 ms** |
+| first third → last third | −73.7 | −11.4 | −11.4 | −24.6 |
+| continuity errors | **3** | 850 | 989 | **811** |
+| PCR repetition > 40 ms | 489/3,245 (15.1 %) | 345/3,314 | 342/3,174 (10.8 %) | 402/3,290 (**12.2 %**) |
+| worst repetition interval | 217.5 ms | 375.1 ms | 380.7 ms | 541.3 ms |
+| groomer: content placed | 547,517 | 323,268 | 339,045 | **407,733** |
+| groomer: dropped | **165** | 227,746 | 211,957 | **134,769** |
+| groomer: stuffing | **4.1 %** | 50.1 % | 46.1 % | **28.8 %** |
+
+**Against its own merge-base, #3351 buys content and pays latency.** The groomer drops 36 % fewer
+packets, places 20 % more content and halves the stuffing — a real improvement, and the first movement
+on content conservation this lane has had. Delivery latency goes the other way, 776.8 → 2,126.2 ms,
+and the repetition gate does not open: 10.8 % → 12.2 %.
+
+**Three of the four pass criteria fail.** Criterion 1 (no intervals above 40 ms after grooming) fails at
+12.2 %. Criterion 2 (0 continuity errors) fails at 811. Criterion 4 (no regression in delivery latency)
+fails at 18× the pre-fix control. Only criterion 3, continuity discipline on payload-less packets, passes
+— as it has since #2967. **The deployable configuration is still the pre-fix build.**
+
+### The B-frame control
+
+Measurement 9 left open whether the ~480 ms standing lag is `Pacer::absorb` reading B-frame reorder
+depth or a fixed filling offset. Two otherwise-identical 140 s clips, generated with upstream's own
+ffmpeg line and differing only in `bframes`, graded by upstream's `pcr-timing.py --live` over 120 s:
+
+| | `bframes=3` | `bframes=0` |
+|---|---:|---:|
+| drift | **481.2 ms** | **428.6 ms** |
+| tail rate | +0.008 ms/s (converged) | +3.696 ms/s (still climbing) |
+| releases outside ±10 ms | 3/4,779 | 1/4,782 |
+| `pcr-position` median \| worst gap | 4 \| 115 | 19 \| 115 |
+
+**Removing the reorder depth entirely leaves about 90 % of the lag**, and the `bframes=0` arm had not
+finished converging when the window closed, so its asymptote is higher than the 428.6 ms shown. Nor is
+it the latency budget: on the same `bframes=0` clip, `--latency-max` of 500 ms, 1 s and 2 s gives
+**428.6, 414.9 and 451.5 ms**. The lag is a fixed filling offset of roughly 420–490 ms, and it is
+neither of the two mechanisms that were in question. On our own clip it reads **494.1 ms at
+−0.044 ms/s** — converged, and within 1 ms of upstream's generated clip.
 
 ## Conclusion
 
@@ -574,13 +743,24 @@ rather than the one first taken up: **emit the PCR packet adjacent to the media 
 labels**, so position and value agree for a consumer that has only bytes. It needs no timing at all and
 it is a larger change in `moq-mux`.
 
-**That ask has now been granted and verified at the pipe** (measurement 9,
-[#3351](https://github.com/moq-dev/moq/pull/3351), `[unmerged]`): slicing the export on the grid puts
-adjacency at 0 % and release error inside ±10 ms, against a merge-base control that still fails both. The
-conclusion above therefore holds for every *merged* build and is superseded only once #3351 lands. What
-remains untested is the sentence that matters most here, because it is the one #2937 was filed under: a
-positional fix at the exporter should let a byte-locking groomer produce a conformant wire, and
-measurements 3, 4 and 6 have not been re-run against it.
+**That ask was granted, it merged, and it is the first thing on this lane to move content** —
+[#3351](https://github.com/moq-dev/moq/pull/3351) at `4cf216149`, graded in measurements 9 and 10.
+Slicing the export on the grid puts adjacency at 0 % and release error inside ±10 ms, and against
+#3351's own merge-base the byte-locking groomer drops 36 % fewer packets, places 20 % more content and
+halves its stuffing. **It does not open the gate**: 12.2 % of intervals still exceed 40 ms on the wire,
+continuity is 811 errors, and delivery latency is 2,126 ms against a 118 ms pre-fix control. Three of
+four criteria fail and the deployable build is unchanged.
+
+**The last obstruction is not a defect, which is why no further upstream ask follows from it.** #3351
+places each slot's bytes at the media time the slot asserts; a coded frame's bytes belong to *its own*
+40 ms however large the frame is, so a 417 kB I-frame arrives as 357 ms of carrier for 40 ms of media.
+The source's CBR mux had spread those bytes over many frame periods against a T-STD buffer, and **that
+schedule is not in the decode timestamps, so no exporter working from them can reconstruct it.** The
+smoothing is the downstream stage's job. It can do it: the displacement is bounded at **761 ms**, and a
+groomer given a cushion past it conserves **99.6 %** of the programme at 0 continuity errors and exact
+CBR. What that buffer does not buy is the repetition gate, which still fails at 10.4 %. **The lane's
+remaining cost is therefore latency, not lost content** — and latency is the axis its whole case rests
+on.
 
 **The end-to-end regression is #2967's and #3006 does not repair it** — measurement 6 below, and the
 attribution is available because the two arms were run on different builds and different platforms and
@@ -588,12 +768,11 @@ agree. #2967 alone on the laptop rig delivered 769 ms against a 118 ms control; 
 EC2 primary delivers **771.6 ms against a 120.0 ms control**. A pacing fix cannot be the cause of a
 regression that was already fully present in a build with no pacing in it.
 
-**One conclusion is unaffected and worth stating plainly.** The 40 ms repetition gate is now reachable
-on this lane — the clock arriving at the edge is even for the first time, and T18's prediction that an
-evenly spaced exporter cadence would clear the gate at the depth the lane already runs is still the
-open question, not a refuted one. What T19 establishes is that reaching it needs the *positional*
-change on the exporter's output path, and that until then the deployable configuration is the pre-fix
-build.
+**T18's prediction is now tested, and it does not hold.** The expectation was that an evenly spaced
+exporter cadence would clear the 40 ms repetition gate at the depth the lane already runs. The cadence
+is now even at the pipe to a p95 release error of 1.70 ms, and the gate still fails on the wire at
+12.2 % — because the *bytes*, not the clock, are what a groomer has to place. The deployable
+configuration remains the pre-fix build.
 
 ## Limits
 
@@ -602,7 +781,10 @@ build.
   but the *effect size* of the original defect varied by clip (0 % to 25.2 % of intervals above 40 ms),
   so the positional-bunching figures should be read as this clip's shape and not as a constant.
 - **The end-to-end arm was run at one cushion**, 250 ms. That is the deployable one and the one T18's
-  ladder shows to be representative, but a regression measured at one rung is not a ladder.
+  ladder shows to be representative, but a regression measured at one rung is not a ladder. The
+  *file-domain* cushion sweep in measurement 10 is a ladder and shows the recovery point at ~1,500 ms;
+  the wire has not been re-run there, so "a cushion past the displacement conserves the programme" is
+  established for a regulated replay and not yet for the live chain.
 - **The reserved-bit and continuity-discipline checks are new instruments**, written for this experiment.
   They were validated in the only way available — the control build reads `0x00` and the fixed build
   `0x3F`, which is the documented change — and not against an independently damaged fixture.
@@ -625,6 +807,15 @@ build.
 
 ## Corrections
 
+- **Believed:** the byte-locking groomer's 45.9 % (measurement 3) and 67.2 % (measurement 8) content
+  losses were what the positional defect costs. **True:** they are what it costs *at the cushion those
+  runs used*. The displacement is bounded — 450 ms pre-#3351, 761 ms merged, both deterministic to the
+  packet across replicates — and a cushion past it recovers the programme: at 1,500 ms the merged build
+  places 105,959 of 106,382 packets with 0 continuity errors and exact CBR, and the #2967 control
+  reaches 98.8 % there too. Neither number was wrong; both were quoted as a lane property when they are
+  a lane-and-buffer property. **Method rule:** a shedding figure means nothing without the buffer it was
+  measured at, and a bounded displacement is a *sizing* input, not a verdict — measure the sweep and
+  report the recovery point beside the loss.
 - **Believed:** a hard bound on accumulated PCR release drift at 250 ms was a conservative default, so
   the instrument was ready to grade a fix. **True:** the bound belongs to the sender, not the analyst.
   `export ts --latency-max` entitles the exporter to hold 500 ms of buffer, so a correct pipeline
@@ -645,11 +836,20 @@ build.
   and "monotone growth to roughly `lead`, then flat" is exactly what both predict — a 480 ms plateau
   against a 500 ms budget fits either. **Method rule:** a quantity converging on a configured limit is
   evidence that *something* is bounded by that limit, never of which thing; when two mechanisms share a
-  curve, name the arm that separates them before attributing it. Here that arm is a source encoded
-  `bframes=0`, where a filling buffer still reaches ~480 ms and reorder absorption does not. Not run:
-  the instruction for this session was not to re-test the PR branch, and it belongs in the merged-build
-  run in any case. The attribution in the comment posted on #3351 is stated more confidently than this
-  evidence supports.
+  curve, name the arm that separates them before attributing it. That arm has since been run
+  (measurement 10): `bframes=0` still carries 428.6 ms of the lag against `bframes=3`'s 481.2 ms, and
+  moving `--latency-max` across 500 ms, 1 s and 2 s moves it by under 40 ms. **Neither mechanism owns
+  it** — it is a fixed filling offset, and the limit it converges near is a coincidence of scale rather
+  than a cause. The attribution in the comment posted on #3351 was stated more confidently than the
+  evidence then supported, and is superseded by this.
+- **Believed:** the merged build introduced an unbounded, monotonically growing delivery lag — the first
+  end-to-end arms measured 3,582 ms rising +2,153 ms across 90 s, reproduced at +2,193 ms, where every
+  control was flat. **True:** the growth is the same standing lag ramping toward a budget it had not
+  reached inside the window. [`t18-arm.sh`](scripts/t18-arm.sh) runs the exporter at `--latency-max 3s`
+  by default; hold it at 500 ms and the arm settles at 2,126 ms with a −24.6 ms trend. Nothing is
+  unbounded and the groomer's cushion was never breached. **Method rule:** before reporting a trend as
+  growth, check the window against every buffer in the path that the trend could be filling — a rig
+  default two rungs above the setting under test will manufacture one.
 - **Believed:** the analyser was ready to grade the boundary conditions, having been fixed six times
   over. **True:** it had two further defects, both of it failing conforming input, and both found only
   once legal fixtures existed rather than broken ones. A *signalled* discontinuity failed twice over —
@@ -720,8 +920,11 @@ build.
   [#2978](https://github.com/moq-dev/moq/issues/2978) (the same class of defect on the SRT egress,
   Luke's own, and **closed** — see Corrections),
   [#3334](https://github.com/moq-dev/moq/issues/3334) (the residual output-position/release defect,
-  filed from measurement 7) and [#3335](https://github.com/moq-dev/moq/pull/3335) (`test/ts/pcr-timing.py`,
-  test tooling only). Hedged code-reading comments were left on
+  filed from measurement 7, **closed by the fix and discharged by measurement 10**),
+  [#3351](https://github.com/moq-dev/moq/pull/3351) (the positional fix, **merged `4cf216149`**, graded
+  in measurements 9 and 10) and [#3335](https://github.com/moq-dev/moq/pull/3335)
+  (`test/ts/pcr-timing.py`, test tooling only — **closed as absorbed**: #3351 landed the file
+  byte-identical to that branch's head, so nothing was left to merge). Hedged code-reading comments were left on
   [#2829](https://github.com/moq-dev/moq/issues/2829) and
   [#2779](https://github.com/moq-dev/moq/issues/2779) — offered as possibly the same underlying property,
   not as established fact.

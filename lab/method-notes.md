@@ -473,7 +473,25 @@ C6.)*
 > decaying slope cannot be told from the kernel taking pages back.
 
 **A bound on an accumulating quantity has to come from the thing that is allowed to accumulate it.
-Pick the number and the check grades the number.** *(T19 measurement 9, grading #3351.)*
+Pick the number and the check grades the number — and before reporting a trend as growth, check the
+window against every buffer in the path that the trend could be filling.**
+*(T19 measurements 9 and 10, grading #3351.)*
+
+> The merged build's first end-to-end arms read 3,582 ms of delivery latency rising +2,153 ms across
+> 90 s, reproduced at +2,193 ms, where every control was flat — which reads as an unbounded leak and was
+> very nearly written up as one. It is the exporter's standing lag ramping toward a budget it had not
+> reached inside the window: the rig runs `moq export ts --latency-max 3s` by default, and holding it at
+> 500 ms settles the same arm at 2,126 ms with a −24.6 ms trend. A rig default two rungs above the
+> setting under test will manufacture a trend out of a transient.
+
+**A shedding figure is a property of the stream *and* the buffer it met. Sweep the buffer and report
+the recovery point beside the loss.** *(T19 measurement 10.)*
+
+> The byte-locking groomer's 45.9 % and 67.2 % content losses were quoted for three experiments as what
+> the exporter's positional defect costs. They are what it costs *at the one cushion those runs used*.
+> The displacement behind them is bounded and deterministic — 450 ms before the positional fix, 761 ms
+> after — and a cushion past it recovers the programme: 105,959 of 106,382 packets, 0 continuity errors,
+> exact CBR. A bounded displacement is a sizing input, not a verdict.
 
 > A hard bound on accumulated PCR release drift was added with a 250 ms default, chosen because it
 > looked small. A sender that buffers is *entitled* to build a standing lag up to its own latency

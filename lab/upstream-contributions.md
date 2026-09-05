@@ -425,6 +425,27 @@ the other side on [#2829](https://github.com/moq-dev/moq/issues/2829) with the t
 damage). Reported on the PR with the numbers, the control, and the caveat that this grades the pipe and
 not the wire.
 
+**It merged as `4cf216149`, the wire was graded, and #3334 is discharged as filed.** The invariant #3334
+stated — that PCR byte position and release instant stop being functions of frame arrival — holds on the
+merged build against a real contribution clip: adjacency 0.0 %, releases outside ±10 ms 2 of 4,779 at a
+p95 of 1.70 ms. **The lane still fails its own conformance gate**, at 12.2 % of intervals above 40 ms
+and 811 continuity errors end to end, and that is worth stating precisely because it is *not* a residue
+of #3334. #3351 places each slot's bytes at the media time the slot asserts; a coded frame's bytes
+belong to its own 40 ms however large the frame is, so a 417 kB I-frame is 357 ms of carrier for 40 ms
+of media. The smoothing that a CBR mux supplies against a T-STD buffer is not encoded in decode
+timestamps, so **no exporter working from them can reconstruct it** — the requirement belongs
+downstream, and downstream can meet it: cushioned past the bounded 761 ms displacement our groomer
+conserves 99.6 % of the programme at 0 continuity errors and exact CBR. **Nothing further is owed
+upstream on this line**, and no new issue was filed.
+
+**One gap in upstream's own gate is worth knowing about, and it is a scope gap rather than a defect.**
+`pcr-timing.py`'s `pcr-position` check grades *adjacency*, which is what #3334 was about. On upstream's
+generated fixture the worst positional gap is 115 packets; on a 1080i25 contribution capture it is
+**4,641**, and the check passes both. A gate built on adjacency alone will not see a frame-shaped
+export meeting a byte-locking consumer. Not filed: the check does what it was written to do, the
+quantity it misses is the one this campaign has just shown is not the exporter's to fix, and an issue
+asking for a threshold on someone else's content would be spending their attention badly.
+
 **Two things governed how it was filed, and both are about not spending someone else's attention badly.**
 It is a **new issue** rather than a comment: #2937 and #2984 are closed as completed and correctly so —
 #2967 delivered the contract #2937 asked for, and #3006 delivered #2984's — so a residual buried in either

@@ -546,10 +546,11 @@ control against **771.6 ms and 1,166 errors** on `#3006`. The laptop rig measure
 positional clustering meeting a groomer, and #3006 neither causes nor cures it. Only repetition moves,
 15.0 % → 10.5 % of intervals over the gate, which matters only if it reaches zero.
 
-**So the prediction stands unresolved, the deployable build is still the pre-fix one, and the remaining
-change is now the other one.** A groomer consumes bytes, not arrival times, so the fix this lane needs
-is the positional one: **emit each PCR packet adjacent to the media bytes of the slot it labels**, so
-position and value agree for a consumer that has only bytes.
+**So at this point the deployable build was still the pre-fix one, and the remaining change was the
+other one.** A groomer consumes bytes, not arrival times, so the fix this lane needed was the positional
+one: **emit each PCR packet adjacent to the media bytes of the slot it labels**, so position and value
+agree for a consumer that has only bytes. That fix has since merged, and the paragraphs below grade it —
+**the prediction it was meant to settle is now refuted rather than open.**
 
 **The two remaining failures share one cause, which is the strongest form this result has taken.** The
 exporter advances its PCR grid from *media-frame arrival* rather than from the passage of media time —
@@ -566,18 +567,33 @@ three implementation directions offered, the choice being the maintainer's; the 
 all three domains in one pass is offered as [#3335](https://github.com/moq-dev/moq/pull/3335), test
 tooling only ([upstream contributions](../lab/upstream-contributions.md) §1).
 
-**The positional fix has since been written, and it verifies at the pipe `[unmerged]`.**
+**The positional fix was written, it merged, and the wire it unblocked still fails the gate.**
 [#3351](https://github.com/moq-dev/moq/pull/3351) slices the export on the PCR grid rather than on media
-frames, which is the invariant #3334 asked for. Graded against **its own merge-base** on one host, with
-only the client binary differing: PCR packets adjacent to the previous one fall **50.31 % → 0 %**, and
-releases outside ±10 ms of the interval their own values assert fall **491/799 → 0 to 4/745**, p95
-**70.3 ms → 1.5 to 1.9 ms**. The control reproduces the single-cause reading above, with 43.4 % of its
-PCR packets both adjacent and early. The buffer the fix introduces converges to **480 ms against a
-500 ms `--latency-max`** and then holds to 0.017 ms/s over the following 40 s, so it is a constant offset
-and not a rate error; the publisher alone contributes ±0.8 ms per decile, so the lag is the exporter's.
-**This is measured at P1 on a single-rendition clip and says nothing yet about the wire:** whether a
-byte-locking groomer downstream now produces a conformant stream is the requirement #2937 was filed
-under, and it has not been re-run ([T19](../lab/test-19-pcr-grid-verification.md) measurement 9).
+frames, which is the invariant #3334 asked for, and it does that exactly. At the pipe, graded against
+**its own merge-base** with only the client binary differing: PCR packets adjacent to the previous one
+fall **50.31 % → 0 %**, and releases outside ±10 ms of the interval their own values assert fall
+**491/799 → 0 to 4/745**, p95 **70.3 ms → 1.5 to 1.9 ms**. On the merged build (`4cf216149` in `main`
+`f8236680b`) and a real contribution clip the same holds: **2/4,779** releases outside ±10 ms at a p95
+of 1.70 ms, adjacency **87.2 % → 0.0 %**, and upstream's own gate passes.
+
+**On the wire it buys content and pays latency.** Against #3351's own merge-base at a matched exporter
+budget, the byte-locking groomer drops **211,957 → 134,769** packets, places 20 % more content and cuts
+stuffing **49.9 % → 28.8 %** — the first movement on content conservation this lane has had. Delivery
+latency goes **776.8 → 2,126.2 ms** against a 118 ms pre-fix control, continuity is 811 errors, and PCR
+repetition above 40 ms goes **10.8 % → 12.2 %**. Three of T19's four pass criteria fail and the
+deployable configuration is still the pre-fix build
+([T19](../lab/test-19-pcr-grid-verification.md) measurement 10).
+
+**What remains is not a defect, and that is the substantive result.** #3351 places each slot's bytes at
+the media time the slot asserts; a coded frame's bytes belong to *its own* 40 ms however large the frame
+is, so on this clip a 417 kB I-frame arrives as **357 ms of carrier for 40 ms of media**. The source's
+CBR mux had spread exactly those bytes across many frame periods against a T-STD buffer, and that
+schedule is not present in the decode timestamps — **so no exporter working from them can reconstruct
+it, and the smoothing has to be supplied downstream.** It can be: the positional displacement is bounded
+(**761 ms**, deterministic across replicates), and a groomer whose cushion exceeds it conserves
+**99.6 %** of the programme at 0 continuity errors and exact CBR. That buffer does not buy the
+repetition gate, which still fails at 10.4 %. The lane's residual cost is therefore **latency, not lost
+content** — on the axis its case rests on.
 
 **Half of the damage this defect does downstream turned out to be ours, and that half is fixed.** The
 byte-locking groomer read one source PCR interval as both a duration and a length — an assumption about
@@ -1525,7 +1541,7 @@ exporter's **output path** carrying the spacing its muxer already computes (§3.
 
 | # | Question | Blocked on | What it moves |
 |---|---|---|---|
-| 1 | **Would an evenly spaced exporter PCR cadence clear the P1 repetition gate on the MoQ lane?** (§3.2) | One more upstream change, and it is now a specific one: **each PCR packet emitted adjacent to the media bytes of the slot it labels**, so position and value agree for a stage that has only bytes. The rig then re-runs unaltered ([T19](../lab/test-19-pcr-grid-verification.md)) | The lane's last conformance failure, and the precondition for row 2 being worth running on the media-aware lane at all. **Two of the three domains are now answered.** [#2967](https://github.com/moq-dev/moq/pull/2967) made the PCR *values* an exact 25 ms grid; [#3006](https://github.com/moq-dev/moq/pull/3006) paced the stdout writer so the spacing survives as *arrival time*, doubling the on-grid share at the pipe and halving gate failures. Neither moved the **byte positions**, which is what a groomer re-deriving PCR reads, so end to end the lane is unchanged (120 → 772 ms, 0 → 1,166 continuity errors). The remaining change is positional, is the larger one in `moq-mux`, and was filed as [#3334](https://github.com/moq-dev/moq/issues/3334). **It has now been written and verified at the pipe** as [#3351](https://github.com/moq-dev/moq/pull/3351) `[unmerged]`: adjacency 50.31 % → 0 % and release error p95 70.3 → 1.7 ms against its own merge-base. So the third domain is answered *at P1*, and this row reduces to the end-to-end re-run the answer makes possible: whether a byte-locking groomer downstream of a grid-sliced export produces a conformant wire. **Now the cheapest high-leverage measurement outstanding, and it is unblocked the moment #3351 lands** |
+| 1 | ~~**Would an evenly spaced exporter PCR cadence clear the P1 repetition gate on the MoQ lane?**~~ (§3.2) | **Answered — no.** Closed by [T19](../lab/test-19-pcr-grid-verification.md) measurement 10 | All three domains are now fixed upstream and the gate still fails. [#2967](https://github.com/moq-dev/moq/pull/2967) made the PCR *values* an exact 25 ms grid; [#3006](https://github.com/moq-dev/moq/pull/3006) paced the stdout writer so the spacing survives as *arrival time*; [#3351](https://github.com/moq-dev/moq/pull/3351) sliced the export on the grid so **byte position** agrees with value, taking adjacency to 0 % and release error to a p95 of 1.70 ms on a merged build. On the wire the lane still carries **12.2 % of intervals above 40 ms and 811 continuity errors**, at 2,126 ms against a 118 ms pre-fix control. The reason is not a remaining defect: a coded frame's bytes belong to its own 40 ms, so a 417 kB I-frame is 357 ms of carrier, and the CBR mux schedule that used to smooth it is not recoverable from decode timestamps. **The smoothing is the downstream stage's job**, and buying it costs latency — the axis this lane exists for. What #3351 did buy is content: groomer drops fall 36 % against its own merge-base, and at a cushion past the 761 ms displacement the programme is 99.6 % conserved |
 | 2 | **Does groomed output pass TR 101 290 P1/P2 on real hardware IRDs, sustained, including ST 2022-7 under loss?** | A hardware IRD and analyser | Everything. Until it passes, the grooming design is structurally sound and file-validated, not broadcast-acceptable. Note that the segmented lane is ready for this test now and the media-aware lane is not, so the two arms need not wait on each other |
 | 3 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs, and a path with 80–150 ms of RTT | Both paths measured were healthy, so nothing exercised the recovery the point-to-point tunnels exist for — the case that should favour them. This is the arm that could change the ordering rather than confirm it |
 | 4 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's own edge stage?** | MEG- or TITAN-class hardware | Whether part of the broadcast-grade layer is purchasable on one data plane and not the other; also the only route to a low-latency TS-in-HLS receiver |

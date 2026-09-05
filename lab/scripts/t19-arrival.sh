@@ -72,9 +72,19 @@ kill -0 "$PUB" 2>/dev/null || {
 	exit 1
 }
 
+# GRADER swaps the oracle without touching the rig. The default is this campaign's
+# own arrival oracle, which reports the inter-arrival distribution. Point it at
+# upstream's `test/ts/pcr-timing.py` to grade release *error* and cumulative drift
+# against the PCR's own asserted clock, which is the form #3351's gate takes —
+# running that grader on this clip rather than on upstream's generated one is what
+# distinguishes a lag that converges from a lag that accumulates.
+#   GRADER="python3 /path/to/test/ts/pcr-timing.py --live --seconds $SECS"
+GRADER=${GRADER:-python3 $(dirname "$0")/t19-pcr-arrival.py $SECS}
+
 echo "=== $(basename "$OUT"): $("$MOQ" --version) / $("$RELAY" --version) ==="
+# shellcheck disable=SC2086  # GRADER is a command line, and splitting it is the point
 timeout "$((SECS + 20))" "$MOQ" "${C[@]}" --broadcast "$BCAST" export ts --latency-max "$MOQLAT" \
 	2>"$OUT/export.log" |
-	python3 "$(dirname "$0")/t19-pcr-arrival.py" "$SECS"
+	$GRADER
 echo
 echo "artefacts in $OUT"
