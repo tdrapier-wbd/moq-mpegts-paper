@@ -13,6 +13,22 @@ having.
 
 ## 1. Controls
 
+**A control that removes the suspect stage tests the stimulus, not the system, and exonerates
+nothing downstream of what it removed.** *(T21.)*
+
+> T21's rate divergence was triggered by the source clip looping. The loop wrap was ruled out early by
+> feeding the same clip, looped by the same `tsp --infinite`, **straight into the groomer with MoQ
+> removed from the path**: the estimate held across several wraps and the candidate was written down as
+> eliminated. It was the cause. The control had removed the exporter, which is the stage that fails on
+> a wrap, so it could only ever return a null — and that null was then read as evidence about a path
+> that still contained the exporter.
+>
+> The check is mechanical: name the stages the control removes, and ask whether the hypothesis was
+> ever that one of *them* misbehaves. If it was, the control cannot test it. A stimulus reproduced
+> against a shortened path establishes only that the stimulus alone is insufficient, which is a much
+> weaker statement than it reads as — and the honest way to write it is "the wrap alone, without the
+> exporter, does not do it", not "not the wrap".
+
 **A control with the mechanism removed is worth more than a second run of the same arm.** A second
 run reproduces the artefact. *(T15, and independently T9.)*
 
@@ -1012,7 +1028,32 @@ run has qualified the transient.** *(T21.)*
 > The rule is not "test for longer", which is unbounded. It is that where a change introduces or
 > replaces an accumulator — a control loop, a decayed window, a running estimate — the qualifying run
 > has to outlast that accumulator's time constants, and somebody has to have asked what they are. Nobody
-> had.
+> had. The specific thing the 300 s window could not contain was the **source looping**, at 600 s: an
+> event a permanent feed meets constantly and a short test never does.
+
+**Where a stage derives a quantity from its input, the input's own version of that quantity is a
+control, and capturing both ends of one run is cheaper than arguing about which end is wrong.**
+*(T21.)*
+
+> T21's groomer was accused of a broken rate estimator for two runs. Capturing the publisher's input
+> and the exporter's output *in the same run* and reading PCR against packet count on each settled it
+> in one pass: the source carried a clean 25 ms grid and one signalled discontinuity, the exported copy
+> carried no discontinuity and a clock that had stopped. The estimator was arithmetically faithful to
+> an input that had stopped telling the truth.
+>
+> The general form is that a derived quantity going wrong has two candidate owners, the deriver and the
+> source, and no amount of instrumenting the deriver distinguishes them. One `tee` on each side does.
+
+**An estimator must not integrate a sample it has no reason to believe, and a physical ceiling is the
+cheapest reason available.** *(T21.)*
+
+> The pacer computed a content rate of 431 Mb/s inside a carrier running at 11 Mb/s, released on it,
+> and drained its own de-jitter cushion to nothing. Both numbers were in the same counter line for
+> twenty minutes. Content is carried *inside* the carrier, so over a window of seconds it cannot arrive
+> faster than the carrier holds — over a single interval it certainly can, which is what the buffer is
+> for, and the distinction between those two is where the ceiling belongs. Any recovered quantity that
+> has a conservation law available should be checked against it before it is acted on, and the check
+> should raise a counter rather than clamp silently, because the excursion is the diagnosis.
 
 **A quantity that is supposed to be stationary needs a time series, and a high-water mark is not one.**
 *(T21.)*

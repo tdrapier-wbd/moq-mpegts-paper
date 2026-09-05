@@ -627,11 +627,28 @@ t=1,202 s**, gaining ~250 Mb/s per minute. The de-jitter buffer collapses with i
 **10,587 packets (~1.4 s) to 0**, and underruns accumulate at **~970/s**. The wire stays conformant
 throughout — 0 continuity errors, 0 intervals above 40 ms, exact CBR, programme conserved at the source
 rate, 0 drops — so **no check applied to the output detects it**; what is lost is the cushion, and with
-it the lane's only protection against arrival jitter. The exporter's log is clean for the whole run:
-this is a defect in `mpegts-pacer`, not in `moq-dev` and not in media-aware carriage. The mechanism is
-not yet located and three candidates are eliminated (source loop wrap, upstream event, degenerate PCR
-intervals alone). **The conformance result above therefore holds for the window it was measured over
-and is not established beyond it.**
+it the lane's only protection against arrival jitter.
+
+**The mechanism is located, and it is two faults in series.** Capturing both sides of the MoQ round
+trip in one run separates them. The **trigger is upstream**: the source carried a clean 25 ms PCR grid
+and exactly one signalled discontinuity — the clip looping at 600 s — and the exporter's output carried
+**no discontinuity at all**, because it latches the last pre-wrap PCR and thereafter emits a value
+advancing by one 90 kHz tick per PCR packet, permanently. After that, 100,000 packets of programme
+carry **6.9 ms** of PCR where they should carry 15,880 ms. The **amplifier was ours**: the groomer's
+rate estimator was arithmetically faithful to an input whose clock had stopped, divided real packets by
+a media time that was not advancing, and released on the result. Diagnosis came from reporting the two
+accumulators separately — the denominator never moved (2.15 s throughout) while the numerator ramped at
+exactly the packet arrival rate, which is a sum that has stopped decaying rather than one that has
+started growing.
+
+The groomer half is **fixed and regression-tested** (`mpegts-pacer` `5ab84cd`): intervals too short to
+carry usable media time are coalesced rather than folded in individually, and a recovered content rate
+above the carrier's is rejected as impossible, holding the last credible rate and raising a counter.
+Replayed against the captured failure the release rate holds at 6,368 pps against a true 6,331 while
+the raw ratio still climbs past 524,000. The exporter half is upstream's and is reported. **The
+conformance result above therefore still holds for the window it was measured over, and the re-soak
+that would extend it past minutes has not been run.** *An earlier reading attributed the whole failure
+to `mpegts-pacer` on the strength of a clean exporter log; the log is clean and the exporter is not.*
 
 **What it costs is buffer, and the buffer is the encoder's VBV moved downstream.** The requirement is
 content-dependent and is *not* a function of bitrate. Three sources at 9.5–9.9 Mb/s of programme in an

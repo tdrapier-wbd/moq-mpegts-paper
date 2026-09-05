@@ -97,27 +97,51 @@ segmented lane over HTTP/3, only delivered-rate and programme-loss claims. Build
 that reads the playlist over H3 and concatenates segments verbatim; it is a small job and it upgrades
 every cell T20 measured.
 
-**P0-3. Locate and fix the groomer's release-loop divergence, then re-soak.** *Now the single item
-between this architecture and a viability claim, and it displaced the soak that found it.*
+**P0-3. The exporter's PCR does not survive a source discontinuity — upstream fix, then re-soak.**
+*The groomer half is closed; the upstream half is now the single item between this architecture and a
+viability claim.*
 **Falsifies:** the headline conformance result's applicability to a permanent service.
-[T21](test-21-permanence-soak.md) put the groomer inside a long run for the first time and found that at
-**~9 minutes** the recovered media-rate estimate departs and ramps linearly without bound, collapsing
-the de-jitter cushion from ~1.4 s to zero while the wire stays perfectly conformant. The lane is
-therefore conformant over minutes and **not established over hours**, and no check on the output can
-tell the difference.
 
-*This is not the general soak; it is the defect the general soak surfaced in the first twenty minutes,
-and running 7 days against a stage known to fail at 9 minutes measures nothing.* Sequence:
+[T21](test-21-permanence-soak.md) put the groomer inside a long run for the first time, found the
+recovered media rate departing at ~9 minutes and ramping without bound while the wire stayed perfectly
+conformant, and has since **located the mechanism**. The source loops its clip at 600 s and signals one
+clean PCR discontinuity. The exporter never passes it on: it latches the last pre-wrap value and
+thereafter emits a PCR advancing by **one 90 kHz tick per PCR packet**, permanently, so 100,000 packets
+of programme carry **6.9 ms** of PCR instead of 15,880 ms. Our groomer then divided real packets by a
+media time that had stopped advancing — that half is **fixed, regression-tested and pushed**
+(`mpegts-pacer` `5ab84cd`), validated deterministically against the captured failure and on a live arm.
 
-1. **Diagnose, do not guess.** Emit `decayed_packets` and `decayed_secs` separately in the counter line.
-   One reading then distinguishes a numerator that grows without bound from a denominator that vanishes,
-   and the ramp's linearity says it is one accumulation and not an instability in the control law.
-   Three candidates are already eliminated: the source loop wrap (does not reproduce with MoQ removed
-   from the path), an upstream event (exporter log clean throughout), and degenerate PCR intervals alone
-   (a 4,000-interval regression test does not reproduce the ramp).
-2. **Fix, with a regression test that fails first**, and re-run the 300 s conformance arm to confirm
-   nothing regressed.
-3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path.
+**What remains is upstream's and it is the more serious half.** A permanent feed meets a PCR
+discontinuity routinely — a splice, an encoder restart, a source failover, and the 33-bit PCR base
+wrapping every 26.51 h whether anything else happens or not. On current evidence the exporter's clock
+stops at the first one and never restarts, silently, with no log line and no wire symptom. Sequence:
+
+1. **Report upstream** with the two-sided capture as the reproduction: source PCR grid clean with one
+   discontinuity, exported copy with none and a stopped clock. *(Done — see
+   [upstream contributions](upstream-contributions.md).)*
+2. **Characterise the trigger precisely** before assuming it is only the loop wrap. The cheapest arm
+   injects a *deliberate* discontinuity mid-clip rather than waiting 600 s for the loop, which also
+   tests whether the exporter recovers when the source's PCR jumps forward rather than backward, and
+   whether a 33-bit wrap behaves the same as a splice. Existing rig: `lab/scripts/t21-pcr-attribution.sh`
+   plus the PCR harness's discontinuity stimulus, which already exists.
+3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path. Not
+   before: a soak against an exporter known to stop its clock at 600 s measures the clock, not
+   permanence. The groomer fix means the lane now *survives* the event with its cushion intact, which
+   is worth confirming over hours, but survival with a dead source timebase is not the same as the
+   lane working.
+
+**P0-3b. The servo saturates, and the buffer walks to a rail.** *Ours, unaddressed, and separate from
+the above.* On the 8-vCPU secondary the rate estimate stayed healthy for a full run while the buffer
+drifted monotonically from 9,008 to 18,105 packets against a 6,300 set point. The release servo's
+authority is ±`RATE_SERVO_GAIN` = ±5 %, so any standing rate-estimate error beyond 5 % saturates it and
+occupancy runs to the cap (drops) or to zero (underruns) regardless. **Question:** is the ±5 % clamp
+adequate for the estimator's real accuracy, and what is that accuracy over hours? **Minimum
+experiment:** the existing diagnostic lane on both hosts with the fixed estimator, reading
+`buffer_packets` against `latency_target_ms` — the fix improved estimator accuracy (9.42 Mb/s against a
+true ~9.5, where the old build read 8.67), so this may already be smaller than it was, and that is
+worth measuring before changing a control constant. **Changes the conclusion if:** the buffer cannot be
+held at its set point over hours on either host, which would mean the cushion is not a designed
+quantity but an accident of host speed.
 
 **P0-4. ~~Silent media-plane failure — detection.~~ Done for the MoQ lane —
 [T22](test-22-silent-media-plane-failure.md).** It confirmed the property it was aimed at and bounded

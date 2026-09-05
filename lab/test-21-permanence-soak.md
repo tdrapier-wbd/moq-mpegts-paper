@@ -23,15 +23,28 @@
 > pass-through with no jitter absorption at all — and the only instrument that shows it is the groomer's
 > own counters, which is why they were added before this run.
 >
-> **This is a defect in `mpegts-pacer`, ours, not in `moq-dev`.** The exporter's log is clean for the
-> whole run: no evictions, no errors, no reconnects, eight subscribes at start-up and nothing after. The
-> mechanism is not yet located (see *Open* below) and the fix is deliberately not guessed at.
+> **The mechanism is now located, and the first attribution was wrong.** The trigger is the source's
+> PCR discontinuity — `tsp --infinite` reaching the end of the clip and looping, at 600 s. The
+> publisher's input takes it in its stride: captured before MoQ sees it, the source carries **exactly
+> one** discontinuity, PCR 26,225.6 s → 25,625.6 s at packet 3,967,658, and resumes its clean 25 ms
+> grid immediately. The exporter's output carries **zero** discontinuities, because it never follows
+> the wrap. It **latches the last pre-wrap value and thereafter emits a PCR that advances by exactly
+> one 90 kHz tick per PCR packet** — 0.0111 ms, a counter and not a clock — and never recovers. After
+> that, 100,000 packets of programme carry **6.9 ms** of PCR where they should carry 15,880 ms.
+>
+> **So the defect that starts it is upstream's, and the defect that amplifies it is ours.** The pacer's
+> rate estimator was arithmetically faithful to an input that had stopped telling the truth: it divided
+> real packets by a media time that had stopped advancing, got a rate two orders of magnitude above
+> anything the carrier could hold, released on it, and drained its own cushion. Both halves are now
+> addressed — the estimator is fixed and regression-tested here, the exporter behaviour is reported
+> upstream — and they must not be conflated. *An earlier reading of this experiment called the whole
+> thing ours on the strength of a clean exporter log. The log is clean; the exporter is not.*
 >
 > **The consequence for the paper is a scope, not a retraction.**
 > [T19](test-19-pcr-grid-verification.md) measurement 11's conformance result stands for the window it
 > was measured over. It was a 300 s window, the divergence begins at about 540 s, and so the claim that
-> the media-aware lane produces a conformant CBR wire **is established for minutes and is not
-> established for hours**.
+> the media-aware lane produces a conformant CBR wire **is established for minutes and is not yet
+> established for hours** — the re-soak that would establish it is the next run, not this one.
 
 ## Objective
 
@@ -163,40 +176,147 @@ an open item in its own right — it is a tokio worker pool that should not be g
 
 ## What this does and does not establish
 
-- **Establishes:** the complete media-aware lane does not hold its operating state for as long as an
-  hour on an unimpaired path. The failure is in the groomer's release loop, it is reproducible in the
-  sense that it appeared once and persisted for the remaining two hours without recovering, and it is
-  invisible to every conformance and content check applied to the output.
-- **Establishes:** a groomer defect of this class is undetectable from the wire. That is a finding about
-  monitoring, not only about this bug — see [T22](test-22-silent-media-plane-failure.md), which
-  measures the same asymmetry deliberately.
-- **Does not establish:** anything about MoQ or about media-aware carriage. The exporter behaved
-  correctly and said nothing because there was nothing to say. This is our code.
-- **Does not establish:** that the lane cannot be made to hold its state. The loop is ours to fix, and
-  the ramp's linearity says the mechanism is a single unbounded accumulation rather than an
-  instability in the control law.
-- **Does not yet establish:** the resource question the soak was also for. That needs the run to finish.
+- **Establishes:** the complete media-aware lane, as built, did not hold its operating state for as
+  long as an hour on an unimpaired path. Reproduced four times on the 2-vCPU primary at the same
+  trigger, and deterministically offline from a capture.
+- **Establishes:** the trigger is a **source PCR discontinuity that the exporter does not survive** —
+  an ordinary event on a permanent feed, where a splice, an encoder restart or a clock rewrap will
+  produce one. It is upstream's, it is silent, and until it is fixed any permanent deployment of this
+  lane meets it the first time its source discontinues.
+- **Establishes:** a defect of this class is **undetectable from the wire**. Programme conserved,
+  continuity clean, PCR repetition clean, exact CBR — every check an operator has, passing, over a
+  stage with no jitter absorption left and a source with no timebase at all. That is a finding about
+  monitoring rather than about this bug; [T22](test-22-silent-media-plane-failure.md) measures the same
+  asymmetry deliberately, and together they are why the groomer's own counters are load-bearing.
+- **Establishes:** a groomer must not take its input's timebase on trust. Ours did, and that is the
+  half of the failure that is ours. It is fixed and regression-tested.
+- **Does not establish:** that media-aware carriage is unsound. Both faults are implementation faults
+  in identified components, one upstream and one ours, and neither is a property of demuxing MPEG-TS
+  into tracks.
+- **Does not establish:** that the lane now holds its state for hours. The fix is validated
+  deterministically and on a short live arm; the re-soak has not been run.
+- **Does not yet establish:** the resource question the soak was also for. That needs a full run that
+  is not chasing a known defect.
+
+## Mechanism
+
+Three instruments settled it, and each ruled out a class the previous one could not.
+
+**1. The two accumulators, reported separately.** The rate is `decayed_packets / decayed_secs`, and a
+ratio that has gone wrong says nothing about which half did. Emitting them separately answered it in
+one reading: across the departure the **denominator does not move** — `rate_dsecs` sits at 2.15 s
+before, during and after — while the **numerator ramps linearly**, 13,702 → 51,101 → 616,677, gaining
++6,280 packets per second. That is the packet arrival rate exactly, which says the numerator had
+stopped decaying rather than started growing. It also predicts the observed slope: 6,280 packets/s
+over a 2.15 s window is 4.40 Mb/s per second, or **264 Mb/s per minute**, against the ~250 measured.
+
+**2. The interval tail.** The mean interval stayed normal at 188 packets throughout, and
+`rate_max_packets_in_interval` froze at 1,832 — so no single monster interval was responsible. What
+moved was `rate_sub_ms_intervals`: in the last window before the departure, **all 494 admitted
+intervals were shorter than a millisecond of media time**. The window decays on media time, so an
+interval that carries none removes nothing from the sum while still adding its packets. Once every
+interval is that interval, `decayed_packets` is a plain running total.
+
+**3. Capture and replay, on both sides of MoQ at once.** The estimator consults no clock, so a capture
+of the pacer's input replays its whole trajectory deterministically — which turns a defect needing ten
+minutes of live lane into a file and three seconds of CPU. It reproduces exactly. Capturing the
+*publisher's* input in the same run then attributes it:
+
+| | source (`tsp` output, before MoQ) | exported (after the round trip) |
+|---|---|---|
+| PCR interval grid | clean **25.0 ms**, ~650 PCRs per 100k packets | clustered; 345 of 398 sub-ms, gaps to 320 ms |
+| media time per 100k packets, before | 15,850 ms | 15,880 ms |
+| media time per 100k packets, after | **15,850 ms — unchanged** | **6.9 ms** |
+| PCR discontinuities in the run | **1**, at packet 3,967,658: 26,225.6 s → 25,625.6 s | **0** |
+
+The source loops the clip and signals it. The exporter never passes that discontinuity on: it latches
+the last pre-wrap value, 26,226.2 s, and emits PCR incrementing by one 90 kHz tick per PCR packet
+thereafter, permanently. Note the exporter's PCR was already unlike its input before the failure —
+clustered byte-adjacent with 320 ms gaps against a clean 25 ms grid, and about 38 % of the source's
+PCRs not carried at all.
+
+**Why the earlier elimination was wrong.** The first pass ruled out the loop wrap by feeding the same
+looped clip *straight into the groomer with MoQ removed*, and the estimate held. That control removes
+the component that fails, so it could only ever return a null. The rule it yields is in
+[method notes](method-notes.md) §1: a control that removes the suspect stage tests the stimulus, not
+the system, and cannot exonerate anything downstream of what it removed.
+
+## The correction, and what it is not
+
+Two separate faults, and conflating them would misattribute both.
+
+**Upstream — the exporter's PCR does not survive a source discontinuity.** Reported; see
+[upstream contributions](upstream-contributions.md). Nothing in `mpegts-pacer` can fix a source whose
+clock has stopped, and this is the defect that starts the failure.
+
+**Ours — the estimator integrated an input it should have distrusted.** Two changes, both small and
+both justified independently of the trigger:
+
+1. **Coalesce intervals too short to be a sample.** A PCR interval below 10 ms carries too little media
+   time to say anything about rate, and — because the window decays on media time — too little to decay
+   anything out of it either. Packets now accumulate with their media time until the pending span is a
+   usable sample, which keeps every packet paired with the time it actually arrived in (the property
+   the ratio-of-sums exists to preserve) and guarantees every decay is driven by a real span. Ten
+   milliseconds is well inside the 40 ms a conformant source must repeat PCR within, so a working
+   source always clears it. On a clean 25 ms grid the change is a no-op, measured: identical figures
+   to six significant digits.
+2. **A recovered content rate above the carrier's is not a content rate.** The groomer emits this
+   stream at the mux rate, stuffing included, so over a window of seconds the media inside it cannot
+   arrive faster than the carrier holds. Over one interval it certainly can, which is what the buffer
+   is for, so the ceiling is applied to the windowed estimate and not to a sample. When the sums say
+   otherwise, the packets are real and the media time is not: the pacer holds its last credible rate
+   and raises `rate_clock_stalled`.
+
+Validated against the captured failure, replayed through the fixed estimator:
+
+| packets | raw ratio | **release rate** | `clock_stalled` | true rate |
+|---:|---:|---:|:--|---:|
+| 3,500,000 | 6,549 pps | **6,549 pps** | false | 6,331 |
+| 4,000,000 | 71,185 pps | **6,368 pps** | **true** | 6,722 |
+| 4,500,000 | 309,267 pps | **6,368 pps** | **true** | 7,561 |
+| 5,000,000 | 524,220 pps | **6,368 pps** | **true** | 8,401 |
+
+The raw ratio still climbs, because the input still lies. What the pacer releases on no longer does.
+
+**And live, on the same host, against the same trigger.** The lane re-run with the fixed groomer meets
+the discontinuity at the same t=601 s and holds:
+
+| | unfixed | **fixed** |
+|---|---|---|
+| recovered rate at t=601 | 35.7 Mb/s, ramping | **9,575,263 b/s, frozen** |
+| recovered rate at t=691 | 431.4 Mb/s | **9,575,263 b/s** |
+| buffer occupancy at t=691 | 601 packets | **5,684 packets** |
+| underruns at t=691 | **84,977** | **0** |
+| dropped | 0 | 0 |
+| operator-visible alarm | none | **`clock_stalled=true` at t=601** |
+
+The frozen 9.575 Mb/s is the last credible estimate and the true content rate is ~9.5 Mb/s, so the
+groomer keeps releasing correctly through a source that has stopped telling it the time. `rate_pending`
+climbs into the tens of thousands and stays there, which is the stalled clock made legible: packets
+held back from an estimate they cannot inform.
+
+The alarm is the part that matters most for the architecture. The exporter defect is still there and is
+still invisible to every check on the wire — but it is no longer invisible to the operator, because the
+one stage that must read the source's timebase now says when that timebase has stopped.
+
+**The deterministic regression** feeds a healthy 25 ms grid, checks the estimate settles, then switches
+to one 90 kHz tick per PCR packet at the same packet rate. Against the unfixed estimator it reads
+1,520,675 pps for a true 6,400 — a 238× overshoot, the field failure in miniature — and it asserts the
+stall is visible in the counters, because nothing on the wire is.
 
 ## Open
 
-**The mechanism is not located, and three candidates were eliminated rather than one confirmed.**
+**The re-soak.** The fix is validated deterministically and on a short live arm; it has not yet been
+run for hours. That is the next run and it is what would let the conformance claim extend past minutes.
 
-- *Not the source loop wrap.* Feeding the same clip, looped by the same `tsp --infinite -P regulate`,
-  **directly into the groomer with MoQ removed from the path** holds the estimate at 9.48–9.50 Mb/s
-  across several wraps over 150 s. The wrap alone does not do it.
-- *Not an upstream event.* The exporter log is clean for the whole run.
-- *Not simply degenerate PCR intervals.* The obvious candidate was that the estimator's window decays
-  on *media* time, so a run of near-zero PCR intervals — which T19 measured the exporter emitting as
-  byte-adjacent pairs — would add packets to the numerator while decaying almost nothing out. A
-  regression test that alternates one-tick and 25 ms intervals over 4,000 intervals **does not**
-  reproduce the ramp, so that pattern by itself is not sufficient either.
+**Also open:** the groomer's thread count on a 2-vCPU host, and the resource slopes, which need a full
+run that is not chasing a known defect.
 
-The next step is diagnostic rather than speculative: emit `decayed_packets` and `decayed_secs`
-separately in the counter line, which distinguishes a numerator that grows from a denominator that
-vanishes in a single reading. Shipping a fix before that would be guessing.
-
-**Also open:** the groomer's thread count on a 2-vCPU host, and the resource slopes, which need the
-full run.
+**A second release-loop question, not yet answered.** On the 8-vCPU secondary the estimate stayed
+healthy for the whole run and the buffer still drifted — 9,008 packets to 18,105 over nine minutes,
+monotonically, against a 6,300-packet set point. The servo's authority is `±RATE_SERVO_GAIN`, ±5 %, so
+any standing rate error beyond 5 % saturates it and the buffer walks to a rail. That is a different
+failure from this one, it is ours, and it is unaddressed.
 
 ## Corrections
 

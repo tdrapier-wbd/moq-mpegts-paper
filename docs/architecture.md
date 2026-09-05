@@ -233,7 +233,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | | Measured | Domain |
 |---|---|---|
 | Groomed, MoQ lane, **current, over minutes** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
-| Groomed, MoQ lane, **over hours** | conformance figures **unchanged** — still 0 above 40 ms, 0 continuity errors, exact CBR, programme conserved — while the edge stage's de-jitter cushion collapses from ~1.4 s to **0** at about 9 min and underruns run at ~970/s. The wire cannot show this; see [T21](../lab/test-21-permanence-soak.md) | **wire + edge-stage counters** |
+| Groomed, MoQ lane, **across a source discontinuity** | conformance figures **unchanged** — still 0 above 40 ms, 0 continuity errors, exact CBR, programme conserved — while the exporter's PCR has stopped being a clock and the edge stage's cushion has collapsed to **0**. The wire cannot show either; see [T21](../lab/test-21-permanence-soak.md) | **wire + edge-stage counters** |
 | Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
@@ -1105,9 +1105,10 @@ Ranked by how much a negative answer would change the architecture.
 1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate, and now the
    highest-leverage item outright. Grooming is file-validated, structurally sound and **P1-conformant on
    the wire in software on both lanes over the windows measured**; nothing has been near an IRD. Not
-   complete. On the MoQ lane the software result is scoped to minutes — the edge stage's release loop
-   departs at about nine minutes while its output stays conformant ([T21](../lab/test-21-permanence-soak.md)) —
-   so that stage has to hold its state before hardware time is worth booking.
+   complete. On the MoQ lane the software result is scoped to minutes — at the source's first PCR
+   discontinuity the exporter's clock stops advancing while its output stays conformant
+   ([T21](../lab/test-21-permanence-soak.md)) — so the lane has to survive a discontinuity before
+   hardware time is worth booking.
 2. **How is the edge gateway's buffer sized for a feed it has not seen?** (§4.2.) The media-aware lane
    costs a buffer bound set by the **peak coded frame**, not by the bitrate: three sources at
    9.5–9.9 Mb/s of programme, with peak frames of 256, 1,826 and 4,562 transport packets, need bounds
