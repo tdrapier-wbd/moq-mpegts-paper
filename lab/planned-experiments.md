@@ -102,33 +102,35 @@ every cell T20 measured.
 viability claim.*
 **Falsifies:** the headline conformance result's applicability to a permanent service.
 
-[T21](test-21-permanence-soak.md) put the groomer inside a long run for the first time, found the
-recovered media rate departing at ~9 minutes and ramping without bound while the wire stayed perfectly
-conformant, and has since **located the mechanism**. The source loops its clip at 600 s and signals one
-clean PCR discontinuity. The exporter never passes it on: it latches the last pre-wrap value and
-thereafter emits a PCR advancing by **one 90 kHz tick per PCR packet**, permanently, so 100,000 packets
-of programme carry **6.9 ms** of PCR instead of 15,880 ms. Our groomer then divided real packets by a
-media time that had stopped advancing — that half is **fixed, regression-tested and pushed**
-(`mpegts-pacer` `5ab84cd`), validated deterministically against the captured failure and on a live arm.
+[T21](test-21-permanence-soak.md) put the groomer inside a long run for the first time and found the
+recovered media rate departing at ~9 minutes while the wire stayed perfectly conformant. Our groomer
+had divided real packets by a media time that had stopped advancing — that half is **fixed,
+regression-tested and pushed** (`mpegts-pacer` `5ab84cd`).
 
-**What remains is upstream's and it is the more serious half.** A permanent feed meets a PCR
-discontinuity routinely — a splice, an encoder restart, a source failover, and the 33-bit PCR base
-wrapping every 26.51 h whether anything else happens or not. On current evidence the exporter's clock
-stops at the first one and never restarts, silently, with no log line and no wire symptom. Sequence:
+[T23](test-23-pcr-discontinuity-classes.md) has since **characterised the upstream half as a class**,
+which is what step 2 below asked for, and the answer changes the shape of what remains:
 
-1. **Report upstream** with the two-sided capture as the reproduction: source PCR grid clean with one
-   discontinuity, exported copy with none and a stopped clock. *(Done — see
-   [upstream contributions](upstream-contributions.md).)*
-2. **Characterise the trigger precisely** before assuming it is only the loop wrap. The cheapest arm
-   injects a *deliberate* discontinuity mid-clip rather than waiting 600 s for the loop, which also
-   tests whether the exporter recovers when the source's PCR jumps forward rather than backward, and
-   whether a 33-bit wrap behaves the same as a splice. Existing rig: `lab/scripts/t21-pcr-attribution.sh`
-   plus the PCR harness's discontinuity stimulus, which already exists.
-3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path. Not
-   before: a soak against an exporter known to stop its clock at 600 s measures the clock, not
-   permanence. The groomer fix means the lane now *survives* the event with its cushion intact, which
-   is worth confirming over hours, but survival with a dead source timebase is not the same as the
-   lane working.
+- **The 33-bit rollover is carried correctly end to end** — a 30.080 ms step in modulo arithmetic,
+  6,259 PCRs within ±500 ns, 0 continuity errors. This was the item that made the defect unavoidable
+  for a permanent feed, and it is **discharged**.
+- **Forward jumps recover** in 238 ms.
+- **A rewind costs its own duration in programme**, one-for-one from 1 s to 600 s, because the
+  exporter's scheduler is monotonic in media time. The recovery burst — 97,225 packets, 18.3 MB —
+  is itself large enough to overrun the groomer.
+
+**What remains is upstream's, and it is narrower than it looked.** The exposure is the splice, the
+source failover and the encoder restart, not a clock that stops of its own accord. Sequence:
+
+1. **Report upstream.** *(Done — measurements posted to
+   [#2833](https://github.com/moq-dev/moq/issues/2833), which already owned the mechanism for SI
+   tables; T23 adds that the stall stops the whole programme, that the cost is linear, and that the
+   rollover is unaffected. See [upstream contributions](upstream-contributions.md).)*
+2. ~~**Characterise the trigger precisely.**~~ **Done — T23.**
+3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path. This is
+   now unblocked and is the highest-value item outstanding: the reason to defer it was an exporter
+   thought to stop its clock at the first discontinuity, and a permanent feed on a non-looping source
+   meets no rewind at all. **Use a non-looping source**, or the soak measures the rewind rather than
+   permanence.
 
 **P0-3b. The servo saturates, and the buffer walks to a rail.** *Ours, unaddressed, and separate from
 the above.* On the 8-vCPU secondary the rate estimate stayed healthy for a full run while the buffer

@@ -1014,6 +1014,33 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 
 ## 6. Claims, and their scope
 
+**A defect found through an incidental stimulus is described at the level of that stimulus, not of the
+class it belongs to. Characterise the class before reporting it.** *(T23.)*
+
+> T21 found the exporter's PCR degenerating into a counter after the source clip looped, and the report
+> drafted from it said "the exporter's PCR does not survive a source discontinuity". Grading the event
+> as a controlled variable instead — direction, magnitude and class each varied with everything else
+> held — returned a different picture in three ways. The 33-bit rollover, the one event a permanent
+> feed cannot avoid, is carried **correctly**; forward jumps recover; and a rewind produces a clean
+> withhold-and-burst costing exactly its own duration, with none of the six arms reproducing the
+> counter at all.
+>
+> Every one of those would have made the report wrong in a way the maintainer would have found before
+> we did: an unreproducible symptom, an overstated scope, and a claimed exposure to a rollover that
+> does not exist. What the class-level version buys is the opposite — a linear law, a bounded blast
+> radius, and a negative result that tells the maintainer what the fix does **not** need to handle.
+> *One stimulus establishes that a defect exists. It does not establish what it is.*
+
+**Verify that a fixture asserts what it claims before spending a run on it.** *(T23.)*
+
+> Arm B was meant to be a 600 s backward jump, built by subtracting 600 s from a clip starting at zero.
+> That does not produce a backward jump; it produces a value 600 s below the modulus — legal
+> arithmetic, and a *rollover*. The arm for the discontinuity would have measured the arm for the wrap,
+> and both would have agreed, which is exactly the kind of agreement that reads as corroboration.
+> Reading the generated stimuli back through the analyser caught it in two minutes, against roughly
+> two hours of lane time per full sweep. *Generating a fixture and grading a fixture are two claims;
+> the second is cheap and the first is not self-evidencing.*
+
 **A stage that integrates must be graded over a window longer than its own integration time, or the
 run has qualified the transient.** *(T21.)*
 

@@ -32,6 +32,13 @@
 > one 90 kHz tick per PCR packet** — 0.0111 ms, a counter and not a clock — and never recovers. After
 > that, 100,000 packets of programme carry **6.9 ms** of PCR where they should carry 15,880 ms.
 >
+> **The class is characterised in [T23](test-23-pcr-discontinuity-classes.md), and this stimulus is not
+> representative of it.** Deliberate signalled discontinuities produce a *withhold-and-burst* — output
+> stops for exactly the size of the rewind, then the backlog is released — with a healthy clock either
+> side and no counter anywhere. Forward jumps and the 33-bit rollover are carried correctly. What
+> generalises from T21 is that the exporter does not act on `discontinuity_indicator`; the counter
+> degeneration measured here does not.
+>
 > **So the defect that starts it is upstream's, and the defect that amplifies it is ours.** The pacer's
 > rate estimator was arithmetically faithful to an input that had stopped telling the truth: it divided
 > real packets by a media time that had stopped advancing, got a rate two orders of magnitude above
@@ -179,10 +186,11 @@ an open item in its own right — it is a tokio worker pool that should not be g
 - **Establishes:** the complete media-aware lane, as built, did not hold its operating state for as
   long as an hour on an unimpaired path. Reproduced four times on the 2-vCPU primary at the same
   trigger, and deterministically offline from a capture.
-- **Establishes:** the trigger is a **source PCR discontinuity that the exporter does not survive** —
-  an ordinary event on a permanent feed, where a splice, an encoder restart or a clock rewrap will
-  produce one. It is upstream's, it is silent, and until it is fixed any permanent deployment of this
-  lane meets it the first time its source discontinues.
+- **Establishes:** the trigger is a **source PCR discontinuity the exporter does not act on** — an
+  ordinary event on a permanent feed, produced by a splice, a source failover or an encoder restart.
+  It is upstream's and it is silent. [T23](test-23-pcr-discontinuity-classes.md) bounds it: the
+  exposure is a **rewind**, whose cost is its own duration in programme, and *not* the 33-bit PCR
+  rollover, which is carried correctly.
 - **Establishes:** a defect of this class is **undetectable from the wire**. Programme conserved,
   continuity clean, PCR repetition clean, exact CBR — every check an operator has, passing, over a
   stage with no jitter absorption left and a source with no timebase at all. That is a finding about
@@ -245,9 +253,13 @@ the system, and cannot exonerate anything downstream of what it removed.
 
 Two separate faults, and conflating them would misattribute both.
 
-**Upstream — the exporter's PCR does not survive a source discontinuity.** Reported; see
+**Upstream — the exporter does not act on a signalled discontinuity.** Reported; see
 [upstream contributions](upstream-contributions.md). Nothing in `mpegts-pacer` can fix a source whose
-clock has stopped, and this is the defect that starts the failure.
+clock has stopped, and this is the defect that starts the failure. Stated at the class level by
+[T23](test-23-pcr-discontinuity-classes.md): a **rewind** costs its own duration in programme, while
+forward jumps and the 33-bit rollover are carried correctly. The claim this experiment could support —
+"the exporter's PCR does not survive a source discontinuity" — was broader than its single stimulus
+warranted.
 
 **Ours — the estimator integrated an input it should have distrusted.** Two changes, both small and
 both justified independently of the trigger:

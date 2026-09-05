@@ -233,7 +233,8 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | | Measured | Domain |
 |---|---|---|
 | Groomed, MoQ lane, **current, over minutes** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
-| Groomed, MoQ lane, **across a source discontinuity** | conformance figures **unchanged** — still 0 above 40 ms, 0 continuity errors, exact CBR, programme conserved — while the exporter's PCR has stopped being a clock and the edge stage's cushion has collapsed to **0**. The wire cannot show either; see [T21](../lab/test-21-permanence-soak.md) | **wire + edge-stage counters** |
+| Groomed, MoQ lane, **across a source rewind** | conformance figures **unchanged** — still 0 above 40 ms, 0 continuity errors, exact CBR — across a **62.8 s hole in the programme**, because the exporter withholds output until the rewound timeline is overtaken. The wire cannot show it; see [T23](../lab/test-23-pcr-discontinuity-classes.md) | **wire + content-gap counter** |
+| Groomed, MoQ lane, **across the 33-bit PCR rollover** | carried correctly at every point: a 30.080 ms step in modulo arithmetic, 6,259 PCRs within ±500 ns, 0 continuity errors, 52 ms content gap against the control's 26 ms | **wire alone suffices** |
 | Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
@@ -1105,10 +1106,12 @@ Ranked by how much a negative answer would change the architecture.
 1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate, and now the
    highest-leverage item outright. Grooming is file-validated, structurally sound and **P1-conformant on
    the wire in software on both lanes over the windows measured**; nothing has been near an IRD. Not
-   complete. On the MoQ lane the software result is scoped to minutes — at the source's first PCR
-   discontinuity the exporter's clock stops advancing while its output stays conformant
-   ([T21](../lab/test-21-permanence-soak.md)) — so the lane has to survive a discontinuity before
-   hardware time is worth booking.
+   complete. On the MoQ lane the software result is scoped to minutes, bounded by a source event
+   rather than by duration: the exporter does not act on a signalled PCR discontinuity, and a
+   **backward** jump costs its own duration in programme while the wire stays conformant across the
+   hole ([T23](../lab/test-23-pcr-discontinuity-classes.md)). The **33-bit rollover and forward jumps
+   are carried correctly**, so what has to be survived before hardware time is worth booking is the
+   splice and the encoder restart, not the clock.
 2. **How is the edge gateway's buffer sized for a feed it has not seen?** (§4.2.) The media-aware lane
    costs a buffer bound set by the **peak coded frame**, not by the bitrate: three sources at
    9.5–9.9 Mb/s of programme, with peak frames of 256, 1,826 and 4,562 transport packets, need bounds
@@ -1120,11 +1123,12 @@ Ranked by how much a negative answer would change the architecture.
    encoder's VBV budget downstream into the edge gateway's buffer**, because the T-STD schedule that
    used to carry it lived in the source's byte spacing. What is not established is the coefficient, or
    what a real network path adds to it on top of the burst.
-3. **Do the correctness boundaries in §4.3 hold?** Source-clock drift, PCR discontinuity and wrap,
-   mid-stream PID change, and T-STD occupancy through the media-aware exporter. Each now has a
-   reproducible stimulus and an instrument asserted to grade it correctly, the 33-bit wrap placed
-   rather than waited 26.5 h for; what none of them has yet met is the exporter and the groomer, so
-   the boundaries are *reachable* rather than tested.
+3. **Do the correctness boundaries in §4.3 hold?** **PCR discontinuity and wrap are now tested**
+   through the exporter and the groomer, not merely reachable: the 33-bit wrap is carried correctly
+   end to end, forward jumps recover, and a rewind costs its own duration
+   ([T23](../lab/test-23-pcr-discontinuity-classes.md)). What remains untested through the lane is
+   source-clock drift, mid-stream PID change and T-STD occupancy; each has a reproducible stimulus and
+   an instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Rate coherence between independently
    clocked gateways is settled — single-track content is byte-identical across two hosts in two
    availability zones with no shared component — and what remains is the multi-track case, where the

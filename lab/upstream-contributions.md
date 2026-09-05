@@ -544,6 +544,34 @@ by clip for reasons not established: 25.2 % of intervals above 40 ms on a synthe
 and 9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is
 27 ms. That exception is unexplained and was reported as unexplained.
 
+### A rewound timeline stalls the whole programme, not just the SI cadence — measurements contributed to an open issue
+
+[#2833](https://github.com/moq-dev/moq/issues/2833) is the maintainer's own, and it already had the
+mechanism: the exporter's stored last-emission only moves forward, so after a backwards jump nothing is
+due until the timeline catches up. Its closing paragraph asks for the PCR and `discontinuity_indicator`
+question to be handled together with it. So this is a comment, not a new issue —
+[#2833 (comment)](https://github.com/moq-dev/moq/issues/2833#issuecomment-5554907607) — carrying what
+[T23](test-23-pcr-discontinuity-classes.md) measured that the issue did not have.
+
+**What the measurements add.** The title scopes the stall to SDT/NIT repetition; in fact the exporter
+stops emitting *everything*, so a rewind is a hole in the programme rather than a gap in the tables.
+The cost is **linear in the rewind** — 1 s → 268 ms, 2 s → 1,487 ms, 5 s → 4,514 ms, 10 s → 9,446 ms,
+44.7 s → 44,049 ms — which is what "until the timeline catches up" predicts exactly, and which turns a
+qualitative defect into a budget. Recovery is a **single 18.3 MB burst** that overran our groomer's 8 s
+cushion, so a consumer that survives the outage can still be broken by the re-entry.
+
+**And what it removes from the issue's scope**, which is the more useful half. Forward jumps recover in
+238 ms, so only the backwards case needs handling. The **33-bit PCR base rollover is carried correctly
+end to end** — 30.080 ms across the boundary in modulo arithmetic, 6,259 PCRs within ±500 ns, zero
+continuity errors — so the `due` comparison never sees one, and whatever threshold or signal is chosen
+should keep that true. On the flag itself: `discontinuity_indicator: false` is hardcoded at
+`rs/moq-mux/src/container/ts/export.rs:1102` on `2a6d9ebdf`, and it shows on the forward case too,
+where the exporter reproduces its own +29.05 s timebase change with the flag clear.
+
+The earlier draft, written from T21's looping stimulus, claimed the exporter latches its PCR and emits
+a counter permanently. No arm of T23 reproduces that, and the draft was retired rather than filed. See
+[method notes](method-notes.md) §6.
+
 ---
 
 ## 2. Audio robustness: three defects, two closed

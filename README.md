@@ -85,12 +85,14 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   intervals in a graded output contained zero null slots. The demuxed representation carries everything
   the reconstruction needs; **what the lane costs is buffer**, sized by the peak coded frame rather than
   by the bitrate ([Evidence](docs/evidence.md) §3.2). The scope of that result is **minutes**, and what bounds
-  it is a source event rather than a duration: at the source's first PCR discontinuity the exporter's
-  clock stops advancing — it emits one 90 kHz tick per packet thereafter, permanently — and the
-  groomer, which believed it, collapsed its own cushion to zero while the wire stayed clean throughout
-  ([T21](lab/test-21-permanence-soak.md)). The groomer half is fixed; the exporter half is upstream's
-  and open, and a permanent feed meets a discontinuity at every splice, encoder restart and 26.51 h
-  PCR wrap.
+it is a source event rather than a duration: the exporter does not act on a signalled PCR
+discontinuity. Grading the event as a controlled variable ([T23](lab/test-23-pcr-discontinuity-classes.md))
+separates the classes. A **backward** jump costs its own duration in programme — one-for-one from 1 s
+to 600 s — because the exporter treats a declared new time base as a timestamp not yet due, and the
+recovery burst is large enough to overrun a downstream stage. **Forward** jumps recover in 238 ms, and
+the **33-bit PCR base rollover is carried correctly end to end**, which removes the one timeline event
+a permanent feed cannot avoid. The remaining exposure is therefore the splice and the encoder restart,
+not the clock. In every failing arm the wire stayed conformant across the hole.
 
 ## The strongest negative results
 

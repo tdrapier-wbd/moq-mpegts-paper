@@ -632,9 +632,10 @@ it the lane's only protection against arrival jitter.
 **The mechanism is located, and it is two faults in series.** Capturing both sides of the MoQ round
 trip in one run separates them. The **trigger is upstream**: the source carried a clean 25 ms PCR grid
 and exactly one signalled discontinuity — the clip looping at 600 s — and the exporter's output carried
-**no discontinuity at all**, because it latches the last pre-wrap PCR and thereafter emits a value
-advancing by one 90 kHz tick per PCR packet, permanently. After that, 100,000 packets of programme
-carry **6.9 ms** of PCR where they should carry 15,880 ms. The **amplifier was ours**: the groomer's
+**no discontinuity at all**. Under this stimulus its PCR degenerated into a counter, advancing one
+90 kHz tick per PCR packet, so 100,000 packets of programme carried **6.9 ms** of PCR where they should
+carry 15,880 ms. That degeneration is specific to the looping stimulus and is *not* what a deliberate
+signalled discontinuity produces — see §3.6, which characterises the class. The **amplifier was ours**: the groomer's
 rate estimator was arithmetically faithful to an input whose clock had stopped, divided real packets by
 a media time that was not advancing, and released on the result. Diagnosis came from reporting the two
 accumulators separately — the denominator never moved (2.15 s throughout) while the numerator ramped at
@@ -1539,6 +1540,55 @@ groomer defect severe enough to destroy the de-jitter cushion left every check o
 T22 a dead source left every check on the transport passing. **Neither the transport nor the wire is a
 sufficient health signal on its own**, and the pair that is sufficient — PCR progression plus the
 groomer's own counters — is the pair this campaign had to build.
+
+### 3.13 Which PCR timeline events does the lane survive? — Rollover and forward jumps cleanly; a rewind costs its own duration in programme
+
+[T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software, merged build `f8236680b` plus
+groomer `5ab84cd`. Six arms, each placing exactly one deliberate timeline event at 45 s of a 105 s run,
+graded at the source, after the round trip and after grooming. The stimuli shift PTS and DTS as well as
+PCR, because the exporter schedules from media timestamps; moving PCR alone exercises a path the lane
+does not use.
+
+| event | programme gap | continuity errors | groomer drops | verdict |
+|---|---|---|---|---|
+| **33-bit base rollover** | 52 ms | 0 | 0 | **clean** |
+| forward 30 s | 238 ms | 0 | 0 | recovers |
+| backward 1 s | 268 ms | 0 | 0 | recovers |
+| backward 600 s | ≥62,760 ms | 0 | 0 | fails |
+| encoder restart (backward 44.7 s + counter reset) | 44,049 ms | 103 | 54,168 | fails |
+| control | 26 ms | 0 | 0 | clean |
+
+**The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
+stream, unconditionally, and was the one timeline event a permanent feed cannot avoid. Placed rather
+than waited for, it crosses at all three points as a **30.080 ms step in modulo arithmetic** — the same
+as the worst normal interval in the same stream — with 6,259 PCRs OK at ±500 ns absolute and zero
+continuity errors. Nothing sets `discontinuity_indicator`, correctly. **PROVEN, and the rollover no
+longer qualifies the permanence claim.**
+
+**A rewind costs its own duration, linearly.** Sweeping magnitude with everything else held: 1 s →
+268 ms, 2 s → 1,487 ms, 5 s → 4,514 ms, 10 s → 9,446 ms, 44.7 s → 44,049 ms. One-for-one to within half
+a second across three orders of magnitude, which identifies the mechanism without reading the source:
+the exporter's scheduler is monotonic in media time, so a declared new time base is treated as a
+timestamp merely not yet due, and output is withheld until the old timeline is overtaken. Recovery is a
+single burst — 97,225 packets, 18.3 MB — which is itself large enough to overrun the groomer, and is
+where the encoder-restart arm's drops and continuity errors come from. **PROVEN for the classes tested.**
+
+**`discontinuity_indicator` is neither consumed nor produced.** Four arms present it at the source and
+the exported wire carries zero. `discontinuity_indicator: false` is hardcoded at
+`rs/moq-mux/src/container/ts/export.rs:1102` on upstream `2a6d9ebdf`, so the exporter cannot emit one;
+in the forward arm it reproduces its own +29.05 s timebase change with the flag clear, which is a
+stream error for any downstream device and is only conformant on our wire because the groomer
+re-derives it. Reported on [#2833](https://github.com/moq-dev/moq/issues/2833), which already owned the
+mechanism for SI tables; T23 adds that the stall is not confined to SI but stops the whole programme.
+
+**Third instance of the same asymmetry.** The 600 s arm holds 0 continuity errors, 0 PCR intervals
+above 40 ms and exact CBR across a 62.8 s hole in the programme. As in §3.12 and T21, wire conformance
+does not detect a programme failure.
+
+**Qualification.** T23 does **not** reproduce T21's counter degeneration — 0 of 8,592 intervals across
+the three failing arms show it. A deliberate signalled discontinuity produces a withhold-and-burst with
+a healthy clock either side. Whether the two share a root cause is **UNRESOLVED**; the T21 captures are
+no longer on disk.
 
 ---
 
