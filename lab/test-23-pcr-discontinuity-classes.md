@@ -137,6 +137,49 @@ errors come from. A backward jump alone (`bk2`–`bk10`, arm B) drops nothing; i
 *recovery* from one, when the jump is large enough to build a substantial backlog, that
 overruns the groomer.
 
+### The recovery burst is a groomer sizing choice; the programme hole is not
+
+The encoder-restart arm lost two different things and they have different owners. Sweeping the
+groomer's hard cap — the depth past which input is dropped oldest-first — with the same arm E
+stimulus separates them:
+
+| groomer hard cap | drops | continuity errors | programme gap | buffer high water |
+|---|---|---|---|---|
+| 8,000 ms (adaptive ceiling, the default) | 54,168 | 103 | 44,049 ms | 42,555 |
+| 20,000 ms | 43,170 | 107 | 44,079 ms | 53,193 |
+| 50,000 ms | **0** | **0** | 44,009 ms | 96,179 |
+| 90,000 ms | **0** | **0** | 44,046 ms | 96,231 |
+
+The threshold falls between 20 s and 50 s against a 44.69 s rewind, which is the prediction
+recorded before the sweep: the withheld backlog is exactly the rewind, so a cap that can hold
+the rewind absorbs it and a cap that cannot discards the difference. **The drops and the
+continuity errors are ours and they are a configuration, not a defect.** The programme gap is
+unmoved at ~44 s by any cap, because it is the exporter withholding rather than the groomer
+discarding, and nothing downstream can return media that was never sent.
+
+**The headroom is free when it is not needed.** Pinning the cushion at 1 s — the operating
+point, as distinct from the cap — and varying only the cap:
+
+| arm | cap | drops | continuity | buffer high water | steady lead | pcrverify |
+|---|---|---|---|---|---|---|
+| F control | 2,500 ms | 0 | 0 | 2,449 | 135 ms | 6,239 OK, 0 fail |
+| F control | 50,000 ms | 0 | 0 | **2,447** | 148 ms | 6,245 OK, 0 fail |
+| E restart | 50,000 ms | **0** | **0** | 98,035 | — | 5,024 OK, 0 fail |
+
+A cap twenty times larger changes the steady-state occupancy by two packets. The buffer only
+grows when there is a backlog to absorb, so the cap is headroom rather than latency, and the
+cushion continues to set the operating point. Arm E at a pinned 1 s cushion and a 50 s cap
+loses **nothing**: 0 drops, 0 continuity errors, and PCR still within ±500 ns.
+
+The cost is memory, and it is the rewind that sizes it: absorbing 44.7 s at this rig's 4 Mb/s
+took a high-water mark of 98,035 packets, **18.4 MB**. That scales with both the rewind to be
+survived and the feed's rate, so an operator choosing this is choosing roughly
+*rewind × bitrate* of buffer per feed — at 11 Mb/s and a 60 s rewind, about 82 MB each, which
+is a real number at a few hundred feeds and is a provisioning decision rather than a default.
+**No pacer change is made here.** The right cap is a property of the deployment's worst
+expected rewind, the drops are already counted and visible when it is set too low, and a large
+default would spend memory on every feed to insure against an event most of them never meet.
+
 ### The rollover is handled correctly, at every point
 
 Arm D crosses 2^33 on the paced wire exactly once:
@@ -178,6 +221,11 @@ root cause, but T23 cannot demonstrate that and does not claim it. See Correctio
 4. **An encoder restart is the worst realistic case** and the one most likely in service: it
    is a backward jump *and* it triggers a backlog burst large enough to overrun the groomer,
    costing 44 s of programme, 54,168 dropped packets and the lane's only continuity errors.
+   **The two halves have different owners.** The 44 s hole is the exporter withholding and no
+   downstream stage can recover it. The 54,168 packets and the 103 continuity errors are the
+   groomer's hard cap being smaller than the rewind: at a cap above the rewind the same arm
+   loses nothing, and the headroom costs two packets of steady-state occupancy when unused.
+   That is a provisioning decision (*rewind × bitrate* of buffer per feed), not a defect.
 5. **`discontinuity_indicator` is neither consumed nor produced.** Not consumed: (3) and (4)
    are the consequence. Not produced: in arm C the exporter emits its own +29.05 s timebase
    change with the flag clear, which is a stream error for any downstream device, and it is
@@ -218,5 +266,5 @@ the generated stimuli back through the analyser cost two minutes and caught this
 - Whether T21's counter degeneration and T23's withhold-and-burst share a root cause. The
   T21 captures are no longer on disk. This does not block the upstream report, which is filed
   on T23's evidence and reproduces in 105 s rather than 40 minutes.
-- Whether the arm E burst overruns the groomer at cushions larger than 8,000 ms, i.e. whether
-  the drops are a groomer sizing question or an unavoidable consequence of the backlog.
+- ~~Whether the arm E burst overruns the groomer at larger cushions.~~ **Answered above**: a
+  hard cap above the rewind absorbs it losslessly, and the headroom is free when unused.

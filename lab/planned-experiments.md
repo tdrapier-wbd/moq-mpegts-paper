@@ -126,11 +126,23 @@ source failover and the encoder restart, not a clock that stops of its own accor
    tables; T23 adds that the stall stops the whole programme, that the cost is linear, and that the
    rollover is unaffected. See [upstream contributions](upstream-contributions.md).)*
 2. ~~**Characterise the trigger precisely.**~~ **Done — T23.**
-3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path. This is
-   now unblocked and is the highest-value item outstanding: the reason to defer it was an exporter
-   thought to stop its clock at the first discontinuity, and a permanent feed on a non-looping source
-   meets no rewind at all. **Use a non-looping source**, or the soak measures the rewind rather than
-   permanence.
+3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path.
+   **Running.** The source problem that made this impossible is solved rather than waited out: the
+   lab has no live feed and every clip in it is minutes long, so `lab/scripts/ts-continuous-source.py`
+   replays one with the timeline advanced across the join. It is graded before use — 0 backward PCR
+   steps, 0 discontinuity indicators, 0 continuity errors, join interval indistinguishable from the
+   median — and the lane confirms it, crossing the first pass boundary at `gap_ms=0` where the
+   equivalent loop rewind costs 62,760 ms (T23 arm B). Conditions are in
+   [T21 § the re-soak](test-21-permanence-soak.md#the-re-soak-on-a-continuous-timeline). The 7-day
+   arm remains outstanding after the 24 h arm reports.
+
+**The residue of the rewind finding is closed and it was ours.** T23's encoder-restart arm lost 44 s
+of programme *and* 54,168 packets to a groomer overrun, and only the first is upstream's. Sweeping the
+groomer's hard cap against the same stimulus puts the threshold between 20 s and 50 s against a 44.69 s
+rewind: at a cap above the rewind the arm loses **0 packets and produces 0 continuity errors**, and the
+headroom costs two packets of steady-state occupancy when it is not being used. **No pacer change is
+warranted** — the right cap is the deployment's worst expected rewind times its bitrate, the drops are
+already counted when it is set too low, and a large default would spend memory on every feed.
 
 **P0-3b. The servo saturates, and the buffer walks to a rail.** *Ours, unaddressed, and separate from
 the above.* On the 8-vCPU secondary the rate estimate stayed healthy for a full run while the buffer
@@ -144,6 +156,12 @@ true ~9.5, where the old build read 8.67), so this may already be smaller than i
 worth measuring before changing a control constant. **Changes the conclusion if:** the buffer cannot be
 held at its set point over hours on either host, which would mean the cushion is not a designed
 quantity but an accident of host speed.
+**Now instrumented rather than separately scheduled:** the running re-soak is on the same 8-vCPU
+secondary and reads exactly these quantities for 24 h, so it answers this or it does not, without a
+second run. The early reading is that the estimate **oscillates** about the true rate rather than
+standing off it — 8.79–10.08 Mb/s about ~9.5 — with the buffer in a 5,992–8,001 band and no monotone
+walk. That amplitude exceeds the ±5 % authority at its extremes, so the question is live: an
+oscillation the servo can ride is not the same as the standing error that walked the buffer before.
 
 **P0-4. ~~Silent media-plane failure — detection.~~ Done for the MoQ lane —
 [T22](test-22-silent-media-plane-failure.md).** It confirmed the property it was aimed at and bounded

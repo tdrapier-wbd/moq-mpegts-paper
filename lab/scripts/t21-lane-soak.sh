@@ -26,9 +26,22 @@
 # the path. The question here is whether a healthy lane stays healthy, which is the weaker
 # question and the one that has never been asked.
 #
-# The source loops every ~665 s, so a multi-hour run crosses the wrap dozens of times. Each
-# role respawns and every respawn is counted: an unexplained restart is the result, not a rig
-# failure to be hidden.
+# THE SOURCE MUST NOT REWIND. `tsp -I file --infinite` restarts the file, which restarts its
+# clock, and T23 measured what that costs: a rewind of N seconds costs N seconds of programme.
+# A soak on a looped clip therefore spends its time measuring recovery from a rewind the rig
+# manufactured, which is a real property of the lane, already measured, and not permanence.
+# `SOURCE_MODE=continuous` (the default) replays the clip through
+# `ts-continuous-source.py`, which advances the timeline across the join so PCR, PTS and DTS
+# stay monotone and the continuity counters stay unbroken. `SOURCE_MODE=loop` restores the
+# old behaviour and is kept only so the two can be compared deliberately.
+#
+# The 33-bit rollover is not avoided and should not be. This clip's PCR origin is 25,625.6 s,
+# so a continuous run crosses the modulus about 19.4 h in, unsignalled, exactly as a real feed
+# does every 26.51 h. T23 established the lane carries that correctly in a placed 105 s arm;
+# a soak that runs past it tests the same finding live and at length.
+#
+# Each role respawns and every respawn is counted: an unexplained restart is the result, not a
+# rig failure to be hidden.
 set -uo pipefail
 
 LABEL=${1:?label}
@@ -46,6 +59,8 @@ PACER=${PACER:-$HOME/pacer-64595f6/target/release/mpegts-pacer}
 MONITOR=${MONITOR:-$HOME/t21/t21-pcr-monitor.py}
 CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
 DIR=${DIR:-$HOME/t21}
+SOURCE_MODE=${SOURCE_MODE:-continuous}
+CONTSRC=${CONTSRC:-$HOME/t21/ts-continuous-source.py}
 
 # `SECS` overrides the hours argument, which exists so the rig can be smoke-tested in a
 # minute. A soak whose first run is the real one is a soak whose rig defects are discovered
@@ -57,7 +72,18 @@ BCAST="t21.soak.$LABEL"
 CSV=$RUN/soak.csv
 KIDS=()
 
-for f in "$MOQ" "$RELAY" "$PACER" "$MONITOR" "$CLIP"; do
+case "$SOURCE_MODE" in
+continuous) FEED="python3 $CONTSRC $CLIP | tsp -I file - -P regulate --pcr-synchronous -O file -" ;;
+loop) FEED="tsp -I file $CLIP --infinite -P regulate --pcr-synchronous -O file -" ;;
+*)
+	echo "SOURCE_MODE must be continuous or loop" >&2
+	exit 1
+	;;
+esac
+
+CHECK=("$MOQ" "$RELAY" "$PACER" "$MONITOR" "$CLIP")
+[ "$SOURCE_MODE" = continuous ] && CHECK+=("$CONTSRC")
+for f in "${CHECK[@]}"; do
 	[ -e "$f" ] || {
 		echo "missing: $f" >&2
 		exit 1
@@ -87,7 +113,7 @@ sleep 2
 
 bash -c "while :; do
     echo \"\$(date -Is) publisher start\" >> $RUN/respawn.log
-    tsp -I file $CLIP --infinite -P regulate --pcr-synchronous -O file - \
+    $FEED \
       | $MOQ --client-tls-disable-verify --client-connect https://127.0.0.1:$PORT/anon \
           --broadcast $BCAST import ts
     echo \"\$(date -Is) publisher exit rc=\$?\" >> $RUN/respawn.log
@@ -119,6 +145,7 @@ KIDS+=("$!")
 	echo "moq=$($MOQ --version 2>&1 | head -1) relay=$($RELAY --version 2>&1 | head -1)"
 	echo "pacer=$($PACER --version 2>&1 | head -1)"
 	echo "clip=$CLIP md5=$(md5sum "$CLIP" | cut -d' ' -f1)"
+	echo "source_mode=$SOURCE_MODE"
 	echo "started=$(date -Is)"
 } >"$RUN/meta.txt"
 

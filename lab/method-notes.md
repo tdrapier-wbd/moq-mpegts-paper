@@ -13,6 +13,23 @@ having.
 
 ## 1. Controls
 
+**A looped clip is not a long clip, and the difference is a rewind per lap.** *(T21, T23.)*
+
+> Every soak in this campaign stretched a five-to-ten-minute clip with `tsp -I file --infinite`,
+> because there is no live feed in the lab and it is the obvious thing to reach for. Restarting the
+> file restarts its clock, and T23 later priced that: a backward jump costs its own duration in
+> programme, so T21's source was injecting a 600 s rewind roughly every 665 s. The run could not have
+> measured permanence whatever it found — it was measuring recovery, repeatedly, from an event the rig
+> manufactured.
+>
+> The rule is that **the property under test has to survive the way the stimulus was extended**. A
+> soak needs a timeline that advances for the length of the soak; `ts-continuous-source.py` gets one
+> from a finite clip by advancing PCR, PTS, DTS and the continuity counters across the join, which is
+> a defensible alteration precisely because it can be checked — 0 backward steps, 0 discontinuity
+> indicators, 0 continuity errors, and a join interval indistinguishable from the median. Check it
+> before the run: a source that merely looks continuous confounds the experiment it was built to
+> clean up, and does so invisibly.
+
 **A control that removes the suspect stage tests the stimulus, not the system, and exonerates
 nothing downstream of what it removed.** *(T21.)*
 

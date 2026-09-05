@@ -117,7 +117,7 @@ every "not established" entry recurs in §4 or §5.
 | | Established | Not established | Where |
 |---|---|---|---|
 | **Carriage** | All three lanes carry a full broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, the media-aware lane by stuffing, mux rate, PSI density and PCR spacing | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
-| **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **The release loop does not hold over hours** — it departs at ~9 min and the cushion collapses, with the wire still conformant ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; a conformant lane sustained beyond ~9 min, which is now a known open defect rather than an untested one | §3.2 |
+| **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **Whether it holds over hours is untested**: the one long run to try departed at ~9 min, but on a looped source that rewinds its clock every 665 s, so it measured rewind recovery; the groomer's half of that failure is fixed and a re-soak on a continuous timeline is running ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; a conformant lane sustained beyond minutes, which is now untested rather than known-failing | §3.2 |
 | **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them**: the reordering separation that used to do so was a packet-size artefact, and on HTTP/3 the two lanes overlap (§3.3). Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable** — what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline: not the controller, not bufferbloat | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile | §3.5, §3.6 |
@@ -619,9 +619,15 @@ On the same 90 s live arm at an unchanged cushion, cap and exporter budget: cont
 against a nominal 11,000,000, 0 PCRs outside ±500 ns**, PSI intact, buffer flat at 1.26 s. All four of
 T19's pass criteria are met. **The media-aware lane produces a conformant CBR wire over minutes.**
 
-**Over hours it does not hold that state, and the qualifying window was shorter than the failure.**
-[T21](../lab/test-21-permanence-soak.md) is the first long run to put the groomer inside the
-measurement, and at about **nine minutes** the groomer's recovered media-rate estimate departs the true
+**Whether it holds that state over hours is not yet established, and the first attempt to find out
+measured its own source.** [T21](../lab/test-21-permanence-soak.md) is the first long run to put the
+groomer inside the measurement, and it failed at about nine minutes — but its source was a clip looped
+by `tsp --infinite`, which restarts the clock every 665 s, and §3.13 has since priced a rewind at its
+own duration in programme. **The nine-minute failure is therefore a rewind-recovery result, not a
+permanence result**, and the groomer's half of it is fixed (`5ab84cd`). A re-soak on a source whose
+timeline is continuous is running and is past that trigger cleanly; until it reports, sustained
+operation beyond minutes is **untested rather than failed**. What the first run found, which stands:
+at about **nine minutes** the groomer's recovered media-rate estimate departs the true
 rate and ramps linearly without bound — 9.34 Mb/s at t=541 s, 34.7 Mb/s at t=601 s, **2.58 Gb/s at
 t=1,202 s**, gaining ~250 Mb/s per minute. The de-jitter buffer collapses with it, from a standing
 **10,587 packets (~1.4 s) to 0**, and underruns accumulate at **~970/s**. The wire stays conformant
@@ -1572,6 +1578,17 @@ the exporter's scheduler is monotonic in media time, so a declared new time base
 timestamp merely not yet due, and output is withheld until the old timeline is overtaken. Recovery is a
 single burst — 97,225 packets, 18.3 MB — which is itself large enough to overrun the groomer, and is
 where the encoder-restart arm's drops and continuity errors come from. **PROVEN for the classes tested.**
+
+**The burst's cost is ours and it is a provisioning decision, not a defect.** Sweeping the groomer's
+hard cap against the encoder-restart stimulus puts the threshold between 20 s and 50 s against a
+44.69 s rewind: at 8,000 ms (the default ceiling) the arm loses 54,168 packets with 103 continuity
+errors, at 50,000 ms it loses **nothing**, and the programme hole is unmoved at ~44 s by any cap
+because that half is the exporter withholding. The headroom is free when unused — a cap twenty times
+larger changes steady-state occupancy by two packets (2,449 → 2,447) and leaves PCR accuracy
+unchanged — so what an operator buys is memory sized by *rewind × bitrate*, about 18.4 MB here for
+44.7 s at 4 Mb/s. **The architectural statement is that the edge gateway must be able to hold the
+entire rewind**, because the exporter delivers it as one burst; the implementation statement is that
+our default ceiling is smaller than that and says so in its drop counter. Measured at P2.
 
 **`discontinuity_indicator` is neither consumed nor produced.** Four arms present it at the source and
 the exported wire carries zero. `discontinuity_indicator: false` is hardcoded at

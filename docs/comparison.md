@@ -563,10 +563,12 @@ So the defensible statement is:
 > Its groomed wire **is** TR 101 290 P1-conformant on PCR repetition in software over runs of minutes,
 > but only with all
 > three upstream PCR fixes *and* a groomer that reserves the PCR slot, estimates the media rate
-> correctly and closes its release loop on occupancy — and the lane is not yet shown to hold its
-> operating state for hours, because the exporter does not act on a signalled PCR discontinuity: a
-> source **rewind** costs its own duration in programme, one-for-one from 1 s to 600 s, with the wire
-> giving no sign of it. The 33-bit rollover and forward jumps are carried correctly. The buffer that costs is set by the **peak coded
+> correctly and closes its release loop on occupancy — and the lane is **not yet shown to hold that
+> state for hours**, the one long run to try having been confounded by a looped source that rewound
+> its own clock. Separately and regardless of duration, the exporter does not act on a signalled PCR
+> discontinuity: a source **rewind** costs its own duration in programme, one-for-one from 1 s to
+> 600 s, with the wire giving no sign of it. The 33-bit rollover and forward jumps are carried
+> correctly. The buffer that costs is set by the **peak coded
 > frame**, not by the bitrate, so it is content-dependent and has to be sized per feed. Neither lane has
 > been graded on a hardware IRD, which is now the measurement that would most change this comparison,
 > and it is blocked on apparatus rather than on either project.
@@ -1128,7 +1130,7 @@ every one of these; failing one is disqualifying regardless of how it reads else
 
 | Gate | Cleared when | MoQ today | Segmented HTTP today |
 |---|---|---|---|
-| **Conformant egress** | Groomed output passes TR 101 290 P1/P2 on hardware, sustained | **Cleared in software over minutes, not sustained.** Over 300 s: 0 of 20,193 intervals > 40 ms, 0 continuity errors, 0 groomer drops, exact CBR, 0 PCRs outside ±500 ns. Needed all three upstream PCR fixes *and* a groomer that reserves the PCR slot, estimates the media rate as a ratio of sums and closes its release loop on buffer occupancy. Costs a buffer sized by the peak coded frame (~3.6× its carriage duration), content-dependent. **The exporter does not act on a signalled PCR discontinuity: a source rewind costs its own duration in programme — one-for-one from 1 s to 600 s — with 0 continuity errors and exact CBR across the hole** ([T23](../lab/test-23-pcr-discontinuity-classes.md)). Forward jumps recover in 238 ms and the 33-bit rollover is carried correctly, so the exposure is the splice, the failover and the encoder restart. The groomer half of the related [T21](../lab/test-21-permanence-soak.md) failure is fixed (`5ab84cd`); the exporter half is not. The *sustained* half of this criterion is failed rather than untested. Hardware unverified | **Cleared in software** at an 8 s cushion (0 intervals > 40 ms); never soaked; hardware unverified |
+| **Conformant egress** | Groomed output passes TR 101 290 P1/P2 on hardware, sustained | **Cleared in software over minutes, not sustained.** Over 300 s: 0 of 20,193 intervals > 40 ms, 0 continuity errors, 0 groomer drops, exact CBR, 0 PCRs outside ±500 ns. Needed all three upstream PCR fixes *and* a groomer that reserves the PCR slot, estimates the media rate as a ratio of sums and closes its release loop on buffer occupancy. Costs a buffer sized by the peak coded frame (~3.6× its carriage duration), content-dependent. **The exporter does not act on a signalled PCR discontinuity: a source rewind costs its own duration in programme — one-for-one from 1 s to 600 s — with 0 continuity errors and exact CBR across the hole** ([T23](../lab/test-23-pcr-discontinuity-classes.md)). Forward jumps recover in 238 ms and the 33-bit rollover is carried correctly, so the exposure is the splice, the failover and the encoder restart. The groomer half of the related [T21](../lab/test-21-permanence-soak.md) failure is fixed (`5ab84cd`); the exporter half is not. The *sustained* half of this criterion is **untested**: T21's nine-minute failure was on a source looped by `tsp --infinite`, which rewinds the clock every 665 s and so measured recovery rather than permanence; a re-soak on a continuous timeline is running. Hardware unverified | **Cleared in software** at an 8 s cushion (0 intervals > 40 ms); never soaked; hardware unverified |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Partial.** 14 h clean on delivery; relay memory converging but not flat, publisher threads still growing | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Recovery is fast but lossy — the exporter resumes at the live edge and discards the outage | **Partial.** Refetches losslessly inside the availability window, silently holed past it |
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**, byte-identical across independent hosts; not for a multi-programme mux | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
@@ -1181,9 +1183,10 @@ Ranked by how much each would move the comparison.
    300 s with 0 continuity errors and exact CBR**. Both lanes are therefore conformant in software over
    the windows measured and neither has been near an IRD, which makes hardware the highest-leverage
    item outright. It is blocked on apparatus rather than on either project. On the MoQ lane a second
-   item is now ahead of it in time order though not in leverage: the groomer holds that wire while its
-   own cushion collapses at the source's first PCR discontinuity ([T21](../lab/test-21-permanence-soak.md)), so
-   the software result is established over minutes and not over hours.
+   item is now ahead of it in time order though not in leverage: the software result is established
+   over minutes and not over hours, because the one long run to attempt it was confounded by a looped
+   source that rewound its own clock, and the re-soak that replaces it
+   ([T21](../lab/test-21-permanence-soak.md)) has not yet reported.
 2. **Does a commercial ABR-to-TS gateway, operated as the distributor's own edge stage, produce
    TR 101 290 P1/P2-conformant output on real hardware?** §4.4. If yes, part of the broadcast-grade
    layer is purchasable on one data plane and not the other; if no, the reassembly advantage in §4.2

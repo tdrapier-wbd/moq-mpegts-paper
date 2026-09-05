@@ -26,6 +26,8 @@ BPS=${7:-4000000}
 BCAST=${BCAST:-t23.disc.hang}
 MOQLAT=${MOQLAT:-3s}
 PACER=${PACER:?set PACER to the mpegts-pacer binary}
+# Extra groomer flags, for the arm that sweeps the hard cap against the recovery burst.
+read -r -a PACER_ARGS <<<"${PACER_ARGS:-}"
 
 mkdir -p "$OUT"
 
@@ -71,7 +73,8 @@ C=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --clie
 (timeout "$((SECS + 5))" "$MOQ" "${C[@]}" --broadcast "$BCAST" export ts \
 	--latency-max "$MOQLAT" 2>"$OUT/export.log" |
 	tee "$OUT/export.ts" |
-	"$PACER" - "$BPS" --stats-interval-ms 1000 2>"$OUT/pacer.log" >"$OUT/paced.ts") &
+	"$PACER" - "$BPS" --stats-interval-ms 1000 ${PACER_ARGS+"${PACER_ARGS[@]}"} \
+		2>"$OUT/pacer.log" >"$OUT/paced.ts") &
 SUB=$!
 PIDS+=("$SUB")
 sleep 2

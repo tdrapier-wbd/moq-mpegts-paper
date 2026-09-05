@@ -1,12 +1,20 @@
 # T21 — the permanence soak of the complete media-aware lane
 
-> **State:** running, and it has already failed its own criterion. This is the first long run in the
+> **State: the first run is complete and superseded; the re-soak is running.** The first run's source
+> was `tsp --infinite`, which restarts the clip and therefore its clock. [T23](test-23-pcr-discontinuity-classes.md)
+> has since measured what that costs — a rewind of N seconds costs N seconds of programme — so that
+> run was measuring recovery from a rewind it manufactured, roughly every 665 s, and could not have
+> measured permanence whatever it found. **Its findings stand as findings and are kept below**; what
+> does not stand is the reading of them as a permanence result. The re-soak, on a source whose
+> timeline is continuous, is recorded in [§ The re-soak](#the-re-soak-on-a-continuous-timeline).
+
+> **The first run.** This was the first long run in the
 > campaign to put the **groomer inside the measurement**: [T8b](test-8b-congestion-control.md) C6 soaked
 > `moq export ts` with `tsp count` behind it and [T9](test-9-performance.md) soaked the relay, so the
 > stage that makes this lane conformant had never been run for longer than a single 300 s cell.
 >
-> **The wire stays conformant and the groomer does not stay in its operating state.** Across the run so
-> far: **0 continuity errors, 0 PCR intervals above 40 ms, worst interval 30.08 ms, mux rate exactly
+> **The wire stayed conformant and the groomer did not stay in its operating state.** Across that run:
+> **0 continuity errors, 0 PCR intervals above 40 ms, worst interval 30.08 ms, mux rate exactly
 > 11,000,000 b/s, 0 dropped packets, 0 late drops, 0 respawns**, and programme content conserved at the
 > source rate throughout. Every check an operator could point at the stream passes.
 >
@@ -316,10 +324,74 @@ to one 90 kHz tick per PCR packet at the same packet rate. Against the unfixed e
 1,520,675 pps for a true 6,400 — a 238× overshoot, the field failure in miniature — and it asserts the
 stall is visible in the counters, because nothing on the wire is.
 
+## The re-soak, on a continuous timeline
+
+### The source, and why one had to be built
+
+Every clip in this lab is five to ten minutes long and there is no live feed. The only way anyone had
+stretched one was `tsp -I file --infinite`, which restarts the file and so restarts its clock, and
+[T23](test-23-pcr-discontinuity-classes.md) has now priced that: a rewind costs its own duration in
+programme. A soak on that source measures recovery from a manufactured rewind every 665 s. That is a
+real property of the lane, it is already measured, and it is not permanence.
+
+`lab/scripts/ts-continuous-source.py` replays the clip and advances the timeline across the join, so
+the output is what a continuous encoder emits. **It was graded before it was trusted**, because a
+source that only looks continuous would confound the run it is supposed to clean up. Two passes of
+`CNNiEMEA2.ts`, 49,148 PCRs:
+
+| | measured | required |
+|---|---|---|
+| backward PCR steps | **0** | 0 |
+| `discontinuity_indicator`s | **0** | 0 |
+| continuity errors (TSDuck) | **0** | 0, matching the unmodified clip |
+| PCR interval across the join | 24.640 ms, 24.497 ms | indistinguishable from the 24.648 ms median |
+| worst interval anywhere | 24.951 ms | below the 40 ms gate |
+| span over two passes | 1,199.974 s | 2 × 599.999 s |
+
+The join is a hard content cut at an IDR, which is an ordinary scene change and not a timing event.
+What the source does **not** reproduce is stated in the script and bounds the result: TDT/TOT and
+SCTE-35 payloads repeat each pass and nothing depending on them should be graded here, and the
+bitrate profile repeats with the content, so a slow oscillation at the 600 s pass period is the
+source rather than the lane.
+
+**The 33-bit rollover is not avoided, deliberately.** The clip's PCR origin is 25,625.6 s, so a
+continuous run crosses the modulus about **19.4 h in**, unsignalled, exactly as a real feed does every
+26.51 h. T23 established the lane carries that correctly in a placed 105 s arm; a run that passes
+through it tests the same finding live, at length, and without the placement.
+
+### Configuration
+
+`SOURCE_MODE=continuous`, 24 h target, EC2 secondary (8 vCPU, idle, nothing else timing-sensitive on
+the host). Merged upstream `main` — `moq` 0.10.0 / `moq-relay` 0.14.15, built on the host at
+`222cc72`, containing [#3351](https://github.com/moq-dev/moq/pull/3351) — with `mpegts-pacer` built
+from `5ab84cd`. 11,000,000 b/s, cushion 1,000 ms, cap 2,500 ms, `--latency-max 500ms`, sampled every
+60 s. The `loop` mode is retained in the rig so the two sources can be compared deliberately rather
+than by accident.
+
+### Result so far — incomplete
+
+**This is a partial reading of a running experiment and is not a permanence result.** At the point of
+writing the run had passed the ~9-minute mark at which the first soak departed:
+
+| | first run (looped) | re-soak (continuous) |
+|---|---|---|
+| media-rate estimate | departs at ~9 min, ramps to 6.98 Gb/s | **oscillates 8.79–10.08 Mb/s about the true ~9.5** |
+| `rate_dsecs` (denominator) | frozen at 2.15 s while the numerator ran away | 2.0125 s, the decayed window's steady state, with the numerator oscillating **in band** (11,765–13,484) |
+| de-jitter buffer | collapses 10,587 → 0 | 5,992–8,001, high water 9,588 and flat |
+| underruns | ~970/s | **0** |
+| `clock_stalled` | raised | **false** |
+| continuity errors / PCR > 40 ms / respawns | 0 / 0 / 0 | 0 / 0 / 0 |
+| mux rate | exact | exact 11,000,000 b/s |
+
+The estimator's ±7 % oscillation about the true rate is wider than the release servo's ±5 % authority
+at its extremes, and whether it stays a bounded oscillation or becomes the standing error that walks
+the buffer to a rail is the open question below — it is the reason the run is 24 h and not one hour.
+
 ## Open
 
-**The re-soak.** The fix is validated deterministically and on a short live arm; it has not yet been
-run for hours. That is the next run and it is what would let the conformance claim extend past minutes.
+**The re-soak's outcome.** Running; the partial reading above is nine minutes and settles nothing.
+The pass criterion is fixed in [F2](planned-experiments.md#f2-permanence-soak): zero continuity
+errors, no PCR regression against the 1 h baseline, and every resource series flat or converging.
 
 **Also open:** the groomer's thread count on a 2-vCPU host, and the resource slopes, which need a full
 run that is not chasing a known defect.
