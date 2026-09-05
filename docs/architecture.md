@@ -232,7 +232,8 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 
 | | Measured | Domain |
 |---|---|---|
-| Groomed, MoQ lane, **current** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
+| Groomed, MoQ lane, **current, over minutes** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
+| Groomed, MoQ lane, **over hours** | conformance figures **unchanged** — still 0 above 40 ms, 0 continuity errors, exact CBR, programme conserved — while the edge stage's de-jitter cushion collapses from ~1.4 s to **0** at about 9 min and underruns run at ~970/s. The wire cannot show this; see [T21](../lab/test-21-permanence-soak.md) | **wire + edge-stage counters** |
 | Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
@@ -942,10 +943,32 @@ rights compliance and incident forensics, not merely good practice.
 > §4.2 has been achieved, and that is still open. Until it passes, these runbooks are *designed and
 > rehearsable* but not *proven* for contracted content.
 
-### 9.1 The three probes that are not obvious
+### 9.1 The four probes that are not obvious
 
-Most of the monitoring surface is standard. Three items are specific to this architecture and were
+Most of the monitoring surface is standard. Four items are specific to this architecture and were
 each found by measurement rather than design.
+
+Two of them exist because of one asymmetry, now measured from both sides. **A healthy transport does
+not imply a live programme, and a conformant wire does not imply a healthy stage producing it.** With
+the source frozen for 120 s and every session left established, the publisher, relay and exporter
+logged nothing whatever, while the media plane showed the stall in 1.7–1.9 s
+([T22](../lab/test-22-silent-media-plane-failure.md)). In the other direction, an edge-stage defect
+severe enough to destroy the entire de-jitter cushion left the output passing every conformance and
+content check applied to it ([T21](../lab/test-21-permanence-soak.md)). Neither the session nor the
+wire is a sufficient health signal alone, and an operations design that monitors only what the
+transport reports and what an analyser sees is blind to both failures.
+
+**Programme clock progression, not session state.** The detector to build on, because it needs nothing
+from the transport, nothing from the edge stage and no cooperation from the sender: it is a property of
+the bytes, and every broadcast monitoring product already implements it. Alarm when no PCR has advanced
+for longer than the P1 repetition limit plus the edge stage's cushion. Measured detection is one
+cushion; session state, for a stalled source, never fires at all. A frozen *relay* is the one case
+QUIC's idle timeout eventually catches, at 34.3 s against the media plane's 1.9 s.
+
+**The edge stage's own counters, exported continuously.** Its buffer occupancy against its set point,
+its recovered media rate, its underrun and drop counts. These are the only signals that show the stage
+itself degrading, because its output is conformant either way, and they must be a time series: a
+high-water mark cannot say whether a loop is *still* holding its set point, only that it once was not.
 
 **Programme content, not carrier presence.** The single most important probe on a groomed leg, for
 the reason in §5.3: a groomer holding a rate against a dead upstream produces a byte-perfect carrier
@@ -1006,7 +1029,7 @@ the groomer*, and they are worth naming because they are unfamiliar to a broadca
 | Concern | On MoQ | On segmented HTTP |
 |---|---|---|
 | Liveness signal | subscription state; relay memory against its per-ingested-channel ceiling | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
-| Silent failure mode | a publisher with no subscriber dies at ~30 s to the QUIC idle timeout | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
+| Silent failure mode | **a stalled source behind a healthy session, indefinitely.** The idle timeout catches an *idle* peer — a publisher with no subscriber dies to it at ~30 s, and a frozen relay at 34.3 s — but a publisher whose input has stopped is not idle from QUIC's point of view, and [T22](../lab/test-22-silent-media-plane-failure.md) froze one for 120 s without provoking a single error, timeout or reconnect anywhere. Detection has to come from the media plane, where it takes ~1.7 s. An edge stage configured `--on-stall continue` then re-hides it, emitting valid empty CBR | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
 | Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal*, so an alarm below the segment duration chatters and one above it is slow. Measured, the groomer derives ~9 s against the MoQ lane's ~1 s |
 | Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
 | Recovery | reconnect and resubscribe | re-fetch; the segment is still addressable, which is genuinely easier |
@@ -1081,7 +1104,10 @@ Ranked by how much a negative answer would change the architecture.
 
 1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate, and now the
    highest-leverage item outright. Grooming is file-validated, structurally sound and **P1-conformant on
-   the wire in software on both lanes**; nothing has been near an IRD. Not complete.
+   the wire in software on both lanes over the windows measured**; nothing has been near an IRD. Not
+   complete. On the MoQ lane the software result is scoped to minutes — the edge stage's release loop
+   departs at about nine minutes while its output stays conformant ([T21](../lab/test-21-permanence-soak.md)) —
+   so that stage has to hold its state before hardware time is worth booking.
 2. **How is the edge gateway's buffer sized for a feed it has not seen?** (§4.2.) The media-aware lane
    costs a buffer bound set by the **peak coded frame**, not by the bitrate: three sources at
    9.5–9.9 Mb/s of programme, with peak frames of 256, 1,826 and 4,562 transport packets, need bounds

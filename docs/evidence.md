@@ -117,7 +117,7 @@ every "not established" entry recurs in §4 or §5.
 | | Established | Not established | Where |
 |---|---|---|---|
 | **Carriage** | All three lanes carry a full broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, the media-aware lane by stuffing, mux rate, PSI density and PCR spacing | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
-| **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem | Anything at all on hardware; whether the release loop holds over 24 h or 7 days | §3.2 |
+| **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **The release loop does not hold over hours** — it departs at ~9 min and the cushion collapses, with the wire still conformant ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; a conformant lane sustained beyond ~9 min, which is now a known open defect rather than an untested one | §3.2 |
 | **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them**: the reordering separation that used to do so was a packet-size artefact, and on HTTP/3 the two lanes overlap (§3.3). Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable** — what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline: not the controller, not bufferbloat | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile | §3.5, §3.6 |
@@ -617,7 +617,21 @@ On the same 90 s live arm at an unchanged cushion, cap and exporter budget: cont
 **286.2 → 30.1 ms**), stuffing **32.1 % → 13.4 %**, median delivery latency **4,181 → 2,447 ms**. Over
 300 s: **0 dropped, 0 continuity errors, 0 underruns, 0 of 20,193 intervals above 40 ms, 10,999,999 b/s
 against a nominal 11,000,000, 0 PCRs outside ±500 ns**, PSI intact, buffer flat at 1.26 s. All four of
-T19's pass criteria are met. **The media-aware lane produces a conformant CBR wire.**
+T19's pass criteria are met. **The media-aware lane produces a conformant CBR wire over minutes.**
+
+**Over hours it does not hold that state, and the qualifying window was shorter than the failure.**
+[T21](../lab/test-21-permanence-soak.md) is the first long run to put the groomer inside the
+measurement, and at about **nine minutes** the groomer's recovered media-rate estimate departs the true
+rate and ramps linearly without bound — 9.34 Mb/s at t=541 s, 34.7 Mb/s at t=601 s, **2.58 Gb/s at
+t=1,202 s**, gaining ~250 Mb/s per minute. The de-jitter buffer collapses with it, from a standing
+**10,587 packets (~1.4 s) to 0**, and underruns accumulate at **~970/s**. The wire stays conformant
+throughout — 0 continuity errors, 0 intervals above 40 ms, exact CBR, programme conserved at the source
+rate, 0 drops — so **no check applied to the output detects it**; what is lost is the cushion, and with
+it the lane's only protection against arrival jitter. The exporter's log is clean for the whole run:
+this is a defect in `mpegts-pacer`, not in `moq-dev` and not in media-aware carriage. The mechanism is
+not yet located and three candidates are eliminated (source loop wrap, upstream event, degenerate PCR
+intervals alone). **The conformance result above therefore holds for the window it was measured over
+and is not established beyond it.**
 
 **What it costs is buffer, and the buffer is the encoder's VBV moved downstream.** The requirement is
 content-dependent and is *not* a function of bitrate. Three sources at 9.5–9.9 Mb/s of programme in an
@@ -1463,6 +1477,51 @@ apparent 262–333 ms advantage over SRT is an unsettled window rather than a fi
 zero intervals above 40 ms on the WAN: the byte-transparent arms sit at a floor of 12–21 marginal
 violations (45–60 ms) tracking their small rate surplus, so this rig grades relative conformance reliably
 and absolute conformance only to within those few intervals.*
+
+---
+
+### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes, but only from the media plane, and the gap is unbounded
+
+The failure a primary-distribution operator is least protected against is not a component dying — that
+case closes a socket and something notices. It is every component still running, still connected, and
+the programme off air. [T22](../lab/test-22-silent-media-plane-failure.md) induces exactly that with
+`SIGSTOP`, so the process exists, its sockets stay open and its connection state is untouched, and
+times each candidate detector from the **last advancing media** rather than from the injection — the
+difference being the 1.8–1.9 s the buffer paid for.
+
+**The transport never detects a stalled source.** With the source frozen for **120 s**, the publisher,
+relay and exporter logged nothing at all: no error, no timeout, no reconnect. The 30 s and 120 s arms
+agree, so this is not a race with the QUIC idle timeout — an idle stream is not an error, and a
+monitoring design that alarms on session state or process liveness misses this failure entirely and
+indefinitely.
+
+**The media plane detects it in about one cushion, from two independent signals.** The groomer's
+content-liveness alarm fired at **1.69–1.88 s** in every injected arm; PCR progression at the graded
+output stopped within the 100 ms observation tick, its true floor being the 40 ms P1 repetition limit it
+tests against. The control arm fired nothing. PCR progression is the signal worth building on: it needs
+nothing from MoQ, nothing from the groomer and no cooperation from the sender, and it is already
+implemented in every broadcast monitoring product.
+
+**A frozen relay is the one case the transport eventually catches, 18× slower** — QUIC's idle timeout at
+**34.3 s**, against 1.88 s for the media plane on the same run, and it took the egress chain down with
+it.
+
+**The groomer's stall policy decides whether the failure is silent downstream.** Under `mute` the
+carrier stops 0.1 s after the programme does. Under `continue` the carrier **never stops**: byte-perfect
+CBR, valid PCR, no programme, for as long as the source is gone. That is the default behaviour of any
+pacer not told otherwise, and it converts a detectable failure into an undetectable one.
+
+**Recovery is clean and is scored on media.** Media returned **0.02–1.02 s** after resume, stable within
+0.92 s, and the programme clock skipped **exactly** the wall-clock outage in every arm (28,458 ms over
+28.4 s; 119,365 ms over 119.3 s). The lane resumes at the live edge: it does not replay what it missed
+and does not run late afterwards. For primary distribution that is the right behaviour, but it means the
+programme lost is gone and the only mitigation is redundancy, not buffering.
+
+This result and [T21](../lab/test-21-permanence-soak.md)'s are the same asymmetry seen twice. In T21 a
+groomer defect severe enough to destroy the de-jitter cushion left every check on the output passing; in
+T22 a dead source left every check on the transport passing. **Neither the transport nor the wire is a
+sufficient health signal on its own**, and the pair that is sufficient — PCR progression plus the
+groomer's own counters — is the pair this campaign had to build.
 
 ---
 

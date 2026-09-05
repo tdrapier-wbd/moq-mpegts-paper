@@ -76,14 +76,18 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   P2-limit PCR accuracy **on file**, and on the segmented lane it is conformant to ~11.5 Mbps across
   four reference clips ([Evidence](docs/evidence.md) §3.2).
 - **The media-aware lane reaches a conformant CBR wire — the campaign's longest-standing failure, and it
-  closed downstream.** Over 300 s live: 100 % of pictures matched, **0** continuity errors, **0 of
+  closed downstream — but the edge stage has not been shown to hold that state for hours.** Over 300 s
+  live: 100 % of pictures matched, **0** continuity errors, **0 of
   20,193** PCR intervals above 40 ms at a worst of 30.1 ms, 0 PCRs outside ±500 ns, 10,999,999 b/s
   against a nominal 11,000,000, 0 drops and 0 underruns. Three upstream PCR fixes were each necessary
   and none sufficient; what closed the gate was the groomer **reserving** a slot for the PCR rather than
   taking only slots the content scheduler declined — a burst declines none, so all 71 over-40 ms
   intervals in a graded output contained zero null slots. The demuxed representation carries everything
   the reconstruction needs; **what the lane costs is buffer**, sized by the peak coded frame rather than
-  by the bitrate ([Evidence](docs/evidence.md) §3.2).
+  by the bitrate ([Evidence](docs/evidence.md) §3.2). The scope of that result is **minutes**: the first
+  soak to put the groomer inside the measurement finds its release loop departing at about nine minutes
+  and the de-jitter cushion collapsing to zero, while the wire stays clean throughout
+  ([T21](lab/test-21-permanence-soak.md)).
 
 ## The strongest negative results
 

@@ -97,20 +97,44 @@ segmented lane over HTTP/3, only delivered-rate and programme-loss claims. Build
 that reads the playlist over H3 and concatenates segments verbatim; it is a small job and it upgrades
 every cell T20 measured.
 
-**P0-3. Comparable long-duration soaks — 24 h, then 7 days, on both lanes.** *The largest gap in the
-paper relative to the use case.* **Falsifies:** every claim that either lane can be run *permanently*.
-The longest run on record is 14 h on one MoQ topology; the segmented lane has never been soaked at all,
-and its origin is the role its entire commercial argument rests on. A demonstration that a transfer
-succeeds for forty-five seconds is not evidence about a service that must not stop for a year. Specified
-as [F2](#f2-permanence-soak).
+**P0-3. Locate and fix the groomer's release-loop divergence, then re-soak.** *Now the single item
+between this architecture and a viability claim, and it displaced the soak that found it.*
+**Falsifies:** the headline conformance result's applicability to a permanent service.
+[T21](test-21-permanence-soak.md) put the groomer inside a long run for the first time and found that at
+**~9 minutes** the recovered media-rate estimate departs and ramps linearly without bound, collapsing
+the de-jitter cushion from ~1.4 s to zero while the wire stays perfectly conformant. The lane is
+therefore conformant over minutes and **not established over hours**, and no check on the output can
+tell the difference.
 
-**P0-4. Silent media-plane failure — detection, both lanes.** *Cheap, and no apparatus beyond what
-exists.* **Falsifies:** [Architecture](../docs/architecture.md) §9.1's monitoring design. Both lanes
-already have an *observed* silent failure — the segmented client that lost 82 s of programme while the
-origin logged nothing but 200s, and a relay that stayed running at 100 % CPU and stopped serving — but
-neither has been tested as a designed experiment, and the property they test is the one a
-primary-distribution operator is most exposed to: the connection is healthy and the programme is not
-advancing. Specified as [F3](#f3-silent-media-plane-failure).
+*This is not the general soak; it is the defect the general soak surfaced in the first twenty minutes,
+and running 7 days against a stage known to fail at 9 minutes measures nothing.* Sequence:
+
+1. **Diagnose, do not guess.** Emit `decayed_packets` and `decayed_secs` separately in the counter line.
+   One reading then distinguishes a numerator that grows without bound from a denominator that vanishes,
+   and the ramp's linearity says it is one accumulation and not an instability in the control law.
+   Three candidates are already eliminated: the source loop wrap (does not reproduce with MoQ removed
+   from the path), an upstream event (exporter log clean throughout), and degenerate PCR intervals alone
+   (a 4,000-interval regression test does not reproduce the ramp).
+2. **Fix, with a regression test that fails first**, and re-run the 300 s conformance arm to confirm
+   nothing regressed.
+3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path.
+
+**P0-4. ~~Silent media-plane failure — detection.~~ Done for the MoQ lane —
+[T22](test-22-silent-media-plane-failure.md).** It confirmed the property it was aimed at and bounded
+it: **the transport never detects a stalled source** (120 s frozen, zero non-benign log lines across
+publisher, relay and exporter — not a timeout race, since the 30 s and 120 s arms agree), while the
+media plane detects it in **1.69–1.88 s** from two independent signals, with no false positive on the
+control. A frozen *relay* is the one case QUIC catches, at **34.3 s**. `--on-stall continue` holds a
+byte-perfect programme-free carrier indefinitely and makes the failure undetectable downstream.
+[Architecture](../docs/architecture.md) §9.1 is updated and its monitoring design survives, with PCR
+progression promoted to the primary detector because it needs nothing from MoQ, nothing from the groomer
+and no cooperation from the sender.
+
+**What P0-4 leaves behind, and it is a real gap.** `SIGSTOP` freezes a process *cleanly*. A real
+encoder that stalls may half-work — some tracks advancing and not others, or timestamps repeating while
+bytes still flow — and neither detector above is obviously sufficient for that. **A partial-stall arm is
+new P1** and is specified in [F3](#f3-silent-media-plane-failure). The segmented lane's half of F3 is
+unrun and stays unrun while that lane lacks a byte-faithful receiver (P0-2's residue).
 
 **P0-5. A hardware IRD and a TR 101 290 analyser, soaked ≥ 72 h (Gate 2).** *Blocked on apparatus; P0
 on leverage.* Every conformance number in this campaign is graded by software written or configured by
@@ -373,6 +397,19 @@ than assumed.
   larger gap of the two.
 
 ### F3. Silent media-plane failure
+
+> **Done for the MoQ lane, as [T22](test-22-silent-media-plane-failure.md).** It passes: the transport
+> detects a stalled source never — 120 s frozen, zero non-benign log lines — and the media plane detects
+> it in 1.69–1.88 s from two independent signals, with no false positive on the control. A frozen relay
+> is caught by QUIC's idle timeout at 34.3 s, 18× slower. `--on-stall continue` makes the failure
+> undetectable downstream. Recovery is clean and the programme clock skips exactly the outage.
+>
+> **Two parts remain.** (1) A **partial stall** — an encoder that half-works, advancing some tracks and
+> not others, or repeating timestamps while bytes still flow. `SIGSTOP` freezes a process cleanly and
+> cannot produce this, and neither detector above is obviously sufficient for it; a PCR that keeps
+> advancing over a frozen picture defeats the primary detector outright. **P1**, and the highest-value
+> remaining item in this family. (2) The **segmented lane's** half, which stays blocked on that lane
+> lacking a byte-faithful HTTP/3 receiver.
 
 - **Question.** How does each lane detect that the connection is healthy and the programme is no longer
   advancing, and how long does it take?

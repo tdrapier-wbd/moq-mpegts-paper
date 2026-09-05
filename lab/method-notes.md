@@ -998,6 +998,44 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 
 ## 6. Claims, and their scope
 
+**A stage that integrates must be graded over a window longer than its own integration time, or the
+run has qualified the transient.** *(T21.)*
+
+> `mpegts-pacer`'s open-loop release was replaced by a loop that trims the release rate by the buffer's
+> distance from its cushion, because the open loop integrated rate-estimate error without bound. The
+> replacement was qualified on a 300 s live arm: stable latency, no underruns, no drops, and a
+> conformant wire. That validation was real and it was not sufficient — the new loop's own failure mode
+> takes about **nine minutes** to appear, so the test that qualified it could not have seen it, and the
+> first soak to include the groomer found the media-rate estimate ramping linearly to 2.58 Gb/s with
+> the cushion collapsed to zero.
+>
+> The rule is not "test for longer", which is unbounded. It is that where a change introduces or
+> replaces an accumulator — a control loop, a decayed window, a running estimate — the qualifying run
+> has to outlast that accumulator's time constants, and somebody has to have asked what they are. Nobody
+> had.
+
+**A quantity that is supposed to be stationary needs a time series, and a high-water mark is not one.**
+*(T21.)*
+
+> The groomer reported `buffer_high_water` and no standing depth, so the only buffer figure available
+> after a run was a peak. A peak only ever rises: an hour after one transient it still reports the
+> transient, and it cannot answer the question that matters for a permanent feed, which is whether the
+> stage is *still* holding its set point. The collapse from ~1.4 s to zero was invisible in every
+> counter the pacer had until an instantaneous occupancy was added and sampled on a timer. Any counter
+> whose expected behaviour is "stays where it is" has to be emitted repeatedly; cumulative counters
+> answer "what went wrong", standing levels answer "is it still going wrong", and a soak needs both.
+
+**Conformance of the output is not health of the stage producing it.** *(T21, T22.)*
+
+> A groomer defect severe enough to destroy the entire de-jitter cushion left **every** check on the
+> wire passing: 0 continuity errors, 0 PCR intervals above 40 ms, exact CBR, programme conserved, no
+> drops. The same asymmetry ran the other way in T22, where a source frozen for 120 s left every check
+> on the *transport* passing. Both directions have the same consequence for how a result is worded: a
+> conformance measurement is evidence about the bytes in the window it covers and is not evidence that
+> the pipeline is in a state that will keep producing them. Where a claim needs the second thing, it
+> has to be supported by the stage's own counters, and the scope of what was actually measured —
+> minutes, not hours — belongs in the sentence.
+
 **Citing another component as the working reference for a contract is a behavioural claim about that
 component, and reading its source is not evidence for it.** *(T19.)*
 
