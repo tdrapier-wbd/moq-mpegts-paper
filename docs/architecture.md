@@ -232,8 +232,8 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 
 | | Measured | Domain |
 |---|---|---|
-| Groomed, MoQ lane | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, at the ~1 s cushion the lane runs — and **unchanged at every cushion across an eightfold ladder**, and with groomer starvation removed altogether. *The ladder was run on a different rig over a longer window, so its counts are larger for the same defect; they are in [Evidence](evidence.md) §3.2* | **wire** |
-| Groomed, MoQ lane, live public-internet path | **0.06 %** of intervals above 40 ms — 8 gaps, 139 ms maximum *(one run)* | live chain, file-analysed |
+| Groomed, MoQ lane, **current** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
+| Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
 | Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors | **wire** |
@@ -241,16 +241,15 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 
 Three consequences follow and none of them is cosmetic.
 
-**P1 PCR repetition is a measured failure as delivered, not a caveat, and no amount of buffer fixes
-it.** The groomer inherits the exporter's PCR spacing and delivers 131–159 intervals above 40 ms in 25 s.
-A stage that mints its own PCR schedule (a regenerating muxer) places PCRs freely and posts none; a
-pass-through stage that carries the exporter's inherits their spacing. That word "inherits" is exact and
-was tested: sweeping the cushion across eight times the depth, and separately removing groomer starvation
-entirely, moves the figure not at all — while the groomer's own insertions vary 137 → 0 across that
-ladder, because it can only place a PCR in a slot it was going to stuff and those slots do not fall in
-the exporter's gaps ([Evidence](evidence.md) §3.2). **The MoQ lane is not P1-conformant on PCR repetition as delivered at any
-buffer depth**, the cause sits upstream of this architecture's edge gateway, and any claim of "0 %" that
-does not name the file domain is wrong.
+**P1 PCR repetition was a measured failure as delivered, no amount of buffer fixed it, and the reason
+was that the edge stage was placing PCR opportunistically.** The old groomer could only place a PCR in a
+slot it was going to stuff anyway, and a media-aware source delivers a coded frame as one burst — so its
+output had ample stuffing overall and none inside the burst, and every one of the 71 over-40 ms
+intervals in a graded capture contained *zero* null slots. That is why the figure did not move across an
+eightfold cushion ladder: no cushion shortens a frame. **The edge gateway must reserve the slot**, taking
+it from content on the deadline and deferring the displaced packet by one slot, which costs 0.34 % of the
+carrier at a 40 ms limit and 11 Mb/s and holds the gate independently of buffer depth, exporter cadence
+and content ([T19](../lab/test-19-pcr-grid-verification.md) measurement 11).
 
 **File validation is optimistic, which is why the two columns disagree.** Analysing a captured file
 checks PCR values against byte position and the nominal mux rate — it confirms the *arithmetic* of
@@ -1080,21 +1079,20 @@ slips.
 
 Ranked by how much a negative answer would change the architecture.
 
-1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate. Grooming is
-   file-validated, structurally sound, and measurably not P1-conformant on PCR repetition on the wire —
-   at **every** depth, not merely the one currently run. Not complete.
-2. **Would an evenly spaced PCR emission in the exporter clear the P1 repetition gate?** (§4.2,
-   [Comparison](comparison.md) §5.1.) This replaces "does the chain stay sub-second while conformant",
-   which is measured: it does stay sub-second — 109 ms across the public internet — and it is not
-   conformant, and the two are independent. The change needed upstream is *where* PCR is placed rather
-   than how often it is sent, and **the muxer half of that has landed**: PCR values are now an exact
-   25 ms grid with the sub-millisecond clustering gone entirely. It did not clear the gate, because the
-   spacing is carried as per-frame timestamps and the exporter's only output is a byte stream, so the
-   PCR *packets* still leave bunched and a groomer re-deriving the clock from their positions
-   regenerates the original distribution. What remains is one change on the exporter's output path —
-   pace the stdout writer from the timestamps it already computes, or place each PCR packet beside the
-   media bytes of the slot it labels. Still the highest-leverage remaining item and still outside this
-   architecture's control ([upstream contributions](../lab/upstream-contributions.md) §1).
+1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate, and now the
+   highest-leverage item outright. Grooming is file-validated, structurally sound and **P1-conformant on
+   the wire in software on both lanes**; nothing has been near an IRD. Not complete.
+2. **How is the edge gateway's buffer sized for a feed it has not seen?** (§4.2.) The media-aware lane
+   costs a buffer bound set by the **peak coded frame**, not by the bitrate: three sources at
+   9.5–9.9 Mb/s of programme, with peak frames of 256, 1,826 and 4,562 transport packets, need bounds
+   differing by more than 3×, and the bound that conserves 100 % of two of them loses content on the
+   third. A bound of 3.6× the peak frame's carriage duration sufficed on all three and 2.5× did not
+   ([T19](../lab/test-19-pcr-grid-verification.md) measurement 11). Since a coded frame's carriage
+   duration at the mux rate is the encoder's VBV occupancy for that picture, the figure should be
+   derivable from the contribution encoder's published configuration — **the media-aware lane moves the
+   encoder's VBV budget downstream into the edge gateway's buffer**, because the T-STD schedule that
+   used to carry it lived in the source's byte spacing. What is not established is the coefficient, or
+   what a real network path adds to it on top of the burst.
 3. **Do the correctness boundaries in §4.3 hold?** Source-clock drift, PCR discontinuity and wrap,
    mid-stream PID change, and T-STD occupancy through the media-aware exporter. Each now has a
    reproducible stimulus and an instrument asserted to grade it correctly, the 33-bit wrap placed

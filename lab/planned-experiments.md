@@ -66,14 +66,19 @@ evenly spaced exporter cadence does not clear the P1 repetition gate.** At the p
 against #3351's own merge-base, it drops 36 % fewer packets and halves stuffing but leaves **12.2 % of
 intervals above 40 ms, 811 continuity errors and 2,126 ms of latency** against a 118 ms pre-fix control.
 
-**What P0-1 leaves behind is a sizing question, not an upstream one.** The residue is that a coded
-frame's bytes belong to its own 40 ms, so a 417 kB I-frame is 357 ms of carrier — a mux schedule the
-source's CBR muxer supplied against a T-STD buffer and that decode timestamps do not carry. It has to
-be bought downstream: the displacement is bounded at **761 ms** and a groomer cushioned past it conserves
-**99.6 %** of the programme at 0 continuity errors and exact CBR, but still misses the gate at 10.4 %.
-So the live chain has not been re-run at a cushion past the displacement, and that — not another
-upstream change — is the next measurement on this line. It is **P1**, because it trades the axis the
-lane exists for and cannot make the lane conformant on its own.
+**What P0-1 left behind was ours, and measurement 11 discharges it.** The residue is that a coded frame's
+bytes belong to its own 40 ms, so a 417 kB I-frame is 357 ms of carrier — a mux schedule the source's
+CBR muxer supplied against a T-STD buffer and that decode timestamps do not carry. Building a new one is
+the groomer's job and the groomer had three defects stopping it, the load-bearing one being that PCR
+re-insertion could only take a slot the content scheduler declined and a burst declines none. Fixed,
+**the lane passes: 0 of 20,193 intervals above 40 ms over 300 s, 0 continuity errors, 0 drops, 0
+underruns, exact CBR.** The cost is a buffer sized by the peak coded frame — 3.6× its carriage duration
+sufficed across three sources spanning an 18× peak-to-mean range, 2.5× did not.
+
+**What remains on this line is one coefficient and one platform.** The 3.6× rests on three sources on
+one rig, and the claim that it is derivable from a contribution encoder's published VBV is reasoning,
+not measurement. Widening it is **P2**: it changes a sizing rule, not a viability conclusion. The
+delivery latency this lane now carries (~2.4 s median) is #2967's regression, tracked separately.
 
 **P0-2. ~~The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.~~ Done —
 [T20](test-20-segmented-http3.md).** It falsified the row it was aimed at, and for a reason nobody
@@ -600,26 +605,23 @@ than assumed.
 **Both the cushion sweep and the latency cell this file used to own are now measured in
 [T18](test-18-delivery-latency.md), and the framing they shared was wrong.** They asked where the MoQ
 lane's PCR-repetition curve crosses zero as the groomer's cushion deepens, on the premise that
-conformance is bought with depth and depth is latency. On the media-aware lane the two axes turn out to
-be independent: repetition sits at ~490 intervals above 40 ms with a 228 ms maximum across a ladder
-spanning eight times the depth, and stays there when groomer starvation is removed entirely. The groomer
-inserted 137, 103, 28 and 0 PCRs of its own across that ladder for violation counts of 491, 489, 503 and
-502 — **the exporter clusters its PCRs, so the gaps a groomer would have to fill are not where its own
-insertion slots fall**, and no cushion fixes that.
+conformance is bought with depth and depth is latency. The two axes are indeed independent — repetition
+sat at ~490 intervals above 40 ms with a 228 ms maximum across a ladder spanning eight times the depth,
+and stayed there when groomer starvation was removed entirely — but the reason T18 gave for that was
+wrong. It read the flat ladder as proof that the exporter's clustering put the gaps out of the groomer's
+reach. In fact **no cushion shortens a coded frame**, and the groomer would only place a PCR in a slot
+the content scheduler had declined, of which a burst offers none.
+[T19](test-19-pcr-grid-verification.md) measurement 11 closes it: reserve the slot instead and the gate
+clears at every depth.
 
-What T18 leaves open is listed in its own *Still open* table. Two entries belong here because they need
-setup rather than analysis:
-
-**The prediction, still untested — and the reason is now a measured one.** T18 predicts that an exporter
-emitting PCR-bearing packets on an **even** ~25 ms grid would pass the gate at a 250 ms cushion, that is
-at the 127 ms delivery latency already measured. [#2937](https://github.com/moq-dev/moq/issues/2937) was
-filed against that, [#2967](https://github.com/moq-dev/moq/pull/2967) delivered exactly the placement
-rule asked for, and [T19](test-19-pcr-grid-verification.md) confirms it at the exporter to the tick. The
-prediction still cannot be scored, because the grid does not reach the wire: it is expressed as per-frame
-timestamps and the exporter's output is a byte stream, so the PCR *packets* leave bunched and grooming
-either drops content or regenerates the original distribution. **What this run now needs is one more
-upstream change on the exporter's output path**, after which T18's rig re-runs unaltered. Still the
-campaign's highest-leverage outstanding run.
+**T18's prediction is scored, and it does not hold.** T18 predicted that an exporter emitting
+PCR-bearing packets on an **even** ~25 ms grid would pass the gate at a 250 ms cushion.
+[#2967](https://github.com/moq-dev/moq/pull/2967) delivered the even values,
+[#3006](https://github.com/moq-dev/moq/pull/3006) delivered the even releases and
+[#3351](https://github.com/moq-dev/moq/pull/3351) delivered the even positions; the wire failed after all
+three. The gate is met, at the 250 ms cushion T18 named, by the downstream change instead. What T18 got
+right is that this line was the campaign's highest-leverage run; what it got wrong is which stage owned
+it.
 
 The history #2937 had to answer is worth keeping, because it explains why the fix took the shape it did:
 upstream built this fix once and abandoned it after a real IRD would not lock, so the report argued that

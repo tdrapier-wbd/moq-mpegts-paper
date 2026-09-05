@@ -75,28 +75,34 @@ only ground on which MoQ's case rests, and it is now a measurement rather than a
   four grading criteria where the MoQ lane needs a purpose-built stage. Grooming restores exact CBR and
   P2-limit PCR accuracy **on file**, and on the segmented lane it is conformant to ~11.5 Mbps across
   four reference clips ([Evidence](docs/evidence.md) §3.2).
+- **The media-aware lane reaches a conformant CBR wire — the campaign's longest-standing failure, and it
+  closed downstream.** Over 300 s live: 100 % of pictures matched, **0** continuity errors, **0 of
+  20,193** PCR intervals above 40 ms at a worst of 30.1 ms, 0 PCRs outside ±500 ns, 10,999,999 b/s
+  against a nominal 11,000,000, 0 drops and 0 underruns. Three upstream PCR fixes were each necessary
+  and none sufficient; what closed the gate was the groomer **reserving** a slot for the PCR rather than
+  taking only slots the content scheduler declined — a burst declines none, so all 71 over-40 ms
+  intervals in a graded output contained zero null slots. The demuxed representation carries everything
+  the reconstruction needs; **what the lane costs is buffer**, sized by the peak coded frame rather than
+  by the bitrate ([Evidence](docs/evidence.md) §3.2).
 
 ## The strongest negative results
 
 - **A MoQ feed carries media through none of eight third-party relays.** Version negotiation is not the
   cause; an announce convention the draft permits either way is, and the eight failures have at least
   four distinct causes ([Evidence](docs/evidence.md) §3.7).
-- **The MoQ lane fails TR 101 290 P1 PCR repetition on the wire at *every* buffer depth** — 489–504
-  intervals above 40 ms out of ~3,200–3,300 PCRs in a 90 s cell, unchanged by depth, by removing
-  groomer starvation, or by the path. The exporter conserved the number of PCRs and destroyed their
-  spacing, emitting 85 % of them within 11 µs of each other and leaving gaps up to 1.8 s. It is an
-  upstream placement defect, not the price of the lane's latency ([Evidence](docs/evidence.md) §3.2).
-  A shorter 25 s window on the grooming rig reads 131–159 for the same defect: the counts scale with
-  the observation window, not with the lane.
-  **The exporter half is now fixed twice over and the lane's is not.** Upstream made PCR values an exact
-  25 ms grid — clustering 85.40 % → 0.00 %, intervals above 40 ms 210 → 0 at the exporter — and then
-  paced the stdout writer so the spacing reaches a consumer as arrival time, doubling the on-grid share
-  and halving gate failures at the pipe. But a groomer consumes **bytes, not arrival times**, and the
-  positional layout is untouched: **69.3 %** of PCR packets still leave back-to-back on the build
-  measured (three rigs read 56–87 %, and they are not comparable to each other), so a groomer
-  re-deriving the clock from byte position regenerates the original distribution. End to end the lane
-  reads 120 → 772 ms of latency and 0 → 1,166 continuity errors, unchanged by the pacing fix, so the
-  deployable build is still the pre-fix one.
+- **The media-aware lane's PCR conformance was misattributed for four experiments running, in the same
+  direction each time.** It failed the P1 repetition gate on the wire at 489–504 intervals above 40 ms
+  per 90 s cell, unchanged by buffer depth, by removing groomer starvation or by the path — and that
+  invariance was read three times as evidence that the fault lay upstream, since no cushion could reach
+  it. Upstream then fixed all three things it was accused of (values, release timing, byte position) and
+  the wire still failed. The invariance had a simpler cause: **no cushion shortens a coded frame**. The
+  gate is now met (above), but the lesson stands on its own — *a measurement that does not move under
+  the variable you control does not thereby belong to someone else*
+  ([method notes](lab/method-notes.md)).
+- **Delivery latency on the media-aware lane regressed by an order of magnitude and stayed there.** The
+  lane went from 118 ms to ~772 ms with the first PCR fix and now sits at ~2.4 s median once buffered
+  for burst absorption. It is conformant at that price, but the axis the lane exists to win is the axis
+  it paid ([Evidence](docs/evidence.md) §3.2).
 - **Segmented HTTP fails silently once the client falls out of the origin's availability window.** It
   does not corrupt what it delivers inside that window; past it the client re-anchors and leaves holes
   of 7–82 s, with the origin returning nothing but 200s ([Evidence](docs/evidence.md) §3.3).

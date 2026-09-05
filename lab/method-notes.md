@@ -223,6 +223,17 @@ have it — and it will return a plausible number rather than refuse.** *(T3.)*
 > three orders of magnitude apart, under one column heading. Before booking an unfilled cell as a cheap
 > gap, check the instrument is defined on the thing being compared.
 
+**Pass `pcrverify --bitrate` explicitly whenever the arm might not be carrying full programme. Grading
+PCRs against a rate TSDuck derived from those PCRs turns a conservation failure into a PCR failure.**
+*(T19 measurement 11.)*
+
+> On the shallow rungs of a cushion sweep the groomer was shedding 80 % of its content, so TSDuck's own
+> rate estimate landed tens of kb/s off the nominal 11 Mb/s — and **every** PCR then failed the accuracy
+> gate against it. The output's PCR arithmetic was exactly as correct as on the passing rungs; what had
+> changed was the yardstick. The tell is an accuracy column that goes from 0 failures to *all* failures
+> across one rung of an unrelated parameter. The rate is a known configured input on any arm this
+> campaign runs, so there is no reason to let the instrument infer it.
+
 **Vary the parameter the mechanism says is irrelevant; that is the test the mechanism can fail.**
 *(T3.)*
 
@@ -362,6 +373,31 @@ in it.** *(T9, then T14, then T16 — the same error, three rigs, three times.)*
 > span put a delivered rate 4.7 % above a CBR source and made an overhead figure come out
 > *negative*. The fix that held was to form the ratio from two byte totals over the same media —
 > everything sent, over the payload sent — with no wall clock in it at all.
+
+**Estimate a rate as one ratio of two sums, never as the average of per-interval ratios. The two agree
+only when the intervals carry comparable amounts, and on a media-aware lane they never do.** *(T19,
+`mpegts-pacer`.)*
+
+> The groomer's media-rate estimator smoothed a per-PCR-interval packets-per-second figure. The
+> intervals sat on an exact 25.0 ms grid and carried **1 to 4,631 packets each, median 8**, so the
+> per-interval rates had a median of 320 pps against a true 6,191 and the smoothed average sat 23 %
+> below the truth — the estimator reported 7.14 Mb/s for a 9.31 Mb/s stream and the wire ran a third
+> stuffing. This is not a smoothing-constant problem and no window length fixes it: averaging \(x_i/t_i\)
+> is not \(\sum x_i / \sum t_i\) unless the \(t_i\) are equally weighted by \(x_i\). Sum the packets, sum
+> the media seconds, divide **once**; the same run then reads 9.14 Mb/s. Any heavy-tailed denominator
+> does this, and a lane that delivers a coded frame as one burst is heavy-tailed by construction.
+
+**A rate estimate driving an open loop integrates its own error against uptime. Close the loop on an
+observable.** *(T19, `mpegts-pacer`.)*
+
+> Releasing at `rate × elapsed` makes a 2.5 % under-read cost 2.5 % of the *run* in buffer depth, so the
+> defect presents as a latency ramp rather than as a wrong rate: **+1,792.9 ms across a 90 s window**,
+> then 10,279 packets shed at a bound the actual burst never needed. Trimming the release rate by the
+> buffer's distance from its target bounds it, and the loop settles where occupancy equals the target —
+> which is by definition where the stage is releasing at the rate it is being delivered, whatever the
+> estimator thinks. The estimator still matters for the transient; it stops mattering for the steady
+> state. **A latency figure that grows linearly with window length is the signature**, and it is why the
+> trend must be reported beside the median rather than instead of it.
 
 **The span a capture measures for itself is only the flow's duration if the flow is continuous. On a
 bursty lane, first-to-last-packet is short and every rate divided by it is high.** *(T9 segmented —
@@ -543,9 +579,26 @@ the client — so measure two of them before naming the lane.** *(T8b, T6.)*
 > MoQ legs posted 131–159 at about 1 s. Cushion was the variable under active investigation, so it got
 > the credit, and T13 recorded the failure as "a buffer-depth choice rather than a limit". It was not:
 > T18 swept the MoQ cushion eightfold with no movement at all, and T13's segmented pass-through leg
-> posts 0 while holding almost no buffer. The two runs had differed in the *data plane* as well, and
-> that was the whole effect — one egress delivers PCRs on a grid and the other clusters them. *The
-> variable you are holding in mind is the one most likely to be miscredited.*
+> posts 0 while holding almost no buffer. So cushion was not the effect — but the replacement
+> attribution, that the *data plane* was (one egress delivering PCRs on a grid and the other clustering
+> them), was miscredited in exactly the same way and survived three more experiments. *The variable you
+> are holding in mind is the one most likely to be miscredited, and that applies to the correction as
+> much as to the original.* See the entry below on invariance.
+
+**A quantity that does not move under the variable you control has not thereby been shown to belong to
+someone else.** *(T13, T18, T19.)*
+
+> The MoQ lane's PCR-repetition failure was invariant: unchanged across an eightfold cushion sweep,
+> unchanged when groomer starvation was removed entirely, unchanged across paths and rigs. Cushion was
+> the only downstream knob anyone was turning, so its invariance was read — in T13, then T18, then
+> twice in T19 — as proof the cause lay upstream, and three upstream fixes were specified and merged on
+> that reading. None cleared the wire. The invariance had a mundane explanation: **no cushion shortens a
+> coded frame**, and the groomer would only place a PCR in a slot the content scheduler had declined,
+> which inside a burst is never. Reserving the slot cleared the gate at every depth including the
+> shallowest. The knob was real and irrelevant; the stage was wrong, not the direction of the
+> dependency. *Before concluding "not ours", enumerate what else in your own stage the variable fails
+> to reach* — here, that a burst's length is a property of the input and not of the buffer, so no
+> buffer experiment could ever have distinguished the two hypotheses.
 
 **Name a divergence mechanism from the bytes that differ, not from the most plausible cause.**
 *(T12.)*
