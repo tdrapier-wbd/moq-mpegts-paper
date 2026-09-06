@@ -579,10 +579,16 @@ answers one of the things measured above. It also adds
 `moq_mux::container::ts::Export::discontinuity()` so a consumer can see the event, which is what the
 issue's closing paragraph had asked for.
 
-**Two parts of the campaign outlive the fix.** The maintainer states plainly that the validation is
-*"the repository harness, not a rerun of t0ms's external stimulus campaign"* — upstream's own 20 s and
-120 s arms plus new unit regressions — so **nothing yet grades the fix against a placed timeline event
-through a full lane**, which is what T23 does. And `quest/m0/ts-forward-discontinuity.md`, one of three
+**We supplied the verification the fix shipped without.** The maintainer states plainly that his
+validation is *"the repository harness, not a rerun of t0ms's external stimulus campaign"* — upstream's
+own 20 s and 120 s arms plus new unit regressions — so nothing had graded the fix against a placed
+timeline event through a full lane. Re-running all six arms unchanged against `d88c2ee99` puts every
+one at the control's content gap, and the before/after table, the three-point timeline evidence and
+the collapse of the downstream buffer requirement went back as
+[#3375 (comment)](https://github.com/moq-dev/moq/pull/3375#issuecomment-5557693602). It asks for
+nothing; the detail is in [T23 § against the fix](test-23-pcr-discontinuity-classes.md#against-the-fix-3375).
+
+**One part of the campaign outlives the fix.** `quest/m0/ts-forward-discontinuity.md`, one of three
 follow-ups left open, is built on this campaign and directs its implementer to *"use the stimuli and
 oracle linked from the issue comment"*: the forward-jump arm's missing flag is **not** discharged by
 #3375, because rewind recovery handles the container consumer's signal without establishing that every
