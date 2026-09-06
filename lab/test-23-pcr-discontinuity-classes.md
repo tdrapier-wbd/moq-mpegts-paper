@@ -1,5 +1,15 @@
 # T23 — which PCR discontinuity classes the media-aware lane survives
 
+> **State: re-graded against the fix these measurements prompted, and the rewind defect is gone.**
+> The results below were measured on `f8236680b`, which contained #3351 but not
+> [#3375](https://github.com/moq-dev/moq/pull/3375). That PR opened citing this campaign, merged as
+> `0e61e3520`, and closed [#2833](https://github.com/moq-dev/moq/issues/2833). Re-running all six arms
+> unchanged against `d88c2ee99` — which contains it — is in
+> [§ Against the fix](#against-the-fix-3375). **Every arm now matches the control, the rewinds
+> included**, and the one residue is the forward arm's missing flag, which upstream has recorded as a
+> separate open item on the strength of this campaign. Read everything before that section as the
+> behaviour of builds earlier than `0e61e3520`.
+
 ## Objective
 
 T21 found the exporter's timebase failing after a source PCR discontinuity, but its only
@@ -139,6 +149,10 @@ overruns the groomer.
 
 ### The recovery burst is a groomer sizing choice; the programme hole is not
 
+> **Superseded by [#3375](#against-the-fix-3375), which removes the burst.** Kept because the
+> attribution it establishes is the reusable part, and because it was the live reading for every build
+> before `0e61e3520`.
+
 The encoder-restart arm lost two different things and they have different owners. Sweeping the
 groomer's hard cap — the depth past which input is dropped oldest-first — with the same arm E
 stimulus separates them:
@@ -243,6 +257,58 @@ root cause, but T23 cannot demonstrate that and does not claim it. See Correctio
 | Each arm's class assigned recovers / fails on the media outcome, not on session state | met |
 | Any upstream report rests on behaviour demonstrably inconsistent with ISO 13818-1 for that stimulus | met for 2.4.3.4, both directions |
 
+## Against the fix (#3375)
+
+Same six stimulus files, same rig, same groomer binary, same 105 s window and same 45 s event
+placement; the only variable is the MoQ build — `d88c2ee99`, which contains `0e61e3520`, against the
+`f8236680b` above. Nothing was re-generated, so the comparison is of one build against another and
+nothing else.
+
+| arm | event | gap before | **gap after** | drops before | **after** | CC before | **after** | flag before | **after** |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| A | backward −1 s | 268 ms | **26 ms** | 0 | **0** | 0 | **0** | 0 | **1** |
+| B | backward −600 s | 62,760 ms | **27 ms** | 0 | **0** | 0 | **0** | 0 | **1** |
+| C | forward +30 s | 238 ms | **27 ms** | 0 | **0** | 0 | **0** | 0 | **0** |
+| D | 33-bit rollover | 52 ms | **27 ms** | 0 | **0** | 0 | **0** | 0 | **0** |
+| E | encoder restart | 44,049 ms | **37 ms** | 54,168 | **0** | 103 | **0** | 0 | **1** |
+| F | control | 26 ms | **27 ms** | 0 | **0** | 0 | **0** | 0 | **0** |
+
+**Every arm is now indistinguishable from the control**, and the two that failed no longer do: the
+600 s rewind costs 27 ms of programme where it cost 62.8 s, and the encoder restart costs 37 ms and
+loses nothing where it cost 44 s, 54,168 packets and the lane's only continuity errors. PCR accuracy
+holds throughout — 6,175–6,246 PCRs per arm within ±500 ns, one marginal sample in arm A.
+
+The exporter now **follows** the new timeline instead of waiting it out. Read at all three points,
+arm B's source signals −599.989 s and the export signals −599.525 s with the rate ratio at 1.004; arm
+E's export signals −43.850 s against the source's −44.690 s. Before the fix the export carried no
+event at all and withheld until the old timeline was overtaken.
+
+**The flag is emitted, and on exactly the right arms.** A, B and E — the three signalled events — each
+carry one `discontinuity_indicator` on the exported wire, where every arm previously carried zero.
+D carries none, which is the point: a 33-bit rollover is ordinary arithmetic and flagging it would be
+the defect. F carries none.
+
+**Two residues, one upstream and one ours.**
+
+- **The forward jump propagates unflagged.** Arm C's export reproduces the source's timebase change as
+  `unsignalled +29.050 s`: the media outcome is now the control's, but a downstream device is given a
+  29 s jump with no announcement. Upstream has this recorded as `quest/m0/ts-forward-discontinuity.md`,
+  built on this campaign and pointing its implementer at these stimuli, so it is a known open item
+  rather than a new finding. **Still a stream error for any third-party receiver.**
+- **A small cushion starves on a forward jump.** Arm C took 3,300 underruns against 4–6 in the others,
+  at a 200 ms adaptive cushion — the smallest any arm chose. No programme was lost (0 drops, 27 ms
+  gap): the carrier emitted stuffing where content was momentarily unavailable. It is a groomer sizing
+  behaviour at a small cushion, not a content failure, and worth knowing before a cushion is pinned
+  that low.
+
+**The buffer requirement collapses, which supersedes the sizing result above.** With no backlog to
+absorb, the groomer's adaptive cushion settles at 200–348 ms rather than 8,000 ms, and the buffer high
+water falls from 98,035 packets to **1,102–1,417**. The *rewind × bitrate* provisioning rule derived
+from the cap sweep — about 82 MB per feed for a 60 s rewind at 11 Mb/s — is therefore **discharged for
+builds containing `0e61e3520`**. It was a correct reading of the build it was measured on, and that
+build is superseded. What remains true is the shape of the argument: a stage downstream of an exporter
+that withholds must be sized for what it withholds.
+
 ## Corrections
 
 **Believed:** the exporter's response to a source PCR discontinuity is to latch the last PCR
@@ -264,7 +330,13 @@ the generated stimuli back through the analyser cost two minutes and caught this
 ## Open
 
 - Whether T21's counter degeneration and T23's withhold-and-burst share a root cause. The
-  T21 captures are no longer on disk. This does not block the upstream report, which is filed
-  on T23's evidence and reproduces in 105 s rather than 40 minutes.
-- ~~Whether the arm E burst overruns the groomer at larger cushions.~~ **Answered above**: a
-  hard cap above the rewind absorbs it losslessly, and the headroom is free when unused.
+  T21 captures are no longer on disk, and both behaviours are now absent from the current build, so
+  this is unlikely ever to be settled and no longer blocks anything.
+- ~~Whether the arm E burst overruns the groomer at larger cushions.~~ **Answered**: a hard cap above
+  the rewind absorbs it losslessly and the headroom is free when unused — then **superseded** by
+  #3375, which removes the burst, so the requirement no longer arises.
+- **The forward jump's missing `discontinuity_indicator`**, which #3375 does not address and upstream
+  tracks as `quest/m0/ts-forward-discontinuity.md`. Our stimuli are the verification instrument it
+  names, so re-running arm C is the cheap check when that lands.
+- Whether the arm C cushion starvation (3,300 underruns at a 200 ms adaptive cushion, no content lost)
+  matters at a pinned production cushion. Ours, small, and untested above 200 ms.

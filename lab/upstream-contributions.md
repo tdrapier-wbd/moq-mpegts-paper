@@ -544,7 +544,7 @@ by clip for reasons not established: 25.2 % of intervals above 40 ms on a synthe
 and 9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is
 27 ms. That exception is unexplained and was reported as unexplained.
 
-### A rewound timeline stalls the whole programme, not just the SI cadence — measurements contributed to an open issue
+### A rewound timeline stalls the whole programme, not just the SI cadence — measurements contributed, issue fixed and closed
 
 [#2833](https://github.com/moq-dev/moq/issues/2833) is the maintainer's own, and it already had the
 mechanism: the exporter's stored last-emission only moves forward, so after a backwards jump nothing is
@@ -567,6 +567,27 @@ continuity errors — so the `due` comparison never sees one, and whatever thres
 should keep that true. On the flag itself: `discontinuity_indicator: false` is hardcoded at
 `rs/moq-mux/src/container/ts/export.rs:1102` on `2a6d9ebdf`, and it shows on the forward case too,
 where the exporter reproduces its own +29.05 s timebase change with the flag clear.
+
+**Outcome: fixed and closed, on these measurements.**
+[#3375](https://github.com/moq-dev/moq/pull/3375) opened citing the comment as its motivation — *"Still
+needed after #3351. t0ms's controlled tests on merged main found that rewinds stop the entire program
+output until timestamps catch up, then release the accumulated backlog"* — and merged as `0e61e3520`,
+closing #2833 as completed. It restarts the exporter on a rewind rather than waiting the timeline out:
+uncommitted media discarded, timing and table state reset, **the first new PCR flagged**, and the
+continuity counters of discarded bytes rolled back so recovery introduces no gap. Each of those
+answers one of the things measured above. It also adds
+`moq_mux::container::ts::Export::discontinuity()` so a consumer can see the event, which is what the
+issue's closing paragraph had asked for.
+
+**Two parts of the campaign outlive the fix.** The maintainer states plainly that the validation is
+*"the repository harness, not a rerun of t0ms's external stimulus campaign"* — upstream's own 20 s and
+120 s arms plus new unit regressions — so **nothing yet grades the fix against a placed timeline event
+through a full lane**, which is what T23 does. And `quest/m0/ts-forward-discontinuity.md`, one of three
+follow-ups left open, is built on this campaign and directs its implementer to *"use the stimuli and
+oracle linked from the issue comment"*: the forward-jump arm's missing flag is **not** discharged by
+#3375, because rewind recovery handles the container consumer's signal without establishing that every
+input adaptation-field flag reaches it. The other two follow-ups carry the same signal into SRT egress
+pacing and the JavaScript consumer.
 
 The earlier draft, written from T21's looping stimulus, claimed the exporter latches its PCR and emits
 a counter permanently. No arm of T23 reproduces that, and the draft was retired rather than filed. See

@@ -233,7 +233,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | | Measured | Domain |
 |---|---|---|
 | Groomed, MoQ lane, **current, over minutes** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
-| Groomed, MoQ lane, **across a source rewind** | conformance figures **unchanged** — still 0 above 40 ms, 0 continuity errors, exact CBR — across a **62.8 s hole in the programme**, because the exporter withholds output until the rewound timeline is overtaken. The wire cannot show it; see [T23](../lab/test-23-pcr-discontinuity-classes.md) | **wire + content-gap counter** |
+| Groomed, MoQ lane, **across a source rewind** | **27 ms content gap, the control's figure**, since [#3375](https://github.com/moq-dev/moq/pull/3375). Before it the same arm held every conformance figure — 0 above 40 ms, 0 continuity errors, exact CBR — across a **62.8 s hole in the programme**, which the wire could not show. That is why the content-gap counter is in the measurement; see [T23](../lab/test-23-pcr-discontinuity-classes.md) | **wire + content-gap counter** |
 | Groomed, MoQ lane, **across the 33-bit PCR rollover** | carried correctly at every point: a 30.080 ms step in modulo arithmetic, 6,259 PCRs within ±500 ns, 0 continuity errors, 52 ms content gap against the control's 26 ms | **wire alone suffices** |
 | Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
@@ -1125,8 +1125,9 @@ Ranked by how much a negative answer would change the architecture.
    what a real network path adds to it on top of the burst.
 3. **Do the correctness boundaries in §4.3 hold?** **PCR discontinuity and wrap are now tested**
    through the exporter and the groomer, not merely reachable: the 33-bit wrap is carried correctly
-   end to end, forward jumps recover, and a rewind costs its own duration
-   ([T23](../lab/test-23-pcr-discontinuity-classes.md)). What remains untested through the lane is
+   end to end, and since [#3375](https://github.com/moq-dev/moq/pull/3375) so are rewinds, forward
+   jumps and an encoder restart — all six classes at the control's content gap, with a **forward jump
+   still unflagged** ([T23](../lab/test-23-pcr-discontinuity-classes.md)). What remains untested is
    source-clock drift, mid-stream PID change and T-STD occupancy; each has a reproducible stimulus and
    an instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Rate coherence between independently

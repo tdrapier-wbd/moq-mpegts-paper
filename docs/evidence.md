@@ -1547,22 +1547,33 @@ T22 a dead source left every check on the transport passing. **Neither the trans
 sufficient health signal on its own**, and the pair that is sufficient — PCR progression plus the
 groomer's own counters — is the pair this campaign had to build.
 
-### 3.13 Which PCR timeline events does the lane survive? — Rollover and forward jumps cleanly; a rewind costs its own duration in programme
+### 3.13 Which PCR timeline events does the lane survive? — All six classes, since #3375; a rewind used to cost its own duration in programme
 
-[T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software, merged build `f8236680b` plus
-groomer `5ab84cd`. Six arms, each placing exactly one deliberate timeline event at 45 s of a 105 s run,
-graded at the source, after the round trip and after grooming. The stimuli shift PTS and DTS as well as
-PCR, because the exporter schedules from media timestamps; moving PCR alone exercises a path the lane
-does not use.
+[T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software. Six arms, each placing exactly one
+deliberate timeline event at 45 s of a 105 s run, graded at the source, after the round trip and after
+grooming. The stimuli shift PTS and DTS as well as PCR, because the exporter schedules from media
+timestamps; moving PCR alone exercises a path the lane does not use. Measured twice on the same
+stimulus files and the same groomer `5ab84cd`, with the MoQ build as the only variable:
+`f8236680b` (#3351, not #3375) and `d88c2ee99` (contains `0e61e3520`, the #3375 merge).
 
-| event | programme gap | continuity errors | groomer drops | verdict |
-|---|---|---|---|---|
-| **33-bit base rollover** | 52 ms | 0 | 0 | **clean** |
-| forward 30 s | 238 ms | 0 | 0 | recovers |
-| backward 1 s | 268 ms | 0 | 0 | recovers |
-| backward 600 s | ≥62,760 ms | 0 | 0 | fails |
-| encoder restart (backward 44.7 s + counter reset) | 44,049 ms | 103 | 54,168 | fails |
-| control | 26 ms | 0 | 0 | clean |
+| event | gap on `f8236680b` | **gap on `d88c2ee99`** | CC errors | drops | flag emitted | verdict now |
+|---|---:|---:|---:|---:|---:|---|
+| **33-bit base rollover** | 52 ms | **27 ms** | 0 | 0 | none, correctly | **clean, unchanged** |
+| forward 30 s | 238 ms | **27 ms** | 0 | 0 | **none — residue** | recovers, unflagged |
+| backward 1 s | 268 ms | **26 ms** | 0 | 0 | 1 | **clean** |
+| backward 600 s | ≥62,760 ms | **27 ms** | 0 | 0 | 1 | **clean** |
+| encoder restart (backward 44.7 s + counter reset) | 44,049 ms | **37 ms** | 103 → **0** | 54,168 → **0** | 1 | **clean** |
+| control | 26 ms | **27 ms** | 0 | 0 | none, correctly | clean |
+
+**Every class the lane meets is now carried, and this campaign is why.**
+[#3375](https://github.com/moq-dev/moq/pull/3375) opened citing these measurements, merged as
+`0e61e3520` and closed #2833; re-running the arms unchanged against it puts all six at the control's
+figure. The exporter follows the new timebase instead of waiting it out — arm B's export signals
+−599.525 s against the source's −599.989 s, rate ratio 1.004 — and flags it on exactly the three
+signalled arms while correctly leaving the rollover unflagged. **The buffer requirement collapses with
+the burst**: adaptive cushion 8,000 ms → 200–348 ms, high water 98,035 → 1,102–1,417 packets, which
+discharges the *rewind × bitrate* provisioning rule the pre-fix build implied. **STRONGLY SUPPORTED**
+for the six classes at this rig's scale; one run per arm per build.
 
 **The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
 stream, unconditionally, and was the one timeline event a permanent feed cannot avoid. Placed rather
@@ -1571,7 +1582,8 @@ as the worst normal interval in the same stream — with 6,259 PCRs OK at ±500 
 continuity errors. Nothing sets `discontinuity_indicator`, correctly. **PROVEN, and the rollover no
 longer qualifies the permanence claim.**
 
-**A rewind costs its own duration, linearly.** Sweeping magnitude with everything else held: 1 s →
+**A rewind used to cost its own duration, linearly** — on builds before `0e61e3520`, and the linearity
+is what identified the mechanism that was then fixed. Sweeping magnitude with everything else held: 1 s →
 268 ms, 2 s → 1,487 ms, 5 s → 4,514 ms, 10 s → 9,446 ms, 44.7 s → 44,049 ms. One-for-one to within half
 a second across three orders of magnitude, which identifies the mechanism without reading the source:
 the exporter's scheduler is monotonic in media time, so a declared new time base is treated as a
@@ -1579,28 +1591,36 @@ timestamp merely not yet due, and output is withheld until the old timeline is o
 single burst — 97,225 packets, 18.3 MB — which is itself large enough to overrun the groomer, and is
 where the encoder-restart arm's drops and continuity errors come from. **PROVEN for the classes tested.**
 
-**The burst's cost is ours and it is a provisioning decision, not a defect.** Sweeping the groomer's
+**The burst's cost was ours and it was a provisioning decision, not a defect** — and #3375 removes the
+burst, so the requirement no longer arises. Kept because the attribution is the reusable part: it
+separates what a downstream stage can fix from what it cannot. Sweeping the groomer's
 hard cap against the encoder-restart stimulus puts the threshold between 20 s and 50 s against a
 44.69 s rewind: at 8,000 ms (the default ceiling) the arm loses 54,168 packets with 103 continuity
 errors, at 50,000 ms it loses **nothing**, and the programme hole is unmoved at ~44 s by any cap
 because that half is the exporter withholding. The headroom is free when unused — a cap twenty times
 larger changes steady-state occupancy by two packets (2,449 → 2,447) and leaves PCR accuracy
 unchanged — so what an operator buys is memory sized by *rewind × bitrate*, about 18.4 MB here for
-44.7 s at 4 Mb/s. **The architectural statement is that the edge gateway must be able to hold the
-entire rewind**, because the exporter delivers it as one burst; the implementation statement is that
-our default ceiling is smaller than that and says so in its drop counter. Measured at P2.
+44.7 s at 4 Mb/s. The architectural statement — **a stage downstream of an exporter that withholds
+must be sized for what it withholds** — outlives the specific defect; the implementation statement,
+that our default ceiling was smaller than that and said so in its drop counter, is now moot. Measured
+at P2.
 
-**`discontinuity_indicator` is neither consumed nor produced.** Four arms present it at the source and
-the exported wire carries zero. `discontinuity_indicator: false` is hardcoded at
-`rs/moq-mux/src/container/ts/export.rs:1102` on upstream `2a6d9ebdf`, so the exporter cannot emit one;
-in the forward arm it reproduces its own +29.05 s timebase change with the flag clear, which is a
-stream error for any downstream device and is only conformant on our wire because the groomer
-re-derives it. Reported on [#2833](https://github.com/moq-dev/moq/issues/2833), which already owned the
-mechanism for SI tables; T23 adds that the stall is not confined to SI but stops the whole programme.
+**`discontinuity_indicator` was neither consumed nor produced, and now is — on the rewind classes.**
+On `2a6d9ebdf` four arms presented it at the source and the exported wire carried zero, with
+`discontinuity_indicator: false` hardcoded at `rs/moq-mux/src/container/ts/export.rs:1102`, so the
+exporter could not emit one. Reported on
+[#2833](https://github.com/moq-dev/moq/issues/2833), which already owned the mechanism for SI tables;
+T23 added that the stall was not confined to SI but stopped the whole programme. On `d88c2ee99` the
+three signalled arms each carry exactly one indicator and the rollover arm correctly carries none.
+**The forward jump is the residue**: its export still reproduces a +29.05 s timebase change with the
+flag clear, which is a stream error for any third-party device and is only conformant on our wire
+because the groomer re-derives it. Upstream tracks it as `quest/m0/ts-forward-discontinuity.md`, built
+on this campaign.
 
-**Third instance of the same asymmetry.** The 600 s arm holds 0 continuity errors, 0 PCR intervals
-above 40 ms and exact CBR across a 62.8 s hole in the programme. As in §3.12 and T21, wire conformance
-does not detect a programme failure.
+**Third instance of the same asymmetry — on the pre-fix build.** The 600 s arm held 0 continuity
+errors, 0 PCR intervals above 40 ms and exact CBR across a 62.8 s hole in the programme. As in §3.12
+and T21, wire conformance did not detect a programme failure. The failure is gone; **the asymmetry is
+the durable finding**, and it is why the groomer's own counters are in the measurement.
 
 **Qualification.** T23 does **not** reproduce T21's counter degeneration — 0 of 8,592 intervals across
 the three failing arms show it. A deliberate signalled discontinuity produces a withhold-and-burst with

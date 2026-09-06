@@ -118,7 +118,18 @@ which is what step 2 below asked for, and the answer changes the shape of what r
   exporter's scheduler is monotonic in media time. The recovery burst — 97,225 packets, 18.3 MB —
   is itself large enough to overrun the groomer.
 
-**What remains is upstream's, and it is narrower than it looked.** The exposure is the splice, the
+**The upstream half is now fixed, on these measurements, and verified.**
+[#3375](https://github.com/moq-dev/moq/pull/3375) opened citing the T23 comment, merged as
+`0e61e3520`, and closed #2833. Re-running all six arms unchanged against `d88c2ee99` puts **every arm
+at the control's figure**: the 600 s rewind costs 27 ms instead of 62,760 ms, and the encoder restart
+37 ms with 0 drops and 0 continuity errors instead of 44,049 ms with 54,168 and 103. The flag is
+emitted on the three signalled arms and correctly withheld on the rollover. **One residue remains
+upstream** — the forward jump propagates unflagged — and upstream tracks it as
+`quest/m0/ts-forward-discontinuity.md`, built on this campaign and naming our stimuli as its
+verification instrument. Re-running arm C is the cheap check when it lands.
+
+**Historical: what remained upstream's before #3375**, kept because the sequence is the record of how
+it was closed. The exposure was the splice, the
 source failover and the encoder restart, not a clock that stops of its own accord. Sequence:
 
 1. **Report upstream.** *(Done — measurements posted to
@@ -136,13 +147,13 @@ source failover and the encoder restart, not a clock that stops of its own accor
    [T21 § the re-soak](test-21-permanence-soak.md#the-re-soak-on-a-continuous-timeline). The 7-day
    arm remains outstanding after the 24 h arm reports.
 
-**The residue of the rewind finding is closed and it was ours.** T23's encoder-restart arm lost 44 s
-of programme *and* 54,168 packets to a groomer overrun, and only the first is upstream's. Sweeping the
-groomer's hard cap against the same stimulus puts the threshold between 20 s and 50 s against a 44.69 s
-rewind: at a cap above the rewind the arm loses **0 packets and produces 0 continuity errors**, and the
-headroom costs two packets of steady-state occupancy when it is not being used. **No pacer change is
-warranted** — the right cap is the deployment's worst expected rewind times its bitrate, the drops are
-already counted when it is set too low, and a large default would spend memory on every feed.
+**The residue of the rewind finding was closed twice over.** T23's encoder-restart arm lost 44 s of
+programme *and* 54,168 packets to a groomer overrun, and only the first was upstream's. Sweeping the
+groomer's hard cap put the threshold between 20 s and 50 s against a 44.69 s rewind: at a cap above the
+rewind the arm lost **0 packets and produced 0 continuity errors**, with the headroom costing two
+packets of steady-state occupancy when unused. **#3375 then removed the burst entirely**, so the cap
+question no longer arises and the *rewind × bitrate* provisioning rule is discharged: high water falls
+98,035 → 1,102–1,417 packets. **No pacer change was made and none is warranted.**
 
 **P0-3b. The servo saturates, and the buffer walks to a rail.** *Ours, unaddressed, and separate from
 the above.* On the 8-vCPU secondary the rate estimate stayed healthy for a full run while the buffer
