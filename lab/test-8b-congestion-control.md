@@ -20,13 +20,15 @@
 > 6.78–8.94 at 500 ms, so the two rungs overlap and the recorded 4.29 → 10.35 ladder is one sample per
 > cell from distributions that wide. The cells where nothing sheds reproduce tightly; no cell where the
 > subscriber is actively shedding reproduces to better than a factor of two.
-> **Re-checking C3 against upstream [#3271](https://github.com/moq-dev/moq/pull/3271) found a
-> regression that matters more than the rate:** graded as an isolating one-file pair, the post-#3271
-> `moq export ts` **exits with `Error: hang: moq error: old` in 6 of 14 contended cells after 54–57 s**,
-> where the pre-#3271 client does so in 0 of 14 — while both are a perfect null uncontended (9.49 Mb/s
-> each). Waiting for a late group inside the budget lets the relay evict the group being waited for, so
-> the change turns a frequent benign eviction into an occasional fatal one, and a degraded subscriber
-> into an absent one. Reported upstream. **C6 settles
+> **Re-checking C3 found something that matters more than the rate — a subscriber that dies:**
+> `moq export ts` **exits with `Error: hang: moq error: old` in roughly half of contended cells**, at 0
+> continuity errors, leaving a downstream monitor a perfectly conformant stream that simply stops. It
+> is **not** a [#3271](https://github.com/moq-dev/moq/pull/3271) regression, though this file reported
+> it as one: the pre-#3271 client dies too (3 of 15 against 9 of 15, p ≈ 0.060), the same exit appears
+> in C3's original first pass months earlier on an older client, and it reproduces on the current
+> relay. The clean 6-against-0 split first recorded here was a **counting error** — two subscribers per
+> cell, two logs, and only `sub.log` was read. The upstream report was withdrawn before filing. What is
+> established is the failure mode and that it is current; what is open is its cause. **C6 settles
 > permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so
 > C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
 > prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap
@@ -585,7 +587,7 @@ be read as "a deep budget removes the collapse" and never as a rate at a budget.
 this section used to leave open is therefore not open but ill-posed: there was no stable marginal cost to
 explain.
 
-#### The re-check against upstream #3271, and the regression it found
+#### The re-check against upstream #3271, and the subscriber death it found
 
 [#3271](https://github.com/moq-dev/moq/pull/3271) (merged 1 Sep) rewrote the exact gate this section
 attributes C3 to. Before it, `Consumer::poll_read` skipped a missing lower group as soon as any newer
@@ -596,28 +598,45 @@ budget expires. `moq export ts --latency-max` reaches that gate, so C3's mechani
 
 Graded as the isolating pair `bec7c4b59^` against `bec7c4b59`, which differ by one file and carry the
 rest of the delivery path identically. **Uncontended, it is a perfect null: 9.49 Mb/s on both arms, zero
-evictions on both.** Contended, it does something worse than change a rate.
+evictions on both.** Contended, it does something worse than change a rate — but not, as this file
+first recorded, only on the post arm.
 
-| | pre (`8206a35a6`) | post (`bec7c4b59`) |
+| contended cells, isolating pair, old relay | pre (`8206a35a6`) | post (`bec7c4b59`) |
 |---|---:|---:|
-| contended cells run | 14 | 14 |
-| `moq export ts` **exited with `Error: hang: moq error: old`** | **0** | **6** |
+| cells run | 15 | 15 |
+| cells where a `moq export ts` **exited with `Error: hang: moq error: old`** | **3** | **9** |
 | "current group evicted" warnings per surviving cell | 807–1113 | 11–80 |
 | continuity errors, every cell | 0 | 0 |
 
-**The post-#3271 subscriber dies under sustained contention, in 6 of 14 cells, and the pre-#3271
-subscriber never does** (Fisher exact p ≈ 0.016). Time to death clusters tightly at **54–57 s** of
-delivered programme. The mechanism is in the subscriber's own log: 36 groups are evicted and handled by
-the intended skip path (`current group evicted; skipping to next buffered group error=Hang(Moq(Old))`),
-then all eight track subscriptions are cancelled as idle within 80 ms, then the process exits on the next
-`Old`.
+Fisher exact on 9/15 against 3/15 gives **p ≈ 0.060** — the direction is consistent with #3271
+aggravating the failure, and the sample does not establish it. **This corrects a 6-against-0 split
+this file previously reported at p ≈ 0.016**, which was a counting error rather than a measurement:
+each contended cell runs two subscribers and writes `sub.log` and `sub.2.log`, and the death detector
+read only the first. All three pre-arm deaths are in `sub.2.log`, with `sub.log` clean in every one.
 
-The eviction counts are the tell, and they run the opposite way to intuition. The pre arm evicts groups
-**constantly** — 807 to 1113 per 90 s cell — and never dies, because it has already skipped past
-everything it loses, so eviction is a thing that happens behind it. The post arm evicts *one to two
-orders of magnitude less* and sometimes dies, because it is waiting for a specific group inside its
-budget and the relay can evict that group while it waits. **#3271 converts a frequent benign eviction
-into an occasional fatal one.**
+**#3271 is not the cause, on three independent grounds.**
+
+1. **The pre-#3271 client dies too**, 3 of 15 cells on the same relay, once the second subscriber's log
+   is read.
+2. **The failure predates the comparison entirely.** C3's original first-pass cell `c3-cubic-n3` — an
+   older client (`eab96019`), three flows, months before #3271 — recorded the same exit, in
+   `sub.3.log`.
+3. **It reproduces on the current relay.** Every cell in the table shares `moq-relay`
+   **0.13.7-5e0e98c1**, a July build pinned for C2's controller comparison, and the mechanism runs
+   through the *relay's* group eviction. Crossed against 0.14.14, deaths appear in all four
+   relay × client combinations, and eviction counts on both client arms collapse from the
+   hundreds-to-thousands to single digits.
+
+So the failure mode is real, current, and frequent — roughly half of contended cells — and it belongs
+to the contended path rather than to any one commit. The drafted upstream issue attributing it to
+#3271 was withdrawn rather than filed.
+
+The eviction asymmetry between the client arms is real and still worth recording: on the old relay the
+pre arm evicts **constantly** — 807 to 1113 per 90 s cell — and mostly survives, because it has already
+skipped past everything it loses, whereas the post arm evicts one to two orders of magnitude less and
+dies more often, consistent with waiting for a specific group inside its budget while the relay evicts
+it. That remains a plausible aggravating mechanism at p ≈ 0.060. It is not a sufficient one, and it is
+not the cause.
 
 Two things this is *not*. It is not a continuity failure: every cell on both arms records 0 continuity
 errors, so what the delivered bytes carry stays conformant right up to the exit. And it is not visible in
@@ -629,7 +648,8 @@ For primary distribution this matters more than the rate it was looking for: a s
 degraded, and a subscriber that exits is off air. It is also a re-opening of the failure class
 [T6](test-6-relay-resilience.md) closed — the exporter used to die on session loss, which was fixed
 upstream as the most consequential resilience gap on this lane, and this is a new route to the same
-outcome.
+outcome. **The failure mode is established and it is current** (it reproduces on `moq-relay` 0.14.14);
+what is open is its cause, and therefore what a fix would target. That is [P0-7](planned-experiments.md).
 
 ### C6 — permanence: the transport passes, and the memory prediction does not
 
@@ -875,6 +895,28 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
 - **Hold the latency budget equal before quoting the 99 %.** The re-anchoring client sits ~12 s behind
   the edge; capping it near MoQ's 2 s would say whether the delivery advantage survives a matched
   liveness target or was only ever the extra buffer.
+
+## Corrections
+
+**Believed:** the `moq export ts` exit under contention was a regression introduced by
+[#3271](https://github.com/moq-dev/moq/pull/3271), at 6 of 14 contended cells against 0 of 14 on the
+merge-base parent, p ≈ 0.016.
+**True:** the exit occurs on both client arms (9 of 15 against 3 of 15, p ≈ 0.060), on both relay
+versions, and in C3's original first pass months earlier on an older client. Two errors combined to
+manufacture the clean split. Each contended cell runs two or three subscribers and writes `sub.log`,
+`sub.2.log` and `sub.3.log`; **the death detector read only `sub.log`**, and every pre-arm death
+happens to sit in `sub.2.log`. Separately, all cells shared a July relay while the mechanism runs
+through the relay's group eviction.
+**Rules:** two, and the first is the one that would have caught this on its own. **A detector must
+read every instance of the thing it is detecting** — a rig with N subscribers and a per-cell verdict
+derived from subscriber 1 is not measuring the cell, and the failure is silent because a partial read
+returns a plausible number rather than an error. And **a pinned component that the proposed mechanism
+runs through must be crossed, not trusted**: "hold everything else constant" scoped the conclusion to a
+stale relay and made the pin the confound.
+
+That the result was significant, tightly clustered (deaths at 54–57 s) and mechanically explicable is
+the uncomfortable part. Nothing about its shape suggested a counting error, and the draft upstream
+issue was six paragraphs of confident mechanism before either check was run.
 
 ## References
 

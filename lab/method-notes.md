@@ -72,6 +72,58 @@ the newest release is usually the wrong "after".** *(T8b, C3's #3271 re-check.)*
 > `bec7c4b59`, which differ by one file and carry #3006 identically on both sides. A build takes
 > twenty minutes; a void A/B costs the conclusion.
 
+**A per-cell verdict must be derived from every instance of the thing it is about, or the rig will
+quietly report the state of instance one as the state of the cell.** *(T8b, C3's #3271 re-check.)*
+
+> C3's contended cell runs two subscribers, sometimes three, and writes `sub.log`, `sub.2.log` and
+> `sub.3.log`. The detector for "did the subscriber die" read **`sub.log`**. It returned 0 deaths in 14
+> pre-#3271 cells against 6 in 14 post — significant at p ≈ 0.016, clustered at 54–57 s, with a clean
+> mechanism in the logs — and an upstream regression report was drafted on it. Re-reading the archived
+> logs across *all* subscriber files gives 3 of 15 against 9 of 15, p ≈ 0.060: **every pre-arm death sat
+> in `sub.2.log`, and `sub.log` was clean in every one of them.** The same re-read found the exit in
+> C3's original first pass months earlier, in `sub.3.log`, on a client predating the commit under
+> suspicion.
+>
+> The failure is silent in the worst way, because a partial read **returns a plausible number instead
+> of an error**. A missing file or a bad path would have been caught; reading one of three logs is
+> indistinguishable from reading the cell, and it produced a *cleaner* result than the truth — which is
+> exactly what made it convincing. Significance, tight clustering and an explicable mechanism are no
+> defence: all three were present and all three were measuring subscriber 1.
+>
+> The rule is to make the fan-out explicit in the detector — glob `sub*.log`, count instances found,
+> and record that count next to the verdict so a cell that examined one of two flows is visibly not a
+> cell that examined both. Where a rig scales a component, **every derived quantity has to scale with
+> it**; C3 had already been bitten by the same shape once, when only flow 1 was graded and the
+> aggregate survived merely as a by-product of files that happened not to be deleted.
+
+**Pinning a component for reproducibility scopes the conclusion to that pin — and if the mechanism
+runs through the pinned component, the A/B can attribute the effect to the wrong one entirely.**
+*(T8b, C3's #3271 re-check.)*
+
+> The #3271 re-check was built with proper discipline: an isolating merge-base pair differing by one
+> file, one relay binary across every cell so the client was the only variable, five interleaved
+> replicates. It returned a clean, significant, tightly-clustered result — the post-#3271 subscriber
+> exits with `moq error: old` in 6 of 14 contended cells, the pre-#3271 client in 0 of 14, p ≈ 0.016,
+> death at 54–57 s every time. An upstream issue was drafted against it.
+>
+> The single relay held constant was `moq-relay` 0.13.7, a July build pinned months earlier for C2's
+> controller comparison. **The failure mechanism runs through the relay's group eviction**, which is
+> what made the pin a confound rather than merely conservative: crossed against the current 0.14.14
+> relay, deaths appear in all four relay × client combinations and eviction counts on both client arms
+> fall from ~1000 per cell to single digits. The effect is real and current; the pinned relay meant the
+> comparison could only ever describe that relay.
+>
+> (The false attribution here had a second and larger cause — the death detector read one of the cell's
+> two subscriber logs, the note above. Crossing the pin was what prompted re-reading the logs at all,
+> which is its own argument for doing it.)
+>
+> "Hold everything else constant" is the right instinct and it is not sufficient. The question to ask
+> of each pinned component is **"could the mechanism I am proposing run through this?"** — and where
+> the answer is yes, the pin must be crossed rather than trusted, because a stale environment can
+> manufacture a clean split between two versions of something else. Two extra cells against a current
+> build would have caught it; the draft issue was six paragraphs of confident mechanism by the time
+> they were run. **Cross the pin before writing the report, not after.**
+
 **On the media-aware lane, a PCR-derived measure of "how much programme arrived" measures the
 exporter's clock, not the programme.** *(T24, applied in T8b's C3 re-check.)*
 
