@@ -623,13 +623,24 @@ read only the first. All three pre-arm deaths are in `sub.2.log`, with `sub.log`
    `sub.3.log`.
 3. **It reproduces on the current relay.** Every cell in the table shares `moq-relay`
    **0.13.7-5e0e98c1**, a July build pinned for C2's controller comparison, and the mechanism runs
-   through the *relay's* group eviction. Crossed against 0.14.14, deaths appear in all four
-   relay × client combinations, and eviction counts on both client arms collapse from the
-   hundreds-to-thousands to single digits.
+   through the *relay's* group eviction. Crossed over both versions, 5 replicates each:
 
-So the failure mode is real, current, and frequent — roughly half of contended cells — and it belongs
-to the contended path rather than to any one commit. The drafted upstream issue attributing it to
-#3271 was withdrawn rather than filed.
+   | | pre-#3271 client | post-#3271 client |
+   |---|---:|---:|
+   | `moq-relay` 0.13.7 | 2 / 5 cells | 2 / 5 |
+   | `moq-relay` 0.14.14 | 4 / 5 | 3 / 5 |
+
+   **6 of 10 pre against 5 of 10 post settles it: there is no client-side effect.** By relay it is
+   7 of 10 new against 4 of 10 old, which at this n is not a relay effect either (p ≈ 0.37). Eviction
+   counts, meanwhile, differ by two orders of magnitude between relay versions — 39–1973 per cell on
+   0.13.7 against 2–7 on 0.14.14 — while the exit rate does not follow them, so **the trigger is not
+   simply "many evictions"**.
+
+So the failure mode is real, current, and frequent, and it belongs to the contended path rather than to
+any one commit. On the current released pair (`moq` 0.9.15 / `moq-relay` 0.14.14) it takes **6 of 8
+cells and 7 of 16 subscribers**, at `cc=0` in every graded capture, with one cell losing both
+subscribers 16 s apart. The drafted upstream issue attributing it to #3271 was withdrawn; a
+reproduction-framed report is drafted in its place and is what P0-7 files.
 
 The eviction asymmetry between the client arms is real and still worth recording: on the old relay the
 pre arm evicts **constantly** — 807 to 1113 per 90 s cell — and mostly survives, because it has already

@@ -239,21 +239,26 @@ event [T23](test-23-pcr-discontinuity-classes.md) prices at its own duration in 
    *survives* a fix is.
 
 **P0-7. `moq export ts` terminates under sustained contention, and the cause is unknown.**
-*Upstream's, probably; found by C3's #3271 re-check; not reported, because there is nothing actionable
-to report yet.*
+*Upstream's; found by C3's #3271 re-check; reproduction drafted for filing, cause still open.*
 **Falsifies:** the resilience result [T6](test-6-relay-resilience.md) established — that the exporter
 survives what is thrown at it rather than exiting.
 
 Under two feeds competing for one 15 Mb/s bottleneck, `moq export ts` exits with
-`Error: hang: moq error: old` part-way through a 90 s cell. It is not a continuity failure: every cell
-records 0 continuity errors, so the bytes delivered before the exit are fully conformant and a
-downstream monitor sees a clean stream that simply **stops** — the same silent-failure shape
+`Error: hang: moq error: old` part-way through a 90 s cell. It is not a continuity failure: every
+graded capture records 0 continuity errors, so the bytes delivered before the exit are fully conformant
+and a downstream monitor sees a clean stream that simply **stops** — the same silent-failure shape
 [T24](test-24-partial-media-plane-stall.md) is about, arrived at from the transport side.
 
-**What is known.** It reproduces on the current relay (0.14.14). A *steady* shortfall does not cause
-it — one subscriber on a link at 36 % of the required rate produces thousands of evictions across
-150 s cells and never dies — so what appears to matter is two flows competing, where each flow's share
-fluctuates rather than settling. Bursty starvation, not smooth starvation.
+**What is known.** It reproduces on the **current released pair** (`moq` 0.9.15 / `moq-relay` 0.14.14)
+in **6 of 8 cells and 7 of 16 subscribers**, with `cc=0` in every graded capture — so the failure is
+current, frequent, and silent in the media domain. One cell lost both subscribers 16 s apart, which
+rules out a single shared external event. A *steady* shortfall does not cause it: one subscriber on a
+link at 36 % of the required rate produces thousands of evictions across 150 s cells and never dies
+(0 of 12). So what appears to matter is two flows competing, where each flow's share fluctuates rather
+than settling — bursty starvation, not smooth starvation.
+
+The eviction *count* is not the trigger. It differs by two orders of magnitude between relay versions
+(39–1973 per cell on 0.13.7 against 2–7 on 0.14.14) while the exit rate does not move with it.
 
 **What is not known: which component.** The first pass attributed it to
 [#3271](https://github.com/moq-dev/moq/pull/3271) on an isolating one-file pair, 6 of 14 cells against
@@ -266,17 +271,25 @@ client arms is real (hundreds-to-thousands per cell pre, single-to-tens post) an
 
 **Sequence.**
 
-1. **Finish the crossed matrix** — both client arms against both relay versions, five replicates,
-   everything else pinned, and **every subscriber log read** — to establish whether either version
-   moves the death rate. Cheap: 20 cells at 105 s. **Running.** First 11 cells show deaths in all four
-   combinations, so the expected outcome is that neither does.
-2. **Then instrument the propagation path** rather than guessing at it. The candidate is `poll_read`'s
-   error arm, where an error is propagated unless `poll_aborted` reports the group's stream already
-   terminal; if a read can surface `Old` before `poll_finished` resolves, a transport eviction goes out
-   through the decode-error path. That is a lead, not a diagnosis, and a report built on it without a
-   probe would be the same mistake twice.
-3. **Then report**, framed around the reproduction and the crossed matrix. A maintainer can act on "it
-   dies here, on your current build, and here is the rig"; nobody can act on a mechanism we guessed.
+1. ~~Finish the crossed matrix.~~ **Done, 20 cells.** Neither version is the cause:
+
+   | | pre-#3271 client | post-#3271 client |
+   |---|---:|---:|
+   | `moq-relay` 0.13.7 | 2 / 5 cells | 2 / 5 |
+   | `moq-relay` 0.14.14 | 4 / 5 | 3 / 5 |
+
+   6 of 10 pre against 5 of 10 post — no client-side effect — and 7 of 10 on the new relay against
+   4 of 10 on the old, which at n=10 per arm is not a relay effect either (p ≈ 0.37).
+2. **Report the reproduction, rather than waiting on a cause.** A maintainer can act on "it dies here,
+   on your current build, and here is the rig"; nobody can act on a mechanism we guessed. Drafted as
+   `docs/upstream/export-ts-contention-exit-issue.local.md` — framed on the rig and the crossed matrix,
+   with the propagation path offered explicitly as a lead a maintainer may discard. **Awaiting approval
+   to file.**
+3. **Instrument the propagation path** if upstream does not get there first. The candidate is
+   `poll_read`'s error arm, where an error is propagated unless `poll_aborted` reports the group's
+   stream already terminal; if a read can surface `Old` before `poll_finished` resolves, a transport
+   eviction would go out through the decode-error path. Building a *report* on that without a probe
+   would be the same mistake twice, which is why step 2 does not.
 
 **P0-5. A hardware IRD and a TR 101 290 analyser, soaked ≥ 72 h (Gate 2).** *Blocked on apparatus; P0
 on leverage.* Every conformance number in this campaign is graded by software written or configured by
