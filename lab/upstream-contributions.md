@@ -704,10 +704,34 @@ here across four arms, and the mixed frame is gone from both audio PIDs on curre
   is **~256 ms of good audio lost per splice on AC-3**, where MP2 loses nothing. Both PIDs take the
   same branch of the same match, so the asymmetry is downstream of it.
 
-### A recovered stream is signalled nowhere — open, and it is the architecturally important one
+### A recovered stream is signalled nowhere — closed, exactly as asked, and it exposed a bigger gap
 
 Reported as [#2798](https://github.com/moq-dev/moq/issues/2798), scoped to observability rather than
-correctness.
+correctness. **Closed by [#3372](https://github.com/moq-dev/moq/pull/3372)** (merged `d554c75d5`),
+which implemented both halves of the ask and nothing else: a `tracing::warn!` on a *completed* resync,
+and per-PID counters on `Import::stats` — `resyncs`, `discarded`, `unconfirmed` — documented as "the
+counters an operator alarms on … what an operator alarms on is the rate". No protocol change, as
+predicted.
+
+**Verified independently.** [T24](test-24-partial-media-plane-stall.md) suppressed the audio
+elementary streams of a live feed for 60 s and the publisher emitted, unprompted:
+
+```
+WARN moq_mux::container::ts::import: audio stream lost frame sync and resynced pid=121 track=".mp2" discarded=466 resyncs=1
+```
+
+That is the whole ask, working, on a stimulus built for a different experiment.
+
+**Two residues, and the second is now the architecturally important one.** The warning fires on
+*recovery* rather than on the outage, so it is late by the outage's duration — right for "this feed is
+losing audio", not for "audio is off air now". And **it exists for audio only**: T24 measured a 57 s
+absence of *video* access units through the same importer and it produced no log line, no counter and
+no stats entry, because `Stats` is an audio-frame-sync structure by design. Since the importer already
+parses every elementary stream in order to demux it, it is the one component in the chain that knows a
+track has gone quiet for free — and, unlike a relay forwarding an opaque payload, it is structurally
+able to. Drafted as `docs/upstream/import-track-liveness-issue.local.md`; **not yet filed**.
+
+The original report, kept because it is what #3372 answered:
 
 The subscriber's TS after a resync carries **0 continuity errors** (identical to the clean control),
 **0 signalled discontinuities** on any PID, and an audio timeline that simply steps 24 ms → 48 ms
@@ -728,9 +752,9 @@ survive measurement**, which is worth saying: two importers fed the same damaged
 precisely the same frame, so the resync is deterministic on identical input and this is not a
 redundancy risk. What remains is narrower and still real: **the fix converted a maximally loud failure
 into a completely silent one.** Our own source was only discovered to be wrapping mid-frame *because*
-it crashed 216 times; the same condition now produces a stream that looks healthy. The ask is a
+it crashed 216 times; the same condition now produces a stream that looks healthy. The ask was a
 warning on a completed resync and a counter to alarm on a *rate* of them, neither of which touches the
-protocol.
+protocol — and that is precisely what shipped.
 
 ---
 
@@ -955,6 +979,29 @@ conclusion there stands, the lever still works, and what changed is the constant
 The comment states the RSS-only instrument limit, closes off the per-connection reading explicitly so the
 tidy story is not left hanging, and offers the capped 14 h arm plus the third slot count the `A + B ×
 slots` fit still wants.
+
+### The relay's plateau is confirmed at 24 h — and the publisher is the role that actually leaks
+
+The question C6 could not close was whether the soft second term converges: it was still +1.82 MB/h
+when that run ended at 14 h, so "bounded" was the direction the evidence pointed rather than a thing it
+established. [T21](test-21-permanence-soak.md)'s 24 h soak closes it. Fitted past the warm-up, the
+relay's growth follows a **logarithm at R²=0.9895 against 0.9097 for a line**, with its quarterly slope
+halving — 9.85, 4.56, 2.42, 1.75 MB/h — and extrapolating to ~519 MB at a year. **The plateau is real
+and the figure to budget is unchanged.** Worth sending to #2745 as the promised follow-up.
+
+**The same run found something that is not the relay's**, and would have been missed by looking at
+end-point growth alone: over 24 h the relay grew 243 MB and **`moq import ts` grew 137 MB**, so the
+relay looks like the worse of the two and is the better one. The publisher fits a **line** at
+R²=0.9898 against 0.8960 for a logarithm and 0.9655 for a square root, its quarterly slopes hold from
+first to last (2.36, 2.87, 2.81, 2.57 MB/h), and its largest drawdown from a running peak across the
+whole day is 9.2 MB — so it ratchets rather than caching. At +2.83 MB/h that is ~24 GB in a year.
+
+For a lane whose entire case is permanent primary distribution, the publisher is the process that is
+never supposed to restart, and restarting it is a timeline event this campaign has priced. **No
+upstream issue describes publisher RSS growth over long runs** — #2745 and #3128 are both the relay.
+Drafted as `docs/upstream/import-memory-growth-issue.local.md` and **deliberately held**: the soak
+sampled RSS by command-line signature, which for the publisher also matched its wrapper shell, and a
+per-PID re-run is what turns the conclusion from an argument into a measurement.
 
 ---
 

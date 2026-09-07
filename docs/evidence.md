@@ -117,7 +117,7 @@ every "not established" entry recurs in §4 or §5.
 | | Established | Not established | Where |
 |---|---|---|---|
 | **Carriage** | All three lanes carry a full broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, the media-aware lane by stuffing, mux rate, PSI density and PCR spacing | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
-| **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **Whether it holds over hours is untested**: the one long run to try departed at ~9 min, but on a looped source that rewinds its clock every 665 s, so it measured rewind recovery; the groomer's half of that failure is fixed and a re-soak on a continuous timeline is running ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; a conformant lane sustained beyond minutes, which is now untested rather than known-failing | §3.2 |
+| **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **It also holds over a day**: 24.01 h on a continuous timeline delivers 632,199,204 packets and 5,947,298 PCRs with 0 continuity errors, 0 intervals above 40 ms, 0 underruns, 0 respawns and a 27 ms worst programme gap, crossing the 33-bit rollover in flight at 19.4 h ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; anything beyond a day, or on a real encoder's timeline rather than a synthetic clock over a repeating clip | §3.2 |
 | **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them**: the reordering separation that used to do so was a packet-size artefact, and on HTTP/3 the two lanes overlap (§3.3). Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable** — what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline: not the controller, not bufferbloat | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile | §3.5, §3.6 |
@@ -619,14 +619,31 @@ On the same 90 s live arm at an unchanged cushion, cap and exporter budget: cont
 against a nominal 11,000,000, 0 PCRs outside ±500 ns**, PSI intact, buffer flat at 1.26 s. All four of
 T19's pass criteria are met. **The media-aware lane produces a conformant CBR wire over minutes.**
 
-**Whether it holds that state over hours is not yet established, and the first attempt to find out
-measured its own source.** [T21](../lab/test-21-permanence-soak.md) is the first long run to put the
-groomer inside the measurement, and it failed at about nine minutes — but its source was a clip looped
-by `tsp --infinite`, which restarts the clock every 665 s, and §3.13 has since priced a rewind at its
-own duration in programme. **The nine-minute failure is therefore a rewind-recovery result, not a
-permanence result**, and the groomer's half of it is fixed (`5ab84cd`). A re-soak on a source whose
-timeline is continuous is running and is past that trigger cleanly; until it reports, sustained
-operation beyond minutes is **untested rather than failed**. What the first run found, which stands:
+**It holds that state for a day, and the measurement that establishes it had to build its own source.**
+[T21](../lab/test-21-permanence-soak.md)'s 24 h soak on a continuous timeline delivers **632,199,204
+packets and counts all of them**, over **5,947,298 PCRs**, with **0 continuity errors in every one of
+1,437 samples, 0 intervals above 40 ms (worst 30.08 ms), 0 absolute failures at ±500 ns, exact
+11,000,000 b/s, 0 drops, 0 late drops, 0 underruns, 0 stalls, 0 resyncs and 0 respawns**. The worst
+programme gap across the whole day is **27 ms** — the same figure §3.13's control arm returns over
+105 s. The **33-bit PCR rollover was crossed in flight at 19.4 h** and cost nothing, which tests §3.13's
+placed-arm result live and without the placement. **So the conformance claim extends from minutes to a
+day.**
+
+The soak needed a source that does not exist here: the lab has no live feed and every clip in it is
+minutes long, and the only way anyone had stretched one was `tsp --infinite`, which restarts the clock.
+`ts-continuous-source.py` replays a clip with PCR, PTS, DTS and the continuity counters advanced across
+the join, and was **graded before use** — 0 backward PCR steps, 0 discontinuity indicators, 0 continuity
+errors, and a join interval indistinguishable from the clip's own median. What it does *not* reproduce
+bounds the claim: the join is a hard content cut at an IDR rather than smooth content, TDT/TOT and
+SCTE-35 payloads repeat each pass, and the bitrate profile repeats with the content — so this is a
+synthetic clock over a repeating programme, and it says nothing about a real encoder's restarts, GOP
+changes or clock drift.
+
+**The first attempt measured its own source, and its finding is kept for what it does establish.**
+That run failed at about nine minutes — but its source was the looped clip, and §3.13 has since priced a
+rewind at its own duration in programme. **The nine-minute failure is therefore a rewind-recovery
+result, not a permanence result**, and the groomer's half of it is fixed (`5ab84cd`). What it found,
+which stands:
 at about **nine minutes** the groomer's recovered media-rate estimate departs the true
 rate and ramps linearly without bound — 9.34 Mb/s at t=541 s, 34.7 Mb/s at t=601 s, **2.58 Gb/s at
 t=1,202 s**, gaining ~250 Mb/s per minute. The de-jitter buffer collapses with it, from a standing
@@ -652,10 +669,43 @@ The groomer half is **fixed and regression-tested** (`mpegts-pacer` `5ab84cd`): 
 carry usable media time are coalesced rather than folded in individually, and a recovered content rate
 above the carrier's is rejected as impossible, holding the last credible rate and raising a counter.
 Replayed against the captured failure the release rate holds at 6,368 pps against a true 6,331 while
-the raw ratio still climbs past 524,000. The exporter half is upstream's and is reported. **The
-conformance result above therefore still holds for the window it was measured over, and the re-soak
-that would extend it past minutes has not been run.** *An earlier reading attributed the whole failure
-to `mpegts-pacer` on the strength of a clean exporter log; the log is clean and the exporter is not.*
+the raw ratio still climbs past 524,000. The exporter half was upstream's and is now fixed — see
+§3.13. *An earlier reading attributed the whole failure to `mpegts-pacer` on the strength of a clean
+exporter log; the log is clean and the exporter is not.*
+
+**Two questions the soak closes and one it opens, and the one it opens is the only thing now between
+this lane and a permanence claim.**
+
+**Closed: the release loop is stable over a day.** The concern was that the groomer's closed-loop
+release, qualified on a 300 s arm, could drift onto a rail — a nine-minute reading had the buffer
+climbing 9,008 → 18,105 packets against a 6,300-packet set point, and the servo's authority is ±5 %.
+Over 24 h it does not: the **high-water mark of 9,903 packets was set in the opening minutes and never
+beaten in the following twenty-three hours**, occupancy finished at 6,469, the cushion held at
+1,000 ms, and there were **0 underruns in 632 million packets**. The ±7 % rate oscillation is real and
+self-limiting — it tracks the clip's own bitrate profile, which repeats every 600 s with the content.
+The nine-minute drift was a start-up transient read as a trend.
+
+**Closed: the relay's memory ceiling is bounded, which §3.6 could previously only point at.** Fitted
+past the warm-up, the relay's growth follows a **logarithm at R²=0.9895 against 0.9097 for a line**,
+and its slope halves every quarter — 9.85, 4.56, 2.42, 1.75 MB/h — extrapolating to ~519 MB in a year.
+§3.6's 14 h reading was "converging asymptotically … still +1.82 MB/h in the final hour", which was the
+direction the evidence pointed rather than a thing it established. At 24 h it is established.
+
+**Open: `moq import ts` grows linearly, and it is the one series that fails the criterion.** The
+publisher grew **+2.83 MB/h** with its slope intact in every quarter — 2.36, 2.87, 2.81, 2.57 — fitting
+a line at **R²=0.9898** against 0.8960 for a logarithm and 0.9655 for a square root, and giving back
+almost nothing: the largest drawdown from a running peak is 9.2 MB against 137 MB of growth. That is
+~24 GB in a year and exhaustion of a 15.3 GB host in about **seven and a half months**. Every other
+role passes — the groomer is **flat** at +0.5 MB over 24 h, the exporter converged and turned over —
+and file descriptors are flat in all four roles.
+
+F2's criterion was fixed before the run: *any series still rising at a rate that would exhaust the host
+inside a year is a fail*. **So permanence is currently blocked by one upstream component rather than by
+the architecture**, and the distinction matters for the verdict — this is a defect in a named binary,
+not a property of demuxing MPEG-TS into tracks. One qualification travels with it, and is why nothing
+has gone upstream yet: the soak resolved each role by command-line signature, which for the publisher
+also matched its wrapper shell, so the figure is a sum of a binary and a shell. A shell does not grow
+137 MB, but that is an argument rather than a measurement, and a per-process re-run is what settles it.
 
 **What it costs is buffer, and the buffer is the encoder's VBV moved downstream.** The requirement is
 content-dependent and is *not* a function of bitrate. Three sources at 9.5–9.9 Mb/s of programme in an
@@ -1504,7 +1554,7 @@ and absolute conformance only to within those few intervals.*
 
 ---
 
-### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes, but only from the media plane, and the gap is unbounded
+### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes if it has stopped completely, and only from per-stream instrumentation if it has stopped partly
 
 The failure a primary-distribution operator is least protected against is not a component dying — that
 case closes a socket and something notices. It is every component still running, still connected, and
@@ -1522,9 +1572,45 @@ indefinitely.
 **The media plane detects it in about one cushion, from two independent signals.** The groomer's
 content-liveness alarm fired at **1.69–1.88 s** in every injected arm; PCR progression at the graded
 output stopped within the 100 ms observation tick, its true floor being the 40 ms P1 repetition limit it
-tests against. The control arm fired nothing. PCR progression is the signal worth building on: it needs
-nothing from MoQ, nothing from the groomer and no cooperation from the sender, and it is already
-implemented in every broadcast monitoring product.
+tests against. The control arm fired nothing.
+
+**But PCR progression is not the signal to build on, and that correction is the substance of
+[T24](../lab/test-24-partial-media-plane-stall.md).** T22 recommended it because it needs nothing from
+MoQ, nothing from the groomer and no cooperation from the sender, and because every broadcast
+monitoring product already implements it. All of that is true, and it does not survive a **partial**
+stall — which is the more likely failure, and the one T22 named as its own limit.
+
+PCR rides on the video PID in this programme as in most. An encoder whose video path has died behind a
+running mux therefore emits healthy PCR over no pictures, and with the video suppressed for a minute
+the delivered stream carries **0 continuity errors, 0 PCR intervals above 40 ms and a worst interval of
+30.080 ms — identical to the control's** — at a carrier rate within 600 b/s of it. **The entire
+TR 101 290 P1 set passes over a service with no pictures in it**, and the transport's log output is
+*identical* to a healthy run's once broadcast names are normalised away. The stimulus was graded as
+healthy before use, against the unmodified clip, so this is a property of the detectors and not of the
+tool: identical packet and PCR counts, identical worst interval, zero continuity errors by two
+independent graders.
+
+**Two detectors do fire, and both are proportional to the dead stream's share of the mux.** Losing the
+video took the stuffing ratio from **13.7 % to 95.2 %** within a second of the outage reaching the
+output, against a control that never moves past 13 points, and took the groomer's underrun counter from
+**0 to 406,850**. Losing both audio streams and the subtitles — about 440 kb/s of a 9.5 Mb/s programme —
+peaked the stuffing ratio at **27.0 %** against a control that peaks at **27.1 %**, and left underruns
+at **0**. The same detector that is unmissable for video cannot see audio at all, because the audio's
+share of the mux is below the lane's own variance. An alarm tuned to catch it would false-positive on
+healthy variable-bitrate video.
+
+**What detects every case is per-PID access-unit liveness** — counting access units per elementary
+stream in media time. It found the video outage at 57.22 s and the AC-3 outage at 60.53 s, and fired
+nothing on the control. That is the detector to specify, and the distinction that matters when
+procuring monitoring is that per-PID *bitrate* inherits the same proportional-sensitivity problem: a
+dead stream's PID bitrate goes to zero, but the service bitrate barely moves.
+
+**One failure mode is out of reach of all of it, and is not this architecture's problem.** An encoder
+that keeps emitting *valid* access units carrying a frozen or looping picture advances PCR, PTS, DTS and
+the continuity counters and holds its bitrate, so it defeats every detector above including per-stream
+liveness. It is equally undetectable under opaque carriage or over SDI, because it can only be found by
+decoding and comparing pictures. It is untested here and is stated as a limit of transport monitoring
+in general.
 
 **A frozen relay is the one case the transport eventually catches, 18× slower** — QUIC's idle timeout at
 **34.3 s**, against 1.88 s for the media plane on the same run, and it took the egress chain down with
@@ -1541,11 +1627,31 @@ pacer not told otherwise, and it converts a detectable failure into an undetecta
 and does not run late afterwards. For primary distribution that is the right behaviour, but it means the
 programme lost is gone and the only mitigation is redundancy, not buffering.
 
-This result and [T21](../lab/test-21-permanence-soak.md)'s are the same asymmetry seen twice. In T21 a
-groomer defect severe enough to destroy the de-jitter cushion left every check on the output passing; in
-T22 a dead source left every check on the transport passing. **Neither the transport nor the wire is a
-sufficient health signal on its own**, and the pair that is sufficient — PCR progression plus the
-groomer's own counters — is the pair this campaign had to build.
+**The lane contains a partial failure rather than amplifying it, and this is the result that speaks to
+the architecture rather than to the monitoring.** There is a real objection to demuxing carriage here:
+a lane that reassembles a mux from independently delivered tracks could let one dead track block the
+others, turning a dead elementary stream into a dead service — a failure *worse* than not detecting it,
+and one opaque carriage cannot have because it does not know what a track is. It does not happen. With
+the video dead for a minute, **the two audio streams, the subtitles, all three SCTE-35 splice-info
+streams and the PSI tables ran with no interruption longer than two seconds**, and the carrier held
+exact CBR. The lane degrades to precisely the streams that failed. Recovery was clean in every arm — 0
+continuity errors, 0 dropped packets — and the total-loss arm took a single PCR rebase at the seam.
+
+**And the one component that could close the detection gap is the media-aware publisher itself.**
+`moq import ts` already logs a warning when the *audio* parser loses frame sync, so an audio stall is
+visible in the publisher's own log with no downstream analysis at all. There is no equivalent for
+video: 57 s with no video access units produced no log line. Because the importer parses every
+elementary stream in order to demux it, it is the only component in the chain that knows a track has
+gone quiet without doing extra work — an observability signal a media-aware publisher can offer and an
+opaque relay structurally cannot. Reported upstream.
+
+This result and [T21](../lab/test-21-permanence-soak.md)'s are the same asymmetry seen three times. In
+T21 a groomer defect severe enough to destroy the de-jitter cushion left every check on the output
+passing; in T22 a dead source left every check on the transport passing; in T24 a dead video path left
+the whole of TR 101 290 P1 passing. **Neither the transport nor the wire is a sufficient health signal
+on its own, and the wire's own conformance checks are not sufficient either.** What is sufficient is
+per-stream liveness plus the groomer's own counters, and both are instruments this campaign had to
+build.
 
 ### 3.13 Which PCR timeline events does the lane survive? — All six classes, since #3375; a rewind used to cost its own duration in programme
 

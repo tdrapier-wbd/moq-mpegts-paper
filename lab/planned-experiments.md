@@ -97,7 +97,8 @@ segmented lane over HTTP/3, only delivered-rate and programme-loss claims. Build
 that reads the playlist over H3 and concatenates segments verbatim; it is a small job and it upgrades
 every cell T20 measured.
 
-**P0-3. The exporter's PCR does not survive a source discontinuity — upstream fix, then re-soak.**
+**P0-3. ~~The exporter's PCR does not survive a source discontinuity — upstream fix, then re-soak.~~
+Both halves closed: the fix is merged upstream as #3375 and the 24 h soak is run.**
 *The groomer half is closed; the upstream half is now the single item between this architecture and a
 viability claim.*
 **Falsifies:** the headline conformance result's applicability to a permanent service.
@@ -137,15 +138,18 @@ source failover and the encoder restart, not a clock that stops of its own accor
    tables; T23 adds that the stall stops the whole programme, that the cost is linear, and that the
    rollover is unaffected. See [upstream contributions](upstream-contributions.md).)*
 2. ~~**Characterise the trigger precisely.**~~ **Done — T23.**
-3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path.
-   **Running.** The source problem that made this impossible is solved rather than waited out: the
-   lab has no live feed and every clip in it is minutes long, so `lab/scripts/ts-continuous-source.py`
-   replays one with the timeline advanced across the join. It is graded before use — 0 backward PCR
-   steps, 0 discontinuity indicators, 0 continuity errors, join interval indistinguishable from the
-   median — and the lane confirms it, crossing the first pass boundary at `gap_ms=0` where the
-   equivalent loop rewind costs 62,760 ms (T23 arm B). Conditions are in
-   [T21 § the re-soak](test-21-permanence-soak.md#the-re-soak-on-a-continuous-timeline). The 7-day
-   arm remains outstanding after the 24 h arm reports.
+3. **Then** re-soak per [F2](#f2-permanence-soak), 24 h and 7 days, with the groomer in path. **The
+   24 h arm is done.** The source problem that made this impossible is solved rather than waited out:
+   the lab has no live feed and every clip in it is minutes long, so
+   `lab/scripts/ts-continuous-source.py` replays one with the timeline advanced across the join. It is
+   graded before use — 0 backward PCR steps, 0 discontinuity indicators, 0 continuity errors, join
+   interval indistinguishable from the median — and the lane confirms it, crossing the first pass
+   boundary at `gap_ms=0` where the equivalent loop rewind costs 62,760 ms (T23 arm B). **Result:
+   632,199,204 packets over 24.01 h with 0 continuity errors, 0 underruns, 0 respawns and a 27 ms worst
+   programme gap, and the 33-bit rollover crossed in flight at 19.4 h for nothing.** The media plane
+   passes; F2 fails on one resource series, `moq import ts` at +2.83 MB/h. Conditions and figures in
+   [T21 § the 24 h soak](test-21-permanence-soak.md#the-24-h-soak-on-a-continuous-timeline). The
+   7-day arm remains outstanding and is **no longer the next thing to run** — see P0-6.
 
 **The residue of the rewind finding was closed twice over.** T23's encoder-restart arm lost 44 s of
 programme *and* 54,168 packets to a groomer overrun, and only the first was upstream's. Sweeping the
@@ -155,8 +159,15 @@ packets of steady-state occupancy when unused. **#3375 then removed the burst en
 question no longer arises and the *rewind × bitrate* provisioning rule is discharged: high water falls
 98,035 → 1,102–1,417 packets. **No pacer change was made and none is warranted.**
 
-**P0-3b. The servo saturates, and the buffer walks to a rail.** *Ours, unaddressed, and separate from
-the above.* On the 8-vCPU secondary the rate estimate stayed healthy for a full run while the buffer
+**P0-3b. ~~The servo saturates, and the buffer walks to a rail.~~ CLOSED by the 24 h soak — the walk
+does not happen.** The high-water mark was **9,903 packets, set in the opening minutes and never beaten
+in the following twenty-three hours**, with occupancy oscillating and finishing at 6,469 against the
+set point, the cushion held at 1,000 ms and **0 underruns** in 632 million packets. The ±7 % rate
+oscillation is real and self-limiting: it tracks the clip's own bitrate profile, which repeats every
+600 s with the content, so it is the source's shape rather than an accumulating error. **The ±5 %
+servo authority is adequate at this estimator accuracy and no control constant needs changing.** The
+original observation, kept because it is what motivated the run: on the 8-vCPU secondary the rate
+estimate stayed healthy for a nine-minute arm while the buffer
 drifted monotonically from 9,008 to 18,105 packets against a 6,300 set point. The release servo's
 authority is ±`RATE_SERVO_GAIN` = ±5 %, so any standing rate-estimate error beyond 5 % saturates it and
 occupancy runs to the cap (drops) or to zero (underruns) regardless. **Question:** is the ±5 % clamp
@@ -167,12 +178,11 @@ true ~9.5, where the old build read 8.67), so this may already be smaller than i
 worth measuring before changing a control constant. **Changes the conclusion if:** the buffer cannot be
 held at its set point over hours on either host, which would mean the cushion is not a designed
 quantity but an accident of host speed.
-**Now instrumented rather than separately scheduled:** the running re-soak is on the same 8-vCPU
-secondary and reads exactly these quantities for 24 h, so it answers this or it does not, without a
-second run. The early reading is that the estimate **oscillates** about the true rate rather than
-standing off it — 8.79–10.08 Mb/s about ~9.5 — with the buffer in a 5,992–8,001 band and no monotone
-walk. That amplitude exceeds the ±5 % authority at its extremes, so the question is live: an
-oscillation the servo can ride is not the same as the standing error that walked the buffer before.
+It was answered by instrumentation rather than by a second run: the 24 h soak sat on the same 8-vCPU
+secondary and read exactly these quantities for a day. The nine-minute drift was the tail of a start-up
+transient, not a walk, and the method lesson is that **a monotone series over nine minutes is not
+evidence of a monotone series** — the run has to outlast the transient before its direction means
+anything.
 
 **P0-4. ~~Silent media-plane failure — detection.~~ Done for the MoQ lane —
 [T22](test-22-silent-media-plane-failure.md).** It confirmed the property it was aimed at and bounded
@@ -185,11 +195,48 @@ byte-perfect programme-free carrier indefinitely and makes the failure undetecta
 progression promoted to the primary detector because it needs nothing from MoQ, nothing from the groomer
 and no cooperation from the sender.
 
-**What P0-4 leaves behind, and it is a real gap.** `SIGSTOP` freezes a process *cleanly*. A real
-encoder that stalls may half-work — some tracks advancing and not others, or timestamps repeating while
-bytes still flow — and neither detector above is obviously sufficient for that. **A partial-stall arm is
-new P1** and is specified in [F3](#f3-silent-media-plane-failure). The segmented lane's half of F3 is
-unrun and stays unrun while that lane lacks a byte-faithful receiver (P0-2's residue).
+**What P0-4 left behind is now closed, and it changed P0-4's own recommendation.** `SIGSTOP` freezes a
+process *cleanly*, and a real encoder that stalls may half-work. That arm is run as
+[T24](test-24-partial-media-plane-stall.md) and the suspicion was correct: **a PCR that keeps advancing
+over a dead video path defeats T22's primary detector outright**, and with it the whole of TR 101 290
+P1 — 0 continuity errors and a worst interval identical to the control's, across 57.22 s with no
+pictures. What survives is that the lane **contains** the failure rather than amplifying it, and that
+**per-PID access-unit liveness** detects every arm where PCR progression detects none. The segmented
+lane's half of F3 is unrun and stays unrun while that lane lacks a byte-faithful receiver (P0-2's
+residue).
+
+**P0-6. `moq import ts` leaks memory linearly, and it is the only thing now standing between this lane
+and a permanence claim.** *Upstream's; found by the 24 h soak; not yet reported.*
+**Falsifies:** F2, on the criterion fixed before the run — *any series still rising at a rate that
+would exhaust the host inside a year is a fail*.
+
+The publisher grew **+2.83 MB/h** across 24 h with its slope intact in every quarter
+(2.36 / 2.87 / 2.81 / 2.57), a linear fit at R²=0.9898 beating both a logarithm (0.8960) and a square
+root (0.9655), and a largest drawdown from a running peak of 9.2 MB against 137 MB of growth — so it
+ratchets rather than caching. That is ~24 GB in a year and exhaustion of a 15.3 GB host in about seven
+and a half months. Every other role in the lane passes: the groomer is flat, the exporter converged and
+turned over, and the relay is logarithmic.
+
+**Why it is P0 rather than a defect report.** This lane's entire case is permanent primary
+distribution. A publisher that has to be restarted twice a year to reclaim memory is a scheduled
+outage on the one path that is not supposed to have one, and restarting the publisher is exactly the
+event [T23](test-23-pcr-discontinuity-classes.md) prices at its own duration in lost programme.
+
+**Sequence, and step 1 is not optional.**
+
+1. **Attribute it per process.** The soak sampled RSS by `pgrep -f` on a signature, and the
+   publisher's signature matches its wrapper shell as well as `moq import ts`. A shell does not grow
+   137 MB, but that is an argument and an upstream report needs a measurement.
+   `lab/scripts/t21-role-memory.sh` re-runs the same lane for 6 h sampling each PID separately and
+   labelled, which also gives the relay's logarithm a second independent read. **Running.**
+2. **Then report upstream**, with the quarterly slopes and the three competing fits, because "it grows"
+   is not actionable and "it grows linearly with the slope intact over 24 h" is. No existing issue
+   describes publisher RSS growth over long runs; the nearest is
+   [#2745](https://github.com/moq-dev/moq/issues/2745), which is the relay's ~9 KiB per ingested group
+   and closed.
+3. **Then re-soak** once a fix lands. The 7-day arm is worth more after this than before it: at
+   +2.83 MB/h a week is 476 MB, which is measurable but is not the question — whether the slope
+   *survives* a fix is.
 
 **P0-5. A hardware IRD and a TR 101 290 analyser, soaked ≥ 72 h (Gate 2).** *Blocked on apparatus; P0
 on leverage.* Every conformance number in this campaign is graded by software written or configured by
@@ -425,6 +472,23 @@ than assumed.
 
 ### F2. Permanence soak
 
+> **24 h arm done for the MoQ lane, as [T21](test-21-permanence-soak.md). Split verdict, and the split
+> is the finding.** The media plane passes without qualification: 24.01 h, 632,199,204 packets,
+> 5,947,298 PCRs, **0** continuity errors, **0** PCR intervals over 40 ms, **0** underruns, **0**
+> respawns, exact CBR, worst programme gap **27 ms**, and the 33-bit rollover crossed in flight at
+> 19.4 h for nothing. The buffer-walk concern (P0-3b) is closed: high water set in the opening minutes
+> and never beaten.
+>
+> **The resource criterion fails, in one role.** `mpegts-pacer` is flat, `moq export ts` converged and
+> turned over, `moq-relay` is logarithmic and bounded at ~519 MB/yr — which **confirms** C6's
+> asymptotic reading below, previously only a direction. **`moq import ts` grows linearly at
+> +2.83 MB/h**, slope intact across all four quarters, ~24 GB in a year and host exhaustion in ~7.5
+> months. The criterion below was fixed in advance and says that is a fail. Permanence is therefore
+> blocked by one upstream component, not by the architecture.
+>
+> **Outstanding:** the 7-day arm; the segmented lane, still never soaked and now the larger gap of the
+> two; and per-PID attribution of the publisher's growth, which is running.
+
 - **Question.** Does either lane remain in a *stable operating state* as uptime grows, or does it merely
   survive?
 - **Hypothesis.** Survival is not in doubt on either. What the soak is looking for is monotonic drift in
@@ -447,9 +511,12 @@ than assumed.
   that matter are the ones with a time constant longer than a test.
 - **Existing evidence.** [T8b](test-8b-congestion-control.md) C6 is 14.006 h on one MoQ topology: 0
   continuity errors, 0 respawns, 9.512 Mb/s mean, relay RSS converging asymptotically on baseline +
-  200.5 MB and still +1.82 MB/h in the final hour. [T9](test-9-performance.md) has 26.5 h phased soaks
-  on an older build. **The segmented lane has never been soaked**, which makes its half of this the
-  larger gap of the two.
+  200.5 MB and still +1.82 MB/h in the final hour — **now confirmed as genuinely logarithmic** by the
+  24 h arm, which is what a 14 h run could not settle. [T9](test-9-performance.md) has 26.5 h phased
+  soaks on an older build; its unresolved publisher thread growth (22 → 86 over 26 h) did **not**
+  reproduce here (12 → 16 over 24 h), so that item is superseded by a build change rather than
+  explained. **The segmented lane has never been soaked**, which makes its half of this the larger gap
+  of the two.
 
 ### F3. Silent media-plane failure
 
@@ -459,12 +526,29 @@ than assumed.
 > is caught by QUIC's idle timeout at 34.3 s, 18× slower. `--on-stall continue` makes the failure
 > undetectable downstream. Recovery is clean and the programme clock skips exactly the outage.
 >
-> **Two parts remain.** (1) A **partial stall** — an encoder that half-works, advancing some tracks and
-> not others, or repeating timestamps while bytes still flow. `SIGSTOP` freezes a process cleanly and
-> cannot produce this, and neither detector above is obviously sufficient for it; a PCR that keeps
-> advancing over a frozen picture defeats the primary detector outright. **P1**, and the highest-value
-> remaining item in this family. (2) The **segmented lane's** half, which stays blocked on that lane
-> lacking a byte-faithful HTTP/3 receiver.
+> **The partial stall is now done too, as [T24](test-24-partial-media-plane-stall.md), and it corrected
+> T22's recommendation.** The concern was exactly right: a PCR that keeps advancing over a dead video
+> path defeats the primary detector outright. Measured, across a **57.22 s** video hole with the mux and
+> clock alive: **0** continuity errors, **0** PCR intervals over 40 ms, worst interval **30.080 ms —
+> identical to the control**, carrier within 600 b/s of it, and the transport's log lines *identical* to
+> the control's once arm names are normalised away. **The whole of TR 101 290 P1 passes over a service
+> with no pictures in it.**
+>
+> Two things save it. The lane **contains** the failure — audio, subtitles, SCTE-35 and PSI all ran
+> uninterrupted, so a demuxing carriage layer does not let one dead track block the others, which was
+> the architectural risk. And two detectors do fire for a large stream: the **stuffing ratio**
+> (13.7 % → 95.2 %, within a second) and the **groomer's underrun counter** (406,850 against 0).
+>
+> **But both are proportional to the dead stream's share of the mux and neither sees a dead audio
+> stream** — killing ~440 kb/s of a 9.5 Mb/s programme peaks stuffing at 27.0 % against a control that
+> peaks at 27.1 %, and leaves underruns at 0. **Only per-PID access-unit liveness caught every arm**, and
+> that is what F10 should specify. F3's decision criterion is met on the *total* stall and met on the
+> *partial* stall **only if per-PID liveness is the detector**; it is not met by PCR progression.
+>
+> **One part remains:** the **segmented lane's** half, which stays blocked on that lane lacking a
+> byte-faithful HTTP/3 receiver. A frozen *picture* carried in valid advancing access units is
+> deliberately out of scope — it defeats every transport-layer detector, over SDI and opaque carriage
+> equally, so it is a limit of transport monitoring rather than of either lane.
 
 - **Question.** How does each lane detect that the connection is healthy and the programme is no longer
   advancing, and how long does it take?
@@ -653,6 +737,30 @@ than assumed.
   a real CDN is B-5.
 
 ### F10. Observability
+
+> **T22 and [T24](test-24-partial-media-plane-stall.md) have already produced this family's first
+> reportable output — the list of faults for which no telemetry distinguishes the failing component —
+> and it is longer than expected.**
+>
+> - **A stalled source is invisible to the transport indefinitely** (T22): 120 s frozen, zero
+>   non-benign log lines across publisher, relay and exporter.
+> - **A dead video path behind a live mux is invisible to the whole of TR 101 290 P1** (T24), and the
+>   transport's log output is *identical* to a healthy run's once arm names are normalised away.
+> - **A dead audio stream is invisible to every wire-observable detector tried**, including the
+>   stuffing ratio that catches the video case unmissably, because its share of the mux is below the
+>   lane's own variance.
+>
+> **What this family should now specify is per-PID access-unit liveness**, which caught every T24 arm
+> at its true length with no false positive on the control, and which no other detector tried came
+> close to matching. The distinction that matters for procurement is that per-PID *bitrate* inherits
+> exactly the proportional-sensitivity problem — a dead stream's PID bitrate goes to zero, but the
+> service bitrate does not move — so the requirement is liveness per stream, not bitrate per stream.
+>
+> **And one asymmetry is upstream's to fix**: `moq import ts` warns when the audio parser loses frame
+> sync but says nothing when a video track goes quiet for a minute. The importer already parses every
+> elementary stream in order to demux it, so it is the one component in the chain that knows a track
+> has stopped without doing extra work — the single highest-leverage observability change available on
+> this lane, and something an opaque relay structurally cannot offer.
 
 - **Question.** Can an operations team run hundreds of permanent feeds and determine quickly why one has
   stopped delivering correctly?

@@ -1,12 +1,24 @@
 # T21 — the permanence soak of the complete media-aware lane
 
-> **State: the first run is complete and superseded; the re-soak is running.** The first run's source
-> was `tsp --infinite`, which restarts the clip and therefore its clock. [T23](test-23-pcr-discontinuity-classes.md)
-> has since measured what that costs — a rewind of N seconds costs N seconds of programme — so that
-> run was measuring recovery from a rewind it manufactured, roughly every 665 s, and could not have
-> measured permanence whatever it found. **Its findings stand as findings and are kept below**; what
-> does not stand is the reading of them as a permanence result. The re-soak, on a source whose
-> timeline is continuous, is recorded in [§ The re-soak](#the-re-soak-on-a-continuous-timeline).
+> **State: complete. The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
+> resources, in one role.** 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
+> zero PCR intervals over 40 ms, zero absolute PCR failures at ±500 ns, zero drops, **zero underruns**,
+> zero respawns, and a worst programme gap of **27 ms across the whole day**. The 33-bit rollover was
+> crossed in flight at 19.4 h and cost nothing. The groomer's own resident memory is **flat**, and the
+> buffer walk that [P0-3b](planned-experiments.md) was opened for **did not occur**.
+>
+> The one failure is upstream and it is in the publisher: **`moq import ts` resident memory grows
+> linearly at +2.83 MB/h** and holds that slope across all four quarters of the run, which on this host
+> is exhaustion in about seven and a half months. F2's criterion was fixed in advance and this trips it.
+> The relay, by contrast, is **logarithmic and bounded**, which settles a question T8b left open.
+> Recorded in [§ The 24 h soak](#the-24-h-soak-on-a-continuous-timeline).
+>
+> **The first run is superseded.** Its source was `tsp --infinite`, which restarts the clip and
+> therefore its clock. [T23](test-23-pcr-discontinuity-classes.md) has since measured what that costs —
+> a rewind of N seconds costs N seconds of programme — so that run was measuring recovery from a rewind
+> it manufactured, roughly every 665 s, and could not have measured permanence whatever it found. **Its
+> findings stand as findings and are kept below**; what does not stand is the reading of them as a
+> permanence result.
 
 > **The first run.** This was the first long run in the
 > campaign to put the **groomer inside the measurement**: [T8b](test-8b-congestion-control.md) C6 soaked
@@ -120,7 +132,7 @@ loss-recovery gap and the over-limit spacing fixture.
 
 ### The wire
 
-| Metric | Result over the run so far |
+| Metric | Result over that run |
 |---|---|
 | Continuity errors | **0** |
 | PCR intervals > 40 ms | **0** |
@@ -174,7 +186,9 @@ the conformance result cannot be assumed to transfer to a path that jitters.
 
 ### Resources
 
-Too early for a slope past the conventional one-hour warm-up. The readings so far, at t=1,385 s:
+**Superseded by the 24 h soak's resource table below**, which is the run long enough to fit a slope.
+These readings are kept only because the two thread-count anomalies were first seen here. At
+t=1,385 s, well inside the warm-up:
 
 | Role | RSS start → now | threads | fds |
 |---|---|---:|---:|
@@ -209,10 +223,19 @@ an open item in its own right — it is a tokio worker pool that should not be g
 - **Does not establish:** that media-aware carriage is unsound. Both faults are implementation faults
   in identified components, one upstream and one ours, and neither is a property of demuxing MPEG-TS
   into tracks.
-- **Does not establish:** that the lane now holds its state for hours. The fix is validated
-  deterministically and on a short live arm; the re-soak has not been run.
-- **Does not yet establish:** the resource question the soak was also for. That needs a full run that
-  is not chasing a known defect.
+- **Establishes, from the 24 h soak:** the lane holds its operating state for a day on a continuous
+  timeline — zero continuity errors, zero underruns, a 27 ms worst programme gap and a bounded buffer
+  over 632 million packets — so [T19](test-19-pcr-grid-verification.md)'s conformance result now
+  extends from minutes to a day rather than being scoped to minutes.
+- **Establishes, from the 24 h soak:** the groomer's resident memory and the relay's are both
+  provisionable — flat and logarithmic respectively — and **`moq import ts`'s is not**, growing
+  linearly at +2.83 MB/h with the slope intact across four quarters. Permanence is blocked by one
+  upstream role, not by the architecture.
+- **Does not establish:** that the publisher's growth is `moq import ts`'s rather than its wrapper's.
+  The soak summed a process signature; the per-PID run is what settles it.
+- **Does not establish:** anything about a *real* encoder's timeline. The continuous source is a
+  synthetic clock over a repeating clip, which is honest about pacing and PCR and says nothing about
+  encoder restarts, GOP structure changes or drifting source clocks.
 
 ## Mechanism
 
@@ -324,7 +347,7 @@ to one 90 kHz tick per PCR packet at the same packet rate. Against the unfixed e
 1,520,675 pps for a true 6,400 — a 238× overshoot, the field failure in miniature — and it asserts the
 stall is visible in the counters, because nothing on the wire is.
 
-## The re-soak, on a continuous timeline
+## The 24 h soak, on a continuous timeline
 
 ### The source, and why one had to be built
 
@@ -368,39 +391,129 @@ from `5ab84cd`. 11,000,000 b/s, cushion 1,000 ms, cap 2,500 ms, `--latency-max 5
 60 s. The `loop` mode is retained in the rig so the two sources can be compared deliberately rather
 than by accident.
 
-### Result so far — incomplete
+### The wire, over 24 hours
 
-**This is a partial reading of a running experiment and is not a permanence result.** At the point of
-writing the run had passed the ~9-minute mark at which the first soak departed:
+24.01 h (86,436 s), 1,437 samples at 60 s, graded continuously in flight.
 
-| | first run (looped) | re-soak (continuous) |
+| Metric | Result | F2 criterion |
 |---|---|---|
-| media-rate estimate | departs at ~9 min, ramps to 6.98 Gb/s | **oscillates 8.79–10.08 Mb/s about the true ~9.5** |
-| `rate_dsecs` (denominator) | frozen at 2.15 s while the numerator ran away | 2.0125 s, the decayed window's steady state, with the numerator oscillating **in band** (11,765–13,484) |
-| de-jitter buffer | collapses 10,587 → 0 | 5,992–8,001, high water 9,588 and flat |
-| underruns | ~970/s | **0** |
-| `clock_stalled` | raised | **false** |
-| continuity errors / PCR > 40 ms / respawns | 0 / 0 / 0 | 0 / 0 / 0 |
-| mux rate | exact | exact 11,000,000 b/s |
+| Duration | **86,436 s = 24.01 h** | ≥ 24 h |
+| Packets delivered / counted | **632,199,204 / 632,199,204** | conserved |
+| Continuity errors | **0**, in every one of 1,437 samples | 0 |
+| PCRs verified | **5,947,298** | — |
+| Absolute PCR failures at ±500 ns | **0** | no regression on the 1 h baseline |
+| PCR intervals > 40 ms | **0** | 0 |
+| Worst PCR interval | **30.08 ms** | < 40 ms |
+| Mux rate | **11,000,000 b/s** exact | exact |
+| Dropped / late-dropped | **0 / 0** | 0 |
+| Underruns / stalls / muted / resyncs | **0 / 0 / 0 / 0** | 0 |
+| Respawns | **0** — no role restarted once | 0 |
+| Worst programme gap, whole run | **27 ms** | — |
 
-The estimator's ±7 % oscillation about the true rate is wider than the release servo's ±5 % authority
-at its extremes, and whether it stays a bounded oscillation or becomes the standing error that walks
-the buffer to a rail is the open question below — it is the reason the run is 24 h and not one hour.
+Two of those deserve separating out from the list, because they are the readings the experiment was
+built to get and neither was available before it.
+
+**Zero underruns over 632 million packets.** The first run accumulated them at ~970 per second within
+ten minutes. The distinction matters more than the count: an underrun is a slot that emitted stuffing
+because media had not arrived, so it is the groomer reporting that its cushion was empty at that
+instant. None in 24 h means the cushion was *never* empty — the lane kept a full jitter budget in hand
+for a day, which is the property [T19](test-19-pcr-grid-verification.md)'s 300 s conformance result
+could not speak to.
+
+**A worst programme gap of 27 ms across the entire day.** This is the same figure the T23 control arm
+returns over 105 s, so a day of uptime widened the worst hole in the programme by nothing at all. It
+covers 144 source pass joins and the 33-bit rollover.
+
+### The 33-bit rollover, crossed in flight
+
+The clip's PCR origin puts the modulus at ~19.4 h, and the run went through it unsignalled, as a real
+feed does every 26.51 h. Across the crossing the per-minute monitor reads `gap_ms=0 cc=0 gt40=0` with
+the mux rate exact and the worst interval unchanged at 30.08 ms. T23 established this in a placed
+105 s arm; it now holds live, at length, and without the placement.
+
+### The release loop, and P0-3b
+
+[P0-3b](planned-experiments.md) was opened because on a nine-minute arm the buffer drifted 9,008 →
+18,105 packets monotonically against a 6,300 set point, and a servo with ±5 % authority cannot correct
+a standing error larger than that — so the concern was a walk to a rail. **It did not happen.**
+
+| | at 9 min (the P0-3b reading) | over 24 h |
+|---|---|---|
+| buffer occupancy | 9,008 → 18,105, monotone | oscillates; **6,469 at the end** |
+| buffer high water | rising | **9,903, set early and never beaten** |
+| cushion held | — | **1,000 ms**, lead 507 ms |
+| media-rate estimate | healthy | **9,180,341 b/s** against a true ~9.5 Mb/s |
+| `rate_dsecs` (the denominator) | 2.15 s | **2.012526 s**, the decayed window's steady state |
+| `pcr_rebases` | — | **0** |
+| `clock_stalled` | false | **false** throughout |
+| underruns | 0 | **0** |
+
+The high-water mark is the decisive number. It was set in the opening minutes and not approached again
+in the following twenty-three hours, so the occupancy series is a bounded oscillation about the set
+point and not a walk. The ±7 % estimator oscillation noted at nine minutes is real and it is
+*self-limiting*: it tracks the clip's own bitrate profile, which repeats every 600 s with the content,
+so it is the source's shape and not an accumulating error. **P0-3b is closed by this run.**
+
+The groomer's thread count also settles: **13 → 15 over 24 h** on the 8-vCPU secondary, against the
+10 → 74 seen on the 2-vCPU primary in the first run. The pool grows by two and stops. The 2-vCPU
+reading is not explained by this and is not reproduced by it either; it stays open as a small-host
+question rather than a groomer defect.
+
+### Resources — the one failure
+
+Sampled every 60 s. Slopes are fitted on `t > 2 h` to exclude the warm-up, and quoted per quarter of
+the remainder, because a slope that *holds* is the thing that distinguishes a leak from a cache filling.
+
+| Role | RSS start → end | growth | Q1 | Q2 | Q3 | Q4 | shape | 1 yr |
+|---|---|---:|---:|---:|---:|---:|---|---:|
+| `mpegts-pacer` | 8.7 → 9.1 MB | **+0.5 MB** | 0.00 | 0.00 | 0.00 | −0.00 | **flat** | flat |
+| `moq export ts` | 32.5 → 151.4 MB | +118.9 MB | 1.43 | 0.63 | 0.15 | −0.19 | **converged, turned over** | bounded |
+| `moq-relay` | 28.0 → 270.6 MB | +242.6 MB | 9.85 | 4.56 | 2.42 | 1.75 | **logarithmic** | ~519 MB |
+| **`moq import ts`** | 36.4 → 173.7 MB | +137.2 MB | **2.36** | **2.87** | **2.81** | **2.57** | **linear** | **~24 GB** |
+
+Quarterly slopes are MB/h. Thread counts: relay **9, flat**; export 11 → 13; pacer 13 → 15; import
+12 → 16. File descriptors **flat at 11/13/13/9** for all four roles — nothing leaks a handle. Host load
+averaged 0.79 on 8 vCPU and available memory moved 14,864 → 14,337 MB.
+
+**Three of the four roles pass, and one of those closes an older question.** The groomer is flat, which
+is the reading we most needed since the groomer is ours. The relay fits a logarithm at R²=0.9895
+against R²=0.9097 for a line, and its slope halves every quarter — so [T8b](test-8b-congestion-control.md)
+C6's asymptotic reading, taken at 14 h when the slope was still +1.82 MB/h and therefore arguable, is
+**confirmed** at 24 h. Extrapolated on the log fit the relay reaches ~519 MB in a year, which is a
+number an operator can provision for.
+
+**`moq import ts` does not pass.** It fits a line at R²=0.9898, against R²=0.8960 for a logarithm and
+R²=0.9655 for a square root, and the slope is 2.36, 2.87, 2.81, 2.57 MB/h across the four quarters —
+essentially unchanged from first to last. A cache that is filling loses its slope; this does not. Nor
+does it give memory back: the largest drawdown from a running peak in the whole run is 9.2 MB against
+137 MB of growth. At +2.83 MB/h the publisher reaches ~24 GB in a year and would exhaust this 15.3 GB
+host in about **seven and a half months** of continuous operation.
+
+F2's criterion was fixed before the run — *any series still rising at a rate that would exhaust the
+host inside a year is a fail* — and this trips it. **F2 therefore passes on the media plane and fails
+on resources, in the publisher only.**
+
+The attribution needs one qualification, which is why a follow-up run is recorded below rather than an
+upstream report being filed straight off this data. The soak sampled RSS by `pgrep -f` on a
+*signature*, and the publisher's signature matches its wrapper shell as well as `moq import ts`,
+because the wrapper's argv contains the whole pipeline text. A shell does not grow 137 MB, so the
+growth is not the wrapper's — but that is an argument rather than a measurement, and a defect reported
+upstream should rest on the latter.
 
 ## Open
 
-**The re-soak's outcome.** Running; the partial reading above is nine minutes and settles nothing.
-The pass criterion is fixed in [F2](planned-experiments.md#f2-permanence-soak): zero continuity
-errors, no PCR regression against the 1 h baseline, and every resource series flat or converging.
+**The publisher's memory slope, per process.** `lab/scripts/t21-role-memory.sh` re-runs the same lane
+for 6 h sampling each PID separately and labelled, which both isolates `moq import ts` from its wrapper
+and gives the relay's logarithm a second, independent read. Nothing upstream is reported until it
+lands. No issue upstream describes publisher RSS growth over long runs, so this is new if it holds.
 
-**Also open:** the groomer's thread count on a 2-vCPU host, and the resource slopes, which need a full
-run that is not chasing a known defect.
+**The groomer's thread count on a 2-vCPU host.** 10 → 74 in the first run, not reproduced on 8 vCPU
+(13 → 15). A small-host question, unexplained.
 
-**A second release-loop question, not yet answered.** On the 8-vCPU secondary the estimate stayed
-healthy for the whole run and the buffer still drifted — 9,008 packets to 18,105 over nine minutes,
-monotonically, against a 6,300-packet set point. The servo's authority is `±RATE_SERVO_GAIN`, ±5 %, so
-any standing rate error beyond 5 % saturates it and the buffer walks to a rail. That is a different
-failure from this one, it is ours, and it is unaddressed.
+**What 24 h does not reach.** The rollover recurs every 26.51 h and this run crossed it once, so a
+second crossing is untested; and the campaign has no true live source, so the joins are content cuts
+on a continuous synthetic clock rather than encoder behaviour. Both are stated in
+[F2](planned-experiments.md#f2-permanence-soak) as the bounds of the claim.
 
 ## Corrections
 

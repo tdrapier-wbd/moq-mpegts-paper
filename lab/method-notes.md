@@ -393,6 +393,47 @@ selection oracle.)*
 > conforms**; conformance is decided by the thing the standard is written for, which here is a
 > receiver, and that gate stays open.
 
+**A monotone series measured inside a start-up transient is not a monotone series.** *(T21, P0-3b.)*
+
+> P0-3b was opened on a nine-minute reading in which the groomer's buffer drifted 9,008 → 18,105
+> packets against a 6,300 set point, monotonically. The servo's authority is ±5 %, so a standing error
+> larger than that would walk the buffer to a rail, and the direction of nine minutes of data said it
+> was happening. Over 24 h it was not: the high-water mark was set in the opening minutes and never
+> beaten again, and the occupancy series is a bounded oscillation whose period turned out to be the
+> clip's own 600 s bitrate profile.
+>
+> The rule is not "measure for longer" — that is unbounded. It is that **a trend claim needs a window
+> longer than the longest period in the stimulus**, and the stimulus's periods have to be enumerated
+> before the window is chosen. A looping source has a period by construction; so does a source whose
+> bitrate profile repeats. Neither is visible in a run shorter than the loop.
+
+**Distinguish a leak from a cache by whether the slope survives, and fit the competing shapes rather
+than eyeballing the curve.** *(T21's 24 h soak.)*
+
+> Two roles in the 24 h soak grew by comparable totals — the relay by 243 MB and the publisher by
+> 137 MB — and end-point growth said the relay was the worse of the two. It is the better one. Fitting
+> a line and a logarithm separately settles it: the relay fits a logarithm at R²=0.9895 against 0.9097
+> for a line, and its quarterly slopes halve (9.85 / 4.56 / 2.42 / 1.75 MB/h), so it converges. The
+> publisher fits a line at R²=0.9898 against 0.8960 for a logarithm and 0.9655 for a square root, and
+> its quarterly slopes hold (2.36 / 2.87 / 2.81 / 2.57), so it does not.
+>
+> Three habits come out of it. **Quote slopes per quarter, not per run** — a slope that holds is the
+> signature of a leak and a slope that decays is a cache filling, and the totals cannot tell them
+> apart. **Fit at least a line, a logarithm and a square root**, because "still rising" is compatible
+> with all three and only one of them exhausts a host. And **report the largest drawdown from a running
+> peak**: a cache gives memory back, so 9.2 MB of drawdown against 137 MB of growth is itself evidence.
+
+**Sample resource series per process, not per command-line signature.** *(T21's 24 h soak, and the
+follow-up run it forced.)*
+
+> The soak resolved each role with `pgrep -f` on a signature and summed the matches. For the publisher
+> that signature also matched the wrapper shell, because the wrapper's `argv` contains the whole
+> pipeline text — so the series reported was the sum of a binary and a shell. A shell does not grow
+> 137 MB, and the conclusion survives, but it survives *by argument* rather than by measurement, which
+> is not good enough for a defect report going upstream. The fix is to resolve each role to a single
+> PID once, label it, and record a role that vanishes as gone rather than silently re-resolving the
+> pattern onto whatever now matches.
+
 ---
 
 ## 3. Ratios, windows and intervals
@@ -804,6 +845,36 @@ measurement eliminates a class of cause, and a caveat retired by argument elimin
 ---
 
 ## 5. Rig hygiene
+
+**A stimulus built to defeat a detector must be graded as *healthy* by that detector before it is
+used.** *(T24.)*
+
+> T24 asks whether the lane can see a dead video stream behind a live clock. The whole experiment turns
+> on the stimulus being indistinguishable from a healthy stream by every check an operator already has
+> — so that was measured first, against the unmodified clip: identical packet count, identical PCR
+> count (24,574), identical worst PCR interval to three decimal places, zero continuity errors by both
+> our own grader and TSDuck, and `pcrverify --absolute` passing. Only then is a hole in the video
+> interesting.
+>
+> The trap it avoids is specific and easy to fall into. Suppressing packets naively breaks the
+> continuity counters, and a broken counter is caught by any TR 101 290 P1 check — so the experiment
+> would have "detected" the failure, the detector would have looked adequate, and the finding would
+> have been an artefact of the tool rather than a property of the lane. **When the hypothesis is "X
+> cannot see this", the stimulus has to be proved invisible to X before the run, not after it.**
+
+**A detector that watches an aggregate has a sensitivity floor set by the share of the aggregate it is
+watching, and that floor has to be reported with it.** *(T24.)*
+
+> The stuffing ratio detects a dead video stream unmissably: 13.7 % to 95.2 %, inside one second, with
+> a control that never moves more than 13 points. Against a dead *audio* stream the same detector peaks
+> at 27.0 % where the control peaks at 27.1 %. Nothing about the detector changed; the audio and
+> subtitles are 4 % of the mux and the video is 82 %.
+>
+> So a positive detection result on a large component says nothing about a small one, and the honest
+> output is not "the stuffing ratio works" but the share below which it does not. The generalisation
+> beyond this experiment: **any detector reading a ratio, a total or a rate over a composite has this
+> property**, and the useful figure is the smallest contributor whose loss exceeds the aggregate's own
+> variance. Per-component instrumentation is the only thing that escapes it.
 
 **Before grading two pipelines for determinism, hash every artefact they are supposed to share.**
 *(T12 arm D, independent upstream.)*
