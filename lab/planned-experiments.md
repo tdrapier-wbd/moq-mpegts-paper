@@ -480,8 +480,10 @@ than assumed.
 > and never beaten.
 >
 > **The resource criterion fails, in one role.** `mpegts-pacer` is flat, `moq export ts` converged and
-> turned over, `moq-relay` is logarithmic and bounded at ~519 MB/yr — which **confirms** C6's
-> asymptotic reading below, previously only a direction. **`moq import ts` grows linearly at
+> turned over, `moq-relay` is logarithmic and convergent — which **confirms the shape** of C6's
+> asymptotic reading below, previously only a direction, while **raising its constant**: the run passes
+> C6's baseline + 200.5 MB asymptote to reach baseline + 242.6 MB at 24 h, extrapolating to ~519 MB at a
+> year, so the budget is ~2.5× the slot arithmetic rather than 2.03×. **`moq import ts` grows linearly at
 > +2.83 MB/h**, slope intact across all four quarters, ~24 GB in a year and host exhaustion in ~7.5
 > months. The criterion below was fixed in advance and says that is a fail. Permanence is therefore
 > blocked by one upstream component, not by the architecture.

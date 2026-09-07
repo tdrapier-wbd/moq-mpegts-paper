@@ -685,11 +685,17 @@ beaten in the following twenty-three hours**, occupancy finished at 6,469, the c
 self-limiting — it tracks the clip's own bitrate profile, which repeats every 600 s with the content.
 The nine-minute drift was a start-up transient read as a trend.
 
-**Closed: the relay's memory ceiling is bounded, which §3.6 could previously only point at.** Fitted
-past the warm-up, the relay's growth follows a **logarithm at R²=0.9895 against 0.9097 for a line**,
-and its slope halves every quarter — 9.85, 4.56, 2.42, 1.75 MB/h — extrapolating to ~519 MB in a year.
-§3.6's 14 h reading was "converging asymptotically … still +1.82 MB/h in the final hour", which was the
-direction the evidence pointed rather than a thing it established. At 24 h it is established.
+**Closed: the relay's growth is convergent, which §3.6 could previously only point at — but the
+constant is larger than §3.6 estimated.** Fitted past the warm-up, the relay's growth follows a
+**logarithm at R²=0.9895 against 0.9097 for a line**, with its slope halving every quarter — 9.85,
+4.56, 2.42, 1.75 MB/h. §3.6's 14 h reading was "converging asymptotically … still +1.82 MB/h in the
+final hour", which was the direction the evidence pointed rather than a thing it established; **the
+direction is now established**. The magnitude is not the same, and the difference matters to anyone
+sizing a host: C6 put the asymptote at baseline + 200.5 MB, and this run passes that figure, reaching
+baseline + 242.6 MB at 24 h with the log fit extrapolating to **~519 MB at a year**. So the shape is
+confirmed and **the budget should be roughly 2.5× C6's ceiling rather than C6's ceiling**. Both runs
+are single runs on one topology, and the asymptote is an extrapolation from a fit rather than an
+observed plateau — which is the honest limit on the figure.
 
 **Open: `moq import ts` grows linearly, and it is the one series that fails the criterion.** The
 publisher grew **+2.83 MB/h** with its slope intact in every quarter — 2.36, 2.87, 2.81, 2.57 — fitting

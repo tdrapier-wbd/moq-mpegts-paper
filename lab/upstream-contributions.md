@@ -986,8 +986,12 @@ The question C6 could not close was whether the soft second term converges: it w
 when that run ended at 14 h, so "bounded" was the direction the evidence pointed rather than a thing it
 established. [T21](test-21-permanence-soak.md)'s 24 h soak closes it. Fitted past the warm-up, the
 relay's growth follows a **logarithm at R²=0.9895 against 0.9097 for a line**, with its quarterly slope
-halving — 9.85, 4.56, 2.42, 1.75 MB/h — and extrapolating to ~519 MB at a year. **The plateau is real
-and the figure to budget is unchanged.** Worth sending to #2745 as the promised follow-up.
+halving — 9.85, 4.56, 2.42, 1.75 MB/h. **The convergence is real; the constant is not the one C6
+predicted.** This run passes C6's baseline + 200.5 MB asymptote, reaching baseline + 242.6 MB at 24 h,
+with the log fit extrapolating to ~519 MB at a year — so the answer to the question we asked on #2745 is
+that the soft second term *does* converge, but the budget is about 2.5× the slot arithmetic rather than
+the 2.03× C6 measured. Worth sending as the promised follow-up, with the caveat that an extrapolated
+asymptote is not an observed plateau.
 
 **The same run found something that is not the relay's**, and would have been missed by looking at
 end-point growth alone: over 24 h the relay grew 243 MB and **`moq import ts` grew 137 MB**, so the

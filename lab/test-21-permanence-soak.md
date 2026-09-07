@@ -479,8 +479,11 @@ averaged 0.79 on 8 vCPU and available memory moved 14,864 → 14,337 MB.
 is the reading we most needed since the groomer is ours. The relay fits a logarithm at R²=0.9895
 against R²=0.9097 for a line, and its slope halves every quarter — so [T8b](test-8b-congestion-control.md)
 C6's asymptotic reading, taken at 14 h when the slope was still +1.82 MB/h and therefore arguable, is
-**confirmed** at 24 h. Extrapolated on the log fit the relay reaches ~519 MB in a year, which is a
-number an operator can provision for.
+**confirmed in shape** at 24 h — but not in constant, and the difference is what an operator sizes a
+host with. C6 put the asymptote at baseline + 200.5 MB; this run passes that, reaching **baseline +
+242.6 MB at 24 h**, with the log fit extrapolating to **~519 MB at a year**. So the budget is roughly
+**2.5× the slot arithmetic rather than C6's 2.03×**. Both are single runs on one topology, and ~519 MB
+is an extrapolation from a fit rather than an observed plateau, which is the limit on the figure.
 
 **`moq import ts` does not pass.** It fits a line at R²=0.9898, against R²=0.8960 for a logarithm and
 R²=0.9655 for a square root, and the slope is 2.36, 2.87, 2.81, 2.57 MB/h across the four quarters —
