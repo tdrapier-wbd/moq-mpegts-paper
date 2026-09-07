@@ -70,17 +70,36 @@ SETTLE=${SETTLE:-15}
 BASE=${BASE:-45} # baseline phase length
 ABUSE=${ABUSE:-60}
 RECOVER=${RECOVER:-45}
+CYCLES=${CYCLES:-1} # abuse+recovery repeats, against one relay
 
 NSTORM=${NSTORM:-40}
 STORM_PERIOD=${STORM_PERIOD:-5}
 CHURN_HOLD=${CHURN_HOLD:-0.3}
 NGHOST=${NGHOST:-40}
 
+# The group cache is unbounded unless one of these is set (`moq-relay` config.rs:
+# "Unbounded unless `cache.capacity` or `cache.headroom`"), so the default arms
+# measure an unbounded cache and say so. Setting either turns the same arm into a
+# test of the documented mitigation rather than a second measurement of the
+# default, which is the only reason to vary it.
+CACHE_HEADROOM=${CACHE_HEADROOM:-}
+CACHE_CAPACITY=${CACHE_CAPACITY:-}
+
+# The `storm` and `churn` arms SIGKILL their subscribers, so those sessions are
+# served until the idle timeout expires (30 s by default, measured in T6). At a
+# 5 s churn period that means several generations coexist inside the relay, and
+# "40 abusers" understates what it is actually holding. Shortening the timeout
+# scales that overlap down without changing anything else, which separates
+# retention-times-churn-rate from a per-subscription cost that never comes back.
+IDLE_TIMEOUT=${IDLE_TIMEOUT:-}
+
 BCAST=f11.victim
 T1=$SETTLE
 T2=$((SETTLE + BASE))
-T3=$((SETTLE + BASE + ABUSE))
-TOTAL=$((SETTLE + BASE + ABUSE + RECOVER))
+# No T3: past the baseline the phase is a function of (elapsed - T2) modulo the
+# abuse+recovery period, so `phase_of` computes the cycle rather than comparing
+# against a fixed third boundary.
+TOTAL=$((SETTLE + BASE + (ABUSE + RECOVER) * CYCLES))
 
 for b in "$MOQ" "$RELAY"; do
 	[ -x "$b" ] || {
@@ -120,13 +139,23 @@ trap cleanup EXIT
 echo "=== $(date -u +%FT%TZ) f11 arm=$ARM label=$LABEL ==="
 echo "moq:   $("$MOQ" --version 2>&1 | head -1)"
 echo "relay: $("$RELAY" --version 2>&1 | head -1)"
-echo "phases: settle=$SETTLE base=$BASE abuse=$ABUSE recover=$RECOVER total=${TOTAL}s"
+echo "phases: settle=$SETTLE base=$BASE abuse=$ABUSE recover=$RECOVER" \
+	"cycles=$CYCLES total=${TOTAL}s"
+echo "cache: headroom=${CACHE_HEADROOM:-unset} capacity=${CACHE_CAPACITY:-unset}" \
+	"$([ -z "$CACHE_HEADROOM$CACHE_CAPACITY" ] && echo '(unbounded — the default)')"
+echo "relay idle timeout: ${IDLE_TIMEOUT:-30s (default)}"
 
 # ---- relay -----------------------------------------------------------------
 # --stats-enabled=true is what exposes the traffic counters; --internal-listen
 # alone serves only the accept series. Both are require_equals.
+RELAY_ARGS=()
+[ -n "$CACHE_HEADROOM" ] && RELAY_ARGS+=(--cache-headroom "$CACHE_HEADROOM")
+[ -n "$CACHE_CAPACITY" ] && RELAY_ARGS+=(--cache-capacity "$CACHE_CAPACITY")
+[ -n "$IDLE_TIMEOUT" ] && RELAY_ARGS+=(--server-quic-idle-timeout "$IDLE_TIMEOUT")
+
 "$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
 	--internal-listen "127.0.0.1:$MPORT" --stats-enabled=true \
+	"${RELAY_ARGS[@]+${RELAY_ARGS[@]}}" \
 	>"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 KIDS+=("$RELAY_PID")
@@ -303,18 +332,44 @@ CSV=$OUT/samples.csv
 
 ABUSER_PID=""
 START=$(date +%s)
+# With CYCLES=1 (the default) this is the four-phase run the file describes.
+# With CYCLES=N the abuse and recovery phases repeat N times against **one**
+# relay, which is the only way to ask whether a retained cost *ratchets*: the
+# 6-minute recovery run established that the relay keeps most of what an abuse
+# burst costs it, and "keeps 1.7 GB once" and "keeps 1.7 GB per burst" are an
+# operational note and a denial of service respectively. Phase labels carry the
+# cycle number so a per-phase grade can still separate them.
 phase_of() {
 	local e=$1
-	if [ "$e" -lt "$T1" ]; then echo settle; elif [ "$e" -lt "$T2" ]; then echo baseline; elif [ "$e" -lt "$T3" ]; then echo abuse; else echo recovery; fi
+	[ "$e" -lt "$T1" ] && {
+		echo settle
+		return
+	}
+	[ "$e" -lt "$T2" ] && {
+		echo baseline
+		return
+	}
+	local into=$((e - T2))
+	local period=$((ABUSE + RECOVER))
+	local cyc=$((into / period + 1))
+	[ "$cyc" -gt "$CYCLES" ] && {
+		echo "recovery$CYCLES"
+		return
+	}
+	if [ $((into % period)) -lt "$ABUSE" ]; then echo "abuse$cyc"; else echo "recovery$cyc"; fi
 }
+# The arm's phase, with the cycle number stripped, so the abuser start/stop
+# logic does not have to know about cycling.
+kind_of() { printf '%s' "${1%%[0-9]*}"; }
 
 while :; do
 	NOW=$(date +%s)
 	E=$((NOW - START))
 	[ "$E" -ge "$TOTAL" ] && break
 	PH=$(phase_of "$E")
+	KIND=$(kind_of "$PH")
 
-	if [ "$PH" = abuse ] && [ -z "$ABUSER_PID" ] && [ "$ARM" != control ]; then
+	if [ "$KIND" = abuse ] && [ -z "$ABUSER_PID" ] && [ "$ARM" != control ]; then
 		echo "=== $(date -u +%FT%TZ) +${E}s abuse starts ==="
 		# Its own session, so the whole tree dies with one signal to the
 		# group and no descendant outlives the abuse phase.
@@ -331,7 +386,7 @@ while :; do
 		ABUSER_PID=$!
 		KIDS+=("$ABUSER_PID")
 	fi
-	if [ "$PH" = recovery ] && [ -n "$ABUSER_PID" ]; then
+	if [ "$KIND" = recovery ] && [ -n "$ABUSER_PID" ]; then
 		echo "=== $(date -u +%FT%TZ) +${E}s abuse stops ==="
 		# Negative PID = the process group setsid created. This is why the
 		# abuser needed its own session: the storm arm's children are
@@ -377,7 +432,10 @@ echo "=== samples: $CSV ($(wc -l <"$CSV") rows) ==="
 # from the answer we are hoping for. Assert the load existed before believing
 # anything about how well it was survived.
 if [ "$ARM" != control ]; then
-	PEAK=$(awk -F, 'NR>1 && $2=="abuse" {if ($9>m) m=$9} END{print m+0}' "$CSV")
+	# Prefix match, not equality: with CYCLES>1 the phase is `abuse1`, and an
+	# exact match would read 0 here — turning this guard into the very false
+	# negative it exists to prevent.
+	PEAK=$(awk -F, 'NR>1 && $2 ~ /^abuse/ {if ($9>m) m=$9} END{print m+0}' "$CSV")
 	echo "=== abuser liveness: peak concurrent=$PEAK during abuse ==="
 	if [ "$PEAK" -lt 2 ]; then
 		echo "!!! ARM DID NOT RUN: peak abuser count $PEAK — victims' clean"

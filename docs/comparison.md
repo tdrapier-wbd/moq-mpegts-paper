@@ -82,7 +82,7 @@ What differs is the *shape* of the replication point and who runs it.
 | Replication state | none — any edge can serve any object | per-subscriber, per-track, live | per-destination, live |
 | Who operates it | the commodity delivery market, from a dozen suppliers, today | one CDN today, at five to ten times commodity delivery; otherwise you | you, or a managed media service |
 | Adding a destination | a cache fill nobody provisions | a subscription and its relay state | a gateway output slot, and sometimes an instance |
-| Known hard ceilings | none at this scale | untested beyond our own rig; relay memory grows per ingested group and plateaus softly, at a ceiling whose scaling term is open by a factor of two ([Evidence](evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow |
+| Known hard ceilings | none at this scale | untested beyond our own rig; relay memory grows per ingested group and plateaus softly, at a ceiling whose scaling term is open by a factor of two ([Evidence](evidence.md) §3.6). Separately, **subscription churn costs the relay ~1.8 GB in 60 s** at 40 crashing receivers — retained sessions, not cache, and tunable through the idle timeout (§3.14) | AWS MediaConnect: 50 outputs per flow |
 | Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network | none | none |
 
 Three conclusions follow, and only the first is a differentiator.
@@ -92,6 +92,18 @@ disguise.** Because a segment is a named resource rather than a position in a se
 can move between edges, regions or suppliers mid-stream with nothing to re-establish, and the origin
 never learns that it happened. MoQ and SRT fan-out is stateful, so the replication point is also a
 failure domain: losing a relay loses a session, and recovery is a resubscribe. Developed in §3.
+
+**The multi-tenancy exposure this implies has now been measured, and it is narrower than the
+argument.** Holding per-subscription state does cost the relay: forty receivers crashing and
+reconnecting every five seconds take it from 87 MB to 1.9 GB in a minute, because a peer that dies
+without closing is served until the idle timeout and keeps accruing media throughout
+([Evidence](evidence.md) §3.14). But it buys no access to anyone else's stream — well-behaved
+subscribers through the same relay stayed within 8 KB of a control across 198 MB at zero continuity
+errors, and the relay never refused a connection. **The exposure is the relay's own memory, it is
+bounded by peak retained sessions rather than by episode count, and the idle timeout prices it.** A
+cache serving idempotent GETs still has less to hold; it is a provisioning difference, not the
+service-affecting one the bare structural argument suggests. The segmented lane's half of that
+experiment is unrun, so this is not a comparison.
 
 **The economic case is partly about origin offload.** Rather than egressing every copy of a feed directly from the origin, the stream can be replicated through regional or edge infrastructure, with delivery to consumers occurring closer to the edge. This allows commodity CDN infrastructure to absorb the distribution fan-out while reducing the amount of traffic that must be egressed from the origin.
 

@@ -841,7 +841,21 @@ than assumed.
   correlation problem. `--stats-enabled` is off by default on the relay. The segmented lane's diagnostic
   surface is HTTP logs and manifest probes, which is mature and indirect.
 
-### F11. Isolation under abuse
+### F11. Isolation under abuse — **MoQ half run, see [T25](test-25-isolation-under-abuse.md)**
+
+> **The media plane is isolated and the relay's memory cost is attributed.** Five arms plus a control
+> leave the victims within 8 KB across 198 MB at 0 continuity errors, with `accept_failures` and
+> `accept_stalled_seconds` at 0 throughout. Subscription churn costs the relay 87 MB → 1.9 GB in 60 s,
+> and four variants name it: **not** cached payload (a 256 MiB cache cap leaves the peak unchanged),
+> **not** concurrency (the same 42 held cost 144 MB), but abandoned sessions retained until the QUIC
+> idle timeout — which prices it, 30 s → 10 s taking the peak to 489 MB. Bounded by peak retained
+> sessions, not by episode count. **No upstream report**, and T25's Open section says why.
+>
+> **What remains is the segmented half**, which needs the HTTP/3 origin lane from
+> [T20](test-20-segmented-http3.md) and is the only way this becomes the comparison the row below
+> claims. And one cheap measurement would convert the held-back finding into a filing: the relay's own
+> `pool.used()` series, read through the `--stats-prefix` broadcast, to show the retained queue is
+> outside the cache budget rather than inferring it from RSS.
 
 - **Question.** Can one receiver degrade the service other receivers get, on either lane?
 - **Setup.** Against a running feed with well-behaved subscribers: a subscription storm; subscriptions
@@ -856,10 +870,12 @@ than assumed.
 - **Why it matters.** Multi-tenancy is assumed by both economic models. A relay holding per-subscription
   state is structurally more exposed than a cache serving idempotent GETs, and the paper should either
   show that or stop implying it.
-- **Existing evidence.** Relay state is per-subscriber and per-track by construction
-  ([Comparison](../docs/comparison.md) §2); relay memory growth is *not* an audience term, which bounds
-  one obvious attack. [Control plane](../docs/control-plane.md) is design-only and carries no
-  measurement. Nothing has been tested adversarially.
+- **Existing evidence.** [T25](test-25-isolation-under-abuse.md), above, for the MoQ half. Relay state
+  is per-subscriber and per-track by construction ([Comparison](../docs/comparison.md) §2); relay
+  memory growth is not an audience term for a *steady* audience, confirmed at 1.6 MB per held
+  subscriber, and the growth term is subscription lifetime against churn rate.
+  [Control plane](../docs/control-plane.md) is design-only and carries no measurement. Nothing has been
+  tested adversarially, on either lane.
 
 ---
 ## Delivery latency at equal conformance — measured, see T18

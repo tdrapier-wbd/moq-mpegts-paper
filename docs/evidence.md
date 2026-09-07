@@ -121,6 +121,7 @@ every "not established" entry recurs in §4 or §5.
 | **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them**: the reordering separation that used to do so was a packet-size artefact, and on HTTP/3 the two lanes overlap (§3.3). Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable** — what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline: not the controller, not bufferbloat | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile | §3.5, §3.6 |
+| **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention**, not cached payload (a 256 MiB cache cap changes nothing) and not concurrency (the same 42 held cost 144 MB). Tunable: 30 s → 10 s idle timeout takes it to 489 MB | The segmented lane's half of the same experiment, so no comparison; anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
 | **Latency** | Delivery latency on all four planes, loopback and public internet, each graded against the conformance of the same bytes. **MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path | §3.11 |
 
@@ -1738,6 +1739,57 @@ the durable finding**, and it is why the groomer's own counters are in the measu
 the three failing arms show it. A deliberate signalled discontinuity produces a withhold-and-burst with
 a healthy clock either side. Whether the two share a root cause is **UNRESOLVED**; the T21 captures are
 no longer on disk.
+
+### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
+
+[T25](../lab/test-25-isolation-under-abuse.md), P1, software. Five arms and a control against a running
+11 Mb/s feed on the 8-vCPU secondary, then four variants of the worst arm to attribute its cost. Every
+abuser is something an ordinary client does by accident — a crashing receiver, a retry loop, a reader
+whose disk filled — expressed through the shipped CLI. **Not a security assessment**, and none of it
+generalises to a determined attacker.
+
+**The media plane is isolated, in every arm.** The two well-behaved subscribers deliver within **8 KB
+of the control across 198 MB** — a spread of 0.004 % — at **0 continuity errors** and no hole above
+100 ms, including in the arm expected to be worst, a subscriber that stays connected and stops reading.
+`accept_failures_total` and `accept_stalled_seconds` are **0 in every phase of every arm**, so the
+relay never refused or delayed a connection either. Threads (9) and file descriptors (12–13) are flat
+throughout: nothing accumulates handles.
+
+**The cost lands entirely on relay memory, and it is large.** A subscription storm — 40 subscribers to
+the feed the victims are already watching, killed and relaunched every 5 s — takes relay RSS from
+**87 MB to 1.9 GB in 60 s**. Subscriptions to broadcasts that *do not exist* reach 903 MB, which is the
+cheapest version available since it needs no knowledge of what the relay carries.
+
+**Four variants say what that memory is, and the answer changes the conclusion.** Each holds the cell
+identical and varies one thing:
+
+| variant | abuse peak | what it eliminates |
+|---|---:|---|
+| storm, as specified | 1,911 MB | — |
+| group cache capped at 256 MiB | **1,930 MB** | **not cached payload** — the relay's only documented memory bound does not cover it |
+| same 42 subscribers **held**, not churned | **144 MB** | **not concurrency** — 28× less for the same audience |
+| QUIC idle timeout 30 s → 10 s | **489 MB** | **it is retention** — 4.5× less growth for 3× less retention |
+
+A subscriber killed without a `CONNECTION_CLOSE` cannot be distinguished from a silent one, so the
+relay serves it until the idle timeout expires. At a 5 s churn period roughly **seven generations
+coexist**, each still accruing media it will never deliver — ~44 MB per retained session against the
+~37 MB that 30 s at 9.95 Mb/s implies. **A dead peer is not flow-controlled**, which is why one *live*
+non-draining reader costs nothing measurable while 42 dead ones cost 1.8 GB.
+
+**It is bounded and it is provisionable.** Four consecutive abuse cycles reach 1,911 → 1,949 → 1,955 →
+1,959 MB: the first storm sets the high-water and the rest reuse it, so the exposure scales with peak
+retained sessions rather than with how many storms arrive. Provision
+`abandoned-session rate × idle timeout × media rate`, and treat `--server-quic-idle-timeout` as the
+control — against the failover detection the 30 s default exists to provide
+([T6](../lab/test-6-relay-resilience.md)).
+
+**This narrows a claim the paper was making without evidence.** [Comparison](comparison.md) §2 holds
+that a relay carrying per-subscription state is structurally more exposed than a cache serving
+idempotent GETs. The exposure is real, reachable with the shipped CLI, and **confined to the relay's
+own memory** — not to any other subscriber's stream. It also qualifies this campaign's own "relay
+memory is not an audience term" ([T9](../lab/test-9-performance.md)): that holds for a *steady*
+audience, confirmed here at 1.6 MB per held subscriber, and **the growth term is subscription lifetime
+against churn rate**. The segmented lane's half of this is **not measured**, so no comparison is drawn.
 
 ---
 

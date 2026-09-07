@@ -597,6 +597,16 @@ in it.** *(T9, then T14, then T16 — the same error, three rigs, three times.)*
 > *negative*. The fix that held was to form the ratio from two byte totals over the same media —
 > everything sent, over the payload sent — with no wall clock in it at all.
 
+**A delivered-media span measured as last-PCR-minus-first saturates at one lap of a looping source, so
+a cell longer than the clip reports a shortfall that is arithmetic rather than loss.** *(T25.)*
+
+> The same rig read `keep_up` 1.001 in its 165 s cells and 0.779 in its 765 s ones, against a ~600 s
+> clip on `tsp --infinite`: 596.27 s of span in a 765 s window. Nothing was lost — holes above 100 ms
+> were zero and continuity was clean in both — but 0.779 reads exactly like a receiver falling 22 %
+> behind. *Either keep the cell inside one lap, use
+> [`ts-continuous-source.py`](scripts/ts-continuous-source.py) so the timeline does not rewind, or
+> read the cell on delivered bytes and holes and say why the span figure is void.*
+
 **Estimate a rate as one ratio of two sums, never as the average of per-interval ratios. The two agree
 only when the intervals carry comparable amounts, and on a media-aware lane they never do.** *(T19,
 `mpegts-pacer`.)*
@@ -769,6 +779,27 @@ the recovery point beside the loss.** *(T19 measurement 10.)*
 ---
 
 ## 4. Attribution: naming a mechanism from the evidence
+
+**Before reporting a resource cost, vary the knob the documentation says bounds it.** *(T25.)*
+
+> A subscription storm took relay RSS from 87 MB to 1.9 GB in 60 s, and `moq-relay`'s own config
+> documents the group cache as "unbounded unless `cache.capacity` or `cache.headroom`" — so an
+> unbounded cache was the obvious mechanism, and an upstream report saying so would have been written
+> with a straight face. Setting an explicit 256 MiB cap left the peak *unchanged* at 1,930 MB. The
+> memory was abandoned sessions retained until the QUIC idle timeout, which the cache budget does not
+> cover; cutting that timeout 30 s → 10 s cut growth 4.5×. *The documented bound is the cheapest
+> hypothesis to eliminate and the most embarrassing one to have skipped, because a maintainer will
+> ask whether it was set and the answer has to be a measurement.*
+
+**Where a cost could be concurrency or churn, hold peak concurrency fixed and vary only the
+lifetime.** *(T25.)*
+
+> The same 42 concurrent subscribers cost 1,833 MB when killed and relaunched every 5 s and 65 MB when
+> held for the whole phase. Both cells report "42 concurrent abusers", so any metric keyed on
+> concurrency describes them identically while they differ by 28×. *An abuse arm's headline count is
+> the load it applies at an instant, not the load the component is holding — with a 30 s idle timeout
+> and a 5 s churn period the relay holds seven generations, and the arm's own name understates it by
+> nearly an order of magnitude.*
 
 **A comparison at fixed positions cannot tell reordering from corruption. Compare the two as
 multisets before concluding the content differs.** *(T12 arm D, independent upstream.)*
