@@ -10,14 +10,23 @@
 > conditions is the failure *mode*: the MoQ lane loses content and never integrity — **0 continuity
 > errors in every one of its ~40 cells** — while SRT inverts that and gets worse the better-behaved the
 > network is, reaching 17,652–22,365 errors under an AQM while taking the most bytes of any lane.
-> **C3 is where the media-aware lane loses, and it is now explained.** Sharing a congested bottleneck at
-> a 2 s subscriber budget, MoQ's *aggregate* falls from 9.44 Mb/s at one flow to 4.89 at two and 4.02 at
-> three while SRT's rises to 12.65 and holds — but the collapse is neither the controller (loss-based
-> CUBIC collapses identically to delay-sensing BBRv1) nor bufferbloat (it survives `cake`, which cut RTT
-> from ~550 ms to 100 ms). **It is the subscriber's own release deadline:** widening `--latency-max` from
-> 500 ms to 30 s at `n=2` moves the aggregate 4.29 → 10.35 Mb/s, above the single-flow rate, at 0
-> continuity errors throughout. N subscribers independently shed groups that miss their budget, so the
-> ladder measures a 2-second trunk rather than a ceiling on the transport. **C6 settles
+> **C3 is where the media-aware lane loses, and the mechanism is explained while the magnitudes are
+> not.** Sharing a congested bottleneck, MoQ's *aggregate* falls below what a single flow carried
+> unopposed while SRT's rises and holds — and the collapse is neither the controller (loss-based CUBIC
+> collapses like delay-sensing BBRv1) nor bufferbloat (it survives `cake`, which cut RTT from ~550 ms to
+> 100 ms). **It is the subscriber's own release deadline**, and a budget deep enough removes it
+> entirely, at 0 continuity errors throughout. But **five replicates retire the budget ladder as a set
+> of numbers**: at `n=2` with everything pinned the aggregate spans 5.11–9.14 Mb/s at a 2 s budget and
+> 6.78–8.94 at 500 ms, so the two rungs overlap and the recorded 4.29 → 10.35 ladder is one sample per
+> cell from distributions that wide. The cells where nothing sheds reproduce tightly; no cell where the
+> subscriber is actively shedding reproduces to better than a factor of two.
+> **Re-checking C3 against upstream [#3271](https://github.com/moq-dev/moq/pull/3271) found a
+> regression that matters more than the rate:** graded as an isolating one-file pair, the post-#3271
+> `moq export ts` **exits with `Error: hang: moq error: old` in 6 of 14 contended cells after 54–57 s**,
+> where the pre-#3271 client does so in 0 of 14 — while both are a perfect null uncontended (9.49 Mb/s
+> each). Waiting for a late group inside the budget lets the relay evict the group being waited for, so
+> the change turns a frequent benign eviction into an occasional fatal one, and a degraded subscriber
+> into an absent one. Reported upstream. **C6 settles
 > permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so
 > C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
 > prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap
@@ -557,18 +566,70 @@ discarding individual late packets rather than whole groups, which is what its 2
 continuity errors are. Both lanes shed at the same deadline; one sheds in units a decoder can survive
 and the other in units it cannot.
 
-**What is still open** is why the *marginal* cost is so steep at a short budget — 500 ms costs more than
-half the aggregate — and whether the knee sits at the RTT, at the group duration, or at the relay's own
-buffering. That is a narrower question than the one this cell opened with.
-
-**Two things do not reproduce well, and both bound how hard these numbers can be pushed.** Per-flow shares
+**Three things do not reproduce, and the third retires the ladder above as a quantity.** Per-flow shares
 move freely between runs: SRT's flow 1 was 90 % of source at `n=2` in the first pass and 35 % in the
-second; BBRv1's was 46 % and then 26 %. And the *aggregate* reproduces only to about ±15 %: the two cells
-run at CUBIC `n=2` under `cake` at `--latency-max 2s` — the matrix cell and the sweep's own 2 s point —
-gave **7.17 and 5.50 Mb/s**. So the aggregate is the reproducible *quantity* where the split is not, but a
-single cell is worth roughly one significant figure. The sweep's 2.4× trend is well outside that; a
-one-third difference between FIFO and `cake` at a single N is not, which is why the conclusion above rests
-on the sign and the ladder rather than on any one pair.
+second; BBRv1's was 46 % and then 26 %. The *aggregate* was recorded as reproducing to about ±15 % from
+the two cells run at CUBIC `n=2` under `cake` at `--latency-max 2s` — the matrix cell and the sweep's own
+2 s point — which gave **7.17 and 5.50 Mb/s**. **Five replicates say that spread was optimistic.** At
+`n=2` under `cake`, `--latency-max 2s`, everything pinned, the aggregate ranges **5.11–9.14 Mb/s** across
+five runs of one binary, and at 500 ms it ranges **6.78–8.94**. The 500 ms and 2 s distributions overlap
+almost completely, so **the monotone budget ladder is not recoverable from replicated cells**: its two
+tight-budget rungs are one sample each from distributions this wide, and the sweep's own 500 ms figure of
+4.29 Mb/s falls below everything five replicates produced.
+
+**What survives, and what does not.** The *mechanism* stands — the shed is per-subscriber deadline
+shedding, and the two cells where nothing sheds reproduce tightly (uncontended `n=1` at 9.49 against the
+recorded 9.44; `n=2` at a 30 s budget at 10.01 against 10.35). The **magnitudes do not**: no cell in
+which the subscriber is actively shedding reproduced to better than a factor of two, so the ladder should
+be read as "a deep budget removes the collapse" and never as a rate at a budget. The steepness question
+this section used to leave open is therefore not open but ill-posed: there was no stable marginal cost to
+explain.
+
+#### The re-check against upstream #3271, and the regression it found
+
+[#3271](https://github.com/moq-dev/moq/pull/3271) (merged 1 Sep) rewrote the exact gate this section
+attributes C3 to. Before it, `Consumer::poll_read` skipped a missing lower group as soon as any newer
+group was buffered — the pre-#3271 source says so outright, *"on a live track a buffered higher sequence
+means the missing one was evicted (the relay delivers in order), not merely late, so waiting is
+futile"* — and after it the gap is held until `max_timestamp - next_start >= latency`, i.e. until the
+budget expires. `moq export ts --latency-max` reaches that gate, so C3's mechanism is inside the change.
+
+Graded as the isolating pair `bec7c4b59^` against `bec7c4b59`, which differ by one file and carry the
+rest of the delivery path identically. **Uncontended, it is a perfect null: 9.49 Mb/s on both arms, zero
+evictions on both.** Contended, it does something worse than change a rate.
+
+| | pre (`8206a35a6`) | post (`bec7c4b59`) |
+|---|---:|---:|
+| contended cells run | 14 | 14 |
+| `moq export ts` **exited with `Error: hang: moq error: old`** | **0** | **6** |
+| "current group evicted" warnings per surviving cell | 807–1113 | 11–80 |
+| continuity errors, every cell | 0 | 0 |
+
+**The post-#3271 subscriber dies under sustained contention, in 6 of 14 cells, and the pre-#3271
+subscriber never does** (Fisher exact p ≈ 0.016). Time to death clusters tightly at **54–57 s** of
+delivered programme. The mechanism is in the subscriber's own log: 36 groups are evicted and handled by
+the intended skip path (`current group evicted; skipping to next buffered group error=Hang(Moq(Old))`),
+then all eight track subscriptions are cancelled as idle within 80 ms, then the process exits on the next
+`Old`.
+
+The eviction counts are the tell, and they run the opposite way to intuition. The pre arm evicts groups
+**constantly** — 807 to 1113 per 90 s cell — and never dies, because it has already skipped past
+everything it loses, so eviction is a thing that happens behind it. The post arm evicts *one to two
+orders of magnitude less* and sometimes dies, because it is waiting for a specific group inside its
+budget and the relay can evict that group while it waits. **#3271 converts a frequent benign eviction
+into an occasional fatal one.**
+
+Two things this is *not*. It is not a continuity failure: every cell on both arms records 0 continuity
+errors, so what the delivered bytes carry stays conformant right up to the exit. And it is not visible in
+PCR-derived measures — the exported PCR is a regenerated uniform grid, so the arm delivering 40 % fewer
+bytes reads a *better* `keep_up`, which is the T24 property showing up again and the reason delivered
+programme on this lane needs per-PID access-unit counting rather than PCR.
+
+For primary distribution this matters more than the rate it was looking for: a subscriber that sheds is
+degraded, and a subscriber that exits is off air. It is also a re-opening of the failure class
+[T6](test-6-relay-resilience.md) closed — the exporter used to die on session loss, which was fixed
+upstream as the most consequential resilience gap on this lane, and this is a new route to the same
+outcome.
 
 ### C6 — permanence: the transport passes, and the memory prediction does not
 

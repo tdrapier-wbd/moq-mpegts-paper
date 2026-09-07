@@ -729,7 +729,12 @@ absence of *video* access units through the same importer and it produced no log
 no stats entry, because `Stats` is an audio-frame-sync structure by design. Since the importer already
 parses every elementary stream in order to demux it, it is the one component in the chain that knows a
 track has gone quiet for free — and, unlike a relay forwarding an opaque payload, it is structurally
-able to. Drafted as `docs/upstream/import-track-liveness-issue.local.md`; **not yet filed**.
+able to. **Filed as [#3489](https://github.com/moq-dev/moq/issues/3489)**, scoped as an extension of
+the surface #3372 created — `StreamStats` over every elementary stream plus a last-access-unit
+liveness figure — and explicitly not a behaviour change. Verified before filing that `import.rs` on
+`origin/main` carries no video liveness signal (four `warn!` sites, none of them one) rather than
+inferring it from log silence, and linked to [#1838](https://github.com/moq-dev/moq/issues/1838) as
+the monitoring parent. Open.
 
 The original report, kept because it is what #3372 answered:
 
@@ -990,8 +995,9 @@ halving — 9.85, 4.56, 2.42, 1.75 MB/h. **The convergence is real; the constant
 predicted.** This run passes C6's baseline + 200.5 MB asymptote, reaching baseline + 242.6 MB at 24 h,
 with the log fit extrapolating to ~519 MB at a year — so the answer to the question we asked on #2745 is
 that the soft second term *does* converge, but the budget is about 2.5× the slot arithmetic rather than
-the 2.03× C6 measured. Worth sending as the promised follow-up, with the caveat that an extrapolated
-asymptote is not an observed plateau.
+the 2.03× C6 measured. **Posted as the promised follow-up on #2745** — a data point on a closed
+issue, not a re-open — stating plainly that an extrapolated asymptote is not an observed plateau and
+that both legs are single runs on one topology.
 
 **The same run found something that is not the relay's**, and would have been missed by looking at
 end-point growth alone: over 24 h the relay grew 243 MB and **`moq import ts` grew 137 MB**, so the

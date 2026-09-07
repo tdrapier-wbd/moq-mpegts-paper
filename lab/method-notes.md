@@ -30,6 +30,80 @@ having.
 > before the run: a source that merely looks continuous confounds the experiment it was built to
 > clean up, and does so invisibly.
 
+**A negative control and a broken rig give the same reading, so an adversarial arm has to prove it
+ran before its result means anything.** *(T25.)*
+
+> F11's rig launches its abuser under `setsid` so the whole tree can be killed by process group —
+> necessary, because the storm arm subscribes to the victims' *own* broadcast and a `pkill -f` on the
+> broadcast name cannot tell an abuser from the instrument. But the connection arguments were built
+> as a bash array in the parent and passed into `bash -c` as `CONN='${CONN[*]}'`, where they arrive
+> as a plain string. The abuser then expanded that string as `"${CONN[@]}"`, which yields **one**
+> argument, and every abuser died on a CLI parse error before opening a connection. Their stderr went
+> to `/dev/null`, so the arms ran to completion and reported victims with `keep_up` 1.001 and zero
+> continuity errors.
+>
+> That is the most dangerous failure a rig of this shape can have: **the broken result is
+> indistinguishable from the hoped-for one.** "Perfect isolation under abuse" and "no abuse occurred"
+> are the same row in the CSV. Nothing in the output was false; the run simply measured a control arm
+> wearing the storm arm's name, three times.
+>
+> Two rules follow. First, **the stimulus needs its own liveness assertion, checked as a pass
+> criterion rather than eyeballed** — F11 now samples the abuser's process group every second and
+> refuses the cell outright if the peak concurrent count during the abuse phase is below two, which
+> turns a silent false negative into a failed run. Second, **keep one adversary's stderr.** Silencing
+> every child is what made a CLI parse error invisible; one un-redirected child costs nothing and
+> makes the arm falsifiable. The generalisation beyond this rig: whenever the *expected* result of an
+> arm is "nothing happened", that arm needs independent evidence that it happened at all.
+
+**A before/after across two builds must hold the *instrument* constant, not just the subject — and
+the newest release is usually the wrong "after".** *(T8b, C3's #3271 re-check.)*
+
+> The re-check of C3 against upstream #3271 was first set up from two binaries already on the box,
+> `0.9.11-eab96019` against the `0.9.15` release, because both were to hand and #3271 was in the
+> newer one. That comparison is void. Two weeks of `main` separate the pair, and one of the commits
+> in it is #3006, which paces the TS export on each frame's timestamp instead of draining on
+> arrival. C3's instrument is bytes delivered inside a fixed 90 s window, so #3006 does not merely
+> add a second effect — **it changes what the instrument counts**, and it moves a windowed byte count
+> on its own. The first arm read 6.09 Mb/s against the second's 4.48 and the number meant nothing.
+>
+> The rule: identify the commits between the arms, and ask of each not only "could this affect the
+> subject" but "could this affect the *measurement*". Where the answer to the second is yes, the
+> convenient pair has to be abandoned for the merge-base pair — here `bec7c4b59^` against
+> `bec7c4b59`, which differ by one file and carry #3006 identically on both sides. A build takes
+> twenty minutes; a void A/B costs the conclusion.
+
+**On the media-aware lane, a PCR-derived measure of "how much programme arrived" measures the
+exporter's clock, not the programme.** *(T24, applied in T8b's C3 re-check.)*
+
+> A delivered-programme metric was built for the C3 re-check — media time between the first and last
+> PCR of a capture, over the wall-clock window — on the reasoning that a byte count cannot separate
+> "held the live edge with holes in it" from "clean but falling behind". The metric promptly reported
+> the arm that delivered **40 % fewer bytes** as having *better* programme continuity, which is
+> nonsense until it is read the right way round.
+>
+> `moq export ts` regenerates the PCR as a uniform grid rather than passing the source's through
+> (#2967). The exported PCR therefore advances on the exporter's own clock and carries no information
+> about whether media arrived — which is the same property T24 measured head-on, where 57 s of
+> missing video produced 0 continuity errors and a worst PCR interval identical to the control's.
+>
+> The rule: **on this lane, PCR is an exporter liveness signal and nothing more.** It answers "did
+> the exporter stop", which is worth having and which nothing else in T8b reported. It cannot answer
+> "did the programme arrive"; only per-PID access-unit counting can, which is why T24's grader
+> exists. The trap is that the PCR-based number is the easy one to compute and reads plausibly.
+
+**Do not grade a capture while its writer is still running.** *(T8b, C3's #3271 re-check.)*
+
+> The delivered-programme grader was run across the whole run directory while the sweep's last cell
+> was still capturing. It reported that cell as 65.17 s of programme in a 90 s window — a `keep_up`
+> of 0.724, which for a live feed is a serious finding — and the cell was in fact perfect, reading
+> 90.20 s once its writer exited. The partial file is a truthful measurement of a file that is not
+> finished.
+>
+> The failure mode is specific to the *shape* of the artefact: a partial capture is not corrupt, it
+> is short, so nothing in the grader can detect it and the result looks exactly like a real stall.
+> Either grade inside the rig, after the cell's writer has exited, or check the run is complete
+> before grading. The replicate rig now grades in-script for this reason.
+
 **A control that removes the suspect stage tests the stimulus, not the system, and exonerates
 nothing downstream of what it removed.** *(T21.)*
 
