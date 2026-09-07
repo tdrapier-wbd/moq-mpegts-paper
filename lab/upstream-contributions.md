@@ -932,6 +932,37 @@ supported choice for a permanent fixed-rate trunk, or whether the quinn-BBRv1 in
 under a shaped bottleneck is a fixable bug. **Unanswered, and one under-provisioned condition is not
 enough to press it.**
 
+### The subscriber dies under contention, and the first version of the report was wrong
+
+[**#3491**](https://github.com/moq-dev/moq/issues/3491) — *open, reported 2026-09-07.* `moq export ts`
+exits with `Error: hang: moq error: old` when two subscribers pull separate broadcasts through one
+relay across a shared, under-provisioned bottleneck. On the current released pair (`moq` 0.9.15 /
+`moq-relay` 0.14.14) it takes **6 of 8 cells and 7 of 16 subscribers**; one cell lost both subscribers
+16 s apart. Every graded capture has **0 continuity errors**, so what a downstream monitor sees is a
+perfectly conformant stream that simply stops — a transport-side instance of the silent-failure class
+[T24](test-24-partial-media-plane-stall.md) is about. A *steady* shortfall does not cause it (0 of 12
+single-flow cells at 36 % of the required rate, despite thousands of evictions), so the condition
+appears to be flows competing rather than a flow starved.
+
+The report deliberately does not name a cause, and the reason is a correction. **An earlier draft
+attributed this to [#3271](https://github.com/moq-dev/moq/pull/3271) and was withdrawn before filing.**
+It was built the right way — isolating one-file merge-base pair, single relay binary, interleaved
+replicates — and reported 6 of 14 cells against 0 of 14, p ≈ 0.016, deaths clustered at 54–57 s, with a
+mechanism traced through the client's own log. Two faults made that split:
+
+- **The death detector read one of each cell's two subscriber logs.** Re-reading every log gives 9 of
+  15 against 3 of 15, p ≈ 0.060; all three pre-arm deaths sit in `sub.2.log`. The same re-read finds
+  the exit in a cell recorded months earlier, on a client predating #3271.
+- **The relay was pinned to a July build** while the mechanism runs through relay group eviction. A
+  crossed 20-cell matrix gives 6 of 10 pre against 5 of 10 post — no client-side effect at all — and
+  eviction counts that differ by two orders of magnitude between relay versions without the exit rate
+  following them.
+
+So #3491 reports the reproduction and the crossed matrix, and offers the `poll_read` propagation path
+explicitly as a lead a maintainer may discard. **Nothing about the withdrawn result's shape betrayed
+the error** — it was significant, tightly clustered and mechanically explicable — which is why both
+method rules it produced are recorded in [`method-notes.md`](method-notes.md) §1.
+
 ---
 
 ## 5. Relay memory
@@ -1009,9 +1040,20 @@ whole day is 9.2 MB — so it ratchets rather than caching. At +2.83 MB/h that i
 For a lane whose entire case is permanent primary distribution, the publisher is the process that is
 never supposed to restart, and restarting it is a timeline event this campaign has priced. **No
 upstream issue describes publisher RSS growth over long runs** — #2745 and #3128 are both the relay.
-Drafted as `docs/upstream/import-memory-growth-issue.local.md` and **deliberately held**: the soak
-sampled RSS by command-line signature, which for the publisher also matched its wrapper shell, and a
-per-PID re-run is what turns the conclusion from an argument into a measurement.
+
+[**#3493**](https://github.com/moq-dev/moq/issues/3493) — *open, reported 2026-09-07.* The report was
+**deliberately held** until it could be attributed per process: the soak sampled RSS by command-line
+signature, which for the publisher also matched its wrapper shell, and a shell not growing 137 MB is an
+argument rather than a measurement. A 6 h re-run of the same lane on the same build, sampling each PID
+separately, puts the growth at **+2.91 MB/h in `moq import ts` itself** against the signature's +2.83,
+with the largest half-hour increment 17 % of total growth — a ramp, not a jump. The issue carries the
+quarterly slopes, the three competing fits, the per-PID confirmation, and two caveats the short run
+raised on its own: the exporter stepped +14.5 MB once at 5 h rather than converging smoothly, and 6 h
+cannot read the relay's shape at all. Both are stated so a maintainer re-running sees what we saw.
+
+**The held-then-confirmed sequence is the point.** The figure moved by 0.08 MB/h between the argued
+and the measured version, so the delay changed nothing about the conclusion — and it is the only reason
+the report can say "per process" at all, which is the first thing a maintainer would have asked.
 
 ---
 

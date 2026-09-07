@@ -206,7 +206,8 @@ lane's half of F3 is unrun and stays unrun while that lane lacks a byte-faithful
 residue).
 
 **P0-6. `moq import ts` leaks memory linearly, and it is the only thing now standing between this lane
-and a permanence claim.** *Upstream's; found by the 24 h soak; not yet reported.*
+and a permanence claim.** *Upstream's; found by the 24 h soak; confirmed per process and reported as
+[#3493](https://github.com/moq-dev/moq/issues/3493).*
 **Falsifies:** F2, on the criterion fixed before the run — *any series still rising at a rate that
 would exhaust the host inside a year is a fail*.
 
@@ -217,6 +218,12 @@ ratchets rather than caching. That is ~24 GB in a year and exhaustion of a 15.3 
 and a half months. Every other role in the lane passes: the groomer is flat, the exporter converged and
 turned over, and the relay is logarithmic.
 
+**Confirmed per process at 6 h on the same build: +2.91 MB/h for `moq import ts` alone**, largest
+half-hour increment 17 % of total growth, so a ramp rather than a step. The shorter run also flags two
+things it is *not* long enough to settle — the exporter took a one-off +14.5 MB step at 5 h rather than
+converging smoothly, and the relay's shape cannot be read at 6 h at all. Detail in
+[T21](test-21-permanence-soak.md).
+
 **Why it is P0 rather than a defect report.** This lane's entire case is permanent primary
 distribution. A publisher that has to be restarted twice a year to reclaim memory is a scheduled
 outage on the one path that is not supposed to have one, and restarting the publisher is exactly the
@@ -224,16 +231,16 @@ event [T23](test-23-pcr-discontinuity-classes.md) prices at its own duration in 
 
 **Sequence, and step 1 is not optional.**
 
-1. **Attribute it per process.** The soak sampled RSS by `pgrep -f` on a signature, and the
-   publisher's signature matches its wrapper shell as well as `moq import ts`. A shell does not grow
-   137 MB, but that is an argument and an upstream report needs a measurement.
-   `lab/scripts/t21-role-memory.sh` re-runs the same lane for 6 h sampling each PID separately and
-   labelled, which also gives the relay's logarithm a second independent read. **Running.**
-2. **Then report upstream**, with the quarterly slopes and the three competing fits, because "it grows"
-   is not actionable and "it grows linearly with the slope intact over 24 h" is. No existing issue
-   describes publisher RSS growth over long runs; the nearest is
-   [#2745](https://github.com/moq-dev/moq/issues/2745), which is the relay's ~9 KiB per ingested group
-   and closed.
+1. ~~Attribute it per process.~~ **Done.** The soak sampled RSS by `pgrep -f` on a signature, and the
+   publisher's signature matches its wrapper shell as well as `moq import ts` — an argument, where an
+   upstream report needs a measurement. `lab/scripts/t21-role-memory.sh` re-ran the same lane for 6 h
+   sampling each PID separately and labelled: **+2.91 MB/h against the signature's +2.83**, so the
+   growth is in the publisher process.
+2. ~~Report upstream.~~ **Filed as [#3493](https://github.com/moq-dev/moq/issues/3493)**, with the
+   quarterly slopes, the three competing fits and the per-PID confirmation, because "it grows" is not
+   actionable and "it grows linearly with the slope intact over 24 h, per process" is. No existing
+   issue describes publisher RSS growth over long runs; the nearest is
+   [#2745](https://github.com/moq-dev/moq/issues/2745), the relay's ~9 KiB per ingested group, closed.
 3. **Then re-soak** once a fix lands. The 7-day arm is worth more after this than before it: at
    +2.83 MB/h a week is 476 MB, which is measurable but is not the question — whether the slope
    *survives* a fix is.
@@ -280,11 +287,11 @@ client arms is real (hundreds-to-thousands per cell pre, single-to-tens post) an
 
    6 of 10 pre against 5 of 10 post — no client-side effect — and 7 of 10 on the new relay against
    4 of 10 on the old, which at n=10 per arm is not a relay effect either (p ≈ 0.37).
-2. **Report the reproduction, rather than waiting on a cause.** A maintainer can act on "it dies here,
-   on your current build, and here is the rig"; nobody can act on a mechanism we guessed. Drafted as
-   `docs/upstream/export-ts-contention-exit-issue.local.md` — framed on the rig and the crossed matrix,
-   with the propagation path offered explicitly as a lead a maintainer may discard. **Awaiting approval
-   to file.**
+2. ~~Report the reproduction, rather than waiting on a cause.~~ **Filed as
+   [#3491](https://github.com/moq-dev/moq/issues/3491).** Framed on the rig and the crossed matrix,
+   with the propagation path offered explicitly as a lead a maintainer may discard — a maintainer can
+   act on "it dies here, on your current build, and here is the rig"; nobody can act on a mechanism we
+   guessed.
 3. **Instrument the propagation path** if upstream does not get there first. The candidate is
    `poll_read`'s error arm, where an error is propagated unless `poll_aborted` reports the group's
    stream already terminal; if a read can surface `Old` before `poll_finished` resolves, a transport

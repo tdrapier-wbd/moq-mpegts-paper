@@ -23,6 +23,18 @@ The second half of the run is fitted separately and reported as `tail MB/h`,
 because that, not the whole-run slope, is what a provisioning budget needs: a
 converging series has a tail slope well below its overall slope, and a leak does
 not.
+
+*   **A step is separated from a ramp before either verdict is believed.** This
+    is not hypothetical: on the 6 h per-PID run `moq export ts` sat between 119
+    and 122 MB from 0.5 h to 4.5 h, jumped **+14.5 MB inside one half-hour**, and
+    then went flat again. Linear-against-log called that a leak, because a late
+    step fits a line better than it fits a logarithm — the discrimination the
+    module was written around is simply blind to it. So the largest half-hour
+    increment is reported next to the slope, and where one interval carries more
+    than `--step-share` of total growth the shape is named `step` and the slope
+    is flagged as not describing the series. A one-off reallocation and a leak
+    have completely different operational consequences, and a slope averages
+    them into the same number.
 """
 
 import argparse
@@ -56,6 +68,27 @@ def fit(xs, ys):
     return b, a, (1 - rs / ss) if ss else 0.0
 
 
+def biggest_step(pts, bucket_h=0.5):
+    """Largest jump between consecutive bucket means, and total growth.
+
+    Returns (jump_mb, at_hour, growth_mb). Bucketing rather than raw
+    sample-to-sample differencing, because RSS is sampled per second and a
+    single-sample spike is noise where a sustained half-hour shift is not.
+    """
+    buckets = {}
+    for h, mb in pts:
+        buckets.setdefault(int(h / bucket_h), []).append(mb)
+    keys = sorted(buckets)
+    means = [(k * bucket_h, sum(buckets[k]) / len(buckets[k])) for k in keys]
+    if len(means) < 3:
+        return 0.0, 0.0, 0.0
+    jump, at = 0.0, 0.0
+    for (_, a), (hb, b) in zip(means, means[1:]):
+        if b - a > jump:
+            jump, at = b - a, hb
+    return jump, at, means[-1][1] - means[0][1]
+
+
 def series(rows, col, settle):
     """(hours, MB) pairs for one column, past the settle point, blanks dropped."""
     out = []
@@ -86,6 +119,8 @@ def main():
                     help="seconds of start-up transient to discard (default 1200)")
     ap.add_argument("--margin", type=float, default=0.05,
                     help="r2 difference below which the shape is called ambiguous")
+    ap.add_argument("--step-share", type=float, default=0.5,
+                    help="share of total growth in one half-hour that makes it a step")
     args = ap.parse_args()
 
     with open(args.csv) as fh:
@@ -97,7 +132,8 @@ def main():
     print(f"{args.csv}: {len(rows)} samples, {span:.2f} h, "
           f"settle={args.settle:.0f}s")
     hdr = (f"{'role':8s} {'n':>5s} {'first':>8s} {'last':>8s} {'delta':>8s} "
-           f"{'MB/h':>8s} {'tail':>8s} {'r2lin':>6s} {'r2log':>6s}  shape")
+           f"{'MB/h':>8s} {'tail':>8s} {'step':>7s} {'r2lin':>6s} {'r2log':>6s}"
+           f"  shape")
     print(hdr)
     print("-" * len(hdr))
 
@@ -117,7 +153,13 @@ def main():
         half = len(pts) // 2
         tail, _, _ = fit(xs[half:], ys[half:])
 
-        if r2lin > r2log + args.margin:
+        jump, at, growth = biggest_step(pts)
+
+        # A step is checked first, because it makes the slope meaningless
+        # rather than merely uncertain.
+        if growth > 1.0 and jump > args.step_share * growth:
+            shape = f"STEP +{jump:.1f} MB at {at:.1f}h — slope not meaningful"
+        elif r2lin > r2log + args.margin:
             shape = "LINEAR — leak"
         elif r2log > r2lin + args.margin:
             shape = "log — cache/converging"
@@ -125,7 +167,7 @@ def main():
             shape = "ambiguous, run longer"
         print(f"{name:8s} {len(pts):5d} {ys[0]:8.1f} {ys[-1]:8.1f} "
               f"{ys[-1] - ys[0]:+8.1f} {slope:+8.2f} {tail:+8.2f} "
-              f"{r2lin:6.3f} {r2log:6.3f}  {shape}")
+              f"{jump:+7.1f} {r2lin:6.3f} {r2log:6.3f}  {shape}")
 
     last = rows[-1]
     extras = [k for k in ("alive", "pkts", "cc", "relay_thr", "import_thr",

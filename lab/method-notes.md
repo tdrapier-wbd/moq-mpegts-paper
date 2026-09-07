@@ -72,6 +72,29 @@ the newest release is usually the wrong "after".** *(T8b, C3's #3271 re-check.)*
 > `bec7c4b59`, which differ by one file and carry #3006 identically on both sides. A build takes
 > twenty minutes; a void A/B costs the conclusion.
 
+**Fitting the two shapes you expect cannot see a third, and a step masquerades as the leak you were
+looking for.** *(T21, the 6 h per-PID run.)*
+
+> `t21-role-fit.py` was written around the previous lesson — a leak and a warming cache both rise, so
+> fit a line and a logarithm and compare r². It works, and on the 6 h per-PID run it reported
+> `moq export ts` as **"LINEAR — leak"** at +2.73 MB/h with an accelerating +7.50 MB/h tail. The
+> series is nothing of the kind: 119 to 122 MB from 0.5 h to 4.5 h, a **+14.5 MB jump inside one
+> half-hour**, then flat again. A late step fits a line better than it fits a logarithm, so a
+> two-shape discrimination is guaranteed to call it the wrong thing rather than admit it cannot tell.
+>
+> The failure is not the fit, it is the **closed hypothesis set**. Both candidate shapes were
+> monotone-smooth, so no residual could ever say "this is neither" — and because the tool was built to
+> be the careful instrument, its verdict carried more authority than an eyeballed curve would have.
+> The half-hour bucket means, plotted for two minutes, made it obvious.
+>
+> The rule is to **report a shape-independent statistic beside the fitted one** and let it contradict
+> the fit. Here that is the largest single-interval increment as a share of total growth: the exporter
+> put 68 % of its growth into one half-hour and the publisher 17 %, which separates a step from a ramp
+> without reference to either model. The tool now names `step` first and says the slope is not
+> meaningful, because a one-off reallocation and a leak have entirely different operational
+> consequences and a slope averages them into the same number. **Where a verdict is a choice between
+> models, print the evidence that no model was right.**
+
 **A per-cell verdict must be derived from every instance of the thing it is about, or the rig will
 quietly report the state of instance one as the state of the cell.** *(T8b, C3's #3271 re-check.)*
 

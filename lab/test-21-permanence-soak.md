@@ -496,19 +496,44 @@ F2's criterion was fixed before the run — *any series still rising at a rate t
 host inside a year is a fail* — and this trips it. **F2 therefore passes on the media plane and fails
 on resources, in the publisher only.**
 
-The attribution needs one qualification, which is why a follow-up run is recorded below rather than an
-upstream report being filed straight off this data. The soak sampled RSS by `pgrep -f` on a
+The attribution rested on one qualification, now discharged. The soak sampled RSS by `pgrep -f` on a
 *signature*, and the publisher's signature matches its wrapper shell as well as `moq import ts`,
-because the wrapper's argv contains the whole pipeline text. A shell does not grow 137 MB, so the
-growth is not the wrapper's — but that is an argument rather than a measurement, and a defect reported
-upstream should rest on the latter.
+because the wrapper's argv contains the whole pipeline text — an argument rather than a measurement,
+and a defect reported upstream should rest on the latter.
+
+**Per-PID confirmation, 6 h on the same build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
+`lab/scripts/t21-role-memory.sh`, graded by `lab/scripts/t21-role-fit.py`), 157 M packets at 0
+continuity errors:
+
+| role | RSS start → end | MB/h | tail MB/h | largest ½ h step | shape |
+|---|---|---:|---:|---:|---|
+| `moq import ts` | 104.0 → 121.7 MB | **+2.91** | +3.55 | +3.0 | **linear — leak** |
+| `moq-relay` | 116.4 → 131.1 MB | +2.23 | +2.72 | +2.3 | no discrimination at 6 h |
+| `moq export ts` | 117.6 → 138.8 MB | +2.73 | +7.50 | **+14.5** | **step at 5.0 h, not a slope** |
+| groomer / source / `tsp` | — | +0.00 | +0.00 | +0.0 | flat to two decimals |
+
+**The publisher result holds and the figure barely moves**: +2.91 MB/h per process against +2.83 MB/h
+from the signature, with the largest half-hour increment only 17 % of total growth, so it is a ramp
+rather than a jump. That is what [#3493](https://github.com/moq-dev/moq/issues/3493) reports.
+
+**Two things the shorter run says that the 24 h run does not, both recorded rather than resolved.** The
+exporter here is *not* the smooth convergence the 24 h table shows: it sat between 119 and 122 MB from
+0.5 h to 4.5 h and then stepped +14.5 MB inside one half-hour. And 6 h is too short to read the relay's
+shape at all — its tail slope slightly *exceeds* its overall slope and the two fits do not separate
+(r² 0.538 linear against 0.492 log), where 24 h separated them cleanly. Neither disturbs the publisher
+conclusion; both are stated so a re-run is not surprised.
 
 ## Open
 
-**The publisher's memory slope, per process.** `lab/scripts/t21-role-memory.sh` re-runs the same lane
-for 6 h sampling each PID separately and labelled, which both isolates `moq import ts` from its wrapper
-and gives the relay's logarithm a second, independent read. Nothing upstream is reported until it
-lands. No issue upstream describes publisher RSS growth over long runs, so this is new if it holds.
+**Whether the relay actually converges.** The 24 h run says logarithmic at R²=0.9895; the 6 h per-PID
+run cannot separate a line from a logarithm and has a tail slope slightly above its overall slope.
+Six hours is the wrong instrument for that question, so this is not a contradiction — but it does mean
+the relay's convergence rests on a single run, and the next long soak should read it per PID.
+
+**Whether the exporter's +14.5 MB step recurs, and what it is.** One step in one 6 h run, absent from
+24 h of signature-sampled data, is an observation and not a defect. It is worth knowing whether it is
+periodic (a reallocation on some cadence) or a one-off, because the 24 h reading of "converged and
+turned over" would not survive it happening every five hours.
 
 **The groomer's thread count on a 2-vCPU host.** 10 → 74 in the first run, not reproduced on 8 vCPU
 (13 → 15). A small-host question, unexplained.
