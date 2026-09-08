@@ -599,7 +599,7 @@ The earlier draft, written from T21's looping stimulus, claimed the exporter lat
 a counter permanently. No arm of T23 reproduces that, and the draft was retired rather than filed. See
 [method notes](method-notes.md) §6.
 
-### #3375 regressed the complement: a *non*-rewinding source now stalls video and primary audio
+### #3375 regressed the complement: a *non*-rewinding source now stalls video and primary audio — reported as [#3533](https://github.com/moq-dev/moq/issues/3533)
 
 **This is the campaign's own fix, and it traded one failure for its opposite.** #3375 was written
 because of the T23 measurements above, and against its target case it works — that is measured below,
@@ -649,9 +649,13 @@ should be immune — and a video-only source is clean on both builds across five
 1.88–2.02 Mb/s). What is *not* established is which comparison in the audio path yields
 `backwards = true` on a source with 0 backward PCR steps; the report says so rather than guessing.
 
-**Ready to file, not yet filed** — the draft is at
-`docs/upstream/3375-continuous-source-regression.local.md` and awaits a decision to post it. The
-reproducer is a ~30 s clip replayed on a continuous timeline, failing within one join.
+**Filed as [#3533](https://github.com/moq-dev/moq/issues/3533)**, carrying the bisect, the
+paired-replicate confirmation against the parent, the two-source contrast, the named code path, the
+video-only bystander control and the permanence figure. The reproducer is a ~30 s clip replayed on a
+continuous timeline, which fails within one join. What the report explicitly does **not** claim is
+which comparison in the audio path yields `backwards = true` on a source with 0 backward PCR steps —
+that is left to the maintainer rather than guessed at, which is the lesson of the retired draft above.
+**Open upstream; no response yet.**
 
 ---
 

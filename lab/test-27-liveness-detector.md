@@ -5,7 +5,7 @@ a fault-injection arm against the detector itself — and one fixed-N soak in wh
 a client-side defect, now bisected to a single upstream commit:
 [#3375](https://github.com/moq-dev/moq/pull/3375), the rewind fix this campaign's own T23
 measurements motivated, stalls video and primary audio permanently on a source that does *not*
-rewind. Ready to report upstream.**
+rewind. Reported as [#3533](https://github.com/moq-dev/moq/issues/3533).**
 
 [T24](test-24-partial-media-plane-stall.md) concluded that per-PID access-unit liveness was the only
 detector that caught every partial media-plane failure, and reached that conclusion with an offline
