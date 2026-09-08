@@ -189,6 +189,29 @@ transient, not a walk, and the method lesson is that **a monotone series over ni
 evidence of a monotone series** — the run has to outlast the transient before its direction means
 anything.
 
+**P0-3c. Does a real encoder feed arm the #3375 fence? — the one question that sets the severity of
+the campaign's largest open defect. NOT STARTED, and it needs a live sender.**
+**Falsifies:** either the claim that the #3375 regression is a lab artefact, or the claim that current
+`main` can carry a real feed at all.
+
+[T27](test-27-liveness-detector.md) has the fence bisected, confirmed against its parent and named in
+the code: one track presenting a backwards step on its own timeline fences every other track
+permanently. The reproducer supplies that step by replaying a clip, so its join is a hard cut at a
+*repeat* point. **A never-repeating feed may or may not ever produce the same step, and everything
+about how much this matters turns on which.** If it does, current upstream `main` cannot carry a
+multi-track service past its first audio resync; if it does not, the defect is real but reachable only
+from looped sources and the paper should say so plainly.
+
+The obvious rig is the one already built — subscribe to a live SRT-fed broadcast on both sides of the
+merge at once, with a per-PID liveness detector on each, and wait. **It was attempted and could not
+run: the rig's live ingress had no sender attached**, so both subscribers took the catalog and no
+media. This needs either a restored contribution feed or a stimulus that produces a per-track
+backwards step without a content repeat — a genuine programme junction between two different sources
+on one continuous timeline is the cheaper substitute, and is not the same test.
+
+Until it is answered, treat the pre-#3375 build as the only one demonstrated to carry a continuous
+multi-track source, and note that no build carries both that and a true rewind.
+
 **P0-4. ~~Silent media-plane failure — detection.~~ Done for the MoQ lane —
 [T22](test-22-silent-media-plane-failure.md).** It confirmed the property it was aimed at and bounded
 it: **the transport never detects a stalled source** (120 s frozen, zero non-benign log lines across

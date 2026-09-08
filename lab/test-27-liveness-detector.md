@@ -343,6 +343,28 @@ Neither build carries both. Pre-#3375 a rewinding source costs everything; post-
 distribution the second is the worse trade, because a continuous timeline with content joins is what
 a real encoder emits and a rewind is not.
 
+### How much this matters, stated as an open question rather than answered
+
+The reproducer replays a clip, so its join is a **hard cut at a repeat point**. That is ordinary in
+broadcast — it is what a splice looks like — but it is manufactured, and the fence needs *one track*
+to present a backwards step on its own timeline. **Whether a never-repeating encoder feed ever
+produces that step is the question that sets the severity, and it is not answered here.** The attempt
+is recorded because the negative matters: the rig's live SRT-fed broadcast was subscribed on both
+builds simultaneously, and the feed had no sender attached — both subscribers received the catalog and
+no media tracks, so the run measures nothing. The other standing publisher is fed by `tsp --infinite`,
+which is a *true* rewind and therefore the case #3375 fixes.
+
+What can be said about the blast radius from what is measured:
+
+- **A fresh subscriber is unaffected.** One joined the same broadcast while 60 incumbents were stuck
+  and was served perfectly. So the fence is per-exporter state, and a restart clears it — which makes
+  this survivable by supervision, at the cost of every downstream buffer the restart drains.
+- **A fenced track cannot re-join while the source stays continuous**, by construction: re-admission
+  requires a frame that steps *backwards* on that track's own timeline, and a continuous source never
+  provides one. There is no self-healing path that does not involve the source misbehaving.
+- **The single-track case is immune** and the video-only control confirms it, so a video-only
+  contribution feed is not exposed.
+
 ### The code path, and why only some PIDs die
 
 The fence is readable in the diff, and one prediction from it was tested rather than asserted.
