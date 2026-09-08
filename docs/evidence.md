@@ -1763,7 +1763,10 @@ generated inside the recovery path rather than delivered to it. **The code path 
 discontinuity counter and step backwards on that track's own timeline, and `rewind()` leaves every
 track with a timeline behind on a backwards boundary — so one track's backwards step fences the
 others permanently. A prediction from that reading was tested: a **video-only** source is clean on
-both builds across five joins, because the fence needs a bystander. P1, client-side, `[unmerged fix
+both builds across five joins, because the fence needs a bystander. **The stall is permanent, not
+slow recovery**: over 40 minutes and ~80 further joins the fenced subscriber's maximum sample is
+exactly 0.31 Mb/s across 235 samples, against 9.52 Mb/s mean for the parent on the same publisher and
+relay. P1, client-side, `[unmerged fix
 absent — regression present in merged `main`]`. **Not a relay or carriage property**: the relay served
 a freshly joining subscriber perfectly (8.9 Mb/s) while 60 incumbents were stuck, at 0.54 of 2 cores.
 Ready to report upstream; see [T27](../lab/test-27-liveness-detector.md) and

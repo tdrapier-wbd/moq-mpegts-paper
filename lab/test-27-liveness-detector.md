@@ -361,7 +361,11 @@ What can be said about the blast radius from what is measured:
   this survivable by supervision, at the cost of every downstream buffer the restart drains.
 - **A fenced track cannot re-join while the source stays continuous**, by construction: re-admission
   requires a frame that steps *backwards* on that track's own timeline, and a continuous source never
-  provides one. There is no self-healing path that does not involve the source misbehaving.
+  provides one. There is no self-healing path that does not involve the source misbehaving. **Measured
+  rather than left as a reading of the code**: 40 minutes and roughly 80 further joins, 235 samples
+  after the first one, and the fenced subscriber's **maximum** is *exactly* 0.31 Mb/s — not one sample
+  of partial recovery — while the parent build on the same publisher and relay averages 9.52 Mb/s
+  (minimum 8.38). Further joins neither heal it nor make it worse.
 - **The single-track case is immune** and the video-only control confirms it, so a video-only
   contribution feed is not exposed.
 
