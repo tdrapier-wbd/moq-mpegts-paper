@@ -317,12 +317,18 @@ sessions.** The single largest comparative gap. Infrastructure failures have bee
 and reported as recovery *times*; what a distributor buys is programme continuity, and the two are not
 the same number. Specified as [F4](#f4-failure-injection-and-recovery).
 
-**P1-2. The scaling model, both lanes.** Not a maximum observed once. For MoQ the fan-out knee on
-record is the *host's*, because every relay cost figure was measured with subscribers co-resident with
-the relay and they cost more CPU than the relay serving them; drive them from the 8-vCPU box and the
-knee becomes the relay's. For segmented HTTP the question is the split between origin and cache as
-client count rises, which one nginx with `proxy_cache` in front of it indicates and does not establish.
-Removes a caveat from a load-bearing number in [`economics.md`](../docs/economics.md). Specified as
+**P1-2. The scaling model, both lanes. *The MoQ half is complete; the segmented half is not started.***
+Not a maximum observed once. For MoQ the knee on record was the *host's*, and driving the subscribers
+from the 8-vCPU box has now made it the relay's: **0.806 % of a core, 1.39 MB and one full stream copy
+per subscriber, all linear, giving 124–139 subscribers per core**, tested by pinning the relay to one
+core and hitting the predicted cliff at 99.9 % of it
+([T26](test-26-cross-host-fanout.md)). Saturation collapses rather than degrades, and one GSO flag
+moves the ceiling by half. The caveat is removed from
+[`economics.md`](../docs/economics.md) §4.5, which now carries the measured per-subscriber egress.
+**What remains for MoQ** is a wide-area path (this is two AZs in one region at 0.72 ms RTT), channel-count scaling
+as distinct from audience scaling, and high fan-out held longer than 45 s. For segmented HTTP the
+question is the split between origin and cache as client count rises, which one nginx with
+`proxy_cache` in front of it indicates and does not establish. Specified as
 [F5](#f5-the-scaling-model).
 
 **P1-3. A capped-stream relay-memory arm.** *Only time on the rig that exists.* C6 converged
@@ -670,6 +676,15 @@ than assumed.
   and a single grader applying one media-domain metric across all of it.
 
 ### F5. The scaling model
+
+> **The MoQ half is complete — see [T26](test-26-cross-host-fanout.md).** Relay cost is linear on
+> every axis at 0.806 % of a core, 1.39 MB and one full stream copy per subscriber, binding on relay
+> CPU at 124–139 subscribers per core, with the NIC's own allowance counters at zero throughout and
+> the prediction confirmed by pinning the relay to a single core. **R2 is therefore partly answered
+> and partly falsified**: the relay's *state* cost is nearly free, its *bandwidth* cost is N full
+> copies, so "near-zero marginal cost" is only true of the thing the relay shares. The segmented half
+> below is not started, and the MoQ residue is a wide-area path, channel-count scaling and high
+> fan-out held longer than 45 s.
 
 - **Question.** What is the shape of the cost curve as receivers increase, and where does each lane
   place the load?

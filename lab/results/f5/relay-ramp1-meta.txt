@@ -1,0 +1,5 @@
+label=ramp1 rate=11000000 total=1800 nic=ens5 port=4443 bcast=f5.fanout.hang
+relay=moq-relay 0.14.15 relay_pid=180266
+host=ip-10-0-0-77 cores=2 started=2026-09-08T10:11:07+0000
+publisher=remote (on the subscriber host) role=relay-only
+standing_box_busy_pct_before_subscribers=13.0

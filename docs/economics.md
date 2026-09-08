@@ -316,7 +316,11 @@ costs.**
 MoQ's 1:N amplification is the advantage usually cited first, so it deserves an honest accounting:
 **it does not reduce last-mile egress.** Delivering to N receivers outside the cloud costs N copies
 of internet egress whether or not the protocol has a native relay, because the expensive hop is the
-one leaving the cloud.
+one leaving the cloud. This is now measured rather than reasoned: a relay serving 150 remote
+subscribers emits **9.84 Mb/s per subscriber, a full copy each**, with delivery flat within 1.5 % of
+what a single subscriber gets ([Evidence](evidence.md) §3.6). What the relay makes nearly free is
+*state*, not bandwidth — 1.39 MB and 0.806 % of a core per subscriber — so a capacity plan for the
+relay tier is a core count, and the egress bill is unchanged by the choice of protocol.
 
 What a relay removes is duplicated *upstream* carriage. For the eight-service redundant multiplex
 backhauled between continents, a regional relay collapses N copies of backhaul into one, holding it

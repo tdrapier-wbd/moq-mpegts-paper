@@ -1,0 +1,10 @@
+* count: 2026/09/08 10:42:44.724, counted: 400,000 packets, 10,673,290 b/s, total: 400,000 packets, 10,673,290 b/s
+* count: 2026/09/08 10:43:47.762, counted: 800,000 packets, 9,543,601 b/s, total: 800,000 packets, 9,543,601 b/s
+* count: 2026/09/08 10:44:51.411, counted: 1,200,000 packets, 9,451,837 b/s, total: 1,200,000 packets, 9,451,837 b/s
+* count: 2026/09/08 10:45:54.515, counted: 1,600,000 packets, 9,533,469 b/s, total: 1,600,000 packets, 9,533,469 b/s
+* count: 2026/09/08 10:46:58.250, counted: 2,000,000 packets, 9,439,232 b/s, total: 2,000,000 packets, 9,439,232 b/s
+* count: 2026/09/08 10:48:01.613, counted: 2,400,000 packets, 9,494,500 b/s, total: 2,400,000 packets, 9,494,500 b/s
+* count: 2026/09/08 10:49:05.652, counted: 2,800,000 packets, 9,394,275 b/s, total: 2,800,000 packets, 9,394,275 b/s
+* count: 2026/09/08 10:51:10.922, counted: 3,200,000 packets, 4,802,427 b/s, total: 3,200,000 packets, 4,802,427 b/s
+* count: total: counted 3,209,977 packets out of 3,209,977
+* tsp: user interrupt, terminating...

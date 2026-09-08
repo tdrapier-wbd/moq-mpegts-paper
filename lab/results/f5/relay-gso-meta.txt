@@ -1,0 +1,6 @@
+label=gso rate=11000000 total=1800 nic=ens5 port=4443 bcast=f5.fanout.hang
+relay=moq-relay 0.14.15 relay_pid=209166
+host=ip-10-0-0-77 cores=2 started=2026-09-08T10:26:12+0000
+publisher=remote (on the subscriber host) role=relay-only
+server_quic_gso=true
+standing_box_busy_pct_before_subscribers=12.8

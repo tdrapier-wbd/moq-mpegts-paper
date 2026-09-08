@@ -120,7 +120,7 @@ every "not established" entry recurs in §4 or §5.
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **It also holds over a day**: 24.01 h on a continuous timeline delivers 632,199,204 packets and 5,947,298 PCRs with 0 continuity errors, 0 intervals above 40 ms, 0 underruns, 0 respawns and a 27 ms worst programme gap, crossing the 33-bit rollover in flight at 19.4 h ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; anything beyond a day, or on a real encoder's timeline rather than a synthetic clock over a repeating clip | §3.2 |
 | **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them**: the reordering separation that used to do so was a packet-size artefact, and on HTTP/3 the two lanes overlap (§3.3). Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable** — what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline: not the controller, not bufferbloat | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
-| **Cost** | Wire multipliers on a real path; relay CPU and memory envelope | The opaque lane's wire cost; a second source profile | §3.5, §3.6 |
+| **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core — tested by pinning the relay to one core and hitting the predicted cliff at 99.9 % of it, with the NIC's allowance counters at zero throughout. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; channel-count scaling; high fan-out held for longer than 45 s | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention**, not cached payload (a 256 MiB cache cap changes nothing) and not concurrency (the same 42 held cost 144 MB). Tunable: 30 s → 10 s idle timeout takes it to 489 MB | The segmented lane's half of the same experiment, so no comparison; anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
 | **Latency** | Delivery latency on all four planes, loopback and public internet, each graded against the conformance of the same bytes. **MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path | §3.11 |
@@ -1264,14 +1264,40 @@ times the CPU. Cost per Mbps therefore *falls* as bitrate rises, and one core ca
 gigabit — about 110–120 sessions at 10 Mbps. Count sessions rather than gigabits, and note that
 contribution-grade high-bitrate feeds are the *cheapest per Mbps* to relay.
 
-**The fan-out limit measured was the host, not the relay.** Per-subscriber egress held between 9.49
-and 9.65 Mbps to **N = 55 and 527 Mbps aggregate**, then collapsed at N = 70. CPU attribution shows
-why: co-located subscriber processes cost ~2.4× the relay's own CPU, so the 2-vCPU box hit 94 % of
-both cores at N = 55. The relay was using under half of one core to deliver 527 Mbps. **N = 55 is the
-usable envelope this rig measured; the higher fan-out points measure the box.**
+**The fan-out limit is the relay's CPU, and it arrives where a linear model says it will.** Measured
+cross-host, with the relay alone on one instance and the publisher and every subscriber on another
+([T26](../lab/test-26-cross-host-fanout.md), P0/P1) — because the earlier N = 55 knee was the *test
+box*: co-located subscribers cost ~2.4× the relay's own CPU, so a 2-vCPU host hit 94 % of both cores
+while the relay used under half of one. Moved off the box, the same relay class carries **150
+subscribers at 1,426 Mb/s aggregate** with per-subscriber delivery flat within 1.5 %, and the cost per
+additional subscriber is linear on every axis:
 
-**Host configuration outweighs anything else measured** — the same relay version cost ~6× more CPU
-per Mbps on macOS loopback with UDP GSO disabled than on Linux with it enabled.
+| Per additional subscriber | Cost | Fit |
+|---|---|---|
+| Relay CPU | **0.806 % of a core** | linear, r² = 0.998 |
+| Relay RSS | **1.39 MB** | linear, r² = 0.9997 |
+| Relay egress | **9.84 Mb/s — one full copy** | linear, r² = 0.9996 |
+
+That slope gives **124–139 subscribers per core**, or ~1.2–1.34 Gb/s of egress per core at this
+bitrate — and it was *tested* rather than extrapolated: pinning the relay to a single core moved the
+collapse to exactly the predicted point, at 99.9 % of that core, with its host only 61 % busy. The
+attribution is closed from the other side too, since EC2's four interface allowance counters stayed at
+**zero** throughout and the subscriber host was at 39–65 % busy at every cliff. **Nothing here is
+superlinear**, and neither descriptors nor threads move at all across a 200× fan-out (11 and 3),
+because every QUIC connection shares one UDP socket.
+
+**Saturation is a collapse, not a graceful degradation.** Past the cliff aggregate throughput *falls* —
+1,184 → 528 Mb/s, and 964 → 46 Mb/s in a second arm — while relay CPU stays pinned at its limit and
+relay RSS jumps 2.5× as queues back up behind it. No subscriber is thinned in favour of another; the
+service breaks for everyone together. A relay must therefore be provisioned with headroom and
+admission-controlled, and the memory spike means a memory-constrained relay meets the OOM killer at
+the same moment rather than merely slowing down.
+
+**Host configuration outweighs anything else measured**, and it is worth more than a caveat: enabling
+UDP GSO cut per-subscriber relay CPU by **29 %** (1.135 → 0.806 % of a core) and raised the usable
+ceiling by half, on Linux, from one flag. The same relay version had cost ~6× more CPU per Mbps on
+macOS loopback with GSO disabled. **Any capacity figure for this lane is a figure about a
+configuration.**
 
 **Publisher and subscriber roles are stable over a day and a half.** Across two 26.5-hour soaks both
 held memory flat (+0.03 and +0.15 MB/hour, against run-to-run noise several times larger), with

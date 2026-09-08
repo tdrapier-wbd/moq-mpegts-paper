@@ -934,9 +934,27 @@ enough to press it.**
 
 ### The subscriber dies under contention, and the first version of the report was wrong
 
-[**#3491**](https://github.com/moq-dev/moq/issues/3491) — *open, reported 2026-09-07.* `moq export ts`
+[**#3491**](https://github.com/moq-dev/moq/issues/3491) — ***fixed and closed 2026-09-08*** by
+[**#3515**](https://github.com/moq-dev/moq/pull/3515), one day after filing. `moq export ts`
 exits with `Error: hang: moq error: old` when two subscribers pull separate broadcasts through one
-relay across a shared, under-provisioned bottleneck. On the current released pair (`moq` 0.9.15 /
+relay across a shared, under-provisioned bottleneck.
+
+**The cause was in `moq-net`, and it was a cursor confusion.** `GroupState::poll_finished()` returned
+the group's final frame count as soon as the *producer* finished, even if that particular consumer had
+not read that far. When retention later aborted the finished group to release its cached frames,
+`moq-mux` had already been told the group ended cleanly — so the `Old` read error that followed
+propagated out of the export instead of being understood as an eviction. The fix makes
+`Consumer::finished()` answer for its own read cursor, keeps the producer's total on `frame_count()`,
+and lets the container consumer skip transport eviction (`Old` or `Lagged`) while still propagating
+genuine payload decode errors. No wire or API signature change.
+
+**Verified here incidentally but at much larger scale than the report.**
+[T26](test-26-cross-host-fanout.md) put **450 subscriber sessions** through cross-host fan-out on a
+build containing #3515, including two episodes where per-subscriber delivery fell to 3–37 % of nominal
+for 45 s — deeper and more sustained eviction pressure than the two-flow contention that produced the
+original exits. **No session exited with `Old`, or with any error at all**; the only process exits
+anywhere were the subscriber host's OOM kills, which are a property of the rig. This is not a designed
+regression test and is not claimed as one, but it is a stronger load than the reproduction. On the current released pair (`moq` 0.9.15 /
 `moq-relay` 0.14.14) it takes **6 of 8 cells and 7 of 16 subscribers**; one cell lost both subscribers
 16 s apart. Every graded capture has **0 continuity errors**, so what a downstream monitor sees is a
 perfectly conformant stream that simply stops — a transport-side instance of the silent-failure class

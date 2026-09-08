@@ -311,6 +311,18 @@ component — CBR pacing and PCR re-stamping are real-time obligations — so ca
 dominated by timing headroom, not raw throughput. Relay and gateway therefore scale on different axes
 and should be capacity-planned separately (§8.3).
 
+**The relay's axis is now a measured number, and it comes with a warning about how it ends.** Serving
+remote subscribers costs **0.806 % of a core, 1.39 MB and one full stream copy each**, linear, so a
+relay tier is sized as a core count: **124–139 subscribers per core** at ~10 Mb/s, with the interface
+and session management nowhere near binding ([Evidence](evidence.md) §3.6). Two consequences for
+planning. First, **the relay must not be run near that limit**, because past it throughput *collapses*
+rather than degrading — aggregate delivery falls by up to 95 % while CPU stays pinned, so every
+subscriber breaks together and none is thinned in favour of another. Second, **the memory budget must
+cover the collapse and the churn, not just the steady state**: RSS jumps ~2.5× as queues back up
+behind a saturated core, on top of the retained-session cost abuse can add (§3.14), so a
+memory-constrained relay meets the OOM killer at the same instant it meets the CPU cliff. Admission
+control that refuses the N+1th subscriber is worth more than headroom spent on serving it badly.
+
 **Where to place them is an open decision, not a settled one.** This architecture's working
 preference is placement close to the endpoints served, ideally at the hand-off location within the
 partner's own facility, on timing-determinism and hitless-pairing grounds. The alternative — regional

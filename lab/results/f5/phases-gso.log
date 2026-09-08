@@ -1,0 +1,13 @@
+1788863194 n=1 spawned settle=45s
+1788863239 n=1 measure_start
+1788863287 n=25 spawned settle=45s
+1788863333 n=25 measure_start
+1788863382 n=50 spawned settle=45s
+1788863427 n=50 measure_start
+1788863480 n=100 spawned settle=45s
+1788863525 n=100 measure_start
+1788863579 n=150 spawned settle=45s
+1788863625 n=150 measure_start
+1788863679 n=200 spawned settle=45s
+1788863737 n=200 WARNING only 194 alive after settle
+1788863781 n=200 measure_start

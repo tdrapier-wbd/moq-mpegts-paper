@@ -1022,6 +1022,22 @@ measurement eliminates a class of cause, and a caveat retired by argument elimin
 > make the assumption a measured quantity compared against something the configuration already
 > specifies, not to add a threshold.
 
+**Before a throughput ceiling is attributed to software, get the platform's own statement about the
+interface.** *(T26.)*
+
+> A fan-out ramp that collapses is ambiguous between the relay, the relay's host, the network and the
+> rig, and argument does not settle it. On Nitro instances `ethtool -S ens5` publishes the counters AWS
+> increments when it polices the interface — `bw_out_allowance_exceeded`, `pps_allowance_exceeded`,
+> `conntrack_allowance_exceeded`, `linklocal_allowance_exceeded`. Sampling them beside the relay's own
+> CPU turns "the NIC was not the problem" from a plausible claim into a measured one: all four stayed
+> at **zero** through three arms up to 1.47 Gb/s and 154 kpps, so every collapse in the experiment had
+> to be explained by something else.
+>
+> The general rule is to instrument each *candidate* explanation rather than only the one under test.
+> Three of the four candidates here were eliminated by direct evidence — the interface by these
+> counters, the harness by the subscriber host's own idle time and its process count, and the relay's
+> host by per-process accounting — which is what left relay CPU as an attribution rather than a guess.
+
 ---
 
 ## 5. Rig hygiene
@@ -1277,6 +1293,46 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 > window the capture recorded 22,381 datagrams against the shaper's 22,396 passed and 2,441 dropped.
 > Without that check, "unchanged under loss" reads as a finding when it is an artefact of tap
 > placement.
+
+**Kill patterns belong in a script file, never in an ssh command line — and a reset that does not
+verify is not a reset.** *(T26.)*
+
+> `pkill -f "broadcast f5.fanout.hang"` sent over ssh matches the remote shell's *own* command line,
+> because the pattern is an argument of the command being run. It killed itself before reaching the
+> next statement, so the previous run's publisher survived, a second publisher announced the same
+> broadcast, and the relay terminated one of the two about a minute in. In the results that read as
+> the source spontaneously failing at N = 1, and two runs were spent on it.
+>
+> The bracket trick (`"[b]roadcast …"`) does not help here: it stops pkill matching *itself*, not a
+> parent whose argv contains the literal string. The fix is `f5-reset.sh` — patterns in a file, and a
+> verification pass that counts survivors and refuses to let a run start. Its own first version
+> repeated the mistake with an unbracketed `export ts --latency-max` and killed the ssh session that
+> called it.
+
+**A workaround flag must record which platform it works around, and be re-tested when the platform
+changes.** *(T26.)*
+
+> `--server-quic-gso=false` entered this campaign for a stated reason — GSO stalls on *macOS
+> loopback* — and was then carried unexamined onto Linux EC2 hosts, where GSO works. It cost 29 % of
+> per-subscriber relay CPU and half the usable fan-out ceiling, and the first arm of a scaling
+> experiment measured a deliberately handicapped relay before anyone re-read the reason for the flag.
+>
+> The general form: an inherited flag is a claim about an environment. When the environment changes,
+> the claim needs re-testing, and a scaling result is exactly where an unexamined one does the most
+> damage — because it does not look like an error, it looks like a capacity number.
+
+**Fit the model over the régime that holds, then move a resource to test its prediction.** *(T26.)*
+
+> A fan-out curve invites a fit across every point measured, which averages the linear region with the
+> collapse and describes neither. Fitting only the points that held delivery gives relay CPU as
+> 0.806 % of a core per subscriber, which *predicts* a single-core ceiling near 124.
+>
+> That prediction was then tested rather than reported: pinning the relay to one core with `taskset`
+> halved the predicted ceiling and brought the cliff inside the range the rig could reach, and the
+> collapse duly arrived between 125 and 150 with the relay at 99.9 % of that core. **Constraining a
+> resource to move a predicted knee is cheaper than scaling the rig until the knee appears**, and it
+> converts a fitted slope into a falsifiable one — the rig could not drive enough subscribers to reach
+> the two-core ceiling at all.
 
 ---
 
