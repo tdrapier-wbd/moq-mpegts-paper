@@ -17,6 +17,7 @@ receiving shows as a low number rather than as a dead process.
 | `bisect-verdicts.txt` | The six verdict lines only. Each carries the candidate's and the **control's** worst post-settle sample; the control is a known-good binary in the same run, healthy at ~9.1 Mb/s in every step. |
 | `confirm-parent-vs-3375.csv` | The confirmation against `0e61e35`'s own parent `025613d`, two replicates per build, ~7 joins in 240 s on a 30 s clip. Column order is parent, #3375, parent, #3375. |
 | `truerewind-parent-vs-3375.csv` | The same two builds on a source that *really* rewinds (`tsp --infinite`). The result is the inverse: the parent stalls at 0.00 Mb/s, #3375 sustains ~8.66 Mb/s. This is why the finding is "traded", not "broke". |
+| `vidonly-control.csv` | The prediction test: a **video-only** source across five joins, same two builds. Both clean, which is what the code path requires — the fence needs a second elementary stream to fence. |
 | `liveness-3375.jsonl`, `liveness-parent.jsonl` | Per-PID liveness detector output on each build's exporter, run simultaneously on the same source, relay and join. The parent's file contains `discontinuities 0`; the #3375 file contains the `-119.35 s` delivered-clock step and the two PIDs that never clear. |
 
 **A note on reading the 30 s clip.** It is a byte truncation of the 600 s one to a whole number of

@@ -343,6 +343,53 @@ Neither build carries both. Pre-#3375 a rewinding source costs everything; post-
 distribution the second is the worse trade, because a continuous timeline with content joins is what
 a real encoder emits and a rewind is not.
 
+### The code path, and why only some PIDs die
+
+The fence is readable in the diff, and one prediction from it was tested rather than asserted.
+#3375 adds a program *generation* (`epoch`) to the exporter and a re-admission test to each track:
+
+```rust
+fn admit(&mut self, pending: Pending, epoch: u64) -> Option<Pending> {
+    if self.epoch == epoch
+        || (pending.discontinuity != self.discontinuity
+            && self.timeline.is_none_or(|last| pending.frame.timestamp < last))
+    { return Some(pending); }
+    self.discontinuity = pending.discontinuity;
+    None                     // frame discarded
+}
+```
+
+`rewind()` bumps the generation, and on a **backwards** boundary it deliberately leaves every track
+that already has a timeline behind:
+
+```rust
+if !backwards || track.timeline.is_none() { track.epoch = self.epoch; }
+```
+
+So after one track reports a backwards step, every *other* track is fenced into the old generation,
+and the only way back is a frame that both changes its discontinuity counter **and** steps backwards
+on that track's own timeline. **A track whose source never rewinds can never satisfy that**, and its
+frames are discarded indefinitely — which is the permanent loss of PID 111 and PID 121, while the
+passthrough `.ts` track carrying PSI, AC-3 and teletext is unaffected and keeps the lane at
+0.31 Mb/s.
+
+**Two elementary streams are required, and that is the tested part.** If the fence needs one track to
+rewind while another does not, a source with a *single* track cannot exhibit it: the triggering track
+re-joins the new generation itself, and there is no bystander to fence. A video-only source across
+five joins, same two builds, same relay:
+
+| t (s) | parent `025613d` | `#3375` `0e61e35` |
+|---|---:|---:|
+| 10 → 151, five joins | 1.88–2.00 | **1.88–2.02** |
+
+Identical, and both clean. So the multi-track case is necessary, which is consistent with the
+importer's MPEG-2 audio resync at the join (`resyncs=2 discarded=714`) supplying the one backwards
+step. **What remains inference** is precisely which comparison inside the audio path yields
+`backwards = true` on a source measured at 0 backward PCR steps — a track's own high-water mark is
+not the programme clock, and cross-track skew at a hard cut is a plausible source of a small local
+step. The report names the fence, which is actionable, and says this much and no more about the
+trigger.
+
 Raw captures — the bisect log with per-step control readings, the paired-replicate confirmation, the
 true-rewind contrast and both detector event streams — are in
 [`results/t27-3375/`](results/t27-3375/), and the report is drafted at

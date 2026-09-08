@@ -1758,7 +1758,12 @@ from the first. The two builds carry disjoint cases — on a *true* rewind the p
 (0.00 Mb/s) while #3375 sustains 8.66 Mb/s; on a continuous timeline the parent is clean and #3375
 stalls. A per-PID liveness detector on both outputs at once shows the parent recording **0**
 delivered-clock discontinuities where #3375 records **−119.35 s, one pass length**, so the rewind is
-generated inside the recovery path rather than delivered to it. P1, client-side, `[unmerged fix
+generated inside the recovery path rather than delivered to it. **The code path is named**:
+`Track::admit` discards frames from any track left in an older generation unless they both change a
+discontinuity counter and step backwards on that track's own timeline, and `rewind()` leaves every
+track with a timeline behind on a backwards boundary — so one track's backwards step fences the
+others permanently. A prediction from that reading was tested: a **video-only** source is clean on
+both builds across five joins, because the fence needs a bystander. P1, client-side, `[unmerged fix
 absent — regression present in merged `main`]`. **Not a relay or carriage property**: the relay served
 a freshly joining subscriber perfectly (8.9 Mb/s) while 60 incumbents were stuck, at 0.54 of 2 cores.
 Ready to report upstream; see [T27](../lab/test-27-liveness-detector.md) and

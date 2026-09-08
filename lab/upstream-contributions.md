@@ -639,11 +639,19 @@ subscribers at 500 ms and 3 s stalled together within one 10 s sample.
 carrying content joins is what a real encoder emits; a rewinding one is an artefact of looping a
 file. The pre-#3375 failure needed a stimulus the lab had to manufacture. This one arrives on its own.
 
-**Ready to file, not yet filed.** The reproducer is a ~30 s clip replayed on a continuous timeline,
-which fails within one join; the bisect, the paired-replicate confirmation and the two-source contrast
-above are the evidence. It is held only for a final read of the diff so the report names the code path
-rather than guessing at it — and because the last report drafted from a looping stimulus (above) had
-to be retired for exactly that reason.
+**The code path is named, from the diff.** `Track::admit` discards a frame from any track still in an
+older generation unless it *both* changes its discontinuity counter *and* steps backwards on that
+track's own timeline; and `rewind()` leaves every track that already has a timeline in the old
+generation whenever the boundary is backwards. **One track reporting a backwards step therefore fences
+all the others, and a fenced track whose source never rewinds can never re-join.** A prediction from
+that reading was tested rather than assumed: the fence needs a bystander, so a single-track source
+should be immune — and a video-only source is clean on both builds across five joins (1.88–2.00 against
+1.88–2.02 Mb/s). What is *not* established is which comparison in the audio path yields
+`backwards = true` on a source with 0 backward PCR steps; the report says so rather than guessing.
+
+**Ready to file, not yet filed** — the draft is at
+`docs/upstream/3375-continuous-source-regression.local.md` and awaits a decision to post it. The
+reproducer is a ~30 s clip replayed on a continuous timeline, failing within one join.
 
 ---
 
