@@ -583,6 +583,33 @@ follow-up run it forced.)*
 > PID once, label it, and record a role that vanishes as gone rather than silently re-resolving the
 > pattern onto whatever now matches.
 
+**An instrument that blocks on its input cannot observe the absence of input.** *(T27.)*
+
+> The per-PID liveness detector was tested against a total stall — the easiest failure in its set — and
+> reported nothing at all. It was correct in every respect except that it was sitting in `read()`
+> waiting for a packet that was never going to arrive, so its loop never ran and its own timeout check
+> never executed. A detector's "no news" and "no data" are the same silence, and only a timed wait can
+> tell them apart.
+>
+> This generalises past detectors. Any observer whose next reading depends on the thing it is watching
+> is blind to that thing stopping, and the check that covers it has to be driven by a clock the subject
+> does not control. Wall clock is that clock; **the dead man's handle is not redundancy with the
+> media-time measurement, it covers the case media time structurally cannot.**
+
+**Derive elapsed media time by accumulating steps, never as a distance from an origin — and bound the
+step.** *(T27.)*
+
+> The same detector computed media time as the difference between the current PCR and the first one.
+> One corrupted PCR byte therefore moved the whole timeline, and since every stream's gap is measured
+> against that timeline, all four watched PIDs alarmed simultaneously with a fabricated 23,861 s
+> outage. In a real run a broken pipe produced the same failure at 94,847 s.
+>
+> Accumulating step by step confines a bad value to one step, and rejecting any step that is backwards
+> or implausibly large converts it from a corrupted measurement into a *reported discontinuity*, which
+> is information. **A monitoring tool that can be made to invent a fault by one bad byte is worse than
+> no monitoring**, because it produces a confident wrong answer; fault-inject the instrument, not only
+> the system.
+
 ---
 
 ## 3. Ratios, windows and intervals
@@ -1040,6 +1067,48 @@ interface.** *(T26.)*
 
 ---
 
+**When the only remaining difference is the build, bisect it — and shrink the reproducer's period
+first so a step costs minutes.** *(T27, the #3375 regression.)*
+
+> A fan-out soak lost every subscriber's video at the source's first content join, 600 s in. Source,
+> relay, publisher, `--latency-max` and fan-out were each eliminated by control, which left the client
+> build: the run that worked was on a binary 53 commits older. Bisecting that directly would have cost
+> 20 minutes a step, because the stimulus only arrives once per pass. **The failure was triggered by
+> the join, not by the pass length**, so truncating the clip from 600 s to 30 s made a join arrive
+> every half minute and a verdict cost two minutes — six steps, about an hour, one commit. The general
+> rule: before bisecting, ask what the reproducer's period actually depends on, and cut everything the
+> failure does not need.
+
+**Carry a known-good binary as a second subscriber in every bisect step.** *(T27.)*
+
+> Each step of the bisect ran the candidate build *and* the last-known-good build against the same
+> publisher, relay and join, and voided the step if the control also stalled. That converts a whole
+> class of false verdicts — a flaky relay, a host under load, a publisher that died early, a step
+> whose build silently produced an old binary — into a `skip` rather than a `good`/`bad`. It cost one
+> extra process. The control was healthy at 9.1 Mb/s in every step, which is also the evidence that
+> the six verdicts mean what they say.
+
+**`git bisect run` inherits a non-login shell, and a build that cannot start looks exactly like a
+commit that cannot be tested.** *(T27.)*
+
+> The first bisect returned in 25 seconds and named every commit a "possible first bad commit". The
+> step script exited 125 each time because `cargo` was not on a non-login shell's `PATH`, and 125 means
+> *skip*. A step script must therefore set its own `PATH`, and — more generally — **a bisect that
+> finishes far faster than one build takes has not tested anything**; check the elapsed time against
+> the expected cost per step before reading the verdict.
+
+**A fix verified against the stimulus it was written for is not verified against that stimulus's
+complement.** *(T27, on this campaign's own contribution.)*
+
+> #3375 was written because of T23's measurements and re-graded against all six of T23's arms, every
+> one of which places a *single* timeline event in a *single* pass. It passed all six. It also stalls
+> video and primary audio permanently on a source whose timeline is continuous and whose *content*
+> restarts — a stimulus no arm used, and the one a real encoder produces. The two builds carry
+> disjoint cases: pre-fix, a true rewind costs everything; post-fix, a non-rewinding content join
+> does. **The rule is that verifying a fix means adding the case the fix's own logic newly decides
+> about**, not re-running the arms that motivated it. Where a fix introduces a *detector* — here, of a
+> rewind — the new arm to add is the one where that detector should stay silent.
+
 ## 5. Rig hygiene
 
 **A stimulus built to defeat a detector must be graded as *healthy* by that detector before it is
@@ -1333,6 +1402,52 @@ changes.** *(T26.)*
 > resource to move a predicted knee is cheaper than scaling the rig until the knee appears**, and it
 > converts a fitted slope into a falsifiable one — the rig could not drive enough subscribers to reach
 > the two-core ceiling at all.
+
+**A ramp cannot measure anything that develops. Hold the variable you are not asking about still.**
+*(T26, T27.)*
+
+> T26 recorded `moq export ts` at "95.6 MB at N = 1 and 103.3 MB at N = 150 — essentially fixed per
+> process, not a buffer that grows". Both numbers were right and the conclusion was wrong, because in a
+> ramp N and elapsed time move together: every point was 45 s old, so what looked like a flat
+> per-process cost was the first 45 s of a cache filling. Holding N = 10 constant and letting time be
+> the only variable gave 50.2 → 121.9 MB over 703 s, decelerating, **with drawdowns** — memory handed
+> back, which distinguishes a cache from a leak — settling where T21 independently found the same
+> process sitting for four hours.
+>
+> The corollary is that the same instrument cannot answer both questions. A capacity rig and a
+> permanence rig differ in which variable they pin, and reusing one for the other is how a nine-minute
+> host memory exhaustion gets recorded as a fan-out limit at a fixed N.
+
+**A stop condition must fire on the cause, not on a symptom the failure also produces.** *(T27.)*
+
+> A high-fan-out soak was configured to stop when per-subscriber delivery fell below 85 % of the N = 1
+> rate, and it duly reported "delivery fell to 78.5 % at n=100". It had not. `rx_bytes` was constant at
+> ~12.86 GB per cell across every cell *including* that one, and relay egress held 990 Mb/s throughout:
+> the bytes never stopped arriving. The host had OOM-killed a subscriber and spent 38 M direct-reclaim
+> scans, and the figure recorded was the harness failing to account for traffic it was still receiving.
+>
+> A delivery threshold is downstream of memory, CPU and scheduling, so it fires last and blames the
+> wrong thing. Watching `MemAvailable` stops the run while the readings still mean something and names
+> the harness. **Where a resource can be measured directly, do not infer it from throughput.**
+
+**A cleanup pattern must name the run, not the tool.** *(T27.)*
+
+> §5 already carries "kill patterns belong in a script file", from a `pkill` that killed its own ssh
+> session. The same class recurred one level out: an in-lane rig's cleanup ran
+> `pkill -f ts-liveness.py`, which killed a detector belonging to a *different* experiment on the same
+> host, broke that experiment's subscriber pipe and ended its run — and the garbage the broken pipe
+> then fed the detector produced a phantom 94,847 s outage that had to be diagnosed as well.
+>
+> Two hosts running two experiments is now the normal case in this campaign, so scoping is not
+> optional: every pattern includes the run's own label, broadcast name or output path.
+
+**A broadcast name may not be reused by back-to-back arms.** *(T27.)*
+
+> Consecutive arms of an in-lane experiment shared one broadcast name. T25 established that the relay
+> retains an abandoned session until the QUIC idle timeout, so the second arm's subscriber attached to
+> the *first* arm's broadcast and died with `json: dropped` the moment the new publisher replaced it —
+> costing a three-minute run and looking initially like a defect in the lane. One name per arm, or a
+> wait longer than the idle timeout between them; the first is free.
 
 ---
 

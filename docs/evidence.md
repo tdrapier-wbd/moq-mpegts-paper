@@ -122,6 +122,7 @@ every "not established" entry recurs in §4 or §5.
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** (separate publisher, relay, exporter and host in two availability zones). **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core — tested by pinning the relay to one core and hitting the predicted cliff at 99.9 % of it, with the NIC's allowance counters at zero throughout. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; channel-count scaling; high fan-out held for longer than 45 s | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention**, not cached payload (a 256 MiB cache cap changes nothing) and not concurrency (the same 42 held cost 144 MB). Tunable: 30 s → 10 s idle timeout takes it to 489 MB | The segmented lane's half of the same experiment, so no comparison; anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
+| **Observability** | **The transport never detects a media-plane failure** — a source frozen for 120 s produced no log line anywhere, and a dead video path behind a live mux passes the *whole* of TR 101 290 P1 with a worst PCR interval identical to the control's. What does detect every case is **per-PID access-unit liveness**, and that is now a running detector rather than a recommendation: live at the groomed output of a cross-host lane it measures the same 60 s video suppression as **57.212 s** against an offline grader's 57.22 s, catches a dead *audio* stream — which has no other wire-observable signature at all — in **0.7–1.4 s** and localises it to the PID, and fires nothing on a healthy lane. Detection latency is the threshold it reports when it arms | Whether commercial monitoring exposes per-PID liveness rather than only per-PID bitrate, which inherits the proportional-sensitivity problem; a **frozen picture** in valid advancing access units, which defeats every transport-layer detector here and over SDI equally; detection-to-response, since only signal availability is measured | §3.12 |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
 | **Latency** | Delivery latency on all four planes, loopback and public internet, each graded against the conformance of the same bytes. **MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path | §3.11 |
 
@@ -1286,6 +1287,18 @@ attribution is closed from the other side too, since EC2's four interface allowa
 superlinear**, and neither descriptors nor threads move at all across a 200× fan-out (11 and 3),
 because every QUIC connection shares one UDP socket.
 
+**The subscriber's own cost is a fixed ~120 MB of memory per session, and it is a cache rather than a
+leak** ([T27](../lab/test-27-liveness-detector.md), P1). Held at a constant subscriber count so that
+time is the only variable, mean `moq export ts` resident memory rose 49.0 → 119.1 MB over 703 s
+and stopped: a **logarithm fits at r² = 0.904 against a line's 0.602**, the second half of the run
+grows at **−0.21 MB/min**, and the largest drawdown from a running peak is **9.4 MB** — memory given
+back, which a leak does not do. It settles in the **106–119 MB** band, where
+[T21](../lab/test-21-permanence-soak.md) independently found the same process from 0.5 h to 4.5 h,
+and a second run at N = 60 repeats the shape (log r² = 0.973 against 0.793). It is not attributed to a buffer, and `--latency-max 3s` here
+against T21's 500 ms is the untested suspect. The practical consequence is that a host aggregating
+many sessions is sized by *memory* well before CPU: ~130 sessions exhaust 15.7 GB, which is what
+ended T26's ramp and is a property of the client, not of the relay.
+
 **Saturation is a collapse, not a graceful degradation.** Past the cliff aggregate throughput *falls* —
 1,184 → 528 Mb/s, and 964 → 46 Mb/s in a second arm — while relay CPU stays pinned at its limit and
 relay RSS jumps 2.5× as queues back up behind it. No subscriber is thinned in favour of another; the
@@ -1638,6 +1651,25 @@ nothing on the control. That is the detector to specify, and the distinction tha
 procuring monitoring is that per-PID *bitrate* inherits the same proportional-sensitivity problem: a
 dead stream's PID bitrate goes to zero, but the service bitrate barely moves.
 
+**That recommendation has since been built and run in the delivery path, and it holds**
+([T27](../lab/test-27-liveness-detector.md), P1). T24 measured with an offline grader over a capture
+on one host, which left open whether the fine structure a liveness detector needs survives a relay,
+the exporter's PCR regeneration and a CBR groomer. It does, and the agreement is close enough to be
+the result: the same 60 s video suppression measured **57.212 s** by a live detector at the groomed
+output of a cross-host lane, against T24's **57.22 s** offline on loopback — different code,
+different topology, three decimal places apart. **The media-aware lane therefore preserves the
+evidence that the only sufficient detector depends on**, which it was under no obligation to do.
+
+Operationally: the audio case — the one with no wire-observable signature at all — is caught and
+localised to the PID within **0.7–1.4 s**, the video case within **1.24 s**, and 180 s of healthy
+cross-host lane plus 300 s of healthy broadcast material produce **zero alarms**. Detection latency
+equals the per-stream threshold, which the detector learns from observed cadence and states when it
+arms, so it is knowable per stream before a fault occurs. Two qualifications carry: thresholds are
+**wider at the groomed monitoring point than in a file** for the small streams — 1.0–3.1 s against
+1.0–1.8 s for the same content — so the measurement point must be quoted with any latency figure;
+and SCTE-35 and DVB subtitling have no intrinsic cadence and are reported as unmonitorable rather
+than watched, which is a property of those streams and not of the lane.
+
 **One failure mode is out of reach of all of it, and is not this architecture's problem.** An encoder
 that keeps emitting *valid* access units carrying a frozen or looping picture advances PCR, PTS, DTS and
 the continuity counters and holds its bitrate, so it defeats every detector above including per-stream
@@ -1686,7 +1718,7 @@ on its own, and the wire's own conformance checks are not sufficient either.** W
 per-stream liveness plus the groomer's own counters, and both are instruments this campaign had to
 build.
 
-### 3.13 Which PCR timeline events does the lane survive? — All six classes, since #3375; a rewind used to cost its own duration in programme
+### 3.13 Which PCR timeline events does the lane survive? — All six placed classes, since #3375; but that fix stalls a *continuous* timeline whose content restarts
 
 [T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software. Six arms, each placing exactly one
 deliberate timeline event at 45 s of a 105 s run, graded at the source, after the round trip and after
@@ -1713,6 +1745,24 @@ signalled arms while correctly leaving the rollover unflagged. **The buffer requ
 the burst**: adaptive cushion 8,000 ms → 200–348 ms, high water 98,035 → 1,102–1,417 packets, which
 discharges the *rewind × bitrate* provisioning rule the pre-fix build implied. **STRONGLY SUPPORTED**
 for the six classes at this rig's scale; one run per arm per build.
+
+**The same fix regresses the case none of these arms tests, and that is the more operationally
+relevant one.** Every arm above places a *single* event in a *single* pass. Feed the fixed exporter a
+source whose timeline is **continuous** and whose *content* restarts — what a real encoder emits —
+and video and MPEG-1 audio stop at the first content join and never return, leaving only PSI, AC-3
+and teletext at **0.31 Mb/s** against a 9.5 Mb/s source. Bisected over the 53 commits between the
+build [T21](../lab/test-21-permanence-soak.md) soaked and the build under test to
+**`0e61e35`, the #3375 merge itself**, and confirmed against its parent `025613d` with two replicates
+per build sharing one publisher and one relay: parent 9.0–9.8 Mb/s across seven joins, #3375 0.31 Mb/s
+from the first. The two builds carry disjoint cases — on a *true* rewind the parent stalls completely
+(0.00 Mb/s) while #3375 sustains 8.66 Mb/s; on a continuous timeline the parent is clean and #3375
+stalls. A per-PID liveness detector on both outputs at once shows the parent recording **0**
+delivered-clock discontinuities where #3375 records **−119.35 s, one pass length**, so the rewind is
+generated inside the recovery path rather than delivered to it. P1, client-side, `[unmerged fix
+absent — regression present in merged `main`]`. **Not a relay or carriage property**: the relay served
+a freshly joining subscriber perfectly (8.9 Mb/s) while 60 incumbents were stuck, at 0.54 of 2 cores.
+Ready to report upstream; see [T27](../lab/test-27-liveness-detector.md) and
+[upstream contributions](../lab/upstream-contributions.md).
 
 **The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
 stream, unconditionally, and was the one timeline event a permanent feed cannot avoid. Placed rather

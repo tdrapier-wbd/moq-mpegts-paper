@@ -1,0 +1,15 @@
+=== bisect 6acd584: worst candidate=0.30 Mb/s  control=9.16 Mb/s  (floor 5.0)
+=== bisect 6acd584: BAD
+=== bisect a62dd1e: worst candidate=0.30 Mb/s  control=9.14 Mb/s  (floor 5.0)
+=== bisect a62dd1e: BAD
+=== bisect 025613d: worst candidate=9.09 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect 025613d: GOOD
+=== bisect 6bfd2ab: worst candidate=0.30 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect 6bfd2ab: BAD
+=== bisect c7eb13c: worst candidate=0.30 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect c7eb13c: BAD
+=== bisect 0e61e35: worst candidate=0.30 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect 0e61e35: BAD
+0e61e35200c5b13e9c1d82990243b73e917e6ee5 is the first bad commit
+bisect found first bad commit
+# first bad commit: [0e61e35200c5b13e9c1d82990243b73e917e6ee5] fix(moq-mux): recover buffered TS output after a rewind (#3375)

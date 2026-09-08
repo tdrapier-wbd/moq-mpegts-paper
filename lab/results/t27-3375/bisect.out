@@ -1,0 +1,87 @@
+Bisecting: 26 revisions left to test after this (roughly 5 steps)
+[6acd584569a79649faa7ffe8d3f3d306704c94e9] fix(hang): detect a JavaScript container rewind at the playback cursor (#3485)
+running '/home/ubuntu/f5/t27-bisect-step.sh'
+=== bisect 6acd584: build
+=== bisect 6acd584: run
+=== bisect 6acd584: worst candidate=0.30 Mb/s  control=9.16 Mb/s  (floor 5.0)
+=== bisect 6acd584: BAD
+Bisecting: 12 revisions left to test after this (roughly 4 steps)
+[a62dd1eb1ee8d1d6242814ffff69d775fed72897] docs(quest): plan the abort guard, an advisory quest gate, and what the echo-delay test already establishes (#3466)
+running '/home/ubuntu/f5/t27-bisect-step.sh'
+=== bisect a62dd1e: build
+=== bisect a62dd1e: run
+=== bisect a62dd1e: worst candidate=0.30 Mb/s  control=9.14 Mb/s  (floor 5.0)
+=== bisect a62dd1e: BAD
+Bisecting: 6 revisions left to test after this (roughly 3 steps)
+[025613db447602c27ce411ee500dabfc38471a30] feat(moq-transcode)!: validate and order the output ladder (#3447)
+running '/home/ubuntu/f5/t27-bisect-step.sh'
+=== bisect 025613d: build
+=== bisect 025613d: run
+=== bisect 025613d: worst candidate=9.09 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect 025613d: GOOD
+Bisecting: 3 revisions left to test after this (roughly 2 steps)
+[6bfd2aba64cb8ac2a90354e1be04edae2096a32b] chore(moq-net): guard the fuzz workspace lockfile (#3465)
+running '/home/ubuntu/f5/t27-bisect-step.sh'
+=== bisect 6bfd2ab: build
+=== bisect 6bfd2ab: run
+=== bisect 6bfd2ab: worst candidate=0.30 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect 6bfd2ab: BAD
+Bisecting: 0 revisions left to test after this (roughly 1 step)
+[c7eb13cc811734d875fe93c1261d0a790120ab0d] docs: track echo-delay test runtime (#3462)
+running '/home/ubuntu/f5/t27-bisect-step.sh'
+=== bisect c7eb13c: build
+=== bisect c7eb13c: run
+=== bisect c7eb13c: worst candidate=0.30 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect c7eb13c: BAD
+Bisecting: 0 revisions left to test after this (roughly 0 steps)
+[0e61e35200c5b13e9c1d82990243b73e917e6ee5] fix(moq-mux): recover buffered TS output after a rewind (#3375)
+running '/home/ubuntu/f5/t27-bisect-step.sh'
+=== bisect 0e61e35: build
+=== bisect 0e61e35: run
+=== bisect 0e61e35: worst candidate=0.30 Mb/s  control=9.10 Mb/s  (floor 5.0)
+=== bisect 0e61e35: BAD
+0e61e35200c5b13e9c1d82990243b73e917e6ee5 is the first bad commit
+commit 0e61e35200c5b13e9c1d82990243b73e917e6ee5
+Author: Luke Curley <kixelated@gmail.com>
+Date:   Sat Sep 5 20:05:17 2026 -0700
+
+    fix(moq-mux): recover buffered TS output after a rewind (#3375)
+    
+    Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+    Co-authored-by: GPT-6 <noreply@openai.com>
+
+ doc/bin/cli.md                                     |   5 +
+ ...rt-ts-a-rewound-timeline-stalls-the-si-table.md |  48 ---
+ quest/m0/README.md                                 |   4 +-
+ quest/m0/js-rewind-cursor.md                       |  26 ++
+ quest/m0/srt-rewind-pacing.md                      |  26 ++
+ quest/m0/ts-forward-discontinuity.md               |  32 ++
+ quest/m1/monotonic-timeline.md                     |   2 +-
+ rs/moq-cli/src/subscribe.rs                        |  30 ++
+ rs/moq-mux/src/container/consumer.rs               |  33 +-
+ rs/moq-mux/src/container/source.rs                 |  14 +
+ rs/moq-mux/src/container/ts/export.rs              | 145 ++++++-
+ rs/moq-mux/src/container/ts/export_test.rs         | 438 +++++++++++++++++++++
+ 12 files changed, 738 insertions(+), 65 deletions(-)
+ delete mode 100644 quest/m0/2833-moq-export-ts-a-rewound-timeline-stalls-the-si-table.md
+ create mode 100644 quest/m0/js-rewind-cursor.md
+ create mode 100644 quest/m0/srt-rewind-pacing.md
+ create mode 100644 quest/m0/ts-forward-discontinuity.md
+bisect found first bad commit
+=== BISECT LOG ===
+# bad: [f75a07f8d01828fd29f568052085075d9410986f] fix(js): declare every @moq package a package imports (#3480)
+# good: [222cc729fc778dce1244a8cfc9938d0361be84e2] docs: abandon the track re-announce quest (#3459)
+git bisect start 'HEAD' '222cc72'
+# bad: [6acd584569a79649faa7ffe8d3f3d306704c94e9] fix(hang): detect a JavaScript container rewind at the playback cursor (#3485)
+git bisect bad 6acd584569a79649faa7ffe8d3f3d306704c94e9
+# bad: [a62dd1eb1ee8d1d6242814ffff69d775fed72897] docs(quest): plan the abort guard, an advisory quest gate, and what the echo-delay test already establishes (#3466)
+git bisect bad a62dd1eb1ee8d1d6242814ffff69d775fed72897
+# good: [025613db447602c27ce411ee500dabfc38471a30] feat(moq-transcode)!: validate and order the output ladder (#3447)
+git bisect good 025613db447602c27ce411ee500dabfc38471a30
+# bad: [6bfd2aba64cb8ac2a90354e1be04edae2096a32b] chore(moq-net): guard the fuzz workspace lockfile (#3465)
+git bisect bad 6bfd2aba64cb8ac2a90354e1be04edae2096a32b
+# bad: [c7eb13cc811734d875fe93c1261d0a790120ab0d] docs: track echo-delay test runtime (#3462)
+git bisect bad c7eb13cc811734d875fe93c1261d0a790120ab0d
+# bad: [0e61e35200c5b13e9c1d82990243b73e917e6ee5] fix(moq-mux): recover buffered TS output after a rewind (#3375)
+git bisect bad 0e61e35200c5b13e9c1d82990243b73e917e6ee5
+# first bad commit: [0e61e35200c5b13e9c1d82990243b73e917e6ee5] fix(moq-mux): recover buffered TS output after a rewind (#3375)

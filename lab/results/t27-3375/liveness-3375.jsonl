@@ -1,0 +1,22 @@
+{"event": "armed", "t": 25.025, "watching": 4, "thresholds_ms": "111:6150;121:6900;123:6150;131:6150", "unmonitorable": "0(sections);16(sections);17(sections);100(sections);141(scte35);142(scte35);143(scte35)"}
+{"event": "discontinuity", "t": 111.625, "jump_s": -119.35}
+{"event": "alarm", "t": 117.625, "pid": 111, "type": "avc", "reason": "no access unit", "gap_s": 6.15, "threshold_s": 6.15}
+{"event": "alarm", "t": 118.5, "pid": 121, "type": "mp1a", "reason": "no access unit", "gap_s": 6.9, "threshold_s": 6.9}
+
+packets        725,912
+media span     199.225 s
+alarms         2
+discontinuities 1
+
+     pid      type      units    thresh  outages     worst  state
+       0  sections        482 no cadence        0     0.00s  live
+      16  sections         22 no cadence        0     0.00s  live
+      17  sections        102 no cadence        0     0.00s  live
+     100  sections        482 no cadence        0     0.00s  live
+     111       avc      4,022   6150 ms        1    87.75s  DEAD
+     121      mp1a      4,629   6900 ms        1    87.63s  DEAD
+     123       ac3        689   6150 ms        0     0.00s  live
+     131  teletext      4,967   6150 ms        0     0.00s  live
+     141    scte35          0 no cadence        0     0.00s  silent
+     142    scte35          0 no cadence        0     0.00s  silent
+     143    scte35          0 no cadence        0     0.00s  silent

@@ -97,10 +97,12 @@ segmented lane over HTTP/3, only delivered-rate and programme-loss claims. Build
 that reads the playlist over H3 and concatenates segments verbatim; it is a small job and it upgrades
 every cell T20 measured.
 
-**P0-3. ~~The exporter's PCR does not survive a source discontinuity — upstream fix, then re-soak.~~
-Both halves closed: the fix is merged upstream as #3375 and the 24 h soak is run.**
-*The groomer half is closed; the upstream half is now the single item between this architecture and a
-viability claim.*
+**P0-3. The exporter's PCR does not survive a source discontinuity. Groomer half closed; upstream
+half fixed as #3375 and the 24 h soak run — then #3375 was found to have regressed the complement, so
+this is REOPENED against current `main`.**
+*A continuous timeline whose content restarts now stalls video and primary audio permanently, bisected
+to the #3375 merge itself ([T27](test-27-liveness-detector.md)). The 24 h soak stands on the pre-fix
+build; it is not reproducible on current `main`.*
 **Falsifies:** the headline conformance result's applicability to a permanent service.
 
 [T21](test-21-permanence-soak.md) put the groomer inside a long run for the first time and found the
@@ -119,7 +121,10 @@ which is what step 2 below asked for, and the answer changes the shape of what r
   exporter's scheduler is monotonic in media time. The recovery burst — 97,225 packets, 18.3 MB —
   is itself large enough to overrun the groomer.
 
-**The upstream half is now fixed, on these measurements, and verified.**
+**The upstream half was fixed for these six arms, and the fix then broke a seventh case that none of
+them tested** — see [T27](test-27-liveness-detector.md): on a *continuous* timeline whose content
+restarts, `0e61e3520` stalls video and MPEG-1 audio permanently, leaving 0.31 Mb/s of PSI, AC-3 and
+teletext. Against T23's own arms the fix does what it claims.
 [#3375](https://github.com/moq-dev/moq/pull/3375) opened citing the T23 comment, merged as
 `0e61e3520`, and closed #2833. Re-running all six arms unchanged against `d88c2ee99` puts **every arm
 at the control's figure**: the 600 s rewind costs 27 ms instead of 62,760 ms, and the encoder restart
@@ -838,6 +843,18 @@ than assumed.
 > elementary stream in order to demux it, so it is the one component in the chain that knows a track
 > has stopped without doing extra work — the single highest-leverage observability change available on
 > this lane, and something an opaque relay structurally cannot offer.
+>
+> **That specification is now built and tested in the delivery path**
+> ([T27](test-27-liveness-detector.md)). The open question it answered was whether access-unit spacing
+> — precisely the fine structure a store-and-forward hop may rearrange — is still legible at the
+> monitoring point. It is: the same 60 s video suppression reads **57.212 s** live at the groomed
+> output of a cross-host lane against T24's **57.22 s** offline. The audio case is caught in
+> **0.7–1.4 s** and localised to the PID, and nothing fires on either control. Detection latency is
+> the learned threshold, so it is knowable per stream in advance — and it is **wider at the groomed
+> output than in a file** for the small streams, which is the cost of monitoring where the wire
+> actually is. What remains open for this family is the *procurement* question rather than the
+> engineering one: whether commercial monitoring exposes per-PID access-unit liveness at all, or only
+> per-PID bitrate, which inherits the proportional-sensitivity problem.
 
 - **Question.** Can an operations team run hundreds of permanent feeds and determine quickly why one has
   stopped delivering correctly?

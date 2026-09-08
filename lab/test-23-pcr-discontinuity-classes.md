@@ -1,11 +1,15 @@
 # T23 — which PCR discontinuity classes the media-aware lane survives
 
-> **State: re-graded against the fix these measurements prompted, and the rewind defect is gone.**
+> **State: re-graded against the fix these measurements prompted; the rewind defect is gone from these
+> six arms, and the fix has since been found to regress a stimulus none of them uses.**
 > The results below were measured on `f8236680b`, which contained #3351 but not
 > [#3375](https://github.com/moq-dev/moq/pull/3375). That PR opened citing this campaign, merged as
 > `0e61e3520`, and closed [#2833](https://github.com/moq-dev/moq/issues/2833). Re-running all six arms
 > unchanged against `d88c2ee99` — which contains it — is in
-> [§ Against the fix](#against-the-fix-3375). **Every arm now matches the control, the rewinds
+> [§ Against the fix](#against-the-fix-3375). **This verdict holds for the six arms measured here.**
+> It does **not** extend to a continuous timeline whose content restarts: no arm below runs one, and
+> [T27](test-27-liveness-detector.md) has since bisected a permanent video and primary-audio stall on
+> exactly that stimulus to `0e61e3520` itself. **Every arm now matches the control, the rewinds
 > included**, and the one residue is the forward arm's missing flag, which upstream has recorded as a
 > separate open item on the strength of this campaign. Read everything before that section as the
 > behaviour of builds earlier than `0e61e3520`.

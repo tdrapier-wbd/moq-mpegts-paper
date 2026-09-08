@@ -1,0 +1,25 @@
+{"event": "armed", "t": 25.025, "watching": 4, "thresholds_ms": "111:6900;121:6900;123:6900;131:6900", "unmonitorable": "0(sections);16(sections);17(sections);100(sections);141(scte35);142(scte35);143(scte35)"}
+{"event": "alarm", "t": 118.25, "pid": 131, "type": "teletext", "reason": "no access unit", "gap_s": 6.9, "threshold_s": 6.9}
+{"event": "alarm", "t": 118.825, "pid": 123, "type": "ac3", "reason": "no access unit", "gap_s": 6.9, "threshold_s": 6.9}
+{"event": "clear", "t": 119.5, "pid": 131, "type": "teletext", "outage_s": 8.15}
+{"event": "clear", "t": 119.95, "pid": 123, "type": "ac3", "outage_s": 8.025}
+{"event": "watching", "t": 139.5, "pid": 131, "type": "teletext", "threshold_s": 1.0, "source": "learned"}
+{"event": "watching", "t": 140.2, "pid": 123, "type": "ac3", "threshold_s": 1.95, "source": "learned"}
+
+packets        1,250,932
+media span     197.050 s
+alarms         2
+discontinuities 0
+
+     pid      type      units    thresh  outages     worst  state
+       0  sections        550 no cadence        0     0.00s  live
+      16  sections         21 no cadence        0     0.00s  live
+      17  sections        100 no cadence        0     0.00s  live
+     100  sections        550 no cadence        0     0.00s  live
+     111       avc      7,072   6900 ms        0     0.00s  live
+     121      mp1a      8,186   6900 ms        0     0.00s  live
+     123       ac3        662   1950 ms        1     8.03s  live
+     131  teletext      4,756   1000 ms        1     8.15s  live
+     141    scte35          0 no cadence        0     0.00s  silent
+     142    scte35          0 no cadence        0     0.00s  silent
+     143    scte35          0 no cadence        0     0.00s  silent

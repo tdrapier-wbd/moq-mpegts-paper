@@ -544,7 +544,7 @@ by clip for reasons not established: 25.2 % of intervals above 40 ms on a synthe
 and 9.1 % on two contribution captures, and 0 % on a 27.5 Mb/s broadcast mux whose native cadence is
 27 ms. That exception is unexplained and was reported as unexplained.
 
-### A rewound timeline stalls the whole programme, not just the SI cadence — measurements contributed, issue fixed and closed
+### A rewound timeline stalls the whole programme, not just the SI cadence — measurements contributed, issue fixed and closed, **fix later found to regress the complement** (next section)
 
 [#2833](https://github.com/moq-dev/moq/issues/2833) is the maintainer's own, and it already had the
 mechanism: the exporter's stored last-emission only moves forward, so after a backwards jump nothing is
@@ -598,6 +598,52 @@ pacing and the JavaScript consumer.
 The earlier draft, written from T21's looping stimulus, claimed the exporter latches its PCR and emits
 a counter permanently. No arm of T23 reproduces that, and the draft was retired rather than filed. See
 [method notes](method-notes.md) §6.
+
+### #3375 regressed the complement: a *non*-rewinding source now stalls video and primary audio
+
+**This is the campaign's own fix, and it traded one failure for its opposite.** #3375 was written
+because of the T23 measurements above, and against its target case it works — that is measured below,
+not assumed. But on a source whose timeline is **continuous** and whose *content* restarts, the fixed
+exporter stalls video and MPEG-1 audio permanently. From [T27](test-27-liveness-detector.md):
+
+**Bisected to one commit.** 53 commits between the build T21 soaked for 24 h and the build under
+test; `git bisect run` over them, each step building the CLI and crossing several content joins with
+the candidate *and* a known-good binary in the same run. First bad commit **`0e61e35` — #3375,
+"fix(moq-mux): recover buffered TS output after a rewind"** — which changed
+`rs/moq-mux/src/container/ts/export.rs`, the exporter that stalls. Confirmed against its own parent
+`025613d` with two replicates per build against one publisher and one relay: parent **9.0–9.8 Mb/s**
+across seven joins, #3375 **0.31 Mb/s** from the first join onward, never recovering.
+
+**The two cases, same clip, same relay, only the source's timeline differing:**
+
+| source | parent `025613d` | `#3375` `0e61e35` |
+|---|---|---|
+| **true rewind** — `tsp --infinite`, every 30 s | **0.00 Mb/s** from t = 40 s, total stall — the #2833 behaviour this PR fixed | **8.66 Mb/s** mean, dipping to ~7.4 at each rewind then recovering |
+| **continuous timeline, content join** every 30 s | **9.0–9.8 Mb/s** throughout | **0.31 Mb/s** — only PSI, AC-3 and teletext survive |
+
+**The exporter introduces a rewind that is not on the wire.** A per-PID liveness detector on each
+build's output at the same join: the parent records **0 delivered-clock discontinuities** and keeps
+video and MPEG-1 audio live with zero outages, while #3375 records a step **backwards by 119.35 s —
+one pass length** — after which PID 111 (AVC) and PID 121 (MPEG-1 audio) go dead and never clear.
+Since the parent, on the same bytes, sees no discontinuity, the rewind is generated inside the new
+recovery path rather than delivered to it. The importer logs an MPEG-2 audio resync at the join
+(`resyncs=2 discarded=714`); whether that is the trigger is inference and is offered as such.
+
+**Attribution is bounded.** Not the source: two passes accumulate 1200.0 s of media with **0 backward
+PCR steps**. Not the relay or publisher: while 60 incumbent subscribers were stuck a **freshly
+joining subscriber was served perfectly** (8.9 Mb/s, 143,872 video packets in 25 s) from the same
+broadcast, with relay CPU at 0.54 of 2 cores. Not `--latency-max` and not fan-out: at N = 4,
+subscribers at 500 ms and 3 s stalled together within one 10 s sample.
+
+**Why this matters more than the case it replaced**, stated for the report: a continuous timeline
+carrying content joins is what a real encoder emits; a rewinding one is an artefact of looping a
+file. The pre-#3375 failure needed a stimulus the lab had to manufacture. This one arrives on its own.
+
+**Ready to file, not yet filed.** The reproducer is a ~30 s clip replayed on a continuous timeline,
+which fails within one join; the bisect, the paired-replicate confirmation and the two-source contrast
+above are the evidence. It is held only for a final read of the diff so the report names the code path
+rather than guessing at it — and because the last report drafted from a looping stimulus (above) had
+to be retired for exactly that reason.
 
 ---
 

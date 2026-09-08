@@ -153,9 +153,17 @@ for one flag. N = 150 that collapsed to 46 Mb/s in arm A now delivers **1,426 Mb
 
 **N = 200 is the harness failing, and the log says so exactly.** Eleven subscribers were SIGKILLed;
 `dmesg` on the subscriber host shows `tokio-rt-worker invoked oom-killer` and
-`Out of memory: Killed process … (moq)`. Each `moq export ts` holds **95.6 MB at N = 1 and 103.3 MB at
-N = 150** — essentially fixed per process, not a buffer that grows — so 150 clients occupy 15.1 GB of
-the box's 15.7 GB. The client's footprint, not the relay, sets this rig's ceiling.
+`Out of memory: Killed process … (moq)`. Each `moq export ts` held **95.6 MB at N = 1 and 103.3 MB at
+N = 150**, so 150 clients occupy 15.1 GB of the box's 15.7 GB. The client's footprint, not the relay,
+sets this rig's ceiling.
+
+Those two figures were read here as a per-process cost that barely moves with N, which is true and
+was the wrong axis: [T27](test-27-liveness-detector.md) held N constant and found the same process
+**filling logarithmically to a ~106–119 MB plateau over about ten minutes** (log r² = 0.904
+against linear 0.602, and 9.4 MB of drawdown from a running peak), matching where
+[T21](test-21-permanence-soak.md) found the exporter sitting from 0.5 h to 4.5 h. The numbers above
+are that fill caught early — each ramp point is only 45 s old — so **~120 MB, not ~96 MB, is the
+figure to plan against**, and the ceiling this rig imposes is correspondingly nearer.
 
 ### Arm C — GSO enabled, relay pinned to one core
 
@@ -238,9 +246,13 @@ regression test, and it is the strongest evidence available here that #3515 hold
   rather than audience is *not* what this measured.
 - **Nothing beyond 45 s at any N.** This is a capacity curve, not a soak. Permanence at high fan-out —
   in particular whether the relay's logarithmic memory growth from [T21](test-21-permanence-soak.md)
-  holds when 150 subscriptions are attached to it — is untested.
-- **The client's ~96 MB is measured but not explained.** It is fixed per process rather than
-  buffer-driven, and no attempt was made to attribute it.
+  holds when 150 subscriptions are attached to it — is not settled here.
+  [T27](test-27-liveness-detector.md) holds N = 60 for 90 minutes, which is a start and not a
+  permanence claim.
+- **The client's per-process memory is characterised but not attributed.**
+  [T27](test-27-liveness-detector.md) establishes the shape — a cache filling to 116–122 MB, with
+  memory given back along the way — but not what occupies it. `--latency-max 3s` here against
+  T21's 500 ms is the obvious suspect and is untested.
 
 ## How this reads against T25
 
