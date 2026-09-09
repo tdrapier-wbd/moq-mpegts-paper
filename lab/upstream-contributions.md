@@ -588,12 +588,27 @@ the collapse of the downstream buffer requirement went back as
 [#3375 (comment)](https://github.com/moq-dev/moq/pull/3375#issuecomment-5557693602). It asks for
 nothing; the detail is in [T23 § against the fix](test-23-pcr-discontinuity-classes.md#against-the-fix-3375).
 
-**One part of the campaign outlives the fix.** `quest/m0/ts-forward-discontinuity.md`, one of three
-follow-ups left open, is built on this campaign and directs its implementer to *"use the stimuli and
-oracle linked from the issue comment"*: the forward-jump arm's missing flag is **not** discharged by
-#3375, because rewind recovery handles the container consumer's signal without establishing that every
-input adaptation-field flag reaches it. The other two follow-ups carry the same signal into SRT egress
-pacing and the JavaScript consumer.
+**One part of the campaign outlived the fix, and has since been fixed by
+[#3529](https://github.com/moq-dev/moq/pull/3529).** `quest/m0/ts-forward-discontinuity.md`, one of
+three follow-ups left open, was built on this campaign and directed its implementer to *"use the
+stimuli and oracle linked from the issue comment"*: the forward-jump arm's missing flag was not
+discharged by #3375, because rewind recovery handles the container consumer's signal without
+establishing that every input adaptation-field flag reaches it. #3529 discharges it, **deleting that
+quest file as complete**, and its end-to-end regression test
+`a_signalled_reset_reaches_the_exported_clock` is documented as *"the end-to-end shape the #2833
+stimulus campaign graded"* — this campaign's arm C, asserted upstream as a unit test. Re-running arm C
+unchanged confirms it on current `main`: the flag is emitted, the exported jump is faithful to 11 ms
+instead of 961 ms short, and a starvation this lab had attributed to its own groomer goes with it
+([T23 § against #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)). The other two
+follow-ups carry the same signal into SRT egress pacing and the JavaScript consumer.
+
+**A guarantee we did not ask for, and one semantic worth noting.** #3529 also fixes the direction of
+the decision: the exporter reports what the source *declared* and will not infer a break from a
+timestamp step. An **unsignalled** jump therefore still reaches the wire unflagged, by design. In this
+lane it is `mpegts-pacer` that flags such a step — measured, and on the pre-#3529 build it was
+covering for the exporter on the *signalled* case too, putting one flag on the groomed wire where the
+export carried none. That dependency is now discharged: conformance on a signalled forward jump no
+longer requires our groomer.
 
 The earlier draft, written from T21's looping stimulus, claimed the exporter latches its PCR and emits
 a counter permanently. No arm of T23 reproduces that, and the draft was retired rather than filed. See
@@ -655,7 +670,22 @@ video-only bystander control and the permanence figure. The reproducer is a ~30 
 continuous timeline, which fails within one join. What the report explicitly does **not** claim is
 which comparison in the audio path yields `backwards = true` on a source with 0 backward PCR steps —
 that is left to the maintainer rather than guessed at, which is the lesson of the retired draft above.
-**Open upstream; no response yet.**
+
+**Accepted upstream, and the maintainer supplied the part the report withheld.** #3533 is open and
+labelled `quest`, with its own plan at `quest/m0/3533-ts-export-restart-stall.md` restating the
+reproducer, the bisect, the 0.31 Mb/s against 9.5 Mb/s and the single-track immunity. It names the
+trigger the report declined to guess: the legacy audio importer extrapolates timestamps from the last
+PES header and, after a resync at the join, re-locks a frame a few milliseconds below its own
+extrapolated high-water mark, while `consumer.rs`'s rewind check has no tolerance — so a sub-frame
+backward step is read as a rewind and fences the peers. The planned fix gives the fence an exit
+against the exporter's watermark rather than a timer, keeping the true-rewind behaviour #3375 added.
+Declining to guess cost nothing and the inference was sound; the quest's own framing — *"that is what a
+real encoder produces at a hard cut"* — is the report's severity argument accepted.
+
+**Still failing on current `main`.** #3529 edited the #3533 quest only to remove the note that it must
+land *after* #3529, and tested rather than assumed, `fd4f5d82e` is indistinguishable from the #3375
+merge: 0.31 Mb/s from the first join across ~7 joins, against a pre-#3375 control holding
+9.1–9.8 Mb/s ([T23 § against #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)).
 
 ---
 

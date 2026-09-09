@@ -1,0 +1,106 @@
+# T23 re-grade on current main (#3529) — raw grader output
+# builds: fd4f5d82e (main, contains #3529 merge d4b5349) vs d88c2ee99 (post-#3375 baseline)
+# stimuli: /tmp/t23_[A-F].ts, unchanged from T23; groomer mpegts-pacer 5ab84cd
+
+----- arm A build p3375
+=== arm A :: p3375_A ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290369    5569     1     0       0.701     108.860   37.6000   1.000
+export      236548    4271     1     0       1.210     107.560   45.3014   1.006
+paced       285586    6181     1     0       1.210     108.128   37.6000   1.000
+  source events: signalled -0.989s @pkt 119710
+  export events: signalled -0.375s @pkt 98638
+  paced events: signalled -0.458s @pkt 118510
+----- arm A build p3529
+=== arm A :: p3529_A ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290475    5571     1     0       0.701     108.900   37.6000   1.000
+export      236616    4266     1     0       1.310     107.510   45.1126   1.013
+paced       285782    6176     1     0       1.310     108.144   37.6000   1.000
+  source events: signalled -0.989s @pkt 119710
+  export events: signalled -0.400s @pkt 98713
+  paced events: signalled -0.607s @pkt 118638
+----- arm B build p3375
+=== arm B :: p3375_B ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290528    5572     1     0     700.000     209.219   37.6000   1.000
+export      237224    4283     1     0     700.510     208.010   45.1639   1.004
+paced       286195    6248     1     0     700.510     208.493   37.6000   1.000
+  source events: signalled -599.989s @pkt 119710
+  export events: signalled -599.525s @pkt 98967
+  paced events: signalled -599.624s @pkt 118949
+----- arm B build p3529
+=== arm B :: p3529_B ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290741    5576     1     0     700.000     209.299   37.6000   1.000
+export      236980    4277     1     0     700.510     208.010   45.1479   1.003
+paced       286363    6293     1     0     700.510     208.507   37.6000   1.000
+  source events: signalled -599.989s @pkt 119710
+  export events: signalled -599.375s @pkt 98638
+  paced events: signalled -599.660s @pkt 119044
+----- arm C build p3375
+=== arm C :: p3375_C ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290369    5569     1     0       0.701     139.860   37.6000   1.000
+export      233259    4249     0     0       1.210     136.435   45.2153   1.006
+paced       285635    6177     1     0       1.210     137.386   37.6000   1.000
+  source events: signalled +30.011s @pkt 119710
+  export events: unsignalled +29.050s @pkt 99922
+  paced events: signalled +28.789s @pkt 120650
+----- arm C build p3529
+=== arm C :: p3529_C ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290528    5572     1     0       0.701     139.920   37.6000   1.000
+export      236100    4266     2     0       1.210     137.760   45.0645   1.000
+paced       285698    6218     2     0       1.210     138.613   37.6000   1.000
+  source events: signalled +30.011s @pkt 119710
+  export events: signalled +30.000s @pkt 99916, signalled -0.025s @pkt 99928
+  paced events: signalled +29.964s @pkt 120045, signalled +0.022s @pkt 120057
+----- arm D build p3375
+=== arm D :: p3375_D ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290422    5570     0     1   95398.718      64.179   37.6000   1.000
+export      236351    4267     0     1   95399.235      62.167   45.1241   1.005
+paced       285432    6231     0     1   95399.235      62.837   37.6000   1.000
+  source events: rollover +0.011s @pkt 119710
+  export events: rollover +0.025s @pkt 98729
+  paced events: rollover +0.021s @pkt 118351
+----- arm D build p3529
+=== arm D :: p3529_D ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290581    5573     0     1   95398.718      64.239   37.6000   1.000
+export      237380    4285     0     1   95399.235      62.617   45.2954   1.008
+paced       285635    6255     0     1   95399.235      62.894   37.6000   1.000
+  source events: rollover +0.011s @pkt 119710
+  export events: rollover +0.025s @pkt 98729
+  paced events: rollover +0.030s @pkt 118376
+----- arm E build p3375
+=== arm E :: p3375_E ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290528    5572     2     0       0.701      65.219   37.6000   1.000
+export      236298    4263     1     0       1.210      63.885   45.1815   1.003
+paced       286209    6208     1     0       1.210      64.488   37.6000   1.000
+  source events: signalled -44.690s @pkt 119710
+  export events: signalled -43.850s @pkt 98231
+  paced events: signalled -44.325s @pkt 118955
+----- arm E build p3529
+=== arm E :: p3529_E ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290794    5577     2     0       0.701      65.319   37.6000   1.000
+export      237161    4281     1     0       1.210      64.110   45.1479   1.003
+paced       285985    6240     1     0       1.210      64.567   37.6000   1.000
+  source events: signalled -44.690s @pkt 119710
+  export events: signalled -44.075s @pkt 98638
+  paced events: signalled -44.167s @pkt 118532
+----- arm F build p3375
+=== arm F :: p3375_F ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290422    5570     0     0       0.701     109.880   37.6000   1.000
+export      236174    4264     0     0       1.210     107.785   45.1241   1.002
+paced       285719    6229     0     0       1.210     108.635   37.6000   1.000
+----- arm F build p3529
+=== arm F :: p3529_F ===
+point         pkts    PCRs  disc  roll    origin s     final s  rate now   ratio
+source      290528    5572     0     0       0.701     109.920   37.6000   1.000
+export      236346    4266     0     0       1.210     107.835   45.1241   1.002
+paced       285810    6224     0     0       1.210     108.663   37.6000   1.000

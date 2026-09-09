@@ -394,7 +394,8 @@ One deployment constraint is separate from latency and belongs with any conforma
 control's content gap, but that fix regressed the complement — on a continuous timeline whose content
 restarts it stalls video and primary audio permanently, bisected to its own merge commit
 ([T27](../lab/test-27-liveness-detector.md)). No build currently carries both cases, so a deployment on
-current `main` must pin or patch the client. A **forward** jump also still reaches the wire unflagged
+current `main` must pin or patch the client. The **forward** jump's missing flag, the one residue those
+six arms left, has since been fixed upstream and verified by re-running the arm
 ([T23](../lab/test-23-pcr-discontinuity-classes.md)).
 
 ### 5.2 The decision rule, restated

@@ -130,10 +130,20 @@ teletext. Against T23's own arms the fix does what it claims.
 `0e61e3520`, and closed #2833. Re-running all six arms unchanged against `d88c2ee99` puts **every arm
 at the control's figure**: the 600 s rewind costs 27 ms instead of 62,760 ms, and the encoder restart
 37 ms with 0 drops and 0 continuity errors instead of 44,049 ms with 54,168 and 103. The flag is
-emitted on the three signalled arms and correctly withheld on the rollover. **One residue remains
-upstream** — the forward jump propagates unflagged — and upstream tracks it as
-`quest/m0/ts-forward-discontinuity.md`, built on this campaign and naming our stimuli as its
-verification instrument. Re-running arm C is the cheap check when it lands.
+emitted on the three signalled arms and correctly withheld on the rollover.
+
+**Both residues are now closed upstream, and the cheap check was run.**
+[#3529](https://github.com/moq-dev/moq/pull/3529) discharged
+`quest/m0/ts-forward-discontinuity.md` — the quest built on this campaign, which named our stimuli as
+its verification instrument — and deleted it as complete. Re-running all six arms unchanged against
+current `main` `fd4f5d82e`: arm C's export now carries the `discontinuity_indicator` and reconstructs
+the jump to within 11 ms of the source instead of 961 ms short, the rollover is still correctly
+unflagged, the rewinds and the restart are unchanged, and **the arm C starvation this lab had booked
+against its own groomer was the exporter's** — 3,219 underruns against 5 at a cushion pinned
+identically on both builds. See
+[T23 § against #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main). **What has not
+changed is the seventh case**: the #3533 fence is present and unaltered on `fd4f5d82e`, so this entry
+stays REOPENED on that ground alone.
 
 **Historical: what remained upstream's before #3375**, kept because the sequence is the record of how
 it was closed. The exposure was the splice, the
@@ -210,8 +220,18 @@ media. This needs either a restored contribution feed or a stimulus that produce
 backwards step without a content repeat — a genuine programme junction between two different sources
 on one continuous timeline is the cheaper substitute, and is not the same test.
 
+**Upstream has since asserted the answer, which is not the same as our having measured it.** The
+`quest/m0/3533-ts-export-restart-stall.md` plan states the trigger as the legacy audio importer
+re-locking a frame a few milliseconds below its own extrapolated high-water mark after a resync, and
+frames the scenario as *"what a real encoder produces at a hard cut"*. That is the maintainer, who owns
+the code, agreeing with the severity reading — strong support, and still **specification-and-code
+reasoning rather than a measurement on a never-repeating source.** The distinction is the whole point
+of this entry, so it stays open until a live sender or a genuine two-source junction settles it.
+
 Until it is answered, treat the pre-#3375 build as the only one demonstrated to carry a continuous
-multi-track source, and note that no build carries both that and a true rewind.
+multi-track source, and note that no build carries both that and a true rewind — a statement
+re-confirmed against current `main` `fd4f5d82e`, which is indistinguishable from the #3375 merge on the
+continuous source.
 
 **P0-4. ~~Silent media-plane failure — detection.~~ MoQ lane RUN —
 [T22](test-22-silent-media-plane-failure.md),

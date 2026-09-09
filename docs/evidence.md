@@ -1067,14 +1067,15 @@ per-stream liveness plus groomer counters are.
 [T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software. Six arms, each placing exactly one
 deliberate timeline event at 45 s of a 105 s run, graded at the source, after the round trip and after
 grooming. The stimuli shift PTS and DTS as well as PCR, because the exporter schedules from media
-timestamps; moving PCR alone exercises a path the lane does not use. Measured twice on the same
+timestamps; moving PCR alone exercises a path the lane does not use. Measured three times on the same
 stimulus files and the same groomer `5ab84cd`, with the MoQ build as the only variable:
-`f8236680b` (#3351, not #3375) and `d88c2ee99` (contains `0e61e3520`, the #3375 merge).
+`f8236680b` (#3351, not #3375), `d88c2ee99` (contains `0e61e3520`, the #3375 merge) and current `main`
+`fd4f5d82e` (contains the #3529 merge `d4b5349`).
 
 | event | gap on `f8236680b` | **gap on `d88c2ee99`** | CC errors | drops | flag emitted | verdict now |
 |---|---:|---:|---:|---:|---:|---|
 | **33-bit base rollover** | 52 ms | **27 ms** | 0 | 0 | none, correctly | **clean, unchanged** |
-| forward 30 s | 238 ms | **27 ms** | 0 | 0 | **none — residue** | recovers, unflagged |
+| forward 30 s | 238 ms | **27 ms** | 0 | 0 | none on this build; **1 per rendition since #3529** | **clean, and now flagged** |
 | backward 1 s | 268 ms | **26 ms** | 0 | 0 | 1 | **clean** |
 | backward 600 s | ≥62,760 ms | **27 ms** | 0 | 0 | 1 | **clean** |
 | encoder restart (backward 44.7 s + counter reset) | 44,049 ms | **37 ms** | 103 → **0** | 54,168 → **0** | 1 | **clean** |
@@ -1085,7 +1086,9 @@ stimulus files and the same groomer `5ab84cd`, with the MoQ build as the only va
 `0e61e3520` and closed #2833; re-running the arms unchanged against it puts all six at the control's
 figure. The exporter follows the new timebase instead of waiting it out — arm B's export signals
 −599.525 s against the source's −599.989 s, rate ratio 1.004 — and flags it on exactly the three
-signalled arms while correctly leaving the rollover unflagged. **The buffer requirement collapses with
+signalled arms while correctly leaving the rollover unflagged. On `d88c2ee99` the forward arm was the
+fourth signalled event and the only one not flagged; #3529 closed that, and the rollover is still
+correctly unflagged there. **The buffer requirement collapses with
 the burst**: adaptive cushion 8,000 ms → 200–348 ms, high water 98,035 → 1,102–1,417 packets, which
 discharges the *rewind × bitrate* provisioning rule the pre-fix build implied. **STRONGLY SUPPORTED**
 for the six classes at this rig's scale; one run per arm per build.
@@ -1125,8 +1128,10 @@ longer qualifies the permanence claim.**
 
 On pre-`0e61e3520` builds, rewinds cost their own duration linearly (1 s → 268 ms … 44.7 s →
 44,049 ms) via monotonic scheduling — **PROVEN**; #3375 removes the burst. **`discontinuity_indicator`**
-now emits on rewind classes ([#2833](https://github.com/moq-dev/moq/issues/2833)); the forward jump
-(+29.05 s, flag clear) remains a residue. Pre-fix, wire conformance missed a 62.8 s programme hole
+now emits on rewind classes ([#2833](https://github.com/moq-dev/moq/issues/2833)), and on the forward
+jump too since [#3529](https://github.com/moq-dev/moq/pull/3529), which also reconstructs that jump to
+within 11 ms of the source instead of 961 ms short — re-verified by re-running the arm on `fd4f5d82e`
+(T23 § against #3529). Pre-fix, wire conformance missed a 62.8 s programme hole
 (§3.12 asymmetry). T23 does not reproduce T21's counter degeneration — **UNRESOLVED** whether they
 share a root cause.
 

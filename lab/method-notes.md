@@ -270,6 +270,28 @@ the first place to look when a result refuses to explain itself.** *(T8b C3.)*
 > visible as a choice. *Before hunting a mechanism in the network, list every value the rig was told
 > and vary the ones that were never in the matrix.*
 
+**A stage that sizes itself adaptively is a free variable, not a constant. Pin it before you attribute
+a downstream count to a build.** *(T23, re-grading against #3529.)*
+
+> Comparing the same six stimuli across two client builds, the forward-jump arm's groomer underruns
+> fell from 3,300 to 0 — a clean-looking result with a competing explanation, because the groomer's
+> *adaptive* cushion had also settled at ~347 ms in the new session against 200 ms in the old, control
+> included. Either the build or the cushion could account for it. Re-running the arm **and its control**
+> on both builds with the cushion pinned at 200 ms separated them, though not in the way the raw counts
+> suggest: the control moved too, 189 to 6, so the absolute figures still carry something the arm does
+> not isolate. What survives is the excess *over the control within one build* — 17× on the old build,
+> below it on the new. *Pinning the adaptation is what makes a comparison possible; carrying the control
+> through the pinned run is what tells you which part of it you may claim.*
+
+**Re-running the control arm re-measures the session, and that is exactly why it earns its place.**
+*(T23, re-grading against #3529.)*
+
+> The same re-grade appeared to show content gaps rising on every arm, 26–27 ms to 70–127 ms. The
+> byte-identical control arm rose further than any of them, 27 ms to 141 ms, which forbids attributing
+> any of it to the build: the session's baseline had moved, and every arm sat at or below its own
+> control. Without that arm the re-grade would have reported a regression in the very build that fixed
+> the defect it was testing. *Carry the null arm into every re-run, not just the first campaign.*
+
 ---
 
 ## 2. Instruments, and reading what they tell you

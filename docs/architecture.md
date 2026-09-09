@@ -880,9 +880,10 @@ Ranked by how much a negative answer would change the architecture.
 3. **Do the correctness boundaries in §4.3 hold?** **PCR discontinuity and wrap are now tested**
    through the exporter and the groomer, not merely reachable: the 33-bit wrap is carried correctly
    end to end, and since [#3375](https://github.com/moq-dev/moq/pull/3375) so are rewinds, forward
-   jumps and an encoder restart — all six *placed* classes at the control's content gap, with a
-   **forward jump still unflagged** ([T23](../lab/test-23-pcr-discontinuity-classes.md)). **A seventh
-   case is now failing and it is the ordinary one**: on a continuous timeline whose content restarts,
+   jumps and an encoder restart — all six *placed* classes at the control's content gap, the forward
+   jump's missing flag since fixed upstream and re-verified
+   ([T23](../lab/test-23-pcr-discontinuity-classes.md)). **A seventh case is now failing and it is the
+   ordinary one**: on a continuous timeline whose content restarts,
    #3375 itself stalls video and primary audio permanently
    ([T27](../lab/test-27-liveness-detector.md)), so a deployment on current `main` must pin or patch
    the client. What remains untested is

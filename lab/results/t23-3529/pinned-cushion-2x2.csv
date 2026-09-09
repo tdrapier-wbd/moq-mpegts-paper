@@ -1,0 +1,5 @@
+arm,build,cushion_ms,underruns,gap_ms,export_DI,paced_DI,drops,cc_errors
+C,3375,200,3219,27,0,1,0,0
+F,3375,200,189,206,0,0,0,0
+C,3529,200,5,26,2,2,0,0
+F,3529,200,6,34,0,0,0,0

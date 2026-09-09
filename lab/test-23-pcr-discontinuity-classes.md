@@ -1,18 +1,22 @@
 # T23 — which PCR discontinuity classes the media-aware lane survives
 
-> **State: re-graded against the fix these measurements prompted; the rewind defect is gone from these
-> six arms, and the fix has since been found to regress a stimulus none of them uses.**
+> **State: re-graded twice, against both fixes these measurements prompted. All six arms now match the
+> control and both residues are closed — and a seventh stimulus none of them runs is failing.**
 > The results below were measured on `f8236680b`, which contained #3351 but not
 > [#3375](https://github.com/moq-dev/moq/pull/3375). That PR opened citing this campaign, merged as
 > `0e61e3520`, and closed [#2833](https://github.com/moq-dev/moq/issues/2833). Re-running all six arms
 > unchanged against `d88c2ee99` — which contains it — is in
-> [§ Against the fix](#against-the-fix-3375). **This verdict holds for the six arms measured here.**
-> It does **not** extend to a continuous timeline whose content restarts: no arm below runs one, and
-> [T27](test-27-liveness-detector.md) has since bisected a permanent video and primary-audio stall on
-> exactly that stimulus to `0e61e3520` itself. **Every arm now matches the control, the rewinds
-> included**, and the one residue is the forward arm's missing flag, which upstream has recorded as a
-> separate open item on the strength of this campaign. Read everything before that section as the
-> behaviour of builds earlier than `0e61e3520`.
+> [§ Against the fix](#against-the-fix-3375); re-running them again against current `main`
+> `fd4f5d82e`, which contains [#3529](https://github.com/moq-dev/moq/pull/3529), is in
+> [§ Against #3529](#against-3529-current-main). **On current `main` the forward arm's missing
+> `discontinuity_indicator` is emitted, and the arm C starvation this file attributed to groomer
+> sizing turns out to have been the exporter's and goes with it.**
+> **This verdict holds for the six arms measured here.** It does **not** extend to a continuous
+> timeline whose content restarts: no arm below runs one, and
+> [T27](test-27-liveness-detector.md) has bisected a permanent video and primary-audio stall on
+> exactly that stimulus to `0e61e3520` itself — **still present, unchanged, on `fd4f5d82e`**, so a
+> deployment on current `main` must still pin or patch the client. Read everything before
+> § Against the fix as the behaviour of builds earlier than `0e61e3520`.
 
 ## Objective
 
@@ -243,9 +247,10 @@ root cause, but T23 cannot demonstrate that and does not claim it. See Correctio
 4. **The *rewind × bitrate* groomer provisioning rule is discharged post-fix** — no backlog to absorb,
    buffer high water **1,102–1,417** packets against pre-fix **98,035**. The cap-sweep attribution
    (drops are configuration when the cap is below the rewind) remains valid as pre-fix reading.
-5. **`discontinuity_indicator` is now emitted on the exported wire for signalled rewinds and encoder
-   restart** (arms A, B, E). **Residue:** arm C's forward jump still propagates **unsignalled +29.050 s**
-   — upstream open item; still a stream error for any third-party receiver.
+5. **`discontinuity_indicator` is emitted on the exported wire for every signalled arm.** Rewinds and
+   the encoder restart from [#3375](#against-the-fix-3375) (arms A, B, E); the forward jump from
+   [#3529](#against-3529-current-main) (arm C), which also brings its exported jump to within **11 ms**
+   of the source instead of **961 ms** short. The rollover is correctly unflagged throughout.
 6. **Wire conformance again fails to see a programme failure** — the pre-fix arms B and E passed every
    P1 check over programme holes of **62.8 s** and **44 s**; the T21/T22 monitoring lesson stands.
 
@@ -262,7 +267,7 @@ against T23's withhold-and-burst — see [Corrections](#corrections).
 | Control unchanged from a normal run | met — F **27 ms** gap, clean | met — F **26 ms** gap, clean |
 | Rollover crosses with no continuity error, no PCR interval above 40 ms, no programme gap beyond the control's | met — arm D **27 ms** vs control **27 ms** | met — **52 ms** vs control **26 ms** |
 | Each arm's class assigned recovers / fails on the media outcome | met — all six arms **26–37 ms** gap, **0** drops, **0** CC | met for classification — B and E **failed** on programme gap (**62,760 ms**, **44,049 ms**); A and C recovered |
-| Any upstream report rests on behaviour inconsistent with ISO 13818-1 | met for 2.4.3.4 on rewinds; forward flag still open (arm C) | met for 2.4.3.4, both directions — behaviour that identified the defect |
+| Any upstream report rests on behaviour inconsistent with ISO 13818-1 | met for 2.4.3.4 in both directions — rewinds on `0e61e3520`, the forward arm on `fd4f5d82e` ([#3529](#against-3529-current-main)) | met for 2.4.3.4, both directions — behaviour that identified the defect |
 
 ## Against the fix (#3375)
 
@@ -295,18 +300,21 @@ carry one `discontinuity_indicator` on the exported wire, where every arm previo
 D carries none, which is the point: a 33-bit rollover is ordinary arithmetic and flagging it would be
 the defect. F carries none.
 
-**Two residues, one upstream and one ours.**
+**Two residues on this build, both of them upstream's, and both closed on current `main`** — see
+[§ Against #3529](#against-3529-current-main). They are recorded here as the measured state of
+`d88c2ee99`:
 
 - **The forward jump propagates unflagged.** Arm C's export reproduces the source's timebase change as
-  `unsignalled +29.050 s`: the media outcome is now the control's, but a downstream device is given a
-  29 s jump with no announcement. Upstream has this recorded as `quest/m0/ts-forward-discontinuity.md`,
-  built on this campaign and pointing its implementer at these stimuli, so it is a known open item
-  rather than a new finding. **Still a stream error for any third-party receiver.**
+  `unsignalled +29.050 s`: the media outcome is the control's, but a downstream device is given a
+  29 s jump with no announcement. Upstream recorded this as `quest/m0/ts-forward-discontinuity.md`,
+  built on this campaign and pointing its implementer at these stimuli. **A stream error for any
+  third-party receiver on this build.**
 - **A small cushion starves on a forward jump.** Arm C took 3,300 underruns against 4–6 in the others,
   at a 200 ms adaptive cushion — the smallest any arm chose. No programme was lost (0 drops, 27 ms
-  gap): the carrier emitted stuffing where content was momentarily unavailable. It is a groomer sizing
-  behaviour at a small cushion, not a content failure, and worth knowing before a cushion is pinned
-  that low.
+  gap): the carrier emitted stuffing where content was momentarily unavailable. This file first read
+  that as groomer sizing at a small cushion. **It was not ours**: at a cushion pinned to the same
+  200 ms it disappears when the exporter is fixed, and the mechanism was the exporter reconstructing
+  the jump 1 s short.
 
 **The buffer requirement collapses, which supersedes the sizing result above.** With no backlog to
 absorb, the groomer's adaptive cushion settles at 200–348 ms rather than 8,000 ms, and the buffer high
@@ -316,7 +324,138 @@ builds containing `0e61e3520`**. It was a correct reading of the build it was me
 build is superseded. What remains true is the shape of the argument: a stage downstream of an exporter
 that withholds must be sized for what it withholds.
 
+## Against #3529 (current `main`)
+
+[#3529](https://github.com/moq-dev/moq/pull/3529) is the fix for the forward-flag residue above. It
+closed `quest/m0/ts-forward-discontinuity.md` — the quest written on this campaign, which directed its
+implementer at these stimuli — and its end-to-end regression test
+`a_signalled_reset_reaches_the_exported_clock` is documented upstream as *"the end-to-end shape the
+#2833 stimulus campaign graded"*. Its substance is import-side: `import.rs` +682/−46 tracks the PMT's
+PCR PID and carries its `discontinuity_indicator` through the existing empty-group markers, clearing
+buffered PES, codec tails and timestamp state at each reset. **`export.rs` gains five lines of comment
+and no behaviour.**
+
+| | |
+|---|---|
+| Under test | `moq` 0.11.0-`fd4f5d82e`, current `main`, containing the #3529 merge `d4b5349` |
+| Baseline | `moq` 0.10.0-`d88c2ee99`, rebuilt from the same worktree as § Against the fix |
+| Held constant | the six stimulus files unchanged, `t23-discontinuity.sh`, `t23-grade.py`, groomer `5ab84cd`, same host and loopback relay |
+| Raw | [`lab/results/t23-3529/`](results/t23-3529/) |
+
+### The forward arm's flag is emitted, and the exported jump becomes faithful
+
+| arm | export `disc` on `d88c2ee99` | **on `fd4f5d82e`** | export event on `d88c2ee99` | **on `fd4f5d82e`** |
+|---|---:|---:|---|---|
+| C forward 30 s | 0 | **2** | `unsignalled +29.050 s`, ratio 1.006 | **`signalled +30.000 s`, ratio 1.000** |
+| A backward 1 s | 1 | 1 | `signalled −0.375 s` | `signalled −0.400 s` |
+| B backward 600 s | 1 | 1 | `signalled −599.525 s` | `signalled −599.375 s` |
+| D 33-bit rollover | 0 | **0** | `rollover +0.025 s` | `rollover +0.025 s` |
+| E encoder restart | 1 | 1 | `signalled −43.850 s` | `signalled −44.075 s` |
+| F control | 0 | 0 | — | — |
+
+Two quantities move materially, both on arm C. The flag arrives, and the **reconstructed jump matches
+the source to 11 ms** (`+30.000 s` against the source's `+30.011 s`) where it was previously 961 ms
+short at a rate ratio of 1.006. The other signalled arms shift by 25–225 ms between the two runs, which
+is run-to-run variation of the same behaviour and leaves every classification unchanged; against arm
+C's 961 ms it is not a competing explanation. Arm D is the arm that must *not* move and does not: a
+33-bit wrap is still
+carried as ordinary modulo arithmetic and still unflagged, which upstream now also asserts as a unit
+test (`a_timestamp_rollover_is_not_a_timebase_break`). Rewinds and the encoder restart are unchanged.
+**0 continuity errors, 0 drops, 0 late drops, 0 stalls and 0 resyncs on every arm of both builds**, and
+each event arm's groomed output carries exactly one PCR leap and two PTS leaps — one per elementary
+stream — against the control's zero.
+
+### One source marker becomes one exported flag per rendition
+
+Arm C's export carries **two** `discontinuity_indicator`s for the source's one, 12 packets apart: a
+`+30.000 s` step and then a `−0.025 s` step. This is deliberate and upstream asserts it as
+`a_shared_forward_boundary_resets_once_per_rendition`. A forward marker reaches each rendition at that
+rendition's own media position, and a local consumer counter cannot distinguish one program break from
+two independent gaps, so the exporter re-anchors for each. The clip has two elementary streams (AVC
+video PID 256, MPEG-1 audio PID 257) and produces two flags. **The cost scales with rendition count,
+and it is a redundant re-acquisition per peer for a receiver, not a media loss**: the groomed output
+carries both flags with 0 continuity errors and 0 drops. A 25 ms backward step on a program clock is
+legal because it is signalled, but it is a second re-acquisition a receiver did not need.
+
+### The arm C starvation was the exporter's, not the groomer's
+
+The adaptive cushion is not a fixed quantity across sessions — it settled at 200 ms in
+§ Against the fix and at ~347 ms here, control included — so the underrun counts of the two sessions
+are not comparable and the arm C figure had to be re-measured with the cushion **pinned** at 200 ms on
+both builds:
+
+| arm | build | cushion | underruns | content gap | export flags | drops | CC errors |
+|---|---|---:|---:|---:|---:|---:|---:|
+| C forward 30 s | `d88c2ee99` | 200 ms pinned | **3,219** | 27 ms | 0 | 0 | 0 |
+| F control | `d88c2ee99` | 200 ms pinned | 189 | 206 ms | 0 | 0 | 0 |
+| C forward 30 s | `fd4f5d82e` | 200 ms pinned | **5** | 26 ms | 2 | 0 | 0 |
+| F control | `fd4f5d82e` | 200 ms pinned | 6 | 34 ms | 0 | 0 | 0 |
+
+**The evidence is the ratio to the control, not the absolute count.** The control's own figure also
+moves between the two builds, 189 to 6, so the absolute counts still carry something the arm does not
+isolate — a pinned 200 ms cushion is tighter than either build's adaptive choice, and the control is
+sensitive to it. What survives that is the *excess over the control measured within the same build*:
+arm C is **17× its control on `d88c2ee99` and below it on current `main`**. That comparison holds
+whatever else moved, because both rows share a build, a cushion and a session.
+
+The mechanism for the excess is the 961 ms the old exporter dropped from the jump: the groomer was
+asked for content that never arrived. It is not a cushion-sizing property, because the cushion is
+pinned to the same value in every row. Whether a pinned cushion *below* 200 ms starves on some other
+arm is still untested, and the control's own sensitivity at 200 ms is a reason to think a production
+cushion should not be pinned that low.
+
+### What the groomer was hiding
+
+Counted directly on the wire rather than through the grader, `d88c2ee99` puts **0** flags on the
+exported TS and **1** on the groomed TS: `mpegts-pacer` was inferring the break from the PCR step and
+declaring it itself. On `fd4f5d82e` the counts are **2 and 2** — pure propagation. Conformance to
+ISO 13818-1 §2.4.3.4 on a signalled forward jump therefore **no longer depends on our groomer**, which
+matters because the groomer is ours and a third party's carriage stage would not have done it. Note
+the direction of the upstream decision: the exporter now reports what the source declared and
+**will not infer a break from a timestamp step** (`"a leap the source did not declare must not be
+flagged"`). An *unsignalled* source jump consequently still reaches the wire unflagged by design, and
+in this lane it is our groomer, not upstream, that would flag it.
+
+### #3529 does not fix the #3533 fence
+
+Tested rather than assumed, and it does not. Against the T27 continuous multi-track source on the
+cross-host rig, with the relay held at `bin-3515` so the client build is the only variable
+([`fence-on-current-main.csv`](results/t23-3529/fence-on-current-main.csv)):
+
+| client build | t=10–20 s | t=30 s | t=40–240 s |
+|---|---:|---:|---:|
+| `fd4f5d82e` current `main` | 9.22–9.65 Mb/s | 1.63 | **0.31 Mb/s, ~7 joins, no recovery** |
+| `025613d` pre-#3375 | 9.41–9.64 | 9.46 | **9.10–9.81 Mb/s throughout** |
+| `0e61e35` #3375 merge | 8.95–9.34 | 1.90 | **0.31 Mb/s, no recovery** |
+
+Current `main` is indistinguishable from the #3375 merge itself. That is what the code predicts, and
+upstream is explicit about it: [#3533](https://github.com/moq-dev/moq/issues/3533) is open and
+labelled `quest` with its own plan, `quest/m0/3533-ts-export-restart-stall.md`, which #3529 edited only
+to remove the note that it must land *after* #3529. Upstream also supplies the trigger this campaign
+declined to guess at: the legacy audio importer extrapolates timestamps from the last PES header and,
+after a resync at the join, re-locks a frame a few milliseconds below its own extrapolated high-water
+mark; `consumer.rs`'s rewind check has no tolerance, so a sub-frame backward step is read as a rewind
+and fences the peers. The planned fix gives the fence an exit against the exporter's watermark.
+
+### What is unchanged, and what remains untested here
+
+Rewind classes, the rollover and the control are unchanged, so nothing in § Against the fix other than
+the two residues is disturbed. Two of upstream's five new tests cover behaviour no arm here exercises —
+`elementary_discontinuity_is_not_a_timebase_break` and
+`duplicate_payload_clock_packet_declares_one_break` — and remain **unverified in this lane**. Repeated
+*source* markers are also unverified: chaining arm C at 45 s with arm A at 50 s produced a single net
+`+29.011 s` event rather than two markers, so it graded as arm C and was discarded rather than
+reported. What *is* established in-lane is that two closely spaced signalled markers are carried
+cleanly, because arm C's own per-rendition pair is exactly that and costs 0 continuity errors.
+
 ## Corrections
+
+**Believed:** arm C's 3,300 underruns were a groomer sizing behaviour at a small adaptive cushion.
+**True:** they were the exporter's. With the cushion pinned identically on both builds the count falls
+from 3,219 to 5 — its own control's level — because #3529 stopped the exporter reconstructing the
+forward jump 961 ms short.
+**Rule:** an adaptively sized stage is a free variable, not a constant. Before attributing a
+downstream count to a build, pin the adaptation, or the comparison measures the session.
 
 **Believed:** the exporter's response to a source PCR discontinuity is to latch the last PCR
 and emit a counter (T21).
@@ -342,8 +481,14 @@ the generated stimuli back through the analyser cost two minutes and caught this
 - ~~Whether the arm E burst overruns the groomer at larger cushions.~~ **Answered**: a hard cap above
   the rewind absorbs it losslessly and the headroom is free when unused — then **superseded** by
   #3375, which removes the burst, so the requirement no longer arises.
-- **The forward jump's missing `discontinuity_indicator`**, which #3375 does not address and upstream
-  tracks as `quest/m0/ts-forward-discontinuity.md`. Our stimuli are the verification instrument it
-  names, so re-running arm C is the cheap check when that lands.
-- Whether the arm C cushion starvation (3,300 underruns at a 200 ms adaptive cushion, no content lost)
-  matters at a pinned production cushion. Ours, small, and untested above 200 ms.
+- ~~**The forward jump's missing `discontinuity_indicator`.**~~ **Closed** by #3529 and verified by
+  re-running arm C, which is the check this entry anticipated: the flag is emitted and the exported
+  jump is faithful to 11 ms.
+- ~~Whether the arm C cushion starvation matters at a pinned production cushion.~~ **Answered for
+  200 ms** — it was the exporter's, not the cushion's, and it is gone. Whether a pinned cushion
+  *below* 200 ms starves on any arm is still untested.
+- **Whether a non-PCR elementary-PID flag or a duplicate PCR packet behaves in this lane as upstream's
+  unit tests assert.** Both are new guarantees in #3529 with no arm here; each needs a stimulus the
+  generator does not yet produce.
+- **Whether repeated *source* markers survive the lane.** Chaining two arms cancels arithmetically, so
+  this needs a generator that places two markers without rebasing the second onto the first.
