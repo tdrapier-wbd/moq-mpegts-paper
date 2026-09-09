@@ -80,8 +80,9 @@ one rig, and the claim that it is derivable from a contribution encoder's publis
 not measurement. Widening it is **P2**: it changes a sizing rule, not a viability conclusion. The
 delivery latency this lane now carries (~2.4 s median) is #2967's regression, tracked separately.
 
-**P0-2. ~~The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.~~ Done —
-[T20](test-20-segmented-http3.md).** It falsified the row it was aimed at, and for a reason nobody
+**P0-2. ~~The segmented lane over HTTP/3 — the reordering cell, re-run substrate-matched.~~ RUN —
+[T20](test-20-segmented-http3.md).** *Remaining (planned):* byte-faithful HTTP/3 HLS receiver (below).
+It falsified the row it was aimed at, and for a reason nobody
 had ranked: the 0.98-against-0.19 separation was a **packet-size artefact**, not a substrate one.
 Equalised, the cell reads 0.44 segmented/TCP, 0.18 segmented/HTTP/3 and 0.13 media-aware, with the
 last two overlapping. The substrate change also *won* the segmented lane the loss cell and the 30 s
@@ -212,16 +213,20 @@ on one continuous timeline is the cheaper substitute, and is not the same test.
 Until it is answered, treat the pre-#3375 build as the only one demonstrated to carry a continuous
 multi-track source, and note that no build carries both that and a true rewind.
 
-**P0-4. ~~Silent media-plane failure — detection.~~ Done for the MoQ lane —
-[T22](test-22-silent-media-plane-failure.md).** It confirmed the property it was aimed at and bounded
+**P0-4. ~~Silent media-plane failure — detection.~~ MoQ lane RUN —
+[T22](test-22-silent-media-plane-failure.md),
+[T24](test-24-partial-media-plane-stall.md),
+[T27](test-27-liveness-detector.md); segmented lane *planned* (blocked on P0-2 byte-faithful H3
+receiver).** T22 confirmed the property it was aimed at and bounded
 it: **the transport never detects a stalled source** (120 s frozen, zero non-benign log lines across
 publisher, relay and exporter — not a timeout race, since the 30 s and 120 s arms agree), while the
 media plane detects it in **1.69–1.88 s** from two independent signals, with no false positive on the
 control. A frozen *relay* is the one case QUIC catches, at **34.3 s**. `--on-stall continue` holds a
 byte-perfect programme-free carrier indefinitely and makes the failure undetectable downstream.
-[Architecture](../docs/architecture.md) §9.1 is updated and its monitoring design survives, with PCR
-progression promoted to the primary detector because it needs nothing from MoQ, nothing from the groomer
-and no cooperation from the sender.
+[Architecture](../docs/architecture.md) §9.1 is updated and its monitoring design survives; **T24/T27
+supersede PCR progression as the primary detector** — only per-PID access-unit liveness caught every
+partial-stall arm ([T24](test-24-partial-media-plane-stall.md),
+[T27](test-27-liveness-detector.md)).
 
 **What P0-4 left behind is now closed, and it changed P0-4's own recommendation.** `SIGSTOP` freezes a
 process *cleanly*, and a real encoder that stalls may half-work. That arm is run as
@@ -345,7 +350,8 @@ sessions.** The single largest comparative gap. Infrastructure failures have bee
 and reported as recovery *times*; what a distributor buys is programme continuity, and the two are not
 the same number. Specified as [F4](#f4-failure-injection-and-recovery).
 
-**P1-2. The scaling model, both lanes. *The MoQ half is complete; the segmented half is not started.***
+**P1-2. The scaling model, both lanes.** *MoQ half RUN —
+[T26](test-26-cross-host-fanout.md); segmented half planned ([F5](#f5-the-scaling-model)).*
 Not a maximum observed once. For MoQ the knee on record was the *host's*, and driving the subscribers
 from the 8-vCPU box has now made it the relay's: **0.806 % of a core, 1.39 MB and one full stream copy
 per subscriber, all linear, giving 124–139 subscribers per core**, tested by pinning the relay to one
@@ -411,8 +417,8 @@ segmented half is the harder one to design honestly and is specified as
 **P2-1. Operational observability and supportability, assessed comparably.** Largely a structured
 review rather than a measurement, and it should say so. Specified as [F10](#f10-observability).
 
-**P2-2. Resource-exhaustion and isolation.** Whether one bad receiver can degrade others. Reviewed
-rather than exploited. Specified as [F11](#f11-isolation-under-abuse).
+**P2-2. Resource-exhaustion and isolation.** Whether one bad receiver can degrade others. **MoQ half
+run — [T25](test-25-isolation-under-abuse.md);** segmented half still planned per [F11](#f11-isolation-under-abuse).
 
 **P2-3. A standby packager joining an already-running feed.** The production shape, and the cell a
 co-started pair cannot measure. Cheap on the two hosts; sits behind P1-5, which establishes the steady
@@ -616,7 +622,9 @@ than assumed.
 
 ### F3. Silent media-plane failure
 
-> **Done for the MoQ lane, as [T22](test-22-silent-media-plane-failure.md).** It passes: the transport
+> **MoQ lane RUN — [T22](test-22-silent-media-plane-failure.md),
+> [T24](test-24-partial-media-plane-stall.md),
+> [T27](test-27-liveness-detector.md).** *Segmented lane planned* (blocked on P0-2). T22 passes: the transport
 > detects a stalled source never — 120 s frozen, zero non-benign log lines — and the media plane detects
 > it in 1.69–1.88 s from two independent signals, with no false positive on the control. A frozen relay
 > is caught by QUIC's idle timeout at 34.3 s, 18× slower. `--on-stall continue` makes the failure
@@ -705,7 +713,8 @@ than assumed.
 
 ### F5. The scaling model
 
-> **The MoQ half is complete — see [T26](test-26-cross-host-fanout.md).** Relay cost is linear on
+> **MoQ half RUN — [T26](test-26-cross-host-fanout.md).** *Segmented half planned.*
+> Relay cost is linear on
 > every axis at 0.806 % of a core, 1.39 MB and one full stream copy per subscriber, binding on relay
 > CPU at 124–139 subscribers per core, with the NIC's own allowance counters at zero throughout and
 > the prediction confirmed by pinning the relay to a single core. **R2 is therefore partly answered
@@ -843,7 +852,10 @@ than assumed.
 
 ### F10. Observability
 
-> **T22 and [T24](test-24-partial-media-plane-stall.md) have already produced this family's first
+> **MoQ lane RUN — [T22](test-22-silent-media-plane-failure.md),
+> [T24](test-24-partial-media-plane-stall.md),
+> [T27](test-27-liveness-detector.md).** *Segmented lane and procurement survey planned.*
+> T22 and T24 have already produced this family's first
 > reportable output — the list of faults for which no telemetry distinguishes the failing component —
 > and it is longer than expected.**
 >

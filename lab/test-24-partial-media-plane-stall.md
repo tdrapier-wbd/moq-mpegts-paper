@@ -274,24 +274,7 @@ recovery — the discontinuity is declared once, at the seam, and nothing downst
 
 ## Open
 
-**A per-track liveness signal in `moq import ts`.** The publisher logs
-`audio stream lost frame sync and resynced pid=… track=".mp2" discarded=466 resyncs=1` — added
-upstream in [#3372](https://github.com/moq-dev/moq/pull/3372) — so both audio arms are visible in the
-publisher's own log without any downstream analysis. **Video has no equivalent**: 57 s with no access
-units produced no log line at all. The importer already parses each elementary stream in order to
-demux it, so it is the one component in the chain that knows a track has gone quiet without doing any
-extra work. A symmetric per-track gap warning is a small change with a large monitoring payoff, and it
-is something a media-aware publisher can offer that an opaque relay structurally cannot. Drafted for
-upstream.
-
-**The 2.8 s discrepancy between injected and delivered outage.** 60.02 s in, 57.22 s out. The
-magnitude matches the cushion plus `--latency-max` that T22 measured at 1.81–1.92 s, but the sign
-needs care — buffering should shift both edges of a hole equally and leave its length alone, so
-something is compressing it, most likely the exporter's PCR regeneration during the gap (it inserted
-2,575 PCRs in this arm against 4,286 in the control). Not load-bearing for any conclusion above, and
-worth one focused run.
-
-**Whether per-PID liveness monitoring is available in practice.** The recommendation this experiment
-arrives at is only useful if broadcast monitoring products expose per-PID access-unit liveness rather
-than only per-PID bitrate. Bitrate alone would inherit exactly the proportional-sensitivity problem
-measured here, since a dead stream's PID bitrate goes to zero but the *service* bitrate does not.
+See [T27](test-27-liveness-detector.md) § Open for shared open items (upstream per-track liveness
+signal, 2.8 s outage compression, learning-window tail, procurement of per-PID liveness in commercial
+monitors). T27 validated the detector in the distribution path; this file holds the offline
+measurement those arms reproduce.

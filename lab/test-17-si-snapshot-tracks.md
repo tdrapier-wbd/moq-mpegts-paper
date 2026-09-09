@@ -267,27 +267,13 @@ before the cycle wraps yields a committed generation quietly missing a segment. 
 algorithm can do better — that is what sparseness costs — but it bounds how strong a fidelity
 guarantee this carriage can claim.
 
-**TDT/TOT was carried by neither side when this ran** — by design on the importer, by omission
-downstream — so the egress had no time table at all (measured: 0 packets on 0x0014), leaving a DVB
-receiver behind `export ts` with an EPG and no clock to place it against. Reported as
-[#2914](https://github.com/moq-dev/moq/issues/2914) and **since fixed upstream**: `export ts` proxies
-the source's time tables on a latest-value SI slot, and both TDT and TOT now reach the egress with
-TOT's `local_time_offset` descriptors byte-identical to the source's.
-
-Two arguments decided it against synthesis, and the second is the one that generalises:
-
-- **A clock synthesised from the host would break the EPG this test just validated.** EIT event times
-  are absolute UTC, so a clock and the schedule read against it must share one time base — which is
-  why TSDuck's `timeref` shifts EIT event times alongside the tables it re-stamps. Relaying EIT
-  verbatim while minting TDT locally misplaces every event by the offset between the two clocks.
-- **TOT carries policy, not just time.** DST transition dates and per-country offsets are the
-  operator's, and an exporter has no basis on which to invent them.
-
-Proxying is necessary but, for this class of stage, not sufficient. A remultiplexer stores a section
-and re-emits it on its own timer, so the clock it delivers is late by however long it held one:
-[T15](test-15-point-to-point-cadence.md) measurement 4 puts that at ~14 s against a source true to
-under a second, and shows the exporter repeating a time it has already asserted whenever the source
-ticks slower than the timer. The remaining work is emission timing, not carriage.
+**This run measured 0 packets on 0x0014** — TDT/TOT carried by neither side (by design on the
+importer, by omission downstream), leaving a DVB receiver behind `export ts` with an EPG and no clock
+to place it against. That carriage gap is **superseded upstream** since #2929: `export ts` now proxies
+the source's time tables on a latest-value SI slot, and both TDT and TOT reach the egress with TOT's
+`local_time_offset` descriptors byte-identical to the source's. What remains is emission timing, not
+carriage: [T15](test-15-point-to-point-cadence.md) measurement 4 puts the clock ~14 s late against a
+source true to under a second.
 
 ## Conclusions
 

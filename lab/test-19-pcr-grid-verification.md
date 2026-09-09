@@ -1,88 +1,13 @@
 # T19 — the PCR grid, and reconstructing a CBR wire from a media-aware source
 
-> **State:** complete. [#2967](https://github.com/moq-dev/moq/pull/2967) graded on the laptop rig;
-> [#3006](https://github.com/moq-dev/moq/pull/3006) on the EC2 primary, where the *time* domain is
-> measurable and the file domain is not; [#3351](https://github.com/moq-dev/moq/pull/3351) on the merged
-> build (measurement 10); and the downstream reconstruction that the merged build left to be done, on
-> the live wire and on three sources of differing burstiness (measurement 11).
->
-> **Four domains, and the last one is ours.** #2967 put the PCR *values*
-> on a flawless grid — every interval exactly 25.000 ms, 0 above the 40 ms P1 gate, the 85 %
-> sub-millisecond clustering gone — and repaired a reserved-bit defect this campaign never found. It did
-> not move the PCR packets' *positions in the byte stream*, which stayed bunched, and because
-> `moq export ts` writes to stdout the grid was unobservable to every consumer.
-> [#3006](https://github.com/moq-dev/moq/pull/3006) closed that boundary by making the export a
-> real-time pipe: it paces each write on the frame's timestamp, so the spacing now reaches a consumer as
-> *arrival time*. Measured at the pipe, that **halves the P1 gate failures (18.26 % → 7.45 %) and
-> doubles the on-grid fraction (27.4 % → 56.9 %), with the median interval at 24.69 ms**.
->
-> **It is a large improvement and it is not a pass.** 7.45 % of intervals still exceed 40 ms, to a worst
-> case of 277 ms, and 28.9 % arrive in a sub-millisecond burst — the distribution is now bimodal rather
-> than merely wrong, with roughly three stalls a second each followed by a burst of about four PCRs.
-> **That residue is the exporter's, not the instrument's:** the same arm on four times the cores returns
-> the same 7.45 % at zero CPU pressure, and the errors run 4.6:1 *early*, which no starved reader
-> produces. **Its cause is located** — the PCR grid is advanced by media-frame arrival rather than by the
-> passage of media time, so a backfilled run of slots falls due only once the frame that proves they
-> elapsed has landed, by which point every one of them is already late to write. The clustered positions
-> and the bursty releases are then one phenomenon and not two: 615 of the 626 early releases are exactly
-> the byte-adjacent packets (measurement 7).
-> **The byte-stream positions are unchanged and cannot be changed by a timing fix**, so any downstream
-> stage that re-derives PCR from byte position still reproduces the original defect: off-the-shelf
-> `tsp -P pcradjust` yielded 293 intervals above 40 ms and 87.9 % sub-millisecond, and our own
-> byte-locking groomer dropped 45.9 % of content. What #3006 buys is a lane whose cadence is recoverable
-> by a stage that reads the pipe in real time; what it does not buy is a conformant wire.
->
-> **The residue was filed as [#3334](https://github.com/moq-dev/moq/issues/3334)** with the invariant
-> stated as a requirement rather than an implementation, and the instrument this experiment should have
-> had from the start is offered upstream as
-> [#3335](https://github.com/moq-dev/moq/pull/3335) (test tooling only). The half of the defect that is
-> *ours* — a groomer that read source PCR value cadence and positional cadence as interchangeable — is
-> fixed and guarded in `mpegts-pacer` (measurement 8).
->
-> **The positional ask was granted and [#3351](https://github.com/moq-dev/moq/pull/3351) has merged.**
-> At the pipe the fix is everything it claims: adjacency **87.2 % → 0.0 %**, releases outside ±10 ms
-> **2/4,779** at a p95 of **1.70 ms**, and upstream's own gate passes on the merged build. On the wire it
-> *wins* content against #3351's own merge-base — the byte-locking groomer drops **211,957 → 134,769**
-> packets and stuffing falls **49.9 % → 28.8 %** — and on its own it does not reach the gate
-> (measurement 10).
->
-> **The residual was never upstream's to fix, and it is now fixed downstream.** #3351 places each slot's
-> bytes at the media time the slot asserts, which is correct. But a coded frame's bytes belong to *its
-> own* 40 ms however large the frame is, so a 417 kB I-frame lands as ~1,400 packets in one 25 ms slot —
-> while the source's CBR mux had spread those same bytes over many frame periods against a T-STD buffer.
-> **A media-aware lane cannot recover a mux schedule from decode timestamps, because the schedule was
-> never in them.** The groomer has to build a new one, and measurement 11 establishes that it can:
-> **the lane now passes all four criteria on the live wire.**
->
-> **What was in the way was three defects in our groomer, not one property of the lane** — none of them
-> visible on a source that arrives at its own mux rate, all three found by instrumenting rather than by
-> raising the cushion. PCR re-insertion was *opportunistic*, taking only slots the content scheduler
-> declined, and a burst declines nothing: every one of the 71 over-40 ms intervals in the graded output
-> contained **zero** null slots. The media-rate estimator averaged per-interval *ratios* on intervals
-> carrying 1 to 4,631 packets each, and read **23 % low**. And release was open-loop on that estimate, so
-> the residual error integrated against uptime — **+1.8 s of delivery latency across 90 s**, then
-> shedding. Pre-empting content for the PCR, estimating the rate as a ratio of sums, and closing the
-> release loop on buffer occupancy fixes all three.
->
-> **On the same 90 s live arm, at an unchanged cushion, cap and exporter budget:** continuity errors
-> **527 → 0**, groomer drops **109,516 → 0**, PCR intervals over 40 ms **432/3,882 → 0/5,892** (worst
-> **286.2 → 30.1 ms**), stuffing **32.1 % → 13.4 %**, and median delivery latency **4,181 → 2,447 ms**.
-> Over a 300 s arm: **0 dropped, 0 continuity errors, 0 underruns, 0/20,193 intervals over 40 ms, exact
-> 10,999,999 b/s CBR, 0 PCRs outside ±500 ns**, buffer flat at 1.26 s. **The media-aware lane produces a
-> conformant CBR wire.** Its price is buffering, and the buffer is content-dependent: it is set by the
-> **peak coded frame**, not by the bitrate (measurement 11).
->
-> **The ~480 ms standing lag is neither B-frame reorder depth nor the latency budget** — the ambiguity
-> measurement 9 left open is closed. An otherwise-identical `bframes=0` clip still carries **428.6 ms**
-> of it against `bframes=3`'s 481.2 ms, and moving `--latency-max` across 500 ms / 1 s / 2 s moves it
-> between 428.6, 414.9 and 451.5 ms. It is a fixed filling offset of roughly 420–490 ms.
->
-> **The instrument itself now has a test, which it did not when any of the above was measured.**
-> `ts-pcr-fixtures.py` synthesises all nine PCR boundary conditions and `ts-pcr-selftest.py` asserts the
-> verdict each must produce, 38 assertions. **The 33-bit wrap is placed 400 ms into a fixture** rather
-> than soaked 26.51 h for, which is what the eventual 72-hour hardware run needed to avoid a 27-hour
-> preliminary. Building it found two further analyser defects, both of it failing conforming input
-> (corrections).
+> **State:** complete. Three upstream PCR fixes ([#2967](https://github.com/moq-dev/moq/pull/2967),
+> [#3006](https://github.com/moq-dev/moq/pull/3006), [#3351](https://github.com/moq-dev/moq/pull/3351))
+> were graded in measurements 1–10; measurement 11 closed the repetition and mux-survival gates on the
+> live wire with groomer fixes at `64595f6`. **Headline wire result (300 s arm):** 0 continuity errors,
+> 0/20,193 PCR intervals above 40 ms (worst 30.1 ms), 10,999,999 b/s CBR — measurement 11 and
+> Conclusion. **Pass criteria 1–3 met; criterion 4 (delivery latency) not met** — median **2,447 ms** on
+> the passing 90 s arm versus T18's **109 ms** gate (Pass criteria). Upstream residue, positional fix,
+> groomer defects, standing lag and instrument self-test: measurements 1–11, Conclusion and Corrections.
 
 ## Objective
 
@@ -111,6 +36,8 @@ that gate be met:
    broken for every receiver, whatever its PCR looks like.
 4. **No regression in delivery latency**, since the lane's whole case rests on it
    ([T18](test-18-delivery-latency.md): 109 ms across the internet).
+   **Result (measurement 11, groomed live wire): NOT MET** — median delivery latency **2,447 ms**
+   (90 s arm; groomer at `64595f6`, exporter unchanged).
 
 ## Environment
 
@@ -609,12 +536,9 @@ produce a conformant stream. Measurement 10 grades that.
 **Objective.** #3351 merged as `4cf216149`. Re-run measurements 3, 4 and 6 against a merged build and
 decide the requirement, not the claim.
 
-**Build provenance, because the PR head moved after measurement 9 graded it.** `origin/main`
-`f8236680b` contains `4cf216149`; `git diff` over `rs/moq-mux/` between the merged head `9c870e64d` and
-the merge commit is empty, and nothing has touched `rs/moq-mux/src/container/ts/` or `pace.rs` in `main`
-since. The PR head measurement 9 tested was `87502b85e`, which was **force-updated** before merge — the
-exporter itself is identical across that move, but the re-verification was run from `main` regardless.
-Binaries pinned to `~/bin-3351/` (`moq 0.10.0-f8236680b`). Three controls, all measured in the same
+**Build provenance.** `origin/main` `f8236680b` contains #3351's merge `4cf216149`; `git diff` over
+`rs/moq-mux/` between the merged head and the merge commit is empty. Binaries pinned to `~/bin-3351/`
+(`moq 0.10.0-f8236680b`). Three controls, all measured in the same
 session on the same host: `~/bin-main` (0.9.10, pre-fix), `~/bin-2967` (0.9.12), and — to separate
 #3351 from eight weeks of unrelated `main` — **`~/bin-3351base/` (`0.10.0-8ed756a31`, #3351's own
 merge-base**, `4cf216149^`).
@@ -840,12 +764,11 @@ Same arm at 300 s, all three changes in:
 | median delivery latency | **2,466.1 ms** |
 | latency trend across the window | +60.6 ms (from +293.5 ms over 90 s — converging, not ramping) |
 
-**All four pass criteria are met.** Criterion 1 (no intervals above 40 ms after grooming): 0 of 20,193.
-Criterion 2 (mux survives, 0 continuity errors): met. Criterion 3 (continuity discipline on payload-less
-packets): met, as since #2967. Criterion 4 (no regression in delivery latency): the groomer's own
-contribution falls, 4,181 → 2,447 ms at an identical configuration — though the lane's absolute latency
-is still an order of magnitude above the 119 ms pre-#2967 control, which is #2967's regression and not
-this stage's (measurement 6).
+**Criteria 1–3 are met; criterion 4 is not** — see Pass criteria. Criterion 1: 0 of 20,193 intervals
+above 40 ms. Criterion 2: mux survives, 0 continuity errors. Criterion 3: payload-less continuity
+discipline, as since #2967. Criterion 4: median delivery latency **2,447 ms** against T18's **109 ms**
+gate; the groomer's own contribution improved (4,181 → 2,447 ms) but the lane's absolute latency remains
+an order of magnitude above the pre-#2967 control (#2967's regression, measurement 6).
 
 ### The file-domain sweep, isolating the pre-emption
 
@@ -984,9 +907,10 @@ and **that schedule is not in the decode timestamps, so no exporter working from
 it.** Building a new one is the downstream stage's job, and measurement 11 is that stage being made able
 to do it.
 
-**It can, and the lane passes.** 0 continuity errors, 0 groomer drops, 0 underruns, 0 of 20,193 PCR
-intervals above 40 ms at a worst of 30.1 ms, 0 PCRs outside ±500 ns, 10,999,999 b/s against a nominal
-11,000,000, PSI intact, over 300 s on the live chain. What was in the way was three defects in our own
+**It can, and the lane passes criteria 1–3** (0 continuity errors, 0 groomer drops, 0 underruns, 0 of
+20,193 PCR intervals above 40 ms at a worst of 30.1 ms, 0 PCRs outside ±500 ns, 10,999,999 b/s against
+a nominal 11,000,000, PSI intact, over 300 s on the live chain). **Criterion 4 is not met** — median
+delivery latency **2,447 ms** (Pass criteria). What was in the way was three defects in our own
 groomer — an opportunistic PCR re-inserter that never found a spare slot inside a burst, a rate
 estimator that averaged ratios across intervals carrying 1 to 4,631 packets, and an open release loop
 that integrated the resulting error against uptime. **None of them needed information the media-aware
@@ -1137,10 +1061,9 @@ source, including arms that are shedding 80 % of their content.
   nothing else; and a residue with structure has a mechanism, so look for it in the code before naming
   it after the nearest event.
 - **Believed:** [#2978](https://github.com/moq-dev/moq/issues/2978) was explicitly left open by #3006.
-  **True:** it is closed as completed, on 2026-08-21, a day *before* #3006 merged — and #3006 went on to
-  rewrite the same file (`rs/moq-srt/src/server.rs`, −161 lines). Our note inverted both the state and
-  the order. **Method rule:** an issue's state is a fact with a timestamp, not an inference from the PR
-  that seemed to address it; read it from the tracker at the moment of writing.
+  **True:** it was already closed as completed before #3006 merged, and #3006 went on to rewrite the
+  same file (`rs/moq-srt/src/server.rs`, −161 lines). **Rule:** an issue's state is a fact read from the
+  tracker at the moment of writing, not an inference from the PR that seemed to address it.
 - **Believed:** `moq-srt` was an in-tree caller that honoured #2967's pacing contract, which is how
   [#2984](https://github.com/moq-dev/moq/issues/2984) was framed — one caller implements the contract,
   the other discards it. **True:** `moq-srt` had the *shape* of the contract and not the behaviour. Its

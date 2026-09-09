@@ -20,15 +20,9 @@
 > 6.78–8.94 at 500 ms, so the two rungs overlap and the recorded 4.29 → 10.35 ladder is one sample per
 > cell from distributions that wide. The cells where nothing sheds reproduce tightly; no cell where the
 > subscriber is actively shedding reproduces to better than a factor of two.
-> **Re-checking C3 found something that matters more than the rate — a subscriber that dies:**
-> `moq export ts` **exits with `Error: hang: moq error: old` in roughly half of contended cells**, at 0
-> continuity errors, leaving a downstream monitor a perfectly conformant stream that simply stops. It
-> is **not** a [#3271](https://github.com/moq-dev/moq/pull/3271) regression, though this file reported
-> it as one: the pre-#3271 client dies too (3 of 15 against 9 of 15, p ≈ 0.060), the same exit appears
-> in C3's original first pass months earlier on an older client, and it reproduces on the current
-> relay. The clean 6-against-0 split first recorded here was a **counting error** — two subscribers per
-> cell, two logs, and only `sub.log` was read. The upstream report was withdrawn before filing. What is
-> established is the failure mode and that it is current; what is open is its cause. **C6 settles
+> **C3 also found a subscriber that dies:** under contention `moq export ts` exits with
+> `Error: hang: moq error: old` — **not** [#3271](https://github.com/moq-dev/moq/pull/3271); the
+> authoritative numbers and the withdrawn attribution are in [C3 § subscriber death](#the-re-check-against-upstream-3271-and-the-subscriber-death-it-found) and Corrections. **C6 settles
 > permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so
 > C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
 > prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap
@@ -209,9 +203,8 @@ tsp -I file t8b_bbr1.ts -P analyze -O drop | grep -E 'bitrate|packets'
 
 Every intended statistic is a printed field of the cell. For C3 that means the *aggregate* over all N
 receivers — `agg_bytes`, `agg_mbps`, `agg_pct_cap` — summed at grade time by
-[`t8b-provisioned.sh`](scripts/t8b-provisioned.sh), which then deletes the extra flows' captures itself.
-The first pass printed flow 1 only and left the aggregate to be recovered from whatever captures were
-still on disk, which is how a disk janitor came to destroy four of six of them.
+[`t8b-provisioned.sh`](scripts/t8b-provisioned.sh), which then deletes the extra flows' captures itself
+(see Corrections for why that rule exists).
 
 ## Results
 
@@ -247,7 +240,8 @@ they sit on the same scale as the rows above them rather than merely alongside t
 
 **Read the "Character" column as a description of this condition and not as a verdict on a controller.**
 C2 inverts this ordering and C4 flattens it; the reasons are in those sections. What C1 establishes that
-survives is the rig, the segmented lane's client dependence below, and the thinning-versus-damage split.
+survives is the rig, the segmented lane's client dependence below, and the MoQ/SRT failure-mode split
+(Observations).
 
 ### C1, segmented lane — the client decides whether this lane degrades or dies
 
@@ -337,13 +331,8 @@ thing when it is full because something else is briefly using it — the feed is
 so yielding is content lost rather than rate deferred. BBRv2 yields hardest and therefore loses most.
 CUBIC, which needs actual loss before it backs off, holds more of the feed for the same reason it bloats.
 
-**Nothing on the MoQ lane corrupted anything, at any controller: 0 continuity errors in all six cells.**
-The transient costs *content* — a hole where groups were skipped, visible as a PCR interval up to 2.72 s —
-and never integrity. SRT again does the opposite and does it twice as clearly as in C1: it **gains** rate
-during the transient (9.91 and 9.97 against 9.43 before), because it is not congestion-responsive and
-simply declines to yield, and it pays for that with 53 and 5 continuity errors. Taking the most bytes and
-delivering a damaged stream is the same trade C1 recorded at 90 % and 4,279 errors, now visible at a
-provisioning level where every other lane is comfortable.
+**MoQ: 0 CC in all six cells; SRT: 53 / 5 CC while gaining rate through the transient (9.91 / 9.97 Mb/s
+against 9.43 before).** The thinning-versus-damage split is in Observations.
 
 **The PCR column is the exporter defect, not the transient.** 363–414 intervals above 40 ms on every MoQ
 cell is the clustering characterised in [T18](test-18-delivery-latency.md) and filed as
@@ -405,19 +394,9 @@ controller ranking has now come out in three different orders under three condit
 question rather than answering it:** for a fixed-rate feed the controller is a second-order term, and the
 first-order terms are how the link is provisioned and what the bottleneck queue does.
 
-**AQM is where SRT's failure mode stops being a trade and becomes a disqualification.** C1 recorded 4,279
-continuity errors under a FIFO; the same protocol under `codel` at the same shortfall takes **22,365**,
-and under `cake` **17,815**, reproducing to within 0.1 % and 1 % on the replicates. An AQM drops early
-and deliberately rather than tail-dropping a full buffer, and SRT's ARQ cannot keep up with it — so it
-still takes the most bytes of any lane (88 % of cap) and still delivers the least usable stream of any
-lane. Its PCR train degrades in the manner already noted: 538–552 intervals over 40 ms with the *median*
-interval unmoved, which is loss punching holes in an even grid rather than clustering.
-
-**MoQ's 0 continuity errors survive the AQM, and its cost moves entirely into the hole size.** Every MoQ
-cell, both AQMs, both replicates, all four controllers: zero. What the shortfall buys instead is a
-maximum PCR gap of **3.0–7.1 seconds**, i.e. multi-second holes where groups were dropped. Thinning
-rather than damage, at every queue discipline tried — that is now the most robust single result in this
-experiment.
+**MoQ: 0 CC in every cell; SRT: 22,365 / 17,815 CC under `codel` / `cake` at the same shortfall** — see
+Observations for the thinning-versus-damage split. MoQ's cost here is hole size: maximum PCR gaps of
+**3.0–7.1 s** where groups were dropped.
 
 **The segmented lane's 0 PCR violations here are a symptom of lag, not a conformance win, and the
 distinction matters.** `tsp -I hls` posts 0 intervals over 40 ms and a 25.0 ms maximum — perfect, and it
@@ -465,8 +444,8 @@ condition. The three-way disagreement across conditions is between *regimes*, no
 
 **SRT's failure is a cliff where MoQ's is a slope.** It is the best lane in the ladder down to 1.11× —
 97 % delivered at 126–130 ms, better than any MoQ cell — and at 1.01× it breaks: 570 ms and **1,035
-continuity errors**. Graceful degradation against a sharp edge just above unity is the same
-thinning-versus-damage split, now located on the provisioning axis.
+continuity errors**. Graceful degradation against a sharp edge just above unity follows the same split as C1 — see
+Observations.
 
 **The segmented lane needs roughly 1.5× where MoQ needs 1.2×, and the reason is burst shape rather than
 average rate.** Its delay is already 129 ms at 1.51× and triples to 336 ms at 1.21×, where every MoQ cell
@@ -479,9 +458,7 @@ sharing a bottleneck hurts whatever shares it with, and needs provisioning again
 ### C3 — coexistence, where the media-aware lane's one serious scaling result is
 
 N concurrent feeds of one transport through one 15 Mb/s bottleneck and one relay, 500 ms FIFO, 90 s per
-cell. The aggregate is the sum over all N receivers and is now a printed field of the cell rather than a
-number recovered from surviving captures — which is what the first pass got wrong, and why four of its
-six aggregates were destroyed by a disk janitor. **All six are recovered.** The `n=1` column is C5's
+cell. The aggregate is a printed field of the cell (see Corrections). The `n=1` column is C5's
 cell at the identical cap and queue, so the ladder is one condition throughout.
 
 | aggregate delivered, of the 15 Mb/s cap | n=1 | n=2 | n=3 |
@@ -618,9 +595,8 @@ read only the first. All three pre-arm deaths are in `sub.2.log`, with `sub.log`
 
 1. **The pre-#3271 client dies too**, 3 of 15 cells on the same relay, once the second subscriber's log
    is read.
-2. **The failure predates the comparison entirely.** C3's original first-pass cell `c3-cubic-n3` — an
-   older client (`eab96019`), three flows, months before #3271 — recorded the same exit, in
-   `sub.3.log`.
+2. **The failure predates the comparison entirely** — the same exit appears on an older client in an
+   earlier C3 cell (`sub.3.log`; build `eab96019`).
 3. **It reproduces on the current relay.** Every cell in the table shares `moq-relay`
    **0.13.7-5e0e98c1**, a July build pinned for C2's controller comparison, and the mechanism runs
    through the *relay's* group eviction. Crossed over both versions, 5 replicates each:
@@ -844,20 +820,9 @@ operator who can spend buffer does not have this problem; one who cannot must pr
 remains open is narrower than the question this cell opened with: why the marginal cost of a short
 budget is so steep, and whether the knee sits at the RTT, the group duration or the relay's buffering.
 
-**What does not vary is the failure mode, and that is the transferable result.** Across three
-conditions, four controllers, three queue disciplines and two provisioning levels, the MoQ lane loses
-*content* and never *integrity* — **0 continuity errors in every MoQ cell run** — with the cost appearing
-as PCR gaps of up to 7.1 s where groups were skipped. SRT does the opposite everywhere, and for the same
-reason each time: not being congestion-responsive, it takes its share rather than yielding — it actually
-**gained** rate through the C2 transient — and pays in continuity errors. **Its damage scales with how
-well-behaved the network is**: 53 and 5 errors on a provisioned FIFO, 4,279 on an under-provisioned FIFO,
-and 17,652–22,365 under an AQM, because early deliberate drops defeat ARQ where a full tail-drop buffer
-only delayed it. Thinned-but-clean against complete-but-damaged is the real choice, and it is stable
-across every condition in a way that no controller ranking is.
-
-**Under congestion the three data planes fail three different ways — but only two of those failures
-belong to a transport.** MoQ thins and SRT damages, and each does so because of what its protocol
-does with a shortfall. Segmented HTTP does whatever its receiver does: `tsp -I hls` slides backwards
+**What does not vary is the failure mode** — see Observations. **Under congestion the three data planes
+fail three different ways — but only two of those failures belong to a transport.** Segmented HTTP does
+whatever its receiver does: `tsp -I hls` slides backwards
 through the live window and loses the session at 43 s, while a client that re-anchors on a 404 thins
 in whole segments at 99 % of the cap with a clean TS. **The lane is not fragile under congestion; the
 shipped client is.** That is the finding, and it is a different claim from the one the `tsp` row on
@@ -909,25 +874,17 @@ name one. What is promotable is the provisioning rule, the AQM result, and the f
 
 ## Corrections
 
-**Believed:** the `moq export ts` exit under contention was a regression introduced by
-[#3271](https://github.com/moq-dev/moq/pull/3271), at 6 of 14 contended cells against 0 of 14 on the
-merge-base parent, p ≈ 0.016.
-**True:** the exit occurs on both client arms (9 of 15 against 3 of 15, p ≈ 0.060), on both relay
-versions, and in C3's original first pass months earlier on an older client. Two errors combined to
-manufacture the clean split. Each contended cell runs two or three subscribers and writes `sub.log`,
-`sub.2.log` and `sub.3.log`; **the death detector read only `sub.log`**, and every pre-arm death
-happens to sit in `sub.2.log`. Separately, all cells shared a July relay while the mechanism runs
-through the relay's group eviction.
-**Rules:** two, and the first is the one that would have caught this on its own. **A detector must
-read every instance of the thing it is detecting** — a rig with N subscribers and a per-cell verdict
-derived from subscriber 1 is not measuring the cell, and the failure is silent because a partial read
-returns a plausible number rather than an error. And **a pinned component that the proposed mechanism
-runs through must be crossed, not trusted**: "hold everything else constant" scoped the conclusion to a
-stale relay and made the pin the confound.
+**Believed:** C3's aggregate over N receivers could be recovered from per-flow captures after grading
+flow 1 only. **True:** four of six aggregates were lost when a disk cleanup ran against the results
+tree. **Rule:** every statistic the cell claims must be printed at grade time; do not rely on files
+that a janitor may delete.
 
-That the result was significant, tightly clustered (deaths at 54–57 s) and mechanically explicable is
-the uncomfortable part. Nothing about its shape suggested a counting error, and the draft upstream
-issue was six paragraphs of confident mechanism before either check was run.
+**Believed:** the `moq export ts` exit under contention was a [#3271](https://github.com/moq-dev/moq/pull/3271)
+regression (6/14 against 0/14, p ≈ 0.016). **True:** it is **not** #3271 — the exit occurs on both
+client arms (9/15 against 3/15, p ≈ 0.060), on both relay versions, and predates #3271; the clean split
+was a **counting error** (only `sub.log` read of two or three per cell). **Rules:** **a detector must
+read every instance of the thing it is detecting**; and **a pinned component the proposed mechanism runs
+through must be crossed, not trusted**.
 
 ## References
 

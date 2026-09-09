@@ -72,7 +72,7 @@ replays the file's own packets, so the broadcast now presents the source mux to 
   cut to match), captures generously, then trims to the packet bound. The standing relay and both
   standing publishers are left exactly as found; the rig tears its own sender down **by process group**,
   never by process name, because on that box the standing units are `tsp`/`moq`/`ffmpeg` processes too.
-- **Source:** `/home/ubuntu/CNNiEMEA2.ts` (745,917,260 B, 1080i25 H.264, ~9.95 Mbps PCR-derived, 13
+- **Source:** `~/CNNiEMEA2.ts` on `<EC2_IP>` (745,917,260 B, 1080i25 H.264, ~9.95 Mbps PCR-derived, 13
   PIDs, 600 s). The local copy is byte-identical in length and supplies the reference cut, so no
   745 MB transfer is needed to compare against the source.
 - **One instrument, one version, both ends:** TSDuck **3.44-4676** on EC2 *and* locally — the same
@@ -93,17 +93,9 @@ replays the file's own packets, so the broadcast now presents the source mux to 
 for TCP 8080 was added during this session for the segmented lane; the two UDP ports the other lanes
 need (443 QUIC, 9010 SRT) fall under the blanket UDP rule. All three lanes therefore run from home.
 
-**A closed-port probe cannot tell a filtered port from an open one with nothing listening, and reading
-it as "filtered" is how this file briefly acquired a wrong environment claim.** `nc -z` against `80`,
-`443`, `8080` and six other TCP ports reported every one closed, and that was recorded as the security
-group admitting no TCP but SSH. It supported no such conclusion: nothing was listening on any of those
-ports, so a refusal was the expected answer whether the rule existed or not. The discriminator is the
-response, not its absence — **a filtered port drops the packet and the probe times out, while an
-admitted port with no listener refuses immediately.** Measured here: with `python3 -m http.server` bound
-on 8080, a request from home completed in **17 ms** with HTTP 200; TCP **81**, which is in no rule, took
-the full **8 s** timeout. Because that distinction was not drawn at the time, this file cannot say
-retroactively whether 8080 was admitted before the rule was added — only that the probe used could not
-have told the difference.
+**Reachability probes need a listener.** A closed-port check with nothing bound cannot distinguish a
+filtered port from an admitted one with no server; the measured discriminator and the rule are in
+Corrections.
 
 ## Procedure
 
@@ -300,22 +292,22 @@ authoritative carriage record for this lane, taken with matched windows and one 
 and **the whole non-transparency half of its original result has been reversed by
 [#2440](https://github.com/moq-dev/moq/pull/2440) and by the publisher change**:
 
-| Metric | As first measured (pre-#2440, ffmpeg publisher) | **Now** (`0.9.11-eab96019`, `tsp` publisher) |
-|---|---|---|
-| Relay reachable over internet | yes (~125 ms RTT) | yes |
-| Elementary streams delivered | 2 — `0.avc3` + `0.mp2` | **7, all at source PIDs**, plus verbatim `N.ts` tracks |
-| AC-3 / teletext / SCTE-35 ×3 | **dropped** (by ffmpeg, before MoQ) | **all present** — 0x007B typed AC-3, 0x0083, 0x008D/8E/8F |
-| Transport Stream Id | 0x0001 (regenerated) | **0x0000 — source value** |
-| Original Network Id | — | **0x0000 — source value** |
-| Service name / provider | **lost** (unknown / Undefined) | **CNNI EMEA HD / Warner Bros. Discovery** |
-| Service type | **lost** | **0x19 — preserved** |
-| SDT / NIT | **dropped** | **both present** |
-| TDT/TOT | dropped | **still dropped** — [#2914](https://github.com/moq-dev/moq/issues/2914), fixed by #2929 on `dev`, which this build predates |
-| PMT PID | **renumbered → 0x1000** | **0x0064 — source PID kept** |
-| PCR PID | 0x0100 | **0x006F — source PID kept** |
-| Continuity-counter errors (P1) | **0** | **0** |
-| PCR interval mean / max | 34.98 / 319.98 ms | 33.52 / 319.98 ms — **both lane-introduced**, see above |
-| PCR intervals > 40 ms | 13.21 % | 12.59 % — **lane-introduced**, source has none in 600 s |
+| Metric | **`0.9.11-eab96019`, `tsp` publisher** |
+|---|---|
+| Relay reachable over internet | yes (~125 ms RTT) |
+| Elementary streams delivered | **7, all at source PIDs**, plus verbatim `N.ts` tracks |
+| AC-3 / teletext / SCTE-35 ×3 | **all present** — 0x007B typed AC-3, 0x0083, 0x008D/8E/8F |
+| Transport Stream Id | **0x0000 — source value** |
+| Original Network Id | **0x0000 — source value** |
+| Service name / provider | **CNNI EMEA HD / Warner Bros. Discovery** |
+| Service type | **0x19 — preserved** |
+| SDT / NIT | **both present** |
+| TDT/TOT | **still dropped** — [#2914](https://github.com/moq-dev/moq/issues/2914), fixed by #2929 on `dev`, which this build predates |
+| PMT PID | **0x0064 — source PID kept** |
+| PCR PID | **0x006F — source PID kept** |
+| Continuity-counter errors (P1) | **0** |
+| PCR interval mean / max | 33.52 / 319.98 ms — **lane-introduced**, see above |
+| PCR intervals > 40 ms | 12.59 % — **lane-introduced**, source has none in 600 s |
 
 **Over the public internet, the deployed media-aware lane now carries the DVB service layer it used to
 strip, with 0 continuity errors.** Only TDT/TOT is still missing, and that has a known cause and a
@@ -463,15 +455,15 @@ Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §1
 
 ## Corrections
 
-**This file's results table asserted a stripped service layer long after the deployment stopped
-stripping it.** Every SI/PMT/TSID row was measured on a build predating #2440 and, for the loop leg,
-through an `ffmpeg -c copy` publisher that dropped AC-3, teletext and the splice PIDs before MoQ saw
-them — so those rows were partly measuring ffmpeg's stream selection and were labelled as the lane's
-behaviour. Both have since changed and the rows now carry both states explicitly. *Lesson: a result
-taken against a standing deployment has two provenances, the build and the feed, and either can move
-without the experiment being re-run. A leg whose publisher is not part of the rig needs its publisher
-recorded as an input — the same class of error as feeding a lane an ffmpeg remux and attributing the
-remuxer's output to the transport ([T3](test-3-opaque-transparency.md)).*
+**Believed:** the standing loop leg stripped the service layer — 2 elementary streams (`0.avc3` +
+`0.mp2`), AC-3 / teletext / SCTE-35 dropped, TSID regenerated to 0x0001, service identity lost, PMT
+renumbered to 0x1000. **True:** those rows were taken on a build predating #2440 through an
+`ffmpeg -c copy` publisher that dropped those PIDs before MoQ saw them; on the current build with a
+`tsp` publisher the three-lane and Leg A tables above are authoritative. **Rule:** a service-layer
+census must be taken against the deployed build *and* feed, not an earlier one; a leg whose publisher
+is not part of the rig needs its publisher recorded as an input — the same class of error as feeding
+a lane an ffmpeg remux and attributing the remuxer's output to the transport
+([T3](test-3-opaque-transparency.md)).
 
 **This file credited the lane's 320 ms PCR gaps to the encoder, and concluded the opposite of what the
 data supports.** It reported the egress at "mean/max 33.52 / 319.98 ms" and called the maximum
@@ -495,16 +487,12 @@ before recording that a lane preserves something, check whether another experime
 it does not: a contradiction between two files is worth more than a re-measurement, because one of them
 is already wrong.*
 
-**This file briefly recorded the origin's security group as admitting no inbound TCP but SSH, on a probe
-that could not have shown it.** `nc -z` reported nine TCP ports closed and that was written up as
-"filtered", making segmented HTTP look blocked on a firewall change. Nothing was listening on any of
-those ports, so refusal was the expected answer whether or not a rule existed — the probe measured the
-absence of a server, not the presence of a filter. With a listener bound on 8080 the same path completed
-in 17 ms; TCP 81, in no rule, took the full 8 s timeout. *Lesson: a negative reachability result is only
-evidence about the network if the far end would have answered a positive one. Test a port with something
-listening on it, or read the failure mode rather than the failure — a drop times out, a refusal returns
-immediately — and never infer a policy from a silence you have not characterised. The same shape as the
-campaign's rule about computing the effect an arm should see before trusting its null.*
+**Believed:** the origin security group admitted no inbound TCP but SSH. **True:** an `nc -z` probe with
+nothing listening measures the absence of a server, not a filter — refusal is expected whether or not a
+rule exists; with `python3 -m http.server` on 8080 the path completed in **17 ms**, while TCP **81** (in
+no rule) took the full **8 s** timeout. **Rule:** a negative reachability result is evidence about the
+network only if the far end would have answered a positive one — bind a listener, or read the failure
+mode (drop times out, refusal returns immediately).
 
 ## References
 

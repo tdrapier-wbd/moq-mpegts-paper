@@ -303,11 +303,15 @@ rate, stuffing or null packet; MoQ has no notion of them either. That is not a c
 it is the boundary of what a transport specification is for — but it means R3 is *built*, on either
 data plane.
 
-**R3 and R4 looked coupled and are not.** The edge stage that satisfies R3 appeared to buy its PCR
-conformance with buffer depth, and buffer depth is latency — which would have made every recommendation
-a trade between conformance and delay. Measurement separated them: on the media-aware lane the
-repetition figure does not move with buffer depth at all, and the residual failure is an upstream
-carriage defect rather than a price paid out of latency ([Evidence](evidence.md) §3.2, §3.11).
+**R3 and R4 are coupled, but not by buffer depth.** The edge stage that satisfies R3 appeared to buy its
+PCR conformance with buffer depth, and buffer depth is latency. Measurement disposed of that particular
+trade — on the media-aware lane the repetition figure does not move across an eightfold cushion ladder,
+and what clears the gate is the stage reserving an output slot for the PCR, which is independent of
+depth. But the two requirements are not thereby independent: the only configuration measured conformant
+on that lane delivers at **2,447 ms**, against **109 ms** at a cushion that is not conformant, so a
+latency figure for it is meaningless without the conformance of the same bytes. **R4 at R3 is therefore
+the open commercial question on this lane, not a settled advantage** ([Evidence](evidence.md) §3.2,
+§3.11).
 
 ---
 

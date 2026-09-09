@@ -228,38 +228,41 @@ root cause, but T23 cannot demonstrate that and does not claim it. See Correctio
 
 ## Conclusions
 
-1. **The 26.51 h PCR rollover does not threaten permanent operation.** It is carried
-   correctly through ingest, the round trip and grooming, with no measurable disturbance at
-   any of the three points. This was the single mandatory, unavoidable timeline event in the
-   evaluation, and it is discharged.
-2. **Forward discontinuities recover**; the lane loses 238 ms and re-acquires.
-3. **Backward discontinuities cost their own duration in programme**, linearly, because the
-   exporter treats a declared new time base as a timestamp that is merely not due yet. Below
-   about a second this is absorbed. Above it, it is a programme outage of the same length.
-4. **An encoder restart is the worst realistic case** and the one most likely in service: it
-   is a backward jump *and* it triggers a backlog burst large enough to overrun the groomer,
-   costing 44 s of programme, 54,168 dropped packets and the lane's only continuity errors.
-   **The two halves have different owners.** The 44 s hole is the exporter withholding and no
-   downstream stage can recover it. The 54,168 packets and the 103 continuity errors are the
-   groomer's hard cap being smaller than the rewind: at a cap above the rewind the same arm
-   loses nothing, and the headroom costs two packets of steady-state occupancy when unused.
-   That is a provisioning decision (*rewind × bitrate* of buffer per feed), not a defect.
-5. **`discontinuity_indicator` is neither consumed nor produced.** Not consumed: (3) and (4)
-   are the consequence. Not produced: in arm C the exporter emits its own +29.05 s timebase
-   change with the flag clear, which is a stream error for any downstream device, and it is
-   only conformant on our wire because the groomer independently re-derives it.
-6. **Wire conformance again fails to see a programme failure.** Arm B holds 0 continuity
-   errors, 0 PCR intervals above 40 ms and exact CBR across a 62.8 s hole in the programme.
-   This is the third independent instance of the T21/T22 lesson.
+**Current verdict — builds containing `0e61e3520` ([#3375](#against-the-fix-3375)):**
+
+1. **The 26.51 h PCR rollover does not threaten permanent operation.** Carried correctly at all three
+   points; arm D programme gap **27 ms** against control **27 ms**.
+2. **Forward, backward and encoder-restart discontinuities all recover to the control's programme gap
+   (~27 ms).** Arm C: **27 ms** (pre-fix: **238 ms**). Arms A and B: **26–27 ms** (pre-fix: **268 ms**
+   and **62,760 ms**). Arm E: **37 ms**, **0** drops, **0** continuity errors (pre-fix: **44,049 ms**,
+   **54,168** drops, **103** CC).
+3. **The durable mechanism (pre-fix behaviour that identified it):** a signalled **rewind** cost its own
+   duration in programme, linearly from 1 s to 600 s, with the wire showing nothing — arm B held **0**
+   continuity errors and exact CBR across a **62.8 s** hole. The exporter withheld until the new timeline
+   overtook the old; [#3375](#against-the-fix-3375) makes it follow instead.
+4. **The *rewind × bitrate* groomer provisioning rule is discharged post-fix** — no backlog to absorb,
+   buffer high water **1,102–1,417** packets against pre-fix **98,035**. The cap-sweep attribution
+   (drops are configuration when the cap is below the rewind) remains valid as pre-fix reading.
+5. **`discontinuity_indicator` is now emitted on the exported wire for signalled rewinds and encoder
+   restart** (arms A, B, E). **Residue:** arm C's forward jump still propagates **unsignalled +29.050 s**
+   — upstream open item; still a stream error for any third-party receiver.
+6. **Wire conformance again fails to see a programme failure** — the pre-fix arms B and E passed every
+   P1 check over programme holes of **62.8 s** and **44 s**; the T21/T22 monitoring lesson stands.
+
+**Pre-fix (`f8236680b`) — the behaviour that motivated [#3375](#against-the-fix-3375):** conclusions 2–4
+above state the post-fix numbers; the pre-fix media-outcome table in [Results](#results) and the
+[recovery-burst sizing sweep](#the-recovery-burst-is-a-groomer-sizing-choice-the-programme-hole-is-not)
+record the mechanism. T21's counter degeneration at the `tsp --infinite` wrap remains **UNRESOLVED**
+against T23's withhold-and-burst — see [Corrections](#corrections).
 
 ## Pass criteria, fixed before the runs
 
-| criterion | result |
-|---|---|
-| Control unchanged from a normal run | met — F is byte-identical to the base clip and grades clean |
-| Rollover crosses with no continuity error, no PCR interval above 40 ms, no programme gap beyond the control's | met — 52 ms against the control's 26 ms |
-| Each arm's class assigned recovers / fails on the media outcome, not on session state | met |
-| Any upstream report rests on behaviour demonstrably inconsistent with ISO 13818-1 for that stimulus | met for 2.4.3.4, both directions |
+| criterion | result (builds with `0e61e3520`) | pre-fix (`f8236680b`) — mechanism record |
+|---|---|---|
+| Control unchanged from a normal run | met — F **27 ms** gap, clean | met — F **26 ms** gap, clean |
+| Rollover crosses with no continuity error, no PCR interval above 40 ms, no programme gap beyond the control's | met — arm D **27 ms** vs control **27 ms** | met — **52 ms** vs control **26 ms** |
+| Each arm's class assigned recovers / fails on the media outcome | met — all six arms **26–37 ms** gap, **0** drops, **0** CC | met for classification — B and E **failed** on programme gap (**62,760 ms**, **44,049 ms**); A and C recovered |
+| Any upstream report rests on behaviour inconsistent with ISO 13818-1 | met for 2.4.3.4 on rewinds; forward flag still open (arm C) | met for 2.4.3.4, both directions — behaviour that identified the defect |
 
 ## Against the fix (#3375)
 

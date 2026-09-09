@@ -204,12 +204,10 @@ fetchable, conformant, and actively advertised, and a client that wants them can
   `live_start_index`, `m3u8_hold_counters`, `http_seekable` and no `EXT-X-PART` handling), and fetched
   only complete segments.
 
-**Both results are now proof rather than inference.** An earlier run used only the static origin, whose
-playlist omits `PART-HOLD-BACK` — a MUST-level defect — which left open the objection that FFmpeg
-declined the parts because the origin never properly advertised them. Repeating against Apple's
-conformant origin removes it: the directives were present, the validator exercised them, and FFmpeg
-still issued zero blocking reloads and fetched zero parts. Neither client implements low-latency HLS,
-and no property of the origin will change that.
+Neither client implements low-latency HLS, and no property of the origin will change that. Run
+against Apple's conformant origin (`CAN-BLOCK-RELOAD=YES`, `PART-HOLD-BACK=0.900`) as well as a
+static nginx origin: the validator exercised blocking reloads and fetched parts; `tsp` and FFmpeg
+fetched zero parts on both.
 
 ### Measurement 4 — carriage fidelity: arm B1 is verbatim, and loses less than MoQ
 
@@ -336,16 +334,14 @@ free on the wire. Raising the datagram to 1452 B recovers a point of it.
 
 #### Why framing is derived rather than measured, and what was actually blocking it
 
-The blocker recorded here previously was "a caching HTTP/3 origin, currently not installed". nginx
-1.31.3 with `--with-http_v3_module` and Caddy 2.11.4 are now both installed, and **that was not the
-constraint.** Two others are, and neither is fixed by installing a server:
+Two constraints block measuring per-packet framing on loopback, and neither is fixed by installing an
+HTTP/3 origin (nginx 1.31.3 with `--with-http_v3_module` and Caddy 2.11.4 are both available):
 
-- **No HLS client *on this host* speaks HTTP/3.** macOS's system libcurl is built without it, so
-  TSDuck's `hls` input cannot negotiate H3 however the origin is configured. The origin was therefore
-  run as HTTP/1.1, which is the *upper* bound on header cost — H3 would compress those headers with
-  QPACK — so the 1.0006× is conservative against segmented HTTP by under 0.02 points. One has since
-  been built on the EC2 secondary ([T20](test-20-segmented-http3.md)); it does not change this cell,
-  whose second constraint below is the binding one.
+- **No free HLS client in this measurement chain speaks HTTP/3.** macOS's system libcurl is built
+  without it, so TSDuck's `hls` input and FFmpeg cannot negotiate H3 on this host; [T20](test-20-segmented-http3.md)
+  built one on the EC2 secondary, but that does not unblock this loopback cell. The origin was
+  therefore run as HTTP/1.1, which is the *upper* bound on header cost — H3 would compress those
+  headers with QPACK — so the 1.0006× is conservative against segmented HTTP by under 0.02 points.
 - **Loopback cannot price a packet.** `lo0`'s MTU is 16384, so datagram and segment counts here bear
   no relation to a real path, and `tcpdump` needs privileges this environment does not have. A real
   H3 client would not have fixed this.
@@ -373,11 +369,10 @@ it.** Both of segmented HTTP's problems — coarse bursts and a seconds-scale la
 cause, segment size, so shrinking segments to reduce the grooming burden is the same action as
 shrinking them to reduce latency, and it terminates in partial segments. Measurement 2b tested the
 escape and found it closed: the parts are published correctly and free of charge, and **no freely
-available client will fetch them**, so the egress a groomer sees is arm B1's. This is a sharper
-statement than the one this file previously carried. It is not that the low-latency tooling is
-immature or awkward; it is that **the free toolchain is asymmetric — publish exists, receive does
-not** — and the missing half is precisely the half a distributor needs to hand a client a transport
-stream.
+available client will fetch them**, so the egress a groomer sees is arm B1's. It is not that the
+low-latency tooling is immature or awkward; it is that **the free toolchain is asymmetric — publish
+exists, receive does not** — and the missing half is precisely the half a distributor needs to hand
+a client a transport stream.
 
 **Where the asymmetry sits is exactly where the commercial products sell.** Synamedia's MEG with
 "ABR2TS conversion" and Ateme's TITAN Edge are receive-side boxes. Measurement 2b explains the market:
@@ -385,19 +380,11 @@ the publish half of low-latency TS-in-HLS is a free command, and the receive hal
 also sets the terms for anyone wanting a free path — they get classic HLS, seconds of latency, and
 megabyte bursts, on either arm.
 
-**A groomer for arm B1 needs seconds of buffer, not milliseconds.** With 24 silences over 2 s in a
-60 s window, a groomer holding the output byte clock across a silence must hold at least one segment
-period, plus margin for the observed two-period stalls. `mpegts-pacer`'s `--stall-ms` /
-`--on-stall mute` machinery was built for a MoQ egress whose worst gap is 149 ms; it is the right
-mechanism, but the timeouts documented for leg A are an order of magnitude too tight for a
-segment-fetching leg. That is a configuration finding, not a defect.
-
-> **Narrowed by [T16](test-16-grooming-segmented-http.md).** The mechanism claim holds and the
-> parameter claim does not. Run with only the timeout raised — this paragraph's literal proposal —
-> the groomer stops muting and instead overflows its buffer and pads the shortfall with nulls,
-> producing 231 continuity errors behind a flawless PCR record. The operative parameter is the
-> cushion, 200 ms to 8 s, with the timeout following from it; and its value is a property of the
-> egress rather than of the tool, which is why T16's passing arm derives it from arrival instead.
+**A groomer for arm B1 needs seconds of cushion depth, not milliseconds.** With 24 silences over 2 s
+in a 60 s window, a groomer holding the output byte clock across a silence must hold at least one
+segment period, plus margin for the observed two-period stalls. [T16](test-16-grooming-segmented-http.md)
+shows the operative parameter is cushion depth (200 ms–8 s), with stall timeout following from it —
+not raising `--stall-ms` alone, which fails with 231 continuity errors behind a flawless PCR record.
 
 **The carriage result inverts a claim this paper leaned on.** MoQ's clearest carriage advantage was
 verbatim fidelity via the opaque lane. For a *single programme* an MPEG-TS segment achieves the same
@@ -434,15 +421,11 @@ source, and only stripping the mux goes below it. An operator cannot have both h
 to want is a business question rather than a protocol one: the ~7 % is bandwidth, the fidelity is
 whether the far end can re-emit the contribution mux.
 
-**Glass-to-glass latency remains unmeasured, and measurement 2b changed why.** The *structural* floor
-is now settled — segment duration sets it, parts would lower it, and nothing free fetches parts — so
-what is missing is only the end-to-end number at equal conformance. The reason is no longer that the
-low-latency toolchain is missing — half of it is present, free, and works on the first command. It is
-that the half which turns parts back into a transport stream does not exist outside commercial
-hardware. That is a sharper and more useful statement about maturity than "no toolchain does this",
-and it locates the gap precisely: **on the receive side, which is the distributor's side of the
-demarcation** (§4.1). An operator who wants sub-2-second TS-in-HLS must buy a receiver; an operator
-who will not buy one gets classic HLS, whatever the publisher emits.
+**Delivery latency is measured** in [T18](test-18-delivery-latency.md); **glass-to-glass** latency
+(encoder and decoder delay) remains unmeasured. Measurement 2b settled the *structural* floor — segment
+duration sets it, parts would lower it, and nothing free fetches parts — so what the low-latency arm
+still lacks is a free receiver, not a publisher. That locates the gap on the receive side, which is
+the distributor's side of the demarcation (§4.1).
 
 ### Still open
 
@@ -451,7 +434,7 @@ Protocols for these are in [planned-experiments.md](planned-experiments.md).
 | Cell | Needs |
 |---|---|
 | Commercial ABR-to-TS gateway on P1/P2 — moves the paper most, and measurement 2b raised its value | MEG- or TITAN-class hardware on the Gate 2 rig. It is now the *only* candidate receiver that could realise the low-latency arm at all |
-| Glass-to-glass at equal conformance | a client that fetches parts. Measurement 2b shows no free one exists, so this cell is blocked on the same hardware as the row above rather than on Apple's tools |
+| Glass-to-glass (encoder + decoder delay) | equipment this campaign does not vary; delivery latency at equal conformance is in [T18](test-18-delivery-latency.md) |
 | Wire cost with framing measured rather than derived | arm B1 on the EC2 path under [`t9-overhead-wan.sh`](scripts/t9-overhead-wan.sh)'s accounting. Low value: it would confirm a multiplier, not move a result |
 | Multi-programme carriage through a real CDN | a CDN account and the MPTS fixture |
 
@@ -494,6 +477,18 @@ whenever it was fetched. *Lesson: this is T9's loopback artefact recurring in a 
 error, in a different measurement, five experiments later. Comparing two byte totals is only valid
 when they cover the same interval, and the durable fix is not to measure the interval more carefully
 but to construct the ratio so that no interval appears in it.*
+
+**Believed: raising `--stall-ms` for arm B1 was the operative fix, and leg-A timeouts were an order
+of magnitude too tight for segment-fetching silences.** **True: timeout alone fails; cushion depth is
+the variable.** [T16](test-16-grooming-segmented-http.md) measured raising only the stall timeout
+producing 231 continuity errors with a perfect PCR record. **Rule: derive cushion from egress cadence
+first; let stall timeout follow.**
+
+**Believed: FFmpeg declined LL-HLS parts because the static origin omitted `PART-HOLD-BACK`.** **True:
+neither client fetches parts on a conformant origin either.** Apple's origin advertised
+`CAN-BLOCK-RELOAD=YES` and `PART-HOLD-BACK=0.900`; the validator exercised blocking reloads; `tsp` and
+FFmpeg still fetched zero parts. **Rule: test against a conformant origin before attributing client
+behaviour to origin defects.**
 
 ---
 

@@ -8,10 +8,13 @@
 > or session state reports green for the whole outage. This is not a threshold artefact: the 30 s and
 > 120 s arms agree, and the 120 s arm rules out the QUIC idle timeout as an eventual backstop.
 >
-> **The media plane detects it in about one cushion.** The groomer's content-liveness alarm fired
-> **1.69–1.88 s** after the last advancing media in every injected arm, against a configured 1 s stall
-> timeout plus the cushion's grace. PCR progression at the graded output stopped within the observation
-> tick, **0.1 s**. Both are available to an operator; neither needs the transport's cooperation.
+> **The media plane detects a total stall in about one cushion.** The groomer's content-liveness alarm
+> fired **1.69–1.88 s** after the last advancing media in every injected arm, against a configured 1 s
+> stall timeout plus the cushion's grace. PCR progression at the graded output stopped within the
+> observation tick, **0.1 s** — but PCR shares the video PID, so a **partial** stall leaves PCR green;
+> [T24](test-24-partial-media-plane-stall.md) and [T27](test-27-liveness-detector.md) show **per-PID
+> access-unit liveness** is the detector that generalises. Both total-stall detectors are available to
+> an operator; neither needs the transport's cooperation.
 >
 > **A frozen relay is the one case the transport eventually catches, 18× slower.** QUIC's idle timeout
 > fired at **34.3 s** and took the egress chain down with it, against **1.88 s** for the media plane on
@@ -148,25 +151,30 @@ the right behaviour — the alternative is a feed that runs late for ever after 
    healthy for as long as the failure lasts. Any monitoring design that alarms on connection state or
    process liveness will miss it entirely. This was suspected from three incidental observations; it is
    now measured, with a control.
-2. **The media plane detects it in about one cushion, and two independent detectors agree.** The
-   groomer's own alarm at 1.7–1.9 s and PCR progression at the wire are separate mechanisms with
-   separate failure modes, and either is sufficient. F3's pass criterion — at least one detector inside
-   one groomer cushion, with no false positive on the control — is met.
-3. **PCR progression is the detector to build on.** It needs nothing from MoQ, nothing from the
-   groomer, and no cooperation from the sender; it is a property of the bytes. It is also the detector
-   that already exists in every broadcast monitoring product, which matters more for adoption than
-   anything the groomer can offer.
+2. **The media plane detects a total stall in about one cushion, and two independent detectors agree.**
+   The groomer's own alarm (**1.69–1.88 s** in the table above) and PCR progression at the wire are
+   separate mechanisms with separate failure modes; for a **total** stall either is sufficient. F3's pass
+   criterion — at least one detector inside one groomer cushion, with no false positive on the control —
+   is met.
+3. **PCR progression is the detector to build on for a total stall** — it needs nothing from MoQ, nothing
+   from the groomer, and no cooperation from the sender, and it is already in every broadcast monitoring
+   product. **That scope does not extend to a partial stall:** PCR rides on the video PID, so when only
+   the video elementary stream stops the programme clock keeps advancing and PCR stays green
+   ([T24](test-24-partial-media-plane-stall.md)). The property T22 valued — a byte-level check with no
+   sender cooperation — belongs to **per-PID access-unit liveness** for that failure mode
+   ([T27](test-27-liveness-detector.md)). For a feed that stops entirely, PCR remains the adoption path.
 4. **The stall policy is a monitoring decision disguised as a pacer flag.** `continue` holds a
    conformant carrier over a dead source indefinitely. It is the correct choice only where something
    *else* is watching content liveness, and the measurement is that nothing downstream of the carrier
    can be.
-5. **The buffer buys 1.8–1.9 s and no more.** That is the outage a viewer does not see, and it is set by
-   the cushion plus `--latency-max`. Anything longer is on air.
+5. **The buffer buys 1.8–1.9 s and no more** — the cushion plus `--latency-max` (measured at
+   **1.81–1.92 s** in [Method](#method)). That is the outage a viewer does not see; anything longer is
+   on air.
 
 ## Limits
 
 - One host, loopback. Detection latencies on a real path would add the path's own delay, which is small
-  against 1.9 s but not zero.
+  against the buffer budget above but not zero.
 - `SIGSTOP` freezes a process cleanly. A real encoder that stalls may half-work — emitting some tracks
   and not others, or emitting stale timestamps — and this experiment does not cover partial stalls.
   That is a materially different failure and the detectors above are not obviously sufficient for it.

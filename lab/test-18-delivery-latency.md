@@ -108,8 +108,7 @@ byte-transparent tunnel and a remultiplexer without changing what it counts.
   not that the numbers transfer.
 - **Cells run strictly one at a time, and that is a measurement decision.** This host makes MoQ legs skip
   groups when a relay, exporters and groomers share it at ~10 Mb/s, so a contended run measures the
-  laptop's scheduler. Two concurrent sweeps were detected and discarded during this campaign; the rig
-  now refuses to start if an earlier tap still holds the egress port.
+  laptop's scheduler. The rig refuses to start if an earlier tap still holds the egress port.
 - **The WAN origin is a 2-core box that also runs a relay and two publishers.** The standing loop
   publisher was stopped for the measurement and restarted afterwards, but the relay serves the MoQ arm
   from the same two cores as that arm's publisher.
@@ -401,11 +400,7 @@ recorded as open rather than as a finding.
 
 **The clock was the thing most likely to invent a result, so it is bracketed.** Every cell probes the
 offset before and after and reports the drift between them; the offset itself moved ~15 ms over the
-session, about 1 ms per minute. One cell — RIST at 1000 ms in the first pass — straddled a clock step,
-drifting 13.94 ms against a 6.47 ms probe uncertainty, and returned a median of exactly 1000.3 ms with a
-37 ms spread and *zero* PCR violations: by far the cleanest cell in the experiment, and entirely
-spurious. It was re-run and reads 2072 ms. **A two-host latency rig that does not bracket its clock will
-eventually publish that cell.**
+session, about 1 ms per minute. RIST at 1000 ms WAN reads **2072 ms** (see Corrections).
 
 ### Against the pass criteria
 
@@ -438,12 +433,11 @@ conformance trade would be structural and would have to be priced into every rec
 placement in the exporter is a bug with an owner: the lane already carries the clock, and measurement 6
 shows it carries very nearly the right *number* of clock samples — 31–36 a second against the source's
 41 — while putting 85 % of them within 11 µs of each other and leaving 100 ms–1.8 s holes between the
-bursts. **The lane is not emitting the clock too rarely; it is emitting it all at once.** So the fix is
-a placement rule rather than a rate: emit a PCR-bearing packet whenever the clock has advanced past a
-threshold, independent of PES-unit boundaries, which is the ~25 ms even cadence the same clip already
-shows on all three transparent lanes. Re-run this rig unaltered afterwards and the lane should pass at a
-250 ms cushion, which is **127 ms of delivery latency**. That is the outcome the paper hopes for and has
-never been able to claim, and it is still a prediction this experiment makes rather than tests.
+bursts. **The lane is not emitting the clock too rarely; it is emitting it all at once.** The prediction
+that an evenly spaced exporter cadence would clear the gate at a 250 ms cushion and **127 ms** delivery
+latency is **refuted**: [T19](test-19-pcr-grid-verification.md) measurement 11 passes the gate, but at
+**2,447 ms** median delivery latency; what cleared it was the groomer **pre-empting a slot for the PCR
+deadline**, not exporter cadence (measurements 10–11).
 
 **SRT and RIST are the same product at this layer on a lossless link, and possibly not on a real one.**
 T15 found them indistinguishable in cadence; on loopback they are indistinguishable in latency to within
@@ -494,17 +488,18 @@ fill (measurement 6).
 plane's conformance. So the loopback ladder and the WAN figures agree, and the ordering is a property of
 the data planes rather than of either environment.
 
-**The recommendation this changes is about where to spend upstream effort.** The paper has treated MoQ's
-conformance gap as the cost of its latency advantage and priced that trade into its verdicts. It is
-instead where the exporter places PCR, and fixing that would let the lane pass the gate at the depth it
-already runs at — which, measured across the internet, is 109 ms.
+**The recommendation this changes is about where to spend effort.** The paper has treated MoQ's
+conformance gap as the cost of its latency advantage and priced that trade into its verdicts.
+[T19](test-19-pcr-grid-verification.md) shows exporter cadence alone does not close the gate; groomer
+PCR pre-emption does, at **2,447 ms** delivery latency — not the **109 ms** this experiment measured on
+the unfixed lane.
 
 ### Still open
 
 | Cell | Needs |
 |---|---|
 | ~~*Why* the exporter clusters PCRs~~ **answered** | nothing. [#2967](https://github.com/moq-dev/moq/pull/2967) named it from the code: the authored decode clock is a saw on reordered content, and each B-frame dipping below it is nudged exactly one 90 kHz tick — **11.1 µs** — past the previous DTS, which is the median measured here |
-| Whether an **evenly spaced** PCR cadence clears the gate | **one more upstream change, then this rig re-run unaltered.** The exporter change asked for has landed and [T19](test-19-pcr-grid-verification.md) verifies it exactly — but only in the PCR values, because the spacing is carried as per-frame timestamps that stdout discards, so the PCR *packets* still leave bunched and the wire figure does not move. What remains is the exporter's output path. The prediction this experiment makes is still untested |
+| ~~Whether an **evenly spaced** PCR cadence clears the gate~~ **answered** | **No** — exporter cadence alone does not; [T19](test-19-pcr-grid-verification.md) measurement 10 verifies the grid in PCR values but the wire figure does not move until measurement 11's groomer reserves the PCR slot |
 | Why one clip is immune | 0 % of intervals above 40 ms on a 27.5 Mb/s broadcast mux at a 27 ms native cadence, against 9–25 % on every other source. Unexplained, and it bounds how general the defect is |
 | **Whether RIST really beats SRT on a real path** | a window long enough for the RIST arms to settle. Their WAN medians sit 262–333 ms below their own loopback figures with a *rising* trend, so the apparent advantage is an unsettled arm, not a protocol property. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | A lossy path | impairment on the WAN legs. Both paths here were healthy, so nothing exercised the recovery the tunnels exist for — the case that should favour them |
@@ -519,65 +514,41 @@ already runs at — which, measured across the internet, is 109 ms.
 > The general method rules extracted from this section, together with those from every other
 > experiment, are collected in [method-notes.md](method-notes.md).
 
-- **The continuity column read zero on all nineteen cells because its matcher could not match.** It
-  counted lines of `tsp -P continuity` output containing the word "discontinuity". The plugin prints
-  `* continuity: packet index: …, PID: …, missing 14 packets`, and emits that word only in its
-  `--help`, so the count was structurally zero for every input including badly broken ones. Nothing
-  in the output looked wrong: a conformance column of zeros on a healthy rig is exactly what one
-  expects to see, which is why it survived a whole sweep. Re-graded from the same saved captures with
-  a corrected matcher, five of the nineteen cells are still zero and fourteen are not, with the
-  segmented arm posting 583 events at its shallowest cushion. **Method rule:** an instrument that
-  reports the value you expect is not thereby working — before publishing a column of zeros or
-  passes, feed it an input known to be bad and check that it says so. This defect was shared by six
-  rigs across the campaign and is recorded in full in the [T5 Corrections](test-5-network-impairment.md).
+**Believed: the continuity column was zero because the rig was clean.** **True: the matcher searched for
+the word "discontinuity", which `tsp -P continuity` never prints.** Re-graded from the same captures,
+fourteen of nineteen cells are non-zero. **Rule: before publishing a column of zeros or passes, feed the
+instrument an input known to be bad and check that it says so** (shared by six rigs; see
+[T5 Corrections](test-5-network-impairment.md)).
 
-**Believed: the MoQ lane's PCR failure was groomer starvation.** The groomer's `underruns` count equalled
-its inserted nulls exactly, and the commanded carrier exceeded the lane's content rate by the same 3.2 %,
-so starvation explained the numbers arithmetically. **True: starvation explains the drained cushion and
-none of the PCR failure.** Rate-matching the carrier cut underruns from 18,070 to 5 and left repetition
+**Believed: the MoQ lane's PCR failure was groomer starvation.** **True: starvation explains the drained
+cushion and none of the PCR failure** — rate-matching cut underruns from 18,070 to 5 and left repetition
 at 502 violations. **Rule: when a groomer and its source could each explain a placement defect, the
 groomer's own insertion counter decides it.**
 
-**Believed: `pcr_inserted=0` was that counter's verdict.** It was read from the rate-matched cell — the
-one cell in the ladder at **0.0 % stuffing**. This groomer inserts PCR only into slots it was already
-going to stuff, so at 0.0 % stuffing it has no slots and the counter cannot read anything but zero. The
-figure was quoted as proof the groomer could not help, when it was a measurement of the groomer having no
-opportunity to try. **True: read across the ladder, the counter varies with the surplus — 137, 103, 28, 0
-at 4.1 %, 3.2 %, 0.8 %, 0.0 % stuffing — while the violation count holds flat at 491, 489, 503, 502.**
-The conclusion is unchanged and the evidence for it is now the opposite shape: the groomer *did* place
-PCRs, at four different rates, and conformance did not move. **Rule: a counter reading zero in the one
-configuration where the thing it counts is impossible is evidence about that configuration and about
-nothing else. Before quoting a zero, vary the condition that makes the mechanism possible and check the
-counter moves.**
+**Believed: `pcr_inserted=0` proved the groomer could not help.** **True: at 0.0 % stuffing the groomer
+has no stuffing slots to insert into; read across the ladder the counter varies (137, 103, 28, 0) while
+violations hold flat (491, 489, 503, 502).** **Rule: before quoting a zero, vary the condition that makes
+the mechanism possible and check the counter moves.**
 
-**Believed: the exporter emits PCR too rarely, and the fix upstream is a denser cadence.** That was the
-inference from a count of intervals above 40 ms, and it spread as shorthand through `docs/evidence.md`,
-`docs/comparison.md`, `docs/architecture.md`, the top-level `README.md`, T13 and T16 — though *not* into
-[#2937](https://github.com/moq-dev/moq/issues/2937) itself, which was filed correctly as a clustering
-defect asking for a bounded interval. **True: the density is very nearly right and the spacing is
-wrong.** Measured against the same clip carried transparently by three other lanes, the
-exporter emits 31–36 PCRs a second where the source emits 41 and conformance needs ~25 — but with a
-median interval of 11 µs, 85 % of intervals below 1 ms, and the violations concentrated in 100 ms–1.8 s
-holes between bursts. A denser cadence would add PCRs inside the clusters and leave every violation in
-place. **Rule: a threshold-crossing count summarises a distribution and can point at the opposite of its
-cause. Before asking anyone to change a rate, plot the distribution of the intervals and check the mean
-is actually deficient.** The only reason this surfaced is that an unrelated rig (T8b) happened to capture
-the exporter with no groomer downstream and the same source on transparent lanes beside it — **so keep a
-transparent-lane control in any rig that measures a conversion.** The narrower lesson is about
-summarising: the upstream report was precise and the in-house paraphrase of it was not, which is the
-direction of drift worth watching, because the paraphrase is what the rest of the repository then cites.
+**Believed: the exporter emits PCR too rarely; the fix is a denser cadence.** **True: density is nearly
+right and spacing is wrong** — 31–36 PCRs/s with an 11 µs median interval and violations in 100 ms–1.8 s
+holes between bursts. **Rule: plot the interval distribution before asking anyone to change a rate; keep
+a transparent-lane control in any rig that measures a conversion.** The upstream report was precise; the
+in-house paraphrase was not.
 
-**Believed: one latency figure per transport would answer the question.** **True: the figure is a
-function of the grooming depth, and on a null-stripping lane it is a function of the rate surplus as
-well** — the same lane reads 87 ms or 824 ms at the same commanded cushion depending only on the carrier
-rate. **Rule: quote latency with the cushion and the surplus, or do not quote it.**
+**Believed: one latency figure per transport would answer the question.** **True: latency is a function
+of grooming depth, and on a null-stripping lane of the rate surplus as well.** **Rule: quote latency with
+the cushion and the surplus, or do not quote it.**
 
-**Believed: the WAN rig could start its remote clock reference per cell.** The launch used `setsid` and
-`nohup` and looked correct. **True: an SSH invocation does not return until the remote process it started
-has exited**, so a cell that starts an hour-long fixture hangs for an hour rather than racing. **Rule:
-launch a long-lived remote fixture from a locally backgrounded SSH, once, as a deliberate setup step —
-and have the measurement probe it and refuse to run without it**, so a missing reference is an error
-rather than a silent zero.
+**Believed: the WAN rig could start its remote clock reference per cell.** **True: an SSH invocation does
+not return until the remote process it started has exited.** **Rule: launch a long-lived remote fixture
+from a locally backgrounded SSH once as a deliberate setup step, and have the measurement probe it and
+refuse to run without it.**
+
+**Believed: RIST at 1000 ms WAN was the cleanest cell in the experiment (1000.3 ms median, zero PCR
+violations).** **True: the cell straddled a clock step and the figure was spurious; re-run reads 2072
+ms.** **Rule: a two-host latency rig must bracket its clock; a cell whose drift exceeds probe uncertainty
+is re-run rather than quoted.**
 
 ---
 

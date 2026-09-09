@@ -33,7 +33,9 @@ When uncertain where something belongs, prefer `lab/` over `docs/`.
 | `docs/evidence.md` | Method, results by question, and limits. | measurements that are confirmed and current, each with its measurement point (P0/P1/P2) and its qualifications carried from source; evidence against unmerged upstream code marked `[unmerged]` | unvalidated results presented without their label, and any figure whose file-versus-wire domain is not stated where the two differ |
 | `STATUS.md` *(git-ignored)* | Current state only — a one-page snapshot. | what is true right now (build under test, open items, what's proven) | history, chronology |
 | `INSTRUCTIONS.local.md` *(git-ignored)* | Reproduction environment + workflow + these editing rules. | paths, addresses/ports, start commands, test data, tooling, and how to operate in the repo | engineering findings / results / status (those go to `lab/`) |
-| `README.md` | Entry point and document map. | — | — |
+| `README.md` | Executive summary and navigation. | The decision question, current qualified conclusion, major limits, document map. | Measurements, numerical results, test IDs, lab narrative, procedures, correction histories, detailed mechanisms, reference catalogues, or material already explained in `docs/` or `lab/`. |
+
+README changes must preserve an executive-summary length and link downward rather than restating supporting evidence. If a sentence needs a measurement, experiment identifier, or extended qualification, place it in `docs/` or `lab/` and link to it.
 
 `INSTRUCTIONS.local.md`, `STATUS.md`, any `lab/*.local.md`, and any `.env.local` are git-ignored.
 
@@ -105,3 +107,52 @@ neither keeps the narrative.
 **Before finishing, re-read what you changed as a first-time reader.** The common failure is a file
 whose newest section is correct while its heading, summary or table still asserts the thing that was
 just disproved.
+
+## Pair every figure with the condition that makes it true
+
+Most wrong claims in this repository have not been wrong numbers. They have been correct numbers quoted
+without the condition under which they were measured, so that two figures from incompatible
+configurations end up in one comparison.
+
+- **A latency figure is meaningless without the conformance of the same bytes**, and vice versa. The
+  media-aware lane's fastest measured delivery latency and its conformant wire come from *different
+  builds and different groomer configurations*. Never place them in one sentence, row or verdict as
+  though a deployment could have both.
+- **State the domain** where file and wire differ (`file` / `wire` / `hardware: not run`), the
+  **measurement point** (P0/P1/P2), and the **topology** where co-resident and cross-host differ. Prefer
+  the cross-host figure for any deployment or sizing claim.
+- **Name the build** when a result depends on one. Where two defects sit in different builds and every
+  available build carries one of them, say so rather than quoting the better half of each.
+- **Distinguish the kinds of evidence and never let one stand in for another:** measured performance,
+  implementation availability, deployment practice, and commercial relevance. A well-supported technical
+  result does not by itself decide deployability, interoperability or commercial significance.
+- **When a headline figure survives against one comparator and not another, say both.** "Decisive
+  against X, not against Y at equal conformance" is the publishable form; "decisive" alone is not.
+
+## Reduction is not the objective
+
+Length targets serve the reader; they do not licence damage. Before any substantive cut, one of these
+must hold: the meaning survives in an identifiable passage in the same file; it belongs in a more
+authoritative file and survives via a precise cross-reference left in place; it is obsolete, duplicative
+or narration these rules prohibit; or it adds no distinct claim, qualification, evidence or reader
+value. **If none holds, keep it and say why in the report.**
+
+Two specific failure modes to avoid:
+
+- **Do not compress prose into note fragments.** Telegraphic dashes and dropped articles are not
+  concision; they make a paper unreadable and lose qualifications silently. Cut whole passages that are
+  duplicative; keep the surviving prose in complete sentences.
+- **Do not shorten past the target.** Overshooting a word target is evidence of damage, not of
+  diligence. Stop at the target and spend the remaining budget on coherence.
+
+**Open questions, limits and self-critical qualifications are load-bearing content, not padding.** They
+are the most compressible-looking and least safely cut material in the repository.
+
+## `README.md` is the executive summary, and links down
+
+It states the decision question, the current qualified conclusion, the few findings that decide or
+materially constrain it, the most important limits, and where to find the rest. It carries **no
+measurements, test identifiers, lab narrative, detailed mechanisms or extended qualification chains** —
+those go in `docs/` or `lab/` and are linked to. Its conclusion is derived from the current `docs/`
+argument each time, never preserved from a previous draft for continuity. Budget 700–1,000 words for the
+summary itself; the document map and attribution sit outside that count.

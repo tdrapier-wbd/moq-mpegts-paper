@@ -38,11 +38,9 @@ The other results that matter:
   too wide. All three are fixed and each has an arm that fails without the fix, because a monitoring
   tool's own failure modes are the ones that produce a confident wrong answer.
 - **The detector then earned its keep by finding something the campaign was not looking for.** A
-  fixed-N soak meant as a false-positive test instead hit a **client-side stuck state at the source's
-  first content-loop join**: the delivered clock stepped back 596.9 s, video and MPEG-1 audio stopped
-  and never returned, and 60 exporters went on consuming 587 Mb/s while emitting 0.31 Mb/s each — for
-  13 minutes, while a *newly joining* subscriber was served perfectly. Cause not yet established;
-  recorded as an open defect with a control below, not as a conclusion.
+  fixed-N soak meant as a false-positive test instead found **#3375's complement regression** — bisected
+  to `0e61e35`, reported as [#3533](https://github.com/moq-dev/moq/issues/3533); mechanism and upstream
+  report history in [upstream-contributions.md](upstream-contributions.md) § #3375.
 
 Rig: [`ts-liveness.py`](scripts/ts-liveness.py) is the detector,
 [`t27-liveness-inlane.sh`](scripts/t27-liveness-inlane.sh) the in-lane harness,
@@ -232,203 +230,37 @@ groomed wire, because that is what leaves the building.
 
 ### The soak that was meant to be a false-positive test, and found a regression instead
 
-The detector was attached to one of 60 remote subscribers for a fixed-N soak, intended as a
-false-positive test at length and under load rather than as a fan-out measurement. **It found a real
-failure at 590 s, and the detector is how the failure was characterised** — which is a better
-validation than the clean run would have been, and a worse result for the lane.
+A fixed-N soak (N = 60, cross-host) with the detector on one subscriber found a **client-side stuck
+state at the source's first content-loop join** (590 s media): delivered clock **−596.9 s**, video and
+MPEG-1 audio alarms that never cleared, 60 exporters at **0.31 Mb/s** each while the relay still
+transmitted **642 Mb/s** — and a **fresh subscriber served perfectly** (8.9 Mb/s, 143,872 video packets
+in 25 s). Join controls at N = 4 ruled out fan-out and `--latency-max` (500 ms and 3 s stall identically
+to **0.31 Mb/s**).
 
-At the source's **first pass join** — the point where `ts-continuous-source.py` restarts the clip's
-content on a continuous timeline, at 600 s of media — the detector reported, in this order:
-
-| t (media) | Event |
-|---|---|
-| 590.250 | `DISCONTINUITY jump_s=-596.9` — the delivered clock stepped **backwards by one pass length** |
-| 591.275 | `ALARM pid=121 mp1a` — gap 1.025 s against a 1.000 s threshold |
-| 592.250 | `ALARM pid=111 avc` — gap 2.125 s against a 2.100 s threshold |
-
-Neither alarm ever cleared. Delivery did not recover for the **13 further minutes** the run was left
-in that state.
-
-**The source is not the cause, and that is measured rather than assumed.** Two passes of
-`ts-continuous-source.py` through the same clip accumulate **1200.0 s of media with 0 backward PCR
-steps and no step above 5 s** — the fixture does exactly what it claims. The copy on the subscriber
-host is byte-identical to the repository's.
-
-**The relay and publisher are not the cause either.** While the 60 incumbent subscribers were stuck,
-a **subscriber joining afterwards was served perfectly**: 27.8 MB in 25 s — 8.9 Mb/s, with 143,872
-video packets on PID 111 — from the same broadcast on the same relay.
-
-**What the stuck state actually is.** All 60 exporters stayed alive, and each continued to *receive*:
-the relay was still transmitting **642 Mb/s** and the subscriber host still receiving **587 Mb/s**,
-with every EC2 allowance counter at zero and relay CPU at 0.54 of its 2 cores. Each exporter was
-emitting **0.31 Mb/s**, identically — consistent with the tracks that did *not* alarm (AC-3,
-teletext and PSI) continuing while video and the MPEG-1 audio stopped. **Bytes were being consumed
-and not delivered, indefinitely.** The relay's own resource series stayed flat throughout, so this is
-a client-side stuck state and not relay saturation.
-
-**Why [T21](test-21-permanence-soak.md) did not see this.** T21 crossed about 144 of these joins in
-24 h without a mark, which makes the difference between the two runs the entire question. T21 was
-N = 1, loopback, `--latency-max 500ms`, with a pacer draining the exporter; this soak was N = 60,
-cross-host, `--latency-max 3s`, draining to `/dev/null`.
-[`t27-join-control.sh`](scripts/t27-join-control.sh) varies exactly one of those — four subscribers
-at 500 ms and 3 s against one publisher across one join, at a fan-out too low for the relay to be
-the constraint.
-
-**Neither the buffer setting nor fan-out is the discriminator.** At N = 4, all four subscribers
-stalled together at the join, to the same figure, within one 10 s sample:
-
-| t (s) | 500 ms | 500 ms | 3 s | 3 s |
-|---|---:|---:|---:|---:|
-| 591 | 9.46 | 9.80 | 9.59 | 9.74 |
-| 602 | 1.30 | 1.30 | 1.49 | 1.07 |
-| 612 → 672 | **0.31** | **0.31** | **0.31** | **0.31** |
-
-`--latency-max 500ms` — T21's own setting — behaves exactly like 3 s, and N = 4 exactly like N = 60.
-So the two most obvious explanations are eliminated, and 0.31 Mb/s is reproducible to two decimal
-places across four independent clients, which is what a deterministic timeline condition looks like
-rather than a resource one.
-
-**So the client build is the discriminator, and it bisects to one commit.** T21 ran on a build
-predating the one under test, which leaves the build itself as the only untested difference. Shrinking
-the clip to ~30 s turns the 600 s pass into a 30 s one, so a join arrives every half minute and a
-verdict costs two minutes instead of twenty — the discriminator is the *join*, not the pass length.
-With that, [`t27-bisect-step.sh`](scripts/t27-bisect-step.sh) drives `git bisect run` over the 53
-commits between T21's build and today's, building the CLI at each and crossing several joins with the
-candidate **and a known-good binary in the same run** as an in-run control. Six steps, every control
-sample healthy at 9.1 Mb/s:
-
-**First bad commit: [#3375](https://github.com/moq-dev/moq/pull/3375), `0e61e35` —
-*"fix(moq-mux): recover buffered TS output after a rewind"*.** The fix this campaign's T23
-measurements motivated, and verified, is the regression. It changed
-`rs/moq-mux/src/container/ts/export.rs`, which is exactly the exporter that stalls.
-
-**Confirmed against its own parent, which is also the commit the bisect passed.** Two replicates per
-build, one publisher, one relay, ~7 joins in 240 s:
-
-| t (s) | `025613d` parent | `#3375` | `025613d` parent | `#3375` |
-|---|---:|---:|---:|---:|
-| 10 → 20 | 9.51 | 9.22 | 8.67 | 9.19 |
-| 30 (first join) | 9.49 | 1.33 | 9.28 | 1.40 |
-| 40 → 241 | **9.0–9.8** | **0.31** | **9.0–9.8** | **0.31** |
-
-**What the fixed exporter does to the timeline it is given.** Running the detector on each build's
-output at once, on the same source, relay and join:
+[`t27-bisect-step.sh`](scripts/t27-bisect-step.sh) over 53 commits: **first bad
+[#3375](https://github.com/moq-dev/moq/pull/3375) `0e61e35`**, file
+`rs/moq-mux/src/container/ts/export.rs`. Parent `025613d`: **9.0–9.8 Mb/s** across joins; #3375:
+**0.31 Mb/s** from the first join. Detector on the same join:
 
 | | parent `025613d` | `#3375` `0e61e35` |
 |---|---|---|
-| delivered-clock discontinuities | **0** | **−119.35 s**, one pass length |
-| video PID 111 | live, 0 outages | **DEAD**, never clears |
-| MPEG-1 audio PID 121 | live, 0 outages | **DEAD**, never clears |
-| AC-3 123 / teletext 131 | 8.0 s / 8.2 s outage, then `CLEAR` | live throughout |
-| media span | 197.050 s | — |
+| delivered-clock discontinuities | **0** | **−119.35 s** |
+| video PID 111 / MPEG-1 audio 121 | live | **DEAD**, never clear |
+| AC-3 / teletext / PSI | brief outage then `CLEAR` | live — the **0.31 Mb/s** residue |
 
-Two things follow. The surviving PIDs are **exactly** the 0.31 Mb/s residue seen at N = 60, so the
-small-scale reproducer and the soak are the same fault. And the parent sees **zero** discontinuities
-on the same wire, so **the backward step is not on the wire** — the rewind the detector sees is
-introduced inside the fixed exporter, which then cannot emit past it. The importer logs an MPEG-2
-audio resync at the join (`resyncs=2 discarded=714`), which is the kind of event the new
-rewind-detection path plausibly mis-reads, but the internal trigger is not established here and is
-left as inference.
-
-**The fix works on the case it was written for. It has been traded for its complement.** Same two
-builds, same clip, only the source's timeline differs — `tsp --infinite` really does rewind:
-
-| source | parent `025613d` | `#3375` `0e61e35` |
+| source timeline | parent `025613d` | `#3375` `0e61e35` |
 |---|---|---|
-| **true rewind**, every 30 s | **0.00 Mb/s** from t = 40 s — total stall, the #2833 behaviour | **8.66 Mb/s** mean, dipping to ~7.4 at each rewind and recovering |
-| **continuous timeline**, content join every 30 s | **9.0–9.8 Mb/s** throughout | **0.31 Mb/s**, video and MPEG-1 audio dead |
+| true rewind (`tsp --infinite`) | **0.00 Mb/s** stall (#2833) | **8.66 Mb/s**, recovers |
+| continuous, content join every 30 s | **9.0–9.8 Mb/s** | **0.31 Mb/s**, video + MPEG-1 dead |
 
-Neither build carries both. Pre-#3375 a rewinding source costs everything; post-#3375 a
-**non**-rewinding source whose content restarts costs video and primary audio. For primary
-distribution the second is the worse trade, because a continuous timeline with content joins is what
-a real encoder emits and a rewind is not.
-
-### How much this matters, stated as an open question rather than answered
-
-The reproducer replays a clip, so its join is a **hard cut at a repeat point**. That is ordinary in
-broadcast — it is what a splice looks like — but it is manufactured, and the fence needs *one track*
-to present a backwards step on its own timeline. **Whether a never-repeating encoder feed ever
-produces that step is the question that sets the severity, and it is not answered here.** The attempt
-is recorded because the negative matters: the rig's live SRT-fed broadcast was subscribed on both
-builds simultaneously, and the feed had no sender attached — both subscribers received the catalog and
-no media tracks, so the run measures nothing. The other standing publisher is fed by `tsp --infinite`,
-which is a *true* rewind and therefore the case #3375 fixes.
-
-What can be said about the blast radius from what is measured:
-
-- **A fresh subscriber is unaffected.** One joined the same broadcast while 60 incumbents were stuck
-  and was served perfectly. So the fence is per-exporter state, and a restart clears it — which makes
-  this survivable by supervision, at the cost of every downstream buffer the restart drains.
-- **A fenced track cannot re-join while the source stays continuous**, by construction: re-admission
-  requires a frame that steps *backwards* on that track's own timeline, and a continuous source never
-  provides one. There is no self-healing path that does not involve the source misbehaving. **Measured
-  rather than left as a reading of the code**: 40 minutes and roughly 80 further joins, 235 samples
-  after the first one, and the fenced subscriber's **maximum** is *exactly* 0.31 Mb/s — not one sample
-  of partial recovery — while the parent build on the same publisher and relay averages 9.52 Mb/s
-  (minimum 8.38). Further joins neither heal it nor make it worse.
-- **The single-track case is immune** and the video-only control confirms it, so a video-only
-  contribution feed is not exposed.
-
-### The code path, and why only some PIDs die
-
-The fence is readable in the diff, and one prediction from it was tested rather than asserted.
-#3375 adds a program *generation* (`epoch`) to the exporter and a re-admission test to each track:
-
-```rust
-fn admit(&mut self, pending: Pending, epoch: u64) -> Option<Pending> {
-    if self.epoch == epoch
-        || (pending.discontinuity != self.discontinuity
-            && self.timeline.is_none_or(|last| pending.frame.timestamp < last))
-    { return Some(pending); }
-    self.discontinuity = pending.discontinuity;
-    None                     // frame discarded
-}
-```
-
-`rewind()` bumps the generation, and on a **backwards** boundary it deliberately leaves every track
-that already has a timeline behind:
-
-```rust
-if !backwards || track.timeline.is_none() { track.epoch = self.epoch; }
-```
-
-So after one track reports a backwards step, every *other* track is fenced into the old generation,
-and the only way back is a frame that both changes its discontinuity counter **and** steps backwards
-on that track's own timeline. **A track whose source never rewinds can never satisfy that**, and its
-frames are discarded indefinitely — which is the permanent loss of PID 111 and PID 121, while the
-passthrough `.ts` track carrying PSI, AC-3 and teletext is unaffected and keeps the lane at
-0.31 Mb/s.
-
-**Two elementary streams are required, and that is the tested part.** If the fence needs one track to
-rewind while another does not, a source with a *single* track cannot exhibit it: the triggering track
-re-joins the new generation itself, and there is no bystander to fence. A video-only source across
-five joins, same two builds, same relay:
-
-| t (s) | parent `025613d` | `#3375` `0e61e35` |
-|---|---:|---:|
-| 10 → 151, five joins | 1.88–2.00 | **1.88–2.02** |
-
-Identical, and both clean. So the multi-track case is necessary, which is consistent with the
-importer's MPEG-2 audio resync at the join (`resyncs=2 discarded=714`) supplying the one backwards
-step. **What remains inference** is precisely which comparison inside the audio path yields
-`backwards = true` on a source measured at 0 backward PCR steps — a track's own high-water mark is
-not the programme clock, and cross-track skew at a hard cut is a plausible source of a small local
-step. The report names the fence, which is actionable, and says this much and no more about the
-trigger.
-
-Raw captures — the bisect log with per-step control readings, the paired-replicate confirmation, the
-true-rewind contrast and both detector event streams — are in
-[`results/t27-3375/`](results/t27-3375/), and the report is drafted at
-`docs/upstream/3375-continuous-source-regression.local.md`.
-
-**What this does and does not say about the lane.** It is a client-side defect in one build of one
-exporter, on one stimulus, and it is neither a relay limit nor a property of media-aware carriage:
-the relay served a fresh subscriber perfectly while 60 incumbents were stuck, at 0.54 of 2 cores with
-every allowance counter at zero. [T23](test-23-pcr-discontinuity-classes.md) measured the six
-discontinuity *classes* and found all six survivable; this is a **different** stimulus — a continuous
-timeline whose content restarts — and the two must not be conflated. T23's verdict on its own arms
-still holds against #3375; what T23 could not have caught is this case, because no T23 arm ran a
-continuous source.
+Video-only control (five joins): **1.88–2.02 Mb/s** on both builds — multi-track is required. The fence
+is `Track::admit` / `rewind()` generation gating in `export.rs` (snippet and full report history:
+[upstream-contributions.md](upstream-contributions.md) § #3375 → [#3533](https://github.com/moq-dev/moq/issues/3533);
+raw captures: [`results/t27-3375/`](results/t27-3375/README.md)). **Blast radius:** per-exporter state
+(restart clears it); no self-heal across 80 further joins (**0.31 Mb/s** max, parent **9.52 Mb/s** mean).
+Whether a never-repeating encoder feed triggers the fence is **open** ([P0-3](planned-experiments.md)).
+This is a **different stimulus** from [T23](test-23-pcr-discontinuity-classes.md)'s six discontinuity
+classes; T23's verdict on those arms is unchanged.
 
 ## What this establishes
 
@@ -462,11 +294,9 @@ continuous source.
 
 ## What this does not establish
 
-- **Nothing about a frozen picture**, exactly as in T24. Every arm here removes access units. An
-  encoder emitting *valid* access units carrying an unchanging picture advances PCR, PTS, DTS and the
-  continuity counters, holds its bitrate, and defeats this detector too. That needs decoding and
-  comparing pictures, it is equally undetectable under opaque carriage or over SDI, and it is a limit
-  of transport monitoring in general.
+- **Nothing about a frozen picture** — see [T24](test-24-partial-media-plane-stall.md) Limits (first
+  stated there): valid advancing access units carrying an unchanging picture defeat every
+  transport-layer detector including this one.
 - **One clip, one PID layout, one mux.** The thresholds are this programme's; the *method* of
   learning them is what transfers. A mux with PCR on its own PID, or with a sparse subtitling stream
   that a broadcaster does expect to be live, would need the classification revisited.
@@ -485,17 +315,23 @@ continuous source.
 
 ## Open
 
-**A per-track liveness signal in `moq import ts`**, carried over from T24 and unchanged by this test.
-The publisher already parses each elementary stream in order to demux it, logs a warning when the
-*audio* parser loses frame sync, and has no equivalent for video. Everything measured here is done
-by a downstream observer reconstructing what the publisher already knew. Still drafted for upstream.
+**A per-track liveness signal in `moq import ts`.** The publisher logs audio frame-sync loss
+([#3372](https://github.com/moq-dev/moq/pull/3372)) but has no equivalent for video. The importer
+already parses each elementary stream to demux it — a symmetric per-track gap warning is drafted for
+upstream. Everything measured here is done by a downstream observer reconstructing what the publisher
+already knew.
 
-**Whether the 2.8 s compression of the outage is the exporter's PCR regeneration.** T24 measured
-60.02 s injected against 57.22 s delivered and could not explain the sign; this reproduces it at
-57.212 s across a different topology, which makes it a property of the lane. One focused run.
+**Whether the 2.8 s compression of the outage is the exporter's PCR regeneration.** [T24](test-24-partial-media-plane-stall.md)
+measured 60.02 s injected against 57.22 s delivered; this reproduces **57.212 s** on a cross-host
+lane. One focused run.
 
 **Whether the lane's spacing jitter has a tail longer than the learning window.** The 90 min soak is
-a start and 90 minutes is not a permanence claim.
+a start; 90 minutes is not a permanence claim.
+
+**Whether per-PID liveness monitoring is available in practice.** The recommendation is only useful if
+broadcast monitoring products expose per-PID access-unit liveness rather than only per-PID bitrate —
+bitrate alone inherits the proportional-sensitivity problem [T24](test-24-partial-media-plane-stall.md)
+measured.
 
 ## Corrections
 

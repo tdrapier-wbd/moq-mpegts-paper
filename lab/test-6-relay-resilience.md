@@ -137,13 +137,15 @@ determinism checks of FFmpeg (`-muxrate`) and TSDuck (`pcradjust`) references.
   (`byte_offset × 8 × 27 MHz ÷ mux_rate`), the same model FFmpeg and TSDuck use.
 - **A single groomer is deterministic (offline / stream-clocked):** the same input paced twice
   yields identical SHA-256 (fixed-rate and `auto`), matching FFmpeg CBR remux and TSDuck `pcradjust`.
-- **Two *independent live* pacers are not byte-identical.** The live real-time path gates its
-  content-vs-null interleave on the wall-clock instant each datagram is emitted, so injecting as
-  little as **50 µs** of emit-scheduling jitter into one leg reshuffles which stuffing slots carry
-  content and diverges the two byte streams within ~30 ms — even though total content/null counts
-  stay equal and each leg stays independently conformant. Non-determinism sources: wall-clock-gated
-  content release; an evolving arrival-timing-dependent media-rate estimate; a first-arrival start
-  anchor; and per-process RTP SSRC / timestamp / sequence origin.
+- **Two independent live pacers keyed to arrival/emit time are not byte-identical.** The live
+  real-time path gates its content-vs-null interleave on the wall-clock instant each datagram is
+  emitted, so injecting as little as **50 µs** of emit-scheduling jitter into one leg reshuffles
+  which stuffing slots carry content and diverges the two byte streams within ~30 ms — even though
+  total content/null counts stay equal and each leg stays independently conformant. Non-determinism
+  sources: wall-clock-gated content release; an evolving arrival-timing-dependent media-rate
+  estimate; a first-arrival start anchor; and per-process RTP SSRC / timestamp / sequence origin.
+  **Stream-clocked pacers are byte-identical:** [T12](test-12-dual-path-handoff.md) measured two
+  independent groomers with `--stream-clock` producing matching legs.
 
 Two routes close it: (a) drive live emission and RTP framing from *stream time* (lock the mux rate,
 anchor to a stream-intrinsic point, derive RTP sequence/timestamp/SSRC from stream position); or (b)
@@ -836,17 +838,13 @@ reselect must be graded *per track* — into those tests instead. See
 ## Conclusion
 
 **On the media-aware lane** transport resilience holds; active/active source failover now ships,
-bounded by detection, with a residual graceful-exit gap. The ST 2022-7 determinism precondition is characterised here (a single
-deterministic/offline groom is byte-exact reproducible; two independent live pacers were not, at the
-time this was measured — see below). Every
-failover number in *this* file is a single-leg recovery time, so it is break-before-make by
-construction; the dual-leg drill it points to has since run as
-[T12](test-12-dual-path-handoff.md), which grades two concurrently live legs at a receiver and finds
-the switch hitless — including the graceful exit that has no single-leg answer. T12 also closes the
-determinism question for two live pacers, and the answer turns on whose clock chooses the slot: keyed
-to their own emit instants they diverge structurally rather than through PCR re-stamping, and keyed
-to stream position they are byte-identical. The full validated finding — including which of our reports were real vs
-harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
+bounded by detection, with a residual graceful-exit gap. The ST 2022-7 determinism precondition is
+characterised in the Results above; [T12](test-12-dual-path-handoff.md) closes the live dual-pacer
+case with stream-clocked grooming. Every failover number in *this* file is a single-leg recovery
+time, so it is break-before-make by construction; the dual-leg drill it points to has since run as
+T12, which grades two concurrently live legs at a receiver and finds the switch hitless — including
+the graceful exit that has no single-leg answer. The full validated finding — including which of our
+reports were real vs harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
 
 **On the segmented lane the same three questions come out differently, and the reason is that the
 serving node holds no state.** A dead origin costs exactly its downtime and no content, because the

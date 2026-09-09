@@ -153,17 +153,19 @@ for one flag. N = 150 that collapsed to 46 Mb/s in arm A now delivers **1,426 Mb
 
 **N = 200 is the harness failing, and the log says so exactly.** Eleven subscribers were SIGKILLed;
 `dmesg` on the subscriber host shows `tokio-rt-worker invoked oom-killer` and
-`Out of memory: Killed process … (moq)`. Each `moq export ts` held **95.6 MB at N = 1 and 103.3 MB at
-N = 150**, so 150 clients occupy 15.1 GB of the box's 15.7 GB. The client's footprint, not the relay,
-sets this rig's ceiling.
+`Out of memory: Killed process … (moq)`. Client memory in this ramp (45 s per point — **not** current
+finding on per-process cost):
 
-Those two figures were read here as a per-process cost that barely moves with N, which is true and
-was the wrong axis: [T27](test-27-liveness-detector.md) held N constant and found the same process
-**filling logarithmically to a ~106–119 MB plateau over about ten minutes** (log r² = 0.904
-against linear 0.602, and 9.4 MB of drawdown from a running peak), matching where
-[T21](test-21-permanence-soak.md) found the exporter sitting from 0.5 h to 4.5 h. The numbers above
-are that fill caught early — each ramp point is only 45 s old — so **~120 MB, not ~96 MB, is the
-figure to plan against**, and the ceiling this rig imposes is correspondingly nearer.
+| N | `moq export ts` RSS (45 s snapshot†) |
+|---:|---:|
+| 1 | **95.6 MB** |
+| 150 | **103.3 MB** |
+
+†Early fill on the time axis, not steady state — [T27](test-27-liveness-detector.md) held N fixed and
+measured the same process **49.0 → 119.1 MB over 703 s**, plateau **116–122 MB** with drawdowns (a
+cache, not a fixed cost); a per-N ramp cannot measure a time-varying quantity. Even on the early axis,
+150 clients occupy 15.1 GB of the box's 15.7 GB, so the client's footprint, not the relay, sets this
+rig's ceiling. **~120 MB, not ~96 MB, is the figure to plan against** — see [Corrections](#corrections).
 
 ### Arm C — GSO enabled, relay pinned to one core
 
@@ -273,18 +275,28 @@ merely slow down.
 
 ## Corrections
 
-- **A flag was carried across platforms with its reason left behind.** `--server-quic-gso=false`
-  entered this campaign because GSO stalls on *macOS loopback*, and was then used unexamined on Linux
-  EC2 hosts, understating the relay by 29 % per subscriber and its ceiling by half. The first arm was
-  run before this was noticed. **Rule:** a flag that works around a platform defect must record which
-  platform, and be re-tested when the platform changes.
-- **A cleanup pattern killed the shell that issued it.** `pkill -f "broadcast f5.fanout.hang"` sent
-  over ssh matches the remote shell's own command line, so it killed itself before reaching the next
-  statement; a stale publisher survived, a second announced the same broadcast, and the relay
-  terminated one of the two about a minute in. That read, in the results, as the source spontaneously
-  failing at N = 1. **Rule:** kill patterns belong in a script file, never in an ssh command line, and
-  a reset must verify that nothing survived. This is what `f5-reset.sh` exists to do — and its own
-  first version repeated the mistake with an unbracketed `export ts --latency-max`.
-- **The reference rate was asserted and was wrong.** The first run declared 11 Mb/s — the pacer's CBR
-  figure — as the target for subscribers that have no pacer, and "failed" at N = 1 by 18 % on the
-  instrument rather than the relay. The reference is now measured at the first schedule point.
+**Believed:** `--server-quic-gso=false` is the correct relay configuration on Linux EC2.
+**True:** the flag entered the campaign for *macOS loopback* GSO stalls; on Linux it handicaps the relay
+by 29 % per subscriber and half the ceiling — arm A was run before this was noticed.
+**Rule:** a flag that works around a platform defect must record which platform, and be re-tested when
+the platform changes.
+
+**Believed:** the reference delivery rate for `moq export ts` subscribers is 11 Mb/s (the pacer's CBR
+figure).
+**True:** subscribers here have no pacer; the first run "failed" at N = 1 by 18 % on the instrument
+rather than the relay.
+**Rule:** the reference rate is measured at the first schedule point, not asserted from a different
+stage's wire rate.
+
+**Believed:** `moq export ts` client memory is essentially fixed per process (~96 MB), barely moving
+with N.
+**True:** [T27](test-27-liveness-detector.md) shows it fills to a **116–122 MB** plateau over time; the
+95.6 / 103.3 MB readings here are 45 s snapshots of an early fill.
+**Rule:** pin the variable under test — a per-N ramp cannot characterise a quantity that varies with
+time; see [method notes](method-notes.md).
+
+**Believed:** a cleanup over ssh with `pkill -f "broadcast f5.fanout.hang"` clears the prior publisher.
+**True:** the pattern matches the remote shell's own command line and kills it before the next statement;
+a stale publisher survived and the run read as source failure at N = 1.
+**Rule:** kill patterns belong in a script file, never in an ssh command line, and a reset must verify
+that nothing survived — what `f5-reset.sh` exists to do.

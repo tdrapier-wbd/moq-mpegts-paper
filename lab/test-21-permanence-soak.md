@@ -20,58 +20,18 @@
 > findings stand as findings and are kept below**; what does not stand is the reading of them as a
 > permanence result.
 
-> **The first run.** This was the first long run in the
-> campaign to put the **groomer inside the measurement**: [T8b](test-8b-congestion-control.md) C6 soaked
-> `moq export ts` with `tsp count` behind it and [T9](test-9-performance.md) soaked the relay, so the
-> stage that makes this lane conformant had never been run for longer than a single 300 s cell.
->
-> **The wire stayed conformant and the groomer did not stay in its operating state.** Across that run:
-> **0 continuity errors, 0 PCR intervals above 40 ms, worst interval 30.08 ms, mux rate exactly
-> 11,000,000 b/s, 0 dropped packets, 0 late drops, 0 respawns**, and programme content conserved at the
-> source rate throughout. Every check an operator could point at the stream passes.
->
-> **Behind that wire, the groomer's release loop has come apart.** At about nine minutes the recovered
-> media-rate estimate leaves the true rate and ramps **linearly and without bound** — 9.34 Mb/s at
-> t=541 s, 34.7 Mb/s at t=601 s, **2.58 Gb/s at t=1,202 s** and **6.98 Gb/s at t=2,404 s**, gaining a
-> steady ~250 Mb/s per minute with no sign of turning over. The de-jitter buffer it is supposed to hold collapses with it, from a
-> standing **10,587 packets (~1.4 s) to 0**, and buffer underruns accumulate at **~970 per second**
-> thereafter.
->
-> **Nothing downstream can see this.** Programme is conserved, so no content check fires; the carrier
-> holds its rate, so no bitrate check fires; PCR repetition and continuity are untouched, so
-> TR 101 290 P1 does not fire. What has been lost is the cushion itself — the groomer has become a
-> pass-through with no jitter absorption at all — and the only instrument that shows it is the groomer's
-> own counters, which is why they were added before this run.
->
-> **The mechanism is now located, and the first attribution was wrong.** The trigger is the source's
-> PCR discontinuity — `tsp --infinite` reaching the end of the clip and looping, at 600 s. The
-> publisher's input takes it in its stride: captured before MoQ sees it, the source carries **exactly
-> one** discontinuity, PCR 26,225.6 s → 25,625.6 s at packet 3,967,658, and resumes its clean 25 ms
-> grid immediately. The exporter's output carries **zero** discontinuities, because it never follows
-> the wrap. It **latches the last pre-wrap value and thereafter emits a PCR that advances by exactly
-> one 90 kHz tick per PCR packet** — 0.0111 ms, a counter and not a clock — and never recovers. After
-> that, 100,000 packets of programme carry **6.9 ms** of PCR where they should carry 15,880 ms.
->
-> **The class is characterised in [T23](test-23-pcr-discontinuity-classes.md), and this stimulus is not
-> representative of it.** Deliberate signalled discontinuities produce a *withhold-and-burst* — output
-> stops for exactly the size of the rewind, then the backlog is released — with a healthy clock either
-> side and no counter anywhere. Forward jumps and the 33-bit rollover are carried correctly. What
-> generalises from T21 is that the exporter does not act on `discontinuity_indicator`; the counter
-> degeneration measured here does not.
->
-> **So the defect that starts it is upstream's, and the defect that amplifies it is ours.** The pacer's
-> rate estimator was arithmetically faithful to an input that had stopped telling the truth: it divided
-> real packets by a media time that had stopped advancing, got a rate two orders of magnitude above
-> anything the carrier could hold, released on it, and drained its own cushion. Both halves are now
-> addressed — the estimator is fixed and regression-tested here, the exporter behaviour is reported
-> upstream — and they must not be conflated. *An earlier reading of this experiment called the whole
-> thing ours on the strength of a clean exporter log. The log is clean; the exporter is not.*
->
-> **The consequence for the paper is a scope, not a retraction.**
-> [T19](test-19-pcr-grid-verification.md) measurement 11's conformance result stands for the window it
-> was measured over. It was a 300 s window, the divergence begins at about 540 s, and so the claim that
-> the media-aware lane produces a conformant CBR wire **is established for minutes and is not yet
-> established for hours** — the re-soak that would establish it is the next run, not this one.
+> **The first run (superseded for permanence; kept as discontinuity-mechanism record).** Stimulus:
+> `tsp --infinite` on a looped clip — a rewind-recovery test, not a permanence test; see
+> [Corrections](#corrections). The wire stayed conformant throughout (**0** continuity errors, **0**
+> PCR intervals above 40 ms, exact **11,000,000 b/s**, programme conserved). Behind it the groomer's
+> recovered media rate left the truth at about **nine minutes** and ramped **linearly without bound**
+> to **6.98 Gb/s**; the de-jitter buffer collapsed from **10,587 packets (~1.4 s) to 0** with
+> underruns at **~970/s**. Nothing downstream could see it. **Trigger (upstream):** the exporter did
+> not act on the signalled discontinuity — PCR degenerated to one 90 kHz tick per packet. **Amplifier
+> (ours):** the estimator divided real packets by a media time that had stopped. Both halves are
+> addressed — estimator fixed and regression-tested below; exporter behaviour reported upstream. The
+> fixed/unfixed comparison at [§ The correction](#the-correction-and-what-it-is-not) holds the rate at
+> **9,575,263 b/s** with **0** underruns where the unfixed run ramped to 35.7 Mb/s and beyond.
 
 ## Objective
 
@@ -91,18 +51,30 @@ once the transient it started in has decayed. Nothing in the campaign had tested
 
 ## Environment
 
-- **Host:** EC2 primary, `c6in.large`, 2 vCPU / 3.8 GB, `eu-west-1a`. Loopback, no shaping, no netns —
-  impairment is a different experiment ([T5](test-5-network-impairment.md),
-  [T8b](test-8b-congestion-control.md)), and mixing the two would leave a drift unattributable between
-  the loop and the path.
+**Primary — the 24 h permanence soak** ([§ The 24 h soak](#the-24-h-soak-on-a-continuous-timeline)):
+
+- **Host:** EC2 secondary, 8 vCPU, idle, nothing else timing-sensitive on the host.
+- **Build under test:** merged upstream `main` — `moq` 0.10.0 / `moq-relay` 0.14.15, built on the host at
+  `222cc72`, containing [#3351](https://github.com/moq-dev/moq/pull/3351); `mpegts-pacer` built from
+  `5ab84cd`.
+- **Source:** `SOURCE_MODE=continuous` — `lab/scripts/ts-continuous-source.py` replays `~/CNNiEMEA2.ts`
+  with the timeline advancing across the join (graded before use; see [§ The source](#the-source-and-why-one-had-to-be-built)).
+- **Chain:** continuous source → `moq import ts` → relay → `moq export ts --latency-max 500ms` →
+  `mpegts-pacer - 11000000 --latency-ms 1000 --max-latency-ms 2500 --stall-ms 1000 --on-stall mute` →
+  `tsp -P continuity -P pcrverify --absolute --jitter-max 500 --bitrate 11000000 -P count` →
+  `t21-pcr-monitor.py`.
+- **Target:** 24 h; 11,000,000 b/s, cushion 1,000 ms, cap 2,500 ms; sampled every 60 s.
+- **Rig:** `lab/scripts/t21-lane-soak.sh`. The `loop` mode is retained so the two sources can be compared
+  deliberately rather than by accident.
+
+**Variant — first run (discontinuity-mechanism record only; superseded for permanence):**
+
+- **Host:** EC2 primary, `c6in.large`, 2 vCPU / 3.8 GB, `eu-west-1a`. Loopback, no shaping, no netns.
 - **Build under test:** `moq 0.9.11-eab96019` / `moq-relay 0.14.11-eab96019` (`main` @ `eab960192`,
   carries [#3351](https://github.com/moq-dev/moq/pull/3351)); `mpegts-pacer` at `41e6181`.
 - **Source:** `~/CNNiEMEA2.ts`, `md5 364ce82c…`, looped by `tsp -I file --infinite -P regulate
-  --pcr-synchronous`. The loop wraps about every 665 s, so a multi-hour run crosses it dozens of times.
-- **Chain:** `tsp` → `moq import ts` → relay → `moq export ts --latency-max 500ms` → `mpegts-pacer -
-  11000000 --latency-ms 1000 --max-latency-ms 2500 --stall-ms 1000 --on-stall mute` → `tsp -P continuity
-  -P pcrverify --absolute --jitter-max 500 --bitrate 11000000 -P count` → `t21-pcr-monitor.py`.
-- **Rig:** `lab/scripts/t21-lane-soak.sh`, sampling every 60 s.
+  --pcr-synchronous`. The loop wraps about every 665 s.
+- **Chain and rig:** as above, with `tsp --infinite` in place of the continuous source.
 
 Nothing is stored. A conformant 11 Mb/s wire is 119 GB a day; every check runs in flight and the whole
 record of the run is a few hundred kilobytes of text.
@@ -130,7 +102,22 @@ loss-recovery gap and the over-limit spacing fixture.
 
 ## Results
 
-### The wire
+### 24 h permanence soak — current verdict
+
+Full tables and resource breakdown: [§ The 24 h soak](#the-24-h-soak-on-a-continuous-timeline). Summary:
+
+| | Media plane (F2) | Resources (F2) |
+|---|---|---|
+| Verdict | **pass** — 24.01 h, **632,199,204** packets, **0** continuity errors, **0** underruns, worst programme gap **27 ms**, 33-bit rollover crossed at 19.4 h | **fail** — **`moq import ts` +2.83 MB/h linear**; relay logarithmic and bounded; groomer flat |
+| Detail | [§ The wire, over 24 hours](#the-wire-over-24-hours), [§ The release loop](#the-release-loop-and-p0-3b) | [§ Resources — the one failure](#resources--the-one-failure) |
+
+### First run — discontinuity-mechanism record (superseded for permanence)
+
+These readings are from the **`tsp --infinite` variant** above. They characterise what happens when the
+exporter does not act on a source PCR discontinuity; they do **not** state the permanence verdict,
+which is the 24 h row above.
+
+#### The wire (first run)
 
 | Metric | Result over that run |
 |---|---|
@@ -145,7 +132,7 @@ loss-recovery gap and the over-limit spacing fixture.
 
 The stream an IRD would receive is clean and stays clean while everything below goes wrong.
 
-### The groomer's release loop
+#### The groomer's release loop (first run)
 
 Sampled every 60 s from the groomer's own counters:
 
@@ -184,11 +171,11 @@ because media had not yet arrived; the media still goes out, which is why progra
 the cushion is the *only* thing between arrival jitter and the wire, and the lane no longer has one, so
 the conformance result cannot be assumed to transfer to a path that jitters.
 
-### Resources
+#### Resources (first run)
 
-**Superseded by the 24 h soak's resource table below**, which is the run long enough to fit a slope.
-These readings are kept only because the two thread-count anomalies were first seen here. At
-t=1,385 s, well inside the warm-up:
+**Superseded by the 24 h soak's resource table** — the run long enough to fit a slope. These readings
+are kept only because the two thread-count anomalies were first seen here. At t=1,385 s, well inside
+the warm-up:
 
 | Role | RSS start → now | threads | fds |
 |---|---|---:|---:|
@@ -205,37 +192,27 @@ an open item in its own right — it is a tokio worker pool that should not be g
 
 ## What this does and does not establish
 
-- **Establishes:** the complete media-aware lane, as built, did not hold its operating state for as
-  long as an hour on an unimpaired path. Reproduced four times on the 2-vCPU primary at the same
-  trigger, and deterministically offline from a capture.
-- **Establishes:** the trigger is a **source PCR discontinuity the exporter does not act on** — an
-  ordinary event on a permanent feed, produced by a splice, a source failover or an encoder restart.
-  It is upstream's and it is silent. [T23](test-23-pcr-discontinuity-classes.md) bounds it: the
-  exposure is a **rewind**, whose cost is its own duration in programme, and *not* the 33-bit PCR
-  rollover, which is carried correctly.
-- **Establishes:** a defect of this class is **undetectable from the wire**. Programme conserved,
-  continuity clean, PCR repetition clean, exact CBR — every check an operator has, passing, over a
-  stage with no jitter absorption left and a source with no timebase at all. That is a finding about
-  monitoring rather than about this bug; [T22](test-22-silent-media-plane-failure.md) measures the same
-  asymmetry deliberately, and together they are why the groomer's own counters are load-bearing.
-- **Establishes:** a groomer must not take its input's timebase on trust. Ours did, and that is the
-  half of the failure that is ours. It is fixed and regression-tested.
-- **Does not establish:** that media-aware carriage is unsound. Both faults are implementation faults
-  in identified components, one upstream and one ours, and neither is a property of demuxing MPEG-TS
-  into tracks.
-- **Establishes, from the 24 h soak:** the lane holds its operating state for a day on a continuous
-  timeline — zero continuity errors, zero underruns, a 27 ms worst programme gap and a bounded buffer
-  over 632 million packets — so [T19](test-19-pcr-grid-verification.md)'s conformance result now
-  extends from minutes to a day rather than being scoped to minutes.
-- **Establishes, from the 24 h soak:** the groomer's resident memory and the relay's are both
-  provisionable — flat and logarithmic respectively — and **`moq import ts`'s is not**, growing
-  linearly at +2.83 MB/h with the slope intact across four quarters. Permanence is blocked by one
-  upstream role, not by the architecture.
-- **Does not establish:** that the publisher's growth is `moq import ts`'s rather than its wrapper's.
-  The soak summed a process signature; the per-PID run is what settles it.
+- **Establishes (24 h soak — current permanence verdict):** the complete media-aware lane **passes F2 on
+  the media plane without qualification** — 24.01 h, zero continuity errors, zero underruns, a **27 ms**
+  worst programme gap and a bounded buffer over **632 million** packets — so
+  [T19](test-19-pcr-grid-verification.md)'s conformance result extends to a day on a continuous timeline.
+- **Establishes (24 h soak):** the groomer's resident memory and the relay's are both provisionable —
+  flat and logarithmic respectively — and **`moq import ts`'s is not**, growing linearly at **+2.83 MB/h**
+  with the slope intact across four quarters. **F2 fails on resources in one role** (the publisher), not
+  on the architecture.
+- **Establishes (first run — discontinuity mechanism, not permanence):** when the exporter does not act
+  on a source PCR discontinuity, the groomer's rate estimator amplifies the fault — wire conformant,
+  cushion gone, undetectable downstream. [T23](test-23-pcr-discontinuity-classes.md) bounds the class;
+  [T22](test-22-silent-media-plane-failure.md) measures the monitoring asymmetry deliberately. The
+  estimator fix is regression-tested in [§ The correction](#the-correction-and-what-it-is-not). The first
+  run's reading that the lane "did not hold its operating state for as long as an hour" is **superseded**
+  by the 24 h result; that run was a rewind-recovery test on `tsp --infinite`, not a permanence soak.
+- **Does not establish:** that media-aware carriage is unsound. The faults found are implementation
+  faults in identified components.
+- **Does not establish:** that the publisher's growth is `moq import ts`'s rather than its wrapper's —
+  the per-PID run discharges this.
 - **Does not establish:** anything about a *real* encoder's timeline. The continuous source is a
-  synthetic clock over a repeating clip, which is honest about pacing and PCR and says nothing about
-  encoder restarts, GOP structure changes or drifting source clocks.
+  synthetic clock over a repeating clip.
 
 ## Mechanism
 
@@ -351,11 +328,8 @@ stall is visible in the counters, because nothing on the wire is.
 
 ### The source, and why one had to be built
 
-Every clip in this lab is five to ten minutes long and there is no live feed. The only way anyone had
-stretched one was `tsp -I file --infinite`, which restarts the file and so restarts its clock, and
-[T23](test-23-pcr-discontinuity-classes.md) has now priced that: a rewind costs its own duration in
-programme. A soak on that source measures recovery from a manufactured rewind every 665 s. That is a
-real property of the lane, it is already measured, and it is not permanence.
+The first run used `tsp --infinite`; that stimulus is wrong for a permanence soak — see
+[Corrections](#corrections) and [method notes](method-notes.md) §1 (*A looped clip is not a long clip*).
 
 `lab/scripts/ts-continuous-source.py` replays the clip and advances the timeline across the join, so
 the output is what a continuous encoder emits. **It was graded before it was trusted**, because a
@@ -381,15 +355,6 @@ source rather than the lane.
 continuous run crosses the modulus about **19.4 h in**, unsignalled, exactly as a real feed does every
 26.51 h. T23 established the lane carries that correctly in a placed 105 s arm; a run that passes
 through it tests the same finding live, at length, and without the placement.
-
-### Configuration
-
-`SOURCE_MODE=continuous`, 24 h target, EC2 secondary (8 vCPU, idle, nothing else timing-sensitive on
-the host). Merged upstream `main` — `moq` 0.10.0 / `moq-relay` 0.14.15, built on the host at
-`222cc72`, containing [#3351](https://github.com/moq-dev/moq/pull/3351) — with `mpegts-pacer` built
-from `5ab84cd`. 11,000,000 b/s, cushion 1,000 ms, cap 2,500 ms, `--latency-max 500ms`, sampled every
-60 s. The `loop` mode is retained in the rig so the two sources can be compared deliberately rather
-than by accident.
 
 ### The wire, over 24 hours
 
@@ -544,6 +509,12 @@ on a continuous synthetic clock rather than encoder behaviour. Both are stated i
 [F2](planned-experiments.md#f2-permanence-soak) as the bounds of the claim.
 
 ## Corrections
+
+**Believed:** `tsp -I file --infinite` is an acceptable way to stretch a clip into a multi-hour soak.
+**True:** restarting the file restarts its clock; [T23](test-23-pcr-discontinuity-classes.md) priced a
+rewind at its own duration in programme, so the first run injected a manufactured discontinuity every
+~665 s and measured rewind recovery, not permanence. **Rule:** the property under test must survive how
+the stimulus was extended — see [method notes](method-notes.md) §1.
 
 **A control loop was accepted into the lane on five minutes of evidence.** The closed-loop release in
 `mpegts-pacer` was introduced to fix a genuine defect — open-loop release integrates rate-estimate
