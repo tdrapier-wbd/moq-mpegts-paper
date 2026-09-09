@@ -1,11 +1,9 @@
 # Internet-Native Primary Distribution for Professional Broadcast
 
 **A technical evaluation of Internet-native primary distribution for professional broadcast, on the
-two data planes that can carry it: Media over QUIC (MoQ), and segmented HTTP carrying MPEG-TS.**
+two data planes that can carry it: Media over QUIC (MoQ), and segmented HTTP carrying MPEG-TS (HLS).**
 
-Status: working draft. This is deliberately critical: the goal is to find the fastest way to
-*disprove* the thesis, not to sell it. AI assistance was used in drafting
-([Contributing](CONTRIBUTING.md)).
+Status: working draft. AI assistance was heavily used in drafting.
 
 ---
 
@@ -24,28 +22,15 @@ reliability** — which needs a cache in the path rather than a better tunnel
 
 ## The conclusion
 
-**The transport is not the decision, and that is the most consequential finding here.** Both candidates
-ride QUIC, both are unicast at the last mile, both land within a few percent of the same wire volume,
-and both need the same broadcast-grade edge stage before a hardware receiver will lock to them — a stage
-neither specification mentions and which the distributor owns, because it no longer supplies its clients'
+**The transport is not the decision, and that is the most consequential finding here.** Both candidates are unicast at the last mile, both land within a few percent of the same wire volume,
+and both need the same broadcast-grade edge stage to produce a TR 101 290-conformant transport-stream hand-off — a stage
+neither specification mentions and which the taker must own, because broadcasters no longer supply its clients'
 receivers. Most of the engineering, and most of the risk, sits *above* the transport
 ([Comparison](docs/comparison.md), [Architecture](docs/architecture.md)).
 
-**Segmented HTTP is the better engineering choice today for any route that can absorb seconds.** It is
-universally interoperable, sells over commodity delivery now, has the more robust recovery model and an
-off-the-shelf path back to a transport stream, and — measured — is verbatim in payload for a single
-programme, so the carriage-fidelity advantage usually assumed for MoQ survives only on a multi-programme
-mux ([Comparison](docs/comparison.md) §14).
+**Segmented HTTP has a mature cache-delivery model, not an out-of-box broadcast receiver path.** Named segments can be served through commodity CDN infrastructure and retried from another edge while they remain within their availability window. But the target IRD estate does not consume HLS directly: it still needs distributor-owned reassembly, grooming and TS-egress stage. This evaluation did not demonstrate an interoperable, low-latency TS-in-HLS receiving path: free receivers fell back to whole segments, while the commercial ABR-to-TS path remains untested. The measured recovery advantage is therefore conditional and does not establish end-to-end receiver interoperability ([Comparison](docs/comparison.md) §3.2, §4, §5.1).
 
-**MoQ's distinguishing claim is latency, and it holds in a narrower form than the headline figure
-suggests.** That figure was measured on a configuration whose wire cannot be made conformant to
-TR 101 290. Held at the conformance a hardware receiver actually
-requires, MoQ still beats the other Internet-native plane decisively — a real margin, and the case for
-MoQ on routes in roughly the two-to-nine-second band. But at conformance it no longer beats the
-point-to-point incumbents it would displace, which carry their source's own conformant timing and buy
-their latency with a jitter buffer the operator sets. **No conformant sub-second configuration was
-produced on any lane**, so the band on which MoQ's strategic case rests is architecturally credible and
-not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
+**MoQ beats the other Internet-native plane decisively on latency at the configurations measured conformant in software.** That makes the case for MoQ on routes with a roughly two-to-nine-second delivery budget. But at conformance it does not necessarily beat the point-to-point incumbents it would displace, which carry their source’s own conformant timing and buy their latency with a jitter buffer the operator sets. No conformant sub-second configuration was produced on any lane, so MoQ’s strategic sub-second case is architecturally credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, ([Evidence](docs/evidence.md) §3.11).
 
 **Two things separate a credible evaluation from a deployable one, and neither is a transport property.**
 The make-or-break conformance gate has never been attempted — nothing here has been fed to a hardware
@@ -68,18 +53,6 @@ commodity delivery, while the entire measured difference between the transports 
   an identified upstream regression that could be recovered; the rest is structural, because a demuxed
   lane moves the contribution encoder's buffer budget downstream into the edge gateway
   ([Comparison](docs/comparison.md) §5.1).
-- **A conformant result currently depends on which build is deployed** — two known defects sit in
-  different builds, so every available build carries one of them ([Evidence](docs/evidence.md) §3.13).
-- **Hitless 1+1 is measured end to end on both planes and scoped differently on each**, and a healthy
-  transport does not imply a live programme: detecting a partial media-plane failure needs per-stream
-  instrumentation no conformance check provides ([Evidence](docs/evidence.md) §3.4, §3.12).
-
-## What is not established
-
-No hardware conformance pass on either plane; no conformant sub-second configuration on any lane; no
-cross-implementation interop; no measurement beyond a day; latency measured only on healthy paths;
-multi-programme carriage through a real CDN; and one publisher-side resource leak that blocks permanent
-operation in that role. The full accounting is [Evidence](docs/evidence.md) §4 and §5.
 
 ---
 
@@ -113,15 +86,11 @@ separate public crate, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-p
 
 ## Contributing
 
-This is a public, living reference whose purpose is to be tested and challenged. Corrections,
-counter-evidence and disagreement are actively wanted — see [Contributing](CONTRIBUTING.md) for how to
-raise an issue, and for the editorial and confidentiality conventions.
+This is a public, living reference whose purpose is to support primary distribution discussions. Corrections,
+counter-evidence and disagreement are welcome.
 
 ## Author
 
-**Thomas Drapier** — Senior Director, Service Management & Partner Services, Broadcast Distribution
-Engineering. [LinkedIn](https://www.linkedin.com/in/tdrapier/)
+**Thomas Drapier** — Warner Bros. Discovery, Senior Director, Service Management & Partner Services, Broadcast Distribution Engineering. [LinkedIn](https://www.linkedin.com/in/tdrapier/)
 
 ---
-
-*This is a living document. Its purpose is to be proven wrong quickly and cheaply.*

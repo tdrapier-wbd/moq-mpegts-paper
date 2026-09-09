@@ -167,7 +167,8 @@ egress, performs in order:
 ### 4.1 The grooming problem, and why it belongs to every data plane
 
 **Any Internet-native transport delivers media in bursts, and a transport stream reassembled directly
-from those bursts has a PCR that hardware IRDs reject on TR 101 290. Grooming is the fix, it sits at
+from those bursts has a PCR that fails TR 101 290 — the conformance the installed base enforces (§3),
+though no hardware receiver's reaction to it has been observed here. Grooming is the fix, it sits at
 the edge, and it is required whichever data plane carries the bytes.**
 
 It is tempting to read this as a cost of MoQ's object model, and measurement says the opposite:
@@ -226,21 +227,19 @@ general-purpose OS and NIC; the P1 wire result above is the same point already m
 anticipated ([Evidence](evidence.md) §3.2).
 
 **Buffer depth fixes it on the segmented plane and does nothing on the MoQ lane, and the fix that does
-work there is not free of latency either.** The segmented-HTTP arm reaches 0 on the wire by holding an
-8 s cushion, which made *"the stage always has a packet ready at the deadline"* look like the general
-explanation. On the MoQ lane depth changes nothing, because the exporter never hands the groomer a
+work there is not free of latency either.** The segmented arm reaches 0 on the wire by holding an 8 s
+cushion; on the MoQ lane depth changes nothing, because the exporter never hands the groomer a
 PCR-bearing packet near the deadline in the first place. **Reserving the slot is what clears the gate**,
-and it is independent of cushion, exporter cadence and content — so the trade is not
-buffer-versus-latency. But the conformant configuration still costs an order of magnitude against the
-lane's fastest measured figure: **2,447 ms of delivery latency against the 109 ms measured on a build
-whose wire cannot be made conformant.** About 650 ms of that is a named upstream regression; the rest is
-the buffer bound in §12's second open question, which is the contribution encoder's VBV occupancy moved
-downstream into this gateway ([Evidence](evidence.md) §3.2, §3.11).
+independently of cushion, exporter cadence and content — so the trade is not buffer-versus-latency. The
+conformant configuration nonetheless costs **2,447 ms of delivery latency against the 109 ms measured
+on a build whose wire cannot be made conformant**: about 650 ms is a named upstream regression and the
+rest is the buffer bound in §12's second open question, the contribution encoder's VBV occupancy moved
+downstream into this gateway ([Comparison](comparison.md) §5.1, [Evidence](evidence.md) §3.2, §3.11).
 
 **The architectural consequence is a real advantage over the other Internet-native plane and not a
-sub-second one.** At equal conformance the gateway on this lane delivers at 2,447 ms against the
-segmented plane's 9,286 ms. It does not beat a transparent tunnel, whose egress carries the source's own
-conformant grid at whatever jitter buffer the operator sets.
+sub-second one.** At equal conformance this gateway delivers at 2,447 ms against the segmented plane's
+9,286 ms, and does not beat a transparent tunnel, whose egress carries the source's own conformant grid
+at whatever jitter buffer the operator sets.
 
 > **The gate that decides this architecture.** A clean TR 101 290 P1/P2 pass on real hardware
 > decoders, sustained, including the ST 2022-7 determinism of §5.1 under loss. Until that evidence

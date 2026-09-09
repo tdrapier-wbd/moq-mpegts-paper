@@ -39,6 +39,27 @@ README changes must preserve an executive-summary length and link downward rathe
 
 `INSTRUCTIONS.local.md`, `STATUS.md`, any `lab/*.local.md`, and any `.env.local` are git-ignored.
 
+## Promotion between layers requires the author's approval
+
+The three layers are `lab/` (L3, the evidence), `docs/` (L2, the paper) and `README.md` (L1, the
+executive summary). Material moves *up* only with the author's explicit prior approval, asked for and
+granted before the edit:
+
+- **L3 → L2 requires approval.** Adding a finding, conclusion, measurement, limitation or argument to
+  `docs/` on the strength of something in `lab/` is a promotion, however well the evidence supports it.
+- **L2 → L1 requires approval.** The same applies to anything reaching `README.md` from `docs/`.
+- **L3 → L1 is prohibited.** Nothing reaches `README.md` directly from the laboratory record. It must
+  first be established in `docs/` and then separately approved for `README.md`.
+- **L1 is read-only** unless the author authorises a specific change — including wording, links,
+  formatting and typographical corrections. Propose them in the report instead.
+
+**Correcting an existing L2 statement that L3 clearly contradicts is not a promotion, and is
+permitted.** The distinction is between repairing a claim the paper already makes and introducing one it
+does not. If a discrepancy can only be resolved by adding new L3 material to `docs/`, stop and ask.
+
+When approval is needed and unavailable, leave the text alone and record the proposed promotion — the
+claim, its evidence in `lab/`, and where it would sit in `docs/` — in the report.
+
 ## Corrections: keep the correction, drop the blow-by-blow
 
 Being wrong and saying so is a feature of this repository — but a *record* of a correction is not the
@@ -156,3 +177,55 @@ measurements, test identifiers, lab narrative, detailed mechanisms or extended q
 those go in `docs/` or `lab/` and are linked to. Its conclusion is derived from the current `docs/`
 argument each time, never preserved from a previous draft for continuity. Budget 700–1,000 words for the
 summary itself; the document map and attribution sit outside that count.
+
+## Editorial principles
+
+Contributions are held to the same standard as the existing text. Please:
+
+- **Write for a technically sophisticated reader.** Assume familiarity with
+  broadcast engineering; do not re-explain the basics.
+- **Justify architectural statements.** Every claim should have a technical
+  rationale, and trade-offs should be stated, not hidden.
+- **State uncertainty explicitly.** Where something is unproven or contested, say
+  so, rather than presenting an opinion as a fact. It is better to write "this is
+  unproven" than to overclaim. A useful habit is to distinguish what is
+  *established*, what is *likely*, and what is *uncertain*.
+- **Avoid marketing, hype, and startup language.** This is reference material, not
+  promotion. Keep commercial and go-to-market argument out of the technical
+  documents.
+- **Cross-link, don't duplicate.** Each concept has exactly one authoritative home and every
+  other mention is a one-line cross-reference. The requirement set lives in
+  [`docs/problem.md`](docs/problem.md) §5; the data-plane comparison in
+  [`docs/comparison.md`](docs/comparison.md); the grooming and redundancy design in
+  [`docs/architecture.md`](docs/architecture.md) §4 and §5; every measurement in
+  [`docs/evidence.md`](docs/evidence.md). Add detail in the right place and link to it rather
+  than restating it.
+- **Name the evidence, or say there is none.** A claim that decides something must cite the
+  measurement that established it. Where a claim is specification-based, architectural
+  reasoning or a vendor datasheet, say so in the sentence that makes it — those words
+  (*measured*, *derived*, *specified*, *reasoned*, *datasheet*) are load-bearing here. Where a
+  figure comes from a file capture rather than the live wire, name the domain: the two differ,
+  and in this repository they have differed materially.
+- **Write the current state, not the sequence that produced it.** Both the paper and the
+  notebook describe what is understood now. When something changes, replace the stale
+  statement where it is made rather than appending a correction after it, and merge repeated
+  discussions of the same point into one authoritative explanation. Where a correction carries
+  a lesson worth keeping, it goes once into [`lab/method-notes.md`](lab/method-notes.md) as a
+  method rule — the correction survives, the blow-by-blow does not.
+- **Use Mermaid for diagrams** so they render in the repository and stay
+  diff-friendly.
+
+**Third-party reports of what somebody pays are not published prices**, and the model
+excludes them. A rate belongs in the paper only if it is on a public price page, derived
+in the open from one that is, or measured here. Where the argument needs a figure that is
+none of those — a discount percentage, an unannounced service rate, a facilities cost —
+model it explicitly and label it *hypothetical*, *assumed* or *illustrative* at every
+point it appears, including inside table headers and chart rows, so that no reader
+arriving mid-document can mistake it for a rate that is obtainable. Never let a modelled
+rate imply that anyone has been offered or has achieved it.
+
+
+The same applies to infrastructure detail in the notebook. `lab/` is public, so commands and
+procedures there use placeholders — `<EC2_IP>`, `<subscriber-home-ip>` — rather than real
+addresses, paths, credentials or TLS fingerprints. If you contribute a procedure, keep that
+convention.
