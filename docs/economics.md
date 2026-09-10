@@ -316,13 +316,60 @@ market the delivery is bought in**.
 | Always-on trunk, few destinations | challenger | Comfortable at any rate on the ladder; the constraint is the fixed cost around it, not the transport |
 | Always-on trunk, tens of destinations | arguable | Turns on procurement inside the cloud, comfortable outside it (§4.3, §4.4) |
 | Always-on trunk, hundreds | **depends entirely on the supplier** | Lost at metered cloud rates, arguable at committed ones, competitive on commodity delivery or owned infrastructure |
-| Always-on trunk, a thousand or more | **incumbent** | Structural: every option is unicast at the last mile, and nothing purchasable today reaches parity. Only owned infrastructure comes close, and not at the reach this implies |
+| Always-on trunk, a thousand or more | **incumbent** | Structural: every *Internet-native* option is unicast at the last mile, and nothing purchasable today reaches parity. Only owned infrastructure comes close, and not at the reach this implies. This is the square the satellite-hybrid model contests, on the drivers in §6.1 |
 | Event, occasional, short-window | challenger | Fast provisioning and pay-for-use match the demand shape, though no commitment means no committed discount |
 | Global or dynamic reach | challenger | Reach without global procurement or a meet-me point |
 | Feeds that differ per destination | challenger | Satellite cannot sell it at any price (§5) |
 
 **Sensitivities:** 1+1 doubles the dominant line (hold equivalent); staffing dominates at low route counts
 (§2); carriage overhead varies with **source** stuffing, not protocol (§3).
+
+### 6.1 The satellite-hybrid case, and the drivers that decide it
+
+The table above reads "incumbent" at a thousand destinations because every Internet-native option is
+unicast at the last mile. **The satellite-hybrid model of [Comparison](comparison.md) §10.2 is the
+incumbent's move in that square:** it keeps the space segment as the fan-out and buys internet capacity
+only for repair, which lets an operator trade fade margin — moving to a higher band, or running less
+of it — without ceding the route. No figure in this document prices it. There is no published
+satellite capacity rate to put on the ladder in §4.2, this repository has no fade statistics for any
+real estate, and nothing about the hybrid path has been measured here, so what follows is a decision
+framework rather than a model, and it is *reasoned* throughout.
+
+| Driver | Pushes toward satellite-hybrid | Pushes toward fully Internet-native |
+|---|---|---|
+| **Destinations inside one footprint** | hundreds to thousands, where satellite's marginal cost is already ~0 | tens, which never reach satellite's break-even and where IP linearity is cheap |
+| **Feed commonality** | one feed common to every site | per-destination variants, regionalisation or differing formats, which satellite cannot sell at any price (§6) |
+| **Fade profile** | rare, short, geographically scattered fades | frequent, long, or regionally correlated fades |
+| **Full-stream fallback** | needed seldom, and for few sites at a time | needed as a standing guarantee for most of the estate |
+| **Per-site IP capacity** | modest and bursty is sufficient | already provisioned and diverse enough to carry the whole feed continuously |
+| **Terrestrial, 4G/5G or LEO availability** | patchy or costly at some sites, which satellite covers and repair fills in | uniformly good, which erodes the reason to keep a space segment at all |
+| **Path independence** | genuine space-versus-terrestrial diversity, valued as redundancy | correlated failure modes — weather, local power, a single access provider — that undercut the diversity argument |
+| **Receiver estate** | a refresh already due, so hybrid capability rides an existing cycle | recently refreshed, or client-owned with no upgrade path, which makes hybrid capability unbuyable at any protocol price |
+| **Satellite commitment** | capacity, antennas and uplink sunk with runway left | a commitment expiring, or a renewal that is itself the decision under review |
+| **Operational tolerance** | willing to run two coupled paths, a recovery tier and splice behaviour | one delivery model to operate and staff |
+
+**Three asymmetries decide more than the table suggests.** First, **the saving is in bytes and the bill
+is often in capacity.** Repair traffic is a small fraction of continuous unicast when counted in bytes
+transferred, but provisioning — and committed or peak-based pricing — follows the correlated peak
+rather than the duty cycle. Where credible fallback means many sites could need the full feed at once,
+the recovery tier approaches full-unicast sizing and the byte saving does not convert proportionally
+into a lower bill. Second, **the hybrid adds a tier rather than replacing one.** It retains the
+transponder, antennas and uplink *and* adds a recovery-server estate, an IP path to every site, and a
+receiver upgrade, so it is cheaper than plain satellite only if the band or margin trade it unlocks
+saves more than that tier costs. That comparison turns on negotiated capacity pricing which is not
+published, so it has to be modelled per case and labelled as modelled wherever it appears. Third,
+**the receiver capex sits with the client** ([Problem](problem.md) §1.5), so the distributor's business
+case can be positive while the estate's is not — and the estate then sets the rollout pace. That is the
+same shape as the edge-stage problem the Internet-native planes have, and it constrains the hybrid just
+as hard.
+
+**What would actually decide it for a real estate**, none of which this repository holds: per-site fade
+statistics and, critically, their *joint* distribution across the estate, from ITU-R P.618 and P.837
+modelling of the real site coordinates plus the operator's own outage history; the correlated peak
+number of sites that could plausibly need full-stream fallback simultaneously; per-site IP capacity,
+cost basis and measured independence from fade; the age, ownership and refresh schedule of the
+receiving estate; the negotiated capacity price under both the current and the proposed band; and a
+conformance measurement of spliced output on hardware, which no public source establishes.
 
 ---
 

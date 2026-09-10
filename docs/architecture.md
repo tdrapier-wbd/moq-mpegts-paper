@@ -35,7 +35,8 @@ Derived from [Problem](problem.md) §1 and §5, and governing every decision bel
 
 1. **The installed base is non-negotiable.** The platform must deliver IRD-grade MPEG-TS to existing
    hardware without modification to that hardware. Any design that requires replacing receivers is
-   rejected on arrival.
+   rejected on arrival — which is the line that separates this architecture from the satellite-hybrid
+   model sketched in §2.1, where the repair function can only sit inside a new receiver.
 2. **The transport is a swappable dependency.** Because the transport commoditises and is currently
    wire-unstable, the media packaging, control, entitlement and egress layers must be independent of
    the specific transport draft. The value must survive a transport change.
@@ -104,6 +105,61 @@ component and sits on none of the media paths.
 **The fabric box is the only part that changes with the data plane.** On MoQ it is a relay cluster
 (§8); on segmented HTTP it is an origin plus a cache tier. Everything to the right of it is identical.
 
+### 2.1 The satellite-hybrid topology, for contrast
+
+The architecture above puts a cache where satellite puts a footprint. **The satellite-hybrid model of
+[Comparison](comparison.md) §10.2 does the opposite: it keeps the space segment as the fan-out and adds
+IP only as a repair path.** It is drawn for the contrast about where the broadcast-grade work goes, not
+because this repository has measured any of it — everything here is *specified*, from VSF TR-06-4
+Parts 7 and 8.
+
+```mermaid
+flowchart LR
+    SRC["Playout / origination\n(MPEG-TS)"]
+    TAP["Processing tap\nPart 7: metadata inserter\nPart 8: passive tee"]
+    MOD["Modulator\nand uplink"]
+    SAT(("Space\nsegment"))
+    RS["Recovery server\nbuffered RTP view of the\npre-modulator stream"]
+    HYB["Hybrid-capable receiver\ndetect, request, splice"]
+    LEG["Legacy IRD\nsatellite only, unrepaired"]
+
+    SRC --> TAP
+    TAP --> MOD
+    MOD --> SAT
+    TAP --> RS
+    SAT --> HYB
+    SAT --> LEG
+    HYB <-. "RIST repair and full-stream fallback" .-> RS
+```
+
+**The tap is the only change to the transmit chain, and the two parts differ on how invasive it is.**
+Part 7 inserts metadata markers into the transport stream ahead of the modulator, so it is an active
+element that needs null-packet bandwidth to work with; Part 8 tees the stream passively and leaves it
+bit-identical. Either way the recovery server must see the *pre-modulator* stream, because that is the
+reference every repair is drawn from — and because the modulator is free to add or delete null packets
+and re-stamp PCRs for rate matching, which is exactly why neither part is allowed to correlate on null
+distribution or on exact PCR values.
+
+**The recovery server is a tier, not a box.** It holds an RTP representation of the feed in a buffer
+the specifications size at satellite round trip plus the worst-case internet latency to any receiver —
+"on the order of several seconds" — and both parts warn that one server will not serve a large estate,
+so the real deployment is a load-balanced, geographically distributed bank fed by whichever headend is
+live. That buffer is the same depth-versus-latency trade §4.2 examines on the MoQ lane, sized by
+satellite round trip instead of by peak coded frame.
+
+**The receiver is where the burden lands, and it splits the estate in two.** A hybrid-capable receiver
+needs loss detection, a RIST client, a buffer at least as deep as the satellite latency plus margin for
+the internet round trip and the repair block, and a splice function that keeps PCR continuity across
+the join — which, per Part 8's own splicing guidance, means setting the discontinuity indicator or
+interpolating PCRs to avoid breaching the ±500 ns accuracy requirement this document spends §4 on.
+Legacy IRDs keep decoding the satellite stream unchanged and simply receive no repair.
+
+**So the broadcast-grade stages do not disappear; they change owner.** There is no fabric and no edge
+gateway, redundancy becomes 1+1 across headends and recovery-server networks rather than across relay
+legs (§5), and the grooming-shaped problem — PCR integrity at a splice — moves inside equipment the
+distributor does not own (§3). That is the same conclusion this document reaches for the
+Internet-native planes, from the other end.
+
 ---
 
 ## 3. What the installed base requires
@@ -129,7 +185,9 @@ reconstructed at the edge to match what the local plant expects, decoupled from 
 traversed the fabric.
 
 **Coexistence architecture** — receivers, plant and monitoring stay untouched ([Problem](problem.md) §2.4);
-native subscribers can bypass the edge gateway, but never as a requirement.
+native subscribers can bypass the edge gateway, but never as a requirement. That is a property of
+*this* architecture rather than of IP distribution generally: the satellite-hybrid alternative in §2.1
+buys its repair path with a receiver upgrade at every site that is to benefit.
 
 ### 3.1 Ingest
 

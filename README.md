@@ -53,6 +53,13 @@ commodity delivery, while the entire measured difference between the transports 
   an identified upstream regression that could be recovered; the rest is structural, because a demuxed
   lane moves the contribution encoder's buffer budget downstream into the edge gateway
   ([Comparison](docs/comparison.md) §5.1).
+- **A fully Internet-native path is not the only answer to the same pressure.** Satellite-hybrid
+  architectures keep the space segment as the fan-out and use IP only to repair what an individual site
+  lost, which answers the economics of the thousandth destination without an IP data plane at all. They
+  concede latency and footprint, need a hybrid-capable receiver at every site that is to benefit, and
+  nothing here measures them — but they are the live alternative on exactly the large, single-footprint
+  estates where both planes above are weakest ([Problem](docs/problem.md) §4,
+  [Comparison](docs/comparison.md) §10.2, [Economics](docs/economics.md) §6.1).
 
 ---
 

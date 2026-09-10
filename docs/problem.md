@@ -97,6 +97,13 @@ Its weaknesses are equally structural: half-second geostationary round trips, a 
 as terrestrial paths improve; rain fade; capital-intensive provisioning; footprint rigidity; and the
 spectrum and fleet-economics pressure in §3.1.
 
+**Two of those weaknesses now have a specified mitigation, which makes satellite a moving target
+rather than a fixed baseline.** Rain fade — and, through it, the option of trading fade margin for
+cheaper or scarcer capacity in a higher band — can be addressed by keeping satellite as the primary
+path and borrowing the internet only to repair what a given site lost. That is a distinct architecture
+with published specifications behind it, and it is taken up as one of the two honest alternatives in
+§4.
+
 ### 2.2 Leased fibre and MPLS-based managed IP
 
 ST 2022-7 hitless redundancy, RTP/FEC and engineered class-of-service brought lower latency and more
@@ -170,7 +177,9 @@ prices in [Economics](economics.md), and two findings from that model bound the 
 
 - Unicast IP cost is **linear in destinations** where satellite fan-out inside the footprint is free,
   so destination count — not bitrate, and nothing a transport can influence — decides the comparison.
-  Every candidate is unicast at the last mile, and a MoQ relay is a cache rather than an exception.
+  Every Internet-native candidate is unicast at the last mile, and a MoQ relay is a cache rather than
+  an exception; only retaining a broadcast medium escapes the linearity, which is the second
+  alternative in §4.
 - Published cloud egress sits about an order of magnitude above what the same delivery costs on a
   commodity CDN or, costed all-in, on owned infrastructure — which makes this a question about
   commercial terms rather than engineering.
@@ -252,19 +261,37 @@ feed once and serves it to many, that the operator does not have to originate a 
 can be bought from more than one supplier. That is a strong constraint, and it is what narrows the
 field to the two candidates [Comparison](comparison.md) evaluates.
 
-**It is not the only possible resolution, and the honest alternative is worth naming.** An API-driven
-control plane over *existing* managed IP or tunnelled transport — MediaConnect-class services,
-orchestrated MPLS/SRT, a re-origination tier operated as a product — narrows the agility and
-provisioning mismatch without a new data plane at all, on procurement, tooling and staff skills that are
-already in place. That is a real advantage and it will win some routes. What it does not do is change the
-marginal economics of the thousandth destination, which is the one thing §2.3 cannot fix from the control
-plane.
+**It is not the only possible resolution, and there are two honest alternatives worth naming.** The
+first is an API-driven control plane over *existing* managed IP or tunnelled transport —
+MediaConnect-class services, orchestrated MPLS/SRT, a re-origination tier operated as a product — which
+narrows the agility and provisioning mismatch without a new data plane at all, on procurement, tooling
+and staff skills that are already in place. That is a real advantage and it will win some routes. What
+it does not do is change the marginal economics of the thousandth destination, which is the one thing
+§2.3 cannot fix from the control plane.
+
+**The second attacks R2 from the opposite direction, and it is the one this document previously left
+out.** Rather than looking for an IP fan-out model whose marginal cost approaches zero, the
+satellite-hybrid architectures keep the medium that already has that property and use IP only where the
+broadcast medium fails: satellite carries the feed to the whole footprint, and a receiver that loses
+data requests just that data over RIST from a buffered recovery server, falling back to a full IP copy
+of the feed only while it is completely faded. VSF TR-06-4 Parts 7 and 8 specify two ways of doing it.
+**So the choice is not "satellite or Internet-native" but at least three-way**, and the third option is
+not a weaker version of either: it concedes the footprint argument outright, accepts a latency floor no
+better than satellite's, and answers the fan-out arithmetic better than any fully Internet-native plane
+currently can (*reasoned*). What it requires in exchange is a new receiver at every site that is to
+benefit, which under §1.5 is the client's capex rather than the distributor's, and credible internet at
+every such site — the point at which the counterargument becomes serious. The mechanisms, the decision
+boundary, the open latency comparison and the maturity of the evidence are in
+[Comparison](comparison.md) §10.2, with the cost and risk drivers in [Economics](economics.md) §6.1.
+Nothing about it is measured here.
 
 The conclusion is not that satellite and managed fibre disappear, but that the *marginal* new route —
-and eventually the marginal re-provisioned route — increasingly lands on an Internet-native path, with
-the installed base migrating through attrition as dedicated capacity is not renewed rather than by a
-single switch-off. What is uncertain is the *rate*, set by how quickly the successor layer earns the
-guarantee the incumbent already provides.
+and eventually the marginal re-provisioned route — increasingly lands on an Internet-native path, or on
+a satellite path with an IP repair channel behind it, with the installed base migrating through
+attrition as dedicated capacity is not renewed rather than by a single switch-off. What is uncertain is
+the *rate*, set by how quickly the successor layer earns the guarantee the incumbent already provides —
+and, on large single-footprint estates, whether it is asked to at all, given the second alternative
+above.
 
 ---
 
@@ -294,8 +321,10 @@ Three notes on how this list is used.
 
 **R2 is the requirement that makes the problem a problem.** It is also the one most easily waved
 through, because every candidate "scales" in the sense of working at ten destinations. The test is
-whether the thousandth destination costs what the tenth did, and that is a question about caching in
-the path, not about throughput.
+whether the thousandth destination costs what the tenth did, and that is a question about what in the
+path serves many destinations from one delivery, not about throughput. For the Internet-native
+candidates that thing is a cache; the satellite-hybrid architectures of §4 satisfy the same requirement
+by retaining a broadcast medium instead, which is why R2 does not by itself select an IP data plane.
 
 **R3 is the requirement this repository spends most of its effort on**, and it is the one neither
 candidate specification addresses. The HLS document contains zero occurrences of PCR, constant bit

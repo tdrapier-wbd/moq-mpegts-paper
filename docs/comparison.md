@@ -41,6 +41,12 @@ on most of them, and the axes it is ahead on stop at the receiver (§6.1).
 They are grouped by *scaling shape*, not by quality, and the grouping flatters two of them: RIST is
 openly specified and multi-vendor where the others are not, and is treated on its own in §10.1.
 
+**All three rows assume the IP path carries the whole feed, and one deployed model does not.** In the
+satellite-hybrid architectures of VSF TR-06-4 Parts 7 and 8, satellite remains the primary one-to-many
+path and RIST carries only the bytes a given site lost. That is a different question from the one this
+table asks; it is not a substitute for a full-IP protocol choice on any route, and it is treated
+separately in §10.2 — where it also turns out to compete for some of the same routes.
+
 Two exclusions, so the field is honest.
 
 **TS-over-HTTP/1.1** — a continuous TS in a chunked HTTP response — is excluded because there is no
@@ -576,6 +582,123 @@ operator runs; multicast is for managed networks, not the public internet. For t
 over owned transit RIST may beat both candidates here; the Internet-native case is about **reach and
 cost at scale**.
 
+### 10.2 Satellite-hybrid: a resolution that keeps the satellite
+
+§10.1's verdict assumes RIST is being asked to carry the feed. **The satellite-hybrid specifications
+ask it to carry only what the satellite lost, which changes the arithmetic without changing the
+protocol.** VSF TR-06-4 Part 7 (in-band) and Part 8 (out-of-band) keep satellite as the primary
+one-to-many path and use RIST as a per-site repair channel: the receiver detects loss or corruption in
+the satellite transport stream, requests the affected range from a buffered *recovery server* over
+RIST, and splices it in. For a complete fade, both specify a full-stream fallback in which the
+recovery server temporarily delivers the whole feed over IP until the receiver turns it off.
+
+That makes a third distribution model, and the comparison has to name it, because it competes for some
+of the same routes on a different axis:
+
+| Model | Fan-out | What the IP path carries | Marginal cost of destination N |
+|---|---|---|---|
+| C-band satellite primary | physical broadcast | nothing | ~0 inside the footprint |
+| **Ku-band satellite + RIST repair (Parts 7/8)** | physical broadcast | only the blocks a site lost, only while it is losing them | ~0 inside the footprint, plus that site's repair traffic |
+| Internet-native (MoQ, segmented HTTP) | cache in the path | the whole feed, to every destination, always | one unicast copy (§2) |
+| Point-to-point tunnels (SRT/Zixi/RIST) | replication the operator runs | the whole feed, to every destination, always | one session and one copy (§10) |
+
+**Why the model exists.** Satellite's marginal-cost property is the one thing the Internet-native
+planes work hardest to approximate and never quite reach (R2); the hybrid keeps it outright, and what
+it spends to keep it is fade margin. Rain attenuation is frequency-dependent — ITU-R P.838 models
+specific attenuation as γ_R = k·R^α with both coefficients functions of frequency, and P.618 applies it
+to Earth–space paths — so the same rain rate costs materially more at Ku than at C band (*specified*).
+Repair buys that margin back *selectively*, which is what separates it from running a duplicate feed to
+everyone: a fading site pulls repair traffic and an unaffected site pulls none. The pressure to move
+band at all is regulatory and regional rather than technical — FCC 20-22 cleared 3.7–3.98 GHz for
+flexible terrestrial use and repacked fixed-satellite operations into 4.0–4.2 GHz across the contiguous
+United States — so it is a US driver, not a worldwide one.
+
+**Part 7 against Part 8.** The two differ only in how a receiver works out which bytes it lost, and
+that difference lands on different parts of the plant.
+
+| | Part 7 — in-band | Part 8 — out-of-band |
+|---|---|---|
+| Transmitted stream | metadata markers added on a private PID (recommended 0x1FF0, `table_id` 0xBF), which *shall not* be referenced in any PMT | "not modified in any way"; must carry at least one PCR PID |
+| Correlation | markers map each block of transport packets to RTP sequence numbers and an SSRC | STC-based NACK: a reference PCR plus a block duration in 90 kHz ticks; the server picks the RTP packet whose PCR is closest |
+| Loss detection | specified — compare received non-null packet count against the marker's count; marker-sequence gaps flag lost markers | **left to the implementer**; the spec suggests expected bit rate from symbol rate and FEC, continuity-count errors, or the transport error indicator |
+| Repair granularity | the whole block between markers — one bad packet costs the block | the requested duration, up to 2.9127 s per message (18-bit field) |
+| Uplink chain | needs a metadata inserter ahead of the modulator, and enough null-packet bandwidth to carry the markers (≈1/(7K) of the stream; the spec works an example at ~2.38 %) | nothing on the transmit path; the recovery server tees off the pre-modulator stream |
+| Legacy receivers | unaffected in principle, since the PID is unreferenced, at the cost of a little payload bandwidth | unaffected, since the stream is unchanged |
+
+Both share the rest: the full-stream fallback, a recovery-server buffer the spec puts "on the order of
+several seconds", and an explicit warning that one recovery server is unlikely to serve a whole
+estate. Part 8's freedom is also its interoperability risk — with detection at the implementer's
+discretion, two conformant receivers on the same feed may disagree about how much was lost, which is a
+gap the specification creates deliberately rather than an oversight.
+
+**The counterargument deserves a real answer.** If every site needs internet good enough to make
+repair credible, why keep a long-term capacity commitment rather than carry the payload over IP? The
+defence is that the two are sized differently: full-IP capacity scales as sites × rate × always, where
+repair scales as faded sites × rate × fade duration. That defence is sound in the average and has four
+specific failure conditions, which together are the decision boundary:
+
+- **Sizing follows the correlated peak, not the duty cycle.** Rain cells are regional, so a single
+  weather system fades many sites at once, and the specifications themselves warn that a single
+  recovery server will not serve a large estate and recommend a distributed, load-balanced bank. If the
+  credible worst case is full-stream fallback for a large fraction of the estate simultaneously, the
+  recovery tier has to be provisioned near full unicast — and a duty cycle reduces *bytes transferred*,
+  not *capacity committed*, which is what peak-based and committed pricing charges for
+  ([Economics](economics.md) §6.1).
+- **The availability claim is a joint-probability claim, and it is unevidenced here.** Repair only adds
+  availability if IP unavailability is uncorrelated with satellite fade, and severe weather stresses
+  local access and site power at the same places and times it fades a downlink. Path independence is a
+  per-site measurement, not an architectural property.
+- **The receiver is the gate, and the distributor does not own it.** Backward compatibility means
+  legacy IRDs keep decoding the satellite stream — *unrepaired*. The benefit arrives site by site as
+  hybrid-capable receivers are installed, which is the client's capex on the client's schedule
+  ([Problem](problem.md) §1.5). That is structurally the same obstacle as the edge stage the
+  Internet-native planes need for R3, and it points the same way: the expensive engineering sits at the
+  receiving end whichever model wins.
+- **It resolves nothing that satellite's footprint already limited.** Per-destination feeds, reach
+  beyond the footprint, event topologies torn down after a rights window and control-plane entitlement
+  (R7) are untouched by a repair path.
+
+**Two things the hybrid makes worse, not better.** Part 7's receiver-sizing guidance puts the buffer at
+no less than the satellite latency plus a multiple of the internet round trip plus a multiple of the
+block time — precisely so the receiver can hand *back* to the satellite, which is the more delayed
+path, though the guidance is informative rather than normative. So the
+model is bounded below by geostationary delay plus repair margin, and is strictly worse on R4 than
+plain satellite. Whether it beats the conformant Internet-native figures in §5.1 depends on the buffer
+actually configured, which the specifications do not fix numerically and this campaign has not
+measured; the comparison is open, not decided in either direction. Second, **the conformance problem
+relocates rather than disappearing.** Part 8's own splicing appendix concedes that inserting recovered
+pre-modulator data into a post-modulator stream without re-stamping PCRs risks exceeding the ±500 ns
+accuracy requirement of ISO/IEC 13818-1, leaving the stream "technically out of compliance", and
+recommends either setting the discontinuity indicator or interpolating PCRs. That is a grooming
+function (§4.3), at the receiver, on the client's side of the demarcation — the same gate this campaign
+spent most of its effort on, with a different owner.
+
+**MoQ has no equivalent mechanism, and it is not being asked the same question.** Parts 7 and 8 specify
+four things MoQ does not have: a correlation between a block of transport packets and a retrievable
+unit, a request carrying either an RTP sequence range or a PCR and duration, a recovery server with a
+defined buffering obligation, and a keep-alive-governed full-stream fallback. Nothing in the IETF MoQ
+charter — whose scope is ingest and distribution for live streaming, gaming and conferencing — or in
+`draft-ietf-moq-transport-19` addresses loss in a *parallel unidirectional path*: the draft's only
+retransmission is QUIC's own, and it makes no reference to transport-stream packet structure or PCR
+(*specified*, by absence). MoQ's named-object model is *architecturally* a plausible substrate for
+range repair, in that a subscriber which knew the objects covering a gap could fetch them, but that is
+reasoning about what could be built rather than a mechanism that exists, and it lacks the
+packet-level correlation the satellite problem turns on. The two questions pull in different
+directions: full-IP primary distribution wants cache-shaped fan-out at near-zero marginal cost, whereas
+satellite repair wants precise, low-volume, per-site retrieval of an identified byte range from a
+buffered origin, correlated against a stream the repair protocol never carried. **A protocol can be the
+better answer to one and irrelevant to the other, and these two are that pair.**
+
+**Maturity, stated plainly.** Part 7 was approved in July 2025 and revised in December 2025; Part 8 in
+June 2026. Both are freely published VSF Technical Recommendations with named multi-company contributor
+lists, so the specification is real, open and reviewable. Past that the public record thins:
+implementation evidence is vendor announcement and single-vendor demonstration, no published
+multi-vendor interoperability result specific to Parts 7 or 8 was located, and there is no public
+evidence of deployment at estate scale. Part 8 is recent enough that verified product support should
+not be assumed. **Nothing in §10.2 is measured here** — this campaign has no satellite segment, no
+modulator and no hybrid receiver — so every claim in it is *specification* or *reasoning*, and that is
+why §14.1 frames the model as a competing resolution rather than scoring it as a candidate in §14.
+
 ---
 
 ## 11. The toolchain: what is free, and the one stage that is not
@@ -741,6 +864,14 @@ choice. Conformance on hardware remains the deciding gate for both
 ([T21](../lab/test-21-permanence-soak.md)); the receive path is the condition that decides segmented
 HTTP specifically, and it is the one a route has to satisfy from outside this evaluation (§6.1).
 
+**And these two are not the only choice on the table.** The gates above ask which Internet-native plane
+carries a feed; the satellite-hybrid model of §10.2 answers the prior question differently, keeping the
+broadcast medium and putting IP behind it only for repair. It is not scored here because nothing about
+it is measured here, but it is strongest exactly where both planes above are weakest — a large estate
+inside one footprint on a common always-on feed — and unavailable for per-destination feeds, reach
+beyond the footprint and event topologies. A route that reads "incumbent" on destination count in
+[Economics](economics.md) §6 is one where the hybrid is the live alternative.
+
 ---
 
 ## 15. Open questions
@@ -761,6 +892,10 @@ Ranked by leverage:
 7. **Genuine segment loss vs lateness?** §3.2 — edge/Pathway selection under Content Steering remains
    specification-only.
 8. **Relay portability vs commoditised delivery economics?** ([Evidence](evidence.md) §3.7).
+9. **What does a real receiver estate's fade and connectivity profile look like?** §10.2 — the
+   satellite-hybrid case turns on the correlated peak of simultaneously faded sites and on whether IP
+   availability is independent of fade at each site. Both are site data nobody in this comparison has,
+   and without them the hybrid-versus-Internet-native question cannot be closed for a specific estate.
 
 ---
 
@@ -787,6 +922,17 @@ described, the grading is in [Evidence](evidence.md) §3.7 (interop) and §3.1 (
 - MSFTS (MPEG-TS profile): https://github.com/mondain/msfts
 - HTTP Live Streaming 2nd Edition — obsoletes RFC 8216, includes Low-Latency HLS and MPEG-TS segment carriage: https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/
 - DVB-MABR, adaptive media streaming over IP multicast (ETSI TS 103 769): https://dvb.org/?standard=adaptive-media-streaming-over-ip-multicast
+
+**Satellite-hybrid (§10.2)**
+
+- VSF TR-06-4 Part 7, RIST Satellite-Hybrid: In-Band Method — approved July 2025, revised December 2025: https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-7_2025-12-10.pdf
+- VSF TR-06-4 Part 8, RIST Satellite-Hybrid: Out-of-Band Method — approved June 2026: https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-8_2026-06-04.pdf
+- VSF Technical Recommendations index, for the TR-06 family and current revisions: https://vsf.tv/technical-recommendations/
+- RIST Forum, the activity group's own material: https://www.rist.tv/
+- ITU-R P.838, specific attenuation model for rain — the frequency dependence behind the C-to-Ku fade argument: https://www.itu.int/rec/R-REC-P.838/
+- ITU-R P.618, propagation data and prediction methods for Earth–space telecommunication systems: https://www.itu.int/rec/R-REC-P.618/
+- ITU-R P.837, characteristics of precipitation for propagation modelling — the rainfall statistics a per-site fade estimate needs ([Economics](economics.md) §6.1): https://www.itu.int/rec/R-REC-P.837/
+- FCC 20-22, *Expanding Flexible Use of the 3.7 to 4.2 GHz Band*, GN Docket 18-122 — the C-band clearing and fixed-satellite repack: https://docs.fcc.gov/public/attachments/FCC-20-22A1.pdf
 
 **Background**
 
