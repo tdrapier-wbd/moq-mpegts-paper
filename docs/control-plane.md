@@ -229,8 +229,19 @@ Revocation is the hard part of any entitlement system. The platform uses two pat
 > answer, and closes the session if it no longer verifies. Revocation is a **poll**, and that
 > difference is why the bound is what it is.
 >
-> **It said "sub-second when the control plane is healthy". That is not achievable at any setting,
-> and the margin is wider than the first measurement of it suggested.** With one session live,
+> **And the consequential finding: three settings disable revocation altogether.** `max-age=0`, a
+> sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at all: the token is
+> checked once, at admission, and a withdrawn grant never takes effect. One arm kept delivering for
+> the full 50 s it was observed. There is no startup warning and no signal in the session. **Three
+> configurations silently yield an unrevocable session, and one of them is what "revoke immediately"
+> looks like.** An operator must set an explicit positive integer `max-age` and assert it in
+> deployment tests; the absence of one is not a default cadence, it is no cadence. This is the
+> criterion that binds a primary-broadcast deployment (§8), because it is about revocation *happening*
+> rather than about how quickly it happens.
+>
+> **It also said "sub-second when the control plane is healthy". That is not achievable at any
+> setting — but it does not bind this deployment, where a few seconds is acceptable for a primary
+> feed, so the target is retired rather than restated (§8).** With one session live,
 > decision-to-last-byte is `(re-check cadence − phase) + 0.110 s` across five cadences, the fixed
 > overhead constant to within two milliseconds. That is the uncontended case: re-checks are served
 > from the same cached HTTP client as admission, so once several sessions are live a re-check can be
@@ -239,15 +250,8 @@ Revocation is the hard part of any entitlement system. The platform uses two pat
 > as two. The period is carried as integer `Cache-Control` delta-seconds and clamped to a one-second
 > floor, so the best achievable worst case is about **1.7 s measured and 2.11 s as documented**
 > ([T37](../lab/test-37-entitlement-revocation.md), measured from the affiliate's captured egress;
-> the 2× figure *specified* by the implementation). §8's `< 1 s` target is unachievable by this
-> mechanism and is marked so there.
->
-> **And the settings an operator would reach for to go faster disable revocation altogether.**
-> `max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at
-> all: the token is checked once, at admission, and a withdrawn grant never takes effect. One arm kept
-> delivering for the full 50 s it was observed. **Three configurations silently yield an unrevocable
-> session, and one of them is what "revoke immediately" looks like.** An operator must set an explicit
-> integer `max-age`; the absence of one is not a default cadence, it is no cadence.
+> the 2× figure *specified* by the implementation). The multi-session figure is the one to quote: a
+> single-session reading understates a deployed estate by up to a factor of two.
 >
 > **Two further costs of a tight cadence.** Re-check is per *session*, so at a one-second cadence the
 > per-subscriber CPU slope rises 27 % against an unauthenticated relay, where a ten-second cadence
@@ -323,6 +327,16 @@ from delivery logs.
 > endpoint answers, and says no) closes the session immediately, while an *unavailability* (no answer,
 > or a server error) enters the staleness window. An operator who sets a staleness window to be
 > lenient about outages has traded §1.1's non-fate-sharing property away, in both directions.
+>
+> **The default window is a one-hour constant and is not connected to the re-check cadence**, which is
+> the second criterion that binds a primary-broadcast deployment (§8). Absent both `stale-if-error`
+> and `stale-while-revalidate` the window is `DEFAULT_STALE = 3600 s` regardless of `max-age`, so an
+> operator who tightens the cadence to shorten the revocation window does not shorten how long a
+> session survives an outage at all: *measured*, a session on a one-second cadence delivered
+> uninterrupted for the whole 70 s an outage was observed, with the relay making 202 failed re-check
+> attempts. An hour of last-known-good service is a defensible default and is the right one for a
+> broadcast feed — but it is a choice the operator should make explicitly with `stale-if-error`, not
+> inherit from a constant while believing `max-age` governs it.
 
 ---
 
@@ -485,24 +499,46 @@ licensed for") — and should be exportable per tenant and per contract boundary
 ## 8. Acceptance criteria
 
 **The numeric targets below are proposed and illustrative** — engineering hypotheses, not committed
-figures. Two of them now have measurements against them, and the revocation target is **unachievable
-as written**. The availability target is deliberately modest because the control plane is out-of-band:
-an outage suspends *changes* but does not interrupt established media flows (§1.1), so its
-availability requirement is lower than the data plane's.
+figures. Four rows now have measurements against them, and the sub-second revocation *latency* target
+is **unachievable as written**. The availability target is deliberately modest because the control
+plane is out-of-band: an outage suspends *changes* but does not interrupt established media flows
+(§1.1), so its availability requirement is lower than the data plane's.
 
-| Metric | Proposed target | Measured | Measurement boundary |
-|---|---|---|---|
-| Control-plane availability | 99.95 % | — | Annual uptime of the provisioning API surface |
-| Route provisioning latency | < 5 s | met, but **bounded by `max-age`** — a new grant is invisible until the cached admission reply expires | `POST /v1/routes` to green data-plane configuration across all affected nodes |
-| Fast-path revocation latency | ~~< 1 s~~ **not achievable; restate at ≈ 2.2 s** | One to two cadences + 0.110 s; floor **≈ 1.7 s measured, 2.11 s documented** | Revoke call to last media byte at the subscriber, with more than one session live |
-| Token renewal success rate | 99.999 % | — | Legitimate refresh requests succeeding before expiration |
+The final column records whether a target **binds a primary-broadcast deployment**. It is a
+statement of requirement, not of evidence: a target that does not bind was still worth measuring
+against, and the measurement is not weakened by the requirement turning out to be looser than the
+target assumed. The distinction exists because one unachievable target here has no operational
+consequence while two *achieved* behaviours have a serious one, and a table that scores only
+target-versus-measurement hides that.
 
-**The revocation target has been corrected rather than caveated.** The mechanism's period is integer
-delta-seconds, so no configuration reaches sub-second; a deployment should commit to about 1.2 s, and
-should *also* commit to an explicit `max-age`, because three plausible configurations disable
-revocation entirely (§4.1). The measurement boundary above has been changed too: "teardown at the
-relay" is the relay's account of itself, and the figure that matters commercially is the last byte the
-affiliate actually received.
+| Metric | Proposed target | Measured | Measurement boundary | Binds primary broadcast? |
+|---|---|---|---|---|
+| Control-plane availability | 99.95 % | — | Annual uptime of the provisioning API surface | Yes |
+| Route provisioning latency | < 5 s | met, but **bounded by `max-age`** — a new grant is invisible until the cached admission reply expires | `POST /v1/routes` to green data-plane configuration across all affected nodes | Yes |
+| Fast-path revocation **completeness** | Revocation always takes effect | **Not met in three configurations.** `max-age=0`, a sub-second `max-age` and an omitted `Cache-Control` each disable re-checking permanently and silently; only token expiry then ends the session | Grant withdrawn to last media byte at the subscriber | **Yes — this is the binding criterion** |
+| Outage tolerance is bounded by the operator's cadence | Implied by §4.2, never stated as a target | **Not met.** The default staleness window is a one-hour constant, independent of `max-age` | Endpoint unreachable to last media byte at the subscriber | **Yes** |
+| Fast-path revocation **latency** | ~~< 1 s~~ **not achievable; retired, not restated** | One to two cadences + 0.110 s; floor **≈ 1.7 s measured, 2.11 s documented** | Revoke call to last media byte at the subscriber, with more than one session live | **No** — a few seconds is acceptable for a primary broadcast feed |
+| Token renewal success rate | 99.999 % | — | Legitimate refresh requests succeeding before expiration | Yes |
+
+**The two rows that bind are about revocation happening, not about it being fast.** Both are cases
+where the control an operator believes they are exercising is not the control they have: a grant
+withdrawn against a relay whose authorization endpoint named no usable `max-age` is not withdrawn at
+all, and a cadence tightened to shorten the revocation window does not shorten how long a session
+survives an endpoint outage. A deployment must therefore **commit to an explicit positive integer
+`max-age`, assert it in deployment tests, and set `stale-if-error` explicitly if an hour of
+last-known-good service is not what it wants** (§4.1). Short token lifetimes remain the backstop that
+makes the silent-disable case survivable rather than unbounded.
+
+**The latency target is retired rather than restated.** The mechanism's period is integer
+delta-seconds with a one-second floor, so no configuration reaches sub-second — but a few seconds is
+acceptable for a primary broadcast feed, so there is no corrected figure to commit to and no work
+outstanding. The measurement stands and is the right one to quote for any future case that *is*
+latency-sensitive, where the multi-session figure is the one to use: a single-session reading
+understates a deployed estate by up to a factor of two
+([Evidence](evidence.md) §3.10, [T37](../lab/test-37-entitlement-revocation.md) D7).
+
+The measurement boundary has been changed throughout: "teardown at the relay" is the relay's account
+of itself, and the figure that matters commercially is the last byte the affiliate actually received.
 
 Behavioural criteria, which matter more than the numbers:
 

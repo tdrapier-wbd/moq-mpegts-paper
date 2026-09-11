@@ -1,34 +1,55 @@
-# Test 37 — Provisioning and de-provisioning: what actually stops a feed, and how fast
+# Test 37 — Provisioning and de-provisioning: what actually stops a feed
 
-**State: run, 2026-09-11. Five of six pass criteria met; criterion 2 failed.** The second of three
-experiments behind [Control](../docs/control-plane.md). [T36](test-36-entitlement-enforcement.md)
-asks whether the relay admits the right callers; this one asks the operator's question. A
-broadcaster must be able to turn a feed on for an affiliate and, more importantly, turn it off — and
-must know the bound on how long "off" takes.
+**State: run, 2026-09-11. Five of six pass criteria met; criterion 2 failed, and that failure does
+not bind a primary-broadcast deployment.** The second of three experiments behind
+[Control](../docs/control-plane.md). [T36](test-36-entitlement-enforcement.md) asks whether the relay
+admits the right callers; this one asks the operator's question. A broadcaster must be able to turn a
+feed on for an affiliate and, more importantly, turn it off — and must be able to rely on "off"
+actually happening.
 
-**Headline.** Revocation is a **poll**, and for a session measured on its own the bound it buys is
-`(re-check cadence − phase) + 0.110 s`, measured across five cadences with the fixed overhead
-constant to within two milliseconds. **That single-session figure is not the deployed bound.**
-Re-checks are served through the same cached HTTP client as admission, so once more than one session
-is live a re-check can be answered from another session's cache entry that is already up to one
-`max-age` old. With six staggered sessions the measured worst case was **1.54 cadences plus
-0.110 s**, and the relay's source states the bound as twice `max-age` (D7). The smallest cadence the
-relay will accept is **one second** — `max-age` is integer delta-seconds and is additionally clamped
-to a 1 s floor — so the best achievable worst case is about **1.7 s measured and 2.11 s as the
-implementation documents it**, not the 1.11 s a single-session reading suggests.
-[Control](../docs/control-plane.md) §8's sub-second revocation target **cannot be met by this
-mechanism at any setting**, and misses it by more than twice the margin this experiment first
-reported. Criterion 2 fails on that.
+**Headline: two findings, both about revocation *happening* rather than about it being fast.** Three
+`Cache-Control` configurations silently make revocation permanent — it never takes effect at all — and
+separately, outage tolerance is decoupled from the cadence an operator chose. Both are correctness
+findings, *revocation you asked for may not happen*, and they are the results that matter for a
+primary broadcast feed.
 
-Worse, the settings an operator would reach for to go faster do the opposite. `max-age=0` and
-`max-age=0.5` both produce **no revalidation at all**, as does omitting `Cache-Control`. In that
-state a withdrawn grant never takes effect: one arm kept delivering for the full 50 s it was
-observed, having been re-checked exactly once, at admission. **Three distinct configurations
-silently yield an unrevocable session, and one of them is what "revoke immediately" looks like.**
+**`max-age=0` and a missing `Cache-Control` disable revalidation permanently, with no diagnostic
+anywhere.** `max-age=0.5` does the same, because the value is parsed as an integer or not at all. A
+session admitted in that state is re-checked exactly once, at admission, and **never again**: one arm
+kept delivering for the full 50 s it was observed after its grant was withdrawn. There is no startup
+warning and no signal in the session — every `tracing::warn!` in `Auth::new` is a deprecation notice
+for a superseded flag. **Three distinct configurations silently yield an unrevocable session, and one
+of them, `max-age=0`, is what an operator writes when they mean "ask me every time".** (D6, filed
+upstream as [#3605](https://github.com/moq-dev/moq/issues/3605).)
 
-Against that, the backstop is real. The hypothesis that expiry would not bound an established
-session is **falsified**: a session ends 0.110 s after its token expires *even with revalidation
-switched off entirely*. Token lifetime, not cadence, is what makes the unrevocable cases survivable.
+**An authorization-endpoint outage is tolerated for an hour by default, however tight the cadence.**
+Absent a `stale-if-error` or `stale-while-revalidate` directive the staleness window is the constant
+`DEFAULT_STALE = 3600 s`, independent of `max-age`, while the relay's own doc comment three lines
+away says the window is "3x the last max-age". An operator who sets `max-age=1` to tighten revocation
+gets a revocation window of one to two seconds and an outage tolerance of **one hour**, and nothing
+in the `Cache-Control` they control changes the second figure. Measured: 70.3 s of uninterrupted
+media with the endpoint returning 503 to all 202 re-check attempts, against the ≈3 s the comment
+predicts (D8).
+
+**What holds.** Where revalidation is armed, the mechanism works: withdrawing a grant, withdrawing a
+key and replacing a key all terminate delivery, no arm ever delivered the *wrong* affiliate's feed,
+and the uninvolved affiliate was undisturbed with zero continuity errors in every arm. The backstop
+is real too — the hypothesis that expiry would not bound an established session is **falsified**: a
+session ends 0.110 s after its token expires *even with revalidation switched off entirely*. **Token
+lifetime, not cadence, is what makes the unrevocable cases survivable**, and it is the reason D6 is a
+hazard rather than a hole.
+
+**On speed, stated without urgency because it does not bind this deployment.** Revocation is a
+**poll**, not a push. With one session live the bound is `(re-check cadence − phase) + 0.110 s`
+across five cadences; with six staggered sessions sharing the relay's authorization cache the
+measured worst case was 1.54 cadences plus 0.110 s, and the implementation's source states the bound
+as twice `max-age` (D7). The cadence floor is one second, so the best achievable worst case is about
+1.7 s measured and 2.11 s as documented. [Control](../docs/control-plane.md) §8's sub-second target
+cannot be met by this mechanism at any setting, and criterion 2 fails on that. **For a primary
+broadcast feed a few seconds is acceptable**, so the measurement's value here is in retiring the
+sub-second target as a design assumption, not in flagging a problem to fix. The figures also remain
+the right ones to quote for any future case that *is* latency-sensitive, and the multi-session result
+is the figure to quote — a single-session reading understates a deployed estate by up to 2×.
 
 ## Objective
 
@@ -396,21 +417,34 @@ being served 40 s after a different affiliate's licence was withdrawn.
 ## Verdict against the pass criteria, fixed before running
 
 The criteria were written against the claims in [Control](../docs/control-plane.md), so that the
-experiment could correct the document rather than merely describe the implementation.
+experiment could correct the document rather than merely describe the implementation. They were
+*not* weighted in advance, and they are not equally consequential: criteria 1 and 5 are about the
+mechanism working, criterion 2 about how fast it works. The ordering below is the order they were
+fixed in, and the weighting is stated after the table.
 
 | # | Criterion | Verdict |
 |---|---|---|
-| 1 | Every disable mechanism terminates delivery | **Fail, for one mechanism.** Withdrawing a grant, withdrawing a key and replacing a key all terminate delivery. Withdrawing a grant from a session admitted without a `Cache-Control` terminates nothing — only the token's expiry does |
-| 2 | **D2 achieves a worst case under one second at some cadence**, with the request rate that buys it | **Fail, by more than a single-session reading shows.** With one session live the best worst case is 1.078 s measured, ≈ 1.11 s modelled, at the minimum cadence of 1 s, costing **0.959 authorization requests per second per session**. With six sessions sharing the authorization cache the worst case is 1.54 cadences plus 0.110 s (D7), and the relay's source states the bound as two cadences — about 1.7 s measured and 2.11 s documented at the 1 s floor. Sub-second is not reachable at any setting |
+| 1 | Every disable mechanism terminates delivery | **Fail, for one mechanism, and this is the consequential failure.** Withdrawing a grant, withdrawing a key and replacing a key all terminate delivery. Withdrawing a grant from a session admitted without a usable `Cache-Control` terminates nothing — only the token's expiry does |
+| 2 | **D2 achieves a worst case under one second at some cadence**, with the request rate that buys it | **Fail, and it does not bind this deployment.** With one session live the best worst case is 1.078 s measured, ≈ 1.11 s modelled, at the minimum cadence of 1 s, costing **0.959 authorization requests per second per session**. With six sessions sharing the authorization cache the worst case is 1.54 cadences plus 0.110 s (D7), and the relay's source states the bound as two cadences — about 1.7 s measured and 2.11 s documented at the 1 s floor. Sub-second is not reachable at any setting. A few seconds is acceptable for a primary broadcast feed, so the result retires §8's target rather than identifying a defect |
 | 3 | D1 with re-checking disabled terminates at token expiry, within one group interval | **Pass**, comfortably — 0.110 s, far inside one group interval. H1 falsified |
 | 4 | D5 behaviour determined and stated, whichever way it falls | **Pass** (determined). By default, sessions survive an unreachable endpoint — 150 s observed with no loss — matching §4.2, and D8 names the mechanism: the default window is a **one-hour constant**, independent of the cadence. Where `stale-while-revalidate` is configured, they close at staleness + ≈4 s |
-| 5 | D6 either revokes or is reported as a hazard | **Reported as a hazard.** It does not revoke, and three separate configurations reach that state |
+| 5 | D6 either revokes or is reported as a hazard | **Reported as a hazard, and this is the experiment's principal result.** It does not revoke, and three separate configurations reach that state |
 | 6 | The uninvolved affiliate sees zero continuity errors and no PCR degradation | **Pass** — undisturbed in every arm, zero continuity errors throughout |
 
-Criterion 2's failure is the experiment's principal result and it is a *bound* failure, not a
-performance one: no amount of tuning reaches sub-second, because the parameter that would have to
-go below one second is an integer whose sub-unit values switch the mechanism off. Criterion 1's
-partial failure and criterion 5 are the same defect seen from two directions.
+**Criteria 1 and 5 are the same defect seen from two directions, and it is the one that matters: a
+configuration in which the revocation an operator performs silently does not happen.** It is a
+correctness failure, it has no diagnostic, and `max-age=0` — one of the three configurations that
+reach it — is a plausible thing for an operator to write meaning the opposite. D8's one-hour outage
+tolerance belongs with them: all three are cases where the control an operator believes they are
+exercising is not the control they have.
+
+Criterion 2's failure is a *bound* failure rather than a performance one — no amount of tuning
+reaches sub-second, because the parameter that would have to go below one second is an integer whose
+sub-unit values switch the mechanism off. **It does not bind a primary-broadcast deployment, where a
+few seconds is acceptable**, and it is recorded here so that §8's target can be retired against
+evidence rather than carried forward untested. Criteria 3 and 6 are the load-bearing passes: expiry
+bounds every case including the unrevocable ones, and revoking one affiliate never disturbed
+another.
 
 ## What this corrects in the design document
 
@@ -418,7 +452,9 @@ Three claims in [Control](../docs/control-plane.md) need changing, and one is co
 
 - **§4.1's "sub-second when the control plane is healthy" is not achievable.** The fast path is a
   poll with an integer-second period; its floor is one second plus a round trip. §8's `< 1 s`
-  acceptance target should be restated at the achievable figure or dropped.
+  acceptance target should be restated at the achievable figure or dropped — and marked as not
+  binding a primary-broadcast deployment, since a few seconds is acceptable there. The target was
+  worth measuring against; it is not worth carrying as an open failure.
 - **§4.1's characterisation of the fast path as "an explicit revocation signal pushed to relays" is
   wrong.** Nothing is pushed. The relay replays its admission question on a timer and acts on the
   answer. That difference is why the bound is what it is.
@@ -507,20 +543,35 @@ that writes on end-of-input must be given an end of input.
 
 ## Open
 
-**Whether an integer-second revocation floor is acceptable is a product question, not a technical
-one.** The mechanism cannot go below about 1.7 s measured worst case, and buying even that costs one
-authorization request per session per second — for a thousand-session estate, a thousand requests a
-second against the entitlement service purely to hold the bound. Whether any broadcast entitlement
-case genuinely needs sub-second revocation, or whether the sub-second target in §8 was aspirational,
-is not something this experiment can settle. What it can say is that the target is unreachable and
-that the document should stop implying otherwise.
+**What an operator can do about D6 today, and whether it is enough, is unresolved.** The hazard is a
+configuration, so the mitigations are all procedural: assert the endpoint's `Cache-Control` in
+deployment tests, keep token lifetimes short so the backstop is tight, and monitor the authorization
+request rate — a session that has stopped re-checking is visible as an absence at the endpoint, which
+is the only place it *is* visible. None of that is measured here and none of it is as good as the
+relay refusing to admit a session it cannot later revoke. Whether an operator would accept the
+procedural version is a question for a deployment, not for this rig.
 
-**The three unrevocable configurations deserve an upstream report.** A `Cache-Control` the relay
-cannot parse as a positive integer disables revalidation silently, with no warning at startup and no
-signal in the session. Drafted, unfiled, at
-[`docs/upstream/authapi-revocation-window-and-staleness.local.md`](../docs/upstream/authapi-revocation-window-and-staleness.local.md),
-together with D7's and D8's findings, which are the same hazard class: a bound an operator would set
-`Cache-Control` to obtain, that `Cache-Control` does not in fact obtain.
+**How the unrevocable configurations interact with clustering is unknown**, and it is the case most
+likely to produce one accidentally. A mesh where one node's authorization endpoint returns a usable
+`max-age` and another's does not would revoke on some nodes and not others, and nothing here tests
+it. This compounds the clustering gap already recorded under *Limits*.
+
+**Whether the one-hour default staleness window is deliberate is not known from here.** D8
+establishes what the constant is and that the neighbouring doc comment contradicts it. Whether
+`DEFAULT_STALE` was chosen as roughly three times a typical twenty-minute `max-age` — in which case
+the comment is right for one cadence and wrong for all others — or as an independent value, is a
+question for the authors. The draft that asks it is **held unfiled by the operator's decision**, at
+[`docs/upstream/authapi-default-stale-window.local.md`](../docs/upstream/authapi-default-stale-window.local.md);
+it is held for sequencing, not because it is weaker than the findings that were filed.
+
+**The revocation-latency figures are recorded for a case this deployment does not have.** Sub-second
+is unreachable and a few seconds is acceptable for a primary broadcast feed, so nothing here is
+outstanding on latency. Two things would become live if that changed: the cost of holding the bound
+is one authorization request per session per second — a thousand-session estate means a thousand
+requests a second against the entitlement service purely to hold it — and **how close the
+multi-session window gets to the documented 2× is not established.** D7 sampled six phases at one
+cadence and found 1.54×; what session count or phase distribution reaches the rest of the margin
+would need a sweep over both, and until then 1.54× is a measured maximum rather than a bound.
 
 **The relay does not warn at startup about configurations where nothing can authenticate.** An
 earlier draft of this section asserted that it does, and used it as the precedent for the report
@@ -528,15 +579,7 @@ above. It does not: every `tracing::warn!` in `Auth::new` at build `fd4f5d82e` i
 notice (`--auth-tls-*`, `--auth-key-dir` with a URL, `--auth-public-api`), and the remaining checks
 are `anyhow::ensure!` hard errors on mutually exclusive flags. There is no startup diagnostic for a
 configuration that is merely hazardous, which weakens the report's "do what you already do
-elsewhere" framing and is why it argues from the hazard instead.
-
-**How close the multi-session window gets to the documented 2× is not established.** D7 sampled six
-phases at one cadence and found 1.54×. Whether the remaining margin is reachable, and what session
-count or phase distribution reaches it, would need a sweep over both — worth doing before any figure
-is quoted as a worst case rather than as a measured maximum.
-
-**Whether the one-hour default staleness window is deliberate is not known from here.** D8
-establishes what the constant is and that the neighbouring doc comment contradicts it. Whether
-`DEFAULT_STALE` was chosen as roughly three times a typical twenty-minute `max-age` — in which case
-the comment is right for one cadence and wrong for all others — or as an independent value, is a
-question for the authors and is asked rather than answered in the drafted report.
+elsewhere" framing and is why [#3605](https://github.com/moq-dev/moq/issues/3605) argues from the
+hazard instead. **[#3603](https://github.com/moq-dev/moq/issues/3603) was filed before this was
+established and its third suggestion still cites the non-existent warning as precedent**; it needs
+correcting in the thread if the discussion reaches that suggestion.

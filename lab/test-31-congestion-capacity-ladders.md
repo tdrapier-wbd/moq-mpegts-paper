@@ -1,11 +1,25 @@
 # Test 31 — Congestion and capacity: the step ladders, both planes
 
-**State: specified, not run.** [T8b](test-8b-congestion-control.md) settled which controller wins under
-which provisioning and queue discipline, and attributed the MoQ lane's shared-bottleneck collapse to
-per-subscriber deadline shedding at `--latency-max`. This experiment asks a different question — how much
-impairment each lane absorbs before programme is lost — and extends T8b with step-capacity ladders on
-both planes plus the withheld segmented C2 cells. It has not run because it was deprioritised behind
-Gate 2 preparation and observability work; the namespace rig and grading scripts already exist.
+**State: specified, not run; blocked on a Linux host.** [T8b](test-8b-congestion-control.md) settled
+which controller wins under which provisioning and queue discipline, and attributed the MoQ lane's
+shared-bottleneck collapse to per-subscriber deadline shedding at `--latency-max`. This experiment asks
+a different question — how much impairment each lane absorbs before programme is lost — and extends
+T8b with step-capacity ladders on both planes plus the withheld segmented C2 cells.
+
+**Why it has not run, corrected.** This was previously recorded as deprioritised behind Gate 2 and
+observability work, with the note that "the namespace rig and grading scripts already exist". They do
+exist, but the rig is `t8b-netns.sh` — two network namespaces joined by a veth — which is **Linux-only,
+and the workstation this campaign runs on is macOS**. The ladders cannot be run here at all, and
+re-basing them on macOS `dnctl`/`pfctl` dummynet would put them on a different emulator from
+[T8b](test-8b-congestion-control.md), [T5](test-5-network-impairment.md) and
+[T20](test-20-segmented-http3.md), so the step ladders could not be compared with the results they are
+meant to extend. It needs no live source and no third party — it needs a Linux host, which is the same
+blocker as [T28](test-28-failure-injection-matrix.md)'s transport axis and should be resolved once for
+both.
+
+The media-domain grading half is no longer missing: [T28](test-28-failure-injection-matrix.md)'s
+`t28-media-lost.py` is built and validated against known answers, and is the scorer for "how much
+programme is lost" on these ladders too.
 
 Registered as [P1-d](planned-experiments.md#p1--establishes-where-one-architecture-is-superior),
 sustained capacity degradation. Extends [T8b](test-8b-congestion-control.md); does not re-run C1–C6.

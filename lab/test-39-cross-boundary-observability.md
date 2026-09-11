@@ -12,14 +12,16 @@ which the fault could appear. That settles the tier split the design rests on: *
 bytes flowed and can never prove the media was healthy**, so the only place the delivered signal can
 be assessed is hardware the broadcaster does not own.
 
-**The return path is authorizable today and not constructible today, and the two halves should not be
-confused.** One token can carry a `--subscribe` prefix for media and an unrelated `--publish` prefix
-for `<affiliate>.telemetry`, and a segment-aware relay routes both correctly — *measured*, six cells,
-Part C. What cannot be done with shipped tooling is put anything in the return path: the `moq` CLI has
-no non-media publish or consume path at all, and the obvious workaround of wrapping telemetry in a
-transport stream is blocked by the exporter's requirement for a video or audio track to carry PCR
-([T33](test-33-gate2-preparation.md)). The mechanism is not blocked on permission, which is what the
-starting hypothesis was about; it is blocked on there being no data track to use.
+**The return path is authorizable today, protocol-legal today, and untooled today — three separate
+things that must not be collapsed.** One token can carry a `--subscribe` prefix for media and an
+unrelated `--publish` prefix for `<affiliate>.telemetry`, and a segment-aware relay routes both
+correctly (*measured*, six cells, Part C). An opaque telemetry payload on its own track is **legal at
+the wire-protocol level on both wires this relay speaks** — *specified*, and confirmed against
+`rs/moq-net`'s types — so such a client is an ordinary MoQ client rather than a side-channel. What is
+missing is only tooling: the `moq` CLI has no non-media publish or consume path, and the obvious
+workaround of wrapping telemetry in a transport stream is blocked by the exporter's requirement for a
+video or audio track to carry PCR ([T33](test-33-gate2-preparation.md)). **The blocker is a CLI gap,
+not a permission gap and not a protocol gap** — see *Open* for the evidence on each.
 
 ## Objective
 
@@ -200,7 +202,7 @@ made the first oracle wrong, and it is a worse problem for an unattended client-
 reporter than it was for a test harness — such a reporter would publish into a void indefinitely with
 no local indication.
 
-### Part B — blocked, on the carriage rather than the permission
+### Part B — blocked on tooling, not on permission and not on the protocol
 
 **There is no way to put telemetry in the return path with shipped tooling.** Every `moq import`
 source and every `moq export` sink is a media container (`ts`, `fmp4`, `avc3`, `flv`, `mkv`, `h264`,
@@ -213,10 +215,12 @@ does not work, for a reason [T33](test-33-gate2-preparation.md) already establis
 refuses a broadcast with no video or audio track, because it has nothing to derive PCR from. A
 telemetry-only transport stream can be imported and cannot be read back.
 
-So the return path needs one of: a client written against `moq-net`/`moq-lite` rather than the CLI; an
-upstream data track; or telemetry carried as a decorative audio track, which is worse than a separate
-pipe. **None of these is a permission problem**, and the starting hypothesis — which was about
-permission — was verified and is not the obstacle.
+**That exhausts the CLI and nothing else.** An opaque payload on its own track is explicitly legal in
+both wire protocols and carries no media typing in `rs/moq-net`'s model, so a client written against
+the library is standard usage rather than a workaround — the evidence is set out under *Open*. The
+return path therefore needs a small `moq-net` client, or the equivalent CLI subcommand upstream; it
+does not need a protocol change, and it does not need telemetry disguised as a decorative audio
+track. **The starting hypothesis was about permission, was verified, and is not the obstacle.**
 
 ## Metrics
 
@@ -235,7 +239,7 @@ permission — was verified and is not the obstacle.
 | 2 | It does so with **zero** changes to `mpegts-pacer`, running concurrently | **Pass.** The groomer ran in the same lane with the flags it already takes and produced 333,144 packets |
 | 3 | The relay's published telemetry is enumerated and audited against §9 rather than characterised | **Pass.** Twelve traffic counters and two presence counters, audited line by line |
 | 4 | The dual-scope token hypothesis is **verified, not assumed**, either way | **Pass.** Six cells with a readback oracle and a control; it holds |
-| 5 | The return path is either demonstrated end to end or its blocker identified and evidenced | **Partial.** Not demonstrated. The blocker is identified, evidenced from the CLI's own surface and from T33, and is carriage rather than authorization |
+| 5 | The return path is either demonstrated end to end or its blocker identified and evidenced | **Partial.** Not demonstrated. The blocker is identified and evidenced from the CLI's own surface, from T33, and from both wire protocols: it is a **tooling** gap. Authorization works (Part C) and an opaque data track is protocol-legal, so neither is the obstacle |
 | 6 | A correlation convention is found in upstream or its absence established, before any is invented | **Pass.** Found; see below. Nothing was invented |
 
 ### The correlation convention already exists and was not invented
@@ -303,12 +307,69 @@ experiment's actual finding is.
 
 ## Open
 
-**A `moq-net` client for the return path is the unblocking step, and it is small.** Part B needs a
-publisher and a consumer of an opaque or JSON track. That is a modest amount of Rust against a shipped
-library and it would close the round trip without any upstream change. It was not written this session.
-Whether it should be contributed as a CLI subcommand instead — `moq import json` / `moq export json`,
-which would also make the relay's own stats readable with the tool that publishes them — is a better
-question than whether to write it locally, and is raised in the drafted upstream report.
+**An opaque telemetry track is legal at the wire-protocol level. The CLI's lack of a `json` sink is a
+tooling gap, not a protocol gap, and not a proprietary design.** This distinction was left unstated in
+the first version of this file, which recorded only that the CLI could not carry telemetry — leaving
+open whether the return path would have to be a side-channel. It would not. Checked directly rather
+than assumed:
+
+- `draft-lcurley-moq-lite` states it three times: *"the transport is payload agnostic and can be
+  proxied by relays/CDNs without knowledge of codecs, containers, or encryption keys"*; of a frame,
+  *"The contents are opaque to the moq-lite layer"*; and FRAME's payload field is *"An
+  application-specific payload."*
+- `rs/moq-net`'s model agrees. `Frame` is a timestamp plus `payload: Bytes`. `track::Info` carries
+  `timescale`, `latency_max`, `priority` and `ordered` — **no codec, MIME type or media typing of any
+  kind.**
+- The same holds on the moq-transport drafts (14–19) this relay also implements, so the answer does
+  not depend on which of the two wires a peer speaks.
+
+**A client written against `moq-net` to carry a telemetry track is therefore an ordinary MoQ client
+using the standard wire protocol**, interoperable with any conformant implementation, and not an
+extension or a side-channel. That is the answer to the interoperability requirement, and it makes
+Part B's blocker purely one of tooling: `moq import json` / `moq export json` (or an opaque `--track`
+passthrough) would close it, as would a small local client. Registered as P1-l; not written this
+session.
+
+**Where the announce-refusal finding reaches is narrower, and the difference matters.** Payload
+agnosticism holds on both wires; the refusal signal does not. `moq-transport` defines it —
+`PUBLISH_NAMESPACE_ERROR` (0x08) on draft-14, generic `REQUEST_ERROR` (0x05) with `error_code` and
+`reason_phrase` on 15+ — and `rs/moq-net/src/ietf/subscriber.rs` **sends** it, from the same
+`Error::Unauthorized` that `rs/moq-net/src/lite/subscriber.rs` silently discards:
+
+```rust
+// An error means the path is outside our scope, so don't serve it.
+let Ok(source) = self.origin.create_broadcast(&path, route) else {
+    announced.declined(path);
+    return Ok(false);
+};
+```
+
+`declined()` writes `None` into a local map; there is no `tracing::` call on that path at any level, so
+the relay does not record the decision even for its own operator. **moq-lite has no per-announcement
+refusal message at all**, and for a structural reason rather than an oversight: its Announce Stream is
+opened by the *subscriber* (stream type `0x1`, creator *Subscriber*), so a publisher never requests
+permission to announce — it answers an `ANNOUNCE_REQUEST` — and moq-lite's general rejection
+mechanism, a prompt stream reset, is wrong here because one Announce Stream carries many
+announcements.
+
+So the finding splits: **making the refusal visible to the relay operator is a one-line logging fix
+needing no protocol change; making it visible to the moq-lite publisher would need a new
+per-announcement status and is a protocol proposal.** Both are written up at
+[`docs/upstream/publish-refusal-not-signalled.local.md`](../docs/upstream/publish-refusal-not-signalled.local.md),
+staged and unfiled, with the protocol half explicitly held for a separate conversation. **T39's own
+measurements are all on `moq-lite-05`**, which is what the shipped CLI negotiates, so the silence we
+observed is the moq-lite path's behaviour and not the relay's behaviour in general.
+
+**One provenance point, because it bounds how far "any conformant implementation" reaches.** moq-lite
+is itself an Internet-Draft (`draft-lcurley-moq-lite`) but an **individual submission, not a MoQ
+working-group document**; `moq-transport` is the working-group protocol. This relay implements both
+and negotiates moq-lite by default. The payload-agnosticism answer holds on either, which is why it is
+the safe one to build on; the refusal answer has to name its wire.
+
+**The IETF path's refusal signal has not been exercised here.** It is read from `ietf/subscriber.rs`
+and the draft message definitions, not observed on a wire. Running a publisher against this relay over
+`moq-transport` to watch a `REQUEST_ERROR` arrive is cheap and should happen before the upstream draft
+is filed.
 
 **Whether a client would accept running it is not a technical question.** The whole design puts the
 only useful detector on hardware the broadcaster does not own, under someone else's change control.

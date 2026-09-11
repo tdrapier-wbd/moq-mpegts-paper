@@ -895,20 +895,16 @@ misses it identically, so the miss is the ungroomed MoQ egress rather than a cos
 twenty-eight cells correct, with the channel no affiliate licenses reaching nobody
 ([T38](../lab/test-38-entitlement-estate.md); six of seven criteria met).
 
-**Revocation, however, is a poll rather than a push, and that sets the bound.** The relay re-asks its
-admission question on a timer and acts on the answer; nothing is pushed to it. With one session live,
-decision-to-last-byte is `(re-check cadence − phase) + 0.110 s` across five cadences, with the fixed
-overhead constant to within two milliseconds. **That single-session figure is the mechanism's floor,
-not its bound.** Re-checks are served from the same cached HTTP client as admission, so with several
-sessions live a re-check can be answered from an entry another session left up to one cadence ago:
-across six subscribers started a second apart, four of six tore down later than one cadence plus
-0.110 s and the *measured* worst case was **1.54 cadences**, against a bound the relay's own source
-states as two cadences. The smallest cadence the mechanism accepts is one second — the period is
-carried as integer `Cache-Control` delta-seconds and is additionally clamped to a one-second floor — so
-**the best achievable worst case is about 1.7 s measured, 2.11 s as the implementation documents it,
-and [Control](control-plane.md) §8's sub-second target cannot be met at any setting**
-([T37](../lab/test-37-entitlement-revocation.md), P2, measured from the affiliate's captured egress;
-the 2× figure is *specified* by the implementation, not measured here).
+**Revocation is a poll rather than a push, and the consequential finding is that three settings
+switch the poll off.** `max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce
+no revalidation at all; in that state a withdrawn grant never takes effect, and one arm kept
+delivering for the full 50 s it was observed, having been re-checked once at admission. There is no
+startup warning and no signal in the session. **Three configurations silently yield an unrevocable
+session, and one of them, `max-age=0`, is what an operator writes meaning "ask me every time".** What
+makes them survivable is the backstop, which is real: a session ends 0.110 s after its token expires
+*even with revalidation switched off*. Token lifetime is therefore the bound that always holds, and
+re-check cadence the one that bounds a deliberate revocation
+([T37](../lab/test-37-entitlement-revocation.md), P2, measured from the affiliate's captured egress).
 
 **An authorization-endpoint outage is tolerated for an hour by default, and the cadence does not
 change that.** Absent a `stale-if-error` or `stale-while-revalidate` directive the staleness window is
@@ -917,14 +913,24 @@ delivering uninterrupted for the whole 70 s an outage was observed, while the re
 re-check attempts. Revocation latency and outage tolerance are set by different parameters, and only
 the first is adjustable from the cadence an operator tunes.
 
-**Worse, the settings an operator would reach for to go faster disable revocation entirely.**
-`max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at all;
-in that state a withdrawn grant never takes effect, and one arm kept delivering for the full 50 s it
-was observed, having been re-checked once at admission. **Three configurations silently yield an
-unrevocable session, and one of them is what "revoke immediately" looks like.** What makes them
-survivable is the backstop, which is real: a session ends 0.110 s after its token expires *even with
-revalidation switched off*. Token lifetime is therefore the bound that always holds, and re-check
-cadence the one that bounds a deliberate revocation.
+**Both of the above are correctness findings — revocation that was asked for may not happen — and
+both bind a broadcast deployment. The latency result below does not**, because a few seconds is
+acceptable for a primary feed ([Control](control-plane.md) §8).
+
+**Revocation latency: one to two re-check cadences, and the multi-session figure is the one to
+quote.** With one session live, decision-to-last-byte is `(re-check cadence − phase) + 0.110 s` across
+five cadences, with the fixed overhead constant to within two milliseconds. **That single-session
+figure is the mechanism's floor, not its bound.** Re-checks are served from the same cached HTTP
+client as admission, so with several sessions live a re-check can be answered from an entry another
+session left up to one cadence ago: across six subscribers started a second apart, four of six tore
+down later than one cadence plus 0.110 s and the *measured* worst case was **1.54 cadences**, against a
+bound the relay's own source states as two cadences. The smallest cadence the mechanism accepts is one
+second — the period is carried as integer `Cache-Control` delta-seconds and is additionally clamped to
+a one-second floor — so **the best achievable worst case is about 1.7 s measured and 2.11 s as the
+implementation documents it, and [Control](control-plane.md) §8's sub-second target cannot be met at
+any setting** (the 2× figure is *specified* by the implementation, not measured here). The target is
+retired rather than restated; the figures remain the ones to quote for any case that is
+latency-sensitive.
 
 **De-provisioning granularity is a credential-topology decision, and it is the sharpest practical
 result.** The revocable unit is the *key*, not the grant inside the token, so an affiliate whose

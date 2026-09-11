@@ -1,12 +1,48 @@
 # Test 28 — Failure-injection and recovery matrix
 
-**State: specified, not run.** Infrastructure and transport failures have been probed one at a time in
-[T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported as recovery
-*time*; what a distributor buys is programme continuity, and the two are not the same number. This
-experiment would apply one media-domain grader across a full matrix on both lanes; it has not run
-because the shared harness and ranked scoring ladder do not yet exist — [P1-a](planned-experiments.md#p1--establishes-where-one-architecture-is-superior)
-groups it with [P1-a](planned-experiments.md#p1--establishes-where-one-architecture-is-superior) and defers it behind
-cheaper decisive cells.
+**State: apparatus built and validated, matrix not run. Pass criterion 1 is discharged; criteria 2–5
+are blocked on a Linux impairment host.** Infrastructure and transport failures have been probed one
+at a time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported
+as recovery *time*; what a distributor buys is programme continuity, and the two are not the same
+number. This experiment applies one media-domain grader across a full matrix on both lanes.
+
+**What changed.** The reason this test had never run was that its shared grader did not exist, so no
+cell could be scored in the media domain. **That grader now exists and has been validated against
+known answers** — `lab/scripts/t28-media-lost.py`, with `lab/scripts/t28-grader-selftest.sh` as its
+oracle. That discharges pass criterion 1 and removes the blocker the file previously named.
+
+**What now blocks it is the impairment substrate, and it is not what the register assumed.** The
+matrix needs `netem`/`tc` at a shared hop (transport axis) and, for [T31](test-31-congestion-capacity-ladders.md)'s
+shared rig, Linux network namespaces. **Both are Linux-only, and the workstation this campaign runs on
+is macOS**, which offers `dnctl`/`pfctl` dummynet instead. Substituting dummynet is not an option
+worth taking: [T5](test-5-network-impairment.md), [T8b](test-8b-congestion-control.md) and
+[T20](test-20-segmented-http3.md) all used `netem`, and a ladder measured on a different emulator
+cannot be placed in the same table as theirs. This needs no third party and no live source — it needs
+a Linux host with the clips and binaries on it.
+
+**Grader validation, measured.** Five cells, one command, `CNNiEMEA.ts` as the source:
+
+| Cell | Injected | Measured lost | Measured duplicated | Continuity errors |
+|---|---|---|---|---|
+| control (unimpaired 80,000-packet slice) | — | **0.000 s** | 0.000 s | 0 |
+| hole, 2,000 packets excised | 0.302435 s | **0.302435 s** | 0.000 s | 37 |
+| hole, 10,000 packets excised | 1.512173 s | **1.512173 s** | 0.000 s | 62 |
+| hole, 50,000 packets excised | 7.560866 s | **7.560866 s** | 0.000 s | 84 |
+| repeat, 20,000 packets duplicated | 3.024345 s | 0.000 s | **3.024346 s** | 98 |
+
+The control is clean and every injection is recovered inside the 100 ms margin criterion 1 fixes. The
+duplication cell is there because duplication is a separate code path and a separate column: a stream
+that loses five seconds and repeats five seconds has not broken even, and the grader is required not to
+net them off. It does not.
+
+**How much this validates, stated precisely.** The agreement is exact rather than merely within
+tolerance because the oracle derives the injected duration from the clip's PCR timeline using the same
+median-rate arithmetic the grader uses. That is a strong check on the *implementation* — it would have
+caught a wrong CSV column, a PCR wrap bug, a sign error, or a rate reference moved by the holes being
+measured, which are the failures this campaign has actually hit — but it is **not** an independent
+check on the *method*. The independent corroboration is the continuity-error column, which comes from
+a different tool and rises from 0 to 37–98 exactly where an excision or repeat was made, confirming
+each capture was damaged as intended.
 
 ## Objective
 
@@ -147,11 +183,30 @@ reported as tied.
   [T30](test-30-segmented-distributed-resilience.md) for segmented pairs; only noted here if a
   transport outage exposes the same class.
 
-## Why this has not run
+## Verdict against the pass criteria
 
-The campaign prioritised cheap decisive gates first (transparency, timing file-domain, partial
-resilience drills). [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md) were
-run as individual experiments with session-centric metrics; consolidating them requires building the
-shared grader once ([planned-experiments.md](planned-experiments.md) Group D: P1-1 shares a harness
-with P0-4). Until that exists, quoting T6 recovery times as programme-loss figures remains
-methodologically out of bounds — which is exactly the gap this test is meant to close.
+| # | Criterion | Verdict |
+|---|---|---|
+| 1 | Grader validity: a control reports 0 s lost and 0 continuity errors; a synthetic hole reproduces the injected duration ± 100 ms | **Pass.** Control 0.000 s and 0 continuity errors; three holes and one repeat all recovered within the margin. See the table above, and the limit on what that validates |
+| 2 | Matrix completeness | **Blocked** — no Linux impairment host. Not started rather than partially run |
+| 3 | Ranking published | **Blocked** on criterion 2 |
+| 4 | Comparability | **Blocked** on criterion 2 |
+| 5 | Segmented receiver axis | **Blocked** on criterion 2 |
+
+## What remains, and exactly what would unblock it
+
+**A Linux host carrying the clips and the `fd4f5d82e` binaries.** That is the whole of it for the
+transport axis: `netem`/`tc` for the outage ladder and the loss/reorder/bandwidth steps, and network
+namespaces for the shared rig with [T31](test-31-congestion-capacity-ladders.md). The EC2 secondary is
+Linux but had roughly 4.4 GB free at last check, which will not hold a matrix of captures at three
+repeats a cell; that needs resolving before the run, not during it.
+
+**The infrastructure axis is closer than the transport axis.** Killing and restarting a publisher, a
+relay or an exporter needs no emulator, so those rows could run on the macOS workstation with the
+grader as it stands. They were not started this session: running half a matrix and publishing it as a
+ranked table is the failure mode this experiment exists to avoid, and the transport rows are the ones
+that carry the comparison. Recorded here as the cheapest genuinely available next step.
+
+Until the matrix runs, quoting [T6](test-6-relay-resilience.md) recovery times as programme-loss
+figures remains methodologically out of bounds — the gap this test exists to close, now one step
+smaller.

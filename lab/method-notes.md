@@ -1581,6 +1581,25 @@ changes.** *(T26.)*
 > costing a three-minute run and looking initially like a defect in the lane. One name per arm, or a
 > wait longer than the idle timeout between them; the first is free.
 
+**"Unblocked" means the apparatus runs on the host in front of you, not that no third party is
+owed.** *(T28 and T31.)*
+
+> Both were carried in the register as runnable — needing no hardware loan, no live source and no
+> maintainer — and both were picked up on that basis. Neither can run on this campaign's macOS
+> workstation: T28's transport axis needs `netem`/`tc` and T31's rig is two Linux network namespaces
+> joined by a veth. The register was not wrong about what was *owed*; it was silent about what the
+> apparatus required, and those are different axes. **Record a substrate requirement in the register
+> entry itself**, beside the third-party dependency, so an entry cannot read "runnable now" on a host
+> that cannot run it.
+
+**Do not re-base a ladder on a different emulator to make it runnable.** *(T31.)*
+
+> The macOS workstation has `dnctl`/`pfctl` dummynet, so T31's ladders are buildable here in the sense
+> that impairment can be applied. They would not be comparable: T5, T8b and T20 all used `netem`, and
+> T31 exists to *extend* T8b. A ladder measured on a different emulator cannot sit in the same table as
+> the one it extends, so the substrate is part of the experiment's definition rather than a detail of
+> its execution. Wait for the host.
+
 ---
 
 ## 6. Claims, and their scope
