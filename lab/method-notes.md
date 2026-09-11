@@ -297,6 +297,16 @@ a downstream count to a build.** *(T23, re-grading against #3529.)*
 > below it on the new. *Pinning the adaptation is what makes a comparison possible; carrying the control
 > through the pinned run is what tells you which part of it you may claim.*
 
+**Stop the subject, not the instrument: a control killed before it can report is not a control.**
+*(T37 D7.)*
+
+> The control subscriber was still being served when the harness stopped — exactly the outcome the
+> control exists to demonstrate — and because the harness killed the whole recorder pipeline rather
+> than only the client, the recorder died mid-stream and wrote no record at all. Two runs reported
+> "the control did not hold" when it had held perfectly. A recorder that writes on end-of-input must
+> be given an end of input. *The control is the arm most likely to still be running at teardown, so
+> it is the arm whose teardown path needs the most care.*
+
 **Re-running the control arm re-measures the session, and that is exactly why it earns its place.**
 *(T23, re-grading against #3529.)*
 
@@ -309,6 +319,24 @@ a downstream count to a build.** *(T23, re-grading against #3529.)*
 ---
 
 ## 2. Instruments, and reading what they tell you
+
+**A harness must assert the fault is present in its own source before asking anything downstream
+about it.** *(T39 Part A.)*
+
+> Three consecutive runs reported that a client-edge detector had not caught a suppressed audio PID.
+> It had not: the source slicing had silently failed and the "faulty" clip still had its audio
+> throughout, so the detector was correctly silent about a fault that was never built. A null from a
+> detector and a null from the apparatus that was supposed to give it something to detect are
+> indistinguishable at the output. *Count the thing you removed, in the file you are about to publish,
+> and abort if it is still there.*
+
+**Time-slicing a transport stream needs `--pcr-based`; wall-clock and media time differ by the ratio
+of disk speed to bitrate.** *(T39 Part A.)*
+
+> `tsp -P until --milli-seconds 20000` reading a file stops twenty seconds after *reading* starts, by
+> which point a 372 MB clip has gone through entirely — so the "twenty second" slice was the whole
+> file. `-P until --seconds` does not exist at all, and that error had been sent to `/dev/null`.
+> *Never suppress a fixture builder's stderr, and state which clock a duration is in.*
 
 **A check that has only ever returned "clean" has not been shown to work. Feed it something broken
 before you publish the zeros.** *(T5, T6, T7, T8b, T18, T3 — one defect, six rigs.)*
@@ -1556,6 +1584,25 @@ changes.** *(T26.)*
 ---
 
 ## 6. Claims, and their scope
+
+**When a measured quantity depends on contention for a shared resource, one user of that resource
+measures the uncontended case — and must be labelled as such.** *(T37 D2 against D7.)*
+
+> T37's revocation sweep ran one subscriber per arm and reported worst case "one re-check cadence plus
+> 0.110 s" as the mechanism's bound. That figure went into three documents. It is the mechanism's
+> *floor*: the relay serves re-checks from a cache shared across sessions, so the effect that widens
+> the window only exists once a second session is present, and no amount of repetition at n=1 could
+> have found it. Six staggered sessions put the worst case at 1.54 cadences, and the implementation's
+> own source names two. *Before quoting a per-session figure as a bound, ask what the sessions share.*
+
+**A verified hypothesis is not a working mechanism.** *(T39 Parts B and C.)*
+
+> The hypothesis was that one credential could carry both a media `--subscribe` scope and a telemetry
+> `--publish` scope, routed independently. It can — six cells, with a readback oracle. The instinct
+> was then to record the telemetry return path as available. It is not: there is no way to publish
+> non-media data with the shipped tooling at all, so the mechanism is blocked on carriage having been
+> verified on permission. *Name what the hypothesis tested and what it did not, especially when it
+> passes — a pass is where the distinction is easiest to lose.*
 
 **A defect found through an incidental stimulus is described at the level of that stimulus, not of the
 class it belongs to. Characterise the class before reporting it.** *(T23.)*

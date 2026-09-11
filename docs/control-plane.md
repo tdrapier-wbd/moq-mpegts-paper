@@ -215,8 +215,8 @@ but widen the blast radius of a leak; narrow-scope tokens do the reverse. The de
 Revocation is the hard part of any entitlement system. The platform uses two paths together:
 
 1. **Fast path** — the relay re-asks its admission question on a timer and drops the affected
-   subscriptions when the answer changes. **Bounded by one re-check period plus about 0.11 s, and its
-   floor is roughly 1.11 s.**
+   subscriptions when the answer changes. **Bounded by between one and two re-check periods plus
+   about 0.11 s — the implementation documents two — so its floor is roughly 2.1 s.**
 2. **Backstop** — short token lifetimes with continuous renewal, so the *worst case* is bounded by
    the token lifetime even if the fast path is unavailable. Revocation then happens by declining to
    refresh.
@@ -229,12 +229,18 @@ Revocation is the hard part of any entitlement system. The platform uses two pat
 > answer, and closes the session if it no longer verifies. Revocation is a **poll**, and that
 > difference is why the bound is what it is.
 >
-> **It said "sub-second when the control plane is healthy". That is not achievable at any setting.**
-> Measured across five cadences, decision-to-last-byte is `(re-check cadence − phase) + 0.110 s`, the
-> fixed overhead constant to within two milliseconds. The period is carried as integer `Cache-Control`
-> delta-seconds, so the smallest cadence is one second and the best achievable worst case is about
-> **1.11 s** ([T37](../lab/test-37-entitlement-revocation.md), measured from the affiliate's captured
-> egress). §8's `< 1 s` target is unachievable by this mechanism and is marked so there.
+> **It said "sub-second when the control plane is healthy". That is not achievable at any setting,
+> and the margin is wider than the first measurement of it suggested.** With one session live,
+> decision-to-last-byte is `(re-check cadence − phase) + 0.110 s` across five cadences, the fixed
+> overhead constant to within two milliseconds. That is the uncontended case: re-checks are served
+> from the same cached HTTP client as admission, so once several sessions are live a re-check can be
+> answered from an entry another session left up to one cadence ago, and the measured worst case
+> across six staggered subscribers was **1.54 cadences** — against a bound the relay's source states
+> as two. The period is carried as integer `Cache-Control` delta-seconds and clamped to a one-second
+> floor, so the best achievable worst case is about **1.7 s measured and 2.11 s as documented**
+> ([T37](../lab/test-37-entitlement-revocation.md), measured from the affiliate's captured egress;
+> the 2× figure *specified* by the implementation). §8's `< 1 s` target is unachievable by this
+> mechanism and is marked so there.
 >
 > **And the settings an operator would reach for to go faster disable revocation altogether.**
 > `max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at
@@ -282,14 +288,18 @@ content the bias is toward short lifetimes and an explicit, tight cadence.
 > claim in the list above is therefore confirmed; the fast-path claim beside it was not.
 
 **How this compares with the alternative data plane** is developed in [Comparison](comparison.md) §7,
-and measurement has made the comparison *less* favourable than this section first claimed. The
-original framing was that segmented HTTP "lacks only the fast path". But MoQ's fast path is itself a
-poll on an integer-second period, so the architectural distinction is not push-versus-poll at all —
-it is a poll every `max-age` seconds against a check on every segment request, and at a two-second
-segment duration those bounds are within about half a second of each other. MoQ's real advantage is
-narrower than a latency figure and does not depend on one: the enforcement point is a relay you can
-operate, so the policy is yours and portable, and a subscription is a live queryable fact rather than
-an inference from delivery logs.
+and measurement has made the comparison *worse* for MoQ than this section first claimed. The original
+framing was that segmented HTTP "lacks only the fast path". But MoQ's fast path is itself a poll on an
+integer-second period, so the distinction is not push-versus-poll at all — it is a poll every
+`max-age` seconds against a check on every part request. Where the CDN authorizes each request, the
+segmented bound is one part-target interval, measured in this lab at **0.28–0.30 s**
+([T14](../lab/test-14-data-plane-comparison.md)), against MoQ's **1.7 s measured and 2.11 s
+documented** worst case. **On revocation latency MoQ is the slower of the two, by roughly six to
+seven times**, and it is the only one of the two with configurations that disable revocation
+entirely — or that tolerate an hour of authorization-endpoint outage while continuing to serve. MoQ's real advantage is therefore narrower than a
+latency figure and does not depend on one: the enforcement point is a relay you can operate, so the
+policy is yours and portable, and a subscription is a live queryable fact rather than an inference
+from delivery logs.
 
 ### 4.2 Failure handling
 
@@ -484,7 +494,7 @@ availability requirement is lower than the data plane's.
 |---|---|---|---|
 | Control-plane availability | 99.95 % | — | Annual uptime of the provisioning API surface |
 | Route provisioning latency | < 5 s | met, but **bounded by `max-age`** — a new grant is invisible until the cached admission reply expires | `POST /v1/routes` to green data-plane configuration across all affected nodes |
-| Fast-path revocation latency | ~~< 1 s~~ **not achievable; restate at ≈ 1.2 s** | `(cadence − phase) + 0.110 s`, floor **≈ 1.11 s** | Revoke call to last media byte at the subscriber |
+| Fast-path revocation latency | ~~< 1 s~~ **not achievable; restate at ≈ 2.2 s** | One to two cadences + 0.110 s; floor **≈ 1.7 s measured, 2.11 s documented** | Revoke call to last media byte at the subscriber, with more than one session live |
 | Token renewal success rate | 99.999 % | — | Legitimate refresh requests succeeding before expiration |
 
 **The revocation target has been corrected rather than caveated.** The mechanism's period is integer

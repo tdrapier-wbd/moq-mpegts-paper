@@ -494,13 +494,25 @@ already has one.
 
 ## 7. Entitlement and access control (R7)
 
-**MoQ's advantage is real but narrow, and it is not revocation latency.** Low-latency segmented HTTP
-re-fetches the playlist every part-target duration, so worst-case revocation is about one request
-interval. MoQ's revocation is **also a poll**, not a push: measured at one re-check period plus
-≈ 0.11 s, with a floor near 1.11 s because the period is carried as integer delta-seconds
-([Evidence](evidence.md) §3.10). At a two-second segment duration the two bounds are within about half
-a second of each other, and three plausible MoQ configurations disable revocation altogether
-([Control](control-plane.md) §4.1).
+**MoQ's advantage is real but narrow, and on revocation latency MoQ loses.** MoQ's revocation is a
+**poll**, not a push: with one session live it is *measured* uniform on `[0.110 s, cadence + 0.110 s]`,
+but re-checks are served from the relay's shared authorization cache, so with several sessions live the
+*measured* worst case rose to **1.54 cadences** and the implementation *specifies* two. The period is
+carried as integer delta-seconds and clamped to a one-second floor, so the tightest configuration's
+worst case is **about 1.7 s measured and 2.11 s as documented** ([Evidence](evidence.md) §3.10).
+Low-latency segmented HTTP re-fetches the playlist every part-target duration, and where the CDN
+authorizes each request the bound is one such interval: against the part durations measured in this
+lab, **0.28–0.30 s** ([T14](../lab/test-14-data-plane-comparison.md)). On worst case that is **MoQ
+roughly six to seven times worse**. Three plausible MoQ configurations disable revocation altogether,
+and by default an authorization-endpoint outage is tolerated for an hour with delivery continuing
+([Control](control-plane.md) §4.1) — neither of which segmented HTTP has an equivalent of.
+
+Two things keep that from being a verdict. The MoQ figure is **measured** and the segmented one is
+**derived** — from the specification and this lab's own measured part durations, not from a revocation
+run, so the comparison is asymmetric in kind and the segmented half could be worse in practice. And it
+holds only where the CDN checks entitlement on **every request**; where the per-supplier machinery
+issues a signed cookie or a token with its own lifetime, the bound is that lifetime and not the
+request interval, which can be far looser than either figure here.
 
 What differs: **where enforcement lives and whether the session is observable.** Segmented HTTP
 enforces at the CDN (per-supplier token machinery); MoQ at the relay (portable if you operate it). A

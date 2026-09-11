@@ -45,7 +45,7 @@ across the two strands is a judgement rather than a derivation.
 
 | # | What is outstanding | Protocol | Blocked on |
 |---|---|---|---|
-| P0-d | Gate 2 preparation: boundary fixtures and the acceptance harness, dry-run before the hardware arrives | [T33](test-33-gate2-preparation.md) | — **runnable now** |
+| P0-d | Gate 2 preparation: boundary fixtures and the acceptance harness, dry-run before the hardware arrives | [T33](test-33-gate2-preparation.md) | **largely discharged** — Parts A, B and C run; the analyser-specific pass-table rows still need hardware |
 | P0-e | A byte-faithful HTTP/3 HLS receiver | *instrument, not an experiment* | us — see below |
 | P0-f | Silent media-plane failure, segmented half | [T22](test-22-silent-media-plane-failure.md), [T24](test-24-partial-media-plane-stall.md) | P0-e |
 | P0-g | Permanence: the seven-day arm, and the segmented soak | [T21](test-21-permanence-soak.md) | P0-h for the MoQ arm |
@@ -53,7 +53,7 @@ across the two strands is a judgement rather than a derivation.
 | P0-i | `moq export ts` exiting under two-feed contention — instrument the read path and attribute it | [T8b](test-8b-congestion-control.md) | — |
 | P0-j | A real never-repeating encoder against the continuous-source fence | [T34](test-34-real-encoder-severity.md) | a live TS source |
 | P0-k | Hardware TR 101 290 P1/P2 soak, ≥ 72 h | [T7](test-7-timing-integrity.md) | IRD + analyser loan |
-| P0-l | A client certificate is a cross-tenant master key, and the authorization endpoint is not told which certificate was presented | [T38](test-38-entitlement-estate.md) § Open | — **runnable now**; upstream report first |
+| P0-l | A client certificate is a cross-tenant master key, and the authorization endpoint is not told which certificate was presented | [T38](test-38-entitlement-estate.md) § Open | **discharged** — measured, and the upstream report is drafted and staged awaiting review |
 
 **P0-e is a build task, not an experiment, and it gates three entries.** Nothing in the lab receives
 an HTTP/3 HLS stream byte-faithfully; the current receiver re-muxes. Until one exists, the segmented
@@ -75,8 +75,9 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 | P1-g | Capped-stream relay memory under pressure | [T9](test-9-performance.md) | — |
 | P1-h | Cross-implementation interop, the remaining legs | [T11](test-11-interop.md) | B-2 for T11c |
 | P1-i | The three remaining data-plane comparison cells | [T14](test-14-data-plane-comparison.md) | B-4, B-5, hardware |
-| P1-j | Three `Cache-Control` configurations under which an entitlement cannot be withdrawn at all | [T37](test-37-entitlement-revocation.md) § Open | — |
-| P1-k | Whether a key-per-entitlement estate scales: keys sized by the licensing matrix, not the affiliate count | [T38](test-38-entitlement-estate.md) § Open | — |
+| P1-j | Three `Cache-Control` configurations under which an entitlement cannot be withdrawn at all | [T37](test-37-entitlement-revocation.md) § Open | **discharged, and it grew.** Report drafted and staged; two further findings measured alongside it — the revocation window is up to twice `max-age` once several sessions share the authorization cache, and the default staleness window is a one-hour constant rather than a multiple of the cadence |
+| P1-k | Whether a key-per-entitlement estate scales: keys sized by the licensing matrix, not the affiliate count | [T38](test-38-entitlement-estate.md) § Open | — **runnable now**, not started; the T36–T38 rig is the apparatus |
+| P1-l | The telemetry return path end to end: a `moq-net` client publishing an opaque or JSON track, closing T39 Part B | [T39](test-39-cross-boundary-observability.md) § Open | — **runnable now**; needs a small client written against the library, since the CLI has no non-media path |
 
 ---
 

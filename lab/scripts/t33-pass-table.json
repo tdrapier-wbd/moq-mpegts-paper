@@ -1,0 +1,148 @@
+{
+  "_comment": [
+    "The Gate 2 pass definition, fixed before the analyser ships. T33 Part B criterion 4.",
+    "A gate settled after seeing output is not a gate, so this file is read by",
+    "t33-acceptance.sh rather than assembled from what a run produced.",
+    "",
+    "Sources: ETSI TR 101 290 for the P1/P2 sub-error numbering and limits. The",
+    "analyser-specific block is NOT TR 101 290 -- PLL lock and the T-STD buffer model are",
+    "vendor verdicts, and they are listed separately so nobody quotes them as conformance.",
+    "",
+    "'measurable_in_software' marks what the Part B rehearsal against the software reference",
+    "can actually grade. Everything false there is a hardware-day first, which is exactly the",
+    "list this file exists to make visible in advance."
+  ],
+  "domain": "wire (P2 at the analyser input); the software rehearsal is file-domain P1 only",
+  "p1": [
+    {
+      "id": "1.1",
+      "name": "TS_sync_loss",
+      "limit": "no loss of synchronisation; 2 consecutive correct sync bytes to regain",
+      "measurable_in_software": true
+    },
+    {
+      "id": "1.2",
+      "name": "Sync_byte_error",
+      "limit": "sync byte != 0x47 in any packet",
+      "measurable_in_software": true
+    },
+    {
+      "id": "1.3",
+      "name": "PAT_error",
+      "limit": "PID 0x0000 absent > 0.5 s; table_id != 0x00 on PID 0x0000; scrambling_control != 00",
+      "measurable_in_software": true
+    },
+    {
+      "id": "1.4",
+      "name": "Continuity_count_error",
+      "limit": "incorrect packet order, lost packet, or duplicate beyond the one ISO 13818-1 2.4.3.3 permits",
+      "measurable_in_software": true
+    },
+    {
+      "id": "1.5",
+      "name": "PMT_error",
+      "limit": "PMT section absent > 0.5 s on any PID referenced by the PAT; table_id != 0x02",
+      "measurable_in_software": true
+    },
+    {
+      "id": "1.6",
+      "name": "PID_error",
+      "limit": "a PID referenced in the PMT carries no data for the user-defined period",
+      "measurable_in_software": true
+    }
+  ],
+  "p2": [
+    {
+      "id": "2.1",
+      "name": "Transport_error",
+      "limit": "transport_error_indicator set in any packet",
+      "measurable_in_software": true
+    },
+    {
+      "id": "2.2",
+      "name": "CRC_error",
+      "limit": "CRC failure in any PAT, PMT, CAT, NIT, EIT, BAT, SDT or TOT table section",
+      "measurable_in_software": true
+    },
+    {
+      "id": "2.3",
+      "name": "PCR_error",
+      "limit": "PCR discontinuity > 100 ms without discontinuity_indicator; PCR repetition > 40 ms",
+      "measurable_in_software": true
+    },
+    {
+      "id": "2.3a",
+      "name": "PCR_repetition_error",
+      "limit": "interval between consecutive PCR values > 40 ms",
+      "measurable_in_software": true
+    },
+    {
+      "id": "2.3b",
+      "name": "PCR_discontinuity_indicator_error",
+      "limit": "PCR difference > 100 ms with the indicator not set",
+      "measurable_in_software": true
+    },
+    {
+      "id": "2.4",
+      "name": "PCR_accuracy_error",
+      "limit": "PCR accuracy outside +/- 500 ns",
+      "measurable_in_software": false,
+      "note": "Graded in software only as a file-domain value check (tsp pcrverify --absolute --jitter-max 13, 481 ns). Release timing is a wire property and needs the analyser."
+    },
+    {
+      "id": "2.5",
+      "name": "PTS_error",
+      "limit": "PTS repetition > 700 ms except in trick modes",
+      "measurable_in_software": true
+    },
+    {
+      "id": "2.6",
+      "name": "CAT_error",
+      "limit": "scrambled packets present with no CAT; table_id != 0x01 on PID 0x0001",
+      "measurable_in_software": true,
+      "note": "Not exercised: nothing in the campaign scrambles."
+    }
+  ],
+  "analyser_specific": [
+    {
+      "id": "A.1",
+      "name": "PLL lock state",
+      "limit": "locked for the whole soak; every unlock event timestamped and counted",
+      "measurable_in_software": false,
+      "note": "Not TR 101 290. This is the receiver's own clock recovery and is the single thing the software reference cannot stand in for."
+    },
+    {
+      "id": "A.2",
+      "name": "T-STD buffer model verdict",
+      "limit": "no transport, multiplex or elementary buffer overflow or underflow across the soak",
+      "measurable_in_software": false,
+      "note": "Not TR 101 290. Vendor-specific model; record the vendor and model version alongside the verdict."
+    },
+    {
+      "id": "A.3",
+      "name": "Service presence and decode",
+      "limit": "service decodes continuously; every loss-of-service event timestamped",
+      "measurable_in_software": false
+    },
+    {
+      "id": "A.4",
+      "name": "Input bitrate stability",
+      "limit": "measured mux rate within the analyser's CBR tolerance for the whole soak",
+      "measurable_in_software": false
+    }
+  ],
+  "capture": {
+    "requirement": "exactly one machine-readable export path, logged to file, chosen before the analyser ships",
+    "accepted": ["CSV", "syslog", "SNMP trap log"],
+    "rejected": ["GUI screenshot", "manual transcription"],
+    "note": "Confirm the export path on the specific model before it ships. This cannot be worked around on site."
+  },
+  "run_order": {
+    "control_before_every_subject": true,
+    "abort_session_on_control_failure": true,
+    "soak_minimum_seconds": 259200,
+    "soak_rationale": "The PCR base wraps every 26.51 h, so a soak under 72 h may not cross one. Part A crosses it by placement instead, which is cheaper but is a file-domain result.",
+    "order_if_one_input": ["control", "boundary drills", "soak"],
+    "order_if_two_inputs": ["control", "soak interleaved with boundary drills"]
+  }
+}

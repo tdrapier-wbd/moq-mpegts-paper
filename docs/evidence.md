@@ -896,12 +896,26 @@ twenty-eight cells correct, with the channel no affiliate licenses reaching nobo
 ([T38](../lab/test-38-entitlement-estate.md); six of seven criteria met).
 
 **Revocation, however, is a poll rather than a push, and that sets the bound.** The relay re-asks its
-admission question on a timer and acts on the answer; nothing is pushed to it. Measured across five
-cadences, decision-to-last-byte is `(re-check cadence − phase) + 0.110 s`, with the fixed overhead
-constant to within two milliseconds. The smallest cadence the mechanism accepts is one second, because
-the period is carried as integer `Cache-Control` delta-seconds, so **the best achievable worst case is
-about 1.11 s and [Control](control-plane.md) §8's sub-second target cannot be met at any setting**
-([T37](../lab/test-37-entitlement-revocation.md), P2, measured from the affiliate's captured egress).
+admission question on a timer and acts on the answer; nothing is pushed to it. With one session live,
+decision-to-last-byte is `(re-check cadence − phase) + 0.110 s` across five cadences, with the fixed
+overhead constant to within two milliseconds. **That single-session figure is the mechanism's floor,
+not its bound.** Re-checks are served from the same cached HTTP client as admission, so with several
+sessions live a re-check can be answered from an entry another session left up to one cadence ago:
+across six subscribers started a second apart, four of six tore down later than one cadence plus
+0.110 s and the *measured* worst case was **1.54 cadences**, against a bound the relay's own source
+states as two cadences. The smallest cadence the mechanism accepts is one second — the period is
+carried as integer `Cache-Control` delta-seconds and is additionally clamped to a one-second floor — so
+**the best achievable worst case is about 1.7 s measured, 2.11 s as the implementation documents it,
+and [Control](control-plane.md) §8's sub-second target cannot be met at any setting**
+([T37](../lab/test-37-entitlement-revocation.md), P2, measured from the affiliate's captured egress;
+the 2× figure is *specified* by the implementation, not measured here).
+
+**An authorization-endpoint outage is tolerated for an hour by default, and the cadence does not
+change that.** Absent a `stale-if-error` or `stale-while-revalidate` directive the staleness window is
+a one-hour constant, independent of `max-age`: *measured*, a session on a one-second cadence kept
+delivering uninterrupted for the whole 70 s an outage was observed, while the relay made 202 failed
+re-check attempts. Revocation latency and outage tolerance are set by different parameters, and only
+the first is adjustable from the cadence an operator tunes.
 
 **Worse, the settings an operator would reach for to go faster disable revocation entirely.**
 `max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at all;
