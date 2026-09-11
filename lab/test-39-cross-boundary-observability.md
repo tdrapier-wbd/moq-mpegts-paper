@@ -330,6 +330,39 @@ Part B's blocker purely one of tooling: `moq import json` / `moq export json` (o
 passthrough) would close it, as would a small local client. Registered as P1-l; not written this
 session.
 
+**Proposed upstream as a convention, filed as
+[#3608](https://github.com/moq-dev/moq/issues/3608).** The ask is a standard shape for
+subscriber-reported health telemetry mirroring `--stats-enabled`, explicitly not a wire-protocol
+change: a catalog entry describing a health-report track, a minimal versioned schema keyed on the
+`wall + pts` correlation the catalog already carries, cadence as a report property, and no
+requirement that any client implement it. It names the CLI tooling gap as the one thing blocking a
+prototype, and asks separately whether that gap is wanted as a contribution regardless — the relay's
+own stats broadcasts are unreadable by the CLI that publishes them either way.
+
+**It is filed as aspirational, and the framing matters more than the proposal.** No open control
+plane and no transport protocol in current use gives an origin this visibility into a subscriber's
+delivered-media health — not WebRTC, SRT or RTMP, not HLS/CMAF/DASH. CMCD/CMSD is the nearest thing
+and is a different measurement: request and buffer state reported to a CDN, silent on whether the
+arriving media was intact. So there is no existing convention to copy or interoperate with, which is
+freedom and risk in the same place, and it is a reason to think carefully about the schema rather
+than a reason not to propose it. Two consequences for how this experiment's results may be used:
+**nothing here is a deficiency of MoQ against an incumbent**, because no incumbent offers it either;
+and **no adoption decision turns on it**, so it must not appear in a verdict table as a point for or
+against a data plane. It is recorded as a real operational gap a distributor meets at fleet scale,
+whose mechanism happens to be unusually close to hand on this plane.
+
+**The route deliberately not taken: the groomer.** `mpegts-pacer` already decodes the stream and
+already counts per-PID access units for [T27](test-27-liveness-detector.md)'s detector, so emitting
+this telemetry from there is a small amount of code and by far the fastest path to the measurement.
+It is rejected on purpose. The groomer is kept minimal and non-proprietary, and a health-reporting
+channel inside one distributor's grooming binary is a capability only that distributor's receivers
+can offer — which forfeits exactly the interoperability that makes the observation worth having, and
+converts an open convention into a private extension. The value of the capability is that *any*
+conformant subscriber could report using a credential the operator already issues. Building it into
+the groomer would produce the data and destroy the reason for it. This is consistent with the
+standing constraint that the client-edge monitor is a standalone process on a second subscription and
+never a groomer patch — the monitor in Part C was built that way for the same reason.
+
 **The announce-refusal finding reaches both wires, and it is not a dropped error.** Payload
 agnosticism holds on both wires, and so does the silence. Measured with
 [`t39-ietf-refusal.sh`](scripts/t39-ietf-refusal.sh) — one relay, one token scoped to publish

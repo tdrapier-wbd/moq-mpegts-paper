@@ -468,7 +468,12 @@ in segments; conformant clients and packagers do not.
 Service-layer SI is a smaller residual: HLS defines initialisation as PAT+PMT only; extra PIDs ride
 along but nothing requires SDT/NIT/EIT/TDT/TOT. MoQ now threads the service layer through its catalog
 ([Evidence](evidence.md) §3.1). SCTE-35 has a specified out-of-band `EXT-X-DATERANGE` mapping;
-monitoring (CMCD/CMSD, segment probes) exists where MoQ observability is thin.
+client-reporting conventions (CMCD/CMSD) and segment probes exist where MoQ has no equivalent. Two
+qualifications on that last point, because it is easy to over-read: CMCD/CMSD carries request and
+buffer state rather than delivered-media integrity, so **neither plane lets an origin establish that
+what a subscriber received was intact** ([Architecture](architecture.md) §9.4); and the relay does
+publish its own operational counters as an ordinary broadcast, which is a narrower surface than the
+segmented ecosystem's, not an absent one.
 
 ### 6.1 Five layers, and they do not resolve the same way
 
@@ -862,6 +867,7 @@ under what conditions each is preferable.
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**, byte-identical across independent hosts; not for a multi-programme mux | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Audience is not a memory term; the measured knee is the host's, not the relay's | **Indicated.** Cache offload measured at one node, not at a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
+| **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact, not merely that bytes moved | **Not satisfied, and no candidate satisfies it.** A relay cannot answer it by construction; the mechanism to close it is unusually close to hand here and is proposed upstream rather than built privately ([Architecture](architecture.md) §9.4) | **Not satisfied.** CMCD/CMSD reports request and buffer state to a CDN, which is a different measurement — it does not say whether the arriving media was intact |
 | **A receive stage at the route's latency budget** | A stage exists that turns the delivered feed back into a transport stream the groomer can take, at the latency the route allows | **Cleared, single-implementation.** `moq export ts` is free and the only one; the groomer behind it is the distributor's on either plane (§11) | **Cleared at classic segment durations, open below them.** Off the shelf for whole segments; nothing free receives low-latency TS-in-HLS, and the commercial ABR-to-TS stage is a datasheet claim this campaign did not measure (§4.4, §6.1) |
 
 **Preference is conditional on the route:**

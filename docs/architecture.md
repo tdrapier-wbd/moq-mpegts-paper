@@ -863,6 +863,54 @@ Segmented HTTP failure modes are *quieter* — stale playlist, warm cache, no er
 segment-fetching leg cannot report a dead source faster than a segment period** (~9 s on a 2 s-segment
 feed); tighter failover budgets need MoQ or a second monitored path.
 
+### 9.4 The vantage the architecture does not have: delivered-media health at a subscriber
+
+Everything in §9.1 is instrumented at a monitoring point the distributor owns — the edge gateway's own
+egress. That is the right place for R3, because the gateway's output is what the contract is written
+about. It is not sufficient for a distributor whose subscribers take delivery over the public internet
+onto receivers it does not administer, and the shortfall is structural rather than a gap in the probe
+set.
+
+**A relay cannot answer the question, by construction.** The payload is opaque to it — deliberately, and
+that same property is what makes an opaque telemetry track legal on the return path described below —
+so relay-side telemetry can prove that bytes moved and can never prove the media was intact. The
+measured form of this is [Evidence](evidence.md) §3.12: when only part of a programme stops, the
+whole of TR 101 290 P1 passes over a service carrying no pictures, and an audio-only stall has no
+wire-observable signature at all. Session counts, byte counts and subscription counts are all healthy
+throughout. **The only vantage that can see delivered-media health is wherever the stream is actually
+decoded**, and for primary distribution to affiliates that is someone else's hardware.
+
+**The mechanism to close it exists and is not proprietary.** A subscriber-side monitor can publish a
+health report back as an ordinary MoQ track: tracks are payload-agnostic on both wires the relay
+speaks, one credential can carry a media `subscribe` scope and an independent `publish` scope for a
+telemetry path, and the catalog already carries the correlation primitive needed to tie "group N was
+bad" to the publisher's timeline. Those three are established, and the work is recorded in
+[T39](../lab/test-39-cross-boundary-observability.md). What does not exist is a way to *carry* the
+report with shipped tooling — the CLI publishes and consumes media containers only — so the return
+path is authorized, routed and protocol-legal, and untooled. It has been proposed upstream as a
+convention rather than built privately ([#3608](https://github.com/moq-dev/moq/issues/3608)).
+
+**This is aspirational, and the architecture should not be read as scoring MoQ down for it.** No open
+control plane and no transport protocol in current use gives an origin this level of visibility into a
+subscriber's delivered-media health — not WebRTC, SRT or RTMP, and not HLS/CMAF/DASH. The nearest thing
+on the segmented side, CMCD/CMSD, reports request-level and buffer-level client state to a CDN; it is
+useful and it is not the same measurement, because it says nothing about whether the media that arrived
+was intact. **So this is a greenfield capability rather than a deficit against an incumbent**, it is
+not a requirement any candidate in [Comparison](comparison.md) satisfies, and no adoption decision here
+turns on it. It is recorded because it is a real operational gap that a distributor will eventually
+meet at fleet scale, and because the mechanism to close it is unusually close to hand on this data
+plane — not because the platform is unsuitable without it.
+
+**One route to it is deliberately not taken.** The edge stage (§4) already decodes the stream, already
+counts per-PID access units, and could emit this telemetry with very little new code — it is the
+obvious place to put it, and it is the wrong place. The groomer is kept minimal and non-proprietary on
+purpose: a health-reporting channel embedded in one distributor's grooming binary is a capability only
+that distributor's receivers can offer, which forfeits the interoperability that makes the observation
+worth having and converts an open convention into a private extension. The value of this capability is
+precisely that *any* conformant subscriber could report, using a credential the operator already
+issues. Building it into the groomer would deliver the measurement and destroy the reason for it, so
+the proposal goes upstream and the groomer stays as it is, even though that is the slower path.
+
 ---
 
 ## 10. Draft and version strategy *(MoQ-specific)*
