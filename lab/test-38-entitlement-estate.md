@@ -373,6 +373,64 @@ done to it at all. **Method rule: a gap in a delivery trace is only evidence of 
 with the intervention removed does not show the same gap; with zero continuity errors, a pause is
 delivery burstiness and no media was lost.**
 
+## The key estate costs the relay nothing, and deleting a key revokes immediately
+
+**P1-k, measured 2026-09-11 on the campaign workstation.** § Open recorded the practical objection to
+the recommended topology: if de-provisioning needs a key per unit of entitlement, the estate is
+sized by the licensing matrix — hundreds of affiliates times tens of channels — and each key is one
+the relay must hold. Measured against estate size, **the relay does not scale with the estate at
+all.**
+
+Rig [`t38-key-estate-scale.sh`](scripts/t38-key-estate-scale.sh), one key per (affiliate, channel)
+pair in a single `--auth-key-dir`, build `moq` 0.11.0-`fd4f5d82e`, one sample per rung. The token
+presented is signed with the **last** key in the estate, so any per-request scan is exercised at its
+worst case rather than its best.
+
+| Estate | Matrix | Key dir | Relay launch → serving | Relay RSS | Time to first media byte |
+|---|---|---|---|---|---|
+| 10 | 10 × 1 | 40 kB | 0.33 s | 13,872 kB | 0.30 s |
+| 500 | 50 × 10 | 2.0 MB | 0.34 s | 13,888 kB | 0.29 s |
+| 2,000 | 100 × 20 | 8.0 MB | 0.32 s | 13,920 kB | 0.29 s |
+| 9,000 | 300 × 30 | 36 MB | 0.34 s | 13,968 kB | 0.29 s |
+| 20,000 | 800 × 25 | 80 MB | 0.33 s | 13,968 kB | 0.29 s |
+
+Startup is flat, admission is flat, and **resident memory grows by 96 kB across a 2,000-fold increase
+in estate size** — about 5 bytes a key, which is not a key. A 9,000-key estate, the size § Open named
+as the practical objection, is indistinguishable from a 10-key one on every axis measured.
+
+**The mechanism, tested rather than inferred**, because "flat" has more than one explanation and the
+operational consequences differ sharply. The relay does not cache the estate; it reads the key the
+token's `kid` names, on demand:
+
+- A key **created after the relay was already serving** admitted a session. So there is no eager load
+  and no startup cache, which is why launch time is flat.
+- The same token, after its key file was **deleted with no relay restart**, was refused. So there is
+  no post-first-use cache either.
+
+Two consequences follow, and the second is the more valuable:
+
+1. **Provisioning a new affiliate or channel needs no relay restart.** Writing the `.jwk` is the whole
+   operation.
+2. **Deleting a key file is a revocation path that takes effect immediately and needs no restart.**
+   That matters against [T37](test-37-entitlement-revocation.md), where the binding finding is that
+   `max-age=0`, a sub-second `max-age` and an omitted `Cache-Control` each disable the `--auth-api`
+   re-check permanently, so a withdrawn grant never takes effect. Key deletion is not subject to that
+   defect at all: it is filesystem state the relay consults per request. **The two findings compose
+   into a working design** — size the estate by the licensing matrix, as this experiment already
+   recommends, and revoke by removing the key, which gets grant-level revocation with none of the
+   cache-header hazard. The cost of the estate that makes this possible is, measured, negligible.
+
+**What this does not show, and it is half the original objection.** § Open said "each a key the
+endpoint must serve *and* the relay must cache". Only the relay half was measured. An `--auth-api`
+endpoint serving a 9,000-entry matrix — its lookup cost, its own caching, and its behaviour when the
+matrix changes under it — is untested, and every run in T36–T38 drove a stub. Nor is this a
+multi-tenancy claim: `--server-tls-root` remains the cross-tenant master key described below, and a
+large key estate does nothing about it. The rungs are single samples; the figures are flat enough and
+the mechanism direct enough that repetition would not change the conclusion, but none was run. Keys
+here are HS256 and minted programmatically rather than through `moq token generate`, with a control
+cell requiring the relay to accept a minted key before any rung was believed; an asymmetric estate
+was not measured.
+
 ## Open
 
 - **Per-subscriber RSS under authorization is unmeasured**, for the instrument reason in Part 4. It
@@ -386,7 +444,7 @@ delivery burstiness and no media was lost.**
   admits.
 - **De-provisioning at the grant level rather than the key level does not exist.** Narrowing an
   affiliate's entitlement requires a key per unit of entitlement, so the key estate has to be sized
-  by the licensing matrix rather than by the affiliate count. Whether that scales to a real estate —
-  hundreds of affiliates times tens of channels, each a key the endpoint must serve and the relay
-  must cache — is untested and is the practical objection to the recommended topology.
+  by the licensing matrix rather than by the affiliate count. **The relay's half of that objection is
+  now measured and does not hold — see § The key estate costs the relay nothing.** The endpoint's
+  half is still untested.
 - **Rights windows**, per the limits above.

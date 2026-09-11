@@ -25,7 +25,8 @@ Reports duplication separately rather than netting it off: a stream that loses f
 seconds and repeats five seconds has not broken even.
 
 Usage:
-    t28-media-lost.py --input capture.ts [--pid 111] [--tolerance-ms 100] [--json out.json]
+    t28-media-lost.py --input capture.ts [--domain file|wire] [--pid 111]
+                      [--tolerance-ms 100] [--json out.json]
     t28-media-lost.py --csv pcr.csv     [--pid 111]          # re-grade without re-running tsp
 
 Pass criterion 1 of T28 requires that this report ~0 on an unimpaired capture *and* the
@@ -108,7 +109,26 @@ def unwrap(samples: list[tuple[int, int]]) -> list[tuple[int, float]]:
 	return out
 
 
-def grade(samples: list[tuple[int, float]], tolerance_s: float) -> dict:
+def grade(samples: list[tuple[int, float]], tolerance_s: float, domain: str = "file") -> dict:
+	"""Programme time lost, in one of two domains. They are not interchangeable.
+
+	`file` -- the reference against a constant byte rate. Expected elapsed time between two
+	PCR samples is the bytes between them divided by the stream's rate, so a hole is time the
+	clock advanced without bytes to account for it. Correct only where the capture really is
+	CBR, which is the file domain: a groomed egress, or a clip.
+
+	`wire` -- the reference against the stream's own PCR cadence, with byte positions ignored
+	entirely. A hole is a PCR interval longer than the cadence.
+
+	**Do not grade a raw `moq export ts` capture in the `file` domain.** The exporter emits
+	PCR-bearing packets in clusters (T19's positional finding), so the packet gap between
+	adjacent PCR samples has a median of about 6 rather than the ~150 a CBR stream gives. The
+	per-interval rate estimate then collapses -- measured at 0.361 Mb/s against a true
+	8.595 Mb/s -- and every in-cluster interval is scored as though the stream had repeated
+	itself. It reported 1,254 s of duplication in a 55 s capture. The hole figure survives that
+	corruption, because a hole is dominated by its time term, but the duplication figure does
+	not, and a grader that is right about one column and silently wrong about the other is not
+	usable. Put the groomer in the path to grade in the file domain, or grade on the wire."""
 	if len(samples) < 3:
 		raise SystemExit(f"only {len(samples)} PCR samples; too few to establish a rate")
 
@@ -116,15 +136,24 @@ def grade(samples: list[tuple[int, float]], tolerance_s: float) -> dict:
 	for (i0, t0), (i1, t1) in zip(samples, samples[1:]):
 		intervals.append((i1 - i0, t1 - t0, t0, t1))
 
-	# Median of the per-interval rates: immune to the holes being measured.
-	rates = [(di * TS_PACKET_BITS) / dt for di, dt, _, _ in intervals if dt > 0 and di > 0]
-	if not rates:
-		raise SystemExit("no usable PCR intervals; the clock never advanced")
-	nominal_bps = statistics.median(rates)
+	# Medians throughout: immune to the holes being measured.
+	nominal_bps = None
+	if domain == "file":
+		rates = [(di * TS_PACKET_BITS) / dt for di, dt, _, _ in intervals if dt > 0 and di > 0]
+		if not rates:
+			raise SystemExit("no usable PCR intervals; the clock never advanced")
+		nominal_bps = statistics.median(rates)
+		cadence_s = None
+	elif domain == "wire":
+		cadence_s = statistics.median([dt for _, dt, _, _ in intervals])
+		if cadence_s <= 0:
+			raise SystemExit("median PCR cadence is not positive; the clock never advanced")
+	else:
+		raise SystemExit(f"unknown domain {domain!r}: expected 'file' or 'wire'")
 
 	holes, repeats = [], []
-	for di, dt, t0, t1 in intervals:
-		expected = (di * TS_PACKET_BITS) / nominal_bps
+	for di, dt, t0, _t1 in intervals:
+		expected = (di * TS_PACKET_BITS) / nominal_bps if domain == "file" else cadence_s
 		excess = dt - expected
 		if excess > tolerance_s:
 			holes.append({"at_s": round(t0, 6), "lost_s": round(excess, 6)})
@@ -132,9 +161,9 @@ def grade(samples: list[tuple[int, float]], tolerance_s: float) -> dict:
 			repeats.append({"at_s": round(t0, 6), "duplicated_s": round(-excess, 6)})
 
 	span = samples[-1][1] - samples[0][1]
-	return {
+	out = {
+		"domain": domain,
 		"pcr_samples": len(samples),
-		"nominal_bitrate_bps": round(nominal_bps),
 		"timeline_span_s": round(span, 6),
 		"media_lost_s": round(sum(h["lost_s"] for h in holes), 6),
 		"media_duplicated_s": round(sum(r["duplicated_s"] for r in repeats), 6),
@@ -143,6 +172,11 @@ def grade(samples: list[tuple[int, float]], tolerance_s: float) -> dict:
 		"holes": holes,
 		"repeats": repeats,
 	}
+	if domain == "file":
+		out["nominal_bitrate_bps"] = round(nominal_bps)
+	else:
+		out["pcr_cadence_s"] = round(cadence_s, 6)
+	return out
 
 
 CONTINUITY_RE = re.compile(r"missing ([\d,]+) packet")
@@ -172,6 +206,14 @@ def main() -> int:
 		default=100.0,
 		help="ignore timeline excursions below this; default 100 ms, T28 pass criterion 1's margin",
 	)
+	ap.add_argument(
+		"--domain",
+		choices=("file", "wire"),
+		default="file",
+		help="reference to grade against: 'file' assumes a constant byte rate (a groomed egress "
+		"or a clip); 'wire' uses the stream's own PCR cadence and ignores byte positions. "
+		"A raw `moq export ts` capture must be graded 'wire' -- see grade()'s docstring.",
+	)
 	ap.add_argument("--json", type=Path, help="write the full result here")
 	ap.add_argument("--label", default="", help="cell label carried through to the JSON")
 	args = ap.parse_args()
@@ -184,7 +226,7 @@ def main() -> int:
 			csv_path = args.csv
 
 		pid, raw = read_pcr_samples(csv_path, args.pid)
-		result = grade(unwrap(raw), args.tolerance_ms / 1000.0)
+		result = grade(unwrap(raw), args.tolerance_ms / 1000.0, args.domain)
 
 	result["pcr_pid"] = pid
 	result["tolerance_ms"] = args.tolerance_ms

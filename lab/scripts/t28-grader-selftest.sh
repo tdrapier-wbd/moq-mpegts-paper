@@ -20,6 +20,9 @@ CLIP="${1:-$HOME/CNNiEMEA.ts}"
 OUT="${2:-/tmp/t28-selftest}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRADER="$HERE/t28-media-lost.py"
+# Both references are validated against the same known answers: DOMAIN=file (CBR, the default)
+# and DOMAIN=wire (PCR cadence). A grader is only validated in the domain it was exercised in.
+DOMAIN="${DOMAIN:-file}"
 TOLERANCE_MS=100
 
 [ -r "$CLIP" ] || { echo "FAIL: clip not readable: $CLIP" >&2; exit 1; }
@@ -37,7 +40,7 @@ echo "== building the control =="
 tsp -I file "$CLIP" -P until --packets $((HEAD_PKTS + TAIL_PKTS)) -O file "$OUT/control.ts" >/dev/null 2>&1
 
 echo "== control: expect ~0 s lost =="
-python3 "$GRADER" --input "$OUT/control.ts" --tolerance-ms "$TOLERANCE_MS" \
+python3 "$GRADER" --input "$OUT/control.ts" --domain "$DOMAIN" --tolerance-ms "$TOLERANCE_MS" \
 	--label control --json "$OUT/control.json"
 CONTROL_LOST=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["media_lost_s"])' "$OUT/control.json")
 # The control must be clean to the same tolerance the cells are graded at.
@@ -92,7 +95,7 @@ for CUT_PKTS in 2000 10000 50000; do
 	)
 	[ "$TRUTH" = "NA" ] && { echo "  SKIP $NAME: no PCR either side of the cut"; continue; }
 
-	python3 "$GRADER" --input "$OUT/$NAME.ts" --tolerance-ms "$TOLERANCE_MS" \
+	python3 "$GRADER" --input "$OUT/$NAME.ts" --domain "$DOMAIN" --tolerance-ms "$TOLERANCE_MS" \
 		--label "$NAME" --json "$OUT/$NAME.json"
 	MEASURED=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["media_lost_s"])' "$OUT/$NAME.json")
 	if python3 -c "import sys; sys.exit(0 if abs(float(sys.argv[1]) - float(sys.argv[2])) <= $TOLERANCE_MS/1000.0 else 1)" \
@@ -135,7 +138,7 @@ with tempfile.TemporaryDirectory() as t:
     print(f"{(rep * 188 * 8) / statistics.median(rates):.6f}")
 PY
 )
-python3 "$GRADER" --input "$OUT/dup-repeat.ts" --tolerance-ms "$TOLERANCE_MS" \
+python3 "$GRADER" --input "$OUT/dup-repeat.ts" --domain "$DOMAIN" --tolerance-ms "$TOLERANCE_MS" \
 	--label dup-repeat --json "$OUT/dup-repeat.json"
 DUP_MEASURED=$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d["media_duplicated_s"],d["media_lost_s"])' "$OUT/dup-repeat.json")
 set -- $DUP_MEASURED

@@ -66,17 +66,17 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 
 | # | What is outstanding | Protocol | Blocked on |
 |---|---|---|---|
-| P1-a | Failure-injection and recovery, both planes, graded in the media domain | [T28](test-28-failure-injection-matrix.md) | **grader built and validated** (pass criterion 1 discharged); matrix blocked on a **Linux host** for `netem`/`tc`. The infrastructure-axis rows need no emulator and are the cheapest available next step |
+| P1-a | Failure-injection and recovery, both planes, graded in the media domain | [T28](test-28-failure-injection-matrix.md) | **MoQ outage ladder run** on the EC2 secondary (substrate: `netem` + netns, which both EC2 hosts have). Remaining: the segmented lane — without it there is no ranking — plus replicates of the latency-budget cells, the infrastructure axis, and the loss/reorder/bandwidth steps |
 | P1-b | MoQ distributed resilience above the egress 1+1 pair | [T29](test-29-moq-distributed-resilience.md) | — |
 | P1-c | Segmented-HTTP distributed resilience | [T30](test-30-segmented-distributed-resilience.md) | — |
-| P1-d | Congestion and capacity: the step ladders, both planes | [T31](test-31-congestion-capacity-ladders.md) | blocked on a **Linux host**: the rig is two network namespaces joined by a veth. Not re-basable on macOS dummynet without losing comparability with [T8b](test-8b-congestion-control.md) |
+| P1-d | Congestion and capacity: the step ladders, both planes | [T31](test-31-congestion-capacity-ladders.md) | **MoQ step ladder run** on the EC2 secondary, sharing P1-a's rig. Remaining: the segmented ladder, the latency-max × contention matrix, buffer instrumentation, and **re-basing the rungs on multiples of stream rate** — the specified 12 Mb/s rung is not a shortfall against a 10 Mb/s fixture |
 | P1-e | MPTS / multiple concurrent services | [T10](test-10-mpts-multiservice.md) | partly B-5 |
 | P1-f | The scaling model, segmented half | [T26](test-26-cross-host-fanout.md) | — |
 | P1-g | Capped-stream relay memory under pressure | [T9](test-9-performance.md) | — |
 | P1-h | Cross-implementation interop, the remaining legs | [T11](test-11-interop.md) | B-2 for T11c |
 | P1-i | The three remaining data-plane comparison cells | [T14](test-14-data-plane-comparison.md) | B-4, B-5, hardware |
 | P1-j | Three `Cache-Control` configurations under which an entitlement cannot be withdrawn at all | [T37](test-37-entitlement-revocation.md) § Open | **discharged, and it is the binding revocation finding** — a correctness hazard, not a latency one. Filed upstream as [#3605](https://github.com/moq-dev/moq/issues/3605) together with the undocumented 2× revocation window. A third finding measured alongside them — the one-hour default staleness window — is held unfiled by the operator |
-| P1-k | Whether a key-per-entitlement estate scales: keys sized by the licensing matrix, not the affiliate count | [T38](test-38-entitlement-estate.md) § Open | — **runnable now**, not started; the T36–T38 rig is the apparatus |
+| P1-k | Whether a key-per-entitlement estate scales: keys sized by the licensing matrix, not the affiliate count | [T38](test-38-entitlement-estate.md) § Open | **Done, negative — the objection does not hold.** Relay launch, RSS and admission flat from 10 to 20,000 keys; keys are read on demand, and deleting one revokes with no restart. The **`--auth-api` half is still open**: a stub served every run |
 | P1-l | The telemetry return path end to end: a `moq-net` client publishing an opaque or JSON track, closing T39 Part B | [T39](test-39-cross-boundary-observability.md) § Open | — **runnable now**; needs a small client written against the library, since the CLI has no non-media path |
 
 ---
@@ -119,15 +119,15 @@ section.
 
 Grouped so nothing in a group contaminates anything else in it. Each group is one run.
 
-- **The entitlement follow-ups.** P0-l and P1-j are discharged; **P1-k** still reuses the rig and stub
-  authorization endpoint built for [T36](test-36-entitlement-enforcement.md) to
-  [T38](test-38-entitlement-estate.md), whose scripts are in [`scripts/`](scripts/). It needs no
-  hardware, no live source and no third party, which is what recommends it while the
-  apparatus-blocked entries wait.
+- **The entitlement follow-ups.** P0-l, P1-j and P1-k are all discharged. What is left of the family
+  is the half P1-k did not reach: a **real `--auth-api` endpoint** serving a licensing matrix, rather
+  than the stub that drove every run from [T36](test-36-entitlement-enforcement.md) to
+  [T38](test-38-entitlement-estate.md). That is a component to write, not a rig to book, and the
+  scripts in [`scripts/`](scripts/) are the harness it would drop into.
 - **The two-host group.** P1-f's fan-out and P1-c's two-host segment store. Both need both boxes and
   neither can share a host with a timing measurement. Run the fan-out **last**, because it
   deliberately saturates a box.
-- **The cheap ladder** *(needs a Linux host — see P1-d)*. P1-d's MoQ half runs in network namespaces against a stopped loop publisher
+- **The cheap ladder** *(run on the EC2 secondary; see P1-d)*. P1-d's MoQ half runs in network namespaces against a stopped loop publisher
   and grades on a per-cell aggregate, so it is the right filler for a window whose main item is
   posting, reviewing or building.
 - **The long runs.** P0-g's soak and P1-g's memory arm want days rather than minutes, and a soak

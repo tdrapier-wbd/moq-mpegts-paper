@@ -1581,16 +1581,48 @@ changes.** *(T26.)*
 > costing a three-minute run and looking initially like a defect in the lane. One name per arm, or a
 > wait longer than the idle timeout between them; the first is free.
 
-**"Unblocked" means the apparatus runs on the host in front of you, not that no third party is
-owed.** *(T28 and T31.)*
+**"Blocked" needs three words, not one: name the apparatus, and name the host you checked.**
+*(T28 and T31.)*
 
-> Both were carried in the register as runnable — needing no hardware loan, no live source and no
-> maintainer — and both were picked up on that basis. Neither can run on this campaign's macOS
-> workstation: T28's transport axis needs `netem`/`tc` and T31's rig is two Linux network namespaces
-> joined by a veth. The register was not wrong about what was *owed*; it was silent about what the
-> apparatus required, and those are different axes. **Record a substrate requirement in the register
-> entry itself**, beside the third-party dependency, so an entry cannot read "runnable now" on a host
-> that cannot run it.
+> Both were carried in the register as runnable, both were picked up on that basis, and neither would
+> run: T28's transport axis needs `netem`/`tc` and T31's rig is two Linux network namespaces joined by
+> a veth, none of which exists on this campaign's macOS workstation. That much was a real gap in the
+> register, which recorded what was *owed* to third parties and said nothing about what the apparatus
+> required. But the conclusion drawn from it — "blocked on a Linux host" — was **wrong**, and written
+> into five places before anyone noticed. Two EC2 Linux hosts were already provisioned, already had
+> `netem` and namespaces, and had already used them for T5, T8b and T20. The ladders ran on the
+> secondary the following session with no new apparatus at all.
+>
+> The error was not missing capability, it was **unverified absence**. "It does not run here" had been
+> allowed to stand in for "it does not run anywhere", and the distance between those is one `ssh` and
+> one `modinfo`. So distinguish them explicitly and never let the first imply the second:
+>
+> | What is true | What may be written |
+> |---|---|
+> | No host in the estate has the apparatus | **blocked** — and say what would supply it |
+> | A host has it, reachable over SSH, not yet checked | **not blocked; unverified** — go and check, it is one command |
+> | A host has it and the rig needs porting | **not blocked; not yet run**, with the porting cost |
+>
+> **Record the substrate requirement in the register entry beside the third-party dependency**, so an
+> entry cannot read "runnable now" on a host that cannot run it — and before writing "blocked" on a
+> substrate, enumerate the hosts and check one. A campaign with remote hosts has no business
+> concluding anything about capability from the machine it happens to be typing on.
+
+**A grader is validated in the domain it was exercised in, and "file" and "wire" are different
+domains.** *(T28.)*
+
+> `t28-media-lost.py` measures programme loss by comparing elapsed PCR time against the bytes between
+> two PCR samples, and it reproduced four injected holes and one injected repeat to the microsecond.
+> It was then pointed at a live `moq export ts` capture and reported **1,254 s of duplication in a
+> 55 s capture**. The arithmetic assumes a constant byte rate; the exporter emits PCR-bearing packets
+> in clusters (T19's positional finding), so the median packet gap between adjacent PCR samples was
+> **6 packets** where a CBR stream gives ~150, and the rate reference collapsed to 0.361 Mb/s against
+> a true 8.595 Mb/s. **The hole column survived and the duplication column did not**, because a hole
+> is dominated by its time term — which is the dangerous shape, since the figure being quoted looked
+> right. Grade a raw exporter capture against the stream's own PCR cadence with byte positions
+> ignored, or put the groomer in the path and restore CBR first. Either way, **run the known-answer
+> self-test in the domain you are about to use**: a self-test that passes in one domain says nothing
+> about the other.
 
 **Do not re-base a ladder on a different emulator to make it runnable.** *(T31.)*
 

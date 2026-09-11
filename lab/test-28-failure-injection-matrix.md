@@ -1,24 +1,30 @@
 # Test 28 — Failure-injection and recovery matrix
 
-**State: apparatus built and validated, matrix not run. Pass criterion 1 is discharged; criteria 2–5
-are blocked on a Linux impairment host.** Infrastructure and transport failures have been probed one
-at a time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported
-as recovery *time*; what a distributor buys is programme continuity, and the two are not the same
-number. This experiment applies one media-domain grader across a full matrix on both lanes.
+**State: run in part, 2026-09-11. The MoQ lane's outage ladder is measured; the segmented lane and
+the infrastructure axis are not.** Infrastructure and transport failures have been probed one at a
+time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported as
+recovery *time*; what a distributor buys is programme continuity, and the two are not the same number.
+This experiment applies one media-domain grader across a full matrix on both lanes.
+
+**Headline: an outage shorter than the subscriber's latency budget costs nothing, and the programme
+cost of a longer one scales with the budget rather than with the outage.** That is the opposite of the
+intuition the register was built on, and it is the result an operator sizes against. Every cell
+returned **0 continuity errors**: when this lane loses programme it loses whole groups cleanly, and a
+receiver sees absence rather than corruption.
 
 **What changed.** The reason this test had never run was that its shared grader did not exist, so no
 cell could be scored in the media domain. **That grader now exists and has been validated against
 known answers** — `lab/scripts/t28-media-lost.py`, with `lab/scripts/t28-grader-selftest.sh` as its
 oracle. That discharges pass criterion 1 and removes the blocker the file previously named.
 
-**What now blocks it is the impairment substrate, and it is not what the register assumed.** The
-matrix needs `netem`/`tc` at a shared hop (transport axis) and, for [T31](test-31-congestion-capacity-ladders.md)'s
-shared rig, Linux network namespaces. **Both are Linux-only, and the workstation this campaign runs on
-is macOS**, which offers `dnctl`/`pfctl` dummynet instead. Substituting dummynet is not an option
-worth taking: [T5](test-5-network-impairment.md), [T8b](test-8b-congestion-control.md) and
-[T20](test-20-segmented-http3.md) all used `netem`, and a ladder measured on a different emulator
-cannot be placed in the same table as theirs. This needs no third party and no live source — it needs
-a Linux host with the clips and binaries on it.
+**The substrate was never missing.** The matrix needs `netem`/`tc` and Linux network namespaces,
+which the campaign's macOS workstation does not have — but both EC2 Linux hosts do, and both had
+already used them for [T5](test-5-network-impairment.md),
+[T8b](test-8b-congestion-control.md) and [T20](test-20-segmented-http3.md). The transport axis now
+runs on the **EC2 secondary** (8 vCPU / 15 GB, `eu-west-1b`), chosen over the primary because a
+2 vCPU host cannot carry a relay, a publisher and a subscriber without the knee being the host's.
+Substituting macOS dummynet would still be wrong, for the comparability reason, and was not done.
+The method rule this cost is in [method-notes](method-notes.md) § Rig hygiene.
 
 **Grader validation, measured.** Five cells, one command, `CNNiEMEA.ts` as the source:
 
@@ -43,6 +49,67 @@ measured, which are the failures this campaign has actually hit — but it is **
 check on the *method*. The independent corroboration is the continuity-error column, which comes from
 a different tool and rises from 0 to 37–98 exactly where an excision or repeat was made, confirming
 each capture was damaged as intended.
+
+**The grader needed a second reference before it could score a live capture, and finding that out is
+part of this result.** The validated arithmetic above compares elapsed PCR time against the bytes
+between two PCR samples, which assumes a constant byte rate. That holds for a clip or a groomed
+egress — the file domain, which is what the self-test exercises — and fails on a raw
+`moq export ts` capture, because the exporter emits PCR-bearing packets in clusters
+([T19](test-19-pcr-timing.md)'s positional finding): the median packet gap between adjacent PCR
+samples measured **6 packets** rather than the ~150 a CBR stream gives, so the rate estimate
+collapsed to **0.361 Mb/s against a true 8.595 Mb/s** and the grader reported **1,254 s of
+duplication in a 55 s capture**. The hole figure survived that corruption, because a hole is
+dominated by its time term, but a grader that is right in one column and silently wrong in another is
+not usable. `t28-media-lost.py` now takes `--domain {file,wire}`; `wire` references the stream's own
+PCR cadence and ignores byte positions. **Both domains are validated against the same five known
+answers** (`DOMAIN=wire bash t28-grader-selftest.sh`), the wire domain carrying a systematic offset
+of one PCR cadence, well inside the 100 ms margin. Everything below is graded `wire`.
+
+## Measured — the transport axis, MoQ lane
+
+**Environment.** EC2 secondary, 8 vCPU / 15 GB, Ubuntu 26.04. Two network namespaces joined by veth
+(`t8b-netns.sh`), `cake` at the bottleneck provisioned at 20 Mb/s, 100 ms base RTT (50 ms each way),
+source a 120 s ~9.95 Mb/s CBR slice of `CNNiEMEA2.ts` paced with `tsp regulate --pcr-synchronous`.
+Build `moq` 0.11.0-`fd4f5d82e`. `moq import ts` → relay → `moq export ts`, **no groomer in the
+path**, captured at the subscriber. Rig: [`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh).
+Outage = 100 % loss applied at the bottleneck for a fixed duration, 20 s after delivery settles.
+Domain **wire**, measurement point **P1**, one sample per cell.
+
+| Outage | `--latency-max` | Media lost | Holes | Largest hole | Continuity errors |
+|---|---|---|---|---|---|
+| none (control) | 3 s | **0.000 s** | 0 | — | 0 |
+| 0.5 s | 3 s | **0.000 s** | 0 | — | 0 |
+| 5 s | 3 s | **2.075 s** | 2 | 1.200 s | 0 |
+| 30 s | 3 s | **30.125 s** | 2 | 29.625 s | 0 |
+| 5 s | 1 s | **1.250 s** | 2 | 0.725 s | 0 |
+| 5 s | 6 s | **0.000 s** | 0 | — | 0 |
+
+**A 0.5 s outage is free**, and a 5 s outage costs nothing at all provided the latency budget exceeds
+it — the relay's cache replays what the subscriber waited for. This is the operationally useful half:
+the budget is a straightforward purchase of outage immunity up to its own length.
+
+**Beyond the budget, the cost tracks the budget, not the outage — which is counter-intuitive and is
+the finding that most needs replication.** Against the same 5 s outage, a 1 s budget lost 1.250 s and
+a 3 s budget lost 2.075 s: the *larger* budget lost *more* programme. The mechanism is consistent
+with a subscriber that skips stale groups and resumes at the live edge, so the hole it takes is
+bounded by how much staleness it was willing to tolerate (largest hole 0.725 s at 1 s, 1.200 s at
+3 s). If that holds, the sizing rule is uncomfortable: **either buy a budget longer than the worst
+outage you expect, or keep it short — an intermediate value is the worst of the three.** Each cell
+here is a single sample and the non-monotonicity rests on two points, so this is *likely*, not
+established. Three repeats per budget across {0.5, 1, 2, 3, 4, 6} s is the cheap confirmation and is
+not yet run.
+
+**The 30 s cell is a different failure and should not be read as the ladder's top rung.** It lost
+30.125 s — *more* than the outage — where the budget model predicts 27 s. 30 s is also
+`DEFAULT_IDLE_TIMEOUT`, so this cell straddles the point where the QUIC session dies rather than
+starving, and what it measures is teardown and re-establishment rather than a gap. Attributing it
+needs cells either side of the timeout (20 s and 40 s) and the idle timeout moved explicitly; not run.
+
+**0 continuity errors in every cell, including the 30 s one**, is a broadcast-domain result in its own
+right and it is not what an impaired TS path normally does. Loss on this lane presents as missing
+media with the continuity counters intact, not as corrupt packets, so a downstream analyser will flag
+absence rather than errors. Pass criterion 4's 0-continuity-error requirement is met on every cell
+run.
 
 ## Objective
 
@@ -188,25 +255,29 @@ reported as tied.
 | # | Criterion | Verdict |
 |---|---|---|
 | 1 | Grader validity: a control reports 0 s lost and 0 continuity errors; a synthetic hole reproduces the injected duration ± 100 ms | **Pass.** Control 0.000 s and 0 continuity errors; three holes and one repeat all recovered within the margin. See the table above, and the limit on what that validates |
-| 2 | Matrix completeness | **Blocked** — no Linux impairment host. Not started rather than partially run |
-| 3 | Ranking published | **Blocked** on criterion 2 |
-| 4 | Comparability | **Blocked** on criterion 2 |
-| 5 | Segmented receiver axis | **Blocked** on criterion 2 |
+| 2 | Matrix completeness | **Partial.** The MoQ lane's outage ladder is run (four outage durations, three latency budgets). The loss/reorder/bandwidth steps, the infrastructure axis and the segmented lane are not |
+| 3 | Ranking published | **Not met, deliberately.** One lane cannot be ranked against a lane that has not run; publishing a half matrix as a ranked table is the failure this experiment exists to avoid |
+| 4 | Comparability | **Pass on the cells run.** One host, one rig, one build, one clip, one grader and one domain across every cell, with an unimpaired control through the same path |
+| 5 | Segmented receiver axis | **Not run.** The apparatus is on the same host (T20's HTTP/3 and HLS lane), so this is now a session's work rather than a blocker |
 
-## What remains, and exactly what would unblock it
+## What remains
 
-**A Linux host carrying the clips and the `fd4f5d82e` binaries.** That is the whole of it for the
-transport axis: `netem`/`tc` for the outage ladder and the loss/reorder/bandwidth steps, and network
-namespaces for the shared rig with [T31](test-31-congestion-capacity-ladders.md). The EC2 secondary is
-Linux but had roughly 4.4 GB free at last check, which will not hold a matrix of captures at three
-repeats a cell; that needs resolving before the run, not during it.
+Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
+and the grader are all on the EC2 secondary, which has 29 GB free — the disk objection this file used
+to record was against a stale figure.
 
-**The infrastructure axis is closer than the transport axis.** Killing and restarting a publisher, a
-relay or an exporter needs no emulator, so those rows could run on the macOS workstation with the
-grader as it stands. They were not started this session: running half a matrix and publishing it as a
-ranked table is the failure mode this experiment exists to avoid, and the transport rows are the ones
-that carry the comparison. Recorded here as the cheapest genuinely available next step.
+- **Replicate the latency-budget non-monotonicity.** Three repeats against a 5 s outage at budgets
+  {0.5, 1, 2, 3, 4, 6} s. This is the cheapest cell in the experiment and it is the one carrying the
+  sizing claim, which currently rests on two single-sample points.
+- **Bracket the idle timeout.** 20 s and 40 s outages with `--server-quic-idle-timeout` set
+  explicitly, to separate a starved session from a dead one.
+- **The remaining transport steps** — loss, reorder and bandwidth — on the rig as it stands.
+- **The infrastructure axis**: kill and restart a publisher, a relay and an exporter. This needs no
+  emulator and could equally run on the macOS workstation.
+- **The segmented lane**, using T20's HTTP/3 and HLS apparatus already built on the same host. Until
+  it runs there is no ranking, which is criterion 3.
 
-Until the matrix runs, quoting [T6](test-6-relay-resilience.md) recovery times as programme-loss
-figures remains methodologically out of bounds — the gap this test exists to close, now one step
-smaller.
+Quoting [T6](test-6-relay-resilience.md) recovery times as programme-loss figures remains
+methodologically out of bounds, but the MoQ lane now has real programme-loss figures of its own for
+the outage row.
+

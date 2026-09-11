@@ -330,35 +330,47 @@ Part B's blocker purely one of tooling: `moq import json` / `moq export json` (o
 passthrough) would close it, as would a small local client. Registered as P1-l; not written this
 session.
 
-**Where the announce-refusal finding reaches is narrower, and the difference matters.** Payload
-agnosticism holds on both wires; the refusal signal does not. `moq-transport` defines it —
-`PUBLISH_NAMESPACE_ERROR` (0x08) on draft-14, generic `REQUEST_ERROR` (0x05) with `error_code` and
-`reason_phrase` on 15+ — and `rs/moq-net/src/ietf/subscriber.rs` **sends** it, from the same
-`Error::Unauthorized` that `rs/moq-net/src/lite/subscriber.rs` silently discards:
+**The announce-refusal finding reaches both wires, and it is not a dropped error.** Payload
+agnosticism holds on both wires, and so does the silence. Measured with
+[`t39-ietf-refusal.sh`](scripts/t39-ietf-refusal.sh) — one relay, one token scoped to publish
+`affa.telemetry`, one clip, the wire pinned per cell with `--client-version`, each version carrying an
+in-scope control as well as the out-of-scope subject:
 
-```rust
-// An error means the path is outside our scope, so don't serve it.
-let Ok(source) = self.origin.create_broadcast(&path, route) else {
-    announced.declined(path);
-    return Ok(false);
-};
-```
+| Wire | In-scope control | Out-of-scope subject | What the publishing client was told |
+|---|---|---|---|
+| `moq-lite-05` | admitted, 2,171,588 B read back | refused, 0 B | nothing; ran to timeout |
+| `moq-transport-14` | admitted, 2,171,588 B read back | refused, 0 B | nothing; ran to timeout |
+| `moq-transport-19` | admitted, 2,171,588 B read back | refused, 0 B | nothing; ran to timeout |
 
-`declined()` writes `None` into a local map; there is no `tracing::` call on that path at any level, so
-the relay does not record the decision even for its own operator. **moq-lite has no per-announcement
-refusal message at all**, and for a structural reason rather than an oversight: its Announce Stream is
-opened by the *subscriber* (stream type `0x1`, creator *Subscriber*), so a publisher never requests
-permission to announce — it answers an `ANNOUNCE_REQUEST` — and moq-lite's general rejection
-mechanism, a prompt stream reset, is wrong here because one Announce Stream carries many
-announcements.
+Enforcement is correct on all three; no out-of-scope publish was admitted anywhere. The in-scope
+control is what makes the subject readable: without it, an error on a given wire could equally mean
+that the wire cannot publish at all.
 
-So the finding splits: **making the refusal visible to the relay operator is a one-line logging fix
-needing no protocol change; making it visible to the moq-lite publisher would need a new
-per-announcement status and is a protocol proposal.** Both are written up at
+**The mechanism is scoped interest, not refusal.** The relay, acting as subscriber toward the
+publishing client, opens announce-interest narrowed to the token's publish scope — visible in its own
+log as `subscribe_namespace sent prefix=affa.telemetry` — and a conforming publisher announces only
+what matches. A client holding `tnt/<leaf>` therefore emits no `PUBLISH_NAMESPACE` at all, and the
+relay's log contains none for that path. **Nothing refuses the announcement because the announcement
+is never made.** moq-lite does the same via the prefix on its `AnnounceRequest`.
+
+This explains why neither error path in the code is reached, and it retires the earlier reading of
+them. `moq-transport` does define a refusal — `PUBLISH_NAMESPACE_ERROR` (0x08) on draft-14, generic
+`REQUEST_ERROR` (0x05) with `error_code` and `reason_phrase` on 15+ — and `ietf/subscriber.rs` can
+encode it; but that call site serves an announcement that arrived *inside* the interest prefix and
+then failed, which is not the path a mis-scoped publisher takes. The moq-lite counterpart,
+`announced.declined(path)` in `lite/subscriber.rs`, writes `None` into a local map with no `tracing::`
+call at any level — also not the reason a mis-scoped publisher sees silence. It remains true, and is
+still structurally interesting, that **moq-lite has no per-announcement refusal message**: its Announce
+Stream is opened by the *subscriber* (stream type `0x1`, creator *Subscriber*), so a publisher answers
+an `ANNOUNCE_REQUEST` rather than requesting permission, and a prompt stream reset — moq-lite's general
+rejection mechanism — is the wrong instrument because one Announce Stream carries many announcements.
+
+So the finding does not split by wire after all. **The fix that would help an operator is client-side
+and needs no protocol change on either wire:** the publishing client knows both the broadcast paths it
+holds and every interest prefix it has received, so it can warn when a broadcast matches none of them.
+Written up at
 [`docs/upstream/publish-refusal-not-signalled.local.md`](../docs/upstream/publish-refusal-not-signalled.local.md),
-staged and unfiled, with the protocol half explicitly held for a separate conversation. **T39's own
-measurements are all on `moq-lite-05`**, which is what the shipped CLI negotiates, so the silence we
-observed is the moq-lite path's behaviour and not the relay's behaviour in general.
+staged and unfiled, with the protocol half explicitly held for a separate conversation.
 
 **One provenance point, because it bounds how far "any conformant implementation" reaches.** moq-lite
 is itself an Internet-Draft (`draft-lcurley-moq-lite`) but an **individual submission, not a MoQ
@@ -366,10 +378,11 @@ working-group document**; `moq-transport` is the working-group protocol. This re
 and negotiates moq-lite by default. The payload-agnosticism answer holds on either, which is why it is
 the safe one to build on; the refusal answer has to name its wire.
 
-**The IETF path's refusal signal has not been exercised here.** It is read from `ietf/subscriber.rs`
-and the draft message definitions, not observed on a wire. Running a publisher against this relay over
-`moq-transport` to watch a `REQUEST_ERROR` arrive is cheap and should happen before the upstream draft
-is filed.
+**What the IETF measurement does not cover.** It shows that the configuration an operator meets — a
+token whose publish scope excludes the path — produces silence on both wires, and why. It does not
+show that *no* configuration reaches `write_error`; an announcement arriving inside the interest
+prefix and then failing may well do so, and that case was not constructed. Each cell is a single
+sample, which is adequate for a categorical told/not-told outcome and would not be for a figure.
 
 **Whether a client would accept running it is not a technical question.** The whole design puts the
 only useful detector on hardware the broadcaster does not own, under someone else's change control.
