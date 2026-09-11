@@ -1,6 +1,7 @@
 # Test 38 — The estate: many channels, many affiliates, and a licensing matrix with holes
 
-**State: run, 2026-09-11.** The third of three experiments behind
+**State: run, 2026-09-11. Six of seven pass criteria met; criterion 4 met on CPU and not gradeable on
+memory.** The third of three experiments behind
 [Control](../docs/control-plane.md). [T36](test-36-entitlement-enforcement.md) grades one credential
 against one path and [T37](test-37-entitlement-revocation.md) grades one revocation against the
 clock. This one asks whether the model survives the shape a real distributor actually has: several
