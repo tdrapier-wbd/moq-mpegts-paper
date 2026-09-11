@@ -874,18 +874,85 @@ HLS's ubiquity is on the delivery path and among clients that terminate in a pla
 is the measurement that it does *not* extend to a low-latency transport-stream receive path
 ([Comparison](comparison.md) §6.1).
 
-### 3.10 Is there a credible entitlement substrate? — Architecturally yes; nothing beyond that is built
+### 3.10 Is there a credible entitlement substrate? — Enforcement is measured and exact; revocation is a poll with a floor above the proposed target
 
-MoQ's authorization hook at subscription time, with its relay and caching semantics, is a credible
-*substrate* for dynamic, revocable, multi-tenant entitlement. **This is an architectural reading of
-the protocol rather than a measurement**, and it carries two boundaries: the credential profile
-enforced there — path-scoped JWTs, mTLS peer identity, expiry — is a deployment choice, not a wire
-primitive the protocol guarantees across implementations; and the multi-region cluster mesh is
-distributed-systems work the platform must build.
+**Enforcement is exact, and it does not leak.** Presented with a credential, the relay admits exactly
+the paths that credential names and refuses everything else. Across eight refusing arms — out-of-scope
+channel, sibling tenant, expired token, publish-only credential, parent path, three malformed
+tokens — **every arm delivered exactly zero payload bytes**, measured at the receiving endpoint rather
+than from a relay log. Path matching is segment-aware, so a grant on `cnn` does not reach `cnn-intl`.
+And entitlement governs *disclosure* as well as delivery: each affiliate was announced precisely the
+channels it licenses and no others ([T36](../lab/test-36-entitlement-enforcement.md), P2; all six pass
+criteria met).
 
-**Nothing in [Control](control-plane.md) beyond the existence of the hook has been built or
-measured.** That document says so at its head, and it is the largest untested assumption in the
-thesis.
+Two qualifications travel with that. Refusal arrives by **two different mechanisms** depending on
+where the credential fails, and one of them produces no error to the client and **no line in the
+relay log at all** — so a log-based enforcement audit would have read nothing on those arms. And the
+admitted arms miss the TR 101 290 P2 PCR gate, but the unauthenticated control on the same host
+misses it identically, so the miss is the ungroomed MoQ egress rather than a cost of authorization.
+
+**A licensing matrix is enforced combinatorially.** Seven credentials against four channels, all
+twenty-eight cells correct, with the channel no affiliate licenses reaching nobody
+([T38](../lab/test-38-entitlement-estate.md); six of seven criteria met).
+
+**Revocation, however, is a poll rather than a push, and that sets the bound.** The relay re-asks its
+admission question on a timer and acts on the answer; nothing is pushed to it. Measured across five
+cadences, decision-to-last-byte is `(re-check cadence − phase) + 0.110 s`, with the fixed overhead
+constant to within two milliseconds. The smallest cadence the mechanism accepts is one second, because
+the period is carried as integer `Cache-Control` delta-seconds, so **the best achievable worst case is
+about 1.11 s and [Control](control-plane.md) §8's sub-second target cannot be met at any setting**
+([T37](../lab/test-37-entitlement-revocation.md), P2, measured from the affiliate's captured egress).
+
+**Worse, the settings an operator would reach for to go faster disable revocation entirely.**
+`max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at all;
+in that state a withdrawn grant never takes effect, and one arm kept delivering for the full 50 s it
+was observed, having been re-checked once at admission. **Three configurations silently yield an
+unrevocable session, and one of them is what "revoke immediately" looks like.** What makes them
+survivable is the backstop, which is real: a session ends 0.110 s after its token expires *even with
+revalidation switched off*. Token lifetime is therefore the bound that always holds, and re-check
+cadence the one that bounds a deliberate revocation.
+
+**De-provisioning granularity is a credential-topology decision, and it is the sharpest practical
+result.** The revocable unit is the *key*, not the grant inside the token, so an affiliate whose
+channels all authenticate under one key cannot lose one of them without losing all of them.
+Withdrawing one channel from a two-channel affiliate under that topology took the channel it *kept*
+down for **2.78 s** and required re-provisioning under a fresh credential. Under a key per channel the
+kept channel was never touched — 229,743 packets, zero continuity errors, and a delivery trace
+indistinguishable from a session with the intervention removed. This is a third term in
+[Control](control-plane.md) §4's scope-granularity trade-off that the document does not consider, and
+it dominates the other two ([T38](../lab/test-38-entitlement-estate.md)).
+
+**Authorization is close to free per subscriber, until the cadence gets tight.** Against an
+unauthenticated relay on the same host, per-subscriber CPU slope was unchanged at 0.0920 % of a core
+with authorization and a ten-second cadence; admission is a once-per-session cost that lands in the
+intercept (up 0.17–0.23 percentage points). At a one-second cadence the *slope* rises 27 %, because
+re-check is per session. So the price of pulling the revocation bound toward its floor is a 27 %
+increase in the term that sets the fan-out ceiling. This is a same-host slope comparison over twenty
+subscribers, **not** comparable in absolute terms with §3.6's cross-host figures; per-subscriber memory
+under authorization was not gradeable in the rig and is not quoted.
+
+**Key handling holds structurally.** Every key the authorization endpoint can serve is a public
+verifying key with no private component, and the relay is given no key material at all — its entire
+authorization configuration is the endpoint URL. Rotation with overlapping validity interrupted
+nothing, and a retired key stopped being honoured 0.122 s after retirement.
+
+**One finding is a warning rather than a result.** With client-certificate authentication configured, a
+peer presenting a valid certificate and **no token** was served every channel in the estate, including
+the channel nobody licenses and **the other broadcaster's channel**. The authorization endpoint is told
+only that *some* certificate was presented, never which one, so certificate-scoped entitlement is not
+merely unimplemented but not expressible. This does not contradict [Control](control-plane.md) §3,
+which already reserves mTLS for data-plane peers — it shows why that split is load-bearing, and that
+configuring both credentials together silently bypasses the token matrix.
+
+**What remains unmeasured is the half that decides the commercial argument.** One implementation, and
+the credential profile enforced at the hook is a deployment choice rather than a wire primitive the
+protocol guarantees across implementations. **One relay throughout** — entitlement across a mesh, where
+the admitting node and the revoking decision are different nodes, is the harder problem and is
+untested. **A stub drove every run**; that the mechanism can be driven by a broadcaster's rights and
+scheduling systems is untested, and [Control](control-plane.md) §6 argues that integration, not
+mechanism, is what decides whether the layer delivers anything. **Rights windows are not modelled** —
+every grant here is on or off, so §4's *temporary* grant type is unexercised. The licensing matrix is
+irregular by construction but invented, and the scale is a handful of channels rather than an estate.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are
 

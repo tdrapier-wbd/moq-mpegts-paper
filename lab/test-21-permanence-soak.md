@@ -503,10 +503,20 @@ turned over" would not survive it happening every five hours.
 **The groomer's thread count on a 2-vCPU host.** 10 → 74 in the first run, not reproduced on 8 vCPU
 (13 → 15). A small-host question, unexplained.
 
+**Whether the rate servo's ±5 % authority has enough margin.** `RATE_SERVO_GAIN` clamps the servo at
+±5 %, so a standing rate-estimate error beyond that saturates it and occupancy runs either to the cap
+or to zero regardless of the control law. Over this soak the estimator read **9,180,341 b/s against a
+true ~9.5 Mb/s** — about 3.4 % low, inside the clamp but with under two points of headroom, and on
+one host. What is not established is whether that margin holds on a slower box or on content with a
+different peak-to-mean ratio. If it does not, the cushion is not a designed quantity but an accident
+of host speed, and the control constant is the wrong one. Reading `buffer_packets` against
+`latency_target_ms` on the existing diagnostic lane over hours, on both hosts, would settle it
+without changing anything.
+
 **What 24 h does not reach.** The rollover recurs every 26.51 h and this run crossed it once, so a
 second crossing is untested; and the campaign has no true live source, so the joins are content cuts
 on a continuous synthetic clock rather than encoder behaviour. Both are stated in
-[F2](planned-experiments.md#f2-permanence-soak) as the bounds of the claim.
+[P0-g](planned-experiments.md#p0--could-change-a-viability-conclusion) as the bounds of the claim.
 
 ## Corrections
 

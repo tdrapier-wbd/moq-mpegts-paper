@@ -16,7 +16,7 @@ accumulating media it will never deliver.
   the peak from 1,911 MB to **488.8 MB**, a 4.5× reduction in growth for a 3× reduction in retention.
 
 So this is an operational property with a knob on it rather than a defect, and **no upstream report is
-warranted** — see [Open](#open). Specified as [F11](planned-experiments.md#f11-isolation-under-abuse).
+warranted** — see [Open](#open). Specified as [P2-b](planned-experiments.md#p2--completeness).
 Rig: [`f11-isolation.sh`](scripts/f11-isolation.sh), graded with
 [`t8b-c3-span.py`](scripts/t8b-c3-span.py).
 

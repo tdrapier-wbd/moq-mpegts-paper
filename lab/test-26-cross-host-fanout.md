@@ -28,7 +28,7 @@ Three findings matter more than the maximum:
   1.39 MB per subscriber against ~10 Mb/s of delivery means the group cache is genuinely shared, and
   nothing in the curve is superlinear.
 
-Specified as the MoQ half of [F5](planned-experiments.md#f5-the-scaling-model). Rigs:
+Specified as the MoQ half of [P1-f](planned-experiments.md#p1--establishes-where-one-architecture-is-superior). Rigs:
 [`f5-relay-side.sh`](scripts/f5-relay-side.sh), [`f5-sub-side.sh`](scripts/f5-sub-side.sh),
 [`f5-reset.sh`](scripts/f5-reset.sh), graded by [`f5-grade.py`](scripts/f5-grade.py). Raw samples in
 [`results/f5/`](results/f5).

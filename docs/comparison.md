@@ -494,15 +494,21 @@ already has one.
 
 ## 7. Entitlement and access control (R7)
 
-**MoQ's advantage is real but narrow — not revocation latency.** Low-latency segmented HTTP re-fetches
-the playlist every part-target duration; worst-case revocation is about one request interval — not
-materially worse than dropping a subscription ([Control](control-plane.md) §4).
+**MoQ's advantage is real but narrow, and it is not revocation latency.** Low-latency segmented HTTP
+re-fetches the playlist every part-target duration, so worst-case revocation is about one request
+interval. MoQ's revocation is **also a poll**, not a push: measured at one re-check period plus
+≈ 0.11 s, with a floor near 1.11 s because the period is carried as integer delta-seconds
+([Evidence](evidence.md) §3.10). At a two-second segment duration the two bounds are within about half
+a second of each other, and three plausible MoQ configurations disable revocation altogether
+([Control](control-plane.md) §4.1).
 
 What differs: **where enforcement lives and whether the session is observable.** Segmented HTTP
 enforces at the CDN (per-supplier token machinery); MoQ at the relay (portable if you operate it). A
 subscription is a live, queryable fact; segmented delivery is inferred from logs. Cache invalidation vs
-no cached entitlement. **Architectural reading, not a measurement** — the authorization hook is verified
-at subscription ([Evidence](evidence.md) §3.10).
+a cached admission decision — MoQ caches the *decision*, which is the same parameter that bounds both
+its revocation and its provisioning. MoQ's enforcement itself is exact and measured: zero payload bytes
+on every refusing arm, and announcement scoped to what a credential licenses. The segmented half is
+**unmeasured here** and is an architectural reading of per-supplier CDN token machinery.
 
 ---
 

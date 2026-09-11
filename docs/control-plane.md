@@ -11,22 +11,30 @@ develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive co
 
 ---
 
-> ## Evidence status: this document describes a design, not a system
+> ## Evidence status: the enforcement mechanism is measured; everything above it is design
 >
-> **Nothing in this document has been built or measured.** The rest of this repository is
-> measurement-led; this document is not, and it should be read at a different confidence level. What
-> *has* been verified is one architectural property, by reading the protocol and exercising the hook:
-> MoQ carries authorization information at the point of subscription and a relay can accept or refuse
-> there, so the enforcement point exists and is native ([Evidence](evidence.md) §3.10). Everything
-> else below — the entity model, the API shape, the revocation paths, the tenancy isolation, the SLO
-> targets — is design intent.
+> **Most of this document describes a design, not a system, but the enforcement layer no longer
+> does.** Three experiments have now measured it against the claims below, and two of those claims
+> were wrong ([Evidence](evidence.md) §3.10). What is measured: admission and refusal against a
+> credential, tenant and path isolation, announcement scope, revocation timing and its mechanism,
+> token expiry as a backstop, de-provisioning granularity, key rotation, key handling, and the CPU
+> cost of authorization. Where a section below has been corrected by measurement, it says so inline.
+>
+> Everything else — the entity model, the API shape, the fast-path *push* the design assumes and the
+> implementation does not provide, tenancy beyond path isolation, orchestration, federation, the SLO
+> targets — remains design intent. **Read the acceptance criteria in §8 as proposals, one of which
+> §4.1 now records as unachievable.**
 >
 > This matters beyond ordinary caveating, for two reasons.
 >
-> **It is the largest untested assumption in the thesis.** The thesis holds that because the transport
+> **It remains the thinner half of the thesis.** The thesis holds that because the transport
 > commoditises, durable value accrues in the control, entitlement, egress and observability layers
-> instead. The egress layer has evidence. This one has none, and it is the half of the argument that is
-> commercial rather than engineering.
+> instead. The egress layer has substantial evidence. This one now has evidence for its *mechanism*
+> and none for the part of the argument that is commercial rather than engineering — and the
+> mechanism is the part that generalises, so it is the part least able to carry the thesis. Three
+> specific holes: there is **one relay** in every measurement, so entitlement across a mesh is
+> untested; a **stub** drove every run, so the integration surface is untested; and **rights windows**
+> — §4's *temporary* grant type — are unexercised.
 >
 > **The market is crowded.** MediaConnect, Zixi, LTN and others ship capable provisioning and
 > management planes. "Value lives in the control plane" is therefore a *necessary* condition for
@@ -67,8 +75,15 @@ is lost is the ability to *make changes* — not the ability to *keep delivering
 
 That has a sharp consequence for entitlement: **revocation cannot depend solely on the control plane
 being reachable at the moment of revocation**, or a control-plane outage would make revocation
-impossible. §4 resolves this with short-lived tokens plus an explicit revocation channel, so the
-worst case is bounded by token lifetime even if the fast path is unavailable.
+impossible. §4 resolves this with short-lived tokens plus a re-check channel, so the worst case is
+bounded by token lifetime even if the re-check path is unavailable.
+
+> **Measured, and it holds by default — but it is a default, not a property of the design.** A
+> 150-second authorization-endpoint outage cost not one byte of established flow. Configure a
+> staleness window, however, and the relay begins closing established sessions when that window
+> lapses, **publishers included** — which trades this principle away in both directions
+> ([T37](../lab/test-37-entitlement-revocation.md), §4.2). Non-fate-sharing survives a control-plane
+> outage only if nobody has configured tolerance for one.
 
 ---
 
@@ -132,6 +147,26 @@ subscription is accepted and then torn down, and no separate auth proxy in front
 The shape the platform depends on — scoped paths plus expiry, checked at subscription — is simple and
 stable even as the wire format churns, and the entitlement *service* is transport-independent.
 
+> **Measured, and it holds.** Eight refusing arms — out-of-scope channel, sibling tenant, expired
+> token, publish-only credential, parent path and three malformed tokens — delivered **exactly zero
+> payload bytes** each, counted at the receiving endpoint. Path matching is segment-aware, so a grant
+> on `cnn` does not reach `cnn-intl`. Refusal also governs *disclosure*: an affiliate is announced
+> only the channels it licenses ([Evidence](evidence.md) §3.10,
+> [T36](../lab/test-36-entitlement-enforcement.md)).
+>
+> One operational caveat the claim does not anticipate: refusal arrives by two mechanisms, and one of
+> them — a credential whose key the authorization endpoint declines to serve — produces **no error to
+> the client and no entry in the relay log**. The enforcement is correct and silent, so an audit that
+> reads logs to prove refusals happened will find nothing to read.
+
+**The role split above is load-bearing, and violating it is worse than it looks.** Configuring
+client-certificate authentication for *subscribers* does not scope them: a peer presenting a valid
+certificate and no token at all was served every channel in the estate, including another
+broadcaster's. The relay treats a verified certificate as unrestricted for the path dialled, and the
+authorization endpoint is told only that *some* certificate was presented, never which — so
+certificate-scoped entitlement is not expressible, and enabling both credentials together bypasses
+the token matrix silently ([T38](../lab/test-38-entitlement-estate.md) Part 5).
+
 ---
 
 ## 4. Entitlement
@@ -160,15 +195,59 @@ route), issued-at and expiry, and a unique identifier for audit and fast-path re
 **Scope granularity.** As narrow as the contract allows. Broad-scope tokens reduce renewal traffic
 but widen the blast radius of a leak; narrow-scope tokens do the reverse. The default is narrow.
 
+> **There is a third term, and measurement shows it dominates the other two: de-provisioning
+> granularity.** The revocable unit is the *verifying key*, not the grant inside the token — a token's
+> claims cannot be narrowed after issue, so withdrawing an entitlement means declining to serve a key.
+> An affiliate whose channels all authenticate under one key therefore cannot lose one of them without
+> losing all of them. Withdrawing one channel from a two-channel affiliate under a shared key took the
+> channel it **kept** down for **2.78 s** and required re-provisioning it under a fresh credential;
+> under a key per channel the kept channel was never touched — 229,743 packets, zero continuity
+> errors, indistinguishable from a session nothing was done to
+> ([T38](../lab/test-38-entitlement-estate.md)).
+>
+> So narrow is not merely the prudent default against a leak. It is the only topology under which
+> de-provisioning is surgical, and the practical unit is **one key per unit of entitlement**, which
+> sizes the key estate by the licensing matrix rather than by the affiliate count. Whether that scales
+> to a real estate is untested.
+
 ### 4.1 Revocation, and what deny-by-default does not mean
 
 Revocation is the hard part of any entitlement system. The platform uses two paths together:
 
-1. **Fast path** — an explicit revocation signal pushed to relays and gateways, which drop the
-   affected subscriptions immediately. Sub-second *when the control plane is healthy*.
+1. **Fast path** — the relay re-asks its admission question on a timer and drops the affected
+   subscriptions when the answer changes. **Bounded by one re-check period plus about 0.11 s, and its
+   floor is roughly 1.11 s.**
 2. **Backstop** — short token lifetimes with continuous renewal, so the *worst case* is bounded by
    the token lifetime even if the fast path is unavailable. Revocation then happens by declining to
    refresh.
+
+> **This description was wrong in two ways, and both are corrected above.**
+>
+> **It said the fast path was "an explicit revocation signal pushed to relays and gateways". Nothing
+> is pushed.** The relay replays the whole admission request on a schedule derived from the
+> `Cache-Control` the authorization endpoint returned, re-verifies the retained token against the
+> answer, and closes the session if it no longer verifies. Revocation is a **poll**, and that
+> difference is why the bound is what it is.
+>
+> **It said "sub-second when the control plane is healthy". That is not achievable at any setting.**
+> Measured across five cadences, decision-to-last-byte is `(re-check cadence − phase) + 0.110 s`, the
+> fixed overhead constant to within two milliseconds. The period is carried as integer `Cache-Control`
+> delta-seconds, so the smallest cadence is one second and the best achievable worst case is about
+> **1.11 s** ([T37](../lab/test-37-entitlement-revocation.md), measured from the affiliate's captured
+> egress). §8's `< 1 s` target is unachievable by this mechanism and is marked so there.
+>
+> **And the settings an operator would reach for to go faster disable revocation altogether.**
+> `max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at
+> all: the token is checked once, at admission, and a withdrawn grant never takes effect. One arm kept
+> delivering for the full 50 s it was observed. **Three configurations silently yield an unrevocable
+> session, and one of them is what "revoke immediately" looks like.** An operator must set an explicit
+> integer `max-age`; the absence of one is not a default cadence, it is no cadence.
+>
+> **Two further costs of a tight cadence.** Re-check is per *session*, so at a one-second cadence the
+> per-subscriber CPU slope rises 27 % against an unauthenticated relay, where a ten-second cadence
+> costs nothing marginal at all ([Evidence](evidence.md) §3.10). And provisioning is bounded by the
+> same cache as revocation: a grant *added* to the endpoint is not visible to the relay until the
+> cached admission reply expires, so `max-age` sets the floor on §8's provisioning latency too.
 
 ```mermaid
 stateDiagram-v2
@@ -182,33 +261,58 @@ stateDiagram-v2
 ```
 
 **It is important not to overstate the consistency boundary.** Deny-by-default governs *ambiguous,
-absent, malformed or expired* credentials — those are refused immediately. It does **not** mean an
-already-granted, still-valid token is dropped the instant a revoke is issued: if the fast path cannot
-reach the edge during a partition, a valid token continues to be honoured until it expires. So the
-two regimes are **sub-second when the fast path is healthy**, and **worst-case one TTL when it is
+absent, malformed or expired* credentials — those are refused immediately, and
+[T36](../lab/test-36-entitlement-enforcement.md) measures that they deliver nothing at all. It does
+**not** mean an already-granted, still-valid token is dropped the instant a revoke is issued: until
+the relay next re-checks, a valid token continues to be honoured. So the two regimes are **one
+re-check period plus ≈ 0.11 s when the re-check path is healthy**, and **worst-case one TTL when it is
 not** — never "deny within the window" for a token that is still valid.
 
-**TTL is therefore the single most consequential parameter in the model**, because it sets both the
-worst-case revocation bound and the steady-state renewal load, roughly in inverse proportion. There
-is no universally correct value; for high-value contracted content the bias is toward short lifetimes
-and aggressive renewal.
+**There are two consequential parameters, not one, and they do different jobs.** Re-check cadence
+bounds a deliberate revocation and sets the steady-state re-check load, roughly in inverse proportion.
+TTL bounds everything else — and it is the *only* bound that holds in the three configurations where
+revalidation is inoperative. Neither has a universally correct value; for high-value contracted
+content the bias is toward short lifetimes and an explicit, tight cadence.
+
+> **An earlier draft named TTL "the single most consequential parameter", which understated the case
+> and named the wrong half of it.** TTL is not what revokes a live affiliate — cadence is. TTL is what
+> makes a misconfigured deployment survivable, and measurement confirms it does: a session ends
+> 0.110 s after its token expires **even with revalidation switched off entirely**, which is the arm
+> this experiment expected to fail ([T37](../lab/test-37-entitlement-revocation.md)). The backstop
+> claim in the list above is therefore confirmed; the fast-path claim beside it was not.
 
 **How this compares with the alternative data plane** is developed in [Comparison](comparison.md) §7,
-and the short version is uncomfortable for the intuitive case: segmented HTTP has the backstop
-natively and lacks only the fast path, and its backstop is tight rather than loose — about one
-request interval. MoQ's real advantage is that the enforcement point is a relay you can operate, so
-the policy is yours and portable, and that a subscription is a live queryable fact rather than an
-inference from delivery logs.
+and measurement has made the comparison *less* favourable than this section first claimed. The
+original framing was that segmented HTTP "lacks only the fast path". But MoQ's fast path is itself a
+poll on an integer-second period, so the architectural distinction is not push-versus-poll at all —
+it is a poll every `max-age` seconds against a check on every segment request, and at a two-second
+segment duration those bounds are within about half a second of each other. MoQ's real advantage is
+narrower than a latency figure and does not depend on one: the enforcement point is a relay you can
+operate, so the policy is yours and portable, and a subscription is a live queryable fact rather than
+an inference from delivery logs.
 
 ### 4.2 Failure handling
 
 - **Expired token** — denied; the endpoint must obtain a fresh grant.
 - **Malformed or absent token** — denied by default.
-- **Control plane unreachable** — existing valid tokens continue to be honoured until expiry, but
-  *new* grants and refreshes cannot be issued, so entitlements naturally drain as TTLs elapse. This
-  is a safe failure mode: the system fails toward *no new access* and toward *revocation by expiry*,
-  never toward open access.
+- **Control plane unreachable** — existing valid tokens continue to be honoured until expiry **by
+  default**, but *new* grants and refreshes cannot be issued, so entitlements naturally drain as TTLs
+  elapse. This is a safe failure mode: the system fails toward *no new access* and toward *revocation
+  by expiry*, never toward open access.
 - **Every ambiguous case resolves to deny.**
+
+> **The honouring of valid tokens during an outage is a configurable default, not an invariant, and
+> the document previously presented it as one.** Measured: with no staleness window configured, 150 s
+> of authorization-endpoint outage cost not one byte, and admission failures fail closed. But where
+> `stale-while-revalidate` or `stale-if-error` is set, the relay stops honouring established sessions
+> when the window lapses — and it closes **publisher** sessions on the same rule, so a control-plane
+> outage takes the feed down at the contribution end as well as the delivery end
+> ([T37](../lab/test-37-entitlement-revocation.md)).
+>
+> The distinction that makes this safe is in the *kind* of failure, not the duration: a refusal (the
+> endpoint answers, and says no) closes the session immediately, while an *unavailability* (no answer,
+> or a server error) enters the staleness window. An operator who sets a staleness window to be
+> lenient about outages has traded §1.1's non-fate-sharing property away, in both directions.
 
 ---
 
@@ -312,6 +416,19 @@ be distributed to the edge *ahead of use* — a control-plane push with its own 
 considerations, and an open question (§9). Certificate revocation and token revocation are distinct
 paths: the former via PKI revocation or short-lived certificates, the latter via §4.1.
 
+> **Both claims measured, and both hold — the first more strongly than it was stated.** Every key the
+> authorization endpoint could serve was a public verifying key with no private component, and the
+> relay was given **no key material at all**: its entire authorization configuration is the endpoint
+> URL, so there is no key store on the edge node to get wrong. The requirement is met structurally
+> rather than by operational discipline. Rotation with overlapping validity interrupted nothing — the
+> successor session ran on undisturbed — and the retired key stopped being honoured 0.122 s after
+> retirement, inside one re-check period ([T38](../lab/test-38-entitlement-estate.md) Part 5).
+>
+> This does *not* settle §9's distribution question. With an authorization endpoint the edge holds no
+> key to distribute *to*; the consistency problem moves to the endpoint and to its cache, where §4.1's
+> `max-age` now governs it. Under `--auth-key-dir`, where the relay does hold verifying keys on disk,
+> the question stands as written.
+
 ### 7.3 Data protection
 
 **In transit**, all data-plane traffic runs over QUIC, encrypted by default, and all control-plane
@@ -357,33 +474,54 @@ licensed for") — and should be exportable per tenant and per contract boundary
 
 ## 8. Acceptance criteria
 
-**All numeric targets below are proposed and illustrative** — engineering hypotheses to validate in a
-real deployment, not committed figures, and not measurements. The availability target is deliberately
-modest because the control plane is out-of-band: an outage suspends *changes* but does not interrupt
-established media flows (§1.1), so its availability requirement is lower than the data plane's.
+**The numeric targets below are proposed and illustrative** — engineering hypotheses, not committed
+figures. Two of them now have measurements against them, and the revocation target is **unachievable
+as written**. The availability target is deliberately modest because the control plane is out-of-band:
+an outage suspends *changes* but does not interrupt established media flows (§1.1), so its
+availability requirement is lower than the data plane's.
 
-| Metric | Proposed target | Measurement boundary |
-|---|---|---|
-| Control-plane availability | 99.95 % | Annual uptime of the provisioning API surface |
-| Route provisioning latency | < 5 s | `POST /v1/routes` to green data-plane configuration across all affected nodes |
-| Fast-path revocation latency | < 1 s | Revoke call to active subscription teardown at the relay |
-| Token renewal success rate | 99.999 % | Legitimate refresh requests succeeding before expiration |
+| Metric | Proposed target | Measured | Measurement boundary |
+|---|---|---|---|
+| Control-plane availability | 99.95 % | — | Annual uptime of the provisioning API surface |
+| Route provisioning latency | < 5 s | met, but **bounded by `max-age`** — a new grant is invisible until the cached admission reply expires | `POST /v1/routes` to green data-plane configuration across all affected nodes |
+| Fast-path revocation latency | ~~< 1 s~~ **not achievable; restate at ≈ 1.2 s** | `(cadence − phase) + 0.110 s`, floor **≈ 1.11 s** | Revoke call to last media byte at the subscriber |
+| Token renewal success rate | 99.999 % | — | Legitimate refresh requests succeeding before expiration |
+
+**The revocation target has been corrected rather than caveated.** The mechanism's period is integer
+delta-seconds, so no configuration reaches sub-second; a deployment should commit to about 1.2 s, and
+should *also* commit to an explicit `max-age`, because three plausible configurations disable
+revocation entirely (§4.1). The measurement boundary above has been changed too: "teardown at the
+relay" is the relay's account of itself, and the figure that matters commercially is the last byte the
+affiliate actually received.
 
 Behavioural criteria, which matter more than the numbers:
 
 - **Revocation correctness.** A revoked or unrefreshed entitlement results in no further delivery
-  within the stated bound — fast-path sub-second when healthy, worst case one TTL otherwise.
+  within the stated bound — one re-check period plus ≈ 0.11 s, worst case one TTL otherwise.
+  **Measured; and the TTL backstop holds even with revalidation disabled.**
 - **Enforcement correctness.** No delivery ever occurs without a valid, in-scope, unexpired token,
-  verified by attempting out-of-scope and expired subscriptions and confirming denial.
-- **Isolation correctness.** No cross-tenant access under any tested path.
+  verified by attempting out-of-scope and expired subscriptions and confirming denial. **Measured:
+  zero payload bytes on every refusing arm, counted at the receiver.** Add to this criterion that it
+  must be verified at the *receiver*, not from relay logs, because one refusal mechanism logs nothing.
+- **Isolation correctness.** No cross-tenant access under any tested path. **Measured for tokens.
+  Fails for client certificates**, which admit their holder to every tenant (§3).
 - **Operational usability.** Provisioning and revocation are simple enough that a NOC can perform an
-  emergency disable under time pressure without error.
-- **Key handling.** Keys never present on edge nodes; no cleartext media or control path.
+  emergency disable under time pressure without error. **This criterion is currently failed by the
+  mechanism, not by the operator**: the intuitive "revoke now" setting is one of the three that makes
+  a session unrevocable, and it reports no error.
+- **Key handling.** Keys never present on edge nodes; no cleartext media or control path. **Measured
+  and met** (§7.2); no transport-stream structure was recoverable from the wire.
+- **De-provisioning granularity.** *New criterion, from measurement.* Withdrawing one channel from a
+  multi-channel affiliate must not interrupt the channels it keeps. Met only under one key per unit of
+  entitlement (§4).
 
-**Validation plan**, when there is something to validate: penetration testing of the API, the token
-issuance and verification path, tenant-isolation boundaries and federation interconnects; red-team
-scenarios covering cross-tenant access, token theft and replay, a compromised endpoint, a compromised
-federation peer over-reaching its negotiated scope, and control-plane privilege escalation.
+**Validation plan**, for what is still unvalidated: penetration testing of the API, the token issuance
+path, tenant-isolation boundaries and federation interconnects; red-team scenarios covering
+cross-tenant access, token theft and replay, a compromised endpoint, a compromised federation peer
+over-reaching its negotiated scope, and control-plane privilege escalation. The enforcement,
+revocation, rotation and isolation paths have been exercised against a single relay driven by a stub
+([Evidence](evidence.md) §3.10); what that leaves is clustering, the integration surface, and rights
+windows.
 
 ---
 
@@ -400,9 +538,26 @@ federation peer over-reaching its negotiated scope, and control-plane privilege 
   knowable in advance by counting interfaces; the saving is not, and a control plane that automates
   provisioning while leaving reconciliation manual delivers neither.
 - **What is the right default TTL,** and should it vary by content value and by the reachability
-  characteristics of the endpoint? Halving the TTL roughly doubles the renewal rate.
+  characteristics of the endpoint? Halving the TTL roughly doubles the renewal rate. **Sharpened by
+  measurement:** the same question now applies to re-check cadence, where the trade is explicit — a
+  one-second cadence buys the floor revocation bound and costs 27 % on the per-subscriber CPU slope,
+  while ten seconds costs nothing marginal (§4.1).
 - **How are rotated verification keys distributed to the edge** with strong enough consistency that a
-  valid token is never rejected nor a revoked key honoured during the rotation window?
+  valid token is never rejected nor a revoked key honoured during the rotation window? **Partly
+  answered:** with an authorization endpoint there is no key at the edge to distribute, and rotation
+  with overlap is clean (§7.2). The question stands for `--auth-key-dir` deployments, and reappears as
+  cache consistency for endpoint deployments.
+- **Does entitlement survive a relay mesh?** Every measurement to date is against a single relay. The
+  case where a subscriber is admitted by one node and revoked at another — and where the admission
+  cache is per node — is untested and is the harder problem
+  ([T38](../lab/test-38-entitlement-estate.md)).
+- **Do rights windows compose with the re-check cadence?** §4's *temporary* grant type is the one a
+  distributor actually needs and the one nothing has exercised: every grant measured is on or off.
+  Whether scheduled grant and expiry land cleanly against a poll, or produce a window at each edge, is
+  open.
+- **Should a peer's certificate identity reach the authorization decision?** It currently does not:
+  the endpoint learns only that some certificate was presented, which is why certificate-scoped
+  entitlement is not expressible (§3). This is an upstream question as much as a design one.
 - **Can content be protected from the *operator*, publisher-to-egress, without breaking relay fan-out
   and caching** — and is that required for the target contracts? (§7.3.)
 - **How is trust established, scoped and *revoked* across a federation boundary**, and how is a

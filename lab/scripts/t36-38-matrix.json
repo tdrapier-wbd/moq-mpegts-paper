@@ -1,0 +1,93 @@
+{
+ "channels": [
+  "cnn",
+  "cnn-intl",
+  "tnt",
+  "nobody"
+ ],
+ "topology_note": "affd is BROAD (one key covering both its channels); affe is NARROW (one key per channel). That difference is the de-provisioning-granularity experiment.",
+ "affiliates": {
+  "wbdkey": {
+   "licensed": [
+    "cnn",
+    "cnn-intl",
+    "tnt",
+    "nobody"
+   ],
+   "key": "/tmp/t36/keys/wbd.pub.jwk",
+   "role": "publisher"
+  },
+  "rivalkey": {
+   "licensed": [
+    "cnn"
+   ],
+   "key": "/tmp/t36/keys/rival.pub.jwk",
+   "role": "publisher"
+  },
+  "affakey": {
+   "licensed": [
+    "cnn"
+   ],
+   "key": "/tmp/t36/keys/affa.pub.jwk",
+   "role": "affiliate A"
+  },
+  "affbkey": {
+   "licensed": [
+    "cnn",
+    "tnt"
+   ],
+   "key": "/tmp/t36/keys/affb.pub.jwk",
+   "role": "affiliate B"
+  },
+  "affckey": {
+   "licensed": [
+    "tnt"
+   ],
+   "key": "/tmp/t36/keys/affc.pub.jwk",
+   "role": "affiliate C"
+  },
+  "affdkey": {
+   "licensed": [
+    "cnn",
+    "tnt"
+   ],
+   "key": "/tmp/t36/keys/affd.pub.jwk",
+   "role": "affiliate D \u2014 broad"
+  },
+  "affecnnkey": {
+   "licensed": [
+    "cnn"
+   ],
+   "key": "/tmp/t36/keys/affe-cnn.pub.jwk",
+   "role": "affiliate E \u2014 narrow, cnn"
+  },
+  "affetntkey": {
+   "licensed": [
+    "tnt"
+   ],
+   "key": "/tmp/t36/keys/affe-tnt.pub.jwk",
+   "role": "affiliate E \u2014 narrow, tnt"
+  },
+  "afffkey": {
+   "licensed": [
+    "cnn-intl"
+   ],
+   "key": "/tmp/t36/keys/afff.pub.jwk",
+   "role": "affiliate F"
+  },
+  "affdtntkey": {
+   "licensed": [
+    "tnt"
+   ],
+   "key": "/tmp/t36/keys/affd-tnt.pub.jwk",
+   "role": "affiliate D \u2014 narrowed to tnt"
+  },
+  "affakey2": {
+   "licensed": [
+    "cnn"
+   ],
+   "key": "/tmp/t36/keys/affa2.pub.jwk",
+   "role": "affiliate A \u2014 successor key"
+  }
+ }
+}

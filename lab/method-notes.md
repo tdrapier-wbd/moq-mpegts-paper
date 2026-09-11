@@ -30,6 +30,20 @@ having.
 > before the run: a source that merely looks continuous confounds the experiment it was built to
 > clean up, and does so invisibly.
 
+**A gap in a delivery trace is not evidence of damage until a run with the intervention removed has
+been shown not to have one.** *(T38.)*
+
+> The topology arm withdrew one channel from an affiliate holding two and measured the channel it
+> kept. That channel's delivery trace showed five pauses over half a second, the longest 3.195 s, and
+> the arm was within a sentence of being written up as a near-miss on its own pass criterion. An
+> undisturbed session on the same channel, with nothing done to it at all, showed four such pauses
+> with the longest at 3.013 s. The pauses are the transport's ordinary delivery burstiness.
+>
+> The tell was there in the same run: **zero continuity errors** on both. A pause with no continuity
+> error is late delivery, not lost media, and the two must not be reported as one thing. The rule is
+> that a de-provisioning, failover or impairment arm needs its own do-nothing twin on the same
+> channel in the same session, because the burstiness floor is a property of the rig and the day.
+
 **A negative control and a broken rig give the same reading, so an adversarial arm has to prove it
 ran before its result means anything.** *(T25.)*
 
@@ -316,6 +330,31 @@ before you publish the zeros.** *(T5, T6, T7, T8b, T18, T3 — one defect, six r
 > (`missing N packets`) over matching on a **word from its prose**, since the prose is not an
 > interface; and where two instruments can be pointed at the same property, report both and treat
 > disagreement as a finding.
+>
+> *(T36 hit both halves of this again in one session, from scratch: a fresh continuity matcher went
+> back to the word, and a PCR counter passed `tsp -P pcrverify --max-interval`, which is not an
+> option that plugin has — the plugin errored and the counter reported zero violations. Both were
+> caught only because the rule above says to break something first: excising forty packets from a
+> passing capture turned 0 into 1. Use `t13-grade.py`'s gates and regex rather than writing a third
+> one.)*
+
+**A per-interval CPU figure has to come from a CPU-time delta over that interval, not from a
+platform utilisation field whose averaging window is longer than the interval.** *(T38.)*
+
+> The first cost ladder sampled `ps -o %cpu`, which on Darwin is a decaying average over up to a
+> minute of real time, at each step of a ladder whose steps were twelve seconds long. Every reading
+> therefore carried most of the previous step's load. The signature was unmistakable once looked
+> for — **the zero-subscriber point read higher than the five-subscriber point in two of three
+> arms** — but a ladder that is merely noisy rather than inverted would have been quoted. Reading
+> the process's cumulative CPU time either side of the dwell and dividing by the wall interval
+> averages over exactly the window of interest and needs no settling; it also costs nothing, so
+> there is no reason to use the utilisation field at all.
+>
+> The same ladder's RSS was unusable for a different reason and was withheld rather than quoted:
+> the relay holds the previous arm's peak for some seconds after teardown, so the fitted intercepts
+> rose monotonically with **arm order** (14.5, 17.5, 57.5, 71.1 MB) and one arm fitted a negative
+> slope. **A resource whose baseline is contaminated by run history needs the process restarted
+> between arms, not a longer settle.**
 
 **A counter that wraps detects an event and cannot size it. Never report its magnitude as the damage.**
 *(T5.)*
@@ -645,6 +684,32 @@ in it.** *(T9, then T14, then T16 — the same error, three rigs, three times.)*
 > span put a delivered rate 4.7 % above a CBR source and made an overhead figure come out
 > *negative*. The fix that held was to form the ratio from two byte totals over the same media —
 > everything sent, over the payload sent — with no wall clock in it at all.
+
+**When the thing under test polls on a fixed cadence, randomise where in its cycle you intervene —
+and take the phase from the pollee's own log, not from how long you slept.** *(T37.)*
+
+> The revocation sweep settled each arm for an integer number of seconds before withdrawing a grant,
+> which placed every decision at the same point in the relay's re-check cycle. Six repetitions agreed
+> to within 3 ms and looked like an enviably tight distribution; they were six measurements of one
+> phase. Randomising the offset within a sub-cadence interval recovered the actual spread, which is
+> uniform across the cadence because that is what the mechanism is.
+>
+> The analysis then made the converse error: it treated the slept offset *as* the phase, which is only
+> true when the settle time is a whole number of cadences, and produced a −0.722 s residual at one
+> cadence — a negative latency, which at least announces itself. Deriving the phase from the
+> timestamps in the authorization endpoint's own request log collapsed the residual to 0.109–0.110 s
+> with a standard deviation under 2 ms at every cadence, and turned a scatter into
+> `(cadence − phase) + 0.110 s`. **The zero of the measurement has to come from the instrument that
+> observed the event, not from the script that intended it.**
+
+**A client's reconnect budget will masquerade as a server's response time, and it is usually the
+rounder number.** *(T37.)*
+
+> The first revocation pilot returned 10.032 s and it was nearly written down. The relay log put the
+> teardown about 25 ms after the decision; the extra ten seconds were the `moq` client's default
+> `--backoff-timeout`, spent re-dialling a relay that was correctly refusing it. **A suspiciously
+> round figure at the scale of a default is a default.** Set the client's retry budget to something
+> negligible and state it, or the arm measures the client.
 
 **A delivered-media span measured as last-PCR-minus-first saturates at one lap of a looping source, so
 a cell longer than the clip reports a shortfall that is arithmetic rather than loss.** *(T25.)*
@@ -1132,6 +1197,23 @@ complement.** *(T27, on this campaign's own contribution.)*
 > rewind — the new arm to add is the one where that detector should stay silent.
 
 ## 5. Rig hygiene
+
+**When arms run back to back against a service that caches an admission decision, the cache carries
+the previous arm's answer into the next one.** *(T37, T38.)*
+
+> Four sweep runs and three provisioning repetitions recorded no media at all, and the first
+> suspicion was the publisher. The relay caches the authorization endpoint's reply for the
+> `max-age` it was given, so a grant withdrawn to end one arm was still cached — as *withdrawn* —
+> when the next arm dialled in. The behaviour is correct, and is itself a result worth reporting
+> (provisioning latency is bounded by the same cache that bounds revocation latency), but as a rig
+> property it silently voids arms. **Either wait out the cache between arms or clear it, and never
+> read "no media" as a publisher fault until the admission cache has been ruled out.**
+>
+> The neighbouring hazard in the same rig: with no subscriber attached between arms the relay
+> cancels its upstream subscription as idle (`subscribe canceled (idle)`) and the resumed broadcast
+> does not reliably deliver, which cost two arms their media. **Hold one keepalive subscriber on
+> every channel for the life of the matrix**, and give it an unlimited reconnect budget so it is not
+> itself torn down by an arm.
 
 **A stimulus built to defeat a detector must be graded as *healthy* by that detector before it is
 used.** *(T24.)*

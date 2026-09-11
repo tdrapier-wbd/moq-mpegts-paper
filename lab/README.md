@@ -172,24 +172,40 @@ top of the script, so re-pricing against a different tariff or a negotiated rate
 
 ## Roadmap — specified but not yet run
 
-Protocols are drafted in [planned-experiments.md](planned-experiments.md), prioritised there as P0/P1/P2
-by what a result could change; each becomes its own per-test file when executed. **The programme has
-been reorganised around permanent operation rather than around whether MoQ works**, so alongside the
-per-experiment remainders below it now carries eleven reliability families (F1–F11): substrate-matched
-impairment, 24 h and 7 day soaks on both lanes, silent media-plane failure, a failure-injection matrix
-scored in media lost rather than in recovery time, the scaling model, each lane's distributed
-redundancy, capacity degradation, interoperability, observability and isolation under abuse. Several
-have had their MoQ half run and their segmented half not; `planned-experiments.md` marks which.
+**Every specified experiment has its own per-test file, whether or not it has run.** An unrun file
+carries the objective, environment, procedure, metrics and pass criteria fixed in advance, and says
+so in a `State:` line at its head. [planned-experiments.md](planned-experiments.md) is the register
+of what is outstanding — a line per item, ranked P0/P1/P2 by what a result could change, pointing
+here for the protocol. It holds no protocols and no findings of its own.
 
-The per-experiment remainders, in priority order:
+**The programme has two strands.** The original asks which of two data planes can be run
+permanently, at scale, by an operations team, for years. The second scores against
+[control-plane.md](../docs/control-plane.md), which has no evidence behind it at all.
 
-| # | Test | Purpose | Gate |
+Runnable now — no hardware, no live source, no third party:
+
+| # | Test | Purpose |
+|---|---|---|
+| [T36](test-36-entitlement-enforcement.md) | Entitlement enforcement | What the relay refuses, and whether anything is delivered before it refuses |
+| [T37](test-37-entitlement-revocation.md) | Provisioning and de-provisioning | What actually stops a feed, the bound on how fast, and what that bound costs |
+| [T38](test-38-entitlement-estate.md) | The affiliate estate | Many channels, many affiliates, a licensing matrix with holes, and what entitlement costs the scaling model |
+| [T33](test-33-gate2-preparation.md) | Gate 2 preparation | Boundary fixtures and the acceptance harness, dry-run before the hardware arrives |
+| [T28](test-28-failure-injection-matrix.md) | Failure injection and recovery | The matrix, both planes, scored in media lost rather than in recovery time |
+| [T29](test-29-moq-distributed-resilience.md) | MoQ distributed resilience | Multi-relay, multi-publisher and receiver-side selection, above the egress 1+1 pair |
+| [T30](test-30-segmented-distributed-resilience.md) | Segmented distributed resilience | Two-host segment store, edge and origin failure, and the silent-misconfiguration class |
+| [T31](test-31-congestion-capacity-ladders.md) | Congestion and capacity | The step ladders on both planes, extending T8b |
+| [T32](test-32-observability-survey.md) | Observability | Whether commercial monitoring would have caught the silent failures T22, T24 and T27 found |
+
+Blocked, and on what:
+
+| # | Test | Purpose | Blocked on |
 |---|---|---|---|
-| T7/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 72 h — the PCR base wraps at 26.51 h) incl. ST 2022-7 under loss | **Gate 2** |
-| T14 (remainder) | MoQ against segmented HTTP — the two blocked cells | Burst granularity, carriage fidelity and wire cost are measured in [test-14](test-14-data-plane-comparison.md), and delivery latency in [test-18](test-18-delivery-latency.md). What remains: a commercial ABR-to-TS gateway on P1/P2, which also gates the segmented plane's *low-latency* arm since B2 showed no *free* client fetches partial segments (needs hardware, and is the cell that moves the paper most); and MPTS through a real CDN (needs a CDN account — and now carries the whole of MoQ's carriage-fidelity advantage) | Gate 1 and Gate 2, on both data planes |
-| T12/E | Restart one leg of a live pair | Stream clocking (T12 arm D) made two independently groomed chains byte-identical, and got a recovered or late-joining leg back onto its partner's numbering, slots and phase. The two-host variant is **run**, and the legs stay byte-identical without a shared clock. What remains is byte-identity on independent restart, blocked by `moq export ts` numbering continuity counters per process — which also needs a grader that can score a pair that is not byte-identical | Gate 3 — completes the 1+1 story |
-| T10 | MPTS / multiple concurrent services | Carry a multi-program TS (or several concurrent SPTS broadcasts) through the opaque lane; verify per-service PSI/SI, PCR and CC at egress, plus relay fan-out under N services | Gate 1 at multi-service scale |
-| T5+ | LEO / Starlink satellite-handover profile | Impairment profile with periodic handover gaps; characterise CC and redundancy behaviour | extends T5/T8 |
+| [T7](test-7-timing-integrity.md)/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 72 h — the PCR base wraps at 26.51 h) incl. ST 2022-7 under loss | IRD + analyser loan — **Gate 2** |
+| [T34](test-34-real-encoder-severity.md) | A real encoder against the continuous-source fence | Whether a never-repeating source triggers the per-track backwards-step fence in practice, and how severely | a live TS source |
+| [T10](test-10-mpts-multiservice.md) | MPTS / multiple concurrent services | Per-service PSI/SI, PCR and continuity at egress, and relay fan-out under N services | partly a media-aware packaging edge |
+| [T14](test-14-data-plane-comparison.md) (remainder) | The blocked comparison cells | A commercial ABR-to-TS gateway on P1/P2, which also gates the segmented plane's low-latency arm; and MPTS through a real CDN | hardware; a CDN account |
+| [T12](test-12-dual-path-handoff.md)/E | Restart one leg of a live pair | Byte-identity on independent restart, and a grader that can score a pair that is not byte-identical | [#2779](https://github.com/moq-dev/moq/issues/2779) |
+| [T35](test-35-leo-handover-impairment.md) | LEO / Starlink handover | Periodic handover gaps; continuity and redundancy behaviour. A candidate, not yet committed | — |
 | T3/T4+ | Opaque lane over the wire | Deploy the opaque publisher on EC2 to run opaque transparency over a real path (T3/T4 are currently localhost/file-fed on the opaque lane) | supports Gate 1 & 3 |
 
 ## Cross-cutting limitations (stated up front)
