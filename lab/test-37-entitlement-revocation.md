@@ -580,6 +580,8 @@ notice (`--auth-tls-*`, `--auth-key-dir` with a URL, `--auth-public-api`), and t
 are `anyhow::ensure!` hard errors on mutually exclusive flags. There is no startup diagnostic for a
 configuration that is merely hazardous, which weakens the report's "do what you already do
 elsewhere" framing and is why [#3605](https://github.com/moq-dev/moq/issues/3605) argues from the
-hazard instead. **[#3603](https://github.com/moq-dev/moq/issues/3603) was filed before this was
-established and its third suggestion still cites the non-existent warning as precedent**; it needs
-correcting in the thread if the discussion reaches that suggestion.
+hazard instead. [#3603](https://github.com/moq-dev/moq/issues/3603) was filed before this was
+established and its third suggestion cited the non-existent warning as precedent; **that has been
+corrected in the issue body and noted in a comment on the thread**, so the suggestion now rests on the
+hazard and on the fact that it asks for a new class of diagnostic rather than another instance of an
+existing one.
