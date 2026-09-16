@@ -2,7 +2,7 @@
 # Hold a fixed fan-out for a long time and watch what moves.
 #
 #   f5-soak-side.sh <label> <relay-ip> <n> <duration-s> [sample-s]
-#   e.g. f5-soak-side.sh rss10 34.246.187.61 10 2700 20
+#   e.g. f5-soak-side.sh rss10 <EC2_IP> 10 2700 20
 #
 # [T26](../test-26-cross-host-fanout.md)'s instrument, `f5-sub-side.sh`, ramps N and measures each
 # point once. That is the right shape for a knee and the wrong shape for anything that develops:

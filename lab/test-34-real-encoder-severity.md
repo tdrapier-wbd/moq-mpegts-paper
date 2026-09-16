@@ -128,9 +128,67 @@ This experiment **does not pass/fail upstream**; it classifies severity:
 
 ## Why this has not run
 
-**Blocked on access to a live TS source.** The obvious rig was attempted; live ingress had no sender
-([P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion)). Restored SRT contribution or a booked programme junction is
-required. Cheaper substitutes were listed but deliberately **not** equated to the primary question. Until
-this runs, severity for real primary distribution rests on code reasoning ([upstream-contributions.md](upstream-contributions.md))
-and the continuous reproducer ([T27](test-27-liveness-detector.md)) — and the planning record requires
-keeping that distinction explicit.
+**It was blocked on access to a live TS source, and that block is being lifted.** The obvious rig was
+attempted and live ingress had no sender
+([P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion)); a contribution feed of a real
+service from AWS MediaConnect is now provisioned to both hosts, with the ingest chain standing and
+measured ([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*). Until this runs, severity for
+real primary distribution rests on code reasoning
+([upstream-contributions.md](upstream-contributions.md)) and the continuous reproducer
+([T27](test-27-liveness-detector.md)) — and the planning record requires keeping that distinction
+explicit.
+
+## What actually has to happen for the fence to close, and what therefore will not trigger it
+
+This matters for operating the live feed as much as for running the experiment, and the answer is
+counter-intuitive in one place.
+
+**The trigger is a discontinuity in the *content*, not in the *transport*.** The fence needs the
+transport timeline to be continuous — PCR, PTS and DTS monotone, continuity counters unbroken, no
+`discontinuity_indicator` — while the content restarts. That is the defining difference between
+[#3533](https://github.com/moq-dev/moq/issues/3533) and the case #3375 was written to fix, and it has a
+consequence worth stating plainly: **a clean contribution feed is the worst case, not the safe one.** A
+transport-level break, which sets the discontinuity indicator, gives the fence one of its two exits; a
+flawless SRT hop carrying a hard cut gives it neither. So "the SRT hand-off is constant with no issues"
+does not protect the feed — it is the precondition under which the defect bites.
+
+**What does and does not qualify:**
+
+| Event | Closes the fence? |
+|---|---|
+| Steady feed, one uninterrupted encode, no junctions | **No.** Nothing resyncs, nothing steps backwards |
+| A hard cut at a programme junction or ad insertion, encoded continuously | **Expected yes** — this is the case the quest calls *"what a real encoder produces at a hard cut"*, and the one this experiment exists to confirm |
+| MediaConnect failover between two sources | **Likely yes**, and for the same reason: a content join on a continuous timeline |
+| SRT loss beyond the recovery window, or our own `srt-ingest` restart | **Probably not by this mechanism** — a transport gap tends to set the indicator, which is an exit. It may of course break the feed some other way |
+| A single-track (video-only) source | **No.** Measured immune on both builds: the fence needs a bystander track |
+
+The qualification on the second row is the honest one: whether a given junction resyncs the *audio*
+importer depends on the upstream encoder and splicer, and nothing here has measured a real one. Our own
+clip carries three SCTE-35 PIDs, so the service is ad-supported and junctions are certain; whether they
+are encoded as hard cuts is not known.
+
+**Two properties make one event sufficient.** The fence is permanent — 0.31 Mb/s with no recovery over
+40 minutes — and it is *partial*: PSI, AC-3 and teletext keep flowing while video and primary audio
+stop. A receiver locks and shows nothing, and any monitor that asks "is the multiplex present" reports
+health. So the operational risk is not an occasional glitch; it is that the feed dies at the first
+junction and continues to look alive. **Watch delivered video bitrate at a subscriber, not mux
+presence** — which is the [T22](test-22-silent-media-plane-failure.md)/[T24](test-24-partial-media-plane-stall.md)
+lesson arriving in production form.
+
+### The two hosts are on opposite sides of the regression, which is a free control
+
+Measured by ancestry rather than assumed: `eab960192`, the build the **primary** runs, does **not**
+contain #3375 (merged `0e61e3520`, 2026-09-05); `fd4f5d82e`, the build under test on the **secondary**,
+does. Against a real encoder — a non-rewinding source — that puts the pair either side of the defect:
+
+| | Primary (`eab960192`) | Secondary (`fd4f5d82e`) |
+|---|---|---|
+| #3533 continuous-join fence | **absent** — predates the regression | **present** |
+| True-rewind stall that #3375 fixed | present, but a live encoder does not rewind | fixed |
+| Also missing on the older build | #3351's PCR-grid slicing, and TDT/TOT carriage | — |
+
+So the primary's older build is expected to survive a junction the secondary's does not, and the pair
+gives T34 its `OLD`/`NEW` arms on the same live source at no cost. **Do not unify the builds before
+this arm runs** — which reverses the sequencing suggested for the 1+1 carriage work, where parity is
+required instead. The older build is not simply better: it lacks #3351, so its raw egress carries the
+worse PCR grid, and a conformance figure from it is not comparable with one from the secondary.

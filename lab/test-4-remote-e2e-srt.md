@@ -128,8 +128,27 @@ Measured on the secondary by killing each element in turn with a caller attached
 
 So the chain is self-healing against everything except its own restart, and against that it depends on
 the far end retrying — which is a requirement on the contribution encoder, not something this side can
-supply while it is the listener. All three units are `systemctl enabled`, so a reboot restores them;
-that is read from unit state rather than measured, because no reboot was performed.
+supply while it is the listener. **A reboot restores the whole chain**: both hosts were rebooted with
+all units enabled, and relay, ingest, publisher and the loop publisher all returned active at
+`NRestarts=0` with `udp/9000` and `udp/443` bound, inside ~26 s.
+
+#### Why the receive-latency floor is 2000 ms and not the 6000 ms it replaced
+
+The retired unit carried `latency=6000`, and that figure was right for the path it was written for:
+[Leg B](#leg-b--the-live-srt-contribution-chain) contributed from a domestic uplink that dropped a
+3.5 Mb/s feed outright, where a six-second buffer was buying real recovery. **The contribution source
+is now AWS MediaConnect**, and the same number on that path is a straight loss.
+
+SRT's recovery headroom is the latency divided by the round-trip time, so the useful question is how
+many retransmission attempts a buffer buys rather than how many seconds it holds. At the 18.6 ms RTT
+measured from this workstation, 2000 ms buys ~100 attempts; on an intra-region AWS path of a few
+milliseconds it buys several hundred. Six seconds buys a multiple of an already unreachable number,
+and charges the whole chain a fixed six-second delay for it — which would dominate every end-to-end
+figure the campaign takes and would have to be declared and subtracted in each one. The floor is
+therefore 2000 ms, and **whether it binds at all is the sender's choice**: SRT negotiates
+`max(our rcv-latency, the caller's peer-latency)`, so our value is a floor and not a setting. Sizing
+it properly means reading the RTT that SRT reports once the real source is dialled in, then lowering
+it if the path deserves it — a one-line change to one unit, which does not disturb the encoder.
 
 ### The three-lane arm
 

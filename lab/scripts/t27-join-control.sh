@@ -2,8 +2,8 @@
 # Cross a continuous-source pass join with subscribers differing in exactly one setting.
 #
 #   t27-join-control.sh <label> <relay-ip> <duration-s> <arm-list>
-#   e.g. t27-join-control.sh joinctl 34.246.187.61 800 "500ms,500ms,3s,3s"
-#        t27-join-control.sh ver 34.246.187.61 1400 "500ms@/home/u/bin-a/moq,500ms@/home/u/bin-b/moq"
+#   e.g. t27-join-control.sh joinctl <EC2_IP> 800 "500ms,500ms,3s,3s"
+#        t27-join-control.sh ver <EC2_IP> 1400 "500ms@/home/u/bin-a/moq,500ms@/home/u/bin-b/moq"
 #
 # An arm is `latmax` or `latmax@binary`, so one run can vary the buffer setting or the client build
 # while every subscriber shares a publisher, a relay and a join.

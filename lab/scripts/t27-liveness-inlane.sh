@@ -3,7 +3,7 @@
 # cross-host MoQ lane, with the detector running live rather than grading a capture.
 #
 #   t27-liveness-inlane.sh <arm> <relay-ip> [at] [for] [total]
-#   e.g. t27-liveness-inlane.sh video 34.246.187.61 60 60 180
+#   e.g. t27-liveness-inlane.sh video <EC2_IP> 60 60 180
 #
 # [T24](../test-24-partial-media-plane-stall.md) established per-PID access-unit liveness as the
 # only detector that caught every partial-failure arm, and did so with an offline grader over a

@@ -1427,6 +1427,36 @@ strips nulls and derives an SPTS per programme — so *transparent* in a shipped
 mean *byte-verbatim* either. What the review establishes is that the specification no longer permits the
 silent version of that.
 
+### The draft is being restructured into three named modes, and the gap that leaves is output timing
+
+The author is formalising the carriage modes rather than leaving one opaque mode and a filtering rule:
+**(1) MPTS transparent, (2) MPTS → SPTSs, and (3) a media-aware lane.** That subsumes #8, #14, #18 and
+#19 above into a single structure, and naming the media-aware lane in the specification is the larger
+change, because it is the lane this campaign has spent most of its measurements on and it has not
+previously been in scope for `m2ts` at all.
+
+**The requirement none of the three modes carries is that the egress be able to *time* its MPEG-TS
+output, and that is the next contribution to make** — a todo held here rather than filed, pending the
+restructured draft.
+
+The case for it is the campaign's central carriage result, and it is measured rather than argued. A
+media-aware lane reconstructs a multiplex from tracks and therefore has no mux rate at all: raw
+`moq export ts` egress carries no stuffing, thins PSI from 8.04 to 2.51 PAT/s, and opens PCR gaps to
+320 ms out of a source with no interval above 40 ms anywhere in 600 s
+([T4](test-4-remote-e2e-srt.md), [T2](test-2-media-aware-transparency.md)). With a groomer in front of
+it the same lane measures IRD-grade ([T7](test-7-timing-integrity.md),
+[T13](test-13-downstream-grooming.md), [T19](test-19-pcr-grid-verification.md)). So a specification can
+define mode 3 completely, have two implementations conform to it exactly, and still have neither
+produce a stream a hardware receiver will hold — because **the property that decides that is not in the
+mode definition.** Defining a mode without an output-timing option specifies what the bytes are and
+leaves unspecified the one thing an IRD locks to.
+
+It is adjacent to #15 and #16 above and is neither of them. #15 asks what the 192-octet arrival-time
+prefix *means*, which is the information a pacer would consume; #16 asks who owns the clock when
+`m2tsMuxRate` is declared. Both are about describing timing that already exists. This asks for the
+egress to be permitted, and in mode 3 expected, to *impose* timing that the carriage destroyed — which
+is a different requirement, and the one with the measurements behind it.
+
 ---
 
 ## 8. What was asked for at the start, what was retracted, and on what evidence

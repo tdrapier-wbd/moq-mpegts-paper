@@ -2,7 +2,7 @@
 # F5 subscriber side — ramp N remote subscribers against a relay on another host.
 #
 #   f5-sub-side.sh <label> <relay-ip> <n-schedule> [settle] [measure]
-#   e.g. f5-sub-side.sh ramp1 34.246.187.61 "1,5,10,25,50,100,150,200,250,300"
+#   e.g. f5-sub-side.sh ramp1 <EC2_IP> "1,5,10,25,50,100,150,200,250,300"
 #
 # Every subscriber runs here and the relay runs there, so the two costs are separated by *host*
 # rather than by process accounting. That matters because process accounting is what
