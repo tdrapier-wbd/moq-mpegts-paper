@@ -687,6 +687,17 @@ land *after* #3529, and tested rather than assumed, `fd4f5d82e` is indistinguish
 merge: 0.31 Mb/s from the first join across ~7 joins, against a pre-#3375 control holding
 9.1–9.8 Mb/s ([T23 § against #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)).
 
+**Still open, and now a release blocker rather than a backlog item.**
+[#3611](https://github.com/moq-dev/moq/pull/3611) folded gap discontinuity into the monotonic-timeline
+plan and [#3628](https://github.com/moq-dev/moq/pull/3628) groomed m0 into release blockers, so the
+quest carries the fix design — give the fence an exit when the program clock driven by the joined
+tracks passes the fenced track's pending frame, implemented in `Track::admit` against the exporter's
+watermark, *"a clock comparison, never a deadline"* — plus the regression test it needs. No code has
+landed. **This is the defect most likely to be met first by a live contribution feed**, because its
+trigger is a hard cut on a source whose transport timeline never steps backwards, which is what a real
+encoder produces; and its signature is a programme that keeps its PSI, AC-3 and teletext while video
+and primary audio stop, so a receiver locks and shows nothing.
+
 ---
 
 ## 2. Audio robustness: three defects, two closed
@@ -1160,6 +1171,83 @@ cannot read the relay's shape at all. Both are stated so a maintainer re-running
 **The held-then-confirmed sequence is the point.** The figure moved by 0.08 MB/h between the argued
 and the measured version, so the delay changed nothing about the conclusion — and it is the only reason
 the report can say "per process" at all, which is the first thing a maintainer would have asked.
+
+---
+
+## 5b. Authorization, entitlement and subscriber observability
+
+Three filings from the control-plane work were answered together, and **all three were accepted in
+substance**. The maintainer's summary of the area was *"I agree, the auth stuff needs a rethinking"*,
+and [#3619](https://github.com/moq-dev/moq/pull/3619) planned all of them into quests in one pass.
+None is a defect report; each says a design does not generalise, which is the weaker kind of claim to
+make and the harder kind to have granted.
+
+### The mTLS identity never reaches the authorization decision — open, and conceded on every point
+
+[#3603](https://github.com/moq-dev/moq/issues/3603) argued that a client certificate authenticates a
+peer and is then discarded, so mTLS can only express unrestricted access. The reply granted all three
+parts and supplied the current state of each: the auth-proxy API on `dev` **already** forwards the
+mTLS identity per connection so the auth server can answer for it, and the default token path cannot
+because its cache is keyed per key — *"I think we could do something similar with mTLS though, like we
+cache the response per identity instead of unrestricted"*. On scoping, mTLS is what the maintainer
+uses for cluster sync, and *"really what you want is per identity scoping, not some global"* — which
+is a stronger position than the config-file option the issue proposed. On the startup warning:
+*"I currently use this approach which I agree is confusing and not a great security practice as a
+result."*
+
+Planned as `quest/m1/auth/relay.md`, on the dev line. **The correction this campaign posted before
+anyone spent time on it is the reason the third ask was judged on its merits**: the issue had claimed
+a precedent — an existing startup warning for configurations where nothing can authenticate — that
+does not exist, and said so in a comment rather than letting the asserted consistency argument stand.
+
+### The revalidation window — closed, and folded into a rethink of the whole auth line
+
+[#3605](https://github.com/moq-dev/moq/issues/3605) reported that `max-age=0` and an omitted
+`Cache-Control` silently disable revalidation permanently, and that the 2× revocation window is
+undocumented outside the source. Closed as completed and absorbed into
+[#3682](https://github.com/moq-dev/moq/pull/3682), *"plan the auth server line on dev"*, alongside
+`moq auth serve` becoming the reference auth server. **The ask is no longer tracked as its own quest**,
+which is worth stating plainly: the behaviour was accepted as wrong, and the remedy is a replacement
+of the surface rather than a fix to it. Whether the replacement closes the specific hazard is not yet
+checkable, and the T37 revocation-window measurements are against a component that is being redesigned.
+
+### Subscriber-reported health telemetry — accepted, and became a four-part questline
+
+[#3608](https://github.com/moq-dev/moq/issues/3608) was filed **as aspirational**, on the reasoning
+that no control plane or transport in current use gives an origin this visibility, so there was no
+convention to copy and no adoption decision turned on it. That framing is now out of date in the one
+direction the campaign did not predict: upstream took the direction, went further than the proposal,
+and planned it as `quest/m2/qos/stats/` with four sub-quests (schema and library, Rust reporters,
+browser reporters, encoder feedback) that **close #3608 when the questline finishes**.
+
+The reply opened *"wall of thought, will distill into a plan later"* and the plan differs from the
+proposal in four ways worth recording, because three of them are better:
+
+- **It reuses `moq-stats` rather than adding a catalog section.** `moq_stats::Producer<E>` takes an
+  extension flattened beside `Traffic`, `()` for the relay and `hang::Stats` for a media client, so
+  one consumer reads the relay's delivery counters and a client's media counters on one layout. The
+  proposal's `wall + pts` correlation is not used.
+- **The convention is a broadcast-name suffix, not a catalog flag.** One `.stats` broadcast per client
+  at a path its token allows — `pilot/feedback.stats` — so a dashboard can tell telemetry from content
+  by name, which is what makes filtering 50 feedback broadcasts per producer tractable.
+- **It is bidirectional.** Publisher self-reports ride the same layout, explicitly so that a
+  subscriber's late frames can be correlated against the publisher's own CPU starvation. The proposal
+  covered the subscriber half only.
+- **It closes the loop.** `quest/m2/qos/stats/encoder-feedback.md` has a Rust encoder subscribe to its
+  viewers' stats and adapt its bitrate. The proposal stopped at reporting.
+
+Two constraints in the plan bound what the capability can be used for, and both agree with this
+campaign's position: reporting is opt-in *because reading is* — *"a publisher subscribes to a prefix it
+chose, never to every viewer"* — and **"self-reports are diagnostics: never billing, authorization, or
+route-selection input"**. The relay's own half stays aggregated: no per-subscriber or per-session row
+reaches the wire, only byte-weighted cumulative histograms. The goal is stated as an
+unknown/healthy/degraded/unhealthy verdict per broadcast *"the way CMSD does for HLS"*, which is the
+comparison [`docs/comparison.md`](../docs/comparison.md) draws.
+
+It lands on `dev`, because `moq-stats` is published and the generic producer is a breaking change.
+**So the gap is no longer unaddressed, but nothing is implemented**, and the campaign's own position —
+that this is not a route to take through `mpegts-pacer` — is unchanged and now has an upstream
+alternative to wait for instead.
 
 ---
 

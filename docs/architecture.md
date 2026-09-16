@@ -887,17 +887,24 @@ telemetry path, and the catalog already carries the correlation primitive needed
 bad" to the publisher's timeline. Those three are established, and the work is recorded in
 [T39](../lab/test-39-cross-boundary-observability.md). What does not exist is a way to *carry* the
 report with shipped tooling — the CLI publishes and consumes media containers only — so the return
-path is authorized, routed and protocol-legal, and untooled. It has been proposed upstream as a
-convention rather than built privately ([#3608](https://github.com/moq-dev/moq/issues/3608)).
+path is authorized, routed and protocol-legal, and untooled.
 
-**This is aspirational, and the architecture should not be read as scoring MoQ down for it.** No open
-control plane and no transport protocol in current use gives an origin this level of visibility into a
-subscriber's delivered-media health — not WebRTC, SRT or RTMP, and not HLS/CMAF/DASH. The nearest thing
-on the segmented side, CMCD/CMSD, reports request-level and buffer-level client state to a CDN; it is
-useful and it is not the same measurement, because it says nothing about whether the media that arrived
-was intact. **So this is a greenfield capability rather than a deficit against an incumbent**, it is
-not a requirement any candidate in [Comparison](comparison.md) satisfies, and no adoption decision here
-turns on it. It is recorded because it is a real operational gap that a distributor will eventually
+**It was proposed upstream as a convention rather than built privately
+([#3608](https://github.com/moq-dev/moq/issues/3608)), and upstream has adopted the direction.** The
+planned shape is a `.stats` broadcast per client on the existing relay-statistics layout, carrying
+publisher and subscriber self-reports together, with reporting opt-in because reading is, and with
+self-reports explicitly barred from billing, authorization and route selection. Nothing is
+implemented, so the capability remains prospective — but it is no longer a convention a distributor
+would have to invent.
+
+**It is still aspirational, and the architecture should not be read as scoring MoQ down for it.** No
+open control plane and no transport protocol in current use gives an origin this level of visibility
+into a subscriber's delivered-media health — not WebRTC, SRT or RTMP, and not HLS/CMAF/DASH. The
+nearest thing on the segmented side, CMCD/CMSD, reports request-level and buffer-level client state to
+a CDN; it is useful and it is not the same measurement, because it says nothing about whether the media
+that arrived was intact. **So this is a greenfield capability rather than a deficit against an
+incumbent**, it is not a requirement any candidate in [Comparison](comparison.md) satisfies, and no
+adoption decision here turns on it. It is recorded because it is a real operational gap that a distributor will eventually
 meet at fleet scale, and because the mechanism to close it is unusually close to hand on this data
 plane — not because the platform is unsuitable without it.
 

@@ -404,6 +404,76 @@ is longer than the run, the run cannot fail and is not a test.**
 first pass of the acceptance harness failed a conforming signalled splice — the same defect class the
 analyser self-test exists to prevent, reintroduced in a second instrument written later.
 
+## The receiving topology Gate 2 will actually use, and what it changes
+
+The hardware arm is now expected to run as **MoQ subscriber → UDP/multicast → DVB analyser and a bank
+of IRDs**, on tin or VMs inside the operator's own network rather than in the lab. That is the right
+shape — it is the edge gateway of [`docs/architecture.md`](../docs/architecture.md) §4 built for real —
+and it changes four things about this experiment's plan.
+
+**The groomer is not optional in this topology, and skipping it would waste the hardware window.** Raw
+`moq export ts` has no mux rate, carries no stuffing, thins PSI from 8.04 to 2.51 PAT/s and opens PCR
+gaps to 320 ms on a source with none above 40 ms ([T4](test-4-remote-e2e-srt.md)). An IRD will not hold
+on that and an analyser will fill a page with P1 failures that belong to the lane rather than to the
+path — none of it new information. The gateway chain is
+`moq export ts --latency-max <budget> | mpegts-pacer | tsp -O ip <group>`, and the CBR target has to be
+declared rather than inherited.
+
+**The gateway has to be characterised as an instrument before it is used as one.** This is the item
+most likely to be skipped and the one that decides whether the P2 figures mean anything. A virtual
+machine's scheduling jitter lands in the PCR series and an analyser cannot tell it from the lane's:
+the whole P2 gate is 481 ns, and a VM can miss that by orders of magnitude on its own. So before any
+MoQ measurement, **replay a known-good file from the same gateway, through the same UDP output, into
+the same analyser**, and record what the gateway contributes by itself. If that control cannot pass,
+the gateway is the wrong instrument and no MoQ result taken through it is admissible. Tin is
+preferable to a VM for exactly this reason; if it must be a VM, pin its CPUs and keep the control.
+
+**1+1 here is failover, not a hitless merge, and the plan should say so before anyone builds for it.**
+The two hosts will carry the same service from different contribution paths, so the two streams are
+**not** frame- or PCR-aligned. An SMPTE 2022-7-style seamless merge needs alignment and a common
+timestamp, and neither exists here; a merge device fed these two inputs would not switch cleanly. The
+tractable measurements are two independent subscriptions graded separately, and the **switch gap** when
+one is dropped — which is what [T6](test-6-redundancy.md) and [T12](test-12-dual-path-handoff.md)
+measure, and where the merge oracle already lives. Two upstream changes landed since the build under
+test bear directly on it and are unmeasured here: a remote source no longer displacing a local
+publisher ([#3694](https://github.com/moq-dev/moq/pull/3694)) and failover rejecting incompatible
+copies ([#3521](https://github.com/moq-dev/moq/pull/3521)).
+
+**Grade the feed in software before anyone reads a front panel.**
+[#3533](https://github.com/moq-dev/moq/issues/3533) is open, and its signature on a live encoder's hard
+cut is video and primary audio stopping while PSI, AC-3 and teletext continue — which presents on an
+IRD as a service that locks and shows nothing, indistinguishable at the panel from a dozen other
+faults. TSDuck first, hardware second.
+
+### Moving the publisher inside the operator's network: the configuration is already the right one
+
+The later intention is to use the same servers as MoQ *publishers*, taking the service from multicast
+directly instead of from SRT. **The publisher needs no redesign**, because the standing ingest chain
+([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*) was deliberately split at a local
+multicast group: stage 2 is already `tsp -I ip <group> | moq import ts`. Relocating it means pointing
+that unit at the real group and at a remote relay, and deleting stage 1. That was the reason for the
+split.
+
+Three things do change, and one of them is a security decision rather than a configuration one:
+
+- **The relays are currently open.** Both run `--auth-public ""`, which is tolerable for a lab on a
+  known address and is not tolerable for a publisher dialling in from a corporate network. Publishing
+  from outside means issuing a publish-scoped token, which is the mechanism
+  [T36](test-36-entitlement-enforcement.md)–[T38](test-38-entitlement-estate.md) measured — so that
+  work stops being preparatory and becomes load-bearing.
+- **The relay certificates are self-signed** (`--tls-generate <public-ip>`), so an external publisher
+  must pin the fingerprint or the relays need real certificates. `--client-tls-disable-verify` is a
+  loopback convenience and should not cross a network boundary.
+- **The latency saved is the SRT buffer, not the distance.** Removing the hop removes the receive
+  latency floor — 2000 ms as configured, and 6000 ms in the unit that was retired — which dominates
+  everything else in the chain. Worth stating plainly so the saving is not attributed to geography.
+
+One question to settle before the topology is built: if the publisher is inside the operator's network
+and the relay is in AWS and the analyser is back inside the operator's network, the media makes a round
+trip. That is an honest measurement of MoQ **as a distribution path** and a poor one of its **minimum
+latency**. If the latter is wanted, a relay has to sit alongside the publisher, and that is a different
+experiment.
+
 ## Open
 
 - **`pid-change` has not run**, and needs a second elementary stream synthesised inside real coded

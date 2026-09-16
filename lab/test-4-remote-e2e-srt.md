@@ -53,7 +53,9 @@ much, because that is what the paper's carriage-fidelity verdict is scored on.
   - `moq-publisher-cnn-loop.service` → `tsp -I file ~/CNNiEMEA2.ts --infinite -P regulate
     --pcr-synchronous -O file - | moq … import ts --broadcast cnn.international.emea.loop.hang`
   - `moq-publisher.service` → `ffmpeg -i "srt://0.0.0.0:9000?mode=listener&latency=6000…" -c copy -f
-    mpegts - | moq … import ts --broadcast cnn.international.emea.live.hang`
+    mpegts - | moq … import ts --broadcast cnn.international.emea.live.hang`. **This unit is
+    retired**; the standing live ingest is now the two-stage chain below, and the ffmpeg leg is the
+    reason why.
 - Local: `moq` client from `~/bin-main`; SRT-capable FFmpeg is the local `~/FFmpeg` build (not OS
   FFmpeg), and `tsp` carries the SRT plugins; TSDuck 3.44.
 - TLS verification disabled (`--client-tls-disable-verify`) for the relay's self-signed cert — a lab
@@ -64,6 +66,70 @@ formerly `ffmpeg -re -stream_loop -1 -c copy`, whose default stream selection dr
 and all three SCTE-35 PIDs before MoQ ever saw them. Any carriage row taken through that publisher
 measured ffmpeg's remuxer as much as the lane. `tsp … -P regulate --pcr-synchronous`
 replays the file's own packets, so the broadcast now presents the source mux to the importer.
+
+### The standing live ingest, for a contribution feed from a third party
+
+A contribution feed of a real service at ~10 Mb/s is expected on both EC2 hosts over SRT, so the live
+leg has been rebuilt to be the reference feed's carrier rather than a demonstration. Both hosts now
+run the same two-stage chain, installed by
+[`live-srt-ingest.sh`](scripts/live-srt-ingest.sh) and checked by
+[`live-feed-status.sh`](scripts/live-feed-status.sh):
+
+```
+stage 1  srt-ingest.service          tsp -I srt --listener 0.0.0.0:9000 --multiple
+                                         -O ip 239.255.0.1:5000 --local-address 127.0.0.1
+stage 2  moq-live-publisher.service  tsp -I ip 239.255.0.1:5000 -O file -
+                                       | moq --broadcast <name> import ts
+```
+
+**The publisher is `tsp`, because the unit it replaces was measured discarding most of the multiplex
+before MoQ could see it.** Feeding a 20 s slice of `CNNiEMEA2.ts` through the retired unit's own
+command on its own host (file domain, ffmpeg 8.0.1, no MoQ involved) reduces **13 PIDs to 5**:
+
+| | PIDs at egress | What is lost |
+|---|---|---|
+| Source slice | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | — |
+| `ffmpeg -c copy -f mpegts` | `0 17 256 257 4096` | NIT, TDT/TOT, second audio, teletext, **all three SCTE-35 PIDs**; video/audio renumbered to 256/257, PMT to 4096 |
+| `tsp` passthrough | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | nothing — byte-identical to the source |
+
+That is the same defect the loop leg was moved off ffmpeg for, and it is unrecoverable downstream: no
+lane, opaque or media-aware, can carry a PID that never arrived. It also disqualifies the retired unit
+from carrying the feed for the splice, subtitle and DVB-table work the live source exists to unblock.
+
+**The two stages are separate processes joined by a loopback multicast group, not one pipeline**, and
+that is a deliberate choice with three consequences. Restarting the MoQ side — which every experiment
+does — leaves the contribution session untouched. Stage 2's input is UDP now and can be real multicast
+later, so moving the source off SRT is a change to stage 1 only, and disappears entirely if the
+publisher is ever placed inside the multicast domain. And the group is a tap point a reference
+recorder or a TSDuck analyser can join without opening a second SRT session.
+
+Measured on the secondary with a PCR-paced caller attached, the chain carries the mux intact:
+
+| Measurement point | Result |
+|---|---|
+| Local group, 8 s sample | **9.98 Mb/s**, PIDs `0 16 17 100 111 121 123 131 141 142 143 8191`, **0 continuity errors**, service `CNNI EMEA HD` |
+| MoQ subscriber, `export ts` | PIDs `0 16 17 100 111 121 123 131 141 142 143` — every source PID except null stuffing, **all three SCTE-35 PIDs, teletext and both audios preserved** |
+
+TDT/TOT (PID 20) appears in neither sample, but the window is too short to distinguish a dropped table
+from one that simply did not repeat inside it; the carriage tables above remain authoritative for that
+row.
+
+#### What recovers by itself, and the one thing that does not
+
+Measured on the secondary by killing each element in turn with a caller attached throughout:
+
+| Event | Outcome |
+|---|---|
+| MoQ publisher killed | Contribution session **unaffected**; unit back inside 8 s; group never stops carrying |
+| Caller closes gracefully | Listener stays up, `NRestarts=0`, and **admits the next caller** — this is what `--multiple` buys |
+| Caller killed with `SIGKILL` (no clean SRT close) | Outage detected, group goes to 0 bytes, listener stays up at `NRestarts=0` |
+| Caller redials after either | Feed resumes, and **the MoQ publisher resumes with it at `NRestarts=0`** — no intervention anywhere |
+| `srt-ingest` itself restarted | **The caller is dropped and must redial.** Our side returns to listening; recovery from here depends on the encoder's own retry policy |
+
+So the chain is self-healing against everything except its own restart, and against that it depends on
+the far end retrying — which is a requirement on the contribution encoder, not something this side can
+supply while it is the listener. All three units are `systemctl enabled`, so a reboot restores them;
+that is read from unit state rather than measured, because no reboot was performed.
 
 ### The three-lane arm
 

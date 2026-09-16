@@ -1624,6 +1624,50 @@ domains.** *(T28.)*
 > self-test in the domain you are about to use**: a self-test that passes in one domain says nothing
 > about the other.
 
+**Delete an output file before the capture that is supposed to write it, or an outage measures the
+run before it.** *(T4, live ingest.)*
+
+> A recovery test sampled a local multicast group into a fixed path before and after killing the
+> sender, and reported the *same* byte count during the outage as before it — because the capture
+> wrote nothing and `stat` read the previous sample still sitting there. The failure is silent, it
+> always errs towards "healthy", and it is indistinguishable from the result the test hopes for. Two
+> measurements in one session were wrong this way before the repeated figure gave it away.
+> **`rm -f` the target inside the measurement function, never once at the top of the script**, and
+> treat an unchanged byte count across a state change as a rig fault until proven otherwise.
+
+**A file source feeding a live transport must be paced, and the reader must be attached first.**
+*(T4, live ingest.)*
+
+> Three candidate local hand-off transports — unicast UDP, multicast on loopback, multicast on the
+> NIC — were all recorded as FAILED, and the conclusion drawn was that loopback multicast does not
+> work on these hosts. It does. `tsp -I file` reads at disk speed, so a 60,000-packet slice was
+> delivered into a datagram socket in milliseconds while the reader was still starting a second
+> later, and UDP buffers nothing for an absent reader. With `-P regulate --pcr-synchronous` and the
+> reader started first, two of the three worked. **A negative result about a transport is only about
+> the transport if the sender ran at the stream's own rate and someone was listening** — the same
+> class of error as grading a lane through an unpaced publisher.
+
+**Never put `ffmpeg` in front of MoQ in a carriage path.** *(T3, T4.)*
+
+> `ffmpeg -c copy -f mpegts` is not a passthrough. Measured on the retired live-ingest unit's own
+> command, a 13-PID slice arrives as **5 PIDs**: default stream selection keeps one video and one
+> audio, renumbers them to 256/257, and discards the NIT, TDT/TOT, the second audio, teletext and all
+> three SCTE-35 PIDs. `tsp` on the same slice is byte-identical to the source. The damage is upstream
+> of the transport and unrecoverable — no lane can carry a PID that never arrived — and it has now
+> cost this campaign two publishers and one round of misattributed carriage rows. **Use `tsp -I srt`
+> / `tsp -O srt` for SRT and `tsp` for replay; if ffmpeg must appear, it is a transcode and must be
+> declared as one.**
+
+**Separate the contribution session from the thing under test.** *(T4, live ingest.)*
+
+> A fused `srt-listener | moq import` pipeline makes every restart of the experiment a restart of the
+> third party's feed. Split at a local multicast group and the contribution session survives the MoQ
+> side being killed — measured: publisher killed, caller unaffected, unit back in 8 s, group never
+> stops. The same split makes the input UDP rather than SRT, so a later move to a real multicast
+> source changes one unit instead of the design, and gives an analyser a tap that costs the publisher
+> nothing. **Where a feed comes from outside the lab, the boundary between it and the rig is part of
+> the rig's design, not an implementation detail.**
+
 **Do not re-base a ladder on a different emulator to make it runnable.** *(T31.)*
 
 > The macOS workstation has `dnctl`/`pfctl` dummynet, so T31's ladders are buildable here in the sense

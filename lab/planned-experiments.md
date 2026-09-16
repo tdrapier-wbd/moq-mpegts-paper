@@ -51,8 +51,8 @@ across the two strands is a judgement rather than a derivation.
 | P0-g | Permanence: the seven-day arm, and the segmented soak | [T21](test-21-permanence-soak.md) | P0-h for the MoQ arm |
 | P0-h | Re-soak the importer after the memory fix lands | [T21](test-21-permanence-soak.md) | upstream [#3493](https://github.com/moq-dev/moq/issues/3493) |
 | P0-i | `moq export ts` exiting under two-feed contention — instrument the read path and attribute it | [T8b](test-8b-congestion-control.md) | — |
-| P0-j | A real never-repeating encoder against the continuous-source fence | [T34](test-34-real-encoder-severity.md) | a live TS source |
-| P0-k | Hardware TR 101 290 P1/P2 soak, ≥ 72 h | [T7](test-7-timing-integrity.md) | IRD + analyser loan |
+| P0-j | A real never-repeating encoder against the continuous-source fence | [T34](test-34-real-encoder-severity.md) | **being lifted** — a live SRT contribution feed is provisioned to both EC2 hosts and the ingest chain is standing and measured ([T4](test-4-remote-e2e-srt.md) § standing live ingest). Expect this arm to reproduce [#3533](https://github.com/moq-dev/moq/issues/3533), which is open |
+| P0-k | Hardware TR 101 290 P1/P2 soak, ≥ 72 h | [T7](test-7-timing-integrity.md) | **being lifted** — analyser and IRD bank expected with the same engagement; see below |
 | P0-l | A client certificate is a cross-tenant master key, and the authorization endpoint is not told which certificate was presented | [T38](test-38-entitlement-estate.md) § Open | **discharged** — measured, and reported upstream as [#3603](https://github.com/moq-dev/moq/issues/3603) |
 
 **P0-e is a build task, not an experiment, and it gates three entries.** Nothing in the lab receives
@@ -77,7 +77,7 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 | P1-i | The three remaining data-plane comparison cells | [T14](test-14-data-plane-comparison.md) | B-4, B-5, hardware |
 | P1-j | Three `Cache-Control` configurations under which an entitlement cannot be withdrawn at all | [T37](test-37-entitlement-revocation.md) § Open | **discharged, and it is the binding revocation finding** — a correctness hazard, not a latency one. Filed upstream as [#3605](https://github.com/moq-dev/moq/issues/3605) together with the undocumented 2× revocation window. A third finding measured alongside them — the one-hour default staleness window — is held unfiled by the operator |
 | P1-k | Whether a key-per-entitlement estate scales: keys sized by the licensing matrix, not the affiliate count | [T38](test-38-entitlement-estate.md) § Open | **Done, negative — the objection does not hold.** Relay launch, RSS and admission flat from 10 to 20,000 keys; keys are read on demand, and deleting one revokes with no restart. The **`--auth-api` half is still open**: a stub served every run |
-| P1-l | The telemetry return path end to end: a `moq-net` client publishing an opaque or JSON track, closing T39 Part B | [T39](test-39-cross-boundary-observability.md) § Open | — **runnable now**; needs a small client written against the library, since the CLI has no non-media path. The convention is now proposed upstream as [#3608](https://github.com/moq-dev/moq/issues/3608), so a maintainer answer may shape the schema — but the prototype does not wait on it. **Not to be built into `mpegts-pacer`**, which is the fast route and is rejected: the groomer stays minimal and non-proprietary |
+| P1-l | The telemetry return path end to end: a `moq-net` client publishing an opaque or JSON track, closing T39 Part B | [T39](test-39-cross-boundary-observability.md) § Open | — **runnable now**; needs a small client written against the library, since the CLI has no non-media path. [#3608](https://github.com/moq-dev/moq/issues/3608) **was accepted and became a four-part questline** (`quest/m2/qos/stats/`) which supersedes the proposed schema: the convention is a `.stats` broadcast suffix on the existing `moq-stats` layout, bidirectional, with an encoder-feedback loop, landing on `dev`. Nothing is implemented. **A prototype built now should follow that shape rather than the one T39 proposed**, and should not wait for it. **Not to be built into `mpegts-pacer`**, which is the fast route and is rejected: the groomer stays minimal and non-proprietary |
 
 ---
 
@@ -112,6 +112,27 @@ section.
 | B-3 | [T15](test-15-point-to-point-cadence.md)'s residual | a true CBR hardware source; nothing in the lab produces one |
 | B-4 | The segmented plane's low-latency arm at equal conformance | a commercial ABR-to-TS gateway — the same apparatus block as P0-k in a different guise |
 | B-5 | Multi-programme carriage through a *media-aware* edge | the commercial packaging edge itself. A byte cache serves an unusual TS payload exactly as nginx does, so asking it of a plain cache re-measures nginx |
+
+### Two of these blocks are being lifted, and the register should be read with that in mind
+
+A live contribution feed of a real service at ~10 Mb/s is being provisioned over SRT to both EC2
+hosts, and the same engineer is expected to supply a professional DVB analyser and a bank of IRDs.
+Between them they discharge the two apparatus dependencies that gate the most entries:
+
+| Entry | Was waiting on | Effect |
+|---|---|---|
+| **P0-j** | a live TS source | **The live feed is that source.** A real encoder's hard cut on a continuous transport timeline is the exact trigger for [#3533](https://github.com/moq-dev/moq/issues/3533), which is open and unfixed, so this arm should be expected to *reproduce* the stall rather than clear it |
+| **P0-k** | IRD + analyser loan | The hardware TR 101 290 P1/P2 soak becomes bookable; it is the only route to a `hardware:` domain figure |
+| **P0-d** | analyser-specific pass-table rows | The rows [T33](test-33-gate2-preparation.md) dry-ran against the model can be taken against the instrument |
+| **P1-i** | hardware | Two of the three remaining comparison cells are analyser-scored |
+| **P2-d** | a real differential-delay pair | The two hosts will carry **the same service over different contribution paths**, which is that pair — unaligned by construction rather than by `netem` |
+| **B-3** | a true CBR hardware source | Possibly discharged, depending on what the contribution encoder emits; check the mux rate's stability before assuming it |
+
+**The ordering constraint is that #3533 sits in front of the analyser work.** Its signature — PSI,
+AC-3 and teletext continuing while video and primary audio stop — presents on an IRD as a service that
+locks and shows nothing, which is indistinguishable at the panel from a dozen other faults. Grade the
+feed through `moq export ts` with TSDuck *before* anyone reads an analyser front panel, or the
+campaign will spend its hardware window rediscovering a known upstream defect.
 
 ---
 
