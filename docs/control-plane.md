@@ -472,6 +472,24 @@ insufficient**, and an additional content-encryption scheme is needed. Whether t
 without breaking relay fan-out and caching is an **open question** (§9), not something this design
 claims to have solved.
 
+**BISS-CA is the industry's likely answer to that requirement, and it costs the carriage mode.** There
+is vendor appetite for it: two vendors proposed running BISS-CA (EBU Tech 3292-s1) over MoQ at IBC
+2026. It fits the requirement well — entitlement travels in-band as ECMs and EMMs, protection
+terminates at the receiver's private key rather than at any network element, and it is royalty-free
+and already deployed in contribution. For primary distribution, though, the gap it closes is narrow.
+The segments MoQ leaves unprotected are the source to the publisher and the subscriber to the IRD;
+both are local, and both are carried in the clear today behind SRT and Zixi on exactly the same
+basis, so within a trusted facility this is the status quo rather than a regression. **Where those
+environments are not trusted, or the operator is not, BISS-CA becomes materially valuable** — and it
+is the only mechanism that reaches the receiver, since transport protection ends at the relay and
+object-level encryption would end at the subscriber.
+
+The cost is that scrambling is applied at transport level, so payloads cannot be demultiplexed and a
+BISS-CA feed must travel through opaque carriage rather than the media-aware lane. Adopting it
+therefore forfeits the media-aware properties the latency argument rests on
+([Comparison](comparison.md) §5.1), which makes it an architectural choice rather than a feature to
+add. Nothing here is measured: no part of this campaign scrambles anything.
+
 **At rest**, logs, audit records and any captures are encrypted, partitioned by tenant and subject to
 retention limits — captures in particular may contain content and must be tightly controlled.
 Service identity, routing and entitlement metadata are themselves commercially sensitive, since they
@@ -605,7 +623,10 @@ windows.
   the endpoint learns only that some certificate was presented, which is why certificate-scoped
   entitlement is not expressible (§3). This is an upstream question as much as a design one.
 - **Can content be protected from the *operator*, publisher-to-egress, without breaking relay fan-out
-  and caching** — and is that required for the target contracts? (§7.3.)
+  and caching** — and is that required for the target contracts? The second half is the one that
+  decides it, and it is a commercial question rather than a technical one: BISS-CA already answers the
+  first half, at the price of opaque carriage (§7.3). **Vendor appetite is not the same as a
+  requirement**, and no rights deal has yet been shown to need operator-blind carriage.
 - **How is trust established, scoped and *revoked* across a federation boundary**, and how is a
   compromised peer contained? ([Architecture](architecture.md) §8.6.)
 - **How is delegated entitlement bounded** so that a chain of re-distribution cannot outlive or

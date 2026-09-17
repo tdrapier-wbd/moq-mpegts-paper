@@ -1300,6 +1300,15 @@ nothing needs inventing, and the missing thing is evidence. Recorded in
 plane gives two answers to one commercial question, and that BISS-CA puts key transport out of scope
 and so relocates rather than solves the integration problem the campaign has never measured.
 
+**Promoted to [`control-plane.md`](../docs/control-plane.md) §7.3 and §9** on the operator's approval,
+with his framing, which sharpens the verdict: for primary distribution the segments MoQ leaves
+unprotected — source to publisher, subscriber to IRD — are local and are carried in the clear today
+behind SRT and Zixi on the same basis, so inside a trusted facility this is the status quo and not a
+regression. The gap only becomes material where those environments, or the operator, are not trusted.
+The §9 open question now separates the two halves and says which one decides it: the technical half is
+answered (BISS-CA works, at the price of opaque carriage), and the commercial half — whether any
+contract requires it — is unanswered, with vendor appetite explicitly not counted as a requirement.
+
 ### FEC is a transport question, and the campaign's contribution to it is the comparison
 
 Raised as a possible MSFTS topic; it is not one. FEC trades latency against loss below the object
@@ -1582,10 +1591,52 @@ specification that states the target and leaves the method open creates the mark
 component. One that is silent persuades every implementer they do not need one, and is discovered to
 be wrong by the first IRD that fails to lock.
 
+### The 2026-09-17 round: eleven issues filed, plus one comment and one cross-venue pair
+
+The whole review was filed on 2026-09-17, as `t0ms` to stay consistent with #7 and #13–#17.
+
+| Filed | What it asks |
+|---|---|
+| [#24](https://github.com/mondain/msfts/issues/24) | §5.2's semantics cover syntax but not the delivery schedule |
+| [#25](https://github.com/mondain/msfts/issues/25) | `m2tsMuxRate` MUST be absent in the one mode that cannot do without it |
+| [#26](https://github.com/mondain/msfts/issues/26) | `m2tsPsiInterval` binds the publisher and nothing at the output |
+| [#27](https://github.com/mondain/msfts/issues/27) | The retain list drops the CAT, so conditional access cannot survive filtering |
+| [#28](https://github.com/mondain/msfts/issues/28) | The carriage mode is not a field |
+| [#29](https://github.com/mondain/msfts/issues/29) | `m2tsModified: false` is declared and unverifiable |
+| [#30](https://github.com/mondain/msfts/issues/30) | A fixed object count does not bound group duration |
+| [#31](https://github.com/mondain/msfts/issues/31) | §5.5.3's group-alignment MUST has no literal solution |
+| [#32](https://github.com/mondain/msfts/issues/32) | Output timing is unspecified — the substantive ask |
+| [#33](https://github.com/mondain/msfts/issues/33) | What ES-level carriage is for |
+| [#34](https://github.com/mondain/msfts/issues/34) | TR 101 290 P1 does not detect this carriage's failure mode |
+| [#15 comment](https://github.com/mondain/msfts/issues/15#issuecomment-5714034547) | The arrival-time mechanism, **not** filed separately |
+| [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731) | Six convergence decisions, cross-linked with #33 |
+
+Three decisions inside that round worth keeping:
+
+- **The arrival-time ask went as a comment, not an issue.** #15 already asked for the 192-octet
+  semantics *and* for a note permitting egress re-pacing, so a new issue would have duplicated it.
+  What the comment adds is that §5.6's premise — MOQT does not preserve inter-packet timing — is false
+  for that carriage, that the note should be SHOULD rather than MAY, and that #15 is therefore a
+  blocking dependency for #32 rather than a loose end. *Check the existing tracker before filing a
+  follow-up; half of this one was already open under a title that did not look like it.*
+- **#32's ask is a conditional MUST paired with a SHOULD NOT**, not a bare MUST and not a SHOULD. A
+  SHOULD would have traded a lowercase "should" in a note for an uppercase one in a subsection and
+  left two conforming implementations indistinguishable. A bare MUST would have been wrong, because
+  re-pacing costs latency equal to its buffer — 109 ms ungroomed against 2,447 ms groomed, different
+  topologies and no deployment having both — so mandating it for file writers, software decoders and
+  downstream multiplexers would make the format worse. Stating where the requirement does *not* apply
+  is what makes it narrow enough to accept, and the draft asks for the behaviour to be configurable
+  because nothing in the catalog knows what an output is for.
+- **#33 went without waiting for a reply to moq-dev#3731.** Nothing in it depends on the reply: it
+  argues the mode's cost/benefit from the draft's own text, and the divergence is worth settling
+  regardless of which way the implementer jumps. The two are cross-linked so neither looks like a
+  single-venue complaint.
+
 ### The retain list drops the CAT, so conditional access cannot survive program-level filtering
 
-The sharpest of the unfiled defects, and it came from asking a deployment question rather than from
-reading the draft again — see the BISS-CA assessment below.
+Filed as [#27](https://github.com/mondain/msfts/issues/27). The sharpest of the round, and it came
+from asking a deployment question rather than from reading the draft again — see the BISS-CA
+assessment below.
 
 §10 claims the packaging "preserves any scrambling or conditional access information present in the
 MPEG-2 Transport Stream". §5.5.2's per-program retain list keeps the PAT, the selected PMT, and "all
