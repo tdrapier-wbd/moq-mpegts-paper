@@ -173,12 +173,25 @@ arrival. The one ordering constraint is that the #3533 A/B above wants the asymm
 first and unify afterwards — and unify before anything that needs parity between the hosts, which
 includes every 1+1 and differential-delay cell.
 
-**The contribution round is drafted and needs no apparatus, so it fits the window exactly.** Twelve
-asks across `moq-dev` and MSFTS are written and awaiting review in `docs/upstream/`, indexed by
-`contribution-round-index.local.md`. Two of them have lab dependencies worth noting here: the
-FEC/ARQ message should wait for **P1-m**, the SRT arm, because without it the message is a reframing
-rather than a result; and the conditional-access finding (§5.5.2's retain list dropping the CAT) is
-specification reading only, since **B-6/P2-h** — anything that scrambles — has never been run.
+**The contribution round is filed, so it no longer competes for the window.** Eleven MSFTS issues
+(#24–#34), a comment on #15 and `moq-dev#3731` went out on 2026-09-17; nothing is owed until someone
+replies. What it leaves behind is one debt and one apparatus question.
+
+**The debt: P1-m now has to carry T28's replication with it.** The FEC/ARQ position quotes the outage
+and capacity table, and every cell in it is a single sample with the latency-budget non-monotonicity
+still *likely rather than established*. Having cited it in a draft intended for a working group,
+leaving it at n=1 is no longer acceptable. Run the SRT arm and the replication in one session on the
+same rig: three repeats against a 5 s outage at budgets {0.5, 1, 2, 3, 4, 6} s, plus the SRT lane at
+matched budgets. One sitting closes the ranking gap in P1-a and P1-d, puts an error bar on the
+non-monotonicity, and unblocks the contribution.
+
+**The apparatus question is time-critical and belongs in the same conversation as the analyser.**
+B-6/P2-h needs a BISS-CA scrambler and one entitled receiver, and most professional IRDs implement
+BISS-CA (CA_SYSTEM_ID 0x2610). The IRD bank and analyser arrive in two weeks on a loan that also
+leaves in two weeks, so **whether a scrambler and a BISS-CA-capable receiver can come with them is a
+question to ask now, not when they arrive**. If the answer is yes, the campaign's first
+conditional-access measurement fits inside a window it already has, and #27 stops being specification
+reading. If it is no, nothing is lost by having asked.
 
 **What not to do with the window.** No new speculative cells the feed would invalidate, and in
 particular not [T28](test-28-failure-injection-matrix.md)'s latency-budget non-monotonicity, which is
