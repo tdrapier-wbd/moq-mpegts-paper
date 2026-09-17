@@ -1270,6 +1270,36 @@ health assessment of an `m2ts` track requires per-PID access-unit observation *i
 counters, with the reporting mechanism explicitly out of scope — an Implementation Considerations
 paragraph that plants the finding and points at the separate work.
 
+### BISS-CA over MoQ: the native mechanism answers access, not operator-blindness
+
+Two vendors at IBC 2026 proposed BISS-CA on top of MoQ for conditional access. Assessed from the
+specifications; **nothing about scrambling is measured here** — the Gate 2 pass table records "Not
+exercised: nothing in the campaign scrambles" against its scrambled-packet rows.
+
+The question turns entirely on whether the platform operator must be unable to *see* the content, and
+the campaign's own measurements put MoQ on both sides of that line. Admission works — eight refusing
+arms delivered zero payload bytes ([T36](test-36-entitlement-enforcement.md)) — and the key estate
+scales, flat from 10 to 20,000 keys for 96 kB of RSS, with key-file deletion revoking immediately and
+without restart ([T38](test-38-entitlement-estate.md)). But the relay terminates the session and sees
+plaintext, so the native mechanism decides *who may subscribe*, not *who may comprehend*. Token
+scoping stops at the relay, and the delivered artefact — a transport stream on UDP or RTP into an
+IRD — has no MoQ protection on its final hop at all. BISS-CA, being in-content and
+receiver-terminated, covers exactly the gap the native mechanism does not.
+
+**The decisive technical constraint is that BISS-CA forecloses the media-aware lane.** CISSA scrambles
+TS packet payloads, so PES cannot be reassembled and the demuxing importer cannot produce media
+tracks; PSI and the ECM/EMM tables stay clear, but the media does not. BISS-CA over MoQ therefore
+requires transparent carriage — MSFTS mode 1 — which is the lane with the worse measured latency and
+which `moq-dev` does not implement on `main` at all. Choosing BISS-CA chooses the opaque lane, which
+inverts the architecture's headline and is the part most likely to be missed in a vendor conversation.
+
+**Verdict: do not build it.** Establish whether any rights deal actually requires operator-blind
+carriage; if one does, note that MSFTS §10 already permits BISS-CA over transparent carriage so
+nothing needs inventing, and the missing thing is evidence. Recorded in
+`docs/upstream/biss-ca-over-moq.local.md`, with the two secondary points that a second entitlement
+plane gives two answers to one commercial question, and that BISS-CA puts key transport out of scope
+and so relocates rather than solves the integration problem the campaign has never measured.
+
 ### FEC is a transport question, and the campaign's contribution to it is the comparison
 
 Raised as a possible MSFTS topic; it is not one. FEC trades latency against loss below the object
@@ -1284,9 +1314,22 @@ Two things this campaign can bring there, neither of them MPEG-specific but both
   would have been a brief artefact becomes a full GOP outage. The trade is visible in those ladders.
 - **FEC and the relay's latency budget compete for the same milliseconds.** Any proposal has to be
   scored against simply raising `--latency-max` by the same amount, and against what SRT's ARQ already
-  buys a contribution engineer at an equivalent budget — ~100 retransmission attempts at 2000 ms and
-  the 18.6 ms RTT measured here. The ladders are the right instrument for that comparison and it has
-  not been run.
+  buys a contribution engineer at an equivalent budget. The working figure — a 2000 ms buffer spanning
+  roughly 100 round trips at the 18.6 ms RTT measured here — is a heuristic rather than a specified
+  SRT property, since achievable attempt count also depends on NAK timing, loss pattern and sender
+  buffer retention. The ladders are the right instrument for the comparison and it has not been run.
+
+**The venue is the IETF MoQ list first, not a GitHub issue.** The working group's documents are at
+`github.com/moq-wg`, with `moq-wg/moq-transport` tracking `draft-ietf-moq-transport` — the right place
+for a change to a document, and the wrong place to open the question, because there is no document
+that FEC would change and a new-mechanism issue against a draft heading for publication would be
+triaged out. `moq@ietf.org` is where "is there a problem here" gets settled.
+
+**And the message should wait for the SRT arm.** The two structural observations above are worth
+making, but the ladders currently exist for the MoQ lane only, at one sample per cell, with the
+latency-budget non-monotonicity still *likely rather than established*. "We measured this, here is
+the table" is a much stronger opening than a reframing plus an invitation, and the missing arm is the
+same rig again. Position recorded in `docs/upstream/fec-arq-venue.local.md`.
 
 ---
 
@@ -1479,9 +1522,13 @@ output, and that is the contribution to make** — held here rather than filed.
 
 The case is measured rather than argued. A media-aware lane reconstructs a multiplex from tracks and
 therefore has no mux rate at all: raw `moq export ts` egress carries no stuffing, thins PSI from 8.04
-to 2.51 PAT/s, opens PCR gaps to 320 ms out of a source with no interval above 40 ms anywhere in 600 s,
-and presents an apparent instantaneous rate of 22–32 Gb/s on 10–27 Mb/s content
-([T4](test-4-remote-e2e-srt.md), [T2](test-2-media-aware-transparency.md); P1, file domain). With a
+to 2.51 PAT/s, puts 8.19 % of PCR intervals above 40 ms with a worst of 319.94 ms out of a source
+with none above 40 ms anywhere in 600 s, and presents an apparent instantaneous rate of 15.66 Gb/s on
+~10 Mb/s content ([T4](test-4-remote-e2e-srt.md), three-lane arm; **wire**, cross-host, `eab960192`).
+The file-domain loopback figures are worse still — 13.7–25.5 % above 40 ms
+([T2](test-2-media-aware-transparency.md)) — but their multi-hundred-millisecond maxima carry a
+join/capture-stop artefact, so the percentage is the robust half and the wire figures above are the
+ones to quote. With a
 rate-controlled egress in front of it the same lane measures IRD-grade — 0 of 20,193 PCR intervals
 above 40 ms over 300 s, and the same across a 24.01 h soak ([T19](test-19-pcr-grid-verification.md),
 [T21](test-21-permanence-soak.md)). So a specification can define mode 3 completely, have two
@@ -1526,12 +1573,53 @@ for the egress to be required to *impose* timing that the carriage destroyed.
 **The commercial objection cuts the other way, and that is worth saying to the author.** A co-author's
 employer is undecided on whether to keep its pacing component proprietary. Specifying the requirement
 does not specify the implementation, and the implementation is where the value is — this campaign's own
-grooming work found that PCR-slot reservation, cushion depth, and stream-clocked versus arrival-clocked
-operation all change the result, the last of them between byte-identical and 30–53% aligned
-([T19](test-19-pcr-grid-verification.md), [`architecture.md`](../docs/architecture.md) §5.1). A
+grooming work found that PCR slot pre-emption, the rate estimator, and stream-clocked versus
+arrival-clocked operation all decide the result — the last of them between byte-identical and 30–53 %
+aligned — while the one parameter an implementer would reach for first, cushion depth, turns out not
+to be the variable at all ([T19](test-19-pcr-grid-verification.md),
+[T18](test-18-delivery-latency.md), [T12](test-12-dual-path-handoff.md)). A
 specification that states the target and leaves the method open creates the market for such a
 component. One that is silent persuades every implementer they do not need one, and is discovered to
 be wrong by the first IRD that fails to lock.
+
+### The retain list drops the CAT, so conditional access cannot survive program-level filtering
+
+The sharpest of the unfiled defects, and it came from asking a deployment question rather than from
+reading the draft again — see the BISS-CA assessment below.
+
+§10 claims the packaging "preserves any scrambling or conditional access information present in the
+MPEG-2 Transport Stream". §5.5.2's per-program retain list keeps the PAT, the selected PMT, and "all
+packets whose PID is listed in the Program Map Table … including the PCR_PID and the PIDs of all
+elementary streams" — and the **Conditional Access Table at PID 0x0001 is not in that list**, nor in
+the paragraph that carefully enumerates the other fixed-PID tables the filter drops (NIT 0x0010, SDT
+0x0011, EIT 0x0012, TDT/TOT 0x0014).
+
+That matters because of the reference direction. ISO/IEC 13818-1 requires system-wide conditional
+access management information to be referenced from the CAT, and the CA_descriptor's meaning depends
+on where it sits — EBU Tech 3292-s1 §4.2.2.2 restates it: in the CAT, `CA_PID` is the **EMM** PID; in
+the PMT or an ES loop, the **ECM** PID. So the EMM stream is not reachable from the PMT at all, and
+dropping the CAT leaves nothing in the track pointing at it. The ECM PID *is* referenced from the
+PMT, but by a CA_descriptor rather than in the elementary-stream loop, so the retain list's
+"PIDs of all elementary streams" wording puts it at risk too.
+
+The failure is silent and total: the receiver gets scrambled elementary streams and Entitlement
+Control Messages, has no Entitlement Management Messages, can therefore never obtain the session key,
+and never descrambles a packet — while every validation rule in §5.1 and §8 passes. §5.5.2's saving
+clause ("Publishers filtering scrambled transport streams MUST also retain the conditional access
+packets required for descrambling") is correct but does not tell the implementer that the table
+locating those packets is the one the retain list just discarded.
+
+Same shape as the accepted #11 and #13/#19 findings: a table on a fixed PID, outside the PAT/PMT
+reference graph, dropped by a filter that only follows that graph. **Nothing here is measured** —
+nothing in this campaign scrambles anything — so the finding is a reading of two specifications, not
+an observed product defect. Drafted as `docs/upstream/msfts-9-cat-emm-dropped.local.md`.
+
+A second, structural half: **ES-level carriage cannot carry scrambled content at all.** An ES-level
+track excludes PAT, PMT and nulls, and `m2tsSiPids`, `m2tsPmtPid` and `m2tsScte35Pid` MUST all be
+absent, so there is no carriage path for the CAT, for the PMT's CA_descriptors, or for any association
+between a scrambled stream and the ECM stream keying it. Independently, a publisher cannot identify
+access points or reassemble PES inside encrypted packet payloads. §10's claim cannot hold for mode 3
+and the draft should say so.
 
 ### Three further defects in the new sections, and one unimplementable MUST
 
@@ -1559,7 +1647,7 @@ Found reading the published §5.5 against the implementation; none filed.
 - **§5.5.3's group-alignment MUST cannot be met literally.** It requires publishers of multiple
   ES-level tracks to align Group boundaries "so that matching Group numbers correspond to the same
   presentation position". Audio and video access units do not share a grid — a 1024-sample AAC frame at
-  48 kHz is 21.33 ms against a 40 ms video frame at 25 fps — so exact correspondence is unachievable
+  48 kHz is 21.333 ms against a 40 ms video frame at 25 fps — so exact correspondence is unachievable
   without splitting or padding, and the requirement also sweeps in sparse signalling tracks such as
   SCTE-35, whose sections have no presentation time of their own. It should be restated as a
   presentation-time *correspondence* requirement — the subscriber must be able to locate the matching

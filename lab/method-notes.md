@@ -1692,6 +1692,32 @@ source.** *(T4, live ingest.)*
 
 ## 6. Claims, and their scope
 
+**Reading a specification from inside finds what it says; asking a deployment question from outside
+finds what it omits. Do both.** *(MSFTS review, 2026-09.)*
+
+> Three passes over the published MSFTS §5.5 produced four defects, all of them things the text got
+> wrong about what it did say. None of them found the CAT omission: §5.5.2's per-program retain list
+> follows the PAT/PMT reference graph, the Conditional Access Table sits outside that graph, and the
+> Entitlement Management Message PID is referenced from the CAT and from nowhere the list can reach —
+> so a conforming publisher produces a scrambled track nothing can descramble, silently. What found it
+> was an unrelated question from the commercial side about whether BISS-CA over MoQ was worth
+> pursuing, which forced the entitlement path to be traced end to end. *A reading pass checks the
+> document against itself; a deployment question checks it against a use it has to support. The second
+> is where omissions live.*
+
+**Cite the clause that carries the obligation, not the clause with the famous name.** *(MSFTS
+contribution round, caught in review before filing.)*
+
+> A draft issue argued that MPEG-2 output timing matters because ISO/IEC 13818-1 §2.4.2 defines a
+> model "in which the system clock is recovered from PCR arrival". It does not. The T-STD is an
+> *idealised* decoder: the PCR values define a delivery schedule, and §2.4.2 constrains buffer
+> occupancy against that schedule on the assumption it is met. The obligation that *real* delivery
+> match it within a tolerance is ISO/IEC 13818-9's real-time interface and, operationally for DVB,
+> TR 101 290's PCR repetition and accuracy limits. The wrong citation would have been caught on sight
+> by an MPEG Systems editor and would have cost a twelve-issue round its credibility on the first
+> reply. *The two-step citation is also the stronger argument — schedule, then tolerance — so getting
+> it right cost nothing.*
+
 **When a measured quantity depends on contention for a shared resource, one user of that resource
 measures the uncontended case — and must be labelled as such.** *(T37 D2 against D7.)*
 

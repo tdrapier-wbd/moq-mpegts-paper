@@ -70,6 +70,7 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 | P1-b | MoQ distributed resilience above the egress 1+1 pair | [T29](test-29-moq-distributed-resilience.md) | — |
 | P1-c | Segmented-HTTP distributed resilience | [T30](test-30-segmented-distributed-resilience.md) | — |
 | P1-d | Congestion and capacity: the step ladders, both planes | [T31](test-31-congestion-capacity-ladders.md) | **MoQ step ladder run** on the EC2 secondary, sharing P1-a's rig. Remaining: the segmented ladder, the latency-max × contention matrix, buffer instrumentation, and **re-basing the rungs on multiples of stream rate** — the specified 12 Mb/s rung is not a shortfall against a 10 Mb/s fixture |
+| P1-m | **An SRT arm on the T28/T31 ladders at matched latency budgets** — does MoQ match SRT's residual loss for the same milliseconds of buffer? | [T28](test-28-failure-injection-matrix.md), [T31](test-31-congestion-capacity-ladders.md) | — **the same rig again**, and it gates the FEC/ARQ contribution: without it, any message to the MoQ working group is a reframing rather than a result. Also serves P1-a and P1-d's ranking gap |
 | P1-e | MPTS / multiple concurrent services | [T10](test-10-mpts-multiservice.md) | partly B-5 |
 | P1-f | The scaling model, segmented half | [T26](test-26-cross-host-fanout.md) | — |
 | P1-g | Capped-stream relay memory under pressure | [T9](test-9-performance.md) | — |
@@ -92,6 +93,7 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 | P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | [T31](test-31-congestion-capacity-ladders.md) | deprioritised behind P1-d |
 | P2-f | LEO / Starlink handover impairment — a candidate, not yet committed | [T35](test-35-leo-handover-impairment.md) | — |
 | P2-g | Reproduce the transparency and three-lane arms from an office network, for its UDP/QUIC posture | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) | — |
+| P2-h | Conditional-access carriage through the opaque lane: do the CAT, the EMM and ECM streams and the CISSA-scrambled payloads survive byte-for-byte, and does a receiver descramble? | new | B-6 — a scrambler and one entitled receiver |
 
 **Remainders inside completed experiments** are recorded in their own files and are not restated
 here: [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md),
@@ -112,6 +114,7 @@ section.
 | B-3 | [T15](test-15-point-to-point-cadence.md)'s residual | a true CBR hardware source; nothing in the lab produces one |
 | B-4 | The segmented plane's low-latency arm at equal conformance | a commercial ABR-to-TS gateway — the same apparatus block as P0-k in a different guise |
 | B-5 | Multi-programme carriage through a *media-aware* edge | the commercial packaging edge itself. A byte cache serves an unusual TS payload exactly as nginx does, so asking it of a plain cache re-measures nginx |
+| B-6 | Conditional-access carriage: does a scrambled multiplex survive the opaque lane? | a BISS-CA scrambler and one entitled receiver. Nothing in the campaign scrambles anything, so every CA claim is currently specification reading |
 
 ### Two of these blocks are being lifted, and the register should be read with that in mind
 
@@ -170,11 +173,17 @@ arrival. The one ordering constraint is that the #3533 A/B above wants the asymm
 first and unify afterwards — and unify before anything that needs parity between the hosts, which
 includes every 1+1 and differential-delay cell.
 
+**The contribution round is drafted and needs no apparatus, so it fits the window exactly.** Twelve
+asks across `moq-dev` and MSFTS are written and awaiting review in `docs/upstream/`, indexed by
+`contribution-round-index.local.md`. Two of them have lab dependencies worth noting here: the
+FEC/ARQ message should wait for **P1-m**, the SRT arm, because without it the message is a reframing
+rather than a result; and the conditional-access finding (§5.5.2's retain list dropping the CAT) is
+specification reading only, since **B-6/P2-h** — anything that scrambles — has never been run.
+
 **What not to do with the window.** No new speculative cells the feed would invalidate, and in
 particular not [T28](test-28-failure-injection-matrix.md)'s latency-budget non-monotonicity, which is
-interesting and second-order. The non-lab work — the MSFTS output-timing contribution and the
-mode-3 convergence analysis ([`upstream-contributions.md`](upstream-contributions.md) §7) — needs no
-apparatus at all and is the right thing to spend a window on that the hardware cannot use.
+interesting and second-order. P1-m is the exception among the ladder work, because it unblocks a
+contribution as well as closing the ranking gap.
 
 ---
 
