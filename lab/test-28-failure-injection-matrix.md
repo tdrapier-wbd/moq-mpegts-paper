@@ -55,7 +55,7 @@ part of this result.** The validated arithmetic above compares elapsed PCR time 
 between two PCR samples, which assumes a constant byte rate. That holds for a clip or a groomed
 egress — the file domain, which is what the self-test exercises — and fails on a raw
 `moq export ts` capture, because the exporter emits PCR-bearing packets in clusters
-([T19](test-19-pcr-timing.md)'s positional finding): the median packet gap between adjacent PCR
+([T19](test-19-pcr-grid-verification.md)'s positional finding): the median packet gap between adjacent PCR
 samples measured **6 packets** rather than the ~150 a CBR stream gives, so the rate estimate
 collapsed to **0.361 Mb/s against a true 8.595 Mb/s** and the grader reported **1,254 s of
 duplication in a 55 s capture**. The hole figure survived that corruption, because a hole is

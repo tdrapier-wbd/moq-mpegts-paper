@@ -1668,6 +1668,18 @@ run before it.** *(T4, live ingest.)*
 > nothing. **Where a feed comes from outside the lab, the boundary between it and the rig is part of
 > the rig's design, not an implementation detail.**
 
+**The reference arm for a carriage measurement is the input to the carriage, not a second copy of the
+source.** *(T4, live ingest.)*
+
+> Asked for a third encoder output to compare MoQ egress against, the answer is that the better
+> reference already exists and costs nothing: the local group the publisher reads from. Three readers
+> joined it simultaneously alongside the publisher and captured **byte-identical** 6 s windows, full
+> 13-PID mux, publisher undisturbed at `NRestarts=0`. A separate encoder output is a *different
+> encode*, so a comparison against it measures encoder variance plus carriage; a tap on the publisher's
+> own input measures carriage alone, on one host and one clock. **Take the reference from the last
+> point the two paths shared, and the difference is attributable; take it from a parallel source and
+> it is not.**
+
 **Do not re-base a ladder on a different emulator to make it runnable.** *(T31.)*
 
 > The macOS workstation has `dnctl`/`pfctl` dummynet, so T31's ladders are buildable here in the sense

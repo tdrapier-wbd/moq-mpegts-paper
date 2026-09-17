@@ -1249,6 +1249,45 @@ It lands on `dev`, because `moq-stats` is published and the generic producer is 
 that this is not a route to take through `mpegts-pacer` — is unchanged and now has an upstream
 alternative to wait for instead.
 
+### Where the specification half of this belongs, and it is mostly not MSFTS
+
+The upstream questline settles the *mechanism*. The open question is where the **convention** is
+written down, and MSFTS is the wrong home for almost all of it. MSFTS is a packaging extension with a
+disciplined scope — §4's list of what it does not define is the best-kept part of the draft — and
+subscriber health reporting applies identically to LOC, CMAF and `m2ts`. A competing design inside one
+packaging extension would also fragment work that is already further along in `moq-dev`. A separate
+draft, or a contribution into MSF itself, is the right venue.
+
+**One paragraph does belong in MSFTS, and it is the part nowhere else can write.** A generic telemetry
+convention can carry buffer occupancy and object counts; it cannot know that for a transport stream
+the broadcast-meaningful counters are TR 101 290 P1, PCR repetition and accuracy, and per-PID
+access-unit rate — nor that **the standard P1 set does not detect the failures this carriage actually
+produces.** That is measured twice over: 57 s of missing video with 0 continuity errors and a PCR
+interval identical to the control ([T24](test-24-partial-media-plane-stall.md)), and #3533's signature of
+PSI, AC-3 and teletext continuing while video and primary audio stop, so a receiver locks and shows
+nothing while every mux-presence monitor reports health. The `m2ts`-specific claim is therefore that
+health assessment of an `m2ts` track requires per-PID access-unit observation *in addition to* P1
+counters, with the reporting mechanism explicitly out of scope — an Implementation Considerations
+paragraph that plants the finding and points at the separate work.
+
+### FEC is a transport question, and the campaign's contribution to it is the comparison
+
+Raised as a possible MSFTS topic; it is not one. FEC trades latency against loss below the object
+layer and applies to every streaming format equally, so it belongs in the transport or QoS discussion.
+Two things this campaign can bring there, neither of them MPEG-specific but both measured here:
+
+- **MoQ sheds whole groups, so its loss granularity is a GOP, and FEC and ARQ recover partial damage.**
+  Measured: outages shorter than `--latency-max` cost nothing and longer ones shed in group-sized units
+  at **0 continuity errors throughout** ([T28](test-28-failure-injection-matrix.md),
+  [T31](test-31-congestion-capacity-ladders.md)). For broadcast a clean group drop may be preferable to
+  a partially corrupt GOP, which weakens the FEC case relative to RTP — but it also means loss that
+  would have been a brief artefact becomes a full GOP outage. The trade is visible in those ladders.
+- **FEC and the relay's latency budget compete for the same milliseconds.** Any proposal has to be
+  scored against simply raising `--latency-max` by the same amount, and against what SRT's ARQ already
+  buys a contribution engineer at an equivalent budget — ~100 retransmission attempts at 2000 ms and
+  the 18.6 ms RTT measured here. The ladders are the right instrument for that comparison and it has
+  not been run.
+
 ---
 
 ## 6. Interoperability
@@ -1427,35 +1466,170 @@ strips nulls and derives an SPTS per programme — so *transparent* in a shipped
 mean *byte-verbatim* either. What the review establishes is that the specification no longer permits the
 silent version of that.
 
-### The draft is being restructured into three named modes, and the gap that leaves is output timing
+### The three named modes are published, and the gap they leave is output timing
 
-The author is formalising the carriage modes rather than leaving one opaque mode and a filtering rule:
-**(1) MPTS transparent, (2) MPTS → SPTSs, and (3) a media-aware lane.** That subsumes #8, #14, #18 and
-#19 above into a single structure, and naming the media-aware lane in the specification is the larger
-change, because it is the lane this campaign has spent most of its measurements on and it has not
-previously been in scope for `m2ts` at all.
+§5.5 "Source Handling and Carriage Modes" is now in the draft, subsuming #8, #14, #18 and #19 into one
+structure: **(1) unmodified carriage, SPTS or whole-multiplex; (2) modified carriage at programme
+level; (3) modified ES-level carriage.** Naming a media-aware lane in the specification is the larger
+change, because it is the lane this campaign has spent most of its measurements on and it had not
+previously been in `m2ts` scope at all.
 
 **The requirement none of the three modes carries is that the egress be able to *time* its MPEG-TS
-output, and that is the next contribution to make** — a todo held here rather than filed, pending the
-restructured draft.
+output, and that is the contribution to make** — held here rather than filed.
 
-The case for it is the campaign's central carriage result, and it is measured rather than argued. A
-media-aware lane reconstructs a multiplex from tracks and therefore has no mux rate at all: raw
-`moq export ts` egress carries no stuffing, thins PSI from 8.04 to 2.51 PAT/s, and opens PCR gaps to
-320 ms out of a source with no interval above 40 ms anywhere in 600 s
-([T4](test-4-remote-e2e-srt.md), [T2](test-2-media-aware-transparency.md)). With a groomer in front of
-it the same lane measures IRD-grade ([T7](test-7-timing-integrity.md),
-[T13](test-13-downstream-grooming.md), [T19](test-19-pcr-grid-verification.md)). So a specification can
-define mode 3 completely, have two implementations conform to it exactly, and still have neither
-produce a stream a hardware receiver will hold — because **the property that decides that is not in the
-mode definition.** Defining a mode without an output-timing option specifies what the bytes are and
-leaves unspecified the one thing an IRD locks to.
+The case is measured rather than argued. A media-aware lane reconstructs a multiplex from tracks and
+therefore has no mux rate at all: raw `moq export ts` egress carries no stuffing, thins PSI from 8.04
+to 2.51 PAT/s, opens PCR gaps to 320 ms out of a source with no interval above 40 ms anywhere in 600 s,
+and presents an apparent instantaneous rate of 22–32 Gb/s on 10–27 Mb/s content
+([T4](test-4-remote-e2e-srt.md), [T2](test-2-media-aware-transparency.md); P1, file domain). With a
+rate-controlled egress in front of it the same lane measures IRD-grade — 0 of 20,193 PCR intervals
+above 40 ms over 300 s, and the same across a 24.01 h soak ([T19](test-19-pcr-grid-verification.md),
+[T21](test-21-permanence-soak.md)). So a specification can define mode 3 completely, have two
+implementations conform to it exactly, and still have neither produce a stream a hardware receiver
+will hold, because **the property that decides that is not in the mode definition.** Byte accuracy is
+specified in detail and time accuracy is not, and for MPEG-2 Systems the two are not separable: 13818-1
+defines a transport stream through the T-STD timing model, in which PCR *arrival* recovers the system
+clock. A byte-perfect stream delivered with arbitrary inter-packet spacing is not a conformant
+transport stream at the point of delivery.
 
-It is adjacent to #15 and #16 above and is neither of them. #15 asks what the 192-octet arrival-time
-prefix *means*, which is the information a pacer would consume; #16 asks who owns the clock when
-`m2tsMuxRate` is declared. Both are about describing timing that already exists. This asks for the
-egress to be permitted, and in mode 3 expected, to *impose* timing that the carriage destroyed — which
-is a different requirement, and the one with the measurements behind it.
+**The draft already concedes the point, in the weakest available form, and that form came from us.**
+[#12](https://github.com/mondain/msfts/pull/12) added the §5.6 note that hardware IRDs recover the mux
+clock from PCR arrival rate, that MOQT does not preserve inter-packet timing, and that deployments
+"may require a rate-controlled egress". It is non-normative, it uses lowercase "should", and it is
+framed as a deployment concern rather than a requirement on any mode. The ask is to promote it.
+
+Four specific changes, in descending order of how hard they are to get accepted:
+
+- **`m2tsMuxRate` MUST be absent for ES-level tracks** (§6.9), so mode 3 — the mode most likely to be
+  used for a broadcast workflow — has no way to declare a rate at all, while §5.5.3 and §8 require the
+  subscriber to recombine those tracks into a TS output. It is told to build a PAT and a PMT and
+  interleave packets, and not at what rate. Making the field available and RECOMMENDED in mode 3 is
+  small, self-contained, and fixes the worst instance.
+- **Promote the §5.6 note to a normative subsection on egress timing**, placing the obligation on the
+  *subscriber producing a TS output* rather than on the publisher — which is the correct party, because
+  MoQ genuinely cannot preserve the timing, so the duty belongs at the reconstruction point. That
+  framing also avoids any objection that the draft is constraining the transport.
+- **Say that 192-octet arrival-time packets are the means, not a curiosity.** Mode 1 with
+  `m2tsPacketSize: 192` and `m2tsTimestampMode: "arrival-time"` is the only configuration in the draft
+  where the per-packet source timing survives, and so the only one where an egress can reproduce it
+  exactly rather than approximate it. The draft never connects §6.12 to §5.6. Doing so gives the timing
+  requirement a mechanism that already exists in the document, and it converts
+  [#15](https://github.com/mondain/msfts/issues/15) from a loose end into a dependency.
+- **`m2tsPsiInterval` describes the source, and mode 3's egress will not honour it.** Measured: PAT
+  repetition fell 8.04 → 2.51/s across the media-aware lane. An egress SHOULD restore the declared
+  cadence; at present §6.8 declares an expectation nobody is asked to meet.
+
+It is adjacent to #15 and #16 and is neither. #15 asks what the arrival-time prefix *means*; #16 asks
+who owns the clock when `m2tsMuxRate` is declared. Both describe timing that already exists. This asks
+for the egress to be required to *impose* timing that the carriage destroyed.
+
+**The commercial objection cuts the other way, and that is worth saying to the author.** A co-author's
+employer is undecided on whether to keep its pacing component proprietary. Specifying the requirement
+does not specify the implementation, and the implementation is where the value is — this campaign's own
+grooming work found that PCR-slot reservation, cushion depth, and stream-clocked versus arrival-clocked
+operation all change the result, the last of them between byte-identical and 30–53% aligned
+([T19](test-19-pcr-grid-verification.md), [`architecture.md`](../docs/architecture.md) §5.1). A
+specification that states the target and leaves the method open creates the market for such a
+component. One that is silent persuades every implementer they do not need one, and is discovered to
+be wrong by the first IRD that fails to lock.
+
+### Three further defects in the new sections, and one unimplementable MUST
+
+Found reading the published §5.5 against the implementation; none filed.
+
+- **The mode is not a field.** There is no `m2tsMode`. A receiver derives the mode from
+  `m2tsModified` plus the presence of `m2tsEsPid` plus `m2tsMpts`, a decision table stated once in
+  prose in §5.5 and never given as a table. Worse, `m2tsMpts` is Optional (§6.15) while §5.5.1 reasons
+  about it being "false" — so absent and false must be equivalent, and the draft never says so. Either
+  add the enumerated field or state the equivalence and give the table normatively.
+- **`m2tsModified: false` is an unverifiable assertion, and the common toolchain violates it
+  silently.** The draft gives the receiver framing validation (§5.1: sync byte, integer multiple of
+  packet size) but nothing against which to check the byte-for-byte claim. Measured here:
+  `ffmpeg -c copy -f mpegts` reduces a 13-PID mux to 5, dropping NIT, TDT/TOT, a second audio,
+  teletext and all three SCTE-35 PIDs, and renumbering the rest
+  ([T4](test-4-remote-e2e-srt.md)) — a publisher built on it would set the flag false in good faith and
+  be wrong. The remedy is the shape the draft already has for SI: an optional source PID inventory the
+  receiver can check the arriving stream against, and a Security Considerations note that the flag is
+  an assertion.
+- **A fixed object count does not bound group duration.** §5.5.1 tells an MPTS publisher that cannot
+  identify random access points to "start a new Group after a fixed number of Objects". On a VBR
+  multiplex that is a fixed *byte* span, not a fixed *time* span, and join latency is a time. Combined
+  with §8's look-back rule and §6.8's demotion of `m2tsPsiInterval` to advisory for MPTS, worst-case
+  join time for transparent MPTS is unbounded in the draft. Bound group duration in time instead.
+- **§5.5.3's group-alignment MUST cannot be met literally.** It requires publishers of multiple
+  ES-level tracks to align Group boundaries "so that matching Group numbers correspond to the same
+  presentation position". Audio and video access units do not share a grid — a 1024-sample AAC frame at
+  48 kHz is 21.33 ms against a 40 ms video frame at 25 fps — so exact correspondence is unachievable
+  without splitting or padding, and the requirement also sweeps in sparse signalling tracks such as
+  SCTE-35, whose sections have no presentation time of their own. It should be restated as a
+  presentation-time *correspondence* requirement — the subscriber must be able to locate the matching
+  position in another track — rather than a group-numbering one. MoQ Group IDs are a poor
+  synchronisation primitive across tracks with different natural cadences, which is exactly what the
+  implementation shows next.
+
+### Mode 3 and the reference implementation are not the same thing, and that is the convergence problem
+
+The draft's ES-level carriage and `moq-dev`'s media-aware lane are routinely spoken of as the same
+mode. They are not, and the difference is structural rather than cosmetic. Read from `origin/main`
+(`rs/moq-mux/src/container/ts/{import,export,catalog}.rs`):
+
+| | MSFTS mode 3 (§5.5.3) | `moq-dev` on `origin/main` |
+|---|---|---|
+| Track payload | **188-octet TS packets**, filtered to one PID | **Decoded access units** — `N.avc3` length-prefixed NALUs, `N.aac` ADTS frames; reassembled PES payloads (`N.ts`) for undecoded ES; complete sections for SCTE-35 |
+| Continuity counters | Preserved inside the carried packets | Observed for resync, then **discarded**; regenerated at export |
+| PAT / PMT | Carried out of band in `initDataList`; subscriber **constructs** a PMT | **Regenerated** at export from catalog identity, re-emitted at keyframes and every 500 ms |
+| PCR | Carried in the track where `m2tsPcrPid == m2tsEsPid`; subscriber sources it from there | **Not carried.** Export synthesises a uniform 25 ms grid; the source PCR PID survives as an identifier only |
+| Group boundaries | MUST align across ES tracks at the same presentation position | Video cuts at keyframes; **audio cuts every frame**; verbatim PES per PES; sections per section |
+| SI tables | Separate ES-level tracks with `role: nit/sdt/eit/tdt` | NIT and SDT as **opaque section sets in the catalog** (`mpegts.si`, with an `interval`); **EIT and TDT/TOT dropped** |
+| Mux rate | `m2tsMuxRate`, though MUST be absent in this mode | No `mux_rate` concept anywhere in the TS code |
+| Catalog | MSF, `packaging: "m2ts"` | **Hang** catalog with a typed `mpegts` extension; `moq-msf`'s `Packaging` enum has no `m2ts` |
+| MPTS | Mode 1 with `m2tsMpts: true` | **First non-zero programme in the PAT only**; export rebuilds a single-programme PSI |
+
+**So the reference implementation is not mode 3. It is a fourth mode the draft does not have:
+access-unit carriage with transport-stream re-synthesis at egress.** Both are defensible, and the
+trade is real. Filtered-TS carriage preserves continuity counters, adaptation fields and PES framing
+exactly, and is a PID filter rather than a demuxer, so it carries what the publisher does not
+understand. Access-unit carriage is what makes the lane media-aware: keyframes define group boundaries
+so joins land on an IDR by construction, per-frame objects give frame-level priority and shedding, and
+codec configuration reaches the catalog so a subscriber initialises without parsing TS. That is the
+mechanism behind this campaign's latency result, and its price is precisely what the measurements show
+lost — continuity counters, stuffing, mux rate and PCR spacing, all of which the egress must
+reconstruct.
+
+**The draft's mode 3 currently sits between the two and collects the costs of both.** It takes on
+per-ES complexity — cross-track group alignment, PAT/PMT reconstruction, PCR sourced from a different
+track, re-interleaving to a single mux under T-STD — without taking the benefit that justifies it,
+because carrying TS packets per PID buys selective component subscription and not media awareness. It
+should resolve one way or the other: pulled back toward mode 2 and presented honestly as selective
+component subscription, or pushed forward to access-unit carriage with the TS re-synthesis specified.
+The implementation is the evidence for the second, which is why the author's suggestion of having
+`moq-dev` contribute to this mode is the right instinct.
+
+**What to ask for, if that contribution happens.** Not a general account of the demux lane — four
+specific things where the implementation holds information the draft lacks:
+
+1. **Why access units rather than filtered TS packets** — settles what mode 3 is for.
+2. **Why audio cuts a group per frame rather than aligning to video** — one QUIC stream per frame so a
+   lost audio frame does not head-of-line-block the next, where §5.5.3's MUST would cost up to a GOP of
+   audio latency. Settles the alignment requirement.
+3. **Why SI travels in the catalog rather than as tracks** — a joining subscriber gets SDT and NIT
+   immediately instead of waiting a repetition cycle, and `mpegts.si`'s `interval` is the same idea as
+   `m2tsPsiInterval`. The draft should permit both and say when to choose each. Against that, the
+   implementation's coverage is short: EIT and TDT/TOT are dropped on `origin/main`, and broadcast time
+   is something an IRD wants ([T2](test-2-media-aware-transparency.md),
+   [T17](test-17-si-snapshot-tracks.md)).
+4. **What the exporter must reconstruct and what it cannot** — the synthetic PCR grid, regenerated
+   continuity counters and PSI, and the absent mux rate. This is the output-timing gap arriving from
+   the implementation rather than from us, and the two arguments should be coordinated: measurement
+   showing the wire fails conformance, implementation showing why the information is unavailable at
+   egress. Either alone is dismissible; together they are not.
+
+**The cheapest convergence win is a declared mux rate.** `moq-dev` strips nulls at import, which is a
+genuine bandwidth gain — the reference clip is 4.57% stuffing and the lane runs ~5.3% below SRT
+([`evidence.md`](../docs/evidence.md) §3.5) — and it is exactly the case §5.5.2 anticipates. Recording
+the observed rate in the `mpegts` catalog section would make the egress re-pacable by a generic groomer
+without any catalog convergence at all. Null-stripping is the win; the declared rate is what makes it
+safe.
 
 ---
 

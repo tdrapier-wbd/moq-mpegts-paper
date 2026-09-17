@@ -428,12 +428,24 @@ the same analyser**, and record what the gateway contributes by itself. If that 
 the gateway is the wrong instrument and no MoQ result taken through it is admissible. Tin is
 preferable to a VM for exactly this reason; if it must be a VM, pin its CPUs and keep the control.
 
+**The non-MoQ comparison arm is already in the rig, and it is better than a second encoder output.**
+The contribution chain splits at a local multicast group before the publisher reads it, and that group
+is a measured fan-out: three simultaneous readers captured **byte-identical** windows with the
+publisher undisturbed ([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*). So the reference
+is the publisher's own input, not a parallel encode — which matters for attribution, because a
+comparison against a separately encoded output measures encoder variance plus carriage, while a
+comparison against the tap measures carriage alone, on one host and one clock. Two ways to use it:
+point the analyser at the tap to characterise the *source* before reading MoQ egress, and, where a
+like-for-like hand-off at the far end is wanted, ship the same bytes conventionally with
+`tsp -I ip <group> -O srt --caller <analyser>` alongside the MoQ path. Neither asks anything of the
+contribution encoder.
+
 **1+1 here is failover, not a hitless merge, and the plan should say so before anyone builds for it.**
 The two hosts will carry the same service from different contribution paths, so the two streams are
 **not** frame- or PCR-aligned. An SMPTE 2022-7-style seamless merge needs alignment and a common
 timestamp, and neither exists here; a merge device fed these two inputs would not switch cleanly. The
 tractable measurements are two independent subscriptions graded separately, and the **switch gap** when
-one is dropped — which is what [T6](test-6-redundancy.md) and [T12](test-12-dual-path-handoff.md)
+one is dropped — which is what [T6](test-6-relay-resilience.md) and [T12](test-12-dual-path-handoff.md)
 measure, and where the merge oracle already lives. Two upstream changes landed since the build under
 test bear directly on it and are unmeasured here: a remote source no longer displacing a local
 publisher ([#3694](https://github.com/moq-dev/moq/pull/3694)) and failover rejecting incompatible

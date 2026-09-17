@@ -134,6 +134,48 @@ locks and shows nothing, which is indistinguishable at the panel from a dozen ot
 feed through `moq export ts` with TSDuck *before* anyone reads an analyser front panel, or the
 campaign will spend its hardware window rediscovering a known upstream defect.
 
+### The two-week window before the feed arrives, and what it is for
+
+The feed, the analyser and the IRD bank arrive together and leave together. They are the scarcest
+resource the campaign has had, and the failure mode is not running out of things to measure — it is
+spending the window debugging a harness. **The window before them is rehearsal, not new enquiry.**
+Three things earn their place, one of them a real experiment that was thought to need the feed and
+does not.
+
+**The #3533 trigger is synthesisable now, and that was missed.** The fence needs a *content*
+discontinuity on a transport timeline that stays *continuous*; a transport break sets the indicator the
+fence uses as an exit, so a clean hop is the precondition for the defect rather than protection from
+it ([T34](test-34-real-encoder-severity.md)). `tsp -I file A.ts B.ts -O srt --caller` produces exactly
+that: one unbroken SRT session, one continuous transport timeline, a hard content join at the
+junction. It runs through the standing live-ingest chain, on the real topology, with no live source.
+Two consequences:
+
+- The reproduction can be attempted this window rather than on the feed, so the live arm of
+  [T34](test-34-real-encoder-severity.md) becomes confirmation on a real encoder rather than first
+  contact with the defect.
+- The **OLD/NEW arms improve.** The two hosts sit either side of #3375 and give a build A/B across two
+  machines; the multicast group gives a better one on *one* machine, because two publishers on
+  different builds can read the same group and are then fed byte-identical input
+  ([T4](test-4-remote-e2e-srt.md)). That removes the host as a variable, which the two-host
+  arrangement cannot.
+
+**Rehearse the Gate 2 run end to end against a synthetic caller.** [T33](test-33-gate2-preparation.md)
+has the fixtures and the acceptance harness; what it does not have is the whole run as one command
+producing one report, exercised through `srt-ingest` rather than beside it. Every harness defect found
+against a looping clip is one not found against a booked analyser.
+
+**Rebuild to current main before the feed, not during it.** The build under test is 64 commits behind,
+the two hosts disagree with each other, and an upstream report taken against a stale tree is stale on
+arrival. The one ordering constraint is that the #3533 A/B above wants the asymmetry, so capture it
+first and unify afterwards — and unify before anything that needs parity between the hosts, which
+includes every 1+1 and differential-delay cell.
+
+**What not to do with the window.** No new speculative cells the feed would invalidate, and in
+particular not [T28](test-28-failure-injection-matrix.md)'s latency-budget non-monotonicity, which is
+interesting and second-order. The non-lab work — the MSFTS output-timing contribution and the
+mode-3 convergence analysis ([`upstream-contributions.md`](upstream-contributions.md) §7) — needs no
+apparatus at all and is the right thing to spend a window on that the hardware cannot use.
+
 ---
 
 ## What to bundle, because prompt count is the scarce resource

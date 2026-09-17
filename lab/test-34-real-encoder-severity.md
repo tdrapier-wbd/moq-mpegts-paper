@@ -138,6 +138,16 @@ real primary distribution rests on code reasoning
 ([T27](test-27-liveness-detector.md)) — and the planning record requires keeping that distinction
 explicit.
 
+**The block was also wider than it needed to be: the trigger does not require a live source.** What
+the fence needs is a content join on a transport timeline that stays continuous, and
+`tsp -I file A.ts B.ts -P regulate --pcr-synchronous -O srt --caller` supplies exactly that — one
+unbroken SRT session, one continuous transport timeline, a hard content cut at the junction — driven
+through the standing ingest chain rather than beside it. That arm is runnable now and should be, so
+that the real-encoder run becomes *confirmation on a production feed* rather than first contact with
+the defect. What the synthetic version cannot settle is the open question below: whether a real
+encoder and splicer resync the **audio** importer at a junction. The two arms answer different
+questions and neither replaces the other.
+
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 
 This matters for operating the live feed as much as for running the experiment, and the answer is
@@ -192,3 +202,12 @@ gives T34 its `OLD`/`NEW` arms on the same live source at no cost. **Do not unif
 this arm runs** — which reverses the sequencing suggested for the 1+1 carriage work, where parity is
 required instead. The older build is not simply better: it lacks #3351, so its raw egress carries the
 worse PCR grid, and a conformance figure from it is not comparable with one from the secondary.
+
+**A better version of the same control exists on one host, and it should be preferred.** The two-host
+arrangement shares a *source* but not a *machine*, so host, kernel, core count and contribution path
+all differ alongside the build. The local multicast group removes all of that: two publishers on
+different builds can read the same group concurrently and are then fed **byte-identical** input —
+measured, three simultaneous readers producing the same digest with the standing publisher undisturbed
+([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*). Run the A/B that way, on the 8-vCPU
+secondary, and keep the two-host pair as the cross-check rather than the primary instrument. It also
+needs no Linux binary copied to the primary, which is the one step the two-host version cannot avoid.

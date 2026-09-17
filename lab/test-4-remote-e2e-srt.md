@@ -103,6 +103,24 @@ later, so moving the source off SRT is a change to stage 1 only, and disappears 
 publisher is ever placed inside the multicast domain. And the group is a tap point a reference
 recorder or a TSDuck analyser can join without opening a second SRT session.
 
+**The tap point is a measured fan-out, not an assumed one.** Three independent readers joined
+`239.255.0.1:5000` simultaneously while `moq-live-publisher` was reading it as a fourth, each capturing
+a 6 s window:
+
+| Reader | Bytes | PIDs | Digest |
+|---|---|---|---|
+| tap 1 | 7,480,332 | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | `b03a6d20…` |
+| tap 2 | 7,480,332 | same | `b03a6d20…` |
+| tap 3 | 7,480,332 | same | `b03a6d20…` |
+
+The three captures are **byte-identical**, carry the full 13-PID mux including TDT/TOT and stuffing,
+and the publisher held `NRestarts=0` throughout. A consumer attached to the group therefore sees
+exactly the bytes the publisher sees, on the same host and the same clock, which makes the group the
+campaign's reference point for anything downstream of the contribution hop: a non-MoQ comparison feed,
+a second publisher on a different build fed byte-identical input, or a recorder. It is a strictly
+better reference than a separate encoder output would be, because it removes the encoder from the
+difference being measured.
+
 Measured on the secondary with a PCR-paced caller attached, the chain carries the mux intact:
 
 | Measurement point | Result |
