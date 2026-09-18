@@ -133,7 +133,10 @@ for _ in $(seq 1 30); do
 	sleep 1
 	FP=$(curl -s --max-time 2 "http://127.0.0.1:$PORT/certificate.sha256" 2>/dev/null) || true
 	[ -n "$FP" ] && break
-	kill -0 "$RELAY_PID" 2>/dev/null || die "relay exited; see $OUT/relay.log$(printf '\n'; tail -5 "$OUT/relay.log")"
+	kill -0 "$RELAY_PID" 2>/dev/null || die "relay exited; see $OUT/relay.log$(
+		printf '\n'
+		tail -5 "$OUT/relay.log"
+	)"
 done
 [ -n "$FP" ] || die "relay never served a fingerprint on :$PORT; see $OUT/relay.log"
 printf '%s' "$FP" >"$W/fp.txt"
@@ -149,6 +152,9 @@ MOQ="$MOQ" PACER="$PACER" CLIP="$CLIP" \
 RC=$?
 
 say "--- acceptance harness exited $RC ---"
-[ -f "$OUT/results.csv" ] && { say "results:"; sed 's/^/  /' "$OUT/results.csv" | tee -a "$LOG"; }
+[ -f "$OUT/results.csv" ] && {
+	say "results:"
+	sed 's/^/  /' "$OUT/results.csv" | tee -a "$LOG"
+}
 say "=== finished $(date -Is) ==="
 exit $RC

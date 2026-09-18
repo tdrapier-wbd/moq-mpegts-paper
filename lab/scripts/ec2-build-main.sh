@@ -26,8 +26,8 @@ echo "=== $(date -u) build $PIN with $JOBS jobs ==="
 
 if ! command -v cargo >/dev/null 2>&1; then
 	echo "--- installing rustup (minimal) ---"
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-		| sh -s -- -y --profile minimal --no-modify-path
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+		sh -s -- -y --profile minimal --no-modify-path
 fi
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo --version

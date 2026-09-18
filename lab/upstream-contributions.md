@@ -1668,6 +1668,23 @@ do not.
 argues the MUST has no literal solution because audio and video access units do not share a grid, and
 "optional" resolves that without anyone having to concede the stronger claim.
 
+**The reply is deliberately held until the next MSFTS revision publishes, and then sent once.** The
+thread's open questions all turn on how far the draft's ES-level carriage moves toward the
+implementation, which the revision decides; answering before it lands would mean answering twice.
+**Three points are owed when it goes**, recorded here so the delay does not lose them:
+
+1. **Bank the mux-rate offer** — catalog field plus padding on export is msfts#25's ask, volunteered,
+   and it is the one place the two venues can converge on a concrete field.
+2. **Correct "just always pad."** Padding unconditionally is the bare-MUST error msfts#32 exists to
+   prevent: re-pacing costs latency equal to its buffer and buys nothing for a file, a software
+   decoder or a downstream multiplexer. The ask is a conditional MUST plus a SHOULD NOT plus
+   configurability.
+3. **Clarify the PCR position rather than contest it.** He is right that transmitting PCR is not what
+   recovers a decoder's clock; our architecture *regenerates* PCR at egress, which is what T19
+   grades. On the current text it reads as disagreement when it is not, and the whole IRD-facing case
+   depends on that regeneration being done correctly — so the risk is "kind of dumb" hardening into a
+   reason not to regenerate it either.
+
 ### The maintainer's objection to the round, and why the volume half of it is right
 
 The draft's editor has objected to the **volume** of issues and to their being **AI-generated**,
@@ -1698,6 +1715,12 @@ pull-request remedy reduces. Arguing about the label addresses the sentence and 
 
 **Method rule:** *a review that only files issues is a review that subcontracts its own conclusions.
 Where the artefact is text and the text is in a repository, send the text.*
+
+**No repository action is being taken on this.** The cadence is being handled directly with the
+editor as a relationship matter rather than by unilaterally converting issues to pull requests, which
+would add eleven more notifications to the thing he objected to. The analysis above stands as the
+position; **nothing is filed, consolidated or re-prioritised on the tracker without his agreement
+first.**
 
 **One point of his to accept without qualification:** that the `moq-dev` implementer is not the
 reference for the draft. Our #33 leans on the implementation's choices as evidence that mode 3 sits

@@ -36,9 +36,18 @@ BCAST="t40.${LABEL}.hang"
 GEN="$HOME/ts-continuous-source.py"
 
 mkdir -p "$RUN"
-[ -x "$MOQ" ] || { echo "no moq at $MOQ" >&2; exit 2; }
-[ -f "$CLIP" ] || { echo "no clip at $CLIP" >&2; exit 2; }
-[ -f "$GEN" ] || { echo "no generator at $GEN" >&2; exit 2; }
+[ -x "$MOQ" ] || {
+	echo "no moq at $MOQ" >&2
+	exit 2
+}
+[ -f "$CLIP" ] || {
+	echo "no clip at $CLIP" >&2
+	exit 2
+}
+[ -f "$GEN" ] || {
+	echo "no generator at $GEN" >&2
+	exit 2
+}
 
 echo "== t40/$LABEL ==" | tee "$RUN/meta.txt"
 {
@@ -85,7 +94,7 @@ sleep 6
 "$MOQ" --client-tls-disable-verify --client-connect "$RELAY" \
 	--broadcast "$BCAST" export ts --latency-max 3s >/dev/null 2>"$RUN/export.log" &
 SUB=$!
-PIDS+=($SUB)
+PIDS+=("$SUB")
 sleep 3
 if ! kill -0 "$SUB" 2>/dev/null; then
 	echo "FAIL: subscriber exited immediately; see $RUN/export.log" | tee -a "$RUN/meta.txt"
@@ -100,7 +109,10 @@ T=0
 while [ "$T" -lt "$SECS" ]; do
 	sleep "$SAMPLE"
 	T=$((T + SAMPLE))
-	kill -0 "$SUB" 2>/dev/null || { echo "subscriber exited at t=${T}s" | tee -a "$RUN/meta.txt"; break; }
+	kill -0 "$SUB" 2>/dev/null || {
+		echo "subscriber exited at t=${T}s" | tee -a "$RUN/meta.txt"
+		break
+	}
 	W=$(awk '/^wchar:/{print $2}' "/proc/$SUB/io" 2>/dev/null)
 	[ -n "${W:-}" ] || break
 	D=$((W - PREV))

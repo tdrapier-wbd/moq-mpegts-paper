@@ -212,6 +212,13 @@ default-featured build the arm could die rather than degrade. Cheapest useful fo
 congestion rig on both binaries at one impairment point; it is not urgent, but it should not be
 discovered during P1-m.
 
+**P1-m is the agreed next session, and it needs no loaned equipment**, so it belongs *before* the
+hardware window rather than inside it. Order of work: build the SRT lane inside the T8b netns
+bottleneck; match the latency budgets across both lanes and prove they are matched before grading
+anything; parameterise the cell list by budget and add the repeat loop; validate against
+`t28-grader-selftest.sh`; then run the 36 cells. **The matched-buffer proof is the gate** — an SRT
+arm at an unmatched buffer produces a ranking that looks like a result and is not one.
+
 **What not to do with the window.** No new speculative cells the feed would invalidate, and in
 particular not [T28](test-28-failure-injection-matrix.md)'s latency-budget non-monotonicity, which is
 interesting and second-order. P1-m is the exception among the ladder work, because it unblocks a
