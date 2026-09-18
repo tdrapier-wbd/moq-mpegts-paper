@@ -180,18 +180,37 @@ replies. What it leaves behind is one debt and one apparatus question.
 **The debt: P1-m now has to carry T28's replication with it.** The FEC/ARQ position quotes the outage
 and capacity table, and every cell in it is a single sample with the latency-budget non-monotonicity
 still *likely rather than established*. Having cited it in a draft intended for a working group,
-leaving it at n=1 is no longer acceptable. Run the SRT arm and the replication in one session on the
-same rig: three repeats against a 5 s outage at budgets {0.5, 1, 2, 3, 4, 6} s, plus the SRT lane at
-matched budgets. One sitting closes the ranking gap in P1-a and P1-d, puts an error bar on the
-non-monotonicity, and unblocks the contribution.
+leaving it at n=1 is no longer acceptable. The shape is settled: three repeats against a 5 s outage
+at budgets {0.5, 1, 2, 3, 4, 6} s, plus the SRT lane at matched budgets, in one session on one rig.
+One sitting closes the ranking gap in P1-a and P1-d, puts an error bar on the non-monotonicity, and
+unblocks the contribution.
 
-**The apparatus question is time-critical and belongs in the same conversation as the analyser.**
-B-6/P2-h needs a BISS-CA scrambler and one entitled receiver, and most professional IRDs implement
-BISS-CA (CA_SYSTEM_ID 0x2610). The IRD bank and analyser arrive in two weeks on a loan that also
-leaves in two weeks, so **whether a scrambler and a BISS-CA-capable receiver can come with them is a
-question to ask now, not when they arrive**. If the answer is yes, the campaign's first
-conditional-access measurement fits inside a window it already has, and #27 stops being specification
-reading. If it is no, nothing is lost by having asked.
+**It cannot be run in a spare hour, and the reason is harness rather than time.**
+`t28-t31-moq-ladder.sh` has **no SRT arm and no budget or repeat loop** — its cells are a fixed list
+(`control`, `step-8-5s`, `step-12-60s`, `step-8-perm`, `outage-0.5s`, `outage-5s`, `outage-30s`), one
+pass each. So three things have to be built before the first cell of P1-m runs: an SRT lane inside
+the same netns bottleneck, matched latency budgets across both lanes, and a repeat loop with the
+budget as a parameter. Then 36 cells at roughly three minutes each. **Building the SRT arm badly is
+worse than not having it**, because the whole point is a like-for-like ranking against the incumbent
+and a mismatched buffer makes the comparison meaningless rather than merely noisy — the trap
+`method-notes.md` §1 records for matched-buffer arms. Schedule it as its own session, ahead of the
+hardware window rather than inside it, since the netns rig needs no loaned equipment.
+
+**The conditional-access apparatus question is withdrawn.** B-6/P2-h would need a BISS-CA scrambler
+and an entitled receiver alongside the loaned analyser, and that is not being pursued: the complexity
+is real, the requirement is unestablished, and `docs/control-plane.md` §9 already records the
+commercial half as the half that decides it. msfts#27 stands on specification reading, which is what
+it claims to be. **Nothing in the hardware window depends on this**, which is the point of dropping
+it now rather than discovering the dependency on the day.
+
+**A new item the rebuild created: grade #3757's backend flip.** Upstream has moved the default QUIC
+backend from quinn to noq, and both hosts are deliberately pinned to quinn so the rebuild stayed a
+one-variable step. A noq pair is built alongside at `~/bin-d518b61b-noq/`. This matters more than it
+looks: `lab/test-8-srt-vs-moq.md` records **noq's BBRv3 aborting the process under high loss**, which
+is precisely the condition P1-m's outage ladder creates, so if the ladders are ever re-run on a
+default-featured build the arm could die rather than degrade. Cheapest useful form is the T8b
+congestion rig on both binaries at one impairment point; it is not urgent, but it should not be
+discovered during P1-m.
 
 **What not to do with the window.** No new speculative cells the feed would invalidate, and in
 particular not [T28](test-28-failure-injection-matrix.md)'s latency-budget non-monotonicity, which is

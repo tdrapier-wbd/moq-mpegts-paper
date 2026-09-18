@@ -1688,6 +1688,46 @@ source.** *(T4, live ingest.)*
 > the one it extends, so the substrate is part of the experiment's definition rather than a detail of
 > its execution. Wait for the host.
 
+### A rehearsal that starts from a directory somebody already set up has rehearsed the measurement, not the day
+
+*From [T33](test-33-gate2-preparation.md).* The Gate 2 acceptance harness fixes the measurement set,
+the run order and the pass table in a script, and its own docstring says that is the point. It was
+still unrunnable. It assumed a relay was listening, its fingerprint was at `/tmp/t33/fp.txt`, and
+three fixtures existed under `/tmp/t33/fixtures/` — and **nothing in the repository created any of
+them.** They had been built by hand during the first rehearsal, in a `/tmp` that no longer existed.
+The harness aborted on its own precondition check, correctly, and could not have been run on
+hardware day by anyone.
+
+> **Rehearse from nothing, on a host that has never run it.** Anything the rig needs and does not
+> build is a precondition you have not tested, and a rehearsal conducted inside a warm working
+> directory cannot see it. The same pass then found two undeclared transitive script imports and a
+> relay that comes up healthy while serving no fingerprint endpoint at all.
+
+### A regression with a sharp signature is a better build-identity test than a version string
+
+*From [T40](test-40-continuous-join-through-srt.md).* Rebuilt from one commit on two hosts, the
+binaries self-reported different version numbers — `0.9.11-d518b61b` against `0.11.2-d518b61b` — from
+the same tree, because the version *number* in this tree goes stale independently of the `-<sha>`
+suffix. Arguing about it from the string is unresolvable.
+
+> **Ask the binary what it is.** Where a known defect has a sharp, build-specific signature, run it:
+> pre-#3375 is healthy under the continuous-join rig and #3375 onward stalls permanently, so three
+> minutes of measurement settles what a version string cannot. Prefer a functional discriminator over
+> any self-report.
+
+### A control made of two production deployments is a coincidence, not an experiment
+
+*From [T34](test-34-real-encoder-severity.md) and [T40](test-40-continuous-join-through-srt.md).* Two
+hosts happened to run builds either side of a regression, which looked like a free `OLD`/`NEW` pair
+and produced a standing instruction not to unify them. It was never an instrument: the pair varied
+host, kernel, core count and contribution path alongside the build, and it held two deployments
+hostage to an experiment that had not been scheduled.
+
+> **If the same comparison can be made from pinned artefacts on one host, make it there and let the
+> deployments move.** Pinned binaries survive every rebuild; a deployment's build does not, and a
+> control that depends on not upgrading anything will eventually be destroyed by someone with a good
+> reason.
+
 ---
 
 ## 6. Claims, and their scope

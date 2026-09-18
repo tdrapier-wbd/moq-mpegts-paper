@@ -197,17 +197,21 @@ does. Against a real encoder — a non-rewinding source — that puts the pair e
 | True-rewind stall that #3375 fixed | present, but a live encoder does not rewind | fixed |
 | Also missing on the older build | #3351's PCR-grid slicing, and TDT/TOT carriage | — |
 
-So the primary's older build is expected to survive a junction the secondary's does not, and the pair
-gives T34 its `OLD`/`NEW` arms on the same live source at no cost. **Do not unify the builds before
-this arm runs** — which reverses the sequencing suggested for the 1+1 carriage work, where parity is
-required instead. The older build is not simply better: it lacks #3351, so its raw egress carries the
-worse PCR grid, and a conformance figure from it is not comparable with one from the secondary.
+So the primary's older build would be expected to survive a junction the secondary's does not. That
+looked like a free `OLD`/`NEW` pair, and it is **no longer needed as one**: the better control has
+been run. The older build was never simply better either — it lacks #3351, so its raw egress carries
+the worse PCR grid, and a conformance figure from it is not comparable with one from the secondary.
 
-**A better version of the same control exists on one host, and it should be preferred.** The two-host
-arrangement shares a *source* but not a *machine*, so host, kernel, core count and contribution path
-all differ alongside the build. The local multicast group removes all of that: two publishers on
-different builds can read the same group concurrently and are then fed **byte-identical** input —
-measured, three simultaneous readers producing the same digest with the standing publisher undisturbed
-([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*). Run the A/B that way, on the 8-vCPU
-secondary, and keep the two-host pair as the cross-check rather than the primary instrument. It also
-needs no Linux binary copied to the primary, which is the one step the two-host version cannot avoid.
+**The one-host version of the control is the instrument, and [T40](test-40-continuous-join-through-srt.md)
+has executed it.** The two-host arrangement shares a *source* but not a *machine*, so host, kernel,
+core count and contribution path all vary alongside the build. Running both arms on the secondary
+from the pinned T27 bisect binaries (`~/t27/bisect/0e61e35` and `025613d`) varies only the build, and
+T40 did exactly that through a faithful copy of the SRT ingest chain: the post-#3375 arm stalls
+permanently at the first content join (0.31 Mb/s residue), the parent is healthy across four joins,
+and the two traces are identical to the hundredth of a Mb/s until the join.
+
+**The builds are therefore free to move.** The control lives in pinned artefacts that no rebuild
+touches, so unifying the hosts costs nothing this experiment needed. What T40 leaves for T34 is the
+question T40 cannot answer: **whether a real encoder produces this junction at all.** T40's generator
+cuts hard at an IDR, which is legitimate but synthetic; only the live feed settles whether the fence
+is one production actually meets.

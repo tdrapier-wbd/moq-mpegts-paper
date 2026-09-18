@@ -194,6 +194,7 @@ Runnable now — no hardware, no live source, no third party:
 | [T29](test-29-moq-distributed-resilience.md) | MoQ distributed resilience | Multi-relay, multi-publisher and receiver-side selection, above the egress 1+1 pair |
 | [T30](test-30-segmented-distributed-resilience.md) | Segmented distributed resilience | Two-host segment store, edge and origin failure, and the silent-misconfiguration class |
 | [T31](test-31-congestion-capacity-ladders.md) | Congestion and capacity | The step ladders on both planes, extending T8b |
+| [T40](test-40-continuous-join-through-srt.md) | The content-join stall through the SRT chain | Whether the deployed two-stage contribution ingest absorbs #3533's trigger, or carries it |
 | [T32](test-32-observability-survey.md) | Observability | Whether commercial monitoring would have caught the silent failures T22, T24 and T27 found |
 
 Blocked, and on what:

@@ -1,11 +1,20 @@
 # Test 33 — Gate 2 preparation: boundary fixtures and the acceptance harness
 
-**State: run, 2026-09-11. Parts A, B and C complete except one arm; nine of ten pass criteria met, one
+**State: run. Parts A, B and C complete except one arm; nine of ten pass criteria met, one
 partially.** The lane carried every boundary condition that could be built — a placed 33-bit PCR wrap,
 a signalled discontinuity, a PMT version increment and source-clock offsets to 20,000 ppm — with **zero
 continuity errors on every capture of every arm**, and the acceptance harness has been rehearsed
 end to end against the software reference with its pass table fixed in a file before the first subject
 ran.
+
+**The rehearsal is now genuinely one command, and making it so found three more untested
+preconditions.** `t33-acceptance.sh` fixes the measurement set and the pass table, and reads like the
+entry point, but it was not one: it assumed a relay was already listening, its fingerprint already at
+`/tmp/t33/fp.txt`, and three fixtures already built under `/tmp/t33/fixtures/`. **Nothing in the
+repository created any of those** — they were made by hand in the first rehearsal and lived in a
+`/tmp` that no longer exists, so the harness was unrunnable by anybody, including us. It is now
+driven by [`t33-gate2.sh`](scripts/t33-gate2.sh), which builds the fixtures from a clip, starts the
+relay, derives the fingerprint and hands over. See *What the one-command rehearsal found* below.
 
 **The preparation found its first untested precondition immediately, which is what it was for.** The
 boundary fixtures could not reach the pipeline at all: they carry no PAT or PMT, so `moq import ts`
@@ -485,6 +494,39 @@ and the relay is in AWS and the analyser is back inside the operator's network, 
 trip. That is an honest measurement of MoQ **as a distribution path** and a poor one of its **minimum
 latency**. If the latter is wanted, a relay has to sit alongside the publisher, and that is a different
 experiment.
+
+## What the one-command rehearsal found
+
+Run on the secondary against `d518b61b` (current `main`, quinn), `t33-gate2.sh` reached a full pass
+— thirteen graded rows, **every one `PASS`**, control re-checked before each subject, including the
+soak arm. Getting there cost four defects, all of them in the *rig* rather than the lane, and all of
+them the kind that would have been discovered on hardware day:
+
+1. **The harness was not an entry point.** It aborted on its own precondition check, correctly, for
+   a missing relay fingerprint. The relay, the fingerprint and three fixtures were all assumed to
+   pre-exist. Had the fixtures not been reconstructible from a clip this would have cost the window
+   outright.
+2. **Two undeclared transitive dependencies.** `t33-service-fixture.py` imports
+   `ts-pcr-fixtures.py`, and the arm script needs `t33-inject-condition.py` and
+   `t33-partA-arm.sh`. A host provisioned with only the named scripts fails on the first fixture.
+3. **The fixture cut used `-P until --seconds` and produced the whole 745 MB clip.** A file source
+   is read as fast as the disk allows, so the wall-clock limit never binds. This is already a rule in
+   [`method-notes.md`](method-notes.md) and it was paid for a second time; the script now cuts by
+   packet count and refuses a fixture outside a sane size band.
+4. **A flag-only relay serves no fingerprint.** Started from `demo/relay/localhost.toml` the QUIC and
+   `web.http` listeners share a port, so the fingerprint endpoint appears to be a property of the
+   relay. Started from flags, `--server-bind` alone comes up healthy, logs `listening kind="quic"`,
+   and serves no `/certificate.sha256` at all — the relay is fine and every client fails. It needs
+   `--web-http-listen` explicitly.
+
+**Method rule:** *a rehearsal that begins from a working directory somebody already set up has
+rehearsed the measurement and not the day. Start it from nothing, on a host that has never run it.*
+
+One result worth recording rather than treating as noise: on the `discontinuity` arm the grader
+reports `pcr_max_ms` of 95,443,492 — the 33-bit PCR wrap period expressed as an interval — while
+still scoring `pcr_over40 = 0`, because the signalled-discontinuity discount removes it. That is the
+corrected gate behaving as designed, and it is also a live demonstration of the limitation recorded
+below: it discounts by count, not by pairing each interval to its own flag.
 
 ## Open
 

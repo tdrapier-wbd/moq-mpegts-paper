@@ -1632,6 +1632,79 @@ Three decisions inside that round worth keeping:
   regardless of which way the implementer jumps. The two are cross-linked so neither looks like a
   single-venue complaint.
 
+### moq-dev#3731 answered: agreement on the diagnosis, a concession on mux rate, and one correction owed
+
+The implementer replied within hours, and the useful content is narrower than the agreement suggests.
+
+| Asked | Answered |
+|---|---|
+| Is MSFTS compatibility an objective? | Convergence is a goal, but **on conversion, not verbatim transport** — *"my goal is to convert TS to/from MoQ, not to transport a legacy protocol verbatim"*, on the same reasoning that there is no RTP-over-MoQ or RTMP-over-MoQ |
+| Is mode 3 the right design? | No — *"the worst of both worlds… all of the overhead of TS and it's still a separate format that players must explicitly support"* |
+| Does the timing reference travel with the media? | Carrying PCR is *"kind of dumb… intended for hardware decoders that don't have their own clocks"*, followed by *"IDK it doesn't really matter"* |
+| Accept §5.5.3's group-alignment MUST? | No — *"use timestamps for synchronization, not group IDs"*, **but optional is acceptable** |
+| SI in the catalog or as tracks? | *"IDK"* — no position |
+| Will the observed mux rate be recorded? | **Yes** — put it in the catalog, report it as `maxBitrate` on import, and **pad to it on export** |
+
+**The mux-rate answer is the result, and it was volunteered.** It is what msfts#25 asks the draft
+for, offered unprompted by the implementation, which means the two venues can converge on this one
+field without anyone being argued into it.
+
+**One correction is owed, and it is the same correction msfts#32 exists to make.** He floats *"or
+frankly just always pad I guess"*. Always padding is exactly the bare-MUST error #32 was written to
+avoid: re-pacing costs latency equal to its buffer, and for a file, a software decoder or a
+downstream multiplexer it buys nothing — which is why #32's ask is a conditional MUST paired with a
+SHOULD NOT and a request that the behaviour be configurable. The reply should carry that shape rather
+than let "always pad" become the implementation.
+
+**The PCR dismissal needs clarifying rather than contesting, and it is the one answer that could
+cost us.** He is right that transmitting PCR across the network is not what recovers a decoder's
+clock, and our architecture agrees — the egress *re-synthesises* PCR on its own grid, which is what
+T19 grades. The risk is that *"kind of dumb"* hardens into a reason not to regenerate PCR correctly
+either, and the entire IRD-facing case depends on that regeneration. Worth a short reply saying
+plainly which of the two we need, because on the current text it reads as though we disagree when we
+do not.
+
+**On group alignment the optional formulation is enough for us**, and it is worth saying so: msfts#31
+argues the MUST has no literal solution because audio and video access units do not share a grid, and
+"optional" resolves that without anyone having to concede the stronger claim.
+
+### The maintainer's objection to the round, and why the volume half of it is right
+
+The draft's editor has objected to the **volume** of issues and to their being **AI-generated**,
+on the grounds of the work it creates for him. The two halves deserve different answers.
+
+**On volume he is right, and the repository's own history proves it rather than his impression.**
+Every one of the sixteen merged pull requests on that draft — including #10, #11, #12, #18 and #19,
+which closed our earlier findings — was **authored by the editor himself.** Our contribution model
+has therefore been to file an issue and have him write the specification text, which means the more
+useful our review has been, the more work it has created for exactly one person. Eleven issues in a
+single day is eleven patches on a volunteer editor's desk. That is a real cost and it is not
+answered by the issues being individually correct, which is the answer we gave.
+
+**The remedy is to send the text, not the defect.** Most of the eleven already contain proposed
+wording — #24, #25, #26 and #32 all do — and the draft is kramdown in a git repository we can fork.
+Converting them to pull requests moves the work from him to us at close to zero marginal cost, and
+it happens to answer the provenance objection too, since a patch that builds is evidence of review
+in a way an issue is not. Two further cheap moves: **consolidate** #28–#31, which are four defects in
+one section, into a single pull request; and **state a priority order** rather than leaving eleven
+equal-looking items, because "if you only take one, take #32" is information only we have.
+
+**On AI provenance the objection is weaker but should not be argued with.** The `moq-dev`
+repository openly labels its own drafts as AI-generated from the implementation
+([#3728](https://github.com/moq-dev/moq/pull/3728)), and the maintainer there reads ours the same way
+— he opened his reply to #3731 with *"I agree with mr AI"*. So provenance is not a norm being
+breached. But the thing he is actually objecting to is **review burden**, and burden is what the
+pull-request remedy reduces. Arguing about the label addresses the sentence and not the complaint.
+
+**Method rule:** *a review that only files issues is a review that subcontracts its own conclusions.
+Where the artefact is text and the text is in a repository, send the text.*
+
+**One point of his to accept without qualification:** that the `moq-dev` implementer is not the
+reference for the draft. Our #33 leans on the implementation's choices as evidence that mode 3 sits
+between two coherent designs; the argument stands on the draft's own text and the base
+specifications, and should be made that way in that venue. Where the two projects disagree, that is a
+convergence question for both, not a standard one of them sets.
+
 ### The retain list drops the CAT, so conditional access cannot survive program-level filtering
 
 Filed as [#27](https://github.com/mondain/msfts/issues/27). The sharpest of the round, and it came
