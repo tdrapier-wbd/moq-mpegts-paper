@@ -10,6 +10,7 @@
 set -uo pipefail
 
 MOQ=${1:?moq binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${2:?moq-relay binary}
 TOML=${3:?relay toml}
 SRC=${4:?source .ts}
@@ -23,6 +24,10 @@ WAITMIN=${WAITMIN:-5}
 mkdir -p "$OUT"
 
 set -m
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 PIDS=()
 cleanup() {
 	for p in ${PIDS+"${PIDS[@]}"}; do
@@ -37,7 +42,7 @@ cleanup() {
 trap cleanup EXIT
 
 cp "$TOML" "$OUT/relay.toml"
-(cd "$OUT" && exec "$RELAY" relay.toml --server-quic-gso=false) >"$OUT/relay.log" 2>&1 &
+(cd "$OUT" && exec "$RELAY" relay.toml "${RELAY_GSO[@]}") >"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 PIDS+=("$RELAY_PID")
 
@@ -56,7 +61,7 @@ kill -0 "$RELAY_PID" 2>/dev/null || {
 	exit 1
 }
 
-C=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --client-quic-gso=false)
+C=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443)
 
 # Publisher first here: the arrival oracle must not spend its window waiting for
 # the catalog, because its clock starts on the first byte it reads.
@@ -83,7 +88,7 @@ GRADER=${GRADER:-python3 $(dirname "$0")/t19-pcr-arrival.py $SECS}
 
 echo "=== $(basename "$OUT"): $("$MOQ" --version) / $("$RELAY" --version) ==="
 # shellcheck disable=SC2086  # GRADER is a command line, and splitting it is the point
-timeout "$((SECS + 20))" "$MOQ" "${C[@]}" --broadcast "$BCAST" export ts --latency-max "$MOQLAT" \
+timeout "$((SECS + 20))" "$MOQ" "${C[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$MOQLAT" \
 	2>"$OUT/export.log" |
 	$GRADER
 echo

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T4 three-lane arm — one MPEG-TS, one origin, one internet path, three data planes.
 #
 #   t4-three-lane.sh <moq|srt|hls> <out-dir> [media_seconds]
@@ -100,8 +104,8 @@ PACE="tsp --realtime -I file $REMOTE_CLIP --infinite -P regulate --pcr-synchrono
 	case "$LANE" in
 	moq)
 		echo "$PACE -O file - \\"
-		echo "  | $REMOTE_MOQ --client-tls-disable-verify \\"
-		echo "      --client-connect https://localhost:443/anon \\"
+		echo "  | $REMOTE_MOQ ${MOQ_DIAL[0]} \\"
+		echo "      ${MOQ_DIAL[1]} https://localhost:443/anon \\"
 		echo "      --broadcast $BCAST import ts"
 		;;
 	srt)
@@ -180,9 +184,9 @@ echo "capturing (bound ${NPKT} packets, ceiling ${CAP_S}s)..."
 set +e
 case "$LANE" in
 moq)
-	timeout "$CAP_S" "$LOCAL_MOQ" --client-tls-disable-verify \
-		--client-connect "https://$HOST:443/anon" \
-		--broadcast "$BCAST" export ts --latency-max "$MOQ_LATENCY" \
+	timeout "$CAP_S" "$LOCAL_MOQ" "${MOQ_DIAL[0]}" \
+		"${MOQ_DIAL[1]}" "https://$HOST:443/anon" \
+		--broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$MOQ_LATENCY" \
 		>"$OUT/raw.ts" 2>"$OUT/receive.log"
 	;;
 srt)

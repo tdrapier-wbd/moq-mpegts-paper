@@ -494,6 +494,23 @@ have it — and it will return a plausible number rather than refuse.** *(T3.)*
 > three orders of magnitude apart, under one column heading. Before booking an unfilled cell as a cheap
 > gap, check the instrument is defined on the thing being compared.
 
+**"Pacing" names two independent quantities, and a lane can be perfect on one and absent on the
+other, so measure them separately.** *(T13, the `84b34f54` residual.)*
+
+> The two are *where the PCR values fall in time* and *how many bytes the stream carries between
+> them*. On the media-aware egress they now have opposite answers: PCR intervals are exactly
+> 25.00 ms at median, p95 and maximum — better than the 24.65 ms source, because the exporter
+> regenerates the values onto a synthetic grid rather than carrying them — while the byte count
+> between the same pairs runs 188 B to 854,836 B against the 31,541 B the declared rate requires.
+> A report that says "pacing is fixed" on the first is true and useless.
+>
+> **Read the interval from the carried PCR values and the rate from the packet count over the same
+> pair** (`pcr-residual.py`). Both statistics come from one capture, they cannot disagree about which
+> stream they describe, and the second is the one a groomer exists to supply. It also explains a
+> result that otherwise looks like a precision problem: a P2 gate predicts arrival from byte
+> position, so a stream whose instantaneous rate spans four orders of magnitude fails every PCR by
+> construction, and no tightening of the encoder would have helped.
+
 **Pass `pcrverify --bitrate` explicitly whenever the arm might not be carrying full programme. Grading
 PCRs against a rate TSDuck derived from those PCRs turns a conservation failure into a PCR failure.**
 *(T19 measurement 11.)*
@@ -1728,6 +1745,64 @@ hostage to an experiment that had not been scheduled.
 > control that depends on not upgrading anything will eventually be destroyed by someone with a good
 > reason.
 
+### An inline instrument damaged one lane and was invisible on the other
+
+*From [T28](test-28-failure-injection-matrix.md) P1-m.* To measure delivery latency the rig put a
+PES-timestamp tap inline on both sides of both lanes — deliberately identical on each, so that
+whatever it cost, it cost both arms. It did not. The tapped SRT lane graded **4.2–5.4 s of programme
+lost and 5,704–8,930 continuity errors with no impairment at all**; the same lane with the tap removed
+graded **0.000 s lost and 0 continuity errors**. The tap was corrupting the transport stream, and the
+MoQ lane never showed it because `moq export ts` re-synthesises the stream at egress — regenerating
+continuity counters and PCR — and launders any damage done upstream of it.
+
+> **"The instrument is on both arms" is not the same as "the instrument cancels."** It cancels only if
+> both arms would *report* its effect. Where one lane passes bytes through and the other regenerates
+> them, an instrument that damages the stream is visible on the first and erased by the second, and
+> the comparison silently becomes a measurement of the instrument. Had this run been graded without
+> its controls, SRT would have looked catastrophically worse than MoQ on entirely fabricated evidence.
+
+> **Prefer a mirroring tap to a pass-through one.** Tee to a file, or derive source timestamps offline
+> from a known fixture, rather than routing the media through a process that has to re-emit it. And
+> keep an unimpaired control for **every** lane at **every** setting: this was caught only because the
+> SRT controls refused to grade clean.
+
+### Never edit a shell script while it is running
+
+*From [T8b](test-8b-congestion-control.md) P0-i.* A 20-minute pass finished all ten cells, then
+emitted `line 172: re: command not found` and `line 173: d: unbound variable` and skipped its own
+summary block. Both the local and the deployed copy passed `bash -n` afterwards, which sent the
+investigation looking for a corrupted transfer that had not happened.
+
+> **`bash` reads a script incrementally, by byte offset, not into memory.** Rewrite the file
+> mid-run and the interpreter resumes at its old offset in the new bytes, executing fragments of
+> whatever now sits there. The symptom is a syntactically valid script producing nonsense errors on
+> lines that do not contain the reported text, near the end of a long run. Edit a copy and deploy it
+> for the *next* run; never `scp` or `sed -i` over a script with a live pass in it.
+
+### A `pgrep` wait loop matches the command that contains it
+
+*From [T8b](test-8b-congestion-control.md) P0-i.* A chain script waited for the previous pass with
+`while pgrep -f "t8b-export-death.sh p0i "; do sleep 20; done`. The pass ended and the loop did not,
+because a *monitoring* shell invoked over SSH carried the same pattern in its own command line, so
+`pgrep` matched the watcher instead of the watched and the chain waited on itself indefinitely. The
+matching mistake with `pkill -f` is worse: the same self-match terminated the SSH session issuing it.
+
+> **Bracket one character of any `pgrep`/`pkill` pattern** — `t8b[-]export-death` — so the pattern
+> cannot match a command line that quotes it. Better still for sequencing, wait on a marker the run
+> writes at the end rather than on the absence of a process, since absence is also what a crash on
+> the first cell looks like.
+
+### A subscriber that ran for the whole window and did not die may still have measured nothing
+
+*From [T8b](test-8b-congestion-control.md) P0-i.* The rig's outcome is "did the process exit", so a
+lane delivering zero bytes presents as N processes that ran the full 90 s and survived — which is
+exactly the null the experiment was trying to distinguish from a real one. With `--auth-public`
+silently inverted (§5), a whole arm could have scored as a clean survival.
+
+> **Where the measurement is an absence, add an independent liveness column.** Classify a cell whose
+> capture is below a floor as *void* rather than as a survivor, and print it. A null result needs
+> positive evidence that the rig was working, and "nothing crashed" is not that evidence.
+
 ---
 
 ## 6. Claims, and their scope
@@ -2069,3 +2144,131 @@ server and the wire.** *(T20, HLS over HTTP/3.)*
 > succeeding quietly — and is corroborated by two further instruments that cannot collude with the
 > client's configuration: the origin's per-request ALPN log and a packet capture counting UDP against
 > TCP.
+
+**After #3793, dial-side and relay flags were renamed — detect, do not assume.** *(Post-#3793 rebuild,
+T21/T27/T40.)*
+
+> [#3793](https://github.com/moq-dev/moq/pull/3793) rejects the old names outright:
+> `--client-connect` → `--connect`, `--client-tls-disable-verify` → `--connect-tls-insecure`,
+> `--latency-max` → `--max-age`; relay `--server-bind` / `--tls-generate` → `--listen` /
+> `--listen-tls-generate`; `--server-quic-gso` → `--quic-gso`. Campaign rigs that compare two builds
+> must detect **each binary separately** — a pre-#3793 subscriber against a post-#3793 relay still needs
+> `--client-*` on the old side and `--connect-*` on the new one, and mixing them is a silent
+> non-start. The shared helper is [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh); `ec2-swap-build.sh`
+> migrates standing unit files when the deployed binary exposes `--connect`.
+
+**`--auth-public` inverted its meaning at the CLI migration, and the wrong value delivers nothing
+without erroring anywhere.** *(T13 `3831-a`, P0-i, and both standing relays.)*
+
+> It takes a path glob, not a boolean, and which glob grants the connection root changed. Measured on
+> one host, loopback, client dialling `https://…/anon`, everything else held:
+>
+> | relay build | `--auth-public ""` | `--auth-public "**"` | `--auth-public "anon/**"` |
+> |---|---|---|---|
+> | `moq 0.9.15` (pre-migration surface) | **15.4 MB** | 0 | 0 |
+> | `moq 0.11.2-5d0991b9` | 0 | **13.3 MB** | 0 |
+> | `moq 0.11.2-615d166d` | 0 | **14.5 MB** | 0 |
+>
+> The pre-migration surface reads `""` as *everything is public*; the post-migration one reads it as
+> *nothing is*. `anon/**` serves nothing on any build, because the `/anon` in the URL is the
+> connection root and the path the relay matches is relative to it — so the documented form is for a
+> client dialling the bare origin, not one dialling `/anon`.
+>
+> **The failure is silent in all three directions.** The relay binds and serves its fingerprint, the
+> publisher's session is accepted, the subscriber's session is accepted, the announcement is
+> registered — and no byte is ever delivered, with no error logged by any of the three. A rig on the
+> wrong value is indistinguishable from a working one until something counts the capture.
+>
+> Two consequences. **Both standing `:443` relays carried the wrong value** — repointed from a
+> pre-migration build to `5d0991b9` with `--auth-public ""` carried across, so from the repoint
+> onward they accepted every session and would have served nothing. And a rig that hard-codes either
+> value cannot carry a build comparison across the migration: P0-i's positive control is a
+> pre-migration binary, and a literal `"**"` voided it on the first attempt. `moq-cli-flags.sh` now
+> derives `RELAY_AUTH` from the detected surface; use it rather than a literal.
+>
+> The general rule is the cheap one and would have caught all of it: **check the capture is non-empty
+> before grading it.** Hours went into bisecting a feature that was working, because a zero-byte file
+> and a broken feature look identical at the census.
+>
+> **This is now enforced rather than remembered.** `moq-cli-flags.sh` exports `moq_relay_public`,
+> which assembles the whole invariant argv so that omitting the grant is not expressible, and
+> `moq_require_bytes`, which voids a cell whose capture is under a floor. `check-rigs.sh` fails the
+> tree if any script hard-codes a migrated flag, writes `--auth-public` literally, or starts a relay
+> without a grant. Run it before a session.
+
+### The default congestion controller changed to the one known to abort, and a rig that does not pin it cannot attribute anything
+
+*(From the `84b34f54` build survey.)* `--quic-congestion-control` takes `loss` (CUBIC) or `delay`
+(BBRv3) and **defaults to `delay`**. [T8](test-8-srt-vs-moq.md) records noq's BBRv3 aborting the
+process under high loss — precisely the condition the outage ladders create — so the default is the
+arm most likely to fail, and it is selected by saying nothing.
+
+> The flag was `--server-quic-congestion-control` before the #3793 CLI migration and
+> `--quic-congestion-control` after, so a rig that did pin it on an older build stops pinning it on
+> a newer one: the flag name errors, or the line is quietly dropped in a shell that tolerates it,
+> and the controller reverts to the default. A build comparison across the migration then carries a
+> **controller change as well as a code change**, attributed to neither.
+>
+> **Pin the controller on every relay, through `RELAY_CC_FLAG` rather than a literal**, and state it
+> with the result. The same applies to the backend itself: #3811 deleted quinn, so every figure from
+> `615d166d` onward is a noq figure whatever the rig asked for, and a comparison spanning it is
+> comparing two stacks. One related trap: **the iroh backend cannot turn GSO off and rejects an
+> explicit `false`**, so `--quic-gso=false` only works on a build that dropped the iroh feature —
+> which `ec2-build-main.sh` does, and a default-feature build does not.
+
+### A cleanup pattern keyed on a flag name stops matching when the flag is renamed
+
+*(From the repo-wide rig audit.)* Twenty `pkill -f "[m]oq-relay --server-bind $PORT"` patterns
+across the rigs matched nothing once the relay started with `--listen`. Nothing errored: `pkill`
+exits non-zero when it matches nothing, and every one of these was `|| true` or end-of-pipeline, so
+the stale relay survived the cell and held the port. The next cell then failed to bind, in a
+different script, with no reference to the cause.
+
+> **Match a process on what will not be renamed** — the binary name and the address it was given —
+> rather than on a flag between them: `[m]oq-relay.*127.0.0.1:$PORT`. A pattern that silently stops
+> matching is worse than one that errors, because a cleanup that does nothing looks exactly like a
+> cleanup that had nothing to do.
+
+### One measured defect is not a diagnosis of a different symptom
+
+*From the standing live-ingest chain.* The auth inversion above was measured, real, and present on
+both standing relays, and it was then written up — in the status file, the notebook and the
+reproduction instructions — as the reason the standing chain was serving 0 bytes, with
+`--auth-public "**"` called "the whole fix". Applying it changed nothing. The chain had **three**
+independent faults: the auth value; a publisher dialling `https://localhost:443` against a relay whose
+generated certificate and advertised origin are its Elastic IP, which the relay answered with an
+immediate redirect until the client logged `connection loop exited: reconnect timed out after 10s`;
+and no source at all, the SRT listener having had no caller since two days earlier, so the multicast
+group it feeds was empty. Only after all three were repaired did a subscriber recover 14.4 MB.
+
+> **A confirmed defect on the path is a candidate, not a cause, until the stages between it and the
+> symptom are each observed.** The failure here was quoting a good loopback measurement as the
+> explanation of a different observation on a different host. Walk the chain stage by stage and count
+> bytes at each boundary — source, ingest, group, publisher session, relay grant, subscriber — and fix
+> what each stage shows rather than what the most recently understood defect suggests.
+
+> **`systemctl is-active` is not evidence that a pipeline is running.** All three units reported
+> `active` with `NRestarts=0` throughout: the SRT listener was idle rather than receiving, and the
+> publisher's inner connection loop had exited inside a shell that stayed alive. Health checks on this
+> chain must count bytes, which is what `live-feed-status.sh` is for.
+
+**#3811 deleted the quinn backend, so every post-2026-09-21 build is a noq build.** *(T13 `3831-a`.)*
+
+> [#3811](https://github.com/moq-dev/moq/pull/3811) removed the quinn and quiche implementations and
+> their Cargo features outright; `--no-default-features --features quinn` now fails with *the package
+> 'moq-cli' does not contain this feature*, which is how `ec2-build-main.sh` first hit it. The campaign
+> measured on quinn up to `5d0991b9`, and [T8](test-8-srt-vs-moq.md) records noq's BBRv3 aborting under
+> high loss, so a comparison spanning that commit carries a transport change as well as a code change.
+> Say which backend a figure is on whenever it crosses #3811, and prefer file-domain evidence for any
+> claim taken across it.
+
+**On homogeneous `5d0991b9`, any `#3493` re-soak that crosses a timestamp reset is blocked by
+[#3798](https://github.com/moq-dev/moq/issues/3798).** *(T21 `3493-check-2h`, `3493-loop-2h`.)*
+
+> Import aborts with *frame timestamp is below the live edge* at the first **content join** on
+> `ts-continuous-source.py` (~600 s on `CNNiEMEA2.ts`) and at the first **loop wrap** on
+> `tsp --infinite` (~665 s on the same clip). Both are the same `TimestampRewind` in
+> `container::Producer::write`; the monotonic-timeline rule does not distinguish continuous join from
+> true rewind for tracks without `reanchor()`. A #3493 slope confirmation therefore needs either an
+> upstream fix ([#3798](https://github.com/moq-dev/moq/issues/3798)) or a single-pass window under one
+> clip length — which cannot reach 2 h without a reset.

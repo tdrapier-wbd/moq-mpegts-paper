@@ -29,6 +29,10 @@
 # it can tolerate is reported rather than quietly averaged.
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 OUT=${1:?output dir}
 SECS=${2:?capture seconds}
 ARM=${3:?arm: srt|rist|moq|hls, or clock-up / clock-down}
@@ -42,6 +46,7 @@ REMOTE_SRC=${REMOTE_SRC:-/home/ubuntu/CNNiEMEA2.ts}
 RELAY_URL=${RELAY_URL:-https://$ORIGIN_IP:443/anon}
 BCAST=${BCAST:-t18.wan.hang}
 MOQ=${MOQ:-$HOME/bin-main/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 
 VPID=${VPID:-111}
 RATE=${RATE:-10000000}
@@ -177,8 +182,8 @@ case "$ARM" in
 srt) RECEIVE=(tsp --realtime -I srt --caller "$ORIGIN_IP:$PORT" --latency "$BUFMS" -O file -) ;;
 rist) RECEIVE=(tsp --realtime -I rist --profile main "rist://$ORIGIN_IP:$PORT?buffer=$BUFMS" -O file -) ;;
 moq)
-	RECEIVE=("$MOQ" --client-tls-disable-verify --client-connect "$RELAY_URL"
-		--broadcast "$BCAST" export ts --latency-max "$MOQLAT")
+	RECEIVE=("$MOQ" "${MOQ_DIAL[@]}" "$RELAY_URL"
+		--broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$MOQLAT")
 	;;
 hls)
 	# `tsp -I hls` exits on an empty playlist, so wait for the origin's live window.

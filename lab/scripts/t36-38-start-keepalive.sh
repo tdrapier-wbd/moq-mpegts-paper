@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # Hold a subscriber on each channel for the whole session.
 #
 # Between arms the last subscriber detaches, the relay cancels the upstream
@@ -14,8 +18,8 @@ cd $W
 FP=$(cat $W/fp.txt)
 for ch in cnn tnt cnn-intl; do
   ~/bin-3529/moq --backoff-timeout 0 \
-    --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/wbd-parent.jwt)" \
-    --client-tls-fingerprint "$FP" export --broadcast "$ch" ts \
+    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/wbd-parent.jwt)" \
+    "${MOQ_FP[@]}" "$FP" export --broadcast "$ch" ts \
     > /dev/null 2> $W/logs/keepalive-$ch.log &
   echo "  keepalive on $ch (pid $!)"
 done

@@ -10,6 +10,10 @@
 # the groomer. The pacer is deliberately absent.
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 SRC=${1:?source .ts}
 OUT=${2:?output dir}
 SECS=${3:?capture seconds}
@@ -50,7 +54,7 @@ trap cleanup EXIT
 # --- relay: documented local config, GSO off (it stalls on macOS loopback) ------
 pkill -f "moq-relay" 2>/dev/null || true
 sleep 1
-(cd ~/moq-dev && exec "$TGT/moq-relay" demo/relay/localhost.toml --server-quic-gso=false) \
+(cd ~/moq-dev && exec "$TGT/moq-relay" demo/relay/localhost.toml "${RELAY_GSO[@]}") \
 	>"$OUT/relay.log" 2>&1 &
 PIDS+=($!)
 sleep 3
@@ -67,8 +71,8 @@ URL=https://localhost:4443
 # --- subscriber first: catalog reservation gating publishes once tracks resolve -
 echo "capturing ${SECS}s of ungroomed MoQ egress..."
 set +e
-"$TGT/moq" --client-tls-fingerprint "$FP" --client-connect "$URL" \
-	--client-quic-gso=false --broadcast "$NAME.hang" export ts 2>"$OUT/sub.log" |
+"$TGT/moq" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" "$URL" \
+	--quic-gso=false --broadcast "$NAME.hang" export ts 2>"$OUT/sub.log" |
 	python3 "$SCRIPTS/t13-cadence.py" pipe "$OUT/a-egress" "$SECS" &
 CAPTURE=$!
 PIDS+=("$CAPTURE")
@@ -83,8 +87,8 @@ sleep 1
 (tsp -I file "$SRC" --infinite \
 	-P regulate --pcr-synchronous --wait-min "${WAITMIN:-50}" \
 	-O file - 2>"$OUT/tsp.log" |
-	"$TGT/moq" --client-tls-fingerprint "$FP" --client-connect "$URL" \
-		--client-quic-gso=false --broadcast "$NAME.hang" import ts) \
+	"$TGT/moq" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" "$URL" \
+		--quic-gso=false --broadcast "$NAME.hang" import ts) \
 	>"$OUT/pub.log" 2>&1 &
 PIDS+=($!)
 

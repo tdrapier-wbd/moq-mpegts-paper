@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T38 Part 1: the WHOLE licensing matrix, every affiliate against every channel.
 # Not a sample: a matrix enforced correctly on the diagonal and wrong in one
 # off-diagonal cell is exactly the failure this is looking for.
@@ -20,8 +24,8 @@ for spec in $AFFS; do
   for ch in $CHANNELS; do
     id="M-$lbl-$ch"
     timeout $SECS ~/bin-3529/moq --backoff-timeout 100ms \
-      --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/$tok.jwt)" \
-      --client-tls-fingerprint "$FP" export --broadcast "$ch" ts \
+      "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/$tok.jwt)" \
+      "${MOQ_FP[@]}" "$FP" export --broadcast "$ch" ts \
       > $W/out/$id.bin 2> $W/logs/$id.log
     b=$(stat -f%z $W/out/$id.bin 2>/dev/null || echo 0)
     if [ "$b" -gt 0 ]; then printf "%-11s" "DELIVER"; v=deliver; else printf "%-11s" "refuse"; v=refuse; fi

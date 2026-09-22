@@ -14,6 +14,10 @@
 # receiving but no longer muxing reads as a low number rather than as a dead process.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 RELAY_IP=${2:?relay ip}
 BCAST=${3:?broadcast}
@@ -30,8 +34,14 @@ OUT=${OUT:-$HOME/t27}/$LABEL
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-CONN=(--client-tls-disable-verify --client-connect "https://$RELAY_IP:$PORT/anon"
-	"--client-quic-gso=${GSO:-true}")
+moq_cli_detect "$OLD" ""
+OLD_DIAL=("${MOQ_DIAL[@]}")
+OLD_LAT=("${MOQ_LAT[@]}")
+moq_cli_detect "$NEW" ""
+NEW_DIAL=("${MOQ_DIAL[@]}")
+NEW_LAT=("${MOQ_LAT[@]}")
+NEW_GSO="--quic-gso=${GSO:-true}"
+OLD_GSO="--client-quic-gso=${GSO:-true}"
 
 PIDS=()
 cleanup() {
@@ -48,16 +58,24 @@ trap cleanup EXIT
 
 # A real feed's cadence is not a clip's: learn for longer before arming, so a satellite feed's
 # ordinary jitter does not become a threshold the run then alarms on.
-start() { # start <tag> <binary>
-	"$2" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" 2>"$OUT/sub.$1.log" |
-		python3 "$LIVENESS" --warmup 10 --learn 40 --jsonl - >"$OUT/live.$1.jsonl" 2>"$OUT/live.$1.err" &
-	# The rate to watch is the exporter's, not the detector's, so record the pipeline's head.
-	PIDS+=("$(pgrep -nf "export ts --latency-max $LATMAX")")
+start_one() {
+	local tag=$1 bin=$2
+	local -a dial lat=()
+	local gso
+	case "$tag" in
+	old) dial=("${OLD_DIAL[@]}") lat=("${OLD_LAT[@]}") gso=$OLD_GSO ;;
+	new) dial=("${NEW_DIAL[@]}") lat=("${NEW_LAT[@]}") gso=$NEW_GSO ;;
+	esac
+	"$bin" "${dial[@]}" "https://$RELAY_IP:$PORT/anon" "$gso" \
+		--broadcast "$BCAST" export ts "${lat[@]}" "$LATMAX" 2>"$OUT/sub.$tag.log" |
+		python3 "$LIVENESS" --warmup 10 --learn 40 --jsonl - >"$OUT/live.$tag.jsonl" 2>"$OUT/live.$tag.err" &
+	sleep 1
+	PIDS+=("$(pgrep -nf "$bin.*export ts")")
 }
 
-start old "$OLD"
+start_one old "$OLD"
 sleep 2
-start new "$NEW"
+start_one new "$NEW"
 sleep 3
 
 for p in "${PIDS[@]}"; do

@@ -28,9 +28,24 @@
 
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 MOQ_BIN="${MOQ_BIN:?set MOQ_BIN to the moq binary this host should publish with}"
 BROADCAST="${BROADCAST:?set BROADCAST to the broadcast name this host publishes}"
-RELAY_URL="${RELAY_URL:-https://localhost:443/anon}"
+
+# The dial flags come from the binary this host will actually run, not from a literal: they were
+# renamed at #3793 and a unit carrying the other set fails at every restart.
+moq_cli_detect "$MOQ_BIN"
+
+# **Never default this to localhost.** A relay started with `--listen-tls-generate <EIP>` advertises
+# that address as its origin, and answers a `localhost` dial with an immediate redirect the client
+# cannot follow — it loops until `connection loop exited: reconnect timed out after 10s` while
+# systemd still reports the unit active and `NRestarts=0`. That silently killed both standing
+# publishers. Give the relay the same name its certificate carries.
+: "${RELAY_URL:?set RELAY_URL to the advertised address on the relay certificate, e.g. https://<EIP>:443/anon, never localhost}"
+RELAY_URL="$RELAY_URL"
 SRT_PORT="${SRT_PORT:-9000}"
 MCAST="${MCAST:-239.255.0.1:5000}"
 # Our receive-latency floor. SRT uses max(our rcv-latency, caller's peer-latency),
@@ -81,7 +96,7 @@ Wants=network-online.target srt-ingest.service moq-relay.service
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu
-ExecStart=/bin/sh -c '$TSP --realtime -I ip $MCAST --local-address 127.0.0.1 -O file - | $MOQ_BIN --client-tls-disable-verify --client-connect $RELAY_URL --broadcast $BROADCAST import ts'
+ExecStart=/bin/sh -c '$TSP --realtime -I ip $MCAST --local-address 127.0.0.1 -O file - | $MOQ_BIN ${MOQ_DIAL[*]} $RELAY_URL --broadcast $BROADCAST import ts'
 Restart=always
 RestartSec=5
 LogRateLimitIntervalSec=30s

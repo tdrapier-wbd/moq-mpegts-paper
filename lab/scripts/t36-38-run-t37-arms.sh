@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T37 arms other than the D2 cadence sweep: E1, E2, D1a/b, D3a/b, D5, D6.
 # C1 (the uninvolved affiliate) rides along in every arm via dartm.sh.
 W=/tmp/t36
@@ -20,8 +24,8 @@ for r in 1 2 3 4 5; do
   T0=$(python3 -c "
 import json;print([json.loads(l) for l in open('$W/decisions.jsonl') if json.loads(l).get('mark')=='E1-r$r'][-1]['wall'])")
   timeout 10 $M --backoff-timeout 100ms \
-    --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa.jwt)" \
-    --client-tls-fingerprint "$FP" export --broadcast cnn ts 2>$W/logs/E1-r$r.log \
+    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa.jwt)" \
+    "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/E1-r$r.log \
     | python3 $LB --out $W/out/E1-r$r.ts --record $W/lastbyte.jsonl --mark "E1-r$r" >/dev/null
   python3 -c "
 import json
@@ -38,14 +42,14 @@ echo "== E2: add a second channel to a live affiliate =="
 # affiliate B already holds cnn+tnt. Start cnn, then bring up tnt on a second
 # session, and grade whether cnn was disturbed.
 timeout 24 $M --backoff-timeout 100ms \
-  --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affb.jwt)" \
-  --client-tls-fingerprint "$FP" export --broadcast cnn ts 2>$W/logs/E2-cnn.log \
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affb.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/E2-cnn.log \
   | python3 $LB --out $W/out/E2-cnn.ts --record $W/lastbyte.jsonl --mark "E2-cnn" >/dev/null &
 sleep 8
 python3 $W/mkstate.py --cache-control "max-age=5" --mark "E2-add" >/dev/null
 timeout 12 $M --backoff-timeout 100ms \
-  --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affb.jwt)" \
-  --client-tls-fingerprint "$FP" export --broadcast tnt ts 2>$W/logs/E2-tnt.log \
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affb.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast tnt ts 2>$W/logs/E2-tnt.log \
   | python3 $LB --out $W/out/E2-tnt.ts --record $W/lastbyte.jsonl --mark "E2-tnt" >/dev/null
 wait
 echo "  cnn continuity across the addition:"
@@ -67,8 +71,8 @@ for variant in withrecheck norecheck; do
   fi
   sleep 1
   timeout 50 $M --backoff-timeout 100ms \
-    --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa-short.jwt)" \
-    --client-tls-fingerprint "$FP" export --broadcast cnn ts 2>$W/logs/D1-$variant.log \
+    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa-short.jwt)" \
+    "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/D1-$variant.log \
     | python3 $LB --out $W/out/D1-$variant.ts --record $W/lastbyte.jsonl --mark "D1-$variant" >/dev/null
   python3 -c "
 import json

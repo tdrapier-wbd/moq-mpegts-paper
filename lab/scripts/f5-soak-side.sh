@@ -25,6 +25,10 @@
 # opposite consequences for a 24/7 service.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 RELAY_IP=${2:?relay ip}
 N=${3:?subscriber count}
@@ -32,6 +36,7 @@ DURATION=${4:-2700}
 SAMPLE=${5:-20}
 
 MOQ=${MOQ:?set MOQ to the moq binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 BCAST=${BCAST:-f5.fanout.hang}
 PORT=${PORT:-4443}
 LATMAX=${LATMAX:-3s}
@@ -82,8 +87,8 @@ box_busy() { awk '/^cpu /{i=$5+$6; t=0; for(j=2;j<=NF;j++)t+=$j; print t, i}' /p
 	echo "stop_if: MemAvailable<${MIN_AVAIL_MB}MB OR a subscriber exits OR the publisher exits"
 } >"$OUT/meta.txt"
 
-CONN=(--client-tls-disable-verify --client-connect "https://$RELAY_IP:$PORT/anon"
-	"--client-quic-gso=$GSO")
+CONN=("${MOQ_DIAL[@]}" "https://$RELAY_IP:$PORT/anon"
+	"--quic-gso=$GSO")
 echo "f5 soak side: n=$N for ${DURATION}s, relay=$RELAY_IP:$PORT, stop below ${MIN_AVAIL_MB}MB free"
 
 [ -f "$SRCGEN" ] || {
@@ -117,7 +122,7 @@ for i in $(seq 1 "$N"); do
 		mkfifo "$f"
 		tsp -I file "$f" -P continuity -P count --total --interval 400000 -O drop \
 			>"$OUT/continuity.log" 2>&1 &
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>"$f" 2>"$OUT/sub.1.log" &
 		SUBS+=("$!")
 		;;
@@ -126,12 +131,12 @@ for i in $(seq 1 "$N"); do
 		rm -f "$f"
 		mkfifo "$f"
 		python3 "$LIVENESS" "$f" >"$OUT/liveness.log" 2>&1 &
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>"$f" 2>"$OUT/sub.2.log" &
 		SUBS+=("$!")
 		;;
 	*)
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>/dev/null 2>/dev/null &
 		SUBS+=("$!")
 		;;

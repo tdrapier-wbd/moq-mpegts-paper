@@ -28,6 +28,10 @@
 # fan-out experiment that cannot prove that is not worth running.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 TOTAL=${2:?total seconds}
 RATE=${3:-11000000}
@@ -38,7 +42,7 @@ PORT=${PORT:-4443}
 OUT=${OUT:-$HOME/f5}/$LABEL
 # UDP GSO lets one syscall carry many datagrams, so on an egress-bound relay it is
 # the single largest term in cost per subscriber. This campaign's start commands
-# carry `--server-quic-gso=false`, but the reason recorded for that flag is that
+# carry `"${RELAY_GSO[@]}"`, but the reason recorded for that flag is that
 # *GSO stalls on macOS loopback* — and these hosts are Linux. Left off here it
 # would quietly measure a handicapped relay, so it is a knob with both settings
 # run, and the deployable configuration is the one with it on.
@@ -73,7 +77,7 @@ cleanup() {
 	done
 	sleep 1
 	for p in "${KIDS[@]+${KIDS[@]}}"; do kill -9 "$p" 2>/dev/null || true; done
-	pkill -f "[m]oq-relay --server-bind 0.0.0.0:$PORT" 2>/dev/null || true
+	pkill -f "[m]oq-relay.*0.0.0.0:$PORT" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -82,8 +86,11 @@ trap cleanup EXIT
 # the one thing this experiment changes relative to every earlier fan-out cell.
 PIN=()
 [ -n "$CPUSET" ] && PIN=(taskset -c "$CPUSET")
-"${PIN[@]}" "$RELAY" --server-bind "0.0.0.0:$PORT" --tls-generate "$(hostname -I | awk '{print $1}')" \
-	--auth-public "" "--server-quic-gso=$GSO" \
+# GSO is the variable under test here, so the value is built rather than taken from RELAY_GSO —
+# but the flag *name* still comes from the detected surface, which renamed at the CLI migration.
+GSO_FLAG="${RELAY_GSO[0]%%=*}=$GSO"
+"${PIN[@]}" "$RELAY" "${RELAY_BIND[@]}" "0.0.0.0:$PORT" "${RELAY_TLS[@]}" "$(hostname -I | awk '{print $1}')" \
+	"${RELAY_AUTH[@]}" "$GSO_FLAG" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 	>"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 KIDS+=("$RELAY_PID")
@@ -93,7 +100,7 @@ kill -0 "$RELAY_PID" 2>/dev/null || {
 	exit 1
 }
 
-relay_pid() { pgrep -f "[m]oq-relay --server-bind 0.0.0.0:$PORT" | head -1; }
+relay_pid() { pgrep -f "[m]oq-relay.*0.0.0.0:$PORT" | head -1; }
 
 RP=$(relay_pid)
 echo "f5 relay side: label=$LABEL relay_pid=$RP nic=$NIC rate=$RATE total=${TOTAL}s"

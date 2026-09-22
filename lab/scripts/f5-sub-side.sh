@@ -25,6 +25,10 @@
 # and a self-inflicted exit would read as a capacity result.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 RELAY_IP=${2:?relay ip}
 SCHEDULE=${3:-1,5,10,25,50,100,150,200,250,300}
@@ -32,6 +36,7 @@ SETTLE=${4:-45}
 MEASURE=${5:-45}
 
 MOQ=${MOQ:?set MOQ to the moq binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 BCAST=${BCAST:-f5.fanout.hang}
 PORT=${PORT:-4443}
 LATMAX=${LATMAX:-3s}
@@ -86,8 +91,8 @@ ulimit -n 65536 2>/dev/null || true
 	echo "stop_if: per_sub<${MIN_KEEP} OR box_busy>${BOX_LIMIT}% OR a subscriber exits"
 } >"$OUT/meta.txt"
 
-CONN=(--client-tls-disable-verify --client-connect "https://$RELAY_IP:$PORT/anon"
-	"--client-quic-gso=$GSO")
+CONN=("${MOQ_DIAL[@]}" "https://$RELAY_IP:$PORT/anon"
+	"--quic-gso=$GSO")
 echo "f5 sub side: relay=$RELAY_IP:$PORT cores=$CORES client_gso=$GSO"
 echo "client_quic_gso=$GSO" >>"$OUT/meta.txt"
 
@@ -153,15 +158,15 @@ spawn_one() {
 		# "no bytes". The interval is in packets (~400k is about a minute here).
 		tsp -I file "$f" -P continuity -P count --total --interval 400000 -O drop \
 			>"$OUT/cont.$idx.log" 2>&1 &
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>"$f" 2>"$OUT/sub.$idx.log" &
 		SUBS+=("$!")
 	elif [ "$idx" -eq $((NCAP + 1)) ]; then
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>/dev/null 2>"$OUT/sub.plain.log" &
 		SUBS+=("$!")
 	else
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>/dev/null 2>/dev/null &
 		SUBS+=("$!")
 	fi

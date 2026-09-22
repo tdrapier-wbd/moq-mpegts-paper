@@ -23,6 +23,10 @@
 # usage: t9-overhead-wan.sh [leg ...]      (default: the four MoQ legs)
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 ORIGIN=${ORIGIN:?set ORIGIN to user@host of the origin box}
 PEM=${PEM:?set PEM to the ssh key}
 PORT=${PORT:-443}
@@ -30,6 +34,10 @@ RELAY_BIN=${RELAY_BIN:?set RELAY_BIN to the moq-relay binary on the origin}
 REMOTE_MOQ=${REMOTE_MOQ:-$(dirname "$RELAY_BIN")/moq}
 TLS_NAME=${TLS_NAME:?set TLS_NAME to the origin address the relay generates a cert for}
 MOQ=${MOQ:-$HOME/moq-dev/target/release/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
+# Only this rig varies MTU discovery, so the flag is derived here rather than in the library.
+# It carries the same `--server-` prefix drop as the rest of the QUIC group did at #3793.
+RELAY_MTU_FLAG=$([ "${RELAY_CLI_NEW:-0}" -eq 1 ] && echo --quic-mtu-discovery || echo --server-quic-mtu-discovery)
 SRC_FULL=${SRC_FULL:?set SRC_FULL to the full-service source clip on the origin}
 SRC_VID=${SRC_VID:?set SRC_VID to the video-only source clip on the origin}
 WINDOW=${WINDOW:-40}
@@ -78,16 +86,16 @@ run_leg() {
 	remote <<-EOF
 		pkill -9 -f 't9\.wan\.$leg\.hang' 2>/dev/null
 		setsid bash -c "tsp -I file '$src' --infinite -P regulate --pcr-synchronous -O file - \
-		  | $REMOTE_MOQ --client-tls-disable-verify \
-		      --client-connect https://127.0.0.1:$PORT/anon --broadcast $bcast import ts" \
+		  | $REMOTE_MOQ "${MOQ_DIAL[0]}" \
+		      "${MOQ_DIAL[1]}" https://127.0.0.1:$PORT/anon --broadcast $bcast import ts" \
 		  >/tmp/t9wan_pub_$leg.log 2>&1 </dev/null & disown
 		sleep 1; echo "publisher launched"
 	EOF
 
 	rm -f "$ts"
-	"$MOQ" --client-tls-disable-verify \
-		--client-connect "https://$TLS_NAME:$PORT/anon" $client_args \
-		--broadcast "$bcast" export ts --latency-max 3s >"$ts" 2>"$OUT/$leg.sub.log" &
+	"$MOQ" "${MOQ_DIAL[0]}" \
+		"${MOQ_DIAL[1]}" "https://$TLS_NAME:$PORT/anon" $client_args \
+		--broadcast "$bcast" export ts "${MOQ_LAT[@]}" 3s >"$ts" 2>"$OUT/$leg.sub.log" &
 	SUB_PID=$!
 
 	sleep "$SETTLE"
@@ -244,10 +252,10 @@ main() {
 	local leg
 	for leg in "${@:-base mtu gso vidonly}"; do
 		case $leg in
-		base)    run_leg base    "--server-quic-gso=false" "" "$SRC_FULL" ;;
-		mtu)     run_leg mtu     "--server-quic-gso=false --server-quic-mtu-discovery=true" "--client-quic-mtu-discovery=true" "$SRC_FULL" ;;
+		base)    run_leg base    "${RELAY_GSO[*]}" "" "$SRC_FULL" ;;
+		mtu)     run_leg mtu     "${RELAY_GSO[*]} ${RELAY_MTU_FLAG}=true" "--client-quic-mtu-discovery=true" "$SRC_FULL" ;;
 		gso)     run_leg gso     "" "" "$SRC_FULL" ;;
-		vidonly) run_leg vidonly "--server-quic-gso=false" "" "$SRC_VID" ;;
+		vidonly) run_leg vidonly "${RELAY_GSO[*]}" "" "$SRC_VID" ;;
 		srt)     run_srt ;;
 		seg)     run_seg ;;
 		*) echo "unknown leg: $leg" ;;

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # F11: can one receiver degrade the service the other receivers get?
 #
 # Multi-tenancy is assumed by both economic models in this paper, and a relay
@@ -56,6 +60,7 @@ ARM=${1:?arm: control|storm|ghost|churn|slow}
 LABEL=${2:-$ARM}
 
 MOQ=${MOQ:-$HOME/bin-3006/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-3006/moq-relay}
 CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
 GRADER=${GRADER:-$HOME/f11/t8b-c3-span.py}
@@ -153,7 +158,8 @@ RELAY_ARGS=()
 [ -n "$CACHE_CAPACITY" ] && RELAY_ARGS+=(--cache-capacity "$CACHE_CAPACITY")
 [ -n "$IDLE_TIMEOUT" ] && RELAY_ARGS+=(--server-quic-idle-timeout "$IDLE_TIMEOUT")
 
-"$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
+"$RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost \
+	"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" \
 	--internal-listen "127.0.0.1:$MPORT" --stats-enabled=true \
 	"${RELAY_ARGS[@]+${RELAY_ARGS[@]}}" \
 	>"$OUT/relay.log" 2>&1 &
@@ -166,7 +172,7 @@ kill -0 "$RELAY_PID" 2>/dev/null || {
 }
 
 URL="https://127.0.0.1:$PORT/anon"
-CONN=(--client-tls-disable-verify --client-connect "$URL")
+CONN=("${MOQ_DIAL[@]}" "$URL")
 
 # Record the metric names this build actually exposes, rather than trusting the
 # names a previous experiment wrote down. A series that was renamed upstream
@@ -195,7 +201,7 @@ sleep 4
 VICTIMS=()
 for i in $(seq 1 "$NVICTIM"); do
 	bash -c "timeout $TOTAL $MOQ ${CONN[*]} --broadcast $BCAST export ts \
-    --latency-max $LATMAX > $OUT/victim.$i.ts" >"$OUT/victim.$i.log" 2>&1 &
+    ${MOQ_LAT[*]} $LATMAX > $OUT/victim.$i.ts" >"$OUT/victim.$i.log" 2>&1 &
 	VICTIMS+=("$!")
 	KIDS+=("$!")
 done
@@ -209,7 +215,7 @@ done
 # experiment is trying not to get wrong.
 abuser() {
 	# Rebuilt here rather than inherited: see the note at the call site.
-	local CONN=(--client-tls-disable-verify --client-connect "$URL")
+	local CONN=("${MOQ_DIAL[@]}" "$URL")
 	# One child per arm keeps its stderr, and the rest are silenced. An
 	# abuser whose output is entirely discarded cannot be told apart from
 	# an abuser that never ran, so the arm's own liveness is unfalsifiable.
@@ -226,10 +232,10 @@ abuser() {
 				i=$((i + 1))
 				if [ "$i" = 1 ]; then
 					"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts \
-						--latency-max "$LATMAX" >/dev/null 2>>"$ABLOG" &
+						"${MOQ_LAT[@]}" "$LATMAX" >/dev/null 2>>"$ABLOG" &
 				else
 					"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts \
-						--latency-max "$LATMAX" >/dev/null 2>&1 &
+						"${MOQ_LAT[@]}" "$LATMAX" >/dev/null 2>&1 &
 				fi
 				pids+=("$!")
 			done
@@ -280,7 +286,7 @@ abuser() {
 		# shellcheck disable=SC2216 # piping to a process that never reads
 		# stdin is the stimulus, not a mistake: it is what fills the pipe
 		# and stops the subscriber reading while it stays subscribed.
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			2>/dev/null | sleep 100000
 		;;
 	*)

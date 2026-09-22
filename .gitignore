@@ -14,6 +14,3 @@ docs/upstream/*
 
 __pycache__/
 *.pyc
-
-# Editorial audit — not part of the publication set
-docs/publication-review.md

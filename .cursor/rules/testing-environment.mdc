@@ -150,6 +150,45 @@ configurations end up in one comparison.
 - **When a headline figure survives against one comparator and not another, say both.** "Decisive
   against X, not against Y at equal conformance" is the publishable form; "decisive" alone is not.
 
+## Every session spends its spare budget on one set of documents
+
+The document set decays by accretion, not by error. Each session folds its new finding in where it was
+discovered rather than into the place that already owns the topic, and the result is a paper that is
+correct everywhere and says the same thing five times. That is not fixed by an occasional large
+editorial pass — one was run, it deferred its four largest items, and the deferral is still outstanding.
+It is fixed by a standing allocation.
+
+**Reserve the tail of every session for an editorial and critical review of exactly one group below,
+taking the groups in turn.** Not the whole set, and not whichever file the session happened to touch —
+the rotation is the point, because the files a session touches are the ones least in need of review.
+If the session has no spare budget, say which group was due and carry it; do not skip the rotation
+silently.
+
+| # | Group | What this pass is looking for |
+|---|---|---|
+| 1 | `docs/evidence.md` | A finding stated in more than one section; a §2 summary row that no longer matches the §3 it points at; a result whose measurement point, domain or build has gone missing |
+| 2 | `docs/comparison.md` + `docs/problem.md` | Restatement of evidence that should be a cross-reference; a verdict cell whose qualification lives only in `evidence.md` |
+| 3 | `docs/architecture.md` + `docs/control-plane.md` | Design that a later measurement has overtaken; unimplemented design presented without its weight |
+| 4 | `docs/economics.md` + `docs/glossary.md` | A modelled rate that has lost its *hypothetical* label; a term defined in two places |
+| 5 | `lab/` experiment files, two per session, oldest reviewed first | A heading or summary contradicted by the file's own later section; a `Corrections` section that has become a narrative; chronology that belongs in `notebook.local.md` |
+| 6 | `lab/method-notes.md` + `lab/planned-experiments.md` + `lab/upstream-contributions.md` | A rule whose incident is now told twice; an experiment entry that will not be run; an upstream item whose state has moved |
+
+**The standing backlog, inherited from the deferred editorial pass.** These are the known items; take
+them within their group's turn rather than as a separate exercise:
+
+- `lab/test-9-performance.md` — the relay-memory result carries 21 headings for one finding, and part
+  of it is a bug-report chronology that belongs in the notebook. The largest item and the one the
+  previous pass rated riskiest.
+- `lab/test-6-relay-resilience.md` — a 189-line `Corrections` section to reduce to its method lessons.
+- `lab/planned-experiments.md` — a pointer audit; entries cite sections that have since moved.
+
+**The constraints in *Reduction is not the objective* below bind this pass absolutely.** It changes
+prose, structure and duplication. It changes **no** number, unit, percentage, count, comparison
+direction, qualification, caveat, measurement-point label or `[unmerged]`/`[dev]` marker. Where
+tightening a sentence would change what it asserts, leave it and report it. Removing a file is subject
+to the same test as removing a passage: it goes only when its content survives somewhere identifiable,
+or is obsolete, and the report says which.
+
 ## Reduction is not the objective
 
 Length targets serve the reader; they do not licence damage. Before any substantive cut, one of these

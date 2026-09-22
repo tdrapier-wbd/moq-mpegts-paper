@@ -26,6 +26,10 @@
 # here the question is what the delivered stream contains, and a capture answers it exactly.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 ARM=${1:?arm: control|video|audio|es|all}
 
 SECS=${SECS:-150}
@@ -40,6 +44,7 @@ LATENCY_MAX=${LATENCY_MAX:-500ms}
 PORT=${PORT:-4471}
 
 MOQ=${MOQ:-$HOME/bin-merged/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-merged/moq-relay}
 PACER=${PACER:-$HOME/pacer-fixed/mpegts-pacer}
 CLIP=${CLIP:-$HOME/t24/clip180.ts}
@@ -54,10 +59,11 @@ run_arm() {
 	rm -rf "$run"
 	mkdir -p "$run"
 
-	pkill -9 -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	sleep 1
 
-	"$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
+	"$RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" \
 		>"$run/relay.log" 2>&1 &
 	kids+=("$!")
 	sleep 2
@@ -66,13 +72,13 @@ run_arm() {
 	# the clip and the window, and four 200 MB copies of it would buy nothing.
 	python3 "$STALLSRC" --mode "$arm" --at "$AT" --for "$DUR" "$CLIP" 2>"$run/stim.log" |
 		tsp -I file - -P regulate --pcr-synchronous -O file - 2>"$run/tsp.log" |
-		"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
+		"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
 			--broadcast "$bcast" import ts >"$run/import.log" 2>&1 &
 	kids+=("$!")
 	sleep 4
 
-	"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
-		--broadcast "$bcast" export ts --latency-max "$LATENCY_MAX" 2>"$run/export.log" |
+	"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
+		--broadcast "$bcast" export ts "${MOQ_LAT[@]}" "$LATENCY_MAX" 2>"$run/export.log" |
 		"$PACER" - "$RATE" --latency-ms "$CUSHION_MS" --max-latency-ms "$CAP_MS" \
 			--stall-ms "$STALL_MS" --on-stall "$ON_STALL" --stats-interval-ms 1000 \
 			2>"$run/pacer.log" |
@@ -96,7 +102,7 @@ run_arm() {
 	sleep 1
 	for p in "${kids[@]}"; do kill -9 "$p" 2>/dev/null; done
 	pkill -9 -f "$bcast" 2>/dev/null
-	pkill -9 -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	sleep 1
 
 	echo "finished=$(date -Is)" >>"$run/meta.txt"

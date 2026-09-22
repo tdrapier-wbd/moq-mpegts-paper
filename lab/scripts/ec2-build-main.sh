@@ -4,18 +4,21 @@
 #
 #   ec2-build-main.sh <commit-sha> [jobs]
 #
-# Why the backend is pinned. Upstream #3757 flipped moq-cli's and moq-relay's default feature
-# set from `quinn` to `noq`+`iroh`, so from that commit a plain `cargo build --release` changes
-# the QUIC stack underneath every measurement. This campaign's entire history is on quinn, and
-# `lab/test-8-srt-vs-moq.md` records that noq's BBRv3 aborts the process under high loss — which
-# is exactly the condition the outage ladders create. Taking 72 commits of change and a backend
-# swap in one step would leave any regression unattributable, so this builds the quinn pair as
-# the primary artefact and a noq pair alongside it, letting the backend become its own A/B
-# whenever we choose to grade it rather than a confound we absorbed silently.
+# The backend is no longer a choice. Upstream #3757 flipped the default from `quinn` to
+# `noq`+`iroh`, and #3811 (`refactor(quic)!: keep only the noq backend`, 2026-09-21) deleted the
+# quinn and quiche implementations outright — the `quinn` feature no longer exists, so a build
+# asking for it fails with "does not contain this feature". From #3811 onward there is exactly
+# one direct QUIC backend.
+#
+# That matters for attribution rather than for the build. This campaign's entire measurement
+# history up to `5d0991b9` is on quinn, and `lab/test-8-srt-vs-moq.md` records that noq's BBRv3
+# aborts the process under high loss — precisely the condition the outage ladders create. Every
+# figure taken from a post-#3811 build is therefore a noq figure, and any comparison against an
+# earlier one carries a backend change as well as the code change. State the backend with the
+# build on any result that crosses #3811.
 #
 # Outputs (binaries are copied out of target/, so reclaiming the build tree is safe):
-#   ~/bin-<short-sha>/{moq,moq-relay}       quinn  — the build under test
-#   ~/bin-<short-sha>-noq/{moq,moq-relay}   noq    — for grading #3757 itself
+#   ~/bin-<short-sha>/{moq,moq-relay}   noq — the only backend, and the build under test
 set -euo pipefail
 
 PIN="${1:?commit sha}"
@@ -42,6 +45,9 @@ git checkout -q --detach "$PIN"
 SHORT=$(git rev-parse --short "$PIN")
 echo "HEAD: $(git log --oneline -1)"
 
+# `nvidia` is in moq-cli's default set and pulls CUDA in whenever anything reaches moq-video, so
+# the feature list is stated rather than inherited here too — for reproducibility, not because the
+# backend is still selectable.
 build_pair() {
 	local backend="$1" outdir="$2"
 	echo "--- building $backend -> $outdir ---"
@@ -55,8 +61,7 @@ build_pair() {
 	"$outdir/moq-relay" --version
 }
 
-build_pair quinn "$HOME/bin-$SHORT"
-build_pair noq "$HOME/bin-$SHORT-noq"
+build_pair noq "$HOME/bin-$SHORT"
 
 echo "$PIN" >"$HOME/bin-$SHORT.sha"
-echo "=== $(date -u) done: ~/bin-$SHORT (quinn, under test) and ~/bin-$SHORT-noq ==="
+echo "=== $(date -u) done: ~/bin-$SHORT (noq, under test) ==="

@@ -23,7 +23,12 @@
 # relay, publisher and subscriber all start and stop inside one run.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 MOQ=${1:?moq binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${2:?moq-relay binary}
 TOML=${3:?relay toml}
 SRC=${4:?source .ts}
@@ -53,7 +58,7 @@ cleanup() {
 trap cleanup EXIT
 
 cp "$TOML" "$OUT/relay.toml"
-(cd "$OUT" && exec "$RELAY" relay.toml --server-quic-gso=false) >"$OUT/relay.log" 2>&1 &
+(cd "$OUT" && exec "$RELAY" relay.toml "${RELAY_GSO[@]}") >"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 PIDS+=("$RELAY_PID")
 
@@ -75,11 +80,11 @@ kill -0 "$RELAY_PID" 2>/dev/null || {
 	exit 1
 }
 
-C=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --client-quic-gso=false)
+C=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 --quic-gso=false)
 
 # Subscriber first: reservation gating publishes the catalog once tracks resolve.
 timeout "$((SECS + 5))" "$MOQ" "${C[@]}" --broadcast "$BCAST" export ts \
-	--latency-max "$MOQLAT" >"$CAP" 2>"$OUT/export.log" &
+	"${MOQ_LAT[@]}" "$MOQLAT" >"$CAP" 2>"$OUT/export.log" &
 SUB=$!
 PIDS+=("$SUB")
 sleep 2

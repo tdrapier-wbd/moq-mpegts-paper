@@ -243,7 +243,9 @@ P2 ±500 ns PCR_accuracy at the physical output, invisible to file analysis. Gro
 and (3); the opaque lane sidesteps (2).
 
 **What grooming does.** It (a) **re-inserts null packets** (PID `0x1FFF`) to pad the reassembled
-stream back to the target mux rate, since nulls are commonly stripped for efficient transport; (b)
+stream back to the target mux rate, since nulls are commonly stripped for efficient transport — on the
+media-aware lane [#3831](https://github.com/moq-dev/moq/pull/3831) now does this in the exporter, so
+the groomer inherits a padded stream rather than an unpadded one; (b)
 **paces the output as a byte-locked constant bit rate**; and (c) applies a **monotonic PCR re-stamp
 and PCR re-insertion** so PCR values are byte-accurate against the reconstructed CBR clock rather
 than merely approximately correct.
@@ -341,7 +343,7 @@ bill. Neither data plane is favoured.
 |---|---|---|
 | Reassemble to a transport stream | re-mux from tracks, or verbatim on the opaque lane | concatenate segments — **easier**, and verbatim in payload for a single programme (the packager re-multiplexes; the payload survives it) |
 | Absorb delivery burstiness | 12.4 kB bursts, 149 ms worst-case silence | 2.95 MB bursts, 4.01 s worst-case silence → **seconds of buffer**, derived from arrival rather than configured |
-| Re-insert stuffing to the target mux rate | required: nulls are stripped in transit | not required: nulls are carried, which is also why it costs ~7 % more on the wire |
+| Re-insert stuffing to the target mux rate | **no longer the groomer's**, from [#3831](https://github.com/moq-dev/moq/pull/3831): nulls are still stripped in transit, but the exporter records the source rate and pads back to it | not required: nulls are carried, which is also why it costs ~7 % more on the wire |
 | Byte-locked CBR pacing and PCR re-stamp | required | **required, identically** |
 | FEC, ST 2022-7 pairing, start gating, egress TR 101 290 | required | **required, identically** |
 

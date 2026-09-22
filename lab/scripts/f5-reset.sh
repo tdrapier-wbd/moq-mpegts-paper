@@ -16,6 +16,10 @@
 #      because the alternative is a scaling curve contaminated by the previous run's processes.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 B=${1:-f5.fanout.hang}
 PORT=${PORT:-4443}
 
@@ -24,11 +28,11 @@ PATTERNS=(
 	"[f]5-sub-side.sh"
 	"[f]5-relay-side.sh"
 	"[t]s-continuous-source.py"
-	"[m]oq-relay --server-bind 0.0.0.0:${PORT}"
+	"[m]oq-relay.*0.0.0.0:${PORT}"
 	# Bracketed like the rest: unbracketed, this matched any shell whose command
 	# line merely contained the string — including the ssh invocation that called
 	# this script, which then killed its own caller before doing anything else.
-	"[e]xport ts --latency-max"
+	"[e]xport ts ${MOQ_LAT[*]}"
 )
 # The broadcast name is built at runtime so it never appears literally in an argv
 # that an operator might paste into a remote shell.

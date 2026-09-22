@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 #
 # T8b condition C6 — the permanence soak, on a provisioned path.
 #
@@ -41,6 +45,7 @@ CC=${CC:-delay}
 SAMPLE=${SAMPLE:-60}
 
 MOQ=${MOQ:-/home/ubuntu/bin-main-eab96019/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-/home/ubuntu/bin-main-eab96019/moq-relay}
 CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
 NETNS=${NETNS:-/home/ubuntu/t8b/t8b-netns.sh}
@@ -61,7 +66,7 @@ KIDS=()
 
 # Refuse to start behind a leaked relay rather than attaching to it and mislabelling the run.
 # Checked before the trap is installed, so a refusal cannot tear down whatever is already there.
-if pgrep -f "[m]oq-relay --server-bind $PUBIP:4443" >/dev/null 2>&1; then
+if pgrep -f "[m]oq-relay.*$PUBIP:4443" >/dev/null 2>&1; then
 	echo "a relay is already bound to $PUBIP:4443 — kill it before starting" >&2
 	exit 1
 fi
@@ -74,7 +79,7 @@ cleanup() {
 	sleep 1
 	for p in ${KIDS+"${KIDS[@]}"}; do kill -9 "$p" 2>/dev/null; done
 	pkill -9 -f "$BCAST" 2>/dev/null
-	pkill -9 -f "[m]oq-relay --server-bind $PUBIP:4443" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*$PUBIP:4443" 2>/dev/null
 	bash "$NETNS" down >/dev/null 2>&1
 	true
 }
@@ -87,8 +92,8 @@ RATE_MBIT=$CAP_MBIT QUEUE_MS=${QUEUE_MS:-500} DELAY_MS=${DELAY_MS:-50} \
 pub() { ip netns exec t8b-pub "$@"; }
 sub() { ip netns exec t8b-sub "$@"; }
 
-pub "$RELAY" --server-bind $PUBIP:4443 --tls-generate localhost --auth-public "" \
-	--server-quic-congestion-control "$CC" >"$RUN/relay.log" 2>&1 &
+pub "$RELAY" "${RELAY_BIND[@]}" $PUBIP:4443 "${RELAY_TLS[@]}" localhost "${RELAY_AUTH[@]}" \
+	"${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$CC" >"$RUN/relay.log" 2>&1 &
 RELAY_PID=$!
 KIDS+=("$RELAY_PID")
 sleep 2
@@ -100,7 +105,7 @@ sleep 2
 pub bash -c "while :; do
     echo \"\$(date -Is) publisher start\" >> $RUN/respawn.log
     tsp -I file $CLIP --infinite -P regulate --pcr-synchronous -O file - \
-      | $MOQ --client-tls-disable-verify --client-connect https://$PUBIP:4443/anon \
+      | $MOQ ${MOQ_DIAL[*]} https://$PUBIP:4443/anon \
           --broadcast $BCAST import ts
     echo \"\$(date -Is) publisher exit rc=\$?\" >> $RUN/respawn.log
     sleep 2
@@ -110,8 +115,8 @@ sleep 5
 
 sub bash -c "while :; do
     echo \"\$(date -Is) subscriber start\" >> $RUN/respawn.log
-    $MOQ --client-tls-disable-verify --client-connect https://$PUBIP:4443/anon \
-      --broadcast $BCAST export ts --latency-max 2s \
+    $MOQ ${MOQ_DIAL[*]} https://$PUBIP:4443/anon \
+      --broadcast $BCAST export ts ${MOQ_LAT[*]} 2s \
       | tsp -I file - -P continuity -P count --total --interval 100000 -O drop
     echo \"\$(date -Is) subscriber exit rc=\$?\" >> $RUN/respawn.log
     sleep 2
@@ -152,7 +157,7 @@ while :; do
 	RTT=$(sub ping -n -c 3 -i 0.3 -q $PUBIP 2>/dev/null |
 		awk -F'/' '/rtt|round-trip/{printf "%.1f", $5}')
 	printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$NOW" "$EL" \
-		"$(one "$(rss_of "[m]oq-relay --server-bind $PUBIP")" 0)" \
+		"$(one "$(rss_of "[m]oq-relay.*$PUBIP")" 0)" \
 		"$(one "$(rss_of "$BCAST import")" 0)" \
 		"$(one "$(rss_of "$BCAST export")" 0)" \
 		"$(one "${PKTS:-}" 0)" "$(one "${CCE:-}" 0)" "$(one "${RESP:-}" 0)" \

@@ -16,6 +16,10 @@
 # left". The tap writes the timestamps this host owns; the caller fetches them.
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 ARM=${1:?arm}
 PORT=${2:?port}
 SECS=${3:?seconds}
@@ -30,6 +34,7 @@ SEGDUR=${SEGDUR:-2}
 RELAY_URL=${RELAY_URL:-}
 BCAST=${BCAST:-t18.wan.hang}
 MOQ=${MOQ:-/home/ubuntu/bin-main-eab96019/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 PGIDF="$OUT/$ARM.pgid"
@@ -66,7 +71,7 @@ rist)
 	;;
 moq)
 	: "${RELAY_URL:?set RELAY_URL to the relay, e.g. https://<EC2_IP>:443/anon}"
-	EGRESS=("$MOQ" --client-tls-disable-verify --client-connect "$RELAY_URL"
+	EGRESS=("$MOQ" "${MOQ_DIAL[@]}" "$RELAY_URL"
 		--broadcast "$BCAST" import ts)
 	;;
 hls)

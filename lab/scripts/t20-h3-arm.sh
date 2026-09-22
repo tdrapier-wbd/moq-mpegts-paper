@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T20 -- substrate-matched segmented-HTTP impairment lane.
 #
 # Runs ONE arm per invocation and grades it. Publisher, origin, impairment lane,
@@ -45,6 +49,7 @@ PCAP="${PCAP:-0}"
 FFMPEG="${FFMPEG:-$HOME/h3/bin/ffmpeg}"
 CURL="${CURL:-$HOME/h3/bin/curl}"
 MOQ="${MOQ:-$HOME/bin-3006/moq}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 MOQ_RELAY="${MOQ_RELAY:-$HOME/bin-3006/moq-relay}"
 HLS_DIR="${HLS_DIR:-/srv/hls}"
 NGINX_LOG="${NGINX_LOG:-/var/log/nginx/h3lab.log}"
@@ -132,14 +137,14 @@ start_hls_publisher() {
 }
 
 start_moq() {
-	"$MOQ_RELAY" --server-bind "127.0.0.1:$MOQ_PORT" --tls-generate localhost \
-		--auth-public "" --server-quic-gso=false >>"$LOG" 2>&1 &
+	"$MOQ_RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$MOQ_PORT" "${RELAY_TLS[@]}" localhost \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" >>"$LOG" 2>&1 &
 	RELAY=$!
 	sleep 3
 	tsp --realtime -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>>"$LOG" |
-		"$MOQ" --client-tls-disable-verify \
-			--client-connect "https://127.0.0.1:$MOQ_PORT/anon" \
-			--client-quic-gso=false --broadcast t20.bench.hang import ts >>"$LOG" 2>&1 &
+		"$MOQ" "${MOQ_DIAL[0]}" \
+			"${MOQ_DIAL[1]}" "https://127.0.0.1:$MOQ_PORT/anon" \
+			--quic-gso=false --broadcast t20.bench.hang import ts >>"$LOG" 2>&1 &
 	PUB=$!
 	sleep 6
 }
@@ -154,8 +159,8 @@ recv_hls() {
 }
 
 recv_moq() {
-	timeout --signal=INT "$WINDOW" "$MOQ" --client-tls-disable-verify \
-		--client-connect "https://127.0.0.1:$MOQ_PORT/anon" --client-quic-gso=false \
+	timeout --signal=INT "$WINDOW" "$MOQ" "${MOQ_DIAL[0]}" \
+		"${MOQ_DIAL[1]}" "https://127.0.0.1:$MOQ_PORT/anon" --quic-gso=false \
 		--broadcast t20.bench.hang export ts >"$OUT" 2>>"$LOG"
 }
 

@@ -16,8 +16,8 @@
 #
 # [T21](../test-21-permanence-soak.md) crossed about 144 of these joins in 24 h without a mark, which
 # makes the difference between the two runs the whole question. T21 was N = 1, loopback,
-# `--latency-max 500ms`, with a pacer draining the exporter; the soak was N = 60, cross-host,
-# `--latency-max 3s`, draining to `/dev/null`.
+# `"${MOQ_LAT[@]}" 500ms`, with a pacer draining the exporter; the soak was N = 60, cross-host,
+# `"${MOQ_LAT[@]}" 3s`, draining to `/dev/null`.
 #
 # This varies **one** of those — `--latency-max` — at a fan-out low enough that the relay cannot be
 # the constraint, with every subscriber attached to the same publisher and crossing the same join.
@@ -26,12 +26,17 @@
 # discriminator; if all of them cross it, fan-out is, and that is the next run rather than this one.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 RELAY_IP=${2:?relay ip}
 DURATION=${3:-800}
 LATLIST=${4:-500ms,500ms,3s,3s}
 
 MOQ=${MOQ:?set MOQ to the moq binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 BCAST=${BCAST:-t27join.hang}
 PORT=${PORT:-4443}
 CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
@@ -52,8 +57,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-CONN=(--client-tls-disable-verify --client-connect "https://$RELAY_IP:$PORT/anon"
-	"--client-quic-gso=$GSO")
+CONN=("${MOQ_DIAL[@]}" "https://$RELAY_IP:$PORT/anon"
+	"--quic-gso=$GSO")
 
 {
 	echo "label=$LABEL relay=$RELAY_IP:$PORT duration=${DURATION}s latmax=$LATLIST"
@@ -85,7 +90,7 @@ for A in $(echo "$LATLIST" | tr ',' ' '); do
 		TAG="$L-$(basename "$(dirname "$BIN")")"
 		;;
 	esac
-	"$BIN" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$L" \
+	"$BIN" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$L" \
 		>/dev/null 2>"$OUT/sub.$i.$TAG.log" &
 	SUBS+=("$!")
 	LATS+=("$TAG")

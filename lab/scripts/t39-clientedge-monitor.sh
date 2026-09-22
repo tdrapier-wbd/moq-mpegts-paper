@@ -24,6 +24,10 @@
 # Usage: t39-clientedge-monitor.sh [pre_s] [post_s]
 
 set -u
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 PRE="${1:-20}"
 POST="${2:-20}"
 
@@ -82,8 +86,9 @@ none | "0 packets") ;;
 	;;
 esac
 
-$M-relay --server-bind 127.0.0.1:$PORT --tls-generate localhost --server-quic-gso=false \
-	--web-http-listen 127.0.0.1:$HTTP --auth-public "" \
+$M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
+	"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
+	--web-http-listen 127.0.0.1:$HTTP "${RELAY_AUTH[@]}" \
 	--stats-enabled --stats-interval 1 --stats-node edge1 --log-level info \
 	>$W/logs/relay.log 2>&1 &
 RELAY=$!
@@ -95,7 +100,7 @@ FP=$(curl -s --max-time 4 http://127.0.0.1:$HTTP/certificate.sha256)
 	tail -5 $W/logs/relay.log
 	exit 1
 }
-C="--client-tls-fingerprint $FP --client-quic-gso=false"
+C=""${MOQ_FP[@]}" $FP --quic-gso=false"
 
 # --- consumer 2: the standalone client-edge monitor -----------------------------------------
 # Started before the publisher so it sees the stream from its first group.
@@ -105,12 +110,12 @@ C="--client-tls-fingerprint $FP --client-quic-gso=false"
 # multiple of the worst spacing seen in it -- a detector armed at 8.4 s is not a detector. The
 # explicit values are generous against the clip's measured cadences and the point here is the
 # tier split, not the detection latency, which T27 already measured properly.
-($M --client-connect "https://127.0.0.1:$PORT/" $C --broadcast cnn export ts 2>$W/logs/mon-sub.log |
+($M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast cnn export ts 2>$W/logs/mon-sub.log |
 	python3 $R/ts-liveness.py - --gap "111:1000,121:1500,123:1500" --jsonl \
 		>$W/out/liveness.jsonl 2>$W/logs/mon.log) &
 
 # --- consumer 1: the groomer, unmodified ----------------------------------------------------
-($M --client-connect "https://127.0.0.1:$PORT/" $C --broadcast cnn export ts 2>$W/logs/groom-sub.log |
+($M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast cnn export ts 2>$W/logs/groom-sub.log |
 	$PACER - auto >$W/out/groomed.ts 2>$W/logs/pacer.log) &
 
 # --- consumer 3: the relay's own view, i.e. tier 2 ------------------------------------------
@@ -122,7 +127,7 @@ C="--client-tls-fingerprint $FP --client-quic-gso=false"
 sleep 3
 
 tsp -I file $W/src.ts -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M --client-connect "https://127.0.0.1:$PORT/" $C --broadcast cnn import ts \
+	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast cnn import ts \
 		>$W/logs/pub.log 2>&1 &
 PUB=$!
 T0=$(python3 -c 'import time;print(repr(time.time()))')

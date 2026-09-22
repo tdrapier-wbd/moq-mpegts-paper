@@ -15,7 +15,12 @@
 
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 MOQ="${1:?usage: export-determinism.sh <moq> <moq-relay> <label> [src] [join_s] [window_s]}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${2:?}"
 LABEL="${3:?}"
 SRC="${4:-$HOME/CNNiEMEA2.ts}"
@@ -36,7 +41,7 @@ trap cleanup EXIT
 
 # GSO off: it stalls on macOS loopback. https:// + pinned fingerprint: the http://
 # bootstrap is broken in these builds.
-( cd ~/moq-dev && "$RELAY" demo/relay/localhost.toml --server-quic-gso=false ) \
+( cd ~/moq-dev && "$RELAY" demo/relay/localhost.toml "${RELAY_GSO[@]}" ) \
 	>"$HOME/det_${LABEL}_relay.log" 2>&1 &
 PIDS+=($!)
 
@@ -48,8 +53,8 @@ done
 [[ -n "${FP:-}" ]] || { echo "relay did not come up" >&2; exit 1; }
 
 sub() {
-	"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$BROADCAST" export ts
+	"$MOQ" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 \
+		--quic-gso=false --broadcast "$BROADCAST" export ts
 }
 
 # Subscriber A first, then the publisher: reservation gating publishes the catalog once
@@ -59,8 +64,8 @@ PIDS+=($!)
 sleep 2
 
 tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null \
-	| "$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$BROADCAST" import ts \
+	| "$MOQ" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 \
+		--quic-gso=false --broadcast "$BROADCAST" import ts \
 		>"$HOME/det_${LABEL}_pub.log" 2>&1 &
 PIDS+=($!)
 

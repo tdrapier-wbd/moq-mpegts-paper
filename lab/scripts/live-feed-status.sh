@@ -48,3 +48,36 @@ echo "  continuity errors: $("$TSP" -I file "$CAP" -P continuity -O drop 2>&1 | 
 echo "  services: $("$TSP" -I file "$CAP" -P analyze --normalized -O drop 2>/dev/null |
 	sed -nE 's/^service:.*name=([^:]*).*/\1/p' | head -3 | tr '\n' ' ')"
 rm -f "$CAP"
+
+# The stage above is the one that was healthy throughout the outage. Every fault that actually
+# stopped the chain lived past it — the relay's inverted `--auth-public`, a publisher looping on a
+# redirect it could not follow — and each left all three units `active` with `NRestarts=0`. So the
+# check is not finished until a subscriber has counted bytes off the relay.
+echo "=== moq egress, sampling ${SECS}s ==="
+MOQ_BIN="${MOQ_BIN:-$(grep -ho '/home/ubuntu/bin-[a-zA-Z0-9._-]*/moq' /etc/systemd/system/moq-live-publisher.service 2>/dev/null | head -1)}"
+BCAST="${BCAST:-$(grep -ho -- '--broadcast [^ ]*' /etc/systemd/system/moq-live-publisher.service 2>/dev/null | awk '{print $2}' | head -1)}"
+ORIGIN="${ORIGIN:-$(grep -ho -- '--listen-tls-generate [^ ]*' /etc/systemd/system/moq-relay.service 2>/dev/null | awk '{print $2}' | head -1)}"
+
+if [ -z "$MOQ_BIN" ] || [ -z "$BCAST" ] || [ -z "$ORIGIN" ]; then
+	echo "  cannot derive binary/broadcast/origin from the units; set MOQ_BIN, BCAST and ORIGIN"
+	exit 1
+fi
+
+# Dial the address on the relay's certificate. A `localhost` dial against a relay advertising its
+# Elastic IP is answered with a redirect the client loops on, which reads here as a dead relay.
+SUB=$(mktemp /tmp/feedegress.XXXXXX.ts)
+timeout "$((SECS + 10))" "$MOQ_BIN" --connect-tls-insecure --connect "https://$ORIGIN:443/anon" \
+	--broadcast "$BCAST" export ts --max-age 2s >"$SUB" 2>/dev/null || true
+EBYTES=$(stat -c%s "$SUB" 2>/dev/null || echo 0)
+rm -f "$SUB"
+
+printf '  %s -> ' "$BCAST"
+if [ "$EBYTES" -lt 100000 ]; then
+	echo "NOTHING DELIVERED ($EBYTES bytes)."
+	echo "  The group above is carrying a stream, so the fault is between the publisher and here:"
+	echo "    - relay grant:  ps -o command= -C moq-relay   # must be --auth-public '**' on a post-#3793 build"
+	echo "    - publisher dial: grep -- --connect /etc/systemd/system/moq-live-publisher.service"
+	echo "                      # must be the relay's own advertised address, never localhost"
+	exit 1
+fi
+echo "$EBYTES bytes in ~${SECS}s => $(awk -v b="$EBYTES" -v s="$SECS" 'BEGIN{printf "%.2f Mb/s", (b*8)/(s*1000000)}')"

@@ -4,20 +4,26 @@
 
 > **The grooming requirement is a property of the lane, not of MPEG-TS.** This experiment began on the
 > MoQ lane and concluded that no off-the-shelf stage does the whole job. That conclusion holds, and it
-> is narrower than it first read: it is caused by two properties of `moq ... export ts` — it drops
+> is narrower than it first read: it was caused by two properties of `moq ... export ts` — it dropped
 > stuffing, and it clusters its PCRs instead of spacing them — and neither is true of a segmented HTTP
-> egress. Graded on the segmented lane, the same TSDuck chain that is only *partial* on the MoQ lane
-> passes all four criteria with the mux intact. Read every result below against the lane it was
-> measured on; the two are tabulated side by side throughout.
+> egress. **Upstream has since fixed the first and not the second**, so the requirement now rests on
+> PCR placement alone. Graded on the segmented lane, the same TSDuck chain that is only *partial* on the
+> MoQ lane passes all four criteria with the mux intact. Read every result below against the lane *and
+> the build* it was measured on; the lanes are tabulated side by side throughout.
 >
-> **The clustering is fixed upstream and criterion 3 is still not met on the MoQ lane.**
-> [#2967](https://github.com/moq-dev/moq/pull/2967) gives the exporter an exact 25 ms PCR grid, and
-> [T19](test-19-pcr-grid-verification.md) verifies it — but only in the PCR *values*, because the
-> spacing lives in per-frame timestamps that stdout discards, leaving 87.2 % of PCR packets back-to-back
-> in the exported bytes. The TSDuck chain below therefore still fails criterion 3 on that lane, and now
-> fails it by regenerating the original distribution from the byte positions: `tsp -P pcradjust` on the
-> fixed exporter's output yields 293 intervals above 40 ms and 87.9 % sub-millisecond. **The tools were
-> never the problem on this criterion and still are not.**
+> **Criterion 3 is still not met on the MoQ lane.**
+> [#2967](https://github.com/moq-dev/moq/pull/2967) gives the exporter an exact 25 ms PCR grid and
+> [T19](test-19-pcr-grid-verification.md) verifies it in the PCR *values*;
+> [#3351](https://github.com/moq-dev/moq/pull/3351) then slices the export on that grid, which largely
+> clears the back-to-back packing the earlier builds showed (87.2 % of PCR packets adjacent before it,
+> 1.0–1.5 % on the builds measured here). **It does not clear criterion 3**: the positions remain badly
+> distributed — 27.8 % of PCR packets still within five packets of the last, 11.3 % of intervals above
+> the 40 ms P1 limit, worst gap 700 ms — so the TSDuck chain below still fails that criterion by
+> inheriting the distribution. **The tools were never the problem on this criterion and still are not.**
+>
+> **[#3831](https://github.com/moq-dev/moq/pull/3831) closes the other two census rows**: `export ts`
+> now carries stuffing and declares a mux rate, within 0.36 % of the source's. It moves neither PCR
+> criterion. Both results are measured below under *The exporter now stuffs and declares a rate*.
 
 **Can the grooming stage be built from tools an operator already has?** Every measurement in this
 campaign has groomed with one tool ([`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)),
@@ -177,6 +183,11 @@ stream, and the observations below establish that `tsp` cannot. On the segmented
 to inflate — the packager passed the source's nulls through, and 4.57 % against 4.59 % is the same
 stuffing minus what fell outside the capture window.
 
+**The two bold MoQ cells are the state of the exporter as this experiment found it, and upstream has
+since changed both.** From [#3831](https://github.com/moq-dev/moq/pull/3831), `export ts` stuffs and
+declares a rate itself; the re-measurement is in *The exporter now stuffs and declares a rate* below,
+and the grooming results in the rest of this file were all taken on the earlier behaviour.
+
 The last row is the one that was not anticipated, and it removes T13's headline live failure from the
 segmented lane before any tool runs. On the build these cells were measured on, MoQ's exporter delivered
 its PCRs in clusters rather than on a grid, so any stage that carries them rather than minting its own
@@ -188,6 +199,180 @@ domain — see the state block above and [T19](test-19-pcr-grid-verification.md)
 Both lanes fail the 481 ns gate on essentially every PCR before grooming, which is expected of either:
 neither delivers on a constant-rate wire, so PCR read against a constant-rate model is wrong on both.
 That is the part a groomer is *for*.
+
+### The exporter now stuffs and declares a rate — and that is all it does
+
+Two cells of the census above have changed upstream.
+[#3831](https://github.com/moq-dev/moq/pull/3831) has `moq import ts` measure the whole-multiplex rate
+off the PCR PID and record it in the catalog as `mpegts.muxRate`, and has `moq export ts` settle a
+fixed-point packet balance each PCR slot and emit null packets to make up the difference.
+`moq export ts --mux-rate <bps>` supplies the rate for a broadcast that recorded none. The PR cites
+[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)'s README — the campaign's own statement
+that the mux rate is *"not recoverable from MoQ"* — as the problem it is closing.
+
+Measured with [`t13-export-muxrate.sh`](scripts/t13-export-muxrate.sh) on the EC2 secondary, `moq`
+`0.11.2-615d166d` against `0.11.2-5d0991b9`, 300,000-packet slice of a live `export ts` capture of
+`CNNiEMEA2.ts` (nominal 9,945,951 b/s, 4.69 % stuffing at source). **File domain.**
+
+| | source | `5d0991b9` (before) | `615d166d` CBR source | `615d166d` `--mux-rate` |
+|---|---|---|---|---|
+| **stuffing (PID 0x1FFF)** | 4.69 % | **~0 %** | **4.93 %** | 4.82 % |
+| **declares a mux rate** | 9,945,951 b/s | 9,475,391 b/s (content only) | **9,981,799 b/s** (+0.36 %) | 9,970,746 b/s (+0.25 %) |
+| continuity errors | 0 | 0 | 0 | 0 |
+| **PCR inside the 481 ns P2 gate** | — | 0 of 1,892 | **0 of 1,807** | 0 of 1,807 |
+| **PCR intervals > 40 ms** | 0 | 212 (11.21 %) | **205 (11.34 %)** | 205 (11.34 %) |
+| PCR packets clustered ≤ 5 packets | — | 31.0 % | 27.8 % | 27.8 % |
+
+**It moves the census rows and one half of criterion 4, and no other criterion.** The stuffing and the
+declared rate come back, and they come back close: +0.36 % on the measured path, +0.25 % on the
+explicit one, so the egress now carries the rate it claims *in the file*. **Criterion 2 (PCR accuracy)
+and criterion 3 (PCR repetition) do not move at all** — 0 of 1,807 PCRs inside the P2 gate on the new
+build against 0 of 1,892 on the old, and 11.34 % of intervals above the 40 ms P1 limit against 11.21 %.
+Criterion 1 was never at issue. Padding changes what the stream is *made of*, not when its clock
+packets sit, so a groomer is still required on this lane for both PCR criteria.
+
+**What does change is that the P2 gate becomes answerable.** Before #3831 the ungroomed egress declared
+no rate, so an accuracy gate read against a constant-rate model returned nonsense (the 22–32 Gb/s
+instantaneous figures recorded under [T2](test-2-media-aware-transparency.md)). It now declares a
+plausible rate and **fails the gate against it**, comprehensively and by four orders of magnitude
+(~24 ms jitter against a 481 ns limit). The finding moves from *ungradeable* to *graded and failing*,
+which is a better-founded claim rather than a worse result.
+
+**The `stripped` arm is not the negative control it was designed to be, and is reported as what it
+is.** Filtering PID 0x1FFF out of the source was meant to produce a VBR feed that records no rate.
+It does not: the PCR values are untouched, so the stream is still paced to a *stable* rate, just a
+lower one. Import recorded 9,486,940 b/s for it and export padded to that, reaching 1.29 % stuffing
+and logging *MPEG-TS output exceeds the multiplex rate* where the media overran. The arm therefore
+demonstrates that the feature tracks the rate it measures rather than a nominal one. **The
+absent-rate path needed a genuinely variable source, and now has one — see below.**
+
+#### The absent-rate path works, tested against a genuinely variable source
+
+Built by re-encoding the clip at constant quality with no rate cap and no mux rate
+(`-crf 30 -muxrate 0`), which gives a source whose own rate moves by **225 % of its median** across
+half-second windows, against **0.0 %** for the CBR fixture — stated rather than assumed, because
+#3831 publishes a rate only once the measurement is stable and an arm claiming "no rate should be
+recorded" has to show its source moves by more than that window.
+
+Read behaviourally rather than by inspecting the catalog, which no shipped CLI can dump.
+`moq export ts --mux-rate`'s own help states the contract: it *"defaults to the multiplex rate the
+catalog recorded from a constant-rate source (`mpegts.muxRate`); without either the output is
+unpadded"*. So null-packet share at the egress is a direct read of whether a rate was recorded.
+`moq 0.11.2-615d166d`, loopback, 34 s captures:
+
+| source | rate spread, 0.5 s windows | TS packets at egress | null (0x1FFF) |
+|---|---:|---:|---:|
+| `clip120.ts` (CBR) | 0.0 % | 194,089 | **10,356 — 5.34 %** |
+| `vbr120.ts` (constant quality) | 225 % | 14,572 | **0 — 0.00 %** |
+
+**#3831 declines to record a rate for a source that does not have one, and the exporter then leaves
+the stream unpadded** — exactly as designed, and the complement of the CBR arm above. This closes the
+row the `stripped` arm could not.
+
+The reason it had to be read this way is worth recording: **the campaign cannot read a MoQ catalog
+with shipped tooling.** `moq` has only `import` and `export`, neither of which surfaces the parsed
+catalog, and `RUST_LOG=moq_mux=debug` on both ends logs per-track codec configs and never
+`mpegts.muxRate`. Any future claim about a catalog field — this one, or MSFTS naming — needs either a
+catalog-dump path upstream or the small `moq-net` client that
+[P1-l](planned-experiments.md) already requires for the telemetry return path. It is the same missing
+capability in a second place.
+
+**Backend caveat.** [#3811](https://github.com/moq-dev/moq/pull/3811) deleted the quinn backend, so
+`5d0991b9` is quinn and `615d166d` is noq. Every figure above is taken from captured bytes rather than
+from delivery, and continuity is 0 on both, so the QUIC stack is not a plausible cause of a
+4.93 %-against-0 % stuffing difference — but the row is a build comparison, not a clean A/B.
+
+#### On the wire, #3831 changes nothing — it adds bytes without re-timing the release
+
+The file-domain arm above cannot see release timing, because writing to a file flattens it. Read live
+off the subscriber's pipe instead, with [`t13-wire-padding.sh`](scripts/t13-wire-padding.sh) and
+`t19-pcr-arrival.py`, 51.4 s per arm, same CBR source, `615d166d` against `5d0991b9`:
+
+| PCR inter-arrival at the pipe | `5d0991b9` (pre-#3831) | `615d166d` (post-#3831) |
+|---|---:|---:|
+| median | 25.07 ms | 25.06 ms |
+| mean | 25.62 ms | 25.62 ms |
+| p95 / p99 | 26.18 / 27.96 ms | 26.19 / 27.97 ms |
+| stdev | 13.95 ms | 13.94 ms |
+| intervals > 40 ms (P1 gate) | 3 (0.15 %) | 3 (0.15 %) |
+| **intervals < 1 ms (arrived in a burst)** | **0** | **0** |
+| TS packets over the window (2,006 PCRs both) | 317,150 | **333,072 (+5.0 %)** |
+
+**The two are identical to three significant figures on every timing statistic, and differ by 5.0 %
+in packet count.** That is the whole effect: the padding adds null packets into the existing PCR
+slots and does not move them. Both builds release PCRs on a ~25 ms grid with **no sub-millisecond
+intervals at all**, so the egress on this build is not the object-burst pattern the census recorded
+against much older builds — #3006's per-frame pacing already removed that, and #3831 neither improves
+nor harms it.
+
+The operational reading: **the exporter's remaining gap against a groomer is not stuffing and not PCR
+arrival cadence.** It is PCR *accuracy* against a constant-rate model (0 of 1,807 inside the 481 ns
+P2 gate, above) and the 11.34 % of intervals over the 40 ms P1 limit in the file domain — the
+clustering of packets *between* PCR slots rather than the spacing of the slots themselves. A
+head-to-head against [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) therefore does
+not need to wait for any further upstream pacing work: the feature that was pending has landed,
+behaves correctly on both the positive and negative paths, and the residual it leaves is the narrower
+one named here.
+
+#### The residual measured: right PCR values, wrong bytes between them
+
+The clustering above was named from the P1 and P2 failures it causes rather than measured directly.
+Measuring it separates two things the word "pacing" conflates — where the PCR *values* fall in time,
+and how many bytes the stream carries *between* them — and the two now have opposite answers.
+`pcr-residual.py` reads a capture, takes the PCR interval from the carried values, and takes the
+instantaneous rate from the packet count over the same pair. On `84b34f54`, two independent
+captures: a loopback publish of the 120 s CBR clip, and the live SRT→multicast→import→relay→export
+chain on the EC2 secondary.
+
+| | source clip | export, loopback | export, live chain |
+|---|---:|---:|---:|
+| PCRs / span | 4,909 / 119.9 s | 614 / 15.3 s | 977 / 24.4 s |
+| PCR interval, median | 24.65 ms | **25.00 ms** | **25.00 ms** |
+| PCR interval, p95 / max | 24.80 / 24.95 ms | **25.00 / 25.00 ms** | **25.00 / 25.00 ms** |
+| intervals over the 40 ms P1 gate | 0 | **0** | **0** |
+| instantaneous rate, median | 9,945,955 b/s | **962,560 b/s** | **360,960 b/s** |
+| instantaneous rate, min → max | 9,945,628 → 9,946,071 | **60,160 → 273,547,520** | **60,160 → 141,616,640** |
+| spread as a share of the median | **0 %** | **28,412 %** | **39,217 %** |
+| intervals within 1 % of nominal | **4,908 of 4,908 (100 %)** | **1 of 613 (0.2 %)** | **11 of 976 (1.1 %)** |
+
+**The PCR values are better than the source's and the byte schedule is not a schedule at all.** The
+export's intervals are exactly 25.00 ms at median, p95 and maximum — the exporter is not carrying
+the source's PCR but regenerating it onto a synthetic grid, which is why it is *more* regular than
+the 24.65 ms input. Over the same intervals the byte count runs from 188 B to 854,836 B where a
+10.09 Mb/s stream needs 31,541 B every time:
+
+| bytes between consecutive PCRs | min | p10 | p25 | median | p75 | p90 | p99 | max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| export, `84b34f54` | 188 | 940 | 1,128 | **3,008** | 31,020 | 52,452 | 375,060 | 854,836 |
+| a true CBR stream at the declared rate | 31,541 | 31,541 | 31,541 | **31,541** | 31,541 | 31,541 | 31,541 | 31,541 |
+
+The distribution is bimodal rather than merely noisy: a mode around 1,128 B, an order of magnitude
+below the requirement, and a second near the 31,020 B the rate actually implies. PCR-bearing packets
+arrive in clumps, and the regenerated values are stamped on the grid whatever byte position they
+land at.
+
+**This is what the 481 ns P2 result was reporting, and it explains why not one PCR passed.** P2
+grades a PCR against the arrival time a constant-rate model predicts from its byte position. A
+stream whose instantaneous rate varies by four orders of magnitude has no byte position that
+predicts anything, so the gate cannot be met by a smaller error — it is the wrong kind of stream,
+not an inaccurate one. Two consequences worth stating plainly:
+
+- **The exporter is a valid input to a groomer and is not a valid transport-stream output.** A
+  receiver that recovers its clock from packet arrival — the ordinary IRD case — is handed a rate
+  that swings between 6 % and 2,700 % of nominal. The bytes and the PCR values are both right; only
+  the schedule joining them is missing, which is exactly the work a groomer does.
+- **The `mpegts-pacer` head-to-head now has a defined target.** The thing to beat is not "reduce
+  jitter" but "place 31,541 B between PCRs that are already on a correct grid", and the table above
+  is the before-measurement for it.
+
+*Domain: file, on a capture of the exporter's stdout. Byte positions are the quantity of interest
+here, so the file domain is the right one and the wire-domain arrival figures above are the
+complement, not a substitute. Build `84b34f54` (noq), both captures; replicated across two
+independent source paths.*
+
+*Backend caveat as above: the `old` arm is quinn and the `new` arm is noq. Both arms are loopback with
+no loss and the instrument is release timing at the subscriber's own pipe, so the stack is not a
+plausible cause of a cadence difference — and no cadence difference was found.*
 
 ### File domain, MoQ lane
 

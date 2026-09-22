@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T38 Part 5 — keys and certificates.
 W=/tmp/t36
 cd $W
@@ -26,13 +30,13 @@ sleep 1
 
 # old credential streaming; new credential brought up alongside (make-before-break)
 timeout 26 $M --backoff-timeout 100ms \
-  --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa.jwt)" \
-  --client-tls-fingerprint "$FP" export --broadcast cnn ts 2>$W/logs/ROT-old.log \
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/ROT-old.log \
   | python3 $LB --out $W/out/ROT-old.ts --record $W/lastbyte.jsonl --mark "ROT-old" >/dev/null &
 sleep 6
 timeout 20 $M --backoff-timeout 100ms \
-  --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa2.jwt)" \
-  --client-tls-fingerprint "$FP" export --broadcast cnn ts 2>$W/logs/ROT-new.log \
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa2.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/ROT-new.log \
   | python3 $LB --out $W/out/ROT-new.ts --record $W/lastbyte.jsonl --mark "ROT-new" >/dev/null &
 sleep 8
 # retire the predecessor
@@ -78,4 +82,4 @@ print()
 print(f"  keys carrying signing material: {bad if bad else 'none'}")
 PY
 echo "  relay command line (what key material it was given):"
-ps -o command= -p "$(pgrep -f 'moq-relay --server-bind 127.0.0.1:9443' | head -1)" | tr ' ' '\n' | rg -A1 'auth|tls' | sed 's/^/    /'
+ps -o command= -p "$(pgrep -f 'moq-relay.*127.0.0.1:9443' | head -1)" | tr ' ' '\n' | rg -A1 'auth|tls' | sed 's/^/    /'

@@ -18,6 +18,10 @@
 # usage: moq-import-survival.sh <label> <source.ts> [once|loop] [seconds]
 # env:   MOQ, RELAY (binary paths), PORT, OUT
 set -uo pipefail
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 LABEL=$1; SRC=$2; LOOP=${3:-once}; SECS=${4:-60}
 : "${MOQ:?set MOQ to the moq binary under test}"
 : "${RELAY:?set RELAY to the moq-relay binary}"
@@ -32,11 +36,11 @@ cleanup(){ for p in $SUB_PID $PUB_PID $RELAY_PID; do
 trap cleanup EXIT INT TERM
 
 # --*-quic-gso=false is required on macOS loopback and harmless elsewhere.
-"$RELAY" --server-bind 127.0.0.1:$PORT --tls-generate localhost --auth-public "" \
-  --server-quic-gso=false >"$OUT/$LABEL.relay.log" 2>&1 & RELAY_PID=$!
+"$RELAY" "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_AUTH[@]}" \
+  "${RELAY_GSO[@]}" >"$OUT/$LABEL.relay.log" 2>&1 & RELAY_PID=$!
 sleep 3
 
-"$MOQ" --client-tls-disable-verify --client-quic-gso=false --client-connect "$URL" \
+"$MOQ" "${MOQ_DIAL[0]}" --quic-gso=false "${MOQ_DIAL[1]}" "$URL" \
   --broadcast "$BCAST" export ts >"$OUT/$LABEL.sub.ts" 2>"$OUT/$LABEL.sub.log" & SUB_PID=$!
 sleep 2
 
@@ -45,7 +49,7 @@ else FEED=(tsp -I file "$SRC" -P regulate --pcr-synchronous -O file -); fi
 
 # Both stages in one subshell so the status recorded is the importer's, not tsp's.
 ( "${FEED[@]}" 2>"$OUT/$LABEL.tsp.log" \
-  | "$MOQ" --client-tls-disable-verify --client-quic-gso=false --client-connect "$URL" \
+  | "$MOQ" "${MOQ_DIAL[0]}" --quic-gso=false "${MOQ_DIAL[1]}" "$URL" \
       --broadcast "$BCAST" import ts >"$OUT/$LABEL.pub.log" 2>&1
   echo "${PIPESTATUS[1]}" > "$OUT/$LABEL.rc" ) & PUB_PID=$!
 

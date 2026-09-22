@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T18 — delivery latency at equal conformance, one arm at one cushion.
 #
 #   t18-arm.sh <src.ts> <out-dir> <capture-seconds> <arm> [cushion-ms]
@@ -60,7 +64,7 @@ EPORT=$((PORT + 5)) # groomer -> egress tap
 VPID=${VPID:-111}      # the video PID the taps key on
 RATE=${RATE:-10000000} # groomer output mux rate; must exceed content rate
 BUFMS=${BUFMS:-1000}   # SRT/RIST jitter buffer
-MOQLAT=${MOQLAT:-3s}   # moq export ts --latency-max
+MOQLAT=${MOQLAT:-3s}   # moq export ts "${MOQ_LAT[@]}"
 WAITMIN=${WAITMIN:-5}  # regulate release granularity
 SEGDUR=${SEGDUR:-2}    # hls segment duration
 # The cap, not the cushion, is what a latency measurement ends up quoting. A
@@ -179,7 +183,7 @@ moq)
 	# `exec` so the recorded pid is the relay itself: without it teardown kills only
 	# the subshell and the relay survives to hold the port into the next run.
 	cp "${RELAY_TOML:-$HOME/moq-dev/demo/relay/localhost.toml}" "$OUT/relay.toml"
-	(cd "$OUT" && exec "$RELAY" relay.toml --server-quic-gso=false) >"$OUT/$TAG-relay.log" 2>&1 &
+	(cd "$OUT" && exec "$RELAY" relay.toml "${RELAY_GSO[@]}") >"$OUT/$TAG-relay.log" 2>&1 &
 	RELAY_PID=$!
 	PIDS+=("$RELAY_PID")
 	for _ in $(seq 1 40); do
@@ -196,9 +200,9 @@ moq)
 		echo "our relay exited but :4443 answered: another relay holds the port." >&2
 		exit 1
 	}
-	C=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --client-quic-gso=false)
+	C=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 --quic-gso=false)
 	# Subscriber first: reservation gating publishes the catalog once tracks resolve.
-	RECEIVE=("$MOQ" "${C[@]}" --broadcast "$BCAST" export ts --latency-max "$MOQLAT")
+	RECEIVE=("$MOQ" "${C[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$MOQLAT")
 	source_into "$MOQ" "${C[@]}" --broadcast "$BCAST" import ts
 	sleep 3
 	require_sender

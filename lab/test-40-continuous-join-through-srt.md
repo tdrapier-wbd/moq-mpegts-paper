@@ -1,10 +1,13 @@
 # Test 40 — Does the SRT contribution chain carry the #3533 content-join stall?
 
-**State: run, conclusive.** The two-stage SRT ingest does **not** absorb the trigger. A source whose
-content restarts on a continuous timeline stalls `moq export ts` permanently on the post-#3375 build
+**State: run, conclusive.** The two-stage SRT ingest does **not** absorb the trigger. On builds through
+`d518b61b`, a source whose content restarts on a continuous timeline stalls `moq export ts` permanently
 when it arrives over SRT through the deployed chain shape, exactly as it does through the published
-local-pipe reproducer. The pre-#3375 control, on the same host, same chain, same source, is healthy
-throughout.
+local-pipe reproducer. On **`5d0991b9`** (`main` after [#3793](https://github.com/moq-dev/moq/pull/3793),
+which carries [#3784](https://github.com/moq-dev/moq/pull/3784) closing
+[#3533](https://github.com/moq-dev/moq/issues/3533), the **0.31 Mb/s export stall is gone** — the
+acceptance oracle reads full rate through the first join — but a **homogeneous** build hits a different
+failure at the join: `moq import ts` exits with *frame timestamp is below the live edge*.
 
 ## Objective
 
@@ -106,43 +109,30 @@ Per-subscriber emitted rate, Mb/s, one 150 s window per arm:
   `discarded=7140` by the end of the window). The primary audio re-lock at the join is where the
   upstream quest note places the trigger, and it is visible here.
 
-### Current `main` still carries it, on both hosts
+### `5d0991b9` — #3533 closed; a new join failure on the dev line
 
-The rig was then run against `d518b61b` — `main` as of 2026-09-18, **72 commits after the bisect
-pair** — on each host in turn:
+Re-run against **`5d0991b9`** after [#3784](https://github.com/moq-dev/moq/pull/3784) merged:
 
-| Arm | Build | Host | Baseline | First collapse | Tail max | Verdict |
-|---|---|---|---:|---:|---:|---|
-| `post3375` | `0e61e35` | secondary | 9.71 | t=30 s | 0.32 | STALLED |
-| `pre3375` | `025613d` | secondary | 9.71 | — | 9.92 | HEALTHY |
-| `main-d518b61b` | `d518b61b` | secondary | 9.71 | t=30 s | 0.32 | STALLED |
-| `primary-newbuild` | `d518b61b` | primary (2 vCPU) | 9.87 | t=30 s | 0.32 | STALLED |
+| Arm | Build | Relay | Baseline (≤20 s) | Through first join | Verdict |
+|---|---|---|---:|---|---|
+| `main-5d0991b9` | `5d0991b9` | standing `d518b61b` | 9.32 Mb/s | peak **9.86 Mb/s** at t=25 s; export exits at t=30 s with *TS track layout changed* | **No #3533 stall** — full rate until exit |
+| `main-5d0991b9-swap` | `5d0991b9` | standing `5d0991b9` | — | import exits at first join: *frame timestamp is below the live edge*; export oracle ~0 Mb/s | **Join failure, not stall** |
 
-**#3533 is unfixed on current `main`**, with a signature indistinguishable from the original
-regression — same collapse point, same 0.31–0.32 Mb/s residue, same permanence. Ten days open with
-no upstream comment.
-
-The primary arm was run for a second reason: that host's rebuild produced a binary whose
-`--version` reads `0.9.11-d518b61b` where the secondary's reads `0.11.2-d518b61b` from the same
-commit and the same tree, which is the stale-version-string gotcha `INSTRUCTIONS` records. Rather
-than argue from a cosmetic string, the defect was used as the oracle: `eab96019` (what the host ran
-before) predates #3375 and is healthy here, `d518b61b` stalls. **The primary stalls**, so the binary
-really is the new code. *A regression with a sharp signature is a build-identity test, and a better
-one than a version string.*
+Upstream's `export_test::discontinuity_flags_the_break_once_across_tracks` — which embeds the #3533
+content-join fence — **passes** on this build (103/103 `export_test` cases).
 
 ## Conclusions
 
-1. **The deployed contribution chain is exposed.** Neither the SRT receive buffer, nor the loopback
-   multicast hop, nor the second `tsp` instance re-aligns the stream enough to hide the join. The
-   fence [T34](test-34-real-encoder-severity.md) holds open is load-bearing: if the contribution
-   encoder ever restarts content on a continuous timeline, a post-#3375 subscriber stops carrying
-   video and primary audio and does not recover.
-2. **The trigger is now synthesisable on demand**, which it was not before through this path. That
-   removes the dependency on the live feed for exercising the defect, and it means the fix can be
-   verified the day it lands rather than the next time a real encoder happens to produce a join.
-3. **The single-host pinned-binary pair is the right control and it has now been captured**, so
-   unifying the two hosts' builds no longer destroys anything. The bisect binaries in
-   `~/t27/bisect/` are the control from here on, not the service builds.
+1. **The deployed contribution chain is exposed** — the SRT buffer, loopback multicast hop and second
+   `tsp` instance do not absorb the join trigger ([T34](test-34-real-encoder-severity.md) remains
+   load-bearing for a *real* encoder's severity).
+2. **#3533's export stall is fixed on `5d0991b9`.** The 0.31 Mb/s residue signature does not appear;
+   the unit test and the mixed-build T40 arm both show full rate through the first join.
+3. **Continuous-source publishing on homogeneous `5d0991b9` still fails at the join** — import exits
+   with *frame timestamp is below the live edge*. That is a separate defect from #3533 and it blocks
+   the permanence re-soak and any long run on `ts-continuous-source.py` until it is resolved upstream.
+4. **The pinned bisect pair remains the control** for the pre-fix stall signature; service builds may
+   move independently.
 
 ## What this does not show
 

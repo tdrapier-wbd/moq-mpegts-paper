@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # Does a publishing client learn that its announce was refused? Measured, per wire version.
 #
 # `docs/upstream/publish-refusal-not-signalled.local.md` claimed, from reading the source, that
@@ -68,7 +72,8 @@ $M token sign --key $W/keydir/affa.jwk --root wbd \
 # The oracle: read anything under the root.
 $M token sign --key $W/keydir/wbd.jwk --root wbd --subscribe "" --expires $EXP >$W/tok/oracle.jwt
 
-$M-relay --server-bind 127.0.0.1:$PORT --tls-generate localhost --server-quic-gso=false \
+$M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
+	"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 	--web-http-listen 127.0.0.1:$HTTP --auth-key-dir $W/keydir --log-level debug \
 	>$W/logs/relay.log 2>&1 &
 RELAY=$!
@@ -109,16 +114,16 @@ for V in "${VERSIONS[@]}"; do
 		OUT=$W/out/$V-$CELL.ts
 
 		# Reader first, so the catalog resolves once the publisher announces.
-		(timeout $READBACK $M --client-connect "$(url "$OJWT")" --client-tls-fingerprint "$FP" \
-			--client-quic-gso=false --client-version "$V" --backoff-timeout 5s \
+		(timeout $READBACK $M "${MOQ_DIAL[1]}" "$(url "$OJWT")" "${MOQ_FP[@]}" "$FP" \
+			--quic-gso=false --client-version "$V" --backoff-timeout 5s \
 			--broadcast "$BC" export ts >"$OUT" 2>$W/logs/oracle-$V-$CELL.log) &
 		ORACLE=$!
 		sleep 1
 
 		T0=$(python3 -c 'import time;print(time.time())')
 		timeout $HOLD tsp -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>/dev/null |
-			timeout $HOLD $M --client-connect "$(url "$PJWT")" --client-tls-fingerprint "$FP" \
-				--client-quic-gso=false --client-version "$V" --backoff-timeout 4s \
+			timeout $HOLD $M "${MOQ_DIAL[1]}" "$(url "$PJWT")" "${MOQ_FP[@]}" "$FP" \
+				--quic-gso=false --client-version "$V" --backoff-timeout 4s \
 				--broadcast "$BC" import ts >"$PLOG" 2>&1
 		PRC=$?
 		HELD=$(python3 -c "import time;print(f'{time.time()-$T0:.1f}')")

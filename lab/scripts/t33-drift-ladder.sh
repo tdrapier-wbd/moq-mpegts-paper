@@ -22,6 +22,10 @@
 # Usage: t33-drift-ladder.sh <source.ts> <out-dir> [seconds] [ppm ...]
 
 set -u
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 SRC="${1:?source .ts}"
 OUT="${2:?out dir}"
 SECS="${3:-120}"
@@ -31,6 +35,7 @@ PPMS=("$@")
 
 W=/tmp/t33
 MOQ=${MOQ:-$HOME/bin-3529/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 PACER=${PACER:?set PACER}
 RELAY_URL=${RELAY_URL:-https://127.0.0.1:9543/t33}
 FP=$(cat $W/fp.txt)
@@ -47,8 +52,8 @@ for PPM in "${PPMS[@]}"; do
 	BCAST="t33d${PPM//-/m}.hang"
 	echo "### ppm=$PPM  nominal=$NOM  replay=$RATE"
 
-	timeout $((SECS + 25)) "$MOQ" --client-connect "$RELAY_URL" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --broadcast "$BCAST" export ts --latency-max 3s 2>"$RUN/export.log" |
+	timeout $((SECS + 25)) "$MOQ" "${MOQ_DIAL[1]}" "$RELAY_URL" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" 3s 2>"$RUN/export.log" |
 		"$PACER" - "$NOM" --latency-ms 1000 --max-latency-ms 8000 \
 			--stall-ms 6000 --on-stall fail --stats-interval-ms 1000 \
 			>"$RUN/groomed.ts" 2>"$RUN/pacer.log" &
@@ -59,8 +64,8 @@ for PPM in "${PPMS[@]}"; do
 	# what a drifting source does to a fixed-rate sink, and the reverse would measure the
 	# groomer's own clock instead.
 	tsp -I file "$SRC" -P regulate --bitrate "$RATE" -O file 2>"$RUN/tsp.log" |
-		timeout $((SECS + 20)) "$MOQ" --client-connect "$RELAY_URL" --client-tls-fingerprint "$FP" \
-			--client-quic-gso=false --broadcast "$BCAST" import ts >"$RUN/import.log" 2>&1
+		timeout $((SECS + 20)) "$MOQ" "${MOQ_DIAL[1]}" "$RELAY_URL" "${MOQ_FP[@]}" "$FP" \
+			--quic-gso=false --broadcast "$BCAST" import ts >"$RUN/import.log" 2>&1
 
 	wait $GRM 2>/dev/null
 	echo "  $(grep -c . "$RUN/pacer.log") stderr lines, groomed $(($(stat -f%z "$RUN/groomed.ts" 2>/dev/null || echo 0) / 188)) pkts"

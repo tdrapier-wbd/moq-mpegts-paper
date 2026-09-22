@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 #
 # T8b, conditions C2–C5 — one cell on a *provisioned* path, in the netns rig.
 #
@@ -56,6 +60,7 @@ SEGSECS=${SEGSECS:-2}
 LATMAX=${LATMAX:-2s}
 
 MOQ=${MOQ:-/home/ubuntu/bin-main-eab96019/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY_QUINN=${RELAY_QUINN:-/home/ubuntu/moq-relay-quinn}
 RELAY_QUICHE=${RELAY_QUICHE:-/home/ubuntu/moq-relay-quiche}
 RELAY_NOQ=${RELAY_NOQ:-/home/ubuntu/moq-relay-noq}
@@ -142,8 +147,8 @@ cc_for() {
 HLS_DIR=$RUN/hls
 case "$TRANSPORT" in
 cubic | bbr1 | bbr2 | bbr3)
-	pub "$(relay_for "$TRANSPORT")" --server-bind $PUBIP:4443 --tls-generate localhost \
-		--auth-public "" --server-quic-congestion-control "$(cc_for "$TRANSPORT")" \
+	pub "$(relay_for "$TRANSPORT")" "${RELAY_BIND[@]}" $PUBIP:4443 "${RELAY_TLS[@]}" localhost \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$(cc_for "$TRANSPORT")" \
 		>"$RUN/relay.log" 2>&1 &
 	KIDS+=("$!")
 	sleep 2
@@ -157,7 +162,7 @@ cubic | bbr1 | bbr2 | bbr3)
 	fi
 	for i in $(seq 1 "$NFLOWS"); do
 		pub bash -c "tsp -I file $CLIP --infinite -P regulate --pcr-synchronous -O file - \
-      | $MOQ --client-tls-disable-verify --client-connect https://$PUBIP:4443/anon \
+      | $MOQ ${MOQ_DIAL[*]} https://$PUBIP:4443/anon \
           --broadcast $BCAST.$i import ts" >"$RUN/pub.$i.log" 2>&1 &
 		KIDS+=("$!")
 	done
@@ -213,9 +218,9 @@ fi
 # ---- receive ---------------------------------------------------------------
 case "$TRANSPORT" in
 cubic | bbr1 | bbr2 | bbr3)
-	sub bash -c "timeout $SECS $MOQ --client-tls-disable-verify \
-      --client-connect https://$PUBIP:4443/anon --broadcast $BCAST.1 export ts \
-      --latency-max $LATMAX > $CAP" >"$RUN/sub.log" 2>&1 &
+	sub bash -c "timeout $SECS $MOQ ${MOQ_DIAL[0]} \
+      "${MOQ_DIAL[1]}" https://$PUBIP:4443/anon --broadcast $BCAST.1 export ts \
+      ${MOQ_LAT[*]} $LATMAX > $CAP" >"$RUN/sub.log" 2>&1 &
 	;;
 srt)
 	sub bash -c "timeout $SECS tsp -I srt --caller $PUBIP:9011 --latency 2000 \
@@ -238,9 +243,9 @@ KIDS+=("$RECV")
 for i in $(seq 2 "$NFLOWS"); do
 	case "$TRANSPORT" in
 	cubic | bbr1 | bbr2 | bbr3)
-		sub bash -c "timeout $SECS $MOQ --client-tls-disable-verify \
-        --client-connect https://$PUBIP:4443/anon --broadcast $BCAST.$i export ts \
-        --latency-max $LATMAX > $RUN/out.$i.ts" >"$RUN/sub.$i.log" 2>&1 &
+		sub bash -c "timeout $SECS $MOQ ${MOQ_DIAL[0]} \
+        "${MOQ_DIAL[1]}" https://$PUBIP:4443/anon --broadcast $BCAST.$i export ts \
+        ${MOQ_LAT[*]} $LATMAX > $RUN/out.$i.ts" >"$RUN/sub.$i.log" 2>&1 &
 		KIDS+=("$!")
 		;;
 	srt)

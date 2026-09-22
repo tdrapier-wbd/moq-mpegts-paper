@@ -27,6 +27,10 @@
 # so the placement changes the sensitivity by a factor of two and has to be stated.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 ARM=${1:?arm: control|video|audio}
 RELAY_IP=${2:?relay ip}
 AT=${3:-60}
@@ -34,6 +38,7 @@ DUR=${4:-60}
 TOTAL=${5:-180}
 
 MOQ=${MOQ:?set MOQ to the moq binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 PACER=${PACER:?set PACER to the mpegts-pacer binary}
 STIM=${STIM:-$HOME/f5/ts-partial-stall.py}
 LIVENESS=${LIVENESS:-$HOME/f5/ts-liveness.py}
@@ -74,8 +79,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-CONN=(--client-tls-disable-verify --client-connect "https://$RELAY_IP:$PORT/anon"
-	"--client-quic-gso=$GSO")
+CONN=("${MOQ_DIAL[@]}" "https://$RELAY_IP:$PORT/anon"
+	"--quic-gso=$GSO")
 
 {
 	echo "arm=$ARM relay=$RELAY_IP:$PORT inject_at=${AT}s for=${DUR}s total=${TOTAL}s"
@@ -89,7 +94,7 @@ echo "t27/$ARM: publishing a $ARM-mode stimulus, detecting at the far end"
 # Subscriber first, so the detector is already learning when the outage is injected rather than
 # joining mid-fault. Its chain is the operator's chain: exporter, groomer, detector.
 (
-	"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts --latency-max "$LATMAX" 2>"$OUT/export.log" |
+	"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" 2>"$OUT/export.log" |
 		"$PACER" - 11000000 --latency-ms 1000 --max-latency-ms 2500 --stall-ms 1000 \
 			--on-stall mute 2>"$OUT/pacer.log" |
 		python3 "$LIVENESS" --warmup 5 --learn 20 --jsonl >"$OUT/liveness.jsonl" 2>"$OUT/liveness.err"

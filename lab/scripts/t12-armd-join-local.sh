@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T12 arm D's mid-stream-join cell, reduced to the question it now has to answer.
 #
 # The full rig ([`t12-dual-leg.sh`](t12-dual-leg.sh)) fans one source into two disjoint
@@ -44,6 +48,7 @@
 set -euo pipefail
 
 MOQ="${1:?usage: t12-armd-join-local.sh <moq> <moq-relay> <pacer-dir> <label> <src.ts> [join_s] [window_s] [rate]}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${2:?}"
 PACER="${3:?}"
 LABEL="${4:?}"
@@ -92,7 +97,7 @@ if "$MOQ" --connect https://localhost --help >/dev/null 2>&1; then
 	RELAY_GSO=(--quic-gso=false)
 else
 	FLAGS_NEW=0
-	RELAY_GSO=(--server-quic-gso=false)
+	RELAY_GSO=("${RELAY_GSO[@]}")
 fi
 
 # Word-split deliberately: this is a tsp plugin chain, not one argument.
@@ -174,7 +179,7 @@ fi
 if [[ $FLAGS_NEW == 1 ]]; then
 	CONNECT=(--connect-tls-fingerprint "$FP" --connect https://localhost:4443 --quic-gso=false)
 else
-	CONNECT=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --client-quic-gso=false)
+	CONNECT=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443)
 fi
 
 BCAST_A="$BCAST"
@@ -186,7 +191,7 @@ export_ts() { # broadcast logfile
 	# run, so a run with no skip lines is one where the filter was demonstrably live, rather
 	# than one where the directive silently failed to match.
 	RUST_LOG="${RUST_LOG:-warn,moq_mux=debug}" \
-		"$MOQ" "${CONNECT[@]}" --broadcast "$1" export ts --latency-max "$LATENCY_MAX" 2>>"$2"
+		"$MOQ" "${CONNECT[@]}" --broadcast "$1" export ts "${MOQ_LAT[@]}" "$LATENCY_MAX" 2>>"$2"
 }
 
 # SC2094: every stage appends to the one log; none of them reads it.
@@ -251,7 +256,7 @@ echo "==> leg A $(wc -c <"$OUT/a.rtp") bytes, leg B $(wc -c <"$OUT/b.rtp") bytes
 # stopped carrying the same media, which no field-level determinism repairs.
 for l in a b; do
 	log="$OUT/leg-$l.log"
-	printf '    leg %s: %s slow, %s old, %s evicted (--latency-max %s)\n' "$l" \
+	printf '    leg %s: %s slow, %s old, %s evicted ("${MOQ_LAT[@]}" %s)\n' "$l" \
 		"$(grep -c 'skipping slow groups' "$log" || true)" \
 		"$(grep -c 'skipping old group' "$log" || true)" \
 		"$(grep -c 'current group evicted' "$log" || true)" "$LATENCY_MAX"

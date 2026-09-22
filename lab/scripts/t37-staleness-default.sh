@@ -26,6 +26,10 @@
 # Usage: t37-staleness-default.sh [watch_s]
 
 set -u
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 WATCH="${1:-75}"
 
 W=/tmp/t37st
@@ -63,7 +67,8 @@ python3 $R/t37-auth-stub.py --port $APORT --state $W/state.json --log $W/authlog
 	>$W/logs/stub.log 2>&1 &
 STUB=$!
 sleep 2
-$M-relay --server-bind 127.0.0.1:$PORT --tls-generate localhost --server-quic-gso=false \
+$M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
+	"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 	--web-http-listen 127.0.0.1:$HTTP --auth-api "http://127.0.0.1:$APORT/auth" --log-level info \
 	>$W/logs/relay.log 2>&1 &
 RELAY=$!
@@ -76,15 +81,15 @@ FP=$(curl -s --max-time 4 http://127.0.0.1:$HTTP/certificate.sha256)
 }
 
 tsp -I file ~/t12_vidonly.ts --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M --client-connect "https://127.0.0.1:$PORT/wbd" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
+	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
 PUB=$!
 trap 'kill $STUB $RELAY $PUB 2>/dev/null' EXIT
 sleep 5
 
 AJ=$(cat $W/tok/affa.jwt)
-(timeout $((WATCH + 60)) $M --client-connect "https://127.0.0.1:$PORT/wbd?jwt=$AJ" \
-	--client-tls-fingerprint "$FP" --client-quic-gso=false --broadcast cnn export ts 2>$W/logs/s.log |
+(timeout $((WATCH + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd?jwt=$AJ" \
+	"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast cnn export ts 2>$W/logs/s.log |
 	python3 $R/t37-lastbyte.py --out $W/out/s.ts --record $W/out/s.json --mark s) \
 	>>$W/logs/lb.log 2>&1 &
 sleep 12

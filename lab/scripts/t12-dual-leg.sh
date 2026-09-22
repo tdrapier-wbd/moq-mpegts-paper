@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T12 — end-to-end 1+1 dual-path delivery rig.
 #
 # One source feeds two complete delivery legs (publisher -> relay -> subscriber ->
@@ -39,6 +43,7 @@ AT=${AT:-30}
 RATE=${RATE:-auto}
 SRC=${SRC:?set SRC to the source clip}
 MOQ=${MOQ:?set MOQ to the moq client binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 MOQ_RELAY=${MOQ_RELAY:?set MOQ_RELAY to the moq-relay binary}
 PACER=${PACER:?set PACER to the directory holding the pacer binary and dual_rtp}
 OUTDIR=${OUTDIR:-./t12-runs}
@@ -115,9 +120,9 @@ port_free() { # abort rather than run on someone else's relay
 # ------------------------------------------------------------------ helpers ---
 start_relay() { # port logfile
 	local port=$1 logf=$2
-	setsid "$MOQ_RELAY" --server-bind "127.0.0.1:$port" --tls-generate localhost \
-		--auth-public "" --server-quic-idle-timeout "$IDLE" \
-		--server-quic-keep-alive "$KEEPALIVE" \
+	setsid "$MOQ_RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$port" "${RELAY_TLS[@]}" localhost \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_IDLE_FLAG" "$IDLE" \
+		"${RELAY_IDLE_FLAG%-idle-timeout}-keep-alive" "$KEEPALIVE" \
 		>"$logf" 2>&1 </dev/null &
 	echo $!
 }
@@ -131,8 +136,7 @@ relay_bound() { # logfile
 
 start_importer() { # fifo port logfile -> pid of the setsid group
 	local fifo=$1 port=$2 logf=$3
-	setsid bash -c "cat '$fifo' | '$MOQ' --client-tls-disable-verify \
-		--client-connect 'https://localhost:$port/anon' --broadcast '$BCAST' import ts" \
+	setsid bash -c "cat '$fifo' | '$MOQ' ${MOQ_DIAL[*]} 'https://localhost:$port/anon' --broadcast '$BCAST' import ts" \
 		>"$logf" 2>&1 </dev/null &
 	echo $!
 }
@@ -155,18 +159,16 @@ start_leg_egress() { # port rtp_port logfile -> pid (exporter + egress pipeline)
 			--stream-clock --sequence-seed $SEQ_SEED" ;;
 	*) return 1 ;;
 	esac
-	setsid bash -c "'$MOQ' --client-tls-disable-verify \
-		--client-connect 'https://localhost:$port/anon' --broadcast '$BCAST' \
-		export ts --latency-max $LATENCY_MAX | $egress" \
+	setsid bash -c "'$MOQ' ${MOQ_DIAL[*]} 'https://localhost:$port/anon' --broadcast '$BCAST' \
+		export ts ${MOQ_LAT[*]} $LATENCY_MAX | $egress" \
 		>"$logf" 2>&1 </dev/null &
 	echo $!
 }
 
 start_dual_egress() { # port logfile -> pid (arm c: one exporter, two destinations)
 	local port=$1 logf=$2
-	setsid bash -c "'$MOQ' --client-tls-disable-verify \
-		--client-connect 'https://localhost:$port/anon' --broadcast '$BCAST' \
-		export ts --latency-max $LATENCY_MAX \
+	setsid bash -c "'$MOQ' ${MOQ_DIAL[*]} 'https://localhost:$port/anon' --broadcast '$BCAST' \
+		export ts ${MOQ_LAT[*]} $LATENCY_MAX \
 		| '$PACER/dual_rtp' $RTP_HOST:$RTP_A_PORT $RTP_HOST:$RTP_B_PORT $RATE \
 			--ssrc $SSRC --seq 0 --latency-ms $PACER_LAT --max-latency-ms $PACER_MAXLAT \
 			--stall-ms $PACER_STALL --on-stall $PACER_ONSTALL" \

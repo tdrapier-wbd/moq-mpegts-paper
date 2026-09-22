@@ -17,6 +17,10 @@
 
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 SRC="${1:-$HOME/CNNiEMEA2_eit_full.ts}"
 WINDOW="${2:-45}"
 BROADCAST="eit.hang"
@@ -46,7 +50,7 @@ describe_build() {
 # Two incompatible flag surfaces are in the wild: the dial-side options were renamed
 # from `--client-*` to `--connect-*` and per-direction QUIC tuning was merged into one
 # `--quic-*` section. Builds carrying the rename still *parse* the old names behind a
-# deprecation warning, but `--client-quic-gso=false` does not reach the transport there,
+# deprecation warning, but `--quic-gso=false` does not reach the transport there,
 # so GSO stays on and the session stalls on macOS loopback with no error logged. Detect
 # the surface rather than assuming one.
 if "$TGT/moq" --connect https://localhost --help >/dev/null 2>&1; then
@@ -54,14 +58,14 @@ if "$TGT/moq" --connect https://localhost --help >/dev/null 2>&1; then
 	GSO=(--quic-gso=false)
 else
 	FLAGS_NEW=0
-	GSO=(--client-quic-gso=false)
+	GSO=(--quic-gso=false)
 fi
 CF=() # dial-side flags, filled by client_flags once the fingerprint is known
 client_flags() { # <fingerprint>
 	if [[ "$FLAGS_NEW" == 1 ]]; then
-		CF=(--connect-tls-fingerprint "$1" --connect https://localhost:4443 --quic-gso=false)
+		CF=("${MOQ_FP[@]}" "$1" --connect https://localhost:4443 --quic-gso=false)
 	else
-		CF=(--client-tls-fingerprint "$1" --client-connect https://localhost:4443 --client-quic-gso=false)
+		CF=("${MOQ_FP[@]}" "$1" "${MOQ_DIAL[1]}" https://localhost:4443)
 	fi
 }
 

@@ -20,6 +20,10 @@
 # Usage: t37-multisession-window.sh [sessions] [cadence_s] [stagger_s] [settle_s]
 
 set -u
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 N="${1:-6}"
 CAD="${2:-5}"
 STAG="${3:-1}"
@@ -80,7 +84,8 @@ python3 $R/t37-auth-stub.py --port $APORT --state $W/state.json --log $W/authlog
 STUB=$!
 sleep 2
 
-$M-relay --server-bind 127.0.0.1:$PORT --tls-generate localhost --server-quic-gso=false \
+$M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
+	"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 	--web-http-listen 127.0.0.1:$HTTP --auth-api "http://127.0.0.1:$APORT/auth" --log-level info \
 	>$W/logs/relay.log 2>&1 &
 RELAY=$!
@@ -96,8 +101,8 @@ AJ=$(cat $W/tok/affa.jwt)
 BJ=$(cat $W/tok/affb.jwt)
 
 tsp -I file ~/t12_vidonly.ts --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M --client-connect "https://127.0.0.1:$PORT/wbd" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
+	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
 PUB=$!
 trap 'kill $STUB $RELAY $PUB 2>/dev/null' EXIT
 sleep 5
@@ -112,8 +117,8 @@ sleep 5
 echo "starting $N sessions, ${STAG}s apart, cadence ${CAD}s"
 SPIDS=""
 for i in $(seq 1 "$N"); do
-	(timeout $((SETTLE + CAD * 12 + 60)) $M --client-connect "https://127.0.0.1:$PORT/wbd?jwt=$AJ" \
-		--client-tls-fingerprint "$FP" --client-quic-gso=false --broadcast cnn export ts 2>$W/logs/s$i.log |
+	(timeout $((SETTLE + CAD * 12 + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd?jwt=$AJ" \
+		"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast cnn export ts 2>$W/logs/s$i.log |
 		python3 $R/t37-lastbyte.py --out $W/out/s$i.ts --record $W/out/s$i.json --mark "s$i") \
 		>>$W/logs/lb.log 2>&1 &
 	SPIDS="$SPIDS $!"
@@ -121,8 +126,8 @@ for i in $(seq 1 "$N"); do
 done
 
 # The control, started alongside the subjects on the affiliate that is never revoked.
-(timeout $((SETTLE + CAD * 12 + 60)) $M --client-connect "https://127.0.0.1:$PORT/wbd?jwt=$BJ" \
-	--client-tls-fingerprint "$FP" --client-quic-gso=false --broadcast cnn export ts 2>$W/logs/c.log |
+(timeout $((SETTLE + CAD * 12 + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd?jwt=$BJ" \
+	"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast cnn export ts 2>$W/logs/c.log |
 	python3 $R/t37-lastbyte.py --out $W/out/c.ts --record $W/out/c.json --mark "c") \
 	>>$W/logs/lb.log 2>&1 &
 CPID=$!

@@ -10,10 +10,15 @@
 # Usage: t21-pcr-attribution.sh <label> [seconds]
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 SECS=${2:-800}
 
 MOQ=${MOQ:-$HOME/bin-main-eab96019/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-main-eab96019/moq-relay}
 PACER=${PACER:-$HOME/pacer-instr/mpegts-pacer}
 CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
@@ -31,12 +36,13 @@ cleanup() {
 	sleep 1
 	for p in ${KIDS+"${KIDS[@]}"}; do kill -9 "$p" 2>/dev/null; done
 	pkill -9 -f "$BCAST" 2>/dev/null
-	pkill -9 -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	true
 }
 trap cleanup EXIT
 
-"$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
+"$RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost \
+	"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" \
 	>"$RUN/relay.log" 2>&1 &
 KIDS+=("$!")
 sleep 2
@@ -46,14 +52,14 @@ sleep 2
 # round trip is responsible.
 tsp -I file "$CLIP" --infinite -P regulate --pcr-synchronous -O file - 2>"$RUN/tsp.log" |
 	tee "$RUN/source.ts" |
-	"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
+	"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
 		--broadcast "$BCAST" import ts >"$RUN/pub.log" 2>&1 &
 KIDS+=("$!")
 sleep 5
 
-timeout "$SECS" "$MOQ" --client-tls-disable-verify \
-	--client-connect "https://127.0.0.1:$PORT/anon" \
-	--broadcast "$BCAST" export ts --latency-max 500ms 2>"$RUN/export.log" |
+timeout "$SECS" "$MOQ" "${MOQ_DIAL[0]}" \
+	"${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/anon" \
+	--broadcast "$BCAST" export ts "${MOQ_LAT[@]}" 500ms 2>"$RUN/export.log" |
 	tee "$RUN/exported.ts" |
 	"$PACER" - "$RATE" --latency-ms 1000 --max-latency-ms 2500 \
 		--stall-ms 2000 --on-stall mute --stats-interval-ms 15000 \

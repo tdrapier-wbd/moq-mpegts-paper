@@ -466,7 +466,18 @@ The attribution rested on one qualification, now discharged. The soak sampled RS
 because the wrapper's argv contains the whole pipeline text — an argument rather than a measurement,
 and a defect reported upstream should rest on the latter.
 
-**Per-PID confirmation, 6 h on the same build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
+### #3493 re-soak on `5d0991b9` (2026-09-20)
+
+**`3493-check-2h` — invalid.** Same lane as the 6 h confirmation but on `moq`/`moq-relay`
+`0.11.2-5d0991b9` / `0.14.18-5d0991b9`, `SOURCE_MODE=continuous`, 2 h target. Import exited at
+~600 s (first content join) with *frame timestamp is below the live edge* — [#3798](https://github.com/moq-dev/moq/issues/3798), not a #3493 regression. `roles.csv` holds 240 rows; import RSS reads 0 after exit; media counters are not a slope confirmation.
+
+**`3493-loop-2h` — invalid (same blocker).** `SOURCE_MODE=loop` (`tsp --infinite`) on the same build.
+Import exited at the first loop wrap (~631 s) with the same [#3798](https://github.com/moq-dev/moq/issues/3798)
+error. Import RSS grew from ~38 MB to ~112 MB before exit (571 s of samples); a 2 h slope confirmation
+on `5d0991b9` is **blocked until #3798 is fixed** — neither continuous nor loop source modes survive.
+
+**Per-PID confirmation, 6 h on the merged build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
 `lab/scripts/t21-role-memory.sh`, graded by `lab/scripts/t21-role-fit.py`), 157 M packets at 0
 continuity errors:
 

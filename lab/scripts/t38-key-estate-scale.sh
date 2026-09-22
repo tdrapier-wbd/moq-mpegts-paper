@@ -26,6 +26,10 @@
 # Usage: t38-key-estate-scale.sh [estate sizes ...]      (default: 10 100 500 2000 9000)
 
 set -u
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 M="${MOQ:-$HOME/bin-3529/moq}"
 CLIP="${CLIP:-$HOME/t12_vidonly.ts}"
 W="${W:-/tmp/p1k}"
@@ -97,7 +101,8 @@ run_cell() { # <estate size>
 	}
 
 	T0=$(python3 -c 'import time;print(time.time())')
-	$M-relay --server-bind "127.0.0.1:$PORT" --tls-generate localhost --server-quic-gso=false \
+	$M-relay "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
+		"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 		--web-http-listen "127.0.0.1:$HTTP" --auth-key-dir "$KD" --log-level warn \
 		>"$W/logs/relay$N.log" 2>&1 &
 	RELAY=$!
@@ -120,15 +125,15 @@ run_cell() { # <estate size>
 	URL="https://127.0.0.1:$PORT/wbd?jwt=$(cat "$W/tok$N.jwt")"
 	local CAP="$W/out/$N.ts"
 	: >"$CAP"
-	timeout $WINDOW "$M" --client-connect "$URL" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --backoff-timeout 5s --broadcast "estate$N" \
+	timeout $WINDOW "$M" "${MOQ_DIAL[1]}" "$URL" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --backoff-timeout 5s --broadcast "estate$N" \
 		export ts >"$CAP" 2>"$W/logs/sub$N.log" &
 	SUB=$!
 	sleep 1
 	T0=$(python3 -c 'import time;print(time.time())')
 	timeout $WINDOW tsp -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>/dev/null |
-		timeout $WINDOW "$M" --client-connect "$URL" --client-tls-fingerprint "$FP" \
-			--client-quic-gso=false --backoff-timeout 4s --broadcast "estate$N" \
+		timeout $WINDOW "$M" "${MOQ_DIAL[1]}" "$URL" "${MOQ_FP[@]}" "$FP" \
+			--quic-gso=false --backoff-timeout 4s --broadcast "estate$N" \
 			import ts >"$W/logs/pub$N.log" 2>&1 &
 	PUB=$!
 	FB=""

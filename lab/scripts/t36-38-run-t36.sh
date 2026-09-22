@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T36 arm matrix. Each arm runs through its own self-terminating wiretap so the
 # wire-level byte volume and the TS-structure scan are attributable per arm.
 W=/tmp/t36
@@ -28,11 +32,11 @@ run_arm() {  # run_arm <id> <path> <broadcast> <tokenfile|none> <role> <expect>
   local RC
   if [ "$ROLE" = "pub" ]; then
     timeout "$SECS" bash -c "tsp -I file $W/clip.ts -P regulate -O file 2>/dev/null | \
-      ~/bin-3529/moq --client-connect '$URL' --client-tls-fingerprint '$FP' \
+      ~/bin-3529/moq "${MOQ_DIAL[1]}" '$URL' ${MOQ_FP[*]} '$FP' \
       import --broadcast '$BC' ts" > $W/out/$ID.bin 2> $W/logs/$ID.log
     RC=$?
   else
-    timeout "$SECS" ~/bin-3529/moq --client-connect "$URL" --client-tls-fingerprint "$FP" \
+    timeout "$SECS" ~/bin-3529/moq "${MOQ_DIAL[1]}" "$URL" "${MOQ_FP[@]}" "$FP" \
       export --broadcast "$BC" ts > $W/out/$ID.bin 2> $W/logs/$ID.log
     RC=$?
   fi

@@ -19,8 +19,13 @@
 # #3533 reports, so a result here is directly comparable with the issue's table.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL="${1:?label}"
 MOQ="${2:?path to moq}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${3:?relay url}"
 CLIP="${4:?source clip}"
 SECS="${5:-150}"
@@ -77,8 +82,9 @@ PIDS+=($!)
 sleep 2
 
 # --- stage 2: multicast -> moq import (the moq-live-publisher shape) ----------------------
+MOQ_DIAL_STR=$(printf '%q ' "${MOQ_DIAL[@]}")
 setsid bash -c "tsp -I ip $MCAST --local-address 127.0.0.1 -O file - \
-	| '$MOQ' --client-tls-disable-verify --client-connect '$RELAY' \
+	| '$MOQ' ${MOQ_DIAL_STR}'$RELAY' \
 	  --broadcast '$BCAST' import ts" >"$RUN/stage2.log" 2>&1 &
 PIDS+=($!)
 sleep 2
@@ -91,8 +97,8 @@ PIDS+=($!)
 sleep 6
 
 # --- the subscriber under test ------------------------------------------------------------
-"$MOQ" --client-tls-disable-verify --client-connect "$RELAY" \
-	--broadcast "$BCAST" export ts --latency-max 3s >/dev/null 2>"$RUN/export.log" &
+"$MOQ" "${MOQ_DIAL[@]}" "$RELAY" \
+	--broadcast "$BCAST" export ts "${MOQ_LAT[@]}" 3s >/dev/null 2>"$RUN/export.log" &
 SUB=$!
 PIDS+=("$SUB")
 sleep 3

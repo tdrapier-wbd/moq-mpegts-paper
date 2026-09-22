@@ -22,6 +22,10 @@
 # produces is the evidence that the rig is sound and the run is one command.
 set -u
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 OUT="${1:?out dir}"
 SUBJ_S="${2:-60}"
 SOAK_S="${3:-300}"
@@ -29,6 +33,7 @@ SOAK_S="${3:-300}"
 W=/tmp/t33
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOQ="${MOQ:?set MOQ}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${RELAY:?set RELAY (moq-relay)}"
 PACER="${PACER:?set PACER}"
 CLIP="${CLIP:?set CLIP}"
@@ -111,10 +116,6 @@ say "  base20.ts          $BASE_SZ bytes ($((BASE_SZ / 188)) packets)"
 # Step B -- the relay, and its fingerprint. The harness reads fp.txt and never starts one.
 # ---------------------------------------------------------------------------
 say "--- relay on :$PORT ---"
-GSO=""
-"$RELAY" --help 2>&1 | grep -q 'server-quic-gso' && GSO="--server-quic-gso=false"
-"$RELAY" --help 2>&1 | grep -q '^\s*--quic-gso' && GSO="--quic-gso=false"
-
 # The fingerprint is served by the *web* listener, not the QUIC one. Started from a TOML
 # config the two share a port and it is easy to assume the QUIC listener provides it; started
 # from flags, a relay with only `--server-bind` comes up healthy, logs `listening kind="quic"`,
@@ -124,7 +125,8 @@ WEB=""
 "$RELAY" --help 2>&1 | grep -q 'web-http-listen' && WEB="--web-http-listen [::]:$PORT"
 
 # shellcheck disable=SC2086
-"$RELAY" --server-bind "[::]:$PORT" --tls-generate localhost --auth-public "" $GSO $WEB \
+"$RELAY" "${RELAY_BIND[@]}" "[::]:$PORT" "${RELAY_TLS[@]}" localhost "${RELAY_AUTH[@]}" \
+	"${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" $WEB \
 	>"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 

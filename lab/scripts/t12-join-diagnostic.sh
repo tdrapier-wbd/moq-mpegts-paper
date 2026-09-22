@@ -8,6 +8,10 @@
 # `dropped` says whether it was quietly deleting programme to stay inside its
 # buffer bound.
 set -uo pipefail
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 cd ~/t12 && source env.sh
 
 PORT=${PORT:-7643}
@@ -40,21 +44,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
-setsid "$MOQ_RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
-	--server-quic-idle-timeout 30s --server-quic-keep-alive 5s >"$R/relay.log" 2>&1 </dev/null &
+setsid "$MOQ_RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost \
+	"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_IDLE_FLAG" 30s \
+	"${RELAY_IDLE_FLAG%-idle-timeout}-keep-alive" 5s >"$R/relay.log" 2>&1 </dev/null &
 RELAY=$!
 sleep 2
 
 setsid bash -c "tsp -I file \"$SRC\" --infinite -P regulate --pcr-synchronous -O file - \
-	| \"$MOQ\" --client-tls-disable-verify --client-connect https://localhost:$PORT/anon \
+	| \"$MOQ\" ${MOQ_DIAL[*]} https://localhost:$PORT/anon \
 		--broadcast $BCAST import ts" >"$R/pub.log" 2>&1 </dev/null &
 PUB=$!
 
 echo "publishing ${JOIN_AFTER}s before the leg joins (max-latency ${MAXLAT} ms)"
 sleep "$JOIN_AFTER"
 
-setsid bash -c "\"$MOQ\" --client-tls-disable-verify --client-connect https://localhost:$PORT/anon \
-	--broadcast $BCAST export ts --latency-max ${LATENCY_MAX:-500ms} \
+setsid bash -c "\"$MOQ\" ${MOQ_DIAL[*]} https://localhost:$PORT/anon \
+	--broadcast $BCAST export ts ${MOQ_LAT[*]} ${LATENCY_MAX:-500ms} \
 	| \"$EGRESS\" 127.0.0.1:$RTP_PORT $RATE --rtp --ssrc 538968071 \
 		--latency-ms $LAT --max-latency-ms $MAXLAT --stall-ms 1000 --on-stall mute \
 		--stream-clock --sequence-seed 0" >"$R/leg.log" 2>&1 </dev/null &

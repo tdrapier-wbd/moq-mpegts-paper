@@ -19,6 +19,10 @@
 # Deliberately no impairment and no shaping: this is a resource measurement on a healthy lane.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 LABEL=${1:?label}
 HOURS=${2:-4}
 SAMPLE=${SAMPLE:-30}
@@ -30,26 +34,41 @@ PORT=${PORT:-4461}
 
 MOQ=${MOQ:-$HOME/bin-merged/moq}
 RELAY=${RELAY:-$HOME/bin-merged/moq-relay}
+moq_cli_detect "$MOQ" "$RELAY"
 PACER=${PACER:-$HOME/pacer-fixed/mpegts-pacer}
 CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
 CONTSRC=${CONTSRC:-$HOME/t21/ts-continuous-source.py}
 DIR=${DIR:-$HOME/t21}
+SOURCE_MODE=${SOURCE_MODE:-continuous}
 
 SECS=${SECS:-$((HOURS * 3600))}
 RUN=$DIR/$LABEL
 mkdir -p "$RUN"
-BCAST="t21.mem.$LABEL"
+BCAST="t21.mem.$LABEL.hang"
 CSV=$RUN/roles.csv
 KIDS=()
 
-for f in "$MOQ" "$RELAY" "$PACER" "$CLIP" "$CONTSRC"; do
+case "$SOURCE_MODE" in
+continuous) FEED="python3 $CONTSRC $CLIP | tsp -I file - -P regulate --pcr-synchronous -O file -" ;;
+loop) FEED="tsp -I file $CLIP --infinite -P regulate --pcr-synchronous -O file -" ;;
+*)
+	echo "SOURCE_MODE must be continuous or loop" >&2
+	exit 1
+	;;
+esac
+
+CHECK=("$MOQ" "$RELAY" "$PACER" "$CLIP")
+[ "$SOURCE_MODE" = continuous ] && CHECK+=("$CONTSRC")
+for f in "${CHECK[@]}"; do
 	[ -e "$f" ] || {
 		echo "missing: $f" >&2
 		exit 1
 	}
 done
 
-if pgrep -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" >/dev/null 2>&1; then
+RELAY_GREP="${RELAY_BIND[0]} 127.0.0.1:$PORT"
+if pgrep -f "[m]oq-relay ${RELAY_BIND[0]} 127.0.0.1:$PORT" >/dev/null 2>&1 ||
+	pgrep -f "[m]oq-relay.*127.0.0.1:$PORT" >/dev/null 2>&1; then
 	echo "a relay is already bound to 127.0.0.1:$PORT — kill it before starting" >&2
 	exit 1
 fi
@@ -59,12 +78,14 @@ cleanup() {
 	sleep 1
 	for p in ${KIDS+"${KIDS[@]}"}; do kill -9 "$p" 2>/dev/null; done
 	pkill -9 -f "$BCAST" 2>/dev/null
-	pkill -9 -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay ${RELAY_BIND[0]} 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	true
 }
 trap cleanup EXIT
 
-"$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
+"$RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost "${RELAY_AUTH[@]}" \
+	"${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 	>"$RUN/relay.log" 2>&1 &
 RELAY_PID=$!
 KIDS+=("$RELAY_PID")
@@ -73,16 +94,15 @@ sleep 2
 # Started with `exec` at the end of each stage so the PID recorded is the binary's own and not
 # a shell that will hand off to it. No respawn wrapper here, deliberately: a restart would
 # reset the very series being measured, and a role that dies is the result.
-python3 "$CONTSRC" "$CLIP" 2>"$RUN/src.log" |
-	tsp -I file - -P regulate --pcr-synchronous -O file - 2>"$RUN/tsp.log" |
-	"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
+bash -c "$FEED" 2>"$RUN/src.log" |
+	"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
 		--broadcast "$BCAST" import ts >"$RUN/import.log" 2>&1 &
 PUB_PID=$!
 KIDS+=("$PUB_PID")
 sleep 5
 
-"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
-	--broadcast "$BCAST" export ts --latency-max "$LATENCY_MAX" 2>"$RUN/export.log" |
+"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
+	--broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATENCY_MAX" 2>"$RUN/export.log" |
 	"$PACER" - "$RATE" --latency-ms "$CUSHION_MS" --max-latency-ms "$CAP_MS" \
 		--stall-ms 1000 --on-stall mute --stats-interval-ms $((SAMPLE * 1000)) 2>"$RUN/pacer.log" |
 	tsp -I file - -P continuity -P count --total --interval 1000000 -O drop \
@@ -95,15 +115,16 @@ sleep 5
 # then never re-resolve: a PID that vanishes is recorded as gone rather than silently replaced
 # by whatever else now matches the pattern.
 pid_of() { pgrep -f "$1" 2>/dev/null | head -1; }
-RELAY_P=$(pid_of "[m]oq-relay --server-bind 127.0.0.1:$PORT")
-IMPORT_P=$(pid_of "[b]in-merged/moq .*$BCAST import")
-EXPORT_P=$(pid_of "[b]in-merged/moq .*$BCAST export")
+RELAY_P=$(pid_of "[m]oq-relay .*127.0.0.1:$PORT")
+IMPORT_P=$(pid_of "[m]oq .*$BCAST import")
+EXPORT_P=$(pid_of "[m]oq .*$BCAST export")
 PACER_P=$(pid_of "[m]pegts-pacer - $RATE")
 PY_P=$(pid_of "[p]ython3 .*ts-continuous-source")
-TSP_P=$(pid_of "[t]sp -I file - -P regulate")
+TSP_P=$(pid_of "[t]sp -I file")
+[ "$SOURCE_MODE" = loop ] && PY_P=${PY_P:-0}
 
 {
-	echo "label=$LABEL hours=$HOURS sample=${SAMPLE}s rate=$RATE port=$PORT"
+	echo "label=$LABEL hours=$HOURS sample=${SAMPLE}s rate=$RATE port=$PORT source_mode=$SOURCE_MODE"
 	echo "moq=$($MOQ --version 2>&1 | head -1) relay=$($RELAY --version 2>&1 | head -1)"
 	echo "pacer=$($PACER --version 2>&1 | head -1)"
 	echo "clip=$CLIP md5=$(md5sum "$CLIP" | cut -d' ' -f1)"
@@ -112,8 +133,10 @@ TSP_P=$(pid_of "[t]sp -I file - -P regulate")
 } >"$RUN/meta.txt"
 cat "$RUN/meta.txt"
 
-for v in RELAY_P IMPORT_P EXPORT_P PACER_P PY_P TSP_P; do
-	[ -n "${!v}" ] || {
+REQUIRED=(RELAY_P IMPORT_P EXPORT_P PACER_P TSP_P)
+[ "$SOURCE_MODE" = continuous ] && REQUIRED+=(PY_P)
+for v in "${REQUIRED[@]}"; do
+	[ -n "${!v}" ] && [ "${!v}" != 0 ] || {
 		echo "could not resolve $v — see $RUN/*.log" >&2
 		exit 1
 	}
@@ -130,9 +153,10 @@ while :; do
 	EL=$((NOW - START))
 	[ "$EL" -ge "$SECS" ] && break
 	ALIVE=0
-	for p in "$RELAY_P" "$IMPORT_P" "$EXPORT_P" "$PACER_P" "$PY_P" "$TSP_P"; do
+	for p in "$RELAY_P" "$IMPORT_P" "$EXPORT_P" "$PACER_P" "$TSP_P"; do
 		kill -0 "$p" 2>/dev/null && ALIVE=$((ALIVE + 1))
 	done
+	[ "$PY_P" != 0 ] && kill -0 "$PY_P" 2>/dev/null && ALIVE=$((ALIVE + 1))
 	PKTS=$(grep -oE 'total: [0-9,]+ packets' "$RUN/grade.log" 2>/dev/null | tail -1 |
 		grep -oE '[0-9,]+' | tr -d ,)
 	CCE=$(grep -cE 'missing .* packets|discontinuity' "$RUN/grade.log" 2>/dev/null || true)
@@ -142,7 +166,7 @@ while :; do
 		"$(rss "$IMPORT_P")" "$(thr "$IMPORT_P")" \
 		"$(rss "$EXPORT_P")" "$(thr "$EXPORT_P")" \
 		"$(rss "$PACER_P")" "$(thr "$PACER_P")" \
-		"$(rss "$PY_P")" "$(rss "$TSP_P")" \
+		"$([ "$PY_P" != 0 ] && rss "$PY_P" || echo 0)" "$(rss "$TSP_P")" \
 		"$ALIVE" "${PKTS:-0}" "${CCE:-0}" >>"$CSV"
 	sleep "$SAMPLE"
 done

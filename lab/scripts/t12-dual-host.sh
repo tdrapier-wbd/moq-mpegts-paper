@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T12 — the clean 1+1 arm across two hosts, so the legs do not share a clock.
 #
 # Arm D on one box proves two stream-clocked groomers agree about stream position.
@@ -48,6 +52,7 @@ LABEL=${1:?usage: ROLE=a|b $0 <label>}
 ROLE=${ROLE:?set ROLE to a or b}
 
 MOQ=${MOQ:?set MOQ to the moq client binary}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 PACER=${PACER:?set PACER to the directory holding the pacer egress binary}
 
 # A relay and a publisher per host, rather than one of each shared between them.
@@ -122,14 +127,14 @@ REC=$!
 PIDS+=("$REC")
 sleep 1
 
-C=(--client-tls-disable-verify --client-connect "$RELAY_URL")
+C=("${MOQ_DIAL[@]}" "$RELAY_URL")
 
 # This host's own relay, when the arm is grading independent upstreams. It binds loopback
 # only: with a publisher and a subscriber per host there is no cross-host traffic left, so
 # exposing it would add a path the arm does not use and a security group it does not need.
 if [ "$OWN_UPSTREAM" = 1 ]; then
-	"$RELAY_BIN" --server-bind "127.0.0.1:$RELAY_PORT" --tls-generate localhost \
-		--auth-public "" >"$OUT/relay.log" 2>&1 &
+	"$RELAY_BIN" "${RELAY_BIND[@]}" "127.0.0.1:$RELAY_PORT" "${RELAY_TLS[@]}" localhost \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" >"$OUT/relay.log" 2>&1 &
 	RLY=$!
 	PIDS+=("$RLY")
 	for _ in $(seq 1 30); do
@@ -184,9 +189,8 @@ fi
 # job's pid, so teardown can signal the whole pipeline. Deliberately *not* setsid:
 # under setsid `$!` is the setsid process, which exits as soon as it has spawned the
 # session leader, so every liveness check on it reports a healthy leg as dead.
-bash -c "'$MOQ' --client-tls-disable-verify \
-	--client-connect '$RELAY_URL' --broadcast '$BCAST' \
-	export ts --latency-max $LATENCY_MAX \
+bash -c "'$MOQ' ${MOQ_DIAL[*]} '$RELAY_URL' --broadcast '$BCAST' \
+	export ts ${MOQ_LAT[*]} $LATENCY_MAX \
 	| '$EGRESS' 127.0.0.1:$PORT $RATE --rtp --ssrc $SSRC \
 	  --latency-ms $PACER_LAT --max-latency-ms $PACER_MAXLAT \
 	  --stall-ms $PACER_STALL --on-stall $PACER_ONSTALL \

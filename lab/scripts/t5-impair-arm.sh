@@ -23,6 +23,10 @@
 # Prints one `RESULT ` line of key=value pairs, and leaves capture + logs in <out-dir>.
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 ARM=${1:?arm: hls|moq}
 SPEC=${2:?netem spec, or "none"}
 SECS=${3:?capture seconds}
@@ -209,15 +213,15 @@ moq)
 	# `sendmsg` of its own, so `ethtool -K lo gso off` alone still leaves netem
 	# dropping super-packets on this arm while the segmented arm gets wire-sized
 	# ones — the same confound in a different layer.
-	"$MOQ_RELAY" --server-bind "127.0.0.1:$RELAY_PORT" --tls-generate localhost \
-		--server-quic-congestion-control "$CC" --server-quic-gso=false \
-		--auth-public "" >"$OUT/relay.log" 2>&1 &
+	"$MOQ_RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$RELAY_PORT" "${RELAY_TLS[@]}" localhost \
+		"$RELAY_CC_FLAG" "$CC" "${RELAY_GSO[@]}" \
+		"${RELAY_AUTH[@]}" >"$OUT/relay.log" 2>&1 &
 	PIDS+=($!)
 	sleep 3
 	grep -qiE '^error|error:' "$OUT/relay.log" 2>/dev/null &&
 		{ echo "RESULT arm=$ARM spec=\"$SPEC\" status=relay_failed"; exit 1; }
 
-	CONNECT=(--client-tls-disable-verify --client-connect "https://127.0.0.1:$RELAY_PORT/anon")
+	CONNECT=("${MOQ_DIAL[@]}" "https://127.0.0.1:$RELAY_PORT/anon")
 	tsp --realtime -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - \
 		2>"$OUT/publish.log" |
 		"$MOQ_BIN" "${CONNECT[@]}" --broadcast t5.impair.hang import ts \

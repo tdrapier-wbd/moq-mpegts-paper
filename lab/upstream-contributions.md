@@ -196,7 +196,8 @@ that rebuilds the multiplex re-emits a stored section on its own grid, so it is 
 held one (~14 s against a source true to half a second) and, below that grid's rate, re-sends a time it
 has already asserted — stepping a trusting receiver's clock backwards. Filed as
 [#2934](https://github.com/moq-dev/moq/issues/2934) with the narrow fix: treat the interval as a floor on
-repetition and emit on change.
+repetition and emit on change. **Closed** via [#3793](https://github.com/moq-dev/moq/pull/3793); upstream
+`export_test::si_revision_does_not_wait_for_the_interval` passes on `5d0991b9`.
 
 ### A liveness risk introduced by the fix — closed by deleting the gate
 
@@ -671,32 +672,51 @@ continuous timeline, which fails within one join. What the report explicitly doe
 which comparison in the audio path yields `backwards = true` on a source with 0 backward PCR steps —
 that is left to the maintainer rather than guessed at, which is the lesson of the retired draft above.
 
-**Accepted upstream, and the maintainer supplied the part the report withheld.** #3533 is open and
-labelled `quest`, with its own plan at `quest/m0/3533-ts-export-restart-stall.md` restating the
-reproducer, the bisect, the 0.31 Mb/s against 9.5 Mb/s and the single-track immunity. It names the
-trigger the report declined to guess: the legacy audio importer extrapolates timestamps from the last
-PES header and, after a resync at the join, re-locks a frame a few milliseconds below its own
-extrapolated high-water mark, while `consumer.rs`'s rewind check has no tolerance — so a sub-frame
-backward step is read as a rewind and fences the peers. The planned fix gives the fence an exit
-against the exporter's watermark rather than a timer, keeping the true-rewind behaviour #3375 added.
-Declining to guess cost nothing and the inference was sound; the quest's own framing — *"that is what a
-real encoder produces at a hard cut"* — is the report's severity argument accepted.
+**Accepted upstream, and the maintainer supplied the part the report withheld** — the legacy audio
+importer re-locking a sub-frame below its extrapolated high-water mark, fencing peers through
+`Track::admit`. **Closed** by [#3784](https://github.com/moq-dev/moq/pull/3784) in
+[#3793](https://github.com/moq-dev/moq/pull/3793) (`5d0991b9`): `export_test` passes and
+[T40](test-40-continuous-join-through-srt.md) no longer reads the 0.31 Mb/s stall through the SRT chain.
 
-**Still failing on current `main`.** #3529 edited the #3533 quest only to remove the note that it must
-land *after* #3529, and tested rather than assumed, `fd4f5d82e` is indistinguishable from the #3375
-merge: 0.31 Mb/s from the first join across ~7 joins, against a pre-#3375 control holding
-9.1–9.8 Mb/s ([T23 § against #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)).
+**What remains on the dev line is not the stall signature.** On homogeneous `5d0991b9`,
+`moq import ts` exits at the first content join with *frame timestamp is below the live edge*
+([T40](test-40-continuous-join-through-srt.md) § `main-5d0991b9-swap`) — a monotonic-timeline
+enforcement from the dev merge, separate from #3533's export-side fence. Root cause: `reanchor()` from
+the #3533 fix applies to legacy audio only; H.264 and verbatim PES paths call `Producer::write` without
+it. Filed as [#3798](https://github.com/moq-dev/moq/issues/3798). Continuous-source permanence and any
+long run on `ts-continuous-source.py` are blocked until that is resolved.
 
-**Still open, and now a release blocker rather than a backlog item.**
-[#3611](https://github.com/moq-dev/moq/pull/3611) folded gap discontinuity into the monotonic-timeline
-plan and [#3628](https://github.com/moq-dev/moq/pull/3628) groomed m0 into release blockers, so the
-quest carries the fix design — give the fence an exit when the program clock driven by the joined
-tracks passes the fenced track's pending frame, implemented in `Track::admit` against the exporter's
-watermark, *"a clock comparison, never a deadline"* — plus the regression test it needs. No code has
-landed. **This is the defect most likely to be met first by a live contribution feed**, because its
-trigger is a hard cut on a source whose transport timeline never steps backwards, which is what a real
-encoder produces; and its signature is a programme that keeps its PSI, AC-3 and teletext while video
-and primary audio stop, so a receiver locks and shows nothing.
+### The mux rate the lane could not carry — closed upstream, citing this campaign's groomer
+
+**The finding.** `moq export ts` emitted content only: MPEG-TS null packets are not carried across
+MoQ, so the reconstructed stream had no stuffing and declared no multiplex rate. A downstream IRD or
+groomer had to be told the rate out of band or measure it, and the campaign's own tool said so —
+[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)'s README states that the mux rate is
+*"not recoverable from MoQ"*. That sentence is quoted in the fix's problem statement.
+
+**Closed** by [#3831](https://github.com/moq-dev/moq/pull/3831). Import measures the whole-multiplex
+rate off the PCR PID — every packet including nulls, over the 27 MHz ticks between clocks, pooled into
+half-second samples and published only once a window agrees within 2 % — and records it in the catalog
+as an additive `mpegts.muxRate`. Export settles a fixed-point packet balance before each clock packet
+and emits `floor(max(balance, 0))` nulls ahead of it; media is never delayed or dropped, and both debt
+and credit are capped at one second. `moq export ts --mux-rate <bps>` overrides the catalog. A
+broadcast that recorded no rate exports byte-identically to before.
+
+**Verified here** ([T13](test-13-downstream-grooming.md) § *The exporter now stuffs and declares a
+rate*, file domain, `0.11.2-615d166d`): stuffing returns at **4.93 %** against the source's 4.69 %, and
+the output declares **9,981,799 b/s** against a 9,945,951 b/s source — **+0.36 %**. The explicit
+`--mux-rate` path lands at +0.25 %. Continuity stays clean.
+
+**What it does not do, measured rather than assumed.** Padding is a composition change. **PCR accuracy
+and PCR repetition are unmoved** — 0 of 1,807 PCRs inside the 481 ns P2 gate, 11.34 % of intervals above
+the 40 ms P1 limit, against 0 of 1,892 and 11.21 % on the previous build. The useful consequence is that
+the P2 gate becomes *answerable* on the ungroomed egress for the first time, because there is now a
+declared rate to grade against; it is answered with a comprehensive failure. A groomer remains required
+on this lane for both PCR criteria.
+
+**Still owed from here.** The absent-rate path is untested: filtering nulls out of a CBR source leaves
+the PCR values intact and therefore still yields a stable, lower rate (import recorded 9,486,940 b/s
+and padded to it), so a genuinely variable source is needed to exercise the omitted-field case.
 
 ---
 
@@ -934,7 +954,7 @@ the *harder* failure mode (host loss) and not the easier, far more common one. T
 and is specified in [#2610](https://github.com/moq-dev/moq/issues/2610) as a publisher-minted epoch
 plus an explicit `Ended` flag. **Specified, not shipped.**
 
-### Three values the exporter mints per process — one closed, two open
+### Three values the exporter mints per process — one closed, one declined, one open
 
 A 1+1 pair cannot be byte-identical while the exporter renders anything from its own process state
 rather than from the broadcast. Three such values were isolated ([T12](test-12-dual-path-handoff.md)):
@@ -949,13 +969,23 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   argument for treating unmerged-code evidence as provisional.
 - **Continuity counters**, numbered from process state, leave exporters that did not start together
   permanently offset by a constant — the single field whose masking lifts agreement to ~98 %. Filed as
-  [#2779](https://github.com/moq-dev/moq/issues/2779). **Open**, and prototyped here rather than only
+  [#2779](https://github.com/moq-dev/moq/issues/2779), and prototyped here rather than only
   described: restarting each PID's counter at the video keyframe boundary and padding every span to a
   multiple of 16 packets takes the same pair from 0.4 % to 99.9 % identical on single-track content
   and from 24.6 % to 93.6 % on multi-track, with both legs continuity-clean. The cost is small in
   aggregate and regressive in detail — 1.5–1.7 % of packets, but **10–18 kb/s per PID almost
   regardless of what that PID carries**, because a PID emitting one or two packets per group is nearly
   always 14 or 15 short of a multiple of 16.
+  **Declined upstream.** [#3868](https://github.com/moq-dev/moq/pull/3868) closed the issue and deleted
+  its quest; the PR body records the decision as *"2779 is abandoned (close #2779 as won't-fix on
+  merge)"*, and the replanned #2829 quest states the reason — *"a late-joining exporter cannot know the
+  packet count of every earlier group, so per-process counters stay"*. GitHub shows the issue as closed
+  *completed*, which is the mechanical state and not the decision. No code changed: `Export::counters`
+  on `615d166d` is still `HashMap<u16, ContinuityCounter>` filled by `entry(pid).or_default()`, so the
+  measurements above stand against current `main` and are not at risk of going stale. **The consequence
+  for this campaign is that byte-identical 1+1 from two independent exporters is not obtainable from
+  upstream and will not become so**; it needs the padding filter above, or a receiver that merges on
+  something other than the whole packet.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the
   earliest frame, so legs whose bytes arrive at different moments order the same media differently.
   Multi-track content therefore stops at 94–96 % even when co-started, and at 75.56 % once the two
@@ -1031,10 +1061,11 @@ supported choice for a permanent fixed-rate trunk, or whether the quinn-BBRv1 in
 under a shaped bottleneck is a fixable bug. **Unanswered, and one under-provisioned condition is not
 enough to press it.**
 
-### The subscriber dies under contention, and the first version of the report was wrong
+### The subscriber dies under contention — reported, fixed on the media path, and **still live on the catalog track**
 
-[**#3491**](https://github.com/moq-dev/moq/issues/3491) — ***fixed and closed 2026-09-08*** by
-[**#3515**](https://github.com/moq-dev/moq/pull/3515), one day after filing. `moq export ts`
+[**#3491**](https://github.com/moq-dev/moq/issues/3491) — ***closed 2026-09-08*** by
+[**#3515**](https://github.com/moq-dev/moq/pull/3515), one day after filing; **the fix is incomplete
+and the failure reproduces on current `main`** (see the end of this section). `moq export ts`
 exits with `Error: hang: moq error: old` when two subscribers pull separate broadcasts through one
 relay across a shared, under-provisioned bottleneck.
 
@@ -1079,6 +1110,30 @@ So #3491 reports the reproduction and the crossed matrix, and offers the `poll_r
 explicitly as a lead a maintainer may discard. **Nothing about the withdrawn result's shape betrayed
 the error** — it was significant, tightly clustered and mechanically explicable — which is why both
 method rules it produced are recorded in [`method-notes.md`](method-notes.md) §1.
+
+**The fix is incomplete, and the residual is on the catalog track.** Re-run as its own experiment
+with a pre-#3515 build as a positive control ([T8b](test-8b-congestion-control.md) § *#3491 survives
+on the catalog track*), three concurrent flows, 15 subscribers per arm:
+
+| arm | contains #3515 | exited | message | track |
+|---|---|---:|---|---|
+| `moq 0.9.15` (`046893254`) | no | 4 / 15 | `hang: moq error: old` | media container |
+| `moq 0.11.2-615d166d` (`main`) | yes | **1 / 15** | `json: old` | `catalog.json` |
+
+`#3515` gave the *container* consumer a skip for an evicted group and corrected `moq-net`'s cursor so
+it triggers. `moq export ts` also reads a **JSON catalog track**, whose consumer has no such skip:
+`moq-json`'s error type declares `Net(#[from] moq_net::Error)` as `#[error(transparent)]`, so a lost
+catalog group propagates out unclassified and unlogged and exits the process. On a snapshot track
+`Error::Old` means *the value you hold has been superseded* — the correct response is to take the
+newer group, not to terminate.
+
+A registered prediction was also tested and **failed**: exits do not fall monotonically with the
+drift budget (6/9 at 500 ms, 4/15 at 2 s, 3/9 at 8 s on the pre-fix build), so the budget aggravates
+the failure without explaining it, and the frame-expiry hypothesis is not supported. **Owed
+upstream:** the catalog consumer should get the same skip, and the three unlogged fatal sites in this
+path should log. **Filed as [#3897](https://github.com/moq-dev/moq/issues/3897)** — as a new issue
+rather than a comment, because #3491 is closed; text at
+[`docs/upstream/export-old-silently-fatal.md`](../docs/upstream/export-old-silently-fatal.md).
 
 ---
 
@@ -1158,7 +1213,10 @@ For a lane whose entire case is permanent primary distribution, the publisher is
 never supposed to restart, and restarting it is a timeline event this campaign has priced. **No
 upstream issue describes publisher RSS growth over long runs** — #2745 and #3128 are both the relay.
 
-[**#3493**](https://github.com/moq-dev/moq/issues/3493) — *open, reported 2026-09-07.* The report was
+[**#3493**](https://github.com/moq-dev/moq/issues/3493) — **closed** via [#3793](https://github.com/moq-dev/moq/pull/3793)
+(`5d0991b9`). Re-soaks **`3493-check-2h`** (continuous) and **`3493-loop-2h`** (loop) both **invalidated**
+when import hit [#3798](https://github.com/moq-dev/moq/issues/3798) at ~600 s / ~631 s respectively.
+A 2 h slope confirmation on homogeneous `5d0991b9` remains blocked. The report was
 **deliberately held** until it could be attributed per process: the soak sampled RSS by command-line
 signature, which for the publisher also matched its wrapper shell, and a shell not growing 137 MB is an
 argument rather than a measurement. A 6 h re-run of the same lane on the same build, sampling each PID
@@ -1610,6 +1668,30 @@ The whole review was filed on 2026-09-17, as `t0ms` to stay consistent with #7 a
 | [#34](https://github.com/mondain/msfts/issues/34) | TR 101 290 P1 does not detect this carriage's failure mode |
 | [#15 comment](https://github.com/mondain/msfts/issues/15#issuecomment-5714034547) | The arrival-time mechanism, **not** filed separately |
 | [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731) | Six convergence decisions, cross-linked with #33 |
+
+**Outcome: the round is answered and closed, five days after filing.** The editor replied to every
+issue and merged [#35](https://github.com/mondain/msfts/pull/35) on 2026-09-22; eleven are closed.
+The draft gained an **Egress Timing** section carrying #32's conditional MUST, a §5.4 table mapping
+the three fields to four carriages (#28), a §5.2 delivery-schedule paragraph with the ISO/IEC
+13818-1 §2.4.2 pointer (#24), a BDAV definition of the 192-octet arrival-time prefix (#15), the CAT
+and CA-descriptor PIDs in the retain list (#27), and `mpeg2tsMuxRate` recommended rather than
+prohibited on ES-level tracks (#25). `m2ts` is renamed `mpeg2ts` throughout, and `m2tsPsiInterval`
+is deleted — which dissolved half of #26 rather than answering it.
+
+**Three asks were declined with reasons, and the reasons are better than the asks.** Field reduction
+accounts for #17 and #27's CA-PID list. For #29's source PID inventory the editor's objection is the
+decisive one and we had not seen it: *an inventory generated by the same pipeline that dropped the
+PIDs would agree with its own output*, so the field helps only when the inventory comes from an
+independent inspection. #34 was declined because our measurement comes from a lane that regenerates
+PSI, continuity counters and PCR — a fourth mode the draft does not define — and modified carriage
+as drafted passes the elementary-stream packets through with their original counters, so P1 does
+fire. Both hold.
+
+**Two remain open.** #33 (what ES-level carriage is for) is with the editor pending his own
+evaluation. #15 is held open on one sentence the merge left inconsistent: Egress Timing closes with
+*"Reproducing it requires timing information that this document does not define"*, and §6.12's
+arrival-time stamps now define exactly that — an artefact of two changes landing separately, raised
+in three lines.
 
 Three decisions inside that round worth keeping:
 

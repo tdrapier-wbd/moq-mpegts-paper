@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T13, wire domain: where `rawsendmpeg2ts` sits.
 #
 # https://github.com/EDIS-mx/rawsendmpeg2ts is a datagram sender, not a groomer: it
@@ -40,6 +44,7 @@ set -uo pipefail
 
 RAWSEND="${1:?usage: t13-rawsend.sh <rawsendmpeg2ts> <moq> <src.ts> [window_s] [pacer]}"
 MOQ="${2:?}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 SRC="${3:?}"
 WINDOW="${4:-25}"
 PACER="${5:-}"
@@ -91,7 +96,7 @@ reap() {
 }
 
 subscribe() { # subscribe <seconds>
-	timeout "$1" "$MOQ" --client-tls-disable-verify --client-connect "$RELAY" \
+	timeout "$1" "$MOQ" "${MOQ_DIAL[@]}" "$RELAY" \
 		--broadcast "$BCAST" export ts
 }
 

@@ -23,6 +23,10 @@
 #   source's own PCR is exactly what a drift arm must not do.
 
 set -u
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 SRC="${1:?source .ts}"
 LABEL="${2:?label}"
 SECS="${3:-20}"
@@ -30,6 +34,7 @@ PPM="${4:-0}"
 
 W=/tmp/t33
 MOQ=${MOQ:-$HOME/bin-3529/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 PACER=${PACER:?set PACER to the mpegts-pacer binary}
 RELAY_URL=${RELAY_URL:-https://127.0.0.1:9543/t33}
 FP=$(cat $W/fp.txt)
@@ -48,13 +53,13 @@ BCAST="t33$LABEL.hang"
 
 # Subscribers first: reservation gating publishes the catalog once tracks resolve, so a
 # subscriber joining late on a short clip can miss the run.
-timeout $((SECS + 20)) "$MOQ" --client-connect "$RELAY_URL" --client-tls-fingerprint "$FP" \
-	--client-quic-gso=false --broadcast "$BCAST" export ts --latency-max 3s \
+timeout $((SECS + 20)) "$MOQ" "${MOQ_DIAL[1]}" "$RELAY_URL" "${MOQ_FP[@]}" "$FP" \
+	--quic-gso=false --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" 3s \
 	>"$RUN/exported.ts" 2>"$RUN/export.log" &
 SUB=$!
 
-timeout $((SECS + 20)) "$MOQ" --client-connect "$RELAY_URL" --client-tls-fingerprint "$FP" \
-	--client-quic-gso=false --broadcast "$BCAST" export ts --latency-max 3s 2>"$RUN/export2.log" |
+timeout $((SECS + 20)) "$MOQ" "${MOQ_DIAL[1]}" "$RELAY_URL" "${MOQ_FP[@]}" "$FP" \
+	--quic-gso=false --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" 3s 2>"$RUN/export2.log" |
 	"$PACER" - "$RATE" --latency-ms 1000 --max-latency-ms 8000 --stall-ms 3000 --on-stall mute \
 		>"$RUN/groomed.ts" 2>"$RUN/pacer.log" &
 GRM=$!
@@ -66,8 +71,8 @@ else
 	PACE=(-P regulate --bitrate "$RATE")
 fi
 tsp -I file "$SRC" "${PACE[@]}" -O file 2>"$RUN/tsp.log" |
-	timeout $((SECS + 16)) "$MOQ" --client-connect "$RELAY_URL" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --broadcast "$BCAST" import ts >"$RUN/import.log" 2>&1
+	timeout $((SECS + 16)) "$MOQ" "${MOQ_DIAL[1]}" "$RELAY_URL" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast "$BCAST" import ts >"$RUN/import.log" 2>&1
 echo "  import rc=$?"
 
 wait $SUB 2>/dev/null

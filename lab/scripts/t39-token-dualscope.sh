@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # Verify whether ONE moq token can carry a media `--subscribe` grant and an unrelated
 # `--publish` grant for a telemetry path, and whether the relay routes both correctly.
 #
@@ -56,7 +60,8 @@ $M token sign --key $W/keydir/wbd.jwk --root wbd --subscribe "" --expires $EXP >
 echo "one token under test: root=wbd subscribe=[cnn] publish=[affa.telemetry]"
 
 # --- relay --------------------------------------------------------------------
-$M-relay --server-bind 127.0.0.1:$PORT --tls-generate localhost --server-quic-gso=false \
+$M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
+	"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
 	--web-http-listen 127.0.0.1:$HTTP --auth-key-dir $W/keydir --log-level info \
 	>$W/logs/relay.log 2>&1 &
 RELAY=$!
@@ -76,8 +81,8 @@ url() { echo "https://127.0.0.1:$PORT/wbd?jwt=$1"; }
 
 # --- the estate's legitimate media publisher, for the subscribe cells ----------
 tsp -I file ~/t12_vidonly.ts --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M --client-connect "$(url "$PJWT")" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
+	$M "${MOQ_DIAL[1]}" "$(url "$PJWT")" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
 PUB=$!
 trap 'kill $RELAY $PUB 2>/dev/null' EXIT
 sleep 5
@@ -87,8 +92,8 @@ echo "cell,op,path,expected,observed,bytes,verdict" >$RESULT
 
 sub_cell() { # n path want note -- the token under test subscribes; bytes are the oracle
 	local n="$1" path="$2" want="$3" note="$4"
-	timeout 8 $M --client-connect "$(url "$JWT")" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --backoff-timeout 3s --broadcast "$path" export ts \
+	timeout 8 $M "${MOQ_DIAL[1]}" "$(url "$JWT")" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --backoff-timeout 3s --broadcast "$path" export ts \
 		>"$W/out/c$n.ts" 2>"$W/logs/c$n.log"
 	local b got
 	b=$(stat -f%z "$W/out/c$n.ts" 2>/dev/null || echo 0)
@@ -100,14 +105,14 @@ pub_cell() { # n path want note -- the token under test publishes; a PRIVILEGED 
 	# on the same path is the oracle. The publishing client is told nothing either way, so
 	# its own log cannot score this.
 	local n="$1" path="$2" want="$3" note="$4"
-	timeout 12 $M --client-connect "$(url "$OJWT")" --client-tls-fingerprint "$FP" \
-		--client-quic-gso=false --backoff-timeout 8s --broadcast "$path" export ts \
+	timeout 12 $M "${MOQ_DIAL[1]}" "$(url "$OJWT")" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --backoff-timeout 8s --broadcast "$path" export ts \
 		>"$W/out/c$n.ts" 2>"$W/logs/c$n-oracle.log" &
 	local O=$!
 	sleep 1
 	timeout 9 tsp -I file ~/t12_vidonly.ts -P regulate --pcr-synchronous -O file - 2>/dev/null |
-		timeout 9 $M --client-connect "$(url "$JWT")" --client-tls-fingerprint "$FP" \
-			--client-quic-gso=false --backoff-timeout 3s --broadcast "$path" import ts \
+		timeout 9 $M "${MOQ_DIAL[1]}" "$(url "$JWT")" "${MOQ_FP[@]}" "$FP" \
+			--quic-gso=false --backoff-timeout 3s --broadcast "$path" import ts \
 			>"$W/logs/c$n.log" 2>&1
 	wait $O 2>/dev/null
 	local b got
@@ -136,8 +141,8 @@ pub_cell 6 affa.telemetry/gw1 ADMIT "per-gateway sub-path"
 # --- oracle control: the oracle itself must be able to read a path that IS published,
 # or every REFUSE above is unfalsifiable.
 echo
-timeout 8 $M --client-connect "$(url "$OJWT")" --client-tls-fingerprint "$FP" \
-	--client-quic-gso=false --broadcast cnn export ts >$W/out/oracle-control.ts 2>/dev/null
+timeout 8 $M "${MOQ_DIAL[1]}" "$(url "$OJWT")" "${MOQ_FP[@]}" "$FP" \
+	--quic-gso=false --broadcast cnn export ts >$W/out/oracle-control.ts 2>/dev/null
 OB=$(stat -f%z $W/out/oracle-control.ts 2>/dev/null || echo 0)
 if [ "$OB" -gt 10000 ]; then
 	echo "oracle control: reads a live path, ${OB} B -- a REFUSE above means refused"

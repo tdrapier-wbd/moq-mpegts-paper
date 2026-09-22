@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T38 Part 4 — what entitlement costs the scaling model. Second rig.
 #
 # The first rig sampled `ps -o %cpu`, which on Darwin is a decaying average over
@@ -53,7 +57,7 @@ run_ladder() {
 		python3 $W/mkstate2.py --cache-control "max-age=$cad" --mark "cost $lbl" >/dev/null
 		;;
 	esac
-	rp=$(pgrep -f "moq-relay --server-bind 127.0.0.1:$port" | head -1)
+	rp=$(pgrep -f "moq-relay.*127.0.0.1:$port" | head -1)
 	[ -z "$rp" ] && {
 		echo "  $lbl: no relay on $port, skipped"
 		return
@@ -64,8 +68,8 @@ run_ladder() {
 		local pids=()
 		for i in $(seq 1 "$n"); do
 			timeout $((DWELL + 6)) ~/bin-3529/moq --backoff-timeout 100ms \
-				--client-connect "https://127.0.0.1:$port/wbd$tok" \
-				--client-tls-fingerprint "$fp" export --broadcast cnn ts \
+				"${MOQ_DIAL[1]}" "https://127.0.0.1:$port/wbd$tok" \
+				"${MOQ_FP[@]}" "$fp" export --broadcast cnn ts \
 				>/dev/null 2>/dev/null &
 			pids+=($!)
 		done

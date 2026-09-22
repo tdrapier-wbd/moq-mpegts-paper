@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 #
 # T21 — the permanence soak of the complete media-aware lane, groomer included.
 #
@@ -54,6 +58,7 @@ LATENCY_MAX=${LATENCY_MAX:-500ms}
 PORT=${PORT:-4460}
 
 MOQ=${MOQ:-$HOME/bin-main-eab96019/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-main-eab96019/moq-relay}
 PACER=${PACER:-$HOME/pacer-64595f6/target/release/mpegts-pacer}
 MONITOR=${MONITOR:-$HOME/t21/t21-pcr-monitor.py}
@@ -91,7 +96,7 @@ for f in "${CHECK[@]}"; do
 done
 
 # Refuse to start behind a leaked relay rather than attaching to it and mislabelling the run.
-if pgrep -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" >/dev/null 2>&1; then
+if pgrep -f "[m]oq-relay.*127.0.0.1:$PORT" >/dev/null 2>&1; then
 	echo "a relay is already bound to 127.0.0.1:$PORT — kill it before starting" >&2
 	exit 1
 fi
@@ -101,12 +106,13 @@ cleanup() {
 	sleep 1
 	for p in ${KIDS+"${KIDS[@]}"}; do kill -9 "$p" 2>/dev/null; done
 	pkill -9 -f "$BCAST" 2>/dev/null
-	pkill -9 -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	true
 }
 trap cleanup EXIT
 
-"$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
+"$RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost \
+	"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" \
 	>"$RUN/relay.log" 2>&1 &
 KIDS+=("$!")
 sleep 2
@@ -114,7 +120,7 @@ sleep 2
 bash -c "while :; do
     echo \"\$(date -Is) publisher start\" >> $RUN/respawn.log
     $FEED \
-      | $MOQ --client-tls-disable-verify --client-connect https://127.0.0.1:$PORT/anon \
+      | $MOQ ${MOQ_DIAL[*]} https://127.0.0.1:$PORT/anon \
           --broadcast $BCAST import ts
     echo \"\$(date -Is) publisher exit rc=\$?\" >> $RUN/respawn.log
     sleep 2
@@ -127,8 +133,8 @@ sleep 5
 # that has shed content fails every PCR and reads as a clock defect (method-notes §2).
 bash -c "while :; do
     echo \"\$(date -Is) egress start\" >> $RUN/respawn.log
-    $MOQ --client-tls-disable-verify --client-connect https://127.0.0.1:$PORT/anon \
-      --broadcast $BCAST export ts --latency-max $LATENCY_MAX 2>> $RUN/export.log \
+    $MOQ ${MOQ_DIAL[*]} https://127.0.0.1:$PORT/anon \
+      --broadcast $BCAST export ts ${MOQ_LAT[*]} $LATENCY_MAX 2>> $RUN/export.log \
       | $PACER - $RATE --latency-ms $CUSHION_MS --max-latency-ms $CAP_MS \
           --stall-ms 1000 --on-stall mute --stats-interval-ms $((SAMPLE * 1000)) 2>> $RUN/pacer.log \
       | tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 500 --bitrate $RATE \
@@ -182,7 +188,7 @@ while :; do
 	CCE=$(grep -cE 'missing .* packets|discontinuity' "$RUN/grade.log" 2>/dev/null || true)
 	PCRV=$(grep -cE 'pcrverify' "$RUN/grade.log" 2>/dev/null || true)
 	RESP=$(grep -c 'exit' "$RUN/respawn.log" 2>/dev/null || true)
-	read -r RR RT RF <<<"$(proc_of "[m]oq-relay --server-bind 127.0.0.1:$PORT")"
+	read -r RR RT RF <<<"$(proc_of "[m]oq-relay.*127.0.0.1:$PORT")"
 	read -r IR IT IF <<<"$(proc_of "$BCAST import")"
 	read -r ER ET EF <<<"$(proc_of "$BCAST export")"
 	read -r PR PT PF <<<"$(proc_of "[m]pegts-pacer - $RATE")"

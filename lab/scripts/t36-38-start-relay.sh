@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # Detached relay launcher for the T36/T37/T38 rig.
 # $1 = auth mode: "keydir" (T36) or "api" (T37/T38)
 W=/tmp/t36
@@ -8,9 +12,9 @@ MODE="${1:-keydir}"
 shift
 
 COMMON=(
-  --server-bind 127.0.0.1:9443
-  --tls-generate localhost
-  --server-quic-gso=false
+  "${RELAY_BIND[@]}" 127.0.0.1:9443
+  "${RELAY_TLS[@]}" localhost
+  "${RELAY_GSO[@]}"
   --web-http-listen 127.0.0.1:9080
   --log-level info
 )

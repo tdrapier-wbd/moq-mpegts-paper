@@ -12,7 +12,12 @@
 #
 # usage: t9-overhead-lo.sh [window-seconds] [source.ts]
 set -uo pipefail
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 BIN=${BIN:-/home/ubuntu/bin-0.14.9}
+moq_cli_detect "$BIN/moq" "${RELAY:-}"
 PORT=${PORT:-8043}
 SRC=${SRC:-${2:-/home/ubuntu/CNNiEMEA2.ts}}
 WINDOW=${WINDOW:-${1:-40}}
@@ -31,19 +36,19 @@ trap cleanup EXIT INT TERM
 
 io() { awk -F': *' -v k="^$2" '$1 ~ k {print $2}' "/proc/$1/io" 2>/dev/null || echo 0; }
 
-$BIN/moq-relay --server-bind "0.0.0.0:$PORT" --tls-generate 127.0.0.1 --auth-public "" \
-	--server-quic-gso=false >/tmp/t9lo_relay.log 2>&1 &
+$BIN/moq-relay "${RELAY_BIND[@]}" "0.0.0.0:$PORT" "${RELAY_TLS[@]}" 127.0.0.1 "${RELAY_AUTH[@]}" \
+	"${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" >/tmp/t9lo_relay.log 2>&1 &
 RELAY=$!
 sleep 3
 
 setsid bash -c "tsp -I file '$SRC' --infinite -P regulate --pcr-synchronous -O file - \
-  | $BIN/moq --client-tls-disable-verify --client-connect https://127.0.0.1:$PORT/anon \
-      --client-quic-gso=false --broadcast $BCAST import ts" >/tmp/t9lo_pub.log 2>&1 &
+  | $BIN/moq ${MOQ_DIAL[*]} https://127.0.0.1:$PORT/anon \
+      --quic-gso=false --broadcast $BCAST import ts" >/tmp/t9lo_pub.log 2>&1 &
 PUB=$!
 sleep 8
 
-$BIN/moq --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
-	--client-quic-gso=false --broadcast "$BCAST" export ts >/dev/null 2>/tmp/t9lo_sub.log &
+$BIN/moq "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
+	--quic-gso=false --broadcast "$BCAST" export ts >/dev/null 2>/tmp/t9lo_sub.log &
 SUB=$!
 sleep 12
 

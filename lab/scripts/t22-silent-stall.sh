@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 #
 # T22 — silent media-plane failure: the feed stops, the transport does not.
 #
@@ -44,6 +48,7 @@ CAP_MS=${CAP_MS:-2500}
 PORT=${PORT:-4461}
 
 MOQ=${MOQ:-$HOME/bin-3006/moq}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-3006/moq-relay}
 PACER=${PACER:-$HOME/pacer/mpegts-pacer}
 OBSERVER=${OBSERVER:-$HOME/t22/t22-wire-observer.py}
@@ -62,7 +67,7 @@ for f in "$MOQ" "$RELAY" "$PACER" "$OBSERVER" "$CLIP"; do
 	}
 done
 
-if pgrep -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" >/dev/null 2>&1; then
+if pgrep -f "[m]oq-relay.*127.0.0.1:$PORT" >/dev/null 2>&1; then
 	echo "a relay is already bound to 127.0.0.1:$PORT — kill it before starting" >&2
 	exit 1
 fi
@@ -71,14 +76,14 @@ fi
 # wedges the next run. Continue everything by signature before tearing it down.
 cleanup() {
 	pkill -CONT -f "$BCAST" 2>/dev/null
-	pkill -CONT -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -CONT -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	pkill -CONT -f "[t]sp -I file $CLIP" 2>/dev/null
 	sleep 0.3
 	for p in ${KIDS+"${KIDS[@]}"}; do kill "$p" 2>/dev/null; done
 	sleep 1
 	for p in ${KIDS+"${KIDS[@]}"}; do kill -9 "$p" 2>/dev/null; done
 	pkill -9 -f "$BCAST" 2>/dev/null
-	pkill -9 -f "[m]oq-relay --server-bind 127.0.0.1:$PORT" 2>/dev/null
+	pkill -9 -f "[m]oq-relay.*127.0.0.1:$PORT" 2>/dev/null
 	true
 }
 trap cleanup EXIT
@@ -88,7 +93,8 @@ event() { echo "$(stamp) $*" >>"$RUN/events.log"; }
 
 : >"$RUN/events.log"
 
-"$RELAY" --server-bind "127.0.0.1:$PORT" --tls-generate localhost --auth-public "" \
+"$RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$PORT" "${RELAY_TLS[@]}" localhost \
+	"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" \
 	>"$RUN/relay.log" 2>&1 &
 RELAY_PID=$!
 KIDS+=("$RELAY_PID")
@@ -99,7 +105,7 @@ event "relay up pid=$RELAY_PID"
 # publisher still running is the "input stalled, session healthy" case, and it is not the same
 # failure as freezing the publisher.
 tsp -I file "$CLIP" --infinite -P regulate --pcr-synchronous -O file - 2>"$RUN/tsp.log" |
-	"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
+	"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
 		--broadcast "$BCAST" import ts >"$RUN/pub.log" 2>&1 &
 KIDS+=("$!")
 sleep 1
@@ -108,8 +114,8 @@ PUB_PID=$(pgrep -f "$BCAST import" | head -1)
 event "publisher up tsp=$TSP_PID pub=$PUB_PID"
 sleep 4
 
-"$MOQ" --client-tls-disable-verify --client-connect "https://127.0.0.1:$PORT/anon" \
-	--broadcast "$BCAST" export ts --latency-max 500ms 2>"$RUN/export.log" |
+"$MOQ" "${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT/anon" \
+	--broadcast "$BCAST" export ts "${MOQ_LAT[@]}" 500ms 2>"$RUN/export.log" |
 	"$PACER" - "$RATE" --latency-ms "$CUSHION_MS" --max-latency-ms "$CAP_MS" \
 		--stall-ms 1000 --on-stall "$POLICY" --stats-interval-ms 5000 2>"$RUN/pacer.log" |
 	python3 "$OBSERVER" --tick 0.1 >"$RUN/wire.csv" 2>"$RUN/observer.log" &

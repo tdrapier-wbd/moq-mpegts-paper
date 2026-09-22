@@ -558,7 +558,9 @@ three-clip breadth loopback ([T3](../lab/test-3-opaque-transparency.md)); EIT on
 packets and renumbers two continuity counters; in a 1,200-packet window the only difference is byte 3 on
 one PAT and one PMT ([Evidence](evidence.md) §3.1). **The clock is not verbatim:** one PAT/PMT pair per
 segment displaces PCR by 109–302 µs (predicted and measured); grooming closes P2 violations at the
-demarcation (§4.1). P2 presupposes a mux rate — uninformative on the media-aware lane until groomed.
+demarcation (§4.1). P2 presupposes a mux rate, which the media-aware lane did not declare until
+[#3831](https://github.com/moq-dev/moq/pull/3831); it now does, and fails the gate on every PCR
+([Evidence](evidence.md) §3.1).
 
 **EPG:** both deliver 69 sections byte-identically; MoQ via reconstruction (must detect completeness),
 segmented via copy. MoQ hands joining receivers the whole EPG in ~1 ms; segmented clients wait the

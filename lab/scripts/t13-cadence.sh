@@ -14,7 +14,12 @@
 
 set -uo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 MOQ="${1:?usage: t13-cadence.sh <moq> <moq-relay> <pacer-dir> <relay.toml> <src.ts> [window_s]}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${2:?}"
 PACER_DIR="${3:?}"
 RELAY_CONF="${4:?}"
@@ -58,8 +63,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --server-quic-gso=false is required on macOS loopback, where GSO stalls.
-"$RELAY" relay.toml --server-quic-gso=false >"$OUT/relay.log" 2>&1 &
+# "${RELAY_GSO[@]}" is required on macOS loopback, where GSO stalls.
+"$RELAY" relay.toml "${RELAY_GSO[@]}" >"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 sleep 4
 
@@ -73,15 +78,15 @@ echo "relay up, fingerprint ${FP:0:16}..."
 # The http:// fingerprint bootstrap is broken in these builds: connect over
 # https:// and pin the fingerprint explicitly.
 subscribe() {
-	"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-		--client-quic-gso=false --broadcast "$1" export ts
+	"$MOQ" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 \
+		--quic-gso=false --broadcast "$1" export ts
 }
 
 publish() { # publish <broadcast> <logprefix>
 	tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - \
 		2>"$2.tsp.log" |
-		"$MOQ" --client-tls-fingerprint "$FP" --client-connect https://localhost:4443 \
-			--client-quic-gso=false --broadcast "$1" import ts \
+		"$MOQ" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 \
+			--quic-gso=false --broadcast "$1" import ts \
 			>"$2.pub.log" 2>&1 &
 	PUBLISHER=$!
 }

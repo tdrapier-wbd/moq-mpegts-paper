@@ -19,8 +19,13 @@
 
 set -u
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 NETNS="${NETNS:-$HOME/t8b-netns.sh}"
 MOQ="${MOQ:-$HOME/bin-3529/moq}"
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${RELAY:-$HOME/bin-3529/moq-relay}"
 CLIP="${CLIP:-$HOME/clip120.ts}"
 GRADER="${GRADER:-$HOME/t28-media-lost.py}"
@@ -89,21 +94,21 @@ run_cell() {
 
 	set_rate $PROV_MBIT; clear_loss
 
-	ip netns exec t8b-pub "$RELAY" --server-bind "$IP_PUB:$PORT" --tls-generate "$IP_PUB" \
-		--auth-public "" --log-level warn >"$log.relay.log" 2>&1 &
+	ip netns exec t8b-pub "$RELAY" "${RELAY_BIND[@]}" "$IP_PUB:$PORT" "${RELAY_TLS[@]}" "$IP_PUB" \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" --log-level warn >"$log.relay.log" 2>&1 &
 	RELAY_PID=$!
 	sleep 3
 
 	# Subscriber first: reservation gating publishes the catalog once tracks resolve.
-	ip netns exec t8b-sub "$MOQ" --client-tls-disable-verify \
-		--client-connect "https://$IP_PUB:$PORT" --broadcast "$BC" \
-		export ts --latency-max "$LATMAX" >"$cap" 2>"$log.sub.log" &
+	ip netns exec t8b-sub "$MOQ" "${MOQ_DIAL[0]}" \
+		"${MOQ_DIAL[1]}" "https://$IP_PUB:$PORT" --broadcast "$BC" \
+		export ts "${MOQ_LAT[@]}" "$LATMAX" >"$cap" 2>"$log.sub.log" &
 	SUB_PID=$!
 	sleep 2
 
 	ip netns exec t8b-pub bash -c \
 		"tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null \
-		 | '$MOQ' --client-tls-disable-verify --client-connect 'https://$IP_PUB:$PORT' \
+		 | '$MOQ' ${MOQ_DIAL[*]} 'https://$IP_PUB:$PORT' \
 		     --broadcast '$BC' import ts" >"$log.pub.log" 2>&1 &
 	PUB_PID=$!
 

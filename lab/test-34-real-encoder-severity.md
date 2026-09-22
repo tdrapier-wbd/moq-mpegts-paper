@@ -1,12 +1,16 @@
 # Test 34 — A real encoder against the continuous-source fence
 
-**State: specified, not run.** [#3533](https://github.com/moq-dev/moq/issues/3533) stalls video and
-primary audio permanently when one track reports a backwards step on a **continuous timeline** — bisected
-to [#3375](https://github.com/moq-dev/moq/pull/3375) in [T27](test-27-liveness-detector.md). The
-reproducer manufactures that step at a **content repeat**; whether a **never-repeating live encoder**
-ever produces the same step sets how severe the defect is for real primary distribution. This experiment
-has not run because the rig's live ingress had no sender attached on the one attempt, and restoring a
-contribution feed or a genuine two-source junction is blocked on someone else's schedule.
+**State: partial — SRT+recording arm run; export comparison blocked on `5d0991b9`.**
+[#3533](https://github.com/moq-dev/moq/issues/3533)'s export stall is fixed on `5d0991b9`; this arm
+grades whether a real encoder triggers the dev-line join failure (*below the live edge* on import,
+[T40](test-40-continuous-join-through-srt.md)). **2026-09-20 SRT substitute:** `CNNiEMEA2.ts` fed with
+`tsp --infinite` as an SRT caller into the standing ingest (`srt-ingest` → `moq-live-publisher` on
+`5d0991b9`). The publisher import **dies at the first loop wrap** with the same *below the live edge*
+error ([#3798](https://github.com/moq-dev/moq/issues/3798)) — before any `OLD`/`NEW` export comparison
+could run. An isolated SRT chain with a pre-#3375 publisher import did not yield measurable export
+rates in the window (import pipe did not pass bytes). **Export-side fence comparison remains open** until
+[#3798](https://github.com/moq-dev/moq/issues/3798) is fixed or the publisher is pinned to a build that
+survives the join.
 
 Specified as [P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion). Rig sketch:
 [`t27-realfeed-severity.sh`](scripts/t27-realfeed-severity.sh).

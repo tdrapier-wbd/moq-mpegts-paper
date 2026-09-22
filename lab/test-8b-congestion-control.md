@@ -615,8 +615,8 @@ read only the first. All three pre-arm deaths are in `sub.2.log`, with `sub.log`
 So the failure mode is real, current, and frequent, and it belongs to the contended path rather than to
 any one commit. On the current released pair (`moq` 0.9.15 / `moq-relay` 0.14.14) it takes **6 of 8
 cells and 7 of 16 subscribers**, at `cc=0` in every graded capture, with one cell losing both
-subscribers 16 s apart. The drafted upstream issue attributing it to #3271 was withdrawn; a
-reproduction-framed report is drafted in its place and is what P0-7 files.
+subscribers 16 s apart. The drafted upstream issue attributing it to #3271 was withdrawn; the
+reproduction-framed report that replaces it is below.
 
 The eviction asymmetry between the client arms is real and still worth recording: on the old relay the
 pre arm evicts **constantly** — 807 to 1113 per 90 s cell — and mostly survives, because it has already
@@ -635,8 +635,84 @@ For primary distribution this matters more than the rate it was looking for: a s
 degraded, and a subscriber that exits is off air. It is also a re-opening of the failure class
 [T6](test-6-relay-resilience.md) closed — the exporter used to die on session loss, which was fixed
 upstream as the most consequential resilience gap on this lane, and this is a new route to the same
-outcome. **The failure mode is established and it is current** (it reproduces on `moq-relay` 0.14.14);
-what is open is its cause, and therefore what a fix would target. That is [P0-7](planned-experiments.md).
+outcome.
+
+#### #3491 survives on the catalog track: the fix reached the media consumer and not the JSON one
+
+P0-i re-ran the failure as its own experiment rather than as a by-product of the #3271 comparison,
+with the two guards the withdrawn report lacked: **every** subscriber's log is classified, and a cell
+capturing under 200 kB is scored *void* rather than as a survivor. Rig
+[`t8b-export-death.sh`](scripts/t8b-export-death.sh); three concurrent flows of the ~9.95 Mb/s clip
+through one relay at a 15 Mb/s cap, 100 ms base RTT, `bfifo` 500 ms, 90 s cells, `--max-age 2s`,
+five replicates per arm interleaved in one session.
+
+| arm | contains [#3515](https://github.com/moq-dev/moq/pull/3515) | subscribers exited | exit message | track |
+|---|---|---:|---|---|
+| `moq 0.9.15` (`046893254`) | **no** — positive control | 4 / 15 | `Error: hang: moq error: old` | a media container track |
+| `moq 0.11.2-615d166d` (current `main`) | **yes** | **1 / 15** | `Error: json: old` | `catalog.json` |
+
+**The build ordering is the whole result, and it was nearly misread.** `#3515` — the fix that closed
+[#3491](https://github.com/moq-dev/moq/issues/3491) — is *not* an ancestor of the 0.9.15 release, so
+the `old` arm is **pre-fix** and its 4 of 15 is the known defect behaving as reported. That makes it a
+valid positive control rather than a second finding. The `new` arm **does** contain #3515, and it
+still lost a subscriber — through a different consumer.
+
+**The fix reached the container consumer and not the JSON one.** `#3515` gave
+`moq-mux/src/container/consumer.rs` a skip for a transport-evicted group, and corrected `moq-net` so
+the skip actually triggers. But `moq export ts` reads **one JSON catalog track alongside seven media
+tracks**, and the catalog consumer has no equivalent. `Error: json: old` is
+`moq_mux::Error::Json(moq_json::Error::Net(moq_net::Error::Old))`, where `moq-json`'s `Net` variant is
+declared `#[error(transparent)]` over `moq_net::Error` — so a lost catalog group propagates out with
+no classification attempted and nothing logged. On a snapshot track this is the easiest case to
+argue: `Error::Old` means *the value you hold has been superseded*, and the correct response is to
+take the newer group, which is what the reader wanted.
+
+**Three fatal sites in this path, none of which logs.** The catalog route above; the container
+consumer's early `return Poll::Ready(Err(e))`, whose explanatory `warn!` sits *after* it so only the
+handled case is logged; and `poll_read_finish`'s `track.poll_recv_group(waiter)?`, which has no skip
+path by construction. From outside they are indistinguishable, which is why this took three sessions
+and one withdrawn issue to characterise.
+
+On the pre-fix arm the log timeline suggests the two media routes are connected rather than
+independent: a dying subscriber's entire 90 s log contains **exactly one** `container::Consumer`
+event — the *handled* eviction, `error=Hang(Moq(Old))` — and **4.7 ms later the process is tearing
+down**, everything between being `Drop` noise from the local producers unwinding. The skip does
+`pending.pop_front()`; if that empties `pending`, the next iteration goes straight to the track-level
+`?`. Consistent with #3515's diagnosis, and not separable without ask (2)'s logging.
+
+**A registered prediction was tested and did not hold.** If the fatal `Old` were the frame-level
+drift-budget expiry in `moq-net/src/model/frame.rs` — whose own comment calls that park "the stall the
+drift budget exists to bound" — the death rate should fall monotonically as the budget rises. Held at
+three concurrent flows on the pre-fix build, varying only `--max-age`:
+
+| `--max-age` | subscribers exited | evictions per subscriber |
+|---|---:|---|
+| 500 ms | **6 / 9** | 1–6 |
+| 2 s | 4 / 15 | 1–12 |
+| 8 s | 3 / 9 | 0–18 |
+
+The shortest budget is clearly the worst, and **2 s against 8 s shows no trend at this n**. Deaths
+persist at an 8 s budget, where a stall would have to exceed eight seconds to expire a frame, so the
+drift budget aggravates the failure without explaining it. Eviction counts do not track the death
+rate in either direction, which also rules out "many evictions" as the trigger — the same conclusion
+the relay-version cross above reached.
+
+**What P0-i settles and what it does not.** Settled: the failure survives #3515 on current `main`
+through the catalog consumer; the pre-fix build reproduces the original defect, so the rig is known to
+provoke the condition; three fatal sites in this path log nothing; and the stream behind the exit is
+conformant (`cc = 0`) right to the last byte. Not settled: which producer raises the `Error::Old`,
+which cannot be established from outside precisely because none of the sites logs. The upstream draft
+is written around that boundary — it asks for the catalog consumer to get the skip #3515 gave the
+container consumer, and for the three sites to log — and neither ask depends on the unknown.
+**Filed as [#3897](https://github.com/moq-dev/moq/issues/3897)**, as a new issue rather than a
+comment because [#3491](https://github.com/moq-dev/moq/issues/3491) is closed; text at
+[`docs/upstream/export-old-silently-fatal.md`](../docs/upstream/export-old-silently-fatal.md).
+
+*One rig-hygiene note from this pass, because it cost an hour of misdirected debugging: the run
+completed all ten cells and then emitted `line 172: re: command not found` and skipped its own summary
+block, while both copies of the script passed `bash -n` afterwards. `bash` reads a script
+incrementally by byte offset, and the file had been redeployed mid-run. Never edit a running shell
+script — see [method-notes](method-notes.md).*
 
 ### C6 — permanence: the transport passes, and the memory prediction does not
 

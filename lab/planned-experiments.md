@@ -49,11 +49,9 @@ across the two strands is a judgement rather than a derivation.
 | P0-e | A byte-faithful HTTP/3 HLS receiver | *instrument, not an experiment* | us — see below |
 | P0-f | Silent media-plane failure, segmented half | [T22](test-22-silent-media-plane-failure.md), [T24](test-24-partial-media-plane-stall.md) | P0-e |
 | P0-g | Permanence: the seven-day arm, and the segmented soak | [T21](test-21-permanence-soak.md) | P0-h for the MoQ arm |
-| P0-h | Re-soak the importer after the memory fix lands | [T21](test-21-permanence-soak.md) | upstream [#3493](https://github.com/moq-dev/moq/issues/3493) |
-| P0-i | `moq export ts` exiting under two-feed contention — instrument the read path and attribute it | [T8b](test-8b-congestion-control.md) | — |
-| P0-j | A real never-repeating encoder against the continuous-source fence | [T34](test-34-real-encoder-severity.md) | **being lifted** — a live SRT contribution feed is provisioned to both EC2 hosts and the ingest chain is standing and measured ([T4](test-4-remote-e2e-srt.md) § standing live ingest). Expect this arm to reproduce [#3533](https://github.com/moq-dev/moq/issues/3533), which is open |
+| P0-h | Re-soak the importer after the memory fix lands | [T21](test-21-permanence-soak.md) | [#3493](https://github.com/moq-dev/moq/issues/3493) closed in `5d0991b9`; both continuous and loop 2 h checks invalidated ([#3798](https://github.com/moq-dev/moq/issues/3798)); blocked until import re-anchor lands |
+| P0-j | A real never-repeating encoder against the continuous-source fence | [T34](test-34-real-encoder-severity.md) | SRT+recording arm run: standing `5d0991b9` publisher dies at first loop wrap ([#3798](https://github.com/moq-dev/moq/issues/3798)); export comparison blocked until import re-anchor lands |
 | P0-k | Hardware TR 101 290 P1/P2 soak, ≥ 72 h | [T7](test-7-timing-integrity.md) | **being lifted** — analyser and IRD bank expected with the same engagement; see below |
-| P0-l | A client certificate is a cross-tenant master key, and the authorization endpoint is not told which certificate was presented | [T38](test-38-entitlement-estate.md) § Open | **discharged** — measured, and reported upstream as [#3603](https://github.com/moq-dev/moq/issues/3603) |
 
 **P0-e is a build task, not an experiment, and it gates three entries.** Nothing in the lab receives
 an HTTP/3 HLS stream byte-faithfully; the current receiver re-muxes. Until one exists, the segmented
@@ -70,15 +68,15 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 | P1-b | MoQ distributed resilience above the egress 1+1 pair | [T29](test-29-moq-distributed-resilience.md) | — |
 | P1-c | Segmented-HTTP distributed resilience | [T30](test-30-segmented-distributed-resilience.md) | — |
 | P1-d | Congestion and capacity: the step ladders, both planes | [T31](test-31-congestion-capacity-ladders.md) | **MoQ step ladder run** on the EC2 secondary, sharing P1-a's rig. Remaining: the segmented ladder, the latency-max × contention matrix, buffer instrumentation, and **re-basing the rungs on multiples of stream rate** — the specified 12 Mb/s rung is not a shortfall against a 10 Mb/s fixture |
-| P1-m | **An SRT arm on the T28/T31 ladders at matched latency budgets** — does MoQ match SRT's residual loss for the same milliseconds of buffer? | [T28](test-28-failure-injection-matrix.md), [T31](test-31-congestion-capacity-ladders.md) | — **the same rig again**, and it gates the FEC/ARQ contribution: without it, any message to the MoQ working group is a reframing rather than a result. Also serves P1-a and P1-d's ranking gap |
+| P1-m | **The SRT arm on the T28/T31 ladders, matched on *measured* latency** — does MoQ match SRT's residual loss for the same milliseconds of delivered buffer? | [T28](test-28-failure-injection-matrix.md) § *The budget ladder replicated* | — **partly run, and next.** The MoQ half is done (3 reps × 6 budgets, clean controls) and discharged T28's non-monotonicity replication. The matched-buffer premise is measured **false** ([Evidence](../docs/evidence.md) §3.3), so the arm must be rebuilt on measured latency. Two rig defects block the SRT half and both are rebuilds rather than re-runs: the latency tap must **mirror** rather than pass through — inline, it corrupted the stream and MoQ's exporter laundered the damage — and SRT's `--latency` must be set from the MoQ lane's measured figure rather than its nominal budget. Still gates the FEC/ARQ contribution |
+| P1-n | **The `mpegts-pacer` head-to-head**: what a groomer adds over the exporter alone, now that #3006 and #3831 have landed and nothing upstream is pending | [T13](test-13-downstream-grooming.md) § *The residual measured* | — **runnable now, and it shares P1-m's window, rig and host.** The before-figure exists: PCR values sit on an exact 25.00 ms grid while the bytes between them run 188 B–854,836 B against the 31,541 B the declared rate needs, an instantaneous-rate spread of 28,000–39,000 % of median over two independent captures. The target is therefore specific — place the right number of bytes between PCRs that are already correctly timed — rather than "reduce jitter" |
 | P1-e | MPTS / multiple concurrent services | [T10](test-10-mpts-multiservice.md) | partly B-5 |
 | P1-f | The scaling model, segmented half | [T26](test-26-cross-host-fanout.md) | — |
 | P1-g | Capped-stream relay memory under pressure | [T9](test-9-performance.md) | — |
 | P1-h | Cross-implementation interop, the remaining legs | [T11](test-11-interop.md) | B-2 for T11c |
 | P1-i | The three remaining data-plane comparison cells | [T14](test-14-data-plane-comparison.md) | B-4, B-5, hardware |
-| P1-j | Three `Cache-Control` configurations under which an entitlement cannot be withdrawn at all | [T37](test-37-entitlement-revocation.md) § Open | **discharged, and it is the binding revocation finding** — a correctness hazard, not a latency one. Filed upstream as [#3605](https://github.com/moq-dev/moq/issues/3605) together with the undocumented 2× revocation window. A third finding measured alongside them — the one-hour default staleness window — is held unfiled by the operator |
-| P1-k | Whether a key-per-entitlement estate scales: keys sized by the licensing matrix, not the affiliate count | [T38](test-38-entitlement-estate.md) § Open | **Done, negative — the objection does not hold.** Relay launch, RSS and admission flat from 10 to 20,000 keys; keys are read on demand, and deleting one revokes with no restart. The **`--auth-api` half is still open**: a stub served every run |
-| P1-l | The telemetry return path end to end: a `moq-net` client publishing an opaque or JSON track, closing T39 Part B | [T39](test-39-cross-boundary-observability.md) § Open | — **runnable now**; needs a small client written against the library, since the CLI has no non-media path. [#3608](https://github.com/moq-dev/moq/issues/3608) **was accepted and became a four-part questline** (`quest/m2/qos/stats/`) which supersedes the proposed schema: the convention is a `.stats` broadcast suffix on the existing `moq-stats` layout, bidirectional, with an encoder-feedback loop, landing on `dev`. Nothing is implemented. **A prototype built now should follow that shape rather than the one T39 proposed**, and should not wait for it. **Not to be built into `mpegts-pacer`**, which is the fast route and is rejected: the groomer stays minimal and non-proprietary |
+| P1-k | The `--auth-api` half of the entitlement estate: a real endpoint serving a licensing matrix, rather than the stub that drove every run from T36 to T38 | [T38](test-38-entitlement-estate.md) § Open | — a component to write, not a rig to book. The key-per-entitlement half is done and negative: the estate scales |
+| P1-l | The telemetry return path end to end: a `moq-net` client publishing an opaque or JSON track, closing T39 Part B | [T39](test-39-cross-boundary-observability.md) § Open | — **runnable now**; needs a small client written against the library, since the CLI has no non-media path. [#3608](https://github.com/moq-dev/moq/issues/3608) **was accepted and became a four-part questline** (`quest/m2/qos/stats/`) which supersedes the proposed schema: the convention is a `.stats` broadcast suffix on the existing `moq-stats` layout, bidirectional, with an encoder-feedback loop, landing on `dev`. Nothing is implemented. **A prototype built now should follow that shape rather than the one T39 proposed**, and should not wait for it. **Not to be built into `mpegts-pacer`**, which is the fast route and is rejected: the groomer stays minimal and non-proprietary. **The same client is now wanted for a second reason**: no shipped CLI can dump a parsed catalog, so no catalog field can be read directly — [P0-m](test-13-downstream-grooming.md) had to infer `mpegts.muxRate`'s absence from null-packet share at the egress |
 
 ---
 
@@ -93,7 +91,7 @@ plane cannot be graded on carriage fidelity and the segmented halves of P0-f, P2
 | P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | [T31](test-31-congestion-capacity-ladders.md) | deprioritised behind P1-d |
 | P2-f | LEO / Starlink handover impairment — a candidate, not yet committed | [T35](test-35-leo-handover-impairment.md) | — |
 | P2-g | Reproduce the transparency and three-lane arms from an office network, for its UDP/QUIC posture | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) | — |
-| P2-h | Conditional-access carriage through the opaque lane: do the CAT, the EMM and ECM streams and the CISSA-scrambled payloads survive byte-for-byte, and does a receiver descramble? | new | B-6 — a scrambler and one entitled receiver |
+| P2-i | [T12](test-12-dual-path-handoff.md)'s churn arms — the recovered-leg and late-join cells, and a grader the merge oracle is not yet | — **no longer blocked and no longer upstream's**: [#2779](https://github.com/moq-dev/moq/issues/2779) was closed won't-fix, so per-process continuity counters are permanent. The cells now grade our own keyframe-restart padding filter |
 
 **Remainders inside completed experiments** are recorded in their own files and are not restated
 here: [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md),
@@ -109,12 +107,10 @@ section.
 
 | # | What it blocks | Waiting on |
 |---|---|---|
-| B-1 | [T12](test-12-dual-path-handoff.md)'s churn arms — the recovered-leg and late-join cells, and a grader the merge oracle is not yet | upstream [#2779](https://github.com/moq-dev/moq/issues/2779); commenting is the only thing that moves it |
 | B-2 | The full interop suite against a `moq2ts` subscriber (T11c) | they publish one. Worth planning the matrix now so the run is ready when it lands |
 | B-3 | [T15](test-15-point-to-point-cadence.md)'s residual | a true CBR hardware source; nothing in the lab produces one |
 | B-4 | The segmented plane's low-latency arm at equal conformance | a commercial ABR-to-TS gateway — the same apparatus block as P0-k in a different guise |
 | B-5 | Multi-programme carriage through a *media-aware* edge | the commercial packaging edge itself. A byte cache serves an unusual TS payload exactly as nginx does, so asking it of a plain cache re-measures nginx |
-| B-6 | Conditional-access carriage: does a scrambled multiplex survive the opaque lane? | a BISS-CA scrambler and one entitled receiver. Nothing in the campaign scrambles anything, so every CA claim is currently specification reading |
 
 ### Two of these blocks are being lifted, and the register should be read with that in mind
 
@@ -131,98 +127,51 @@ Between them they discharge the two apparatus dependencies that gate the most en
 | **P2-d** | a real differential-delay pair | The two hosts will carry **the same service over different contribution paths**, which is that pair — unaligned by construction rather than by `netem` |
 | **B-3** | a true CBR hardware source | Possibly discharged, depending on what the contribution encoder emits; check the mux rate's stability before assuming it |
 
-**The ordering constraint is that #3533 sits in front of the analyser work.** Its signature — PSI,
-AC-3 and teletext continuing while video and primary audio stop — presents on an IRD as a service that
-locks and shows nothing, which is indistinguishable at the panel from a dozen other faults. Grade the
-feed through `moq export ts` with TSDuck *before* anyone reads an analyser front panel, or the
-campaign will spend its hardware window rediscovering a known upstream defect.
-
-### The two-week window before the feed arrives, and what it is for
+### The window before the feed arrives, and what it is for
 
 The feed, the analyser and the IRD bank arrive together and leave together. They are the scarcest
 resource the campaign has had, and the failure mode is not running out of things to measure — it is
 spending the window debugging a harness. **The window before them is rehearsal, not new enquiry.**
-Three things earn their place, one of them a real experiment that was thought to need the feed and
-does not.
 
-**The #3533 trigger is synthesisable now, and that was missed.** The fence needs a *content*
-discontinuity on a transport timeline that stays *continuous*; a transport break sets the indicator the
-fence uses as an exit, so a clean hop is the precondition for the defect rather than protection from
-it ([T34](test-34-real-encoder-severity.md)). `tsp -I file A.ts B.ts -O srt --caller` produces exactly
+**The standing ingest chain is repaired and verified, and only the feed is now missing.** It had
+three faults, not the single `--auth-public` one previously recorded here: the relays' inverted
+`--auth-public ""`; publishers dialling `https://localhost:443` at a relay whose certificate and
+advertised origin are its Elastic IP, which answers with an immediate redirect until the client's
+connection loop times out; and an SRT listener with no caller since 2026-09-20, so the multicast
+group it feeds was empty. A subscriber now recovers 14.4 MB through the whole chain from a clip
+pushed into the group, which is the standing rehearsal recipe until the feed arrives
+(`INSTRUCTIONS.local.md`). P0-j, the #3533 reproduction and the Gate 2 rehearsal are unblocked.
+Method rule in [method-notes](method-notes.md) § *One measured defect is not a diagnosis of a
+different symptom*.
+
+**The #3533 trigger is synthesisable without the feed.** The fence needs a *content* discontinuity on
+a transport timeline that stays *continuous*; a transport break sets the indicator the fence uses as
+an exit, so a clean hop is the precondition for the defect rather than protection from it
+([T34](test-34-real-encoder-severity.md)). `tsp -I file A.ts B.ts -O srt --caller` produces exactly
 that: one unbroken SRT session, one continuous transport timeline, a hard content join at the
-junction. It runs through the standing live-ingest chain, on the real topology, with no live source.
-Two consequences:
-
-- The reproduction can be attempted this window rather than on the feed, so the live arm of
-  [T34](test-34-real-encoder-severity.md) becomes confirmation on a real encoder rather than first
-  contact with the defect.
-- The **OLD/NEW arms improve.** The two hosts sit either side of #3375 and give a build A/B across two
-  machines; the multicast group gives a better one on *one* machine, because two publishers on
-  different builds can read the same group and are then fed byte-identical input
-  ([T4](test-4-remote-e2e-srt.md)). That removes the host as a variable, which the two-host
-  arrangement cannot.
+junction, on the real topology with no live source. It makes the live arm of T34 a confirmation on a
+real encoder rather than first contact with the defect. The multicast group also gives a better
+`OLD`/`NEW` pair than the two hosts do, because two publishers on different builds reading one group
+are fed byte-identical input ([T4](test-4-remote-e2e-srt.md)), which removes the host as a variable.
 
 **Rehearse the Gate 2 run end to end against a synthetic caller.** [T33](test-33-gate2-preparation.md)
 has the fixtures and the acceptance harness; what it does not have is the whole run as one command
 producing one report, exercised through `srt-ingest` rather than beside it. Every harness defect found
 against a looping clip is one not found against a booked analyser.
 
-**Rebuild to current main before the feed, not during it.** The build under test is 64 commits behind,
-the two hosts disagree with each other, and an upstream report taken against a stale tree is stale on
-arrival. The one ordering constraint is that the #3533 A/B above wants the asymmetry, so capture it
-first and unify afterwards — and unify before anything that needs parity between the hosts, which
-includes every 1+1 and differential-delay cell.
+**Does a noq-only build survive the outage ladder?** [#3811](https://github.com/moq-dev/moq/pull/3811)
+deleted the quinn backend, so every future build is noq — and
+[T8](test-8-srt-vs-moq.md) records noq's BBRv3 *aborting the process* under high loss, which is
+precisely what an outage ladder creates. Every ladder figure the campaign holds is a quinn figure. The
+cheapest useful form is the T8b congestion rig on both binaries at one impairment point. It is not
+urgent; it is the thing that decides whether the ladders can be re-run at all on current main.
 
-**The contribution round is filed, so it no longer competes for the window.** Eleven MSFTS issues
-(#24–#34), a comment on #15 and `moq-dev#3731` went out on 2026-09-17; nothing is owed until someone
-replies. What it leaves behind is one debt and one apparatus question.
+**The ordering constraint is that #3533 sits in front of the analyser work.** Its signature — PSI,
+AC-3 and teletext continuing while video and primary audio stop — presents on an IRD as a service that
+locks and shows nothing, which is indistinguishable at the panel from a dozen other faults. Grade the
+feed through `moq export ts` with TSDuck *before* anyone reads an analyser front panel.
 
-**The debt: P1-m now has to carry T28's replication with it.** The FEC/ARQ position quotes the outage
-and capacity table, and every cell in it is a single sample with the latency-budget non-monotonicity
-still *likely rather than established*. Having cited it in a draft intended for a working group,
-leaving it at n=1 is no longer acceptable. The shape is settled: three repeats against a 5 s outage
-at budgets {0.5, 1, 2, 3, 4, 6} s, plus the SRT lane at matched budgets, in one session on one rig.
-One sitting closes the ranking gap in P1-a and P1-d, puts an error bar on the non-monotonicity, and
-unblocks the contribution.
-
-**It cannot be run in a spare hour, and the reason is harness rather than time.**
-`t28-t31-moq-ladder.sh` has **no SRT arm and no budget or repeat loop** — its cells are a fixed list
-(`control`, `step-8-5s`, `step-12-60s`, `step-8-perm`, `outage-0.5s`, `outage-5s`, `outage-30s`), one
-pass each. So three things have to be built before the first cell of P1-m runs: an SRT lane inside
-the same netns bottleneck, matched latency budgets across both lanes, and a repeat loop with the
-budget as a parameter. Then 36 cells at roughly three minutes each. **Building the SRT arm badly is
-worse than not having it**, because the whole point is a like-for-like ranking against the incumbent
-and a mismatched buffer makes the comparison meaningless rather than merely noisy — the trap
-`method-notes.md` §1 records for matched-buffer arms. Schedule it as its own session, ahead of the
-hardware window rather than inside it, since the netns rig needs no loaned equipment.
-
-**The conditional-access apparatus question is withdrawn.** B-6/P2-h would need a BISS-CA scrambler
-and an entitled receiver alongside the loaned analyser, and that is not being pursued: the complexity
-is real, the requirement is unestablished, and `docs/control-plane.md` §9 already records the
-commercial half as the half that decides it. msfts#27 stands on specification reading, which is what
-it claims to be. **Nothing in the hardware window depends on this**, which is the point of dropping
-it now rather than discovering the dependency on the day.
-
-**A new item the rebuild created: grade #3757's backend flip.** Upstream has moved the default QUIC
-backend from quinn to noq, and both hosts are deliberately pinned to quinn so the rebuild stayed a
-one-variable step. A noq pair is built alongside at `~/bin-d518b61b-noq/`. This matters more than it
-looks: `lab/test-8-srt-vs-moq.md` records **noq's BBRv3 aborting the process under high loss**, which
-is precisely the condition P1-m's outage ladder creates, so if the ladders are ever re-run on a
-default-featured build the arm could die rather than degrade. Cheapest useful form is the T8b
-congestion rig on both binaries at one impairment point; it is not urgent, but it should not be
-discovered during P1-m.
-
-**P1-m is the agreed next session, and it needs no loaned equipment**, so it belongs *before* the
-hardware window rather than inside it. Order of work: build the SRT lane inside the T8b netns
-bottleneck; match the latency budgets across both lanes and prove they are matched before grading
-anything; parameterise the cell list by budget and add the repeat loop; validate against
-`t28-grader-selftest.sh`; then run the 36 cells. **The matched-buffer proof is the gate** — an SRT
-arm at an unmatched buffer produces a ranking that looks like a result and is not one.
-
-**What not to do with the window.** No new speculative cells the feed would invalidate, and in
-particular not [T28](test-28-failure-injection-matrix.md)'s latency-budget non-monotonicity, which is
-interesting and second-order. P1-m is the exception among the ladder work, because it unblocks a
-contribution as well as closing the ranking gap.
+**What not to do with the window.** No new speculative cells the feed would invalidate.
 
 ---
 
@@ -272,3 +221,9 @@ is in the file named.
 - **The segmented HTTP/3 arm** — run, and both the original motivation and its successor are
   answered ([T20](test-20-segmented-http3.md)). What survives is P0-e, an instrument gap rather than
   an open question.
+- **Conditional-access carriage through the opaque lane, and the apparatus for it.** It would need a
+  BISS-CA scrambler and an entitled receiver alongside the loaned analyser. The complexity is real,
+  the requirement is unestablished, and [`docs/control-plane.md`](../docs/control-plane.md) §9
+  already records the commercial half as the half that decides it. msfts#27 stands on specification
+  reading, which is what it claims to be. Dropped now rather than discovered as a dependency on the
+  day the hardware arrives.

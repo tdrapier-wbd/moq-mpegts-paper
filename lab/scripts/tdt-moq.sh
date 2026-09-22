@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # What the media-aware lane does to the clock it carries.
 #
 # The companion to `tdt-transports.sh`, which asked the same question of UDP, SRT and
@@ -33,6 +37,7 @@
 set -uo pipefail
 
 MOQ=${1:?usage: tdt-moq.sh <moq> <moq-relay> <relay.toml> <src.ts> <out-dir> [seconds] [arm...]}
+moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${2:?moq-relay binary}
 TOML=${3:?relay config}
 SRC=${4:?source clip}
@@ -117,7 +122,7 @@ if "$MOQ" --connect https://localhost --help >/dev/null 2>&1; then
 	RELAY_GSO=(--quic-gso=false)
 else
 	FLAGS_NEW=0
-	RELAY_GSO=(--server-quic-gso=false)
+	RELAY_GSO=("${RELAY_GSO[@]}")
 fi
 
 PIDS=()
@@ -176,9 +181,9 @@ for ARM in "${ARMS[@]}"; do
 		continue
 	}
 	if [[ $FLAGS_NEW == 1 ]]; then
-		CF=(--connect-tls-fingerprint "$FP" --connect https://localhost:4443 --quic-gso=false)
+		CF=("${MOQ_FP[@]}" "$FP" --connect https://localhost:4443 --quic-gso=false)
 	else
-		CF=(--client-tls-fingerprint "$FP" --client-connect https://localhost:4443 --client-quic-gso=false)
+		CF=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 --quic-gso=false)
 	fi
 
 	# Publisher first here, unlike the EIT rig: the instrument stamps arrival against wall

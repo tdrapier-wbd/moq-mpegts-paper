@@ -24,6 +24,10 @@
 
 set -euo pipefail
 
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
+
 SRC="${1:?usage: si-join-cost.sh <fixture.ts> <label> [joins] [settle_s]}"
 LABEL="${2:?label}"
 JOINS="${3:-5}"
@@ -50,7 +54,7 @@ TGT="${TGT:-$(cd ~/moq-dev && cargo metadata --format-version 1 --no-deps \
 
 # The dial-side flags were renamed from `--client-*` to `--connect-*` and per-direction
 # QUIC tuning merged into one `--quic-*` section. Builds carrying the rename still parse
-# the old names behind a deprecation warning, but `--client-quic-gso=false` does not reach
+# the old names behind a deprecation warning, but `--quic-gso=false` does not reach
 # the transport there, so GSO stays on and the session stalls on macOS loopback with no
 # error logged. Detect the surface rather than assuming one.
 if "$TGT/moq" --connect https://localhost --help >/dev/null 2>&1; then
@@ -58,9 +62,9 @@ if "$TGT/moq" --connect https://localhost --help >/dev/null 2>&1; then
 	FPFLAG=--connect-tls-fingerprint
 	RGSO=(--quic-gso=false)
 else
-	CF=(--client-connect https://localhost:4443 --client-quic-gso=false)
-	FPFLAG=--client-tls-fingerprint
-	RGSO=(--server-quic-gso=false)
+	CF=("${MOQ_DIAL[@]}" https://localhost:4443)
+	FPFLAG="${MOQ_FP[@]}"
+	RGSO=("${RELAY_GSO[@]}")
 fi
 
 echo "==> binaries $TGT"

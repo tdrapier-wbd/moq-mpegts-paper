@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Post-#3793 CLI flags (dual old/new binaries).
+# shellcheck source=moq-cli-flags.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # T38 Parts 2 and 3 — the headline.
 #
 # An affiliate licenses two channels and loses one of them. The question is what
@@ -23,8 +27,8 @@ TOTAL=$((SETTLE+OBS))
 
 sub() {  # sub <mark> <tokenfile> <channel> <seconds>
   timeout $4 ~/bin-3529/moq --backoff-timeout 100ms \
-      --client-connect "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/$2.jwt)" \
-      --client-tls-fingerprint "$FP" export --broadcast "$3" ts 2> $W/logs/$1.log \
+      "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/$2.jwt)" \
+      "${MOQ_FP[@]}" "$FP" export --broadcast "$3" ts 2> $W/logs/$1.log \
     | python3 $LB --out $W/out/$1.ts --record $W/lastbyte.jsonl --mark "$1" > /dev/null &
 }
 
