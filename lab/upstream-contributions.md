@@ -1423,6 +1423,32 @@ latency-budget non-monotonicity still *likely rather than established*. "We meas
 the table" is a much stronger opening than a reframing plus an invitation, and the missing arm is the
 same rig again. Position recorded in `docs/upstream/fec-arq-venue.local.md`.
 
+### A UDP sink for `export ts` — asked once, declined, withdrawn, and re-asked narrowly
+
+[**#1839**](https://github.com/moq-dev/moq/issues/1839), *"feat(egress): generic TS output sink
+(UDP/RTP/FEC/ST 2022-7) + PCR-aware pacing"*, was closed **not planned** by this campaign in July
+2026, after kixelated declined the general shape twice: *"right now we're just targeting WebRTC, not
+RTP in general"*, and *"I don't want to add an import/export module for every possible transport…
+I think I need a concrete customer ask first."* The decline was reasonable and the generic layer
+stays closed.
+
+**Re-asked as [#3923](https://github.com/moq-dev/moq/issues/3923), deliberately smaller**: one sink,
+`--udp <addr:port>` unicast or multicast with a datagram-size and the usual TTL and interface
+controls, and the pluggable-transport part explicitly abandoned — no RTP, no FEC, no ST 2022-7, no
+trait. What justifies re-opening a question the maintainer has already answered is a change in the
+facts rather than a change in how much the campaign wants it:
+[#3831](https://github.com/moq-dev/moq/pull/3831) made `export ts` measure the source's multiplex
+rate and pad its output back to it, so the TS egress is now attempting to be a constant-rate stream,
+and in July the answer to "why would export write to UDP" was that it is not one.
+
+**The filing subordinates its own ask, and that is the point of it.** The same issue reports that the
+byte schedule is absent — 3.3 % of PCR slots carry the bytes the declared rate requires, measured on
+`53f8aa99d` ([T13](test-13-downstream-grooming.md) § *The head-to-head*) — and states that a socket
+would therefore emit a stream an IRD still cannot clock off, that the schedule is worth more than the
+sink, and that the sink should wait behind it. Filing the weaker ask alongside the evidence against
+prioritising it is the honest form when the campaign is not a customer and cannot supply the customer
+ask that was requested.
+
 ---
 
 ## 6. Interoperability
