@@ -399,8 +399,8 @@ labels.
 
 This retires the "group-boundary flush" hypothesis measurement 5 offered, in favour of a located cause,
 and it means **neither remaining failure can be fixed by a timing change**: the position needs a finer
-emission unit, and the release needs the grid to stop being gated on arrival. The upstream package is
-drafted in [`docs/upstream/pcr-output-position.local.md`](../docs/upstream/pcr-output-position.local.md).
+emission unit, and the release needs the grid to stop being gated on arrival. Reported upstream as
+[#3334](https://github.com/moq-dev/moq/issues/3334).
 
 **One further reading, offered as a code reading and not as a measurement.** The same `pick_next_track`
 dependence on `pending` is what

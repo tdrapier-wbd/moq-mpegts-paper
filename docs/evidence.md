@@ -109,7 +109,7 @@ every "not established" entry recurs in §4 or §5.
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** — separate publisher, relay, exporter and host in two availability zones. **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core, confirmed against a predicted cliff. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; channel-count scaling; high fan-out held for longer than 45 s | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention** rather than cached payload or concurrency, each of which §3.14 rules out with its own control. Tunable: 30 s → 10 s idle timeout takes it to 489 MB | The segmented lane's half of the same experiment, so no comparison; anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
-| **Availability** | Shedding a late group is the lane's designed response to congestion, and **the subscriber process does not reliably survive doing it**: `moq export ts` exits on an evicted group, silently, leaving a syntactically perfect capture behind. [#3515](https://github.com/moq-dev/moq/pull/3515) fixed the container consumer and not the catalog one, so current `main` still exits 1 in 15 against a pre-fix control's 4 in 15 | Whether any other consumer carries the same unguarded path; the exit is not a function of budget, so what does determine its rate | §3.15 |
+| **Availability** | Shedding a late group is the lane's designed response to congestion, and **the subscriber process did not reliably survive doing it**: `moq export ts` exited on an evicted group, silently, leaving a syntactically perfect capture behind. [#3515](https://github.com/moq-dev/moq/pull/3515) fixed the container consumer and not the catalog one; [#3907](https://github.com/moq-dev/moq/pull/3907) closed the residual, and the re-run records 0 of 10 against a control's 1 of 10 on the same rig — consistent with the fix, though the event rate is too low for the count alone to establish it | Whether any other consumer carries the same unguarded path; the exit is not a function of budget, so what does determine its rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure** — a source frozen for 120 s produced no log line anywhere, and a dead video path behind a live mux passes the *whole* of TR 101 290 P1 with a worst PCR interval identical to the control's. What does detect every case is **per-PID access-unit liveness**, and that is now a running detector rather than a recommendation: live at the groomed output of a cross-host lane it measures a 60 s video suppression as **57.212 s** against an offline grader's 57.22 s, catches a dead *audio* stream — which has no other wire-observable signature at all — in **0.7–1.4 s**, localises it to the PID, and fires nothing on a healthy lane | Whether commercial monitoring exposes per-PID liveness rather than only per-PID bitrate, which inherits the proportional-sensitivity problem; a **frozen picture** in valid advancing access units, which defeats every transport-layer detector here and over SDI equally; detection-to-response, since only signal availability is measured | §3.12 |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
 | **Latency** | Delivery latency on all four planes, loopback and public internet, each graded against the conformance of the same bytes. **Where no plane is conformant, MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms. **At the configurations measured conformant, MoQ reads 2,447 ms and segmented HTTP 9,286 ms**, while the transparent tunnels carry their source's grid at a buffer the operator sets | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path; **any conformant sub-second configuration, on any lane** | §3.11 |
@@ -1311,18 +1311,28 @@ gone.
 | build | carries the fix | subscribers exited | message | track |
 |---|---|---:|---|---|
 | `moq 0.9.15` (`046893254`) | no — positive control | 4 / 15 | `hang: moq error: old` | a media container track |
-| `moq 0.11.2-615d166d` (`main`) | yes | **1 / 15** | `json: old` | `catalog.json` |
+| `moq 0.11.2-615d166d`, `84b34f54` | the container fix only | **1 / 15**, **1 / 10** | `json: old` | `catalog.json` |
+| `moq 0.11.2` (`53f8aa99d`) | **both** | **0 / 10** | — | — |
 
-**The fix is incomplete rather than absent.** [#3515](https://github.com/moq-dev/moq/pull/3515) gave
-the *container* consumer a skip for an evicted group and corrected the cursor that triggers it; the
-**catalog** consumer never got one, and `moq-json` declares its transport error `#[error(transparent)]`,
-so a lost catalog group propagates out unclassified, unlogged, and fatal. On a snapshot track an
-`Old` error means *the value you hold has been superseded* — the correct response is to take the
-newer group, not to terminate the process. The pre-fix arm behaving exactly as
-[#3491](https://github.com/moq-dev/moq/issues/3491) described is what makes the single surviving exit
-meaningful: the rig is known to provoke the condition, and on the fixed build it provokes it through
-a different consumer. Reported as
-[#3897](https://github.com/moq-dev/moq/issues/3897); *unfixed at the time of writing.*
+**The fix was incomplete rather than absent, and the residual is now closed.**
+[#3515](https://github.com/moq-dev/moq/pull/3515) gave the *container* consumer a skip for an
+evicted group and corrected the cursor that triggers it; the **catalog** consumer never got one,
+and `moq-json` declared its transport error `#[error(transparent)]`, so a lost catalog group
+propagated out unclassified, unlogged and fatal. On a snapshot track an `Old` error means *the
+value you hold has been superseded* — the correct response is to take the newer group, not to
+terminate the process. Reported as [#3897](https://github.com/moq-dev/moq/issues/3897) and fixed by
+[#3907](https://github.com/moq-dev/moq/pull/3907), which gives the snapshot consumer the skip for
+`Old`, `Evicted` and `Lagged` alike, logs the discarded group, and extends the same treatment to
+`moq-binary`.
+
+**The verification is consistent with the fix without establishing it alone, and the distinction
+matters.** The re-run put the fixed build against `84b34f54` — the build carrying only the
+container half — in the same session on the same rig, and the control reproduced the exact failure
+(`json: old`, 1 of 10) while the fixed arm recorded none. But the event rate is low: 0 of 10 is
+what a working fix predicts and also what an unchanged build produces most of the time. What
+carries the conclusion is the conjunction of three things, not the count — the code path is closed
+and now logs, upstream added regression tests for it, and the control still provokes the condition
+on demand.
 
 The consequence for primary distribution is a class distinction the availability argument depends on:
 a subscriber that sheds groups is degraded but on air, and a subscriber that exits is off air. An

@@ -2,8 +2,8 @@
 
 Kept because the claim is an attribution to a single upstream commit, and an attribution has to be
 defensible from the measurements rather than from the write-up.
-See [T27](../../test-27-liveness-detector.md) and the
-[draft report](../../../docs/upstream/3375-continuous-source-regression.local.md).
+See [T27](../../test-27-liveness-detector.md) and
+[#3533](https://github.com/moq-dev/moq/issues/3533).
 
 Topology throughout: source and subscribers on one EC2 host, relay alone on another,
 `--client-quic-gso=true`, `--latency-max 3s` unless a column says otherwise. Rates are each

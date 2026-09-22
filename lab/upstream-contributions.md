@@ -397,7 +397,7 @@ bytes of the slot it labels.
 
 **That ask now has a located root cause, and it is not the one the fallback assumed.** It is filed as
 [#3334](https://github.com/moq-dev/moq/issues/3334), drafted in
-[`docs/upstream/pcr-output-position.local.md`](../docs/upstream/pcr-output-position.local.md),
+[#3334](https://github.com/moq-dev/moq/issues/3334),
 and is not simply "please also fix the positions". Reading the current code,
 `Export::poll_next` advances the PCR grid only as far as `slot(next pending media frame's timestamp)`,
 and `pick_next_track` only considers tracks that already hold a pending frame — so **the clock is a
@@ -1061,11 +1061,14 @@ supported choice for a permanent fixed-rate trunk, or whether the quinn-BBRv1 in
 under a shaped bottleneck is a fixable bug. **Unanswered, and one under-provisioned condition is not
 enough to press it.**
 
-### The subscriber dies under contention — reported, fixed on the media path, and **still live on the catalog track**
+### The subscriber dies under contention — reported, fixed on the media path, then on the catalog track
 
 [**#3491**](https://github.com/moq-dev/moq/issues/3491) — ***closed 2026-09-08*** by
-[**#3515**](https://github.com/moq-dev/moq/pull/3515), one day after filing; **the fix is incomplete
-and the failure reproduces on current `main`** (see the end of this section). `moq export ts`
+[**#3515**](https://github.com/moq-dev/moq/pull/3515), one day after filing. **That fix was
+incomplete**: the same failure reproduced through the catalog consumer, was re-reported as
+[**#3897**](https://github.com/moq-dev/moq/issues/3897) and closed by
+[**#3907**](https://github.com/moq-dev/moq/pull/3907) — both within the same day — and the residual
+is verified closed here (see the end of this section). `moq export ts`
 exits with `Error: hang: moq error: old` when two subscribers pull separate broadcasts through one
 relay across a shared, under-provisioned bottleneck.
 
@@ -1111,29 +1114,51 @@ explicitly as a lead a maintainer may discard. **Nothing about the withdrawn res
 the error** — it was significant, tightly clustered and mechanically explicable — which is why both
 method rules it produced are recorded in [`method-notes.md`](method-notes.md) §1.
 
-**The fix is incomplete, and the residual is on the catalog track.** Re-run as its own experiment
-with a pre-#3515 build as a positive control ([T8b](test-8b-congestion-control.md) § *#3491 survives
-on the catalog track*), three concurrent flows, 15 subscribers per arm:
+**The residual was on the catalog track, and it is now fixed.** Re-run as its own experiment with a
+pre-fix build as a positive control ([T8b](test-8b-congestion-control.md) § *#3491 survives on the
+catalog track*), three concurrent flows:
 
-| arm | contains #3515 | exited | message | track |
-|---|---|---:|---|---|
-| `moq 0.9.15` (`046893254`) | no | 4 / 15 | `hang: moq error: old` | media container |
-| `moq 0.11.2-615d166d` (`main`) | yes | **1 / 15** | `json: old` | `catalog.json` |
+| arm | container fix | catalog fix | exited | message | track |
+|---|---|---|---:|---|---|
+| `moq 0.9.15` (`046893254`) | no | no | 4 / 15 | `hang: moq error: old` | media container |
+| `moq 0.11.2-615d166d`, `84b34f54` | yes | no | **1 / 15**, **1 / 10** | `json: old` | `catalog.json` |
+| `moq 0.11.2` (`53f8aa99d`) | yes | **yes** | **0 / 10** | — | — |
 
 `#3515` gave the *container* consumer a skip for an evicted group and corrected `moq-net`'s cursor so
-it triggers. `moq export ts` also reads a **JSON catalog track**, whose consumer has no such skip:
-`moq-json`'s error type declares `Net(#[from] moq_net::Error)` as `#[error(transparent)]`, so a lost
-catalog group propagates out unclassified and unlogged and exits the process. On a snapshot track
+it triggers. `moq export ts` also reads a **JSON catalog track**, whose consumer had no such skip:
+`moq-json`'s error type declared `Net(#[from] moq_net::Error)` as `#[error(transparent)]`, so a lost
+catalog group propagated out unclassified and unlogged and exited the process. On a snapshot track
 `Error::Old` means *the value you hold has been superseded* — the correct response is to take the
 newer group, not to terminate.
 
+**Reported as [#3897](https://github.com/moq-dev/moq/issues/3897) and closed the same day by
+[#3907](https://github.com/moq-dev/moq/pull/3907)**, which took both asks and went further than
+either: the snapshot consumer now discards a group it cannot finish and waits for the replacement,
+covering `Old`, `Evicted` and `Lagged` rather than only the reported `Old`; the discarded group is
+logged, as are the container consumer's equivalent sites; and the same treatment was extended to
+`moq-binary`, which had the identical unguarded path and was not in the report. Two regression
+tests were added, one for the lost group and one for a lost group on a finished track.
+
+**The verification is consistent with the fix and does not establish it on its own.** The re-run
+put `53f8aa99d` against `84b34f54` in the same session on the same rig; the control reproduced
+`json: old` and the fixed arm recorded nothing. But 0 of 10 is also the commonest outcome of an
+unchanged build at this event rate, so the weight sits on the conjunction — closed code path,
+upstream regression tests, and a control that still provokes the condition on demand — rather than
+on the count. **Method rule: a low-rate failure needs its control in the same session, and a null
+against it is corroboration rather than proof.**
+
 A registered prediction was also tested and **failed**: exits do not fall monotonically with the
 drift budget (6/9 at 500 ms, 4/15 at 2 s, 3/9 at 8 s on the pre-fix build), so the budget aggravates
-the failure without explaining it, and the frame-expiry hypothesis is not supported. **Owed
-upstream:** the catalog consumer should get the same skip, and the three unlogged fatal sites in this
-path should log. **Filed as [#3897](https://github.com/moq-dev/moq/issues/3897)** — as a new issue
-rather than a comment, because #3491 is closed; text at
-[`docs/upstream/export-old-silently-fatal.md`](../docs/upstream/export-old-silently-fatal.md).
+the failure without explaining it, and the frame-expiry hypothesis is not supported.
+
+**A second unguarded path on the same track is open and not yet reported.** When the publisher goes
+away, `moq export ts` exits `Error: json: dropped` rather than ending cleanly, and a restarted
+publisher reaches nothing — measured 0 B recovered over 25 s, reproduced across two runs
+([T13](test-13-downstream-grooming.md) § *Liveness*). This arrives at the track level through
+`poll_next_group`, which #3907's own comment describes as fatal by design, so it is a question about
+intended behaviour rather than a straightforward defect: a standing egress cannot outlive a
+publisher restart without supervision, and the error exit gives a supervisor no way to tell a
+broadcast that ended from one that failed.
 
 ---
 
@@ -1841,7 +1866,8 @@ locating those packets is the one the retain list just discarded.
 Same shape as the accepted #11 and #13/#19 findings: a table on a fixed PID, outside the PAT/PMT
 reference graph, dropped by a filter that only follows that graph. **Nothing here is measured** —
 nothing in this campaign scrambles anything — so the finding is a reading of two specifications, not
-an observed product defect. Drafted as `docs/upstream/msfts-9-cat-emm-dropped.local.md`.
+an observed product defect. Filed as
+[mondain/msfts#27](https://github.com/mondain/msfts/issues/27), now closed.
 
 A second, structural half: **ES-level carriage cannot carry scrambled content at all.** An ES-level
 track excludes PAT, PMT and nulls, and `m2tsSiPids`, `m2tsPmtPid` and `m2tsScte35Pid` MUST all be

@@ -705,8 +705,8 @@ which cannot be established from outside precisely because none of the sites log
 is written around that boundary — it asks for the catalog consumer to get the skip #3515 gave the
 container consumer, and for the three sites to log — and neither ask depends on the unknown.
 **Filed as [#3897](https://github.com/moq-dev/moq/issues/3897)**, as a new issue rather than a
-comment because [#3491](https://github.com/moq-dev/moq/issues/3491) is closed; text at
-[`docs/upstream/export-old-silently-fatal.md`](../docs/upstream/export-old-silently-fatal.md).
+comment because [#3491](https://github.com/moq-dev/moq/issues/3491) is closed, and **closed the same
+day** by [#3907](https://github.com/moq-dev/moq/pull/3907).
 
 *One rig-hygiene note from this pass, because it cost an hour of misdirected debugging: the run
 completed all ten cells and then emitted `line 172: re: command not found` and skipped its own summary

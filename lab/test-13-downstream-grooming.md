@@ -318,61 +318,227 @@ one named here.
 
 The clustering above was named from the P1 and P2 failures it causes rather than measured directly.
 Measuring it separates two things the word "pacing" conflates — where the PCR *values* fall in time,
-and how many bytes the stream carries *between* them — and the two now have opposite answers.
+and how many bytes the stream carries *between* them — and the two have opposite answers.
 `pcr-residual.py` reads a capture, takes the PCR interval from the carried values, and takes the
-instantaneous rate from the packet count over the same pair. On `84b34f54`, two independent
-captures: a loopback publish of the 120 s CBR clip, and the live SRT→multicast→import→relay→export
-chain on the EC2 secondary.
+instantaneous rate from the packet count over the same pair. **Both statistics come from one PID.**
+Pooling PCRs across PIDs produces a meaningless series — two PIDs each on a correct grid, offset
+from one another, read as a half-length grid with half the bytes between samples — so the script
+names every PCR-bearing PID it finds and grades the one carrying the most.
 
-| | source clip | export, loopback | export, live chain |
-|---|---:|---:|---:|
-| PCRs / span | 4,909 / 119.9 s | 614 / 15.3 s | 977 / 24.4 s |
-| PCR interval, median | 24.65 ms | **25.00 ms** | **25.00 ms** |
-| PCR interval, p95 / max | 24.80 / 24.95 ms | **25.00 / 25.00 ms** | **25.00 / 25.00 ms** |
-| intervals over the 40 ms P1 gate | 0 | **0** | **0** |
-| instantaneous rate, median | 9,945,955 b/s | **962,560 b/s** | **360,960 b/s** |
-| instantaneous rate, min → max | 9,945,628 → 9,946,071 | **60,160 → 273,547,520** | **60,160 → 141,616,640** |
-| spread as a share of the median | **0 %** | **28,412 %** | **39,217 %** |
-| intervals within 1 % of nominal | **4,908 of 4,908 (100 %)** | **1 of 613 (0.2 %)** | **11 of 976 (1.1 %)** |
+The run below is the reference: `53f8aa99d`, the EC2 primary, loopback relay, the 600 s CBR clip
+released at its own PCR rate, 150 s captured from the exporter's stdout with the source's stuffing
+intact so `mpegts.muxRate` is recorded and #3831's padding is active.
 
-**The PCR values are better than the source's and the byte schedule is not a schedule at all.** The
-export's intervals are exactly 25.00 ms at median, p95 and maximum — the exporter is not carrying
-the source's PCR but regenerating it onto a synthetic grid, which is why it is *more* regular than
-the 24.65 ms input. Over the same intervals the byte count runs from 188 B to 854,836 B where a
-10.09 Mb/s stream needs 31,541 B every time:
+| | source clip | `moq export ts` |
+|---|---:|---:|
+| packets / null share | 3,967,645 / 4.59 % | 1,022,707 / **4.01 %** |
+| PCR-bearing PIDs | 0x006F | 0x006F |
+| rate over the capture | 9,945,951 b/s | **9,966,922 b/s** (+0.21 % of declared) |
+| PCR interval, min / median / max | 0.151 / 24.65 / 24.95 ms | **25.00 / 25.00 / 25.00 ms** |
+| intervals over the 40 ms P1 gate | 0 | **0** |
+| intervals under 1 ms | 21 (0.09 %) | **0** |
+| instantaneous rate, median | 9,945,955 b/s | **421,120 b/s** |
+| instantaneous rate, min → max | 9,945,628 → 9,946,846 | **60,160 → 278,600,960** |
+| spread as a share of the median | 0 % | **66,143 %** |
+| intervals within 1 % of nominal | 24,573 of 24,573 (100 %) | **205 of 6,173 (3.3 %)** |
+
+**The aggregate rate is right and the schedule is absent, and those are different properties.**
+#3831 pads the output to within 0.21 % of the rate it declares, so a census of the whole capture
+finds a constant-rate stream. Within it, the byte count between consecutive PCRs runs from 188 B to
+870,628 B where the declared rate needs 31,081 B in every slot:
 
 | bytes between consecutive PCRs | min | p10 | p25 | median | p75 | p90 | p99 | max |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| export, `84b34f54` | 188 | 940 | 1,128 | **3,008** | 31,020 | 52,452 | 375,060 | 854,836 |
-| a true CBR stream at the declared rate | 31,541 | 31,541 | 31,541 | **31,541** | 31,541 | 31,541 | 31,541 | 31,541 |
+| `moq export ts`, `53f8aa99d` | 188 | 940 | 940 | **1,316** | 6,392 | 66,364 | 384,460 | 870,628 |
+| a true CBR stream at the declared rate | 31,081 | 31,081 | 31,081 | **31,081** | 31,081 | 31,081 | 31,081 | 31,081 |
 
-The distribution is bimodal rather than merely noisy: a mode around 1,128 B, an order of magnitude
-below the requirement, and a second near the 31,020 B the rate actually implies. PCR-bearing packets
-arrive in clumps, and the regenerated values are stamped on the grid whatever byte position they
-land at.
+The PCR *values* are better than the source's — exactly 25.00 ms at minimum, median and maximum,
+because the exporter regenerates them onto a synthetic grid rather than carrying the 24.65 ms input.
+The distribution of bytes across those slots is bimodal rather than merely noisy: a mode under
+1 kB, an order of magnitude below the requirement, and a second above it. PCR-bearing packets leave
+in clumps, and the regenerated values are stamped on the grid whatever byte position they land at.
 
 **This is what the 481 ns P2 result was reporting, and it explains why not one PCR passed.** P2
 grades a PCR against the arrival time a constant-rate model predicts from its byte position. A
-stream whose instantaneous rate varies by four orders of magnitude has no byte position that
-predicts anything, so the gate cannot be met by a smaller error — it is the wrong kind of stream,
-not an inaccurate one. Two consequences worth stating plainly:
+stream whose instantaneous rate spans four orders of magnitude has no byte position that predicts
+anything, so the gate cannot be met by a smaller error — it is the wrong kind of stream, not an
+inaccurate one. **The exporter is a valid input to a groomer and is not a valid transport-stream
+output.** A receiver that recovers its clock from packet arrival, which is the ordinary IRD case, is
+handed an instantaneous rate between 0.6 % and 2,800 % of nominal.
 
-- **The exporter is a valid input to a groomer and is not a valid transport-stream output.** A
-  receiver that recovers its clock from packet arrival — the ordinary IRD case — is handed a rate
-  that swings between 6 % and 2,700 % of nominal. The bytes and the PCR values are both right; only
-  the schedule joining them is missing, which is exactly the work a groomer does.
-- **The `mpegts-pacer` head-to-head now has a defined target.** The thing to beat is not "reduce
-  jitter" but "place 31,541 B between PCRs that are already on a correct grid", and the table above
-  is the before-measurement for it.
+*Domain: file, on a capture of the exporter's stdout — byte positions are the quantity of interest,
+so the file domain is the right one and the wire-domain arrival figures above are the complement,
+not a substitute. Replicated on `84b34f54` against a second clip and against the live
+SRT→multicast→import→relay→export chain, which gave the same shape (median 3,008 B and 962,560 b/s
+on the loopback path, 1 of 613 intervals within 1 %).*
 
-*Domain: file, on a capture of the exporter's stdout. Byte positions are the quantity of interest
-here, so the file domain is the right one and the wire-domain arrival figures above are the
-complement, not a substitute. Build `84b34f54` (noq), both captures; replicated across two
-independent source paths.*
+#### The head-to-head: three properties, and the groomer still supplies all three
 
-*Backend caveat as above: the `old` arm is quinn and the `new` arm is noq. Both arms are loopback with
-no loss and the instrument is release timing at the subscriber's own pipe, so the stack is not a
-plausible cause of a cadence difference — and no cadence difference was found.*
+The question P1-n exists to answer is not whether the exporter has improved, which it plainly has,
+but whether anything a deployment needs still lives only in the groomer. Three properties decide it
+and they are independent — a stream can pass any one and fail the others. One relay, one publisher,
+one broadcast, five concurrent subscribers, so no arm got a different source or a different minute.
+
+**1. Conformance. The groomer converts 3.3 % into 100 %.** The same capture through
+`mpegts-pacer` in its default arrival clocking, cushion pinned at 200 ms:
+
+| | `moq export ts` | `… \| mpegts-pacer` | source clip |
+|---|---:|---:|---:|
+| rate over the capture | 9,966,922 b/s | **9,945,951 b/s** | 9,945,951 b/s |
+| instantaneous rate, spread | 66,143 % | **0 %** | 0 % |
+| intervals within 1 % of nominal | 3.3 % | **100 %** | 100 % |
+| PCR interval, max | 25.00 ms | 30.09 ms | 24.95 ms |
+| intervals over the 40 ms P1 gate | 0 | **0** | 0 |
+| intervals under 1 ms | 0 | **3,051 (29.08 %)** | 21 (0.09 %) |
+| null share | 4.01 % | 5.40 % | 4.59 % |
+
+**The byte schedule is repaired completely and the PCR interval train is not.** Every one of the
+10,490 graded intervals carries the bytes the rate requires, against 205 of 6,173 for the exporter
+alone. The cost is in the second half of the table: the groomer inserted 4,357 PCR-only packets to
+hold the repetition limit across the exporter's clumps, and where an inserted PCR lands beside a
+carried one the pair is sub-millisecond, so 29.08 % of intervals fall under 1 ms against the
+source's 0.09 %. That is downstream of the same clustering rather than a separate defect — nothing
+exceeds the 40 ms P1 bound, and the byte-locked relationship the accuracy gate grades is exact —
+but the groomed train is not as regular as the source's and the record should not imply it is.
+
+The groomer also needs a cushion sized for this input rather than the 200 ms default. At 200 ms it
+recorded **33,011 underruns**; at 1,500 ms, **4**. The exporter's delivery is bursty enough
+(12,751 bursts, largest 2,696 packets / 0.51 MB, arrival lead 575 ms) that a groomer starves
+repeatedly on the default depth while still producing a conformant output.
+
+**2. Determinism. Two exporters of one broadcast cannot form a 1+1 pair.** This is the property
+seamless protection turns on: an ST 2022-7 receiver merges a redundant pair by matching sequence
+numbers and taking whichever copy arrives first, which requires the legs to be octet-identical for
+the same media. Two individually valid streams are not a pair. `ts-pair-diff.py` aligns two
+captures on a payload needle — source media, not something either process minted, so aligning does
+not assume the answer — and compares the packets that follow, classifying each difference by field.
+Two `moq export ts` processes on one broadcast, the second joining 8 s after the first, 50,000
+packets from the anchor:
+
+| | packets | share of window |
+|---|---:|---:|
+| identical | 2,483 | **4.97 %** |
+| differ in continuity counter | 47,012 | 94.02 % |
+| differ in payload (the interleave) | 13,963 | 27.93 % |
+| differ in PID at the same offset | 505 | 1.01 % |
+| differ in other adaptation-field octets | 151 | 0.30 % |
+
+Reproduced exactly, to the packet, in a second independent run. The two mechanisms are the ones
+already reported upstream — per-process continuity counters
+([#2779](https://github.com/moq-dev/moq/issues/2779)) and arrival-decided interleave
+([#2829](https://github.com/moq-dev/moq/issues/2829), open) — and **#2779's defect is measurably
+still present, which is the expected state rather than a surprise**: it was closed **won't-fix by
+decision**, [#3868](https://github.com/moq-dev/moq/pull/3868) recording "`2779` is abandoned (close
+#2779 as won't-fix on merge)", on the ground that a late-joining exporter cannot know the packet
+count of every earlier group. The 94 % row is therefore a measurement of a defect upstream has
+declined to fix, and the remedy for a 1+1 pair has to sit outside upstream — the keyframe-restart
+plus 16-packet padding filter in §*Redundancy*, or an equivalent.
+
+**3. The groomer's own deterministic mode cannot currently be driven from this source either.**
+`mpegts-pacer`'s stream clocking places every packet on the absolute slot its source PCR implies,
+which is what lets two legs sharing no process agree octet for octet. It can only do that if the
+source's PCR byte positions track its PCR values, and it measures the divergence rather than
+assuming it. Against the exporter it reports **731 overrun intervals and a displacement of 5,762
+packets, 871 ms at the locked rate** — and the consequence is the failure its documentation
+predicts:
+
+| cushion | content packets | stuffing | late drops | displacement |
+|---|---:|---:|---:|---:|
+| 200 ms | 11,386 | **98.4 %** | 962,610 | 5,762 packets (871 ms) |
+| 1,500 ms | 65,717 | **93.1 %** | 908,270 | 5,762 packets (871 ms) |
+
+The output looks like a paced stream — the rate is exact and 100 % of intervals sit within 1 % of
+nominal — and almost all of the programme is missing, because content arrives for slots that have
+already gone out as stuffing. **A cushion of 1,500 ms, nearly twice the measured displacement, does
+not rescue it**, and the displacement is identical across both cells, so this is a property of the
+exporter's output rather than of the run. The corresponding pair comparison is therefore **void**
+rather than passing or failing: two streams that are 93 % stuffing share no media to align on, and
+reporting them as a matched pair would be reporting on the null packets.
+
+**So the 1+1 property is unavailable on this data plane today by either route, and the blocker is
+the same defect in both.** The groomer cannot be retired, and it also cannot yet deliver seamless
+protection over this exporter; what stands between the campaign and both is the byte schedule.
+
+*Domain: file, all arms. Build `53f8aa99d` (noq), `mpegts-pacer` `5ab84cd`, EC2 primary, loopback,
+`CNNiEMEA2.ts` at 9,945,951 b/s declared, 150 s per cell, two cells. Nothing here has been graded on
+a hardware IRD, so these are software conformance figures.*
+
+#### Liveness: the exporter does not mint a dead carrier, and it does not survive the source either
+
+A groomer holding a constant rate by stuffing is exactly right while the source is late and exactly
+wrong once it has died — the output becomes a byte-perfect carrier with no programme in it, and
+every signal a monitor keys on reads healthy. #3831 gave `moq export ts` a null generator and a
+rate to hold, so the question is whether it now has that failure mode. **It does not**, and this is
+the property on which the exporter is unambiguously well behaved: `t13-liveness.sh` killed the
+publisher 30 s into a run, the exporter wrote 1,856,500 B of drained buffer over the next five
+seconds, and then stopped. Carrier liveness and content liveness are the same event, which is what
+lets a downstream input-failover detect anything at all.
+
+**What it does instead is exit, with an error, on the catalog track.** The process ends
+`Error: json: dropped`, and restarting the publisher recovers nothing, because there is no longer a
+subscriber to recover it: measured 0 B over 25 s against a restarted source, reproduced exactly
+across two runs. Two consequences, and they are separate:
+
+- **A standing egress cannot outlive a publisher restart without external supervision.** In a
+  primary-distribution chain the publisher is restarted for a version bump, a failover or an
+  encoder reboot, and the egress must not be what has to be restarted alongside it.
+- **The exit is an error rather than an end of stream**, so a supervisor cannot distinguish a
+  broadcast that ended normally from one that failed. This is the same *shape* as the defect
+  [#3897](https://github.com/moq-dev/moq/issues/3897) reported and
+  [#3907](https://github.com/moq-dev/moq/pull/3907) fixed — a transport condition reaching the
+  snapshot consumer as a fatal error — but a different path: #3907 gave the group read a skip, and
+  this arrives at the track level through `poll_next_group`, which #3907's own comment says is
+  still fatal by design.
+
+#### What retiring the groomer would cost: the capability audit
+
+Read from `mpegts-pacer`'s `README.md` and `src/`, and from `moq export ts --help` plus
+`rs/moq-mux/src/container/ts/export.rs` on `53f8aa99d`. The exporter's whole option surface is two
+flags — `--max-age` and `--mux-rate` — so most of this table is settled by that alone.
+
+| Capability | `moq export ts` | `mpegts-pacer` | Notes |
+|---|---|---|---|
+| **Rate and stuffing** | | | |
+| Constant output rate, stated explicitly | **yes**, `--mux-rate` | yes | |
+| Rate recovered from the source | **yes**, and better placed: measured at *import* off the PCR clock and carried in `mpegts.muxRate`, so it survives the re-mux | yes, but estimated at egress over a warm-up window plus headroom | The exporter's is the stronger design — the pacer cannot see the source's original stuffing |
+| Variable-rate source left unpadded | yes | yes | |
+| **Bytes placed on the schedule the PCR describes** | **no** — measured above | yes | The defect the whole head-to-head turns on |
+| **De-jitter buffer** | | | |
+| Pinned cushion / hard cap | **no** | yes | `--max-age` is a staleness deadline deciding what to *skip*, not a cushion deciding when to *release* |
+| Depth sized from the observed arrival pattern | **no** | yes | The exporter's own output needs ~1,500 ms to stop starving a groomer |
+| Segment-aware sizing and start gate | **no** | yes | Matters for a segmented input, not for this lane |
+| **Determinism** | | | |
+| Two processes byte-identical for the same media | **no** — 4.97 %, measured above | yes, by design (`Clocking::Stream`) | Neither is currently usable: the pacer's mode cannot run on this source |
+| RTP sequence numbering, SSRC, sequence seed | **no** | yes | Prerequisite for ST 2022-7 |
+| **Content liveness** | | | |
+| Stops rather than minting a dead carrier | **yes** | yes (`StallPolicy::Mute`, the default) | The exporter's good result above |
+| Stall *detected and reported* as distinct from end of stream | **no** — exits `Error: json: dropped` | yes — `stalls`, `content_gap_max_ms`, `SourceState` observable while running | |
+| Survives the source returning | **no** | yes — resumes, re-anchors the clock, flags the discontinuity | |
+| Policy on stall (mute / continue / fail) | **no** | yes | |
+| **Output sinks** | | | |
+| stdout / pipe | yes | yes | |
+| UDP, unicast or multicast | **no** | yes | The estate's actual ingest; see below |
+| RTP (RFC 2250) | **no** | yes | |
+| SRT, RTMP, WebRTC, HLS/DASH | **yes**, all four | no | The exporter is far ahead here, and it is why "retire the pacer" is a reasonable question to ask |
+| **PCR handling** | | | |
+| Regenerate onto a grid | yes, time-locked | yes, **byte**-locked | The distinction is the measured defect |
+| Preserve the source's PCR values | **no** | yes | For a soft player that re-buffers |
+| Insert PCR-only packets to hold the repetition limit | not as such | yes, 4,357 in this run | |
+| **Telemetry** | | | |
+| Underruns, late drops, buffer high-water, burst profile, arrival lead | **no** | yes, ~20 counters | |
+| A guard on the source's PCR *positions* | **no** | yes — the instrument that measured the 871 ms above | |
+
+**The audit's answer to "can the groomer be retired for this data plane" is no, and the reason is
+narrower than the table makes it look.** Most rows are features a deployment may not need. Three
+are not optional for primary distribution: the byte schedule, the 1+1 property, and a route onto
+the wire the receiving estate ingests. The exporter has none of the three, and the first is the one
+the other two wait on — a correct byte schedule would make the pacer's deterministic mode work,
+and it is also what a UDP sink would need to be worth having.
+
+**Two things run the other way and belong in the same summary.** The exporter's rate measurement is
+better placed than the pacer's, because import can see the source's stuffing and an egress-side
+estimator cannot. And `export` already speaks SRT, RTMP, WebRTC and HLS/DASH, which the pacer does
+not and will not; the pacer's scope is one narrow job on the TS egress.
 
 ### File domain, MoQ lane
 
@@ -755,13 +921,17 @@ deep as the segment period or it will stop dead rather than degrade.
 
 **On the MoQ lane there is still no off-the-shelf stage that does both halves, and the half missing is
 carriage.** That is not a statement about MPEG-TS grooming; it is a statement about what `export ts`
-delivers. Two of its properties cause the entire result: it carries no stuffing, so a groomer must
-inflate a stream and no tool that preserves a broadcast mux can; and it emits PCRs in bursts rather than
-on a grid, so any stage that carries them rather than minting its own inherits 163 intervals above the
-40 ms limit. The
-segmented lane is the control that isolates this — same clip, same tools, same oracle, both properties
-absent, and the failure disappears. **The gap to state upstream is a MoQ exporter gap, not a grooming
-gap.**
+delivers — and what it delivers has moved, so the property that causes the result has to be named
+carefully. Through `eab960192` the exporter carried no stuffing, declared no rate and put its PCR
+*values* in sub-millisecond bursts, so a groomer had to inflate the stream and any stage carrying
+those values inherited 163 intervals above the 40 ms limit. On `53f8aa99d` all three are fixed:
+#3006 removed the bursting, #3831 restored the stuffing and the declared rate, and the PCR values
+now sit on an exact 25.00 ms grid with none above 40 ms. **What remains is the byte schedule**, and
+it is one property rather than three: the bytes between consecutive PCRs run 188 B to 870,628 B
+against the 31,081 B the declared rate requires, so the aggregate is right and no slot is. The
+segmented lane is the control that isolates this — same clip, same tools, same oracle, the property
+absent, and the failure disappears. **The gap to state upstream is a MoQ exporter gap, not a
+grooming gap**, and it is now a single, precisely stated one.
 
 On the MoQ lane, each candidate fails a different criterion, and which failure is acceptable depends
 on the receiver:
@@ -787,17 +957,18 @@ on the receiver:
   and an SDT is synthesised. For a single-programme feed with no signalling contract this is now a
   complete answer; for a broadcast mux it is not, and no configuration of it is.
 - **`mpegts-pacer`** is the only stage measured here that satisfies all four criteria on the MoQ lane,
-  and the only one that keeps the mux intact. Its weakness is the one criterion 3's live column
-  exposes: it inherits the exporter's PCR spacing, 159 intervals above 40 ms in 25 s. That is not a
-  cushion choice. [T18](test-18-delivery-latency.md) swept the cushion across eight times the depth,
-  removed starvation entirely, and moved the figure not at all, and the segmented legs above post 0
-  from a stage holding almost no buffer — so on both lanes the determinant is the egress, not the
-  depth. The groomer does place PCRs of its own, but only into slots it was already going to stuff, and
-  those do not fall in the gaps the exporter's clustering leaves ([T18](test-18-delivery-latency.md)
-  measurements 4 and 6); the word "inherits" is exact, and it is the whole defect. That it satisfies
-  the set at all is a statement about the state of the ecosystem, not a recommendation: as the
-  upstream review of [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported
-  installation path at the time, and it is still one lab's unpublished tool.
+  and the only one that keeps the mux intact. Its weakness through `eab960192` was the one criterion
+  3's live column exposed — it inherited the exporter's PCR spacing, 159 intervals above 40 ms in
+  25 s — and that is now closed at the source rather than in the groomer: on `53f8aa99d` the
+  exporter's values are on an exact grid and the groomed output carries 0 intervals above 40 ms.
+  What the current head-to-head puts in its place is narrower and sits on the interval train rather
+  than the byte schedule: the groomer inserts PCR-only packets to cover the exporter's clumps, and
+  29.08 % of its intervals fall under 1 ms against the source's 0.09 %. Nothing exceeds the P1
+  bound and the accuracy relationship is exact, but the train is less regular than the source's.
+  That the pacer satisfies the set at all is a statement about the state of the ecosystem, not a
+  recommendation: as the upstream review of
+  [#2830](https://github.com/moq-dev/moq/pull/2830) observed, it had no supported installation path
+  at the time, and it is still one lab's unpublished tool.
 
 The two halves of the job separate cleanly, and on the MoQ lane only one of them is unsolved off the
 shelf. Any stage that owns a clock can produce a broadcast-grade wire, and one that does is 366 lines

@@ -495,13 +495,14 @@ have it — and it will return a plausible number rather than refuse.** *(T3.)*
 > gap, check the instrument is defined on the thing being compared.
 
 **"Pacing" names two independent quantities, and a lane can be perfect on one and absent on the
-other, so measure them separately.** *(T13, the `84b34f54` residual.)*
+other, so measure them separately.** *(T13, the exporter residual; figures below from the
+`53f8aa99d` reference capture, which is the one [T13](test-13-downstream-grooming.md) carries.)*
 
 > The two are *where the PCR values fall in time* and *how many bytes the stream carries between
 > them*. On the media-aware egress they now have opposite answers: PCR intervals are exactly
-> 25.00 ms at median, p95 and maximum — better than the 24.65 ms source, because the exporter
+> 25.00 ms at minimum, median and maximum — better than the 24.65 ms source, because the exporter
 > regenerates the values onto a synthetic grid rather than carrying them — while the byte count
-> between the same pairs runs 188 B to 854,836 B against the 31,541 B the declared rate requires.
+> between the same pairs runs 188 B to 870,628 B against the 31,081 B the declared rate requires.
 > A report that says "pacing is fixed" on the first is true and useless.
 >
 > **Read the interval from the carried PCR values and the rate from the packet count over the same
@@ -510,6 +511,47 @@ other, so measure them separately.** *(T13, the `84b34f54` residual.)*
 > result that otherwise looks like a precision problem: a P2 gate predicts arrival from byte
 > position, so a stream whose instantaneous rate spans four orders of magnitude fails every PCR by
 > construction, and no tightening of the encoder would have helped.
+>
+> **A third quantity hides between them, and it is the one that decides whether a groomer can help:
+> the correct *aggregate* rate is not a schedule.** #3831 pads the export to within 0.21 % of the
+> rate it declares, so a census of the whole capture reports a constant-rate stream while 96.7 % of
+> its individual slots carry the wrong number of bytes. Grade the distribution, never the total.
+
+### Read PCR from one PID, and say which
+
+*(T13 P1-n, hardening `pcr-residual.py`.)* The first version of the script pooled PCRs from every
+PID that carried one. Two PIDs each on a correct 25 ms grid, offset from one another, read as a
+12.5 ms grid with half the bytes between samples — a clean stream graded as a badly clustered one,
+with no symptom that anything is wrong, because every number produced is plausible.
+
+> **Name every PCR-bearing PID in the output and grade one of them.** The script now prints the
+> PID census before the verdict, so a pooled reading cannot be taken by accident, and it grades the
+> PID carrying the most PCRs unless told otherwise.
+>
+> The same pass added the interval **minimum**, which had been omitted. Clustering is a
+> *short*-interval defect, and a series quoted by median, p95 and maximum hides it completely: a
+> grid with a third of its PCRs bunched into sub-millisecond pairs still reports a correct median
+> and a correct maximum. The reference clip turned out to carry 21 sub-millisecond intervals of its
+> own (0.09 %), so the baseline for that statistic is not zero and a groomed output has to be
+> compared against it rather than against perfection.
+
+### A determinism comparison must align on the source's own bytes, never on a value either process minted
+
+*(T13 P1-n, `ts-pair-diff.py`.)* The question is whether two egress processes of one broadcast are
+octet-identical for the same media, which is what an ST 2022-7 receiver needs. Aligning the two
+captures on PCR, on packet index or on continuity counter would assume the answer, because those
+are exactly the values under test — two exporters that disagree about all three would look
+unalignable, and two that agree would look identical for a trivial reason.
+
+> **Align on a payload run that occurs once in the other capture**, which is source media neither
+> process can have regenerated, then classify each difference by field — continuity counter, PCR,
+> PID, adaptation field, payload — so the result names a mechanism instead of a percentage.
+>
+> Two traps found while using it. The needle must be taken from *after* the later process joined:
+> a stagger of 8 s put the first candidates before B's first byte, and the tool correctly reported
+> "no common media", which reads exactly like a failed comparison. And a comparison of two streams
+> that are 93 % null packets is **void, not a pass** — there is no media to align on, and matching
+> stuffing would be the most confident meaningless result available.
 
 **Pass `pcrverify --bitrate` explicitly whenever the arm might not be carrying full programme. Grading
 PCRs against a rate TSDuck derived from those PCRs turns a conservation failure into a PCR failure.**
@@ -1732,6 +1774,14 @@ suffix. Arguing about it from the string is unresolvable.
 > minutes of measurement settles what a version string cannot. Prefer a functional discriminator over
 > any self-report.
 
+> **The self-report has since got worse, and the rule now binds absolutely.**
+> [#3912](https://github.com/moq-dev/moq/pull/3912) dropped the git-describe build scripts so that
+> the binaries report the crate version alone: `53f8aa99d` says `moq 0.11.2`, with **no `-<sha>`
+> suffix at all**. The inconsistency the rule was written about is fixed — two hosts building one
+> commit now agree — at the cost of the only part of the string that identified the commit. Build
+> identity comes from the `bin-<sha>.sha` sidecar that `ec2-build-main.sh` writes, and every rig
+> that records a build must print that file rather than `--version`.
+
 ### A control made of two production deployments is a coincidence, not an experiment
 
 *From [T34](test-34-real-encoder-severity.md) and [T40](test-40-continuous-join-through-srt.md).* Two
@@ -1806,6 +1856,28 @@ silently inverted (§5), a whole arm could have scored as a clean survival.
 ---
 
 ## 6. Claims, and their scope
+
+**Before calling an upstream close accidental, read the body of the pull request that closed it, not
+only the commit diff.** *(T13 / P1-n, the #2779 draft.)*
+
+> The determinism measurement found the continuity-counter defect fully present on a build where
+> [#2779](https://github.com/moq-dev/moq/issues/2779) showed closed-completed, closed the same day as
+> [#3868](https://github.com/moq-dev/moq/pull/3868) — a large `quest/next` grooming pull request — and
+> with no commit anywhere touching the numbering. Every signal available from the timeline and the
+> diff said *swept up by accident*, and a draft comment was written inviting a reopen. #3868's body
+> says the opposite in one line: "`2779` is abandoned (close #2779 as won't-fix on merge and remove
+> its `quest` label)". A deliberate decision, with a rationale already on record.
+>
+> Posting it would have asked a maintainer to reverse a considered call on the premise that he had
+> not made one — the single most expensive kind of error available in someone else's tracker, because
+> it spends standing that took months to accumulate and is not recoverable by being right afterwards.
+> **A grooming pull request states its dispositions in prose, and the disposition is not in the
+> diff.** More generally: when the inference is about *intent* rather than about behaviour, the
+> evidence is what somebody wrote, not what the code does.
+>
+> The recovery is also the better comment. "Your sibling is wrongly closed" is a complaint that
+> invites a defence; "your sibling is rightly closed, and that makes this issue the whole of what is
+> left" is the same measurement carrying an argument the maintainer has reason to want.
 
 **Reading a specification from inside finds what it says; asking a deployment question from outside
 finds what it omits. Do both.** *(MSFTS review, 2026-09.)*
