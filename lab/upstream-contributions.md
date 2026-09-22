@@ -1423,6 +1423,26 @@ latency-budget non-monotonicity still *likely rather than established*. "We meas
 the table" is a much stronger opening than a reframing plus an invitation, and the missing arm is the
 same rig again. Position recorded in `docs/upstream/fec-arq-venue.local.md`.
 
+### The determinism measurement, posted to #2829 — and the correction it needed first
+
+The head-to-head's pair comparison was posted as a comment on
+[#2829](https://github.com/moq-dev/moq/issues/2829): two `moq export ts` processes of one broadcast
+share **4.97 %** of their packets over a 50,000-packet window, 94.02 % differing in continuity
+counter and 27.93 % in the interleave the issue is about, reproduced to the packet
+([T13](test-13-downstream-grooming.md) § *The head-to-head*).
+
+**The first draft of that comment was wrong and was not sent.** It claimed
+[#2779](https://github.com/moq-dev/moq/issues/2779) — the continuity-counter half — had been closed
+*by accident*, swept up in [#3868](https://github.com/moq-dev/moq/pull/3868)'s `quest/next` grooming,
+and invited a reopen. #3868's body says the opposite in one line: "`2779` is abandoned (close #2779 as
+won't-fix on merge and remove its `quest` label)." A deliberate decision, with a rationale already on
+record. The posted version instead accepts the closure and draws the consequence, which is the
+stronger argument anyway: with the counter permanently out of scope upstream, renumbering has to
+happen downstream, and a downstream filter is then capped by the interleave — 100.00 % on
+single-track with the counter masked against 94.09 % on the real multi-track feed. **#2829 is
+therefore the whole of what remains in-tree, rather than one of two halves.** Method rule in
+[`method-notes.md`](method-notes.md) §6.
+
 ### A UDP sink for `export ts` — asked once, declined, withdrawn, and re-asked narrowly
 
 [**#1839**](https://github.com/moq-dev/moq/issues/1839), *"feat(egress): generic TS output sink
@@ -1432,7 +1452,7 @@ RTP in general"*, and *"I don't want to add an import/export module for every po
 I think I need a concrete customer ask first."* The decline was reasonable and the generic layer
 stays closed.
 
-**Re-asked as [#3923](https://github.com/moq-dev/moq/issues/3923), deliberately smaller**: one sink,
+**Re-asked as [#3923](https://github.com/moq-dev/moq/issues/3923), filed, deliberately smaller**: one sink,
 `--udp <addr:port>` unicast or multicast with a datagram-size and the usual TTL and interface
 controls, and the pluggable-transport part explicitly abandoned — no RTP, no FEC, no ST 2022-7, no
 trait. What justifies re-opening a question the maintainer has already answered is a change in the
