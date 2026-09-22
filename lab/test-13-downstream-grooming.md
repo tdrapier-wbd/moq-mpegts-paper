@@ -488,7 +488,8 @@ across two runs. Two consequences, and they are separate:
   [#3907](https://github.com/moq-dev/moq/pull/3907) fixed — a transport condition reaching the
   snapshot consumer as a fatal error — but a different path: #3907 gave the group read a skip, and
   this arrives at the track level through `poll_next_group`, which #3907's own comment says is
-  still fatal by design.
+  the level #3907 deliberately left alone: its own comment says "a group whose content is gone is
+  never fatal… A track- or session-level failure still arrives through `poll_next_group` above."
 
 #### What retiring the groomer would cost: the capability audit
 

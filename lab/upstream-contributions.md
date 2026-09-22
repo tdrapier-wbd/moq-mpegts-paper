@@ -1155,7 +1155,8 @@ the failure without explaining it, and the frame-expiry hypothesis is not suppor
 away, `moq export ts` exits `Error: json: dropped` rather than ending cleanly, and a restarted
 publisher reaches nothing — measured 0 B recovered over 25 s, reproduced across two runs
 ([T13](test-13-downstream-grooming.md) § *Liveness*). This arrives at the track level through
-`poll_next_group`, which #3907's own comment describes as fatal by design, so it is a question about
+`poll_next_group` — the level #3907's own comment deliberately left alone ("a track- or session-level failure still arrives through `poll_next_group` above")
+— so it is a question about
 intended behaviour rather than a straightforward defect: a standing egress cannot outlive a
 publisher restart without supervision, and the error exit gives a supervisor no way to tell a
 broadcast that ended from one that failed.
@@ -1442,6 +1443,42 @@ happen downstream, and a downstream filter is then capped by the interleave — 
 single-track with the counter masked against 94.09 % on the real multi-track feed. **#2829 is
 therefore the whole of what remains in-tree, rather than one of two halves.** Method rule in
 [`method-notes.md`](method-notes.md) §6.
+
+### The byte schedule — a successor to #3334, not a reopen of it
+
+Filed as [**#3925**](https://github.com/moq-dev/moq/issues/3925), and it is the most consequential
+thing the campaign has reported: conformant egress, a deterministic 1+1 pair and
+[#3923](https://github.com/moq-dev/moq/issues/3923)'s sink all wait on it, and the issue says so.
+
+**The care it needed was in not reading as a regression report.**
+[#3334](https://github.com/moq-dev/moq/issues/3334) is closed-completed and
+[#3351](https://github.com/moq-dev/moq/pull/3351) genuinely closed it — verified here against
+#3351's own merge-base: PCR packets adjacent to their predecessor **50.31 % → 0 %**, release
+intervals outside ±10 ms **491/799 → 0–4/745**, worst release error 91.4 → 3.9 ms
+([T19](test-19-pcr-grid-verification.md) measurements 9 and 10). The filing opens by saying so.
+
+What it reports is the **next property along, which #3351's merged checks do not grade: not-adjacent
+is not evenly spaced.** On `53f8aa99d` the PCR values are exact (25.00 ms at min, median and max, 0
+of 6,173 over the 40 ms P1 bound) and #3831's padding lands the aggregate rate within 0.21 % — while
+the bytes between consecutive PCRs run 188 B to 870,628 B against the 31,081 B the declared rate
+needs. The mean is 31,147 B, correct to 0.21 % and the same fact as the aggregate rate; the median is
+1,316 B, **4.2 % of the mean**. Bimodal, not noisy. Only 3.3 % of intervals carry an instantaneous
+rate within 1 % of nominal ([T13](test-13-downstream-grooming.md) § *The residual measured*).
+
+### The liveness exit — filed as a question, deliberately
+
+[**#3926**](https://github.com/moq-dev/moq/issues/3926). `export ts` does **not** mint a dead carrier
+when its publisher dies, which is the important liveness property and the one #3831's null generator
+put at risk; output stops about five seconds after the kill. It exits `Error: json: dropped` instead
+and recovers nothing from a restarted publisher (0 B over 25 s, two runs).
+
+**Filed as a question rather than a defect** because the exit arrives at the track level, which
+#3907's own added comment deliberately left alone — *"a group whose content is gone is never fatal…
+A track- or session-level failure still arrives through `poll_next_group` above."* Asserting it is a
+bug would be a judgement about intent the code does not support, which is the error the #2779 draft
+made earlier in the same session. The issue asks which of the two it is, and separates the half worth
+having either way: a clean exit for "publisher gone" against an error for "something broke", so a
+supervisor can tell them apart.
 
 ### A UDP sink for `export ts` — asked once, declined, withdrawn, and re-asked narrowly
 
