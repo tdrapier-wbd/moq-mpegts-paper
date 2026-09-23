@@ -105,7 +105,7 @@ every "not established" entry recurs in §4 or §5.
 |---|---|---|---|
 | **Carriage** | All three lanes carry a full broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing — **stuffing and mux rate were also missing until [#3831](https://github.com/moq-dev/moq/pull/3831), which restores both to within 0.36 %** | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **It also holds over a day** — 24.01 h on a continuous timeline, clean on continuity, repetition, underruns and respawns, crossing the 33-bit rollover in flight ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; anything beyond a day, or on a real encoder's timeline rather than a synthetic clock over a repeating clip | §3.2 |
-| **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them** — the reordering separation that used to do so was a packet-size artefact. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable**: what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline rather than the controller or bufferbloat. **`--max-age` is a recovery allowance and not a latency setting** — a twelve-fold change in it moves delivered latency not at all on a healthy path, where SRT's `--latency` sets delivered latency exactly, so the two cannot be matched against each other | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge; **any MoQ-against-SRT loss comparison at equal delivered latency**, which needs the arm rebuilt on measured rather than nominal figures | §3.3 |
+| **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched no impairment axis cleanly separates them** — the reordering separation that used to do so was a packet-size artefact. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable**: what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. **Matched at equal *measured* delivered latency, MoQ and SRT recover from an outage in opposite currencies**: MoQ converts its `--max-age` allowance into recovered content and pays in a delivery-latency step that is not bounded by the allowance and does not reverse, while SRT holds its latency to within 20 ms and discards the content instead. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline rather than the controller or bufferbloat. **`--max-age` is a recovery allowance and not a latency setting** — a twelve-fold change in it moves delivered latency not at all on a healthy path, where SRT's `--latency` sets delivered latency exactly, so the two cannot be matched against each other | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge; whether the outage result above extends to **partial loss**, which is a different impairment shape and is not run at matched latency; whether the latency step ever reverses beyond the two minutes observed | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** — separate publisher, relay, exporter and host in two availability zones. **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which now needs the exporter's interleave fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core, confirmed against a predicted cliff. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; channel-count scaling; high fan-out held for longer than 45 s | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention** rather than cached payload or concurrency, each of which §3.14 rules out with its own control. Tunable: 30 s → 10 s idle timeout takes it to 489 MB | The segmented lane's half of the same experiment, so no comparison; anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
@@ -511,6 +511,45 @@ its `--latency` set to the MoQ lane's measured median rather than to the nominal
 resolved, and its cause was the **split publisher** a source-side tap forces rather than the tap
 itself: separating `regulate --pcr-synchronous` from the SRT sender costs the transmitter its pacing
 ([T28](../lab/test-28-failure-injection-matrix.md)).*
+
+**Matched on measured latency instead, the two lanes recover from the same outage in opposite
+currencies — and MoQ's is one a broadcast route cannot spend twice.** With SRT's `--latency` set to
+the MoQ lane's measured median at each budget, both lanes grade 0.000 s lost and 0 continuity errors
+unimpaired, so the comparison starts level. Under a single 5 s outage:
+
+| `--max-age` | MoQ media lost | MoQ late-window latency | SRT media lost | SRT late-window latency |
+|---|---:|---:|---:|---:|
+| 0.5 s | 5.53–6.20 s | ~4.5 s | 3.52–3.57 s | ~2.30 s |
+| 2 s | 0.95–2.23 s | 6.6–9.6 s | 3.52–3.62 s | ~2.18 s |
+| 6 s | 0.20–0.45 s | 10.7–12.3 s | 3.57–3.76 s | ~2.21 s |
+
+**`--max-age` does buy back content**: media lost falls monotonically with the allowance, from about
+the length of the outage at 0.5 s to a fifth of a second at 6 s. **What it costs is delivery latency
+the lane does not return.** The induced latency is *not bounded by the allowance that induced it* —
+at a 6 s `--max-age` the lane runs roughly twice that far behind — and it is permanent on any
+timescale measured: over a longer pass the lane steps once, reaches its new latency about 20 s after
+the outage, then holds flat to **±0.24 s across the following ~75 s** of healthy path. **SRT makes
+the opposite trade and makes it cleanly**: its loss is pinned near the outage length at *every*
+budget, because a fixed delay is not an allowance, and its delivered latency moves **+0.5 to
++19.8 ms** across the outage.
+
+This matters against [R4](problem.md) more than against R5. The requirement is not merely a low
+latency but a *bounded and stable* one, on the stated grounds that a drifting buffer is itself a
+fault for downstream playout and ad insertion. On this evidence the media-aware lane's recovery
+mechanism is a re-timing of the service, and nothing observed re-times it back; an operator buying
+outage immunity with `--max-age` is buying it with a latency step that persists until the session is
+rebuilt. **Continuity-error counts must not be read as a quality ranking across these two lanes**:
+MoQ returns 0 in every cell and SRT 927–2,451, but that is `moq export ts` re-synthesising the
+stream and regenerating continuity counters, not a difference in what arrived.
+
+*Measurement point P1, domain file, on the subscriber's capture — this is delivery latency to a file
+sink, not to a decoder with a bounded buffer, which would have to drop or drift rather than lag.
+Build `53f8aa99d`; single host, one namespace path at 20 Mb/s and 100 ms RTT, so not cross-host. Two
+replicates per outage cell, one unimpaired control per budget, and one replicate on the
+re-convergence pass. **One impairment shape only** — a single 5 s total outage — so nothing here
+extends to partial loss. The re-convergence window was ended at 117.8 s by the source clip rather
+than by the commanded window, so "does it ever recover" is formally open beyond two minutes
+([T28](../lab/test-28-failure-injection-matrix.md) §*The matched ladder*).*
 
 The operational consequence is the one in [Architecture](architecture.md) §8.5: pin the controller
 explicitly, because the resolved default is backend-specific, and choose it against the route's own

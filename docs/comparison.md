@@ -170,7 +170,13 @@ protocol:** byte-completeness at the hand-off becomes cache retry rather than li
 Retry under loss splits: no resilience of *rate* (controller sets that — §3.1), but resilience of
 *content* inside the availability window — byte-verbatim and P1-clean throughout the ladder to 10 %
 loss. An origin killed for ten seconds costs **no content** on the segmented lane (refetch from store);
-the media-aware exporter skips to the live edge and loses the outage. **No off-the-shelf TS client in
+the media-aware exporter skips to the live edge and loses the outage. That last is a statement about
+*node* failure, and a transport outage behaves differently: given a `--max-age` longer than the
+outage the media-aware lane recovers nearly all of the content from the relay cache, but pays for it
+in a delivery-latency step that is not bounded by the allowance and does not reverse, where SRT
+across the same outage holds its latency and discards the content instead ([Evidence](evidence.md)
+§3.3). Neither lane recovers an outage for free; they are billed in different currencies.
+**No off-the-shelf TS client in
 the rig survives an origin restart** — TSDuck and FFmpeg abandon at the first failed playlist reload —
 so a purpose-written client was needed ([T6](../lab/test-6-relay-resilience.md)). Edge and Pathway
 selection under Content Steering remains specification-only.

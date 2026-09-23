@@ -15,7 +15,14 @@
 # that floor is indistinguishable from the impairment's cost.
 #
 # Usage: sudo t28-t31-moq-ladder.sh [cell ...]        (default: all)
-#   cells: control step-8-5s step-12-60s step-8-perm outage-0.5s outage-5s outage-30s
+#   cells: control step-8-5s step-12-60s step-8-perm outage-0.5s outage-5s outage-20s outage-30s outage-40s
+#
+# The 20s/30s/40s outages bracket `--quic-idle-timeout`, which defaults to 30s on both the relay and
+# the client. A 30s outage therefore lands exactly on the boundary and cannot distinguish a starved
+# session from a dead one. Set MOQ_QUIC_IDLE_TIMEOUT (honoured by both binaries, and inherited
+# through `ip netns exec`) to move the boundary and run the same three outages either side of it.
+# Use a separate OUT per idle-timeout setting rather than adding a column: the summary schema is
+# positional and has already cost one wrong results table.
 
 set -u
 
@@ -81,7 +88,9 @@ run_cell() {
 	step-8-perm)  exp=T31;   impair="rate 20->8 Mb/s permanent";  window=$((SETTLE + 45 + 10)) ;;
 	outage-0.5s)  exp=T28;   impair="100% loss for 0.5s";         window=$((SETTLE + 1 + RECOVER)) ;;
 	outage-5s)    exp=T28;   impair="100% loss for 5s";           window=$((SETTLE + 5 + RECOVER)) ;;
+	outage-20s)   exp=T28;   impair="100% loss for 20s";          window=$((SETTLE + 20 + RECOVER)) ;;
 	outage-30s)   exp=T28;   impair="100% loss for 30s";          window=$((SETTLE + 30 + RECOVER)) ;;
+	outage-40s)   exp=T28;   impair="100% loss for 40s";          window=$((SETTLE + 40 + RECOVER)) ;;
 	*) echo "unknown cell $cell"; return 1 ;;
 	esac
 
@@ -122,7 +131,9 @@ run_cell() {
 	step-8-perm) set_rate 8;  sleep 45 ;;
 	outage-0.5s) set_loss 100; sleep 0.5; clear_loss ;;
 	outage-5s)   set_loss 100; sleep 5;   clear_loss ;;
+	outage-20s)  set_loss 100; sleep 20;  clear_loss ;;
 	outage-30s)  set_loss 100; sleep 30;  clear_loss ;;
+	outage-40s)  set_loss 100; sleep 40;  clear_loss ;;
 	esac
 	echo "   impairment applied at $t_impair, now recovering for ${RECOVER}s"
 	case "$cell" in
