@@ -546,12 +546,24 @@ it has not been characterised in production.
 ### 5.7 Graceful degradation
 
 Where full redundancy cannot prevent impairment, QUIC's per-stream delivery and MoQ's prioritisation
-allow the platform to shed lower-priority tracks or renditions while preserving the primary
-programme, instead of head-of-line-blocking the whole flow as a single ordered byte stream would.
-This is realised on the media-aware lane, which exposes the individual tracks to shed or protect. On
-the **opaque fallback lane** the benefit is constrained, because the programme is a single opaque
-object stream with limited internal prioritisation: the fallback trades graceful degradation away in
-exchange for verbatim carriage.
+*would* allow the platform to shed lower-priority tracks or renditions while preserving the primary
+programme, instead of head-of-line-blocking the whole flow as a single ordered byte stream would. The
+media-aware lane exposes the individual tracks that such a policy would act on, and the opaque
+fallback does not — it is a single object stream with limited internal prioritisation, and trades
+this away in exchange for verbatim carriage.
+
+**This is an available mechanism and not a measured behaviour, and what the lane does today is
+coarser.** Under congestion it sheds **whole groups** that missed the subscriber's release deadline,
+which is not selective by track and does not preferentially preserve the primary programme; the
+degradation is in *time*, uniformly across the mux ([Evidence](evidence.md) §3.3). Two measured
+consequences bound how much comfort to take from this section. The process doing the shedding did
+not reliably survive doing it — `moq export ts` exited on an evicted group — and a subscriber that
+exits is off air rather than degraded. And where the subscriber's budget is widened so that groups
+are recovered instead of shed, the lane absorbs the impairment as a **permanent step in delivery
+latency** rather than as lost media, which is a different failure and not obviously the better one
+for a route with a fixed playout schedule. **No priority-ordered shedding policy has been built or
+graded here**; treating graceful degradation as a property of the lane rather than as work still to
+do would overstate it.
 
 ---
 
