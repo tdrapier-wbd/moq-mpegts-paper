@@ -214,9 +214,10 @@ one buffer measured twice.
 **The loss figures from this arm are nevertheless void, and the reason is the instrument.** The SRT
 controls do not grade clean: unimpaired cells lost 4.196–5.391 s with 5,704–8,930 continuity errors.
 Re-run through the identical netns path **with the inline tap removed**, the same lane graded
-**0.000 s lost, 0 holes, 0 continuity errors** over a 27.7 s span. The pass-through tap was corrupting
-the transport stream, and **the MoQ lane never showed it** because `moq export ts` re-synthesises the
-stream at egress and regenerates the continuity counters, laundering any upstream damage. Had the SRT
+**0.000 s lost, 0 holes, 0 continuity errors** over a 27.7 s span. A pass-through tap was corrupting
+the transport stream — **the source-side one, as the next section establishes; the egress tap is
+harmless** — and **the MoQ lane never showed it** because `moq export ts` re-synthesises the stream at
+egress and regenerates the continuity counters, laundering any upstream damage. Had the SRT
 controls been omitted, this rig would have reported SRT as catastrophically worse than MoQ on entirely
 fabricated evidence. Method rule in [method-notes](method-notes.md) § *An inline instrument damaged
 one lane and was invisible on the other*.
