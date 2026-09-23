@@ -347,7 +347,9 @@ the open commercial question on this lane, not a settled advantage** ([Evidence]
 ## 6. Where this goes next
 
 [Comparison](comparison.md) evaluates the two candidate Internet-native data planes — MoQ, and
-segmented HTTP carrying MPEG-TS — against R1, R2, R4 and R5, and against the point-to-point
-incumbents of §2.3. [Architecture](architecture.md) develops R3, R6 and R8, which is where nearly all
-the measured work sits. [Evidence](evidence.md) is the method, the results and the limits.
-[Economics](economics.md) is cross-cutting, and is where R2's arithmetic is actually done.
+segmented HTTP carrying MPEG-TS — against R1–R7, and against the point-to-point incumbents of §2.3;
+it reaches R6 and R7 only as far as the data plane decides them. R8 is not a data-plane axis and is
+not scored there. [Architecture](architecture.md) develops R3, R6 and R8, which is where nearly all
+the measured work sits, and [Control plane](control-plane.md) develops R7. [Evidence](evidence.md) is
+the method, the results and the limits. [Economics](economics.md) is cross-cutting, and is where R2's
+arithmetic is actually done.

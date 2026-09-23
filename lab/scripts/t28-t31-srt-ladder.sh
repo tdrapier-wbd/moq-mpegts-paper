@@ -93,7 +93,7 @@ moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 SUMMARY=$OUT/summary.csv
-echo "lane,budget_s,impair,rep,capture_bytes,media_lost_s,media_dup_s,holes,largest_hole_s,continuity_errors,lat_median_ms,lat_p95_ms,matched_pictures,session" >"$SUMMARY"
+echo "lane,budget_s,srt_ms,matched_how,impair,rep,capture_bytes,media_lost_s,media_dup_s,holes,largest_hole_s,continuity_errors,lat_median_ms,lat_p95_ms,matched_pictures,session" >"$SUMMARY"
 
 pub() { ip netns exec t8b-pub "$@"; }
 sub() { ip netns exec t8b-sub "$@"; }
@@ -138,9 +138,30 @@ run_cell() {
 	local window=$((SETTLE + OUTAGE + RECOVER))
 	local budget_ms
 	budget_ms=$(awk -v b="$budget" 'BEGIN{printf "%d", b*1000}')
+	# **The matched-buffer correction, and the reason this arm exists.** SRT's `--latency` is a
+	# fixed end-to-end delay that is always spent; MoQ's `--max-age` is a recovery allowance that
+	# a healthy path does not spend at all. Setting one to the other compares a lane running at
+	# 2.05 s against a lane running at its own floor *and* holding 2 s of headroom, which is not
+	# one buffer measured twice. So SRT is given the MoQ lane's **measured** unimpaired delivery
+	# latency at the same budget, read from MATCH_FILE ("<budget> <ms>" per line) produced by the
+	# calibration pass. With no match file the arm falls back to the nominal budget and is
+	# explicitly *not* the matched comparison — it says so in the log rather than pretending.
+	local srt_ms=$budget_ms matched_how=nominal
+	if [ -n "${MATCH_FILE:-}" ] && [ -r "$MATCH_FILE" ]; then
+		local m
+		m=$(awk -v b="$budget" '$1==b{printf "%d", $2}' "$MATCH_FILE")
+		if [ -n "$m" ] && [ "$m" -gt 0 ]; then
+			srt_ms=$m
+			matched_how=measured
+		fi
+	fi
 	local tap_secs=$((window + 5))
 	echo
-	echo "== $lane budget=${budget}s impair=$impair rep=$rep (${window}s) =="
+	if [ "$lane" = srt ]; then
+		echo "== $lane budget=${budget}s srt_latency=${srt_ms}ms ($matched_how) impair=$impair rep=$rep (${window}s) =="
+	else
+		echo "== $lane budget=${budget}s impair=$impair rep=$rep (${window}s) =="
+	fi
 
 	# A broadcast name unique to the *cell*, not to the replicate. Keying it on `$rep` alone
 	# let consecutive budgets share one name: the relay retains the previous cell's announce,
@@ -148,10 +169,43 @@ run_cell() {
 	# cell graded a capture contaminated by its predecessor. Include everything that varies.
 	local BC="p1mladder.$lane.b$budget.$impair.$rep.$$"
 
-	# The source, tapped on its way into the lane. Identical for both lanes so the tap is
-	# not part of what separates them.
-	local FEED="tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null \
-        | python3 '$LATENCY' tap $VPID '$d/src.csv' --pipe --seconds $tap_secs"
+	# The source, tapped on its way into the lane. Identical for both lanes so the tap is not
+	# part of what separates them — and *mirrored*, never in the path. An inline tap here was
+	# the whole of the 4.563-4.693 s artefact that voided the first SRT pass: it is a Python
+	# reader between a `regulate`-paced sender and a real-time transmitter, so its cost is paid
+	# as backpressure by a stage that cannot wait. `fork` hands it a copy instead. The same tap
+	# on the *egress* is harmless and was never the problem; both are mirrored anyway, because
+	# the instrument must be identical on both lanes for the comparison to mean anything.
+	# **Position is selectable because the two taps fail differently, and both failures are
+	# measured rather than assumed.** Inline at the *source* destroys the stream (4.563-4.693 s
+	# lost); mirrored at the *egress* preserves the stream but reports the wrong time, because
+	# `tsp` buffers between the pipe and the fork and the tap timestamps its copy on the far
+	# side of that buffer. So the defensible rig is mirrored at the source and inline at the
+	# egress, and these switches exist so that claim stays falsifiable.
+	local TAP_SRC TAP_EG
+	if [ "${SRC_TAP:-mirror}" = mirror ]; then
+		TAP_SRC="-P fork --nowait --ignore-abort \
+        \"python3 '$LATENCY' tap $VPID '$d/src.csv' --pipe --seconds $tap_secs > /dev/null\""
+	else
+		TAP_SRC=""
+	fi
+	if [ "${EG_TAP:-inline}" = mirror ]; then
+		TAP_EG="-P fork --nowait --ignore-abort \
+        \"python3 '$LATENCY' tap $VPID '$d/eg.csv' --pipe --seconds $tap_secs > /dev/null\""
+	else
+		TAP_EG=""
+	fi
+	local SRC_INLINE="" EG_SINK EG_SRT_SINK
+	[ "${SRC_TAP:-mirror}" = inline ] &&
+		SRC_INLINE="| python3 '$LATENCY' tap $VPID '$d/src.csv' --pipe --seconds $tap_secs"
+	if [ "${EG_TAP:-inline}" = mirror ]; then
+		EG_SINK="tsp -I file - $TAP_EG -O file '$d/out.ts'"
+		EG_SRT_SINK="-O file '$d/out.ts'"
+	else
+		EG_SINK="python3 '$LATENCY' tap $VPID '$d/eg.csv' --pipe --seconds $tap_secs --save '$d/out.ts' > /dev/null"
+		EG_SRT_SINK="-O file - | python3 '$LATENCY' tap $VPID '$d/eg.csv' --pipe --seconds $tap_secs --save '$d/out.ts' > /dev/null"
+	fi
+
 
 	case "$lane" in
 	moq)
@@ -163,17 +217,20 @@ run_cell() {
 		# Subscriber first: reservation gating publishes the catalog once tracks resolve.
 		sub bash -c "timeout $((window + 3)) '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
                 --broadcast '$BC' export ts ${MOQ_LAT[*]} ${budget}s \
-              | python3 '$LATENCY' tap $VPID '$d/eg.csv' --pipe --seconds $tap_secs --save '$d/out.ts' > /dev/null" \
-			>"$d/sub.log" 2>&1 &
+              | $EG_SINK" >"$d/sub.log" 2>&1 &
 		sleep 2
-		pub bash -c "$FEED | '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
+		pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \
+                -O file - 2>/dev/null $SRC_INLINE \
+              | '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
                 --broadcast '$BC' import ts" >"$d/pub.log" 2>&1 &
 		;;
 	srt)
 		# The publisher listens and the subscriber calls, so the media crosses the shaped
 		# egress in the same direction as the MoQ lane's.
-		pub bash -c "$FEED | tsp -I file - -O srt --listener '0.0.0.0:$SRT_PORT' \
-                --transtype live --latency $budget_ms" >"$d/pub.log" 2>&1 &
+		pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \
+                -O file - 2>/dev/null $SRC_INLINE \
+              | tsp -I file - -O srt --listener '0.0.0.0:$SRT_PORT' \
+                --transtype live --latency $srt_ms" >"$d/pub.log" 2>&1 &
 		# Wait for the port, not for a guessed interval. `tsp` does not start its output
 		# plugin until the `regulate` input stage has filled, which takes ~8 s with this
 		# source — and TSDuck's SRT caller does not retry, so a 3 s sleep here made the
@@ -189,12 +246,11 @@ run_cell() {
 		done
 		if [ "$bound" -ne 1 ]; then
 			echo "   FAIL: SRT listener never bound :$SRT_PORT — cell abandoned"
-			echo "$lane,$budget,$impair,$rep,0,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,nobind" >>"$SUMMARY"
+			echo "$lane,$budget,$srt_ms,$matched_how,$impair,$rep,0,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,NOBIND,nobind" >>"$SUMMARY"
 			return 0
 		fi
 		sub bash -c "timeout $((window + 3)) tsp -I srt --caller '$PUBIP:$SRT_PORT' \
-                --transtype live --latency $budget_ms -O file - \
-              | python3 '$LATENCY' tap $VPID '$d/eg.csv' --pipe --seconds $tap_secs --save '$d/out.ts' > /dev/null" \
+                --transtype live --latency $srt_ms $TAP_EG $EG_SRT_SINK" \
 			>"$d/sub.log" 2>&1 &
 		;;
 	esac
@@ -218,7 +274,7 @@ run_cell() {
 
 	if [ "$bytes" -lt 200000 ]; then
 		echo "   VOID: ${bytes}B captured — the lane delivered nothing"
-		echo "$lane,$budget,$impair,$rep,$bytes,VOID,VOID,VOID,VOID,VOID,VOID,VOID,VOID,$session" >>"$SUMMARY"
+		echo "$lane,$budget,$srt_ms,$matched_how,$impair,$rep,$bytes,VOID,VOID,VOID,VOID,VOID,VOID,VOID,VOID,$session" >>"$SUMMARY"
 		return 0
 	fi
 
@@ -234,14 +290,14 @@ run_cell() {
 	lat_median=NA lat_p95=NA matched=NA
 	[ -r "$d/lat.kv" ] && . "$d/lat.kv"
 
-	python3 - "$d/grade.json" "$lane" "$budget" "$impair" "$rep" "$bytes" \
+	python3 - "$d/grade.json" "$lane" "$budget" "$srt_ms" "$matched_how" "$impair" "$rep" "$bytes" \
 		"${lat_median:-NA}" "${lat_p95:-NA}" "${matched:-NA}" "$session" "$SUMMARY" <<-'PY'
 		import json, sys
 		g = json.load(open(sys.argv[1]))
-		row = sys.argv[2:6] + [sys.argv[6],
+		row = sys.argv[2:8] + [
 		       g["media_lost_s"], g["media_duplicated_s"], g["hole_count"],
-		       g["largest_hole_s"], g.get("continuity_errors", "na")] + sys.argv[7:11]
-		open(sys.argv[11], "a").write(",".join(str(x) for x in row) + "\n")
+		       g["largest_hole_s"], g.get("continuity_errors", "na")] + sys.argv[9:13]
+		open(sys.argv[13], "a").write(",".join(str(x) for x in row) + "\n")
 	PY
 	grep -E "latency ms|trend" "$d/lat.txt" 2>/dev/null | sed 's/^/   /'
 	rm -f "$d/out.ts" # the grade is the measurement; 70 MB a cell is not
@@ -253,8 +309,12 @@ for rep in $(seq 1 "$REPS"); do
 			# The control is the point: without an unimpaired cell through the same rig at
 			# the same budget, the netns path's own floor is indistinguishable from the
 			# outage's cost — and the wire-domain grading is unlicensed.
-			[ "$rep" = 1 ] && run_cell "$lane" "$b" none "$rep"
-			run_cell "$lane" "$b" outage "$rep"
+			for im in ${IMPAIRS:-none outage}; do
+				# The unimpaired control is run once per budget, not once per
+				# replicate: it establishes the rig's floor, which does not move.
+				[ "$im" = none ] && [ "$rep" != 1 ] && continue
+				run_cell "$lane" "$b" "$im" "$rep"
+			done
 		done
 	done
 done

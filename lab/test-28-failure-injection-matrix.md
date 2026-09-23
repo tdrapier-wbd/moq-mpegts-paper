@@ -260,10 +260,36 @@ while the main chain continues to its output, so the graded capture never passes
 rather than a removal.
 
 *One run per arm for the egress three; the two source arms replicated. Domain: file, on the
-subscriber's capture. This validates the instrument only — it re-opens the SRT arm rather than
-grading it, and no loss figure in this experiment's tables is restored by it. The second rig change
-the arm needs, matching SRT's `--latency` to the MoQ lane's measured delivery latency, is still
-outstanding.*
+subscriber's capture. This validates fidelity only.*
+
+#### …but mirroring the *egress* tap breaks the other half of what it measures
+
+The obvious conclusion from the table above is "mirror both taps", and it is wrong. A tap does two
+jobs — preserve the stream and timestamp its arrival — and `tsp -P fork` fixes the first by breaking
+the second: the tap now reads its copy from the far side of `tsp`'s internal buffer, so it records
+when `tsp` got round to forwarding a packet rather than when the packet arrived. One MoQ cell at
+`--max-age 2s`, unimpaired, three rigs differing only in where each tap sits:
+
+| source tap | egress tap | media lost | continuity | delivery latency, median | spread |
+|---|---|---:|---:|---:|---:|
+| mirror | **inline** | 0.000 s | 0 | **2,047.1 ms** | 618.6 ms |
+| mirror | **mirror** | 0.000 s | 0 | **5,278.9 ms** | 6,987.1 ms |
+| inline | **inline** | 0.000 s | 0 | **2,056.6 ms** | 590.2 ms |
+
+**Mirroring the egress tap adds 3.2 s to the measured latency and multiplies its spread elevenfold**,
+against a figure the other two rigs agree on to 9.5 ms. Nothing about the *stream* differs — all three
+grade 0.000 s lost and 0 continuity errors — so a rig validated on fidelity alone would have passed
+this and then reported MoQ as three times slower than it is.
+
+**So the defensible rig is asymmetric, and each side is chosen on a measurement rather than a
+principle:** mirrored at the source, where inline destroys the stream and where MoQ's re-multiplexing
+means the tap position does not move the timing figure anyway (2,047.1 against 2,056.6 ms); inline at
+the egress, where a pass-through tap is harmless and is the only position that sees true arrival.
+`SRC_TAP` and `EG_TAP` in
+[`t28-t31-srt-ladder.sh`](scripts/t28-t31-srt-ladder.sh) keep both claims falsifiable.
+
+*The second rig change the arm needs — matching SRT's `--latency` to the MoQ lane's measured delivery
+latency rather than its nominal budget — is implemented as `MATCH_FILE` and is exercised below.*
 
 One incidental rig defect worth keeping, because it cost a whole pass: TSDuck's `tsp` does not start
 its output plugin until the `regulate` input stage has filled, which takes **~8 s** with this source,
