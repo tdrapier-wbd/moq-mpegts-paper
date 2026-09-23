@@ -84,9 +84,12 @@ Domain **wire**, measurement point **P1**, one sample per cell.
 | 5 s | 1 s | **1.250 s** | 2 | 0.725 s | 0 |
 | 5 s | 6 s | **0.000 s** | 0 | — | 0 |
 
-**A 0.5 s outage is free**, and a 5 s outage costs nothing at all provided the latency budget exceeds
-it — the relay's cache replays what the subscriber waited for. This is the operationally useful half:
-the budget is a straightforward purchase of outage immunity up to its own length.
+**A 0.5 s outage is free**, and a 5 s outage costs no *media* at all provided the latency budget
+exceeds it — the relay's cache replays what the subscriber waited for. This is the operationally
+useful half: the budget buys outage immunity up to its own length. **It is not free in delivery
+latency, though, and this table does not show that half.** §*The matched ladder* measures the price:
+the recovered content arrives late, the lane steps to a higher delivery latency, and it does not step
+back. Read this table as "what reaches the receiver", not as "what it costs".
 
 **Beyond the budget, loss falls as the budget rises — the opposite of what the two cells above
 suggested, and the replication is what settles it.** Those two cells (1 s losing 1.250 s, 3 s losing
@@ -111,9 +114,10 @@ run.
 ### The budget ladder replicated, and the nominal budget is not a latency setting
 
 Run as the MoQ half of [P1-m](planned-experiments.md), whose purpose is a matched-buffer comparison
-against SRT. **The SRT arm of that comparison has not produced a cell** — see *Open* below — so
-nothing here ranks the two architectures. What it does deliver is the replication T28 owed, and a
-measured result that changes how the comparison has to be set up.
+against SRT. This pass ran the MoQ half only, on a rig with two defects since found and fixed, so
+**nothing in this section ranks the two architectures**; the ranking is in §*The matched ladder*,
+which supersedes these figures. What this pass delivers is the replication T28 owed, and the measured
+result that changed how the comparison had to be set up.
 
 **Environment.** As above, but build `moq` 0.11.2-`5d0991b9`, rig
 [`t28-t31-srt-ladder.sh`](scripts/t28-t31-srt-ladder.sh), and an inline PES-timestamp tap
@@ -556,10 +560,10 @@ reported as tied.
 
 | # | Criterion | Verdict |
 |---|---|---|
-| 1 | Grader validity: a control reports 0 s lost and 0 continuity errors **on both lanes**; a synthetic hole reproduces the injected duration ± 100 ms | **Pass on the MoQ lane, fail on the SRT lane — and the criterion is what caught it.** MoQ: 0.000 s and 0 continuity errors in five of six controls (the 0.5 s budget is disqualified, see above); three holes and one repeat recovered within the margin. SRT: controls graded 4.196–5.391 s lost, traced to the inline tap corrupting the stream, so every SRT cell run so far is void |
-| 2 | Matrix completeness | **Partial.** The MoQ lane's outage ladder is run and replicated (four outage durations; six latency budgets × three repeats at 5 s). The loss/reorder/bandwidth steps, the infrastructure axis, the SRT lane and the segmented lane are not |
-| 3 | Ranking published | **Not met, deliberately.** One lane cannot be ranked against a lane that has not run; publishing a half matrix as a ranked table is the failure this experiment exists to avoid |
-| 4 | Comparability | **Pass on the cells run.** One host, one rig, one build, one clip, one grader and one domain across every cell, with an unimpaired control through the same path |
+| 1 | Grader validity: a control reports 0 s lost and 0 continuity errors **on both lanes**; a synthetic hole reproduces the injected duration ± 100 ms | **Now passes on both lanes.** Every unimpaired control on the matched ladder grades 0.000 s lost and 0 continuity errors on MoQ *and* SRT. The earlier SRT failure (controls at 4.196–5.391 s lost) was real and the criterion is what caught it; its cause was the split publisher a source-side tap forces, not the tap, and a single-`tsp` publisher clears it |
+| 2 | Matrix completeness | **Partial.** Both transport lanes are now run on the outage axis — four outage durations on MoQ, and six budgets × two replicates on MoQ *and* SRT matched on measured latency, plus a re-convergence pass. The loss/reorder/bandwidth steps, the infrastructure axis and the segmented lane are not |
+| 3 | Ranking published | **Met for MoQ against SRT on the outage axis, and the ranking is that the pre-registered rule is the wrong one.** By criterion 5's rule — lower median media lost wins — MoQ is superior at every budget from 2 s up (0.20–2.23 s against SRT's 3.46–3.76 s). That verdict is published in §*The matched ladder* together with the reason it is incomplete: the lanes do not pay in the same currency, and a rule that scores only media lost cannot see that MoQ buys its content with delivery latency it never gives back. The segmented lane is still unrun, so the three-way ranking is not |
+| 4 | Comparability | **Pass on the cells run.** One host, one rig, one build, one clip, one grader and one domain across every cell, with an unimpaired control through the same path. On the matched ladder the SRT arm's `--latency` is additionally set from the MoQ lane's measured median rather than its nominal budget |
 | 5 | Segmented receiver axis | **Not run.** The apparatus is on the same host (T20's HTTP/3 and HLS lane), so this is now a session's work rather than a blocker |
 
 ## What remains
@@ -571,8 +575,15 @@ to record was against a stale figure.
 - ~~**Replicate the latency-budget non-monotonicity.**~~ **Done — it did not replicate**, and the
   sizing rule drawn from it is withdrawn; see *The budget ladder replicated*. What remains of it is a
   small reproducible bump at 4 s, unexplained.
-- **Make the SRT arm comparable**: a mirroring latency tap, and SRT matched on measured rather than
-  nominal buffer. Until then nothing in T28 ranks the two architectures.
+- ~~**Make the SRT arm comparable**: a mirroring latency tap, and SRT matched on measured rather than
+  nominal buffer.~~ **Done** — see *The matched ladder*. Both rig defects are fixed and both lanes
+  grade clean unimpaired.
+- **Add the latency axis to the pre-registered scoring rule.** Criterion 5 ranks on media lost alone,
+  which scores MoQ superior at every budget from 2 s up while missing that it pays in permanent
+  delivery latency. Any future lane comparison here needs a two-axis verdict; that revision is not
+  yet written.
+- **Extend the re-convergence pass beyond 117.8 s.** The source clip, not the commanded window, ended
+  it. A lane flat to ±0.24 s over 75 s is not converging, but "never" is not yet measured.
 - **Bracket the idle timeout.** 20 s and 40 s outages with `--server-quic-idle-timeout` set
   explicitly, to separate a starved session from a dead one.
 - **The remaining transport steps** — loss, reorder and bandwidth — on the rig as it stands.
