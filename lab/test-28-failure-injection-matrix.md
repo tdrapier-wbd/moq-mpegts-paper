@@ -322,7 +322,7 @@ rig now polls for the bound port and marks a cell `nobind` if it never appears.
 With the rig sound on both sides, the ladder ran matched: the MoQ lane first, its **measured**
 unimpaired median delivery latency at each budget written to `MATCH_FILE`, then the SRT lane with
 `--latency` set to that figure rather than to the nominal budget. Two replicates per outage cell, one
-unimpaired control per budget, 60 s cells, 3 s total outage applied mid-window by `set_loss 100`.
+unimpaired control per budget, 60 s cells, 5 s total outage applied mid-window by `set_loss 100`.
 Build `53f8aa99d`, netns at 20 Mb/s and 100 ms RTT, source tap mirrored, egress tap inline.
 
 **The match holds.** Both lanes grade **0.000 s lost and 0 continuity errors** on every unimpaired
@@ -343,8 +343,9 @@ Under the outage the lanes diverge completely. Both replicates are shown:
 | 6 s | 0.45 / 0.20 s | 12,268 / 10,707 ms | 3.76 / 3.57 s | 2,205 / 2,213 ms |
 
 **`--max-age` works: it buys back content.** MoQ's media lost falls monotonically with the allowance,
-from 5.53–6.20 s at a 0.5 s budget — *more* than the 3 s outage itself — to 0.20–0.45 s at 6 s. By a
-3 s allowance the lane recovers nearly all of a 3 s outage.
+from 5.53–6.20 s at a 0.5 s budget — about the length of the outage itself, so a shallow allowance
+recovers essentially none of it — to 0.20–0.45 s at 6 s. By a 3 s allowance the lane is already
+recovering the large majority of a 5 s outage.
 
 **It is not free, and what it costs is delivery latency that does not come back inside the window.**
 Late-window latency rises with the allowance, from ~4.5 s at the 0.5 s budget to 10.7–12.3 s at 6 s,
@@ -375,7 +376,7 @@ its sibling. **The late-window figure is the statistic reported above for exactl
 
 *Domain: file, on the subscriber's capture — delivery latency to a file sink, not to a decoder with a
 bounded buffer, which would have to drop or drift instead of lagging. Single host, one netns path at
-20 Mb/s and 100 ms RTT; not cross-host. One impairment shape — a single 3 s total outage — so this
+20 Mb/s and 100 ms RTT; not cross-host. One impairment shape — a single 5 s total outage — so this
 says nothing about partial loss, and the loss ladder elsewhere in this file is the place for that.*
 
 ## Objective
