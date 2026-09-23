@@ -1851,6 +1851,23 @@ continuity counters and PCR — and launders any damage done upstream of it.
 > process boundary — and treat "delivers more programme time than the run lasted" as the signature of
 > a lost clock, because loss and continuity counts alone do not distinguish it from a bad link.*
 
+### A capture that stops early grades as a flawless cell
+
+*From [T28](test-28-failure-injection-matrix.md) P1-m and the idle-timeout bracket.* A grader that
+measures media lost by comparing programme time against bytes delivered can only see a hole if
+something arrives *after* it. When the session dies mid-cell the capture simply ends, and the grader
+reports **0.000 s lost, 0 holes, 0 continuity errors** — the best possible score, for the worst
+possible outcome. This has now happened twice in one experiment: an SRT cell that captured 19.8 s
+against its siblings' 57.6 s, and both cells where a transport outage reached the QUIC idle timeout
+and the exporter exited with `dropped`, each capturing about a third of the bytes of a surviving
+cell and scoring perfectly.
+
+> **Grade the span and the byte count before reading any quality metric**, and treat a cell whose
+> span falls materially short of its siblings as void rather than as clean. An off-air session and a
+> perfect one are indistinguishable in the headline figure, and the headline figure is the one that
+> reaches the summary table. *The corollary is that a control alone is not enough — the controls here
+> were clean; it was the impaired cells that lied.*
+
 ### A median across a window containing a step measures where the step fell
 
 *From [T28](test-28-failure-injection-matrix.md) P1-m.* Two replicates of the same MoQ outage cell

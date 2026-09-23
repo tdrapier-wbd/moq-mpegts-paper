@@ -100,10 +100,12 @@ original reading was available at all is that the scatter at budgets shorter tha
 factor of seven, so any two single samples can be ordered either way.
 
 **The 30 s cell is a different failure and should not be read as the ladder's top rung.** It lost
-30.125 s — *more* than the outage — where the budget model predicts 27 s. 30 s is also
-`DEFAULT_IDLE_TIMEOUT`, so this cell straddles the point where the QUIC session dies rather than
-starving, and what it measures is teardown and re-establishment rather than a gap. Attributing it
-needs cells either side of the timeout (20 s and 40 s) and the idle timeout moved explicitly; not run.
+30.125 s — *more* than the outage — where the budget model predicts 27 s. 30 s is also the default
+`--quic-idle-timeout`, so this cell straddles the point where the QUIC session dies rather than
+starving, and what it measures is teardown rather than a gap. **This is now attributed rather than
+suspected**: the bracketing cells are in §*The 30 s cell was the QUIC idle timeout*, and they confirm
+it — at the default the session ends and does not return, and with the timeout raised the same
+outage becomes ordinary starvation.
 
 **0 continuity errors in every cell, including the 30 s one**, is a broadcast-domain result in its own
 right and it is not what an impaired TS path normally does. Loss on this lane presents as missing
@@ -382,6 +384,46 @@ bounded buffer, which would have to drop or drift instead of lagging. Single hos
 20 Mb/s and 100 ms RTT; not cross-host. One impairment shape — a single 5 s total outage — so this
 says nothing about partial loss, and the loss ladder elsewhere in this file is the place for that.*
 
+#### The 30 s cell was the QUIC idle timeout, and bracketing it separates a starved session from a dead one
+
+The outage table above flagged its 30 s cell as unattributable: it lost 30.125 s where the budget
+model predicts 27 s, and 30 s is also the default `--quic-idle-timeout` on **both** the relay and the
+client, so the cell straddles the point where the session dies rather than starves. Running the same
+three outages either side of that boundary settles it. Six cells, one replicate each, build
+`53f8aa99d`, `--latency-max 3s`, the namespace rig at 20 Mb/s and 100 ms RTT; the only variable is
+`MOQ_QUIC_IDLE_TIMEOUT`, which both binaries honour.
+
+| outage | idle timeout **30 s** (default) | idle timeout **120 s** |
+|---|---|---|
+| 20 s | 6.000 s lost, 66.2 MB captured | 1.975 s lost, 69.2 MB captured |
+| 30 s | **"0.000 s lost", 23.5 MB — session dead** | 21.850 s lost, 70.0 MB captured |
+| 40 s | **"0.000 s lost", 23.6 MB — session dead** | 40.725 s lost, 66.1 MB captured |
+
+**At the default, an outage that reaches the idle timeout ends the session and it does not come
+back.** Both the 30 s and the 40 s cells terminate with `Caused by: dropped` in the subscriber log,
+capture about a third of the bytes the surviving cells do, and never resume inside the window.
+**Move the timeout out of the way and all three become ordinary starvation**: the session survives,
+the loss scales with the outage — 1.975 s, 21.850 s, 40.725 s — and the 40 s cell logs
+`current group evicted; skipping to next buffered group … Hang(Moq(Old))`, which is
+[#3515](https://github.com/moq-dev/moq/pull/3515)'s skip working as intended rather than an exit.
+
+**So the 30 s cell was never a media result.** It measures teardown, and the budget model was right
+to disagree with it. The deployment rule is the durable part: **`--quic-idle-timeout` must exceed the
+longest transport outage the route is expected to ride through**, on both ends, and its 30 s default
+is below the outage lengths a satellite or terrestrial contribution path can present.
+
+**The failure mode is the one [#3926](https://github.com/moq-dev/moq/issues/3926) asks about, reached
+by a route that issue did not describe.** That question was filed about the publisher going away;
+here the publisher never left — a transport outage alone produced the same `dropped` exit. An
+exporter that exits rather than waiting is off air permanently where a reconnecting one would have
+been degraded for 40 s.
+
+> **And the grader says the dead cells are perfect.** Both report **0.000 s media lost, 0 holes and 0
+> continuity errors**, because a capture that simply stops has nothing after the hole to compare
+> against. Only the byte count and the span reveal it. This is the second time in this experiment
+> that a truncated capture has scored as a flawless cell — see the excluded SRT cell in §*The matched
+> ladder* — and it is now a standing check rather than an observation.
+
 #### The lane does not re-converge: it steps once and holds the new latency
 
 The 60 s cells above could not distinguish a lane still falling behind from one that had settled at a
@@ -584,8 +626,10 @@ to record was against a stale figure.
   yet written.
 - **Extend the re-convergence pass beyond 117.8 s.** The source clip, not the commanded window, ended
   it. A lane flat to ±0.24 s over 75 s is not converging, but "never" is not yet measured.
-- **Bracket the idle timeout.** 20 s and 40 s outages with `--server-quic-idle-timeout` set
-  explicitly, to separate a starved session from a dead one.
+- ~~**Bracket the idle timeout.** 20 s and 40 s outages with the idle timeout set explicitly, to
+  separate a starved session from a dead one.~~ **Done** — the flag is `--quic-idle-timeout`, not
+  `--server-quic-idle-timeout`, and the result is in §*The 30 s cell was the QUIC idle timeout*. One
+  replicate per cell; worth replicating before any figure from it is quoted outside this file.
 - **The remaining transport steps** — loss, reorder and bandwidth — on the rig as it stands.
 - **The infrastructure axis**: kill and restart a publisher, a relay and an exporter. This needs no
   emulator and could equally run on the macOS workstation.
