@@ -966,7 +966,10 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   111/111 for the merged form) and **landed inconsistently, costing 5.9 points of agreement** — a
   one-character change from `!=` to `>` in the due check, which stops a backwards timestamp counting
   as a new slot. **It merged in the `>` form, changing its own measured result**, which is the
-  argument for treating unmerged-code evidence as provisional.
+  argument for treating unmerged-code evidence as provisional. **A residual survives the fix and is
+  now measured**: #2825 moved the cadence from wall-clock into media time, but its *origin* is still
+  the first frame the exporter saw, so two legs that join at different moments run the same period at
+  different phase and never coincide — see *The residual #2825 left* below.
 - **Continuity counters**, numbered from process state, leave exporters that did not start together
   permanently offset by a constant — the single field whose masking lifts agreement to ~98 %. Filed as
   [#2779](https://github.com/moq-dev/moq/issues/2779), and prototyped here rather than only
@@ -1002,6 +1005,40 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   of `(timestamp, pid, name)` over the tracks that have a *pending* frame, so the tiebreak is
   deterministic and the candidate set is not. The invariant was stated as a requirement — the emission
   order should be a function of the media timeline — with the design left to the maintainer.
+
+### The residual #2825 left, and the measurement that can see it — contributed as [#3947](https://github.com/moq-dev/moq/pull/3947)
+
+The maintainer asked for exactly one thing on [#2825](https://github.com/moq-dev/moq/pull/2825), and
+said why nothing in-tree could supply it: the two late-join tests there compare two exporters *inside
+one process* over a synthetic broadcast, so both legs inherit one start point and the tests are blind
+to anything keyed to it. He asked for a measurement that works against a real stream, runnable
+against `test/smoke/` fixtures so it could be a gate rather than a one-off.
+
+`test/ts/table-anchor.py` plus a `run.sh --pair` mode is that measurement, ported to the repository's
+shape. `--pair` subscribes twice against one broadcast with the second leg joining late — the late
+join is the whole point, since two exporters started together can agree on a cadence by having
+started together. The statistic is the PTS of the frame each table was emitted against, and
+**agreement** is the emission points both legs used over those either used, counted only inside the
+media time the two captures share so a late join costs nothing.
+
+**It separates the tables that are anchored from the one that is not.** On a 30 s round-trip with the
+second leg joining 8 s in, PAT and PMT reach 94.37 % agreement, while SDT reaches 0.00 % — both legs
+running a 2.005 s period, 0.512 s out of phase. It reproduces at other join offsets (6 s in: 5.26 %
+at 0.480 s of phase), and the offset is simply wherever the second exporter started.
+
+**This is a residual of #2825 rather than a regression of it.** The fix moved the SI cadence from
+wall-clock into media time, which is what made a single-track, same-start pair reach 100 %. It did
+not move the cadence's *origin*, which is still the first frame the exporter saw. Two legs that join
+at different moments therefore run the same period at different phase, permanently — no amount of
+running time brings them together, which is what distinguishes this from a settling transient.
+
+No fix was proposed with it. SDT is the one table in this set with no natural media anchor, which is
+plausibly why it ended up on a timer at all, so where that cadence should be anchored is upstream's
+call. The mode is opt-in and no CI arm invokes it, so nothing turns red while that is decided.
+
+Grader validation, since a comparison tool that cannot fail is not evidence: a capture graded against
+itself gives 100 % on every table, and nulling every second PAT/PMT emission on one leg drops those
+two to 50.60 % and 51.63 % and fails while the untouched tables stay at 100 %.
 
 ### A takeover livelock — closed
 

@@ -267,14 +267,25 @@ run_cell() {
 	esac
 
 	sleep "$SETTLE"
-	if [ "$impair" = outage ]; then
+	case "$impair" in
+	outage)
 		set_loss 100
 		sleep "$OUTAGE"
 		clear_loss
-	else
-		sleep "$OUTAGE"
-	fi
-	sleep "$RECOVER"
+		sleep "$RECOVER"
+		;;
+	loss*)
+		# Sustained partial loss, not a burst: held for the rest of the cell, because the
+		# question is how each lane trades content against latency under continuous
+		# impairment rather than how it recovers from a discrete one.
+		set_loss "${impair#loss}"
+		sleep $((OUTAGE + RECOVER))
+		clear_loss
+		;;
+	*)
+		sleep $((OUTAGE + RECOVER))
+		;;
+	esac
 	cleanup_procs
 
 	# ---- grade ----

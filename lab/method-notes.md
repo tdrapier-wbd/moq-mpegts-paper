@@ -30,6 +30,21 @@ having.
 > before the run: a source that merely looks continuous confounds the experiment it was built to
 > clean up, and does so invisibly.
 
+**A comparison tool that cannot fail is not evidence.** *(#2825 anchor-point port, [upstream](upstream-contributions.md) §3.)*
+
+> `table-anchor.py` grades two exporter captures against each other and reports a percentage. A tool
+> shaped like that will report a plausible percentage whether or not it is reading the right field,
+> and a first run that returns "94 %" looks like a measurement rather than a thing still to be
+> checked. Nothing about the number distinguishes a working comparison from one that agrees with
+> itself by construction.
+>
+> **Give a comparison instrument a positive and a negative control before quoting it.** Positive: a
+> capture graded against itself must return 100 %. Negative: a deliberate, known perturbation of one
+> leg must fail, by the amount the perturbation implies, and must leave the untouched parts at 100 %.
+> Here that was nulling every second PAT/PMT emission on one leg, which moved exactly those two rows
+> to 50.60 % and 51.63 % and left SDT and NIT at 100 %. The negative control is the one that matters:
+> it is what separates an instrument that is measuring from one that is merely agreeing.
+
 **A gap in a delivery trace is not evidence of damage until a run with the intervention removed has
 been shown not to have one.** *(T38.)*
 
@@ -1867,6 +1882,22 @@ cell and scoring perfectly.
 > perfect one are indistinguishable in the headline figure, and the headline figure is the one that
 > reaches the summary table. *The corollary is that a control alone is not enough — the controls here
 > were clean; it was the impaired cells that lied.*
+
+### Matching on a measured quantity can collapse the sweep you thought you were running
+
+*From [T28](test-28-failure-injection-matrix.md) P1-m, the sustained-loss ladder.* Matching the SRT
+arm to the MoQ lane's *measured* latency rather than its nominal budget is the correction that made
+the outage comparison valid, and it is still right. But MoQ's measured latency is ~2 s at every
+nominal budget, so matching three budgets — 0.5 s, 2 s and 6 s, a twelve-fold range — produced three
+SRT settings of 2,165, 2,016 and 2,012 ms. The SRT row looked like a budget sweep, was laid out as
+one, and is one buffer setting run three times. Its near-identical cells read as suspicious
+repetition until the matched values were examined, at which point they read as the expected result.
+
+> **After matching, print the matched values and check they still differ before reading the arm as a
+> sweep.** A matching function maps the independent variable through a measurement, and a
+> measurement that is flat in that variable maps the whole range onto one point. The arm remains
+> valid at the value it did run — it simply establishes one condition rather than a ladder, and the
+> write-up has to say which.
 
 ### A median across a window containing a step measures where the step fell
 

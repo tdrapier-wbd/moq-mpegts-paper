@@ -153,11 +153,12 @@ $0.002–$0.140; the cloud band sits in the middle, above commodity CDN and belo
 Surveyed transit against list cloud egress is a **four-hundredfold** gap, and it is the figure most
 likely to be misquoted, because transit buys a port and a BGP session rather than a delivery service.
 Loaded with facilities, hardware and transit diversity, self-hosted delivery lands at
-**$0.001–0.004/GB — the same band as commodity CDN volume pricing** — so **the defensible gap between
-running delivery and renting it from a hyperscaler is about tenfold.** That two independent routes to
-delivery, one built and one bought, agree on the cost is the most useful thing in this table: it
-suggests commodity CDN rates sit near the real cost of delivery at scale, and that most of what sits
-above them is margin, product or positioning.
+**$0.001–0.004/GB — the same band as commodity CDN volume pricing** — which puts **the defensible gap
+between running delivery and renting it from a hyperscaler at about tenfold.** That build-up is
+*illustrative* rather than a rate anyone has been quoted, so the agreement is between one published
+route to delivery and one modelled one. It is still the most useful thing in this table: it suggests
+commodity CDN rates sit near the real cost of delivery at scale, and that most of what sits above them
+is margin, product or positioning.
 
 Independent CDN list is nine to forty-five times below cloud egress list, published on a public price
 page with no negotiation; the hyperscalers' own CDNs are barely cheaper than their raw egress ($0.085
@@ -180,7 +181,7 @@ Not buying metered egress at all is the largest structural lever. Owned/co-locat
 transit, ports and facilities — unmetered per GB. Illustrative all-in PoP: **$0.001–0.004/GB** (~tenfold
 below list egress; **distrust most** — illustrative facilities/hardware assumptions).
 
-Open-source relay + standardised protocol lowers entry vs the SRT era; a relay is a cache (§4.4), so the
+Open-source relay + standardised protocol lowers entry vs the SRT era; a relay is a cache (§4.6), so the
 operational shape is familiar. Caveats: capex for opex, utilisation threshold, reach where built, control
 plane still required. **Barrier lower, not absent.**
 
@@ -205,8 +206,9 @@ figure — per $1M/year normaliser: **~95** (committed cloud), **115** (70 % clo
 **323** ($0.005 CDN). Self-hosting (~970/destination at illustrative rates, parity ~1,000) omitted for
 reach reasons (§4.3).
 
-**Reclamation bound:** arguable to ~95 destinations on published cloud rates; commodity CDN to high
-hundreds; 1,000+ out of reach for anything purchasable today. Incumbent free fan-out inside footprint
+**Reclamation bound:** arguable to ~95 destinations on published cloud rates; to high hundreds if a
+relay can be rented at commodity CDN rates, which is an *assumption* and not a rate anyone has
+announced; 1,000+ out of reach for anything purchasable today. Incumbent free fan-out inside footprint
 vs linear unicast columns — ceiling *moves*, not disappears.
 
 **Transport choice moves the table by single digits; destination count by three orders** (§1). One
@@ -236,7 +238,7 @@ cloud egress; MoQ relay from one supplier at 5–10× commodity today.
 **Relay fan-out does not reduce last-mile egress** — measured: 150 subscribers get **9.84 Mb/s each, a
 full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state* (1.39 MB, 0.806 % core per
 subscriber). Upstream backhaul economises where receivers cluster (~$11,500/yr flat vs $185,000 for
-sixteen without relay on the eight-service model) — same topology as HTTP cache (§4.4). **Carriage
+sixteen without relay on the eight-service model) — same topology as HTTP cache (§4.6). **Carriage
 overhead is not where the money is** — 5.3 % wire saving is real but dwarfed by supplier choice (§3).
 
 ### 4.6 The market-structure argument
@@ -254,16 +256,18 @@ and which market prices it?**
 Hyperscalers sell elasticity; always-on primary distribution should buy committed/commodity delivery
 instead.
 
-**A CDN can operate a MoQ relay; it cannot commoditise SRT** — a relay is a cache (§4.4); SRT fan-out
-needs a stateful gateway per stream per destination (media-server business). SRT scales via
+**A CDN can operate a MoQ relay; it cannot commoditise SRT** — a relay is a cache, holding no
+per-destination state a CDN would have to operate; SRT fan-out needs a stateful gateway per stream per
+destination (media-server business). SRT scales via
 re-origination or own transit; CDNs take SRT as contribution ingest only. **Open spec + cache-shaped
 relay primitive** enables multi-vendor competition — openness alone (SRT) did not.
 
 **Limits this to sub-second routes.** Seconds-latency primary distribution favours segmented HTTP on
 commodity economics; the broadcast-grade edge layer cost remains on either plane (§7.2).
 
-**At its narrowest: MoQ could bring commodity pricing to the sub-second band** — parity ~95 vs ~323
-destinations in §4.4, not a general cheapest-feed claim.
+**At its narrowest: MoQ could bring commodity pricing to the sub-second band** — parity ~95 destinations
+on published cloud rates against ~323 at an *assumed* commodity relay rate (§4.4), not a general
+cheapest-feed claim. The whole of that gap is the assumption.
 
 **Four things would falsify it, and none is settled.** Only one CDN has announced a MoQ relay, at
 five to ten times commodity delivery. Professional contribution carries SLA, monitoring and support
