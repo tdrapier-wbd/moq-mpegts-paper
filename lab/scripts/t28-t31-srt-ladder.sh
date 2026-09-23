@@ -99,6 +99,11 @@ pub() { ip netns exec t8b-pub "$@"; }
 sub() { ip netns exec t8b-sub "$@"; }
 
 set_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" loss "${1}%" limit 100000 >/dev/null 2>&1; }
+# netem reorders only against a delay, and the reordered packets are the ones sent *early* —
+# `reorder P% 50%` sends P% of packets immediately and delays the rest by DELAY_MS, with 50 %
+# correlation. The base delay is already there, so reorder costs no extra latency and the arm
+# isolates ordering from the loss and latency axes rather than confounding all three.
+set_reorder() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" reorder "${1}%" 50% limit 100000 >/dev/null 2>&1; }
 clear_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" limit 100000 >/dev/null 2>&1; }
 
 # Every pattern here has to match the worker and nothing that merely *mentions* the worker.
@@ -279,6 +284,14 @@ run_cell() {
 		# question is how each lane trades content against latency under continuous
 		# impairment rather than how it recovers from a discrete one.
 		set_loss "${impair#loss}"
+		sleep $((OUTAGE + RECOVER))
+		clear_loss
+		;;
+	reorder*)
+		# Held for the rest of the cell, as the loss arm is. Reorder is its own axis and must
+		# not be read off either of the others: the outage and loss ladders rank the two lanes
+		# in *opposite* directions, so no impairment shape here stands for another.
+		set_reorder "${impair#reorder}"
 		sleep $((OUTAGE + RECOVER))
 		clear_loss
 		;;

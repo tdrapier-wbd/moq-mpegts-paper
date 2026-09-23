@@ -1032,9 +1032,13 @@ not move the cadence's *origin*, which is still the first frame the exporter saw
 at different moments therefore run the same period at different phase, permanently — no amount of
 running time brings them together, which is what distinguishes this from a settling transient.
 
-No fix was proposed with it. SDT is the one table in this set with no natural media anchor, which is
-plausibly why it ended up on a timer at all, so where that cadence should be anchored is upstream's
-call. The mode is opt-in and no CI arm invokes it, so nothing turns red while that is decided.
+The defect is filed separately as [#3948](https://github.com/moq-dev/moq/issues/3948), so the PR
+stays a test contribution and the product decision has its own thread. No fix was proposed with
+either. SDT is the one table in this set with no natural media anchor, which is plausibly why it
+ended up on a timer at all, so where that cadence should be anchored is upstream's call — the
+issue sets out three options and says plainly that accepting the divergence and documenting it is
+a legitimate answer. The mode is opt-in and no CI arm invokes it, so nothing turns red while that
+is decided.
 
 Grader validation, since a comparison tool that cannot fail is not evidence: a capture graded against
 itself gives 100 % on every table, and nulling every second PAT/PMT emission on one leg drops those
