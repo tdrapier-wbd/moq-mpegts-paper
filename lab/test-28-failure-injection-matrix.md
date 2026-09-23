@@ -520,6 +520,58 @@ domain. Two replicates per cell. Co-resident netns, so the figures are not a cro
 claim. Continuity errors are not comparable between the lanes — `export ts` re-synthesises SI, so MoQ
 reads 0 by construction — and are not netted into loss anywhere above.*
 
+### Reorder is a third pattern and neither lane wins it: SRT delivers everything and damages it, MoQ keeps it clean and loses the picture match
+
+Two impairment shapes had already ranked the lanes in opposite directions, which is a reason to run
+the third rather than infer it. Reorder does not resolve into a ranking at all.
+
+Same rig and the same matched budgets. `netem ... reorder P% 50%` against the existing 50 ms delay,
+so the reordered packets are the ones sent early and the arm costs no extra latency — ordering is
+isolated from the loss and latency axes rather than confounded with them. Held for the last 40 s of
+the window, as the loss arm is. Two replicates.
+
+**At 5 % reorder neither lane moves.** Both grade 0.000 s lost at every budget, SRT takes no
+continuity errors, and MoQ's picture match and span are indistinguishable from unimpaired. The cell
+is reported because a null result on the axis that used to separate these lanes is worth recording.
+
+**At 20 % reorder the two lanes fail in their characteristic directions, and neither is preferable
+on the evidence here:**
+
+| | SRT | MoQ |
+|---|---|---|
+| media lost | **0.000 s in all six cells** | 0.000 s in four; 1.825 s and 5.075 s in two |
+| continuity errors | **430–692 in four of six cells** | 0 everywhere, by construction |
+| capture span | full, 57.6–57.8 s | 49.6–56.4 s |
+| matched pictures | full, 2,019–2,026 | **767–821, against 1,996 unimpaired** |
+| duplication | 0 | 3.53–11.28 s |
+
+**SRT is byte-transparent, so reordering arrives as damage rather than absence** — the programme is
+all there and several hundred continuity errors are in it. **MoQ re-synthesises, so its output stays
+syntactically clean and the cost surfaces somewhere else.** Where, exactly, is not settled by this
+run: the latency instrument's matched-picture count falls to about 40 % of the unimpaired sample,
+which is a much larger drop than the loss arm produced.
+
+**That collapse is a caveat on the latency column before it is a finding about the media.** With
+only ~770 of ~2,000 pictures matched, the latency medians for those cells rest on 40 % of the
+sample, and one of them (1,326.8 ms at a 2 s budget) sits *below* the unimpaired figure, which is
+not a credible delivery latency and is better read as the instrument struggling to pair pictures
+across a reordered stream. **No latency conclusion is drawn from the 20 % reorder cells.** Whether
+the matched-picture collapse also indicates a real presentation-order defect at the egress is the
+open question this arm leaves, and it needs an instrument that grades output order directly rather
+than one that infers it from pairing.
+
+**What the arm does establish is the negative.** Three impairment shapes on one rig at one matched
+latency now rank these two lanes three different ways — MoQ ahead under a discrete outage, SRT ahead
+under sustained loss, and neither ahead under reorder. A resilience claim about either lane that
+does not name its impairment shape is not supported by anything here.
+
+*Measurement point P1, domain wire on both lanes; both unimpaired controls grade 0.000 s lost. Two
+replicates per cell, one control per budget, single host and namespace path at 20 Mb/s and 100 ms
+RTT, so not cross-host. Continuity errors are not comparable between the lanes — `export ts`
+re-synthesises SI and reads 0 by construction — and are not netted into loss. The matched SRT arm is
+again one buffer (≈2 s) run three times rather than a sweep, for the reason in
+§*Sustained partial loss*.*
+
 ## Objective
 
 For each defined failure on each lane, measure how much *programme* is lost or corrupted before
@@ -664,8 +716,8 @@ reported as tied.
 | # | Criterion | Verdict |
 |---|---|---|
 | 1 | Grader validity: a control reports 0 s lost and 0 continuity errors **on both lanes**; a synthetic hole reproduces the injected duration ± 100 ms | **Now passes on both lanes.** Every unimpaired control on the matched ladder grades 0.000 s lost and 0 continuity errors on MoQ *and* SRT. The earlier SRT failure (controls at 4.196–5.391 s lost) was real and the criterion is what caught it; its cause was the split publisher a source-side tap forces, not the tap, and a single-`tsp` publisher clears it |
-| 2 | Matrix completeness | **Partial.** Both transport lanes are now run on the outage axis — four outage durations on MoQ, and six budgets × two replicates on MoQ *and* SRT matched on measured latency, plus a re-convergence pass — and on the sustained partial-loss axis, at 5 % and 10 % × three budgets × two replicates on both lanes. The reorder and bandwidth steps, the infrastructure axis and the segmented lane are not |
-| 3 | Ranking published | **Met for MoQ against SRT on both axes run, and the two axes rank in opposite directions.** By criterion 5's rule — lower median media lost wins — MoQ is superior under a discrete outage at every budget from 2 s up (0.20–2.23 s against SRT's 3.46–3.76 s), and SRT is superior under sustained partial loss at every budget and both rates (0.000 s against 0.33–3.88 s at 5 %). Both verdicts are published, in §*The matched ladder* and §*Sustained partial loss*, together with the reason the first is incomplete: the lanes do not pay in the same currency, and a rule that scores only media lost cannot see that MoQ buys its content with delivery latency it never gives back. **A single-axis ranking of these two lanes is therefore not supportable, and no impairment shape should be treated as standing for the others.** The segmented lane is still unrun, so the three-way ranking is not |
+| 2 | Matrix completeness | **Partial.** Both transport lanes are now run on three transport axes, all matched on measured latency and all two replicates deep: the outage axis (six budgets, plus four outage durations on MoQ and a re-convergence pass), sustained partial loss at 5 % and 10 %, and reorder at 5 % and 20 %. The bandwidth step, the infrastructure axis and the segmented lane are not |
+| 3 | Ranking published | **Met for MoQ against SRT on all three axes run, and they rank three different ways.** By criterion 5's rule — lower median media lost wins — MoQ is superior under a discrete outage at every budget from 2 s up (0.20–2.23 s against SRT's 3.46–3.76 s); SRT is superior under sustained partial loss at every budget and both rates (0.000 s against 0.33–3.88 s at 5 %); and **reorder does not resolve into a ranking at all**, with SRT delivering the whole programme carrying 430–692 continuity errors and MoQ delivering it clean but losing 60 % of its picture match. All three are published, with the reason the first is incomplete: the lanes do not pay in the same currency, and a rule that scores only media lost cannot see that MoQ buys its content with delivery latency it never gives back. **A single-axis ranking of these two lanes is therefore not supportable, and no impairment shape stands for the others — that is now measured on three shapes rather than argued.** The segmented lane is still unrun, so the three-way ranking is not |
 | 4 | Comparability | **Pass on the cells run.** One host, one rig, one build, one clip, one grader and one domain across every cell, with an unimpaired control through the same path. On the matched ladder the SRT arm's `--latency` is additionally set from the MoQ lane's measured median rather than its nominal budget |
 | 5 | Segmented receiver axis | **Not run.** The apparatus is on the same host (T20's HTTP/3 and HLS lane), so this is now a session's work rather than a blocker |
 
@@ -695,7 +747,12 @@ to record was against a stale figure.
   loss*. What it leaves open is narrower: the 10 % MoQ cells are unranked on unequal spans and want
   a re-run, the duplication signal is unattributed, and a genuine SRT budget sweep under loss was
   not run because matching on measured latency collapsed the three budgets onto one setting.
-- **The remaining transport steps** — reorder and bandwidth — on the rig as it stands.
+- ~~**The reorder step.**~~ **Done, and it ranks the lanes a third way** — see §*Reorder is a third
+  pattern*. It leaves one question sharper than it found it: MoQ's matched-picture count falls to
+  ~40 % at 20 % reorder, which is currently a caveat on the latency column and may be a real
+  presentation-order defect. Separating those needs an instrument that grades output order directly
+  rather than inferring it from picture pairing.
+- **The bandwidth step**, the last of the transport axes, on the rig as it stands.
 - **The infrastructure axis**: kill and restart a publisher, a relay and an exporter. This needs no
   emulator and could equally run on the macOS workstation.
 - **The segmented lane**, using T20's HTTP/3 and HLS apparatus already built on the same host. Until
