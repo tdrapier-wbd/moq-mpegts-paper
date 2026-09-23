@@ -498,17 +498,19 @@ the group duration or the relay's own buffering.
 **`--max-age` is a recovery allowance, not a latency setting, and SRT's `--latency` is the opposite
 of that** ([T28](../lab/test-28-failure-injection-matrix.md)). On an unimpaired path a twelve-fold
 change in the subscriber's budget — 0.5 s to 6 s — produces **no trend at all** in delivered latency:
-every cell lands between 1.42 s and 1.98 s. SRT over the same path delivers at its nominal figure
-plus one-way delay to a tenth of a millisecond — 1050.2, 2050.3 and 3050.2 ms for 1, 2 and 3 s. MoQ's
+every cell lands between 1.845 s and 2.125 s. SRT over the same path delivers the latency it is
+commanded to within about a millisecond — 2,028.1 ms against a commanded 2,029 ms. MoQ's
 parameter is spent only on failure; SRT's is spent always. **The two numbers therefore cannot be
 equated**, and an experiment that sets them equal and compares the residual loss produces a ranking
 that is an artefact of the pairing rather than a property of either transport. Anything that reads
 `--max-age` as "the latency this lane will deliver" — a sizing table, a comparison arm, an SLA — is
-reading a budget for recovery as a commitment about steady state. *Measurement point P1, cross-host
-through the namespace rig, three replicates; the MoQ half only. The SRT half is still unrun: its
-instrument is now sound — the artefact was a source-side pass-through tap, and a mirroring tap grades
-identically to no tap at all ([T28](../lab/test-28-failure-injection-matrix.md)) — but the arm itself
-has not been re-taken.*
+reading a budget for recovery as a commitment about steady state. *Measurement point P1, through the
+namespace rig on a single host at 20 Mb/s and 100 ms RTT; both lanes now measured, the SRT arm with
+its `--latency` set to the MoQ lane's measured median rather than to the nominal budget. Both grade
+0.000 s lost and 0 continuity errors unimpaired. The earlier source-side measurement artefact is
+resolved, and its cause was the **split publisher** a source-side tap forces rather than the tap
+itself: separating `regulate --pcr-synchronous` from the SRT sender costs the transmitter its pacing
+([T28](../lab/test-28-failure-injection-matrix.md)).*
 
 The operational consequence is the one in [Architecture](architecture.md) §8.5: pin the controller
 explicitly, because the resolved default is backend-specific, and choose it against the route's own

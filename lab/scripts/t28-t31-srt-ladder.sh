@@ -305,7 +305,10 @@ run_cell() {
 		"${lat_median:-NA}" "${lat_p95:-NA}" "${matched:-NA}" "$session" "$SUMMARY" <<-'PY'
 		import json, sys
 		g = json.load(open(sys.argv[1]))
-		row = sys.argv[2:8] + [
+		# argv[2:9] is lane..capture_bytes: the slice stopped at 8 and silently dropped
+		# capture_bytes, leaving 15 fields under a 16-column header and shifting every
+		# name-based read by one from media_lost_s onward.
+		row = sys.argv[2:9] + [
 		       g["media_lost_s"], g["media_duplicated_s"], g["hole_count"],
 		       g["largest_hole_s"], g.get("continuity_errors", "na")] + sys.argv[9:13]
 		open(sys.argv[13], "a").write(",".join(str(x) for x in row) + "\n")

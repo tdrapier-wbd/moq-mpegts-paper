@@ -1851,6 +1851,34 @@ continuity counters and PCR — and launders any damage done upstream of it.
 > process boundary — and treat "delivers more programme time than the run lasted" as the signature of
 > a lost clock, because loss and continuity counts alone do not distinguish it from a bad link.*
 
+### A median across a window containing a step measures where the step fell
+
+*From [T28](test-28-failure-injection-matrix.md) P1-m.* Two replicates of the same MoQ outage cell
+reported median delivery latencies of **7,936 ms and 2,184 ms** — a 3.6× disagreement that looked
+like the lane behaving non-deterministically. It was not. Delivery latency in these cells does not
+vary about a mean; it *steps* when the outage lands and stays up. A median over the whole window
+therefore reports the pre-outage value whenever fewer than half the samples are post-outage, so it
+encodes the outage's position in the window rather than its effect. The two cells agreed closely on
+p95 (9,868 ms) and on the first-third-to-last-third trend (1,896 → 9,721 ms).
+
+> **Choose the statistic to match the shape of the change.** For a step, report the late-window value
+> and the trend across the window; keep the median only for quantities that are stationary within a
+> cell. *And where a metric is still moving when the window ends, say the figure is a lower bound
+> rather than a value* — several of these cells had not settled at 60 s.
+
+### A declared CSV column that is never written shifts every field after it
+
+*From [T28](test-28-failure-injection-matrix.md) P1-m.* The ladder's header declared sixteen columns
+and its writer emitted fifteen: a Python slice `sys.argv[2:8]` stopped one short and dropped
+`capture_bytes`, which sat in the middle of the row. Nothing failed. Every name-based read from
+`media_lost_s` onward silently returned its neighbour's value, so a first pass at the results table
+reported the *duplication* figure as media lost and the *p95* as the median, and the numbers were
+plausible enough to have been written up.
+
+> **Assert the field count when parsing a self-generated CSV**, and reconcile at least one row
+> against the human-readable log before building a table from it. A shifted column produces wrong
+> numbers of the right magnitude, which is the hardest kind to catch by eye.
+
 ### Never edit a shell script while it is running
 
 *From [T8b](test-8b-congestion-control.md) P0-i.* A 20-minute pass finished all ten cells, then

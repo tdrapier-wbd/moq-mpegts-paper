@@ -177,6 +177,11 @@ This is the result P1-m was built to establish before comparing anything, and it
 every cell lands between 1.42 s and 1.98 s, and 4 s is the *fastest* of the six. **After the outage,
 latency scales with the budget**, from ~2.5–5.8 s at 0.5 s to a very tight ~10.7–10.9 s at 6 s.
 
+*These cells predate the rig corrections below and carry two inline tap stages, so the absolute
+figures are rig-inclusive; the sound-rig replication is in §*The matched ladder*, which reproduces
+both effects — no unimpaired trend, and post-outage latency scaling with the budget — and adds the
+SRT comparator this pass lacked. Quote that section's figures, not these.*
+
 So `--max-age` is not an end-to-end delay budget in the sense SRT's `--latency` is. It is the amount
 of *recovery* delay the subscriber will accept before it gives up on a group, and on a healthy path it
 is not spent at all: the lane delivers at its own floor whatever the number says. SRT's `--latency`,
@@ -193,7 +198,7 @@ Two qualifications on the absolute figures. They are **rig-inclusive**: the ~1.4
 lane alone and must not be quoted as one. What is robust to a constant offset is the **invariance
 across budgets** and the **post-outage scaling**, and those are the findings.
 
-#### The SRT lane's budget *is* its delivered latency, and the arm is still not comparable
+#### The SRT lane's budget *is* its delivered latency, and on this pass the arm was not yet comparable
 
 The SRT lane now produces cells, at budgets {1, 2, 3} s. Its latency behaviour is the exact complement
 of the MoQ lane's:
@@ -209,7 +214,8 @@ Nominal plus one-way path delay, to a tenth of a millisecond, every time. **So t
 spent, MoQ's is a recovery allowance that is spent only on failure. Equating the two numbers — the
 obvious way to build this comparison, and the way it was originally specified — compares a lane
 running at 2.05 s against a lane running at 1.9 s *and* holding 2 s of recovery headroom. That is not
-one buffer measured twice.
+one buffer measured twice. *`MATCH_FILE` is the fix, and §*The matched ladder* is the comparison this
+paragraph was blocking.*
 
 **The loss figures from this arm are nevertheless void, and the reason is the instrument.** The SRT
 controls do not grade clean: unimpaired cells lost 4.196–5.391 s with 5,704–8,930 continuity errors.
@@ -310,6 +316,67 @@ its output plugin until the `regulate` input stage has filled, which takes **~8 
 and TSDuck's SRT caller does not retry. A 3 s sleep between starting the listener and starting the
 caller voided every SRT cell in the first pass, with nothing in the publisher's log to say why. The
 rig now polls for the bound port and marks a cell `nobind` if it never appears.
+
+### The matched ladder: the two lanes make opposite trades, and MoQ's recovery allowance is paid in latency that does not come back
+
+With the rig sound on both sides, the ladder ran matched: the MoQ lane first, its **measured**
+unimpaired median delivery latency at each budget written to `MATCH_FILE`, then the SRT lane with
+`--latency` set to that figure rather than to the nominal budget. Two replicates per outage cell, one
+unimpaired control per budget, 60 s cells, 3 s total outage applied mid-window by `set_loss 100`.
+Build `53f8aa99d`, netns at 20 Mb/s and 100 ms RTT, source tap mirrored, egress tap inline.
+
+**The match holds.** Both lanes grade **0.000 s lost and 0 continuity errors** on every unimpaired
+cell, and SRT delivers the latency it is commanded to within about a millisecond — 2,028.1 ms against
+a commanded 2,029 ms on the control cell. The MoQ lane's own unimpaired latency is **1,845–2,125 ms
+across a twelve-fold sweep of `--max-age`**, which restates in the matched rig what §*`--max-age`
+does not set delivery latency* found: the commanded budget is not the standing latency.
+
+Under the outage the lanes diverge completely. Both replicates are shown:
+
+| `--max-age` / matched `--latency` | MoQ media lost | MoQ late-window latency | SRT media lost | SRT late-window latency |
+|---|---:|---:|---:|---:|
+| 0.5 s | 5.53 / 6.20 s | 4,535 / 4,494 ms | 3.52 / 3.57 s | 2,298 / 2,300 ms |
+| 1 s | 3.98 / 3.85 s | 6,444 / 6,628 ms | 3.74 / 3.61 s | 2,028 / 2,028 ms |
+| 2 s | 2.23 / 0.95 s | 6,635 / 9,593 ms | 3.52 / 3.62 s | 2,172 / 2,189 ms |
+| 3 s | 0.38 / 0.35 s | 8,057 / 9,721 ms | 3.49 / 3.74 s | 2,240 / 2,238 ms |
+| 4 s | 0.90 / 0.20 s | 8,121 / 8,379 ms | 3.46 s | 2,021 ms |
+| 6 s | 0.45 / 0.20 s | 12,268 / 10,707 ms | 3.76 / 3.57 s | 2,205 / 2,213 ms |
+
+**`--max-age` works: it buys back content.** MoQ's media lost falls monotonically with the allowance,
+from 5.53–6.20 s at a 0.5 s budget — *more* than the 3 s outage itself — to 0.20–0.45 s at 6 s. By a
+3 s allowance the lane recovers nearly all of a 3 s outage.
+
+**It is not free, and what it costs is delivery latency that does not come back inside the window.**
+Late-window latency rises with the allowance, from ~4.5 s at the 0.5 s budget to 10.7–12.3 s at 6 s,
+against a ~2 s unimpaired baseline on the same cells; and it is still rising when each 60 s window
+ends, so these are lower bounds rather than settled values. **The induced latency is not bounded by
+the allowance that induced it**: at a 6 s `--max-age` the lane runs roughly twice that far behind. The
+plausible mechanism is contention — backfill and live share one shaped 20 Mb/s egress, so a deeper
+allowance means more backfill, which means falling further behind — but this rig does not separate
+that from the subscriber's own scheduling, and the attribution is **unproven**.
+
+**SRT makes the opposite trade, and makes it cleanly.** Its loss is pinned at **3.46–3.76 s** — the
+outage plus a little — at *every* budget, because the allowance is not an allowance: it is a fixed
+delay. Its latency is pinned at the commanded value across the outage, moving **+0.5 to +19.8 ms**
+first third to last third. It never falls behind, and it never catches up, because it never tries.
+
+**Continuity errors are not comparable across these lanes and should not be read as a quality
+ranking.** MoQ returns **0** in every cell and SRT **927–2,451**, but that is a property of the
+egress: `moq export ts` re-synthesises the stream and regenerates continuity counters, so damage
+upstream of it is laundered, while SRT passes the transport through verbatim. The same effect hid the
+rig defect described above.
+
+*Two anomalies, both explained and neither a lane result.* One SRT cell (4 s, replicate 2) graded a
+**19.8 s** span against ~57.6 s elsewhere and is excluded as a short capture; it is the reason that
+row carries one replicate. And the *median* latency disagreed between MoQ replicates at the 3 s budget
+(7,936 against 2,184 ms) purely because a median over a window containing a step depends on where in
+the window the step fell — that cell's p95 was 9,868 ms and its trend 1,896 → 9,721 ms, in line with
+its sibling. **The late-window figure is the statistic reported above for exactly this reason.**
+
+*Domain: file, on the subscriber's capture — delivery latency to a file sink, not to a decoder with a
+bounded buffer, which would have to drop or drift instead of lagging. Single host, one netns path at
+20 Mb/s and 100 ms RTT; not cross-host. One impairment shape — a single 3 s total outage — so this
+says nothing about partial loss, and the loss ladder elsewhere in this file is the place for that.*
 
 ## Objective
 
