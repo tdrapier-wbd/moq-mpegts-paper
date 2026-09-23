@@ -1,7 +1,8 @@
 # Test 28 — Failure-injection and recovery matrix
 
-**State: run in part, 2026-09-11. The MoQ lane's outage ladder is measured; the segmented lane and
-the infrastructure axis are not.** Infrastructure and transport failures have been probed one at a
+**State: run in part. The MoQ and SRT lanes are measured across three impairment shapes — discrete
+outage, sustained partial loss and reorder — matched on measured latency; the segmented lane and the
+infrastructure axis are not.** Infrastructure and transport failures have been probed one at a
 time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported as
 recovery *time*; what a distributor buys is programme continuity, and the two are not the same number.
 This experiment applies one media-domain grader across a full matrix on both lanes.

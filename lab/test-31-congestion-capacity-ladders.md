@@ -1,17 +1,19 @@
 # Test 31 — Congestion and capacity: the step ladders, both planes
 
-**State: the MoQ step-capacity ladder is run, 2026-09-11; the segmented ladder and the latency-max ×
-contention matrix are not.** [T8b](test-8b-congestion-control.md) settled which controller wins under
-which provisioning and queue discipline, and attributed the MoQ lane's shared-bottleneck collapse to
-per-subscriber deadline shedding at `--latency-max`. This experiment asks a different question — how
-much impairment each lane absorbs before programme is lost — and extends T8b with step-capacity
-ladders on both planes plus the withheld segmented C2 cells.
+**State: the MoQ step-capacity ladder is run, on rungs re-based as multiples of stream rate; the
+segmented ladder and the latency-max × contention matrix are not.**
+[T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
+discipline, and attributed the MoQ lane's shared-bottleneck collapse to per-subscriber deadline
+shedding at `--latency-max`. This experiment asks a different question — how much impairment each
+lane absorbs before programme is lost — and extends T8b with step-capacity ladders on both planes
+plus the withheld segmented C2 cells.
 
-**Headline: the MoQ lane absorbs a transient shortfall of any depth tested and sheds steadily under a
-chronic one.** A 5 s drop to 8 Mb/s against a 9.95 Mb/s stream — a shortfall of 20 % of stream rate,
-below the rate the programme needs — cost nothing at all. The same shortfall left in place cost 7.05 s
-of programme in 45 s, in six separate holes. **0 continuity errors in every cell**, so the ladder's
-integrity invariant (criterion 3) holds throughout.
+**Headline: the MoQ lane absorbs a mild sustained shortfall entirely, and sheds in proportion to
+severity beyond it.** Against a 9.95 Mb/s stream, sixty seconds at **0.9× stream rate costs no
+programme at all**, and neither does a five-second transient at 0.8×. A chronic 0.8× sheds, and 0.5×
+sheds about three times as much. **0 continuity errors in every cell on every rung**, so the ladder's
+integrity invariant (criterion 3) holds throughout — this lane discards whole groups on a deadline
+rather than corrupting packets.
 
 **The substrate was never missing, and that was this file's error.** The rig is `t8b-netns.sh` — two
 network namespaces joined by a veth — which is Linux-only, and the campaign's workstation is macOS.
@@ -86,9 +88,14 @@ survival rather than average throughput — have not been run ([P1-d](planned-ex
 **Step-capacity ladders (both planes).** Apply the same shaped bottleneck sequence identically to MoQ
 and segmented arms:
 
-1. **20 → 8 Mb/s for 5 s** — brief deep shortfall.
-2. **20 → 12 Mb/s for 60 s** — sustained moderate shortfall.
-3. **20 → 8 Mb/s permanently** — chronic under-provision.
+Rungs are **multiples of the stream's own rate**, derived from the fixture at run time, for the
+reason in *The rungs had to be re-based* below; the provisioned rate is 20 Mb/s throughout.
+
+1. **1.2× for 60 s** — headroom, the negative control for the ladder.
+2. **0.9× for 60 s** — mild sustained shortfall, the commonest real under-provision.
+3. **0.8× for 5 s** — brief deep shortfall.
+4. **0.8× permanently** — chronic under-provision.
+5. **0.5× for 60 s** — severe sustained shortfall.
 
 For MoQ, repeat the ladder at `--latency-max` ∈ {1 s, 3 s, 4 s, 6 s} with `n ∈ {2, 3}` contending
 subscribers on the shared bottleneck — the knee C3's mechanism implies but did not locate ([P1-d](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), [T8b Next steps](test-8b-congestion-control.md#next-steps)).
@@ -125,42 +132,98 @@ Per cell, per lane:
 **Environment.** EC2 secondary, 8 vCPU / 15 GB, Ubuntu 26.04 — the primary's 2 vCPU cannot carry a
 relay, a publisher and a subscriber without the knee being the host's. Two network namespaces joined
 by veth (`t8b-netns.sh`), `cake` at the bottleneck, 100 ms base RTT (50 ms each way). Source a 120 s
-~9.95 Mb/s CBR slice of `CNNiEMEA2.ts` paced with `tsp regulate --pcr-synchronous`. Build `moq`
-0.11.0-`fd4f5d82e`, `--latency-max 3s`, n = 1 subscriber, **no groomer in the path**. Rig
-[`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh); graded with
+~9.95 Mb/s CBR slice of `CNNiEMEA2.ts` paced with `tsp regulate --pcr-synchronous`. Build
+**`84b34f54`** (noq), `--latency-max 3s`, n = 1 subscriber, **no groomer in the path**. Rig
+[`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh) with `STREAM_MBIT=9.95`; graded with
 [`t28-media-lost.py`](scripts/t28-media-lost.py) in the **wire** domain, at **P1**, one sample per
-cell. Steps are re-shaped with `tc qdisc change` so the queue is not torn down and re-added, which
+cell — except the chronic 0.8× rung, which has ten across three builds, for the reason below. Steps are re-shaped with `tc qdisc change` so the queue is not torn down and re-added, which
 would itself drop the backlog and be scored as the impairment.
 
-| Step | Shortfall vs stream | Media lost | Holes | Largest hole | Continuity errors |
+**The rungs are multiples of the stream's own rate, not absolute rates.** `STREAM_MBIT=9.95` is the
+fixture's measured rate and the script derives each rung from it, for the reason in *The rungs had to
+be re-based* below. The table gives the multiple, the shaped rate it computes to, and the shortfall
+that leaves against the programme.
+
+| Step | Shaped rate | Shortfall vs stream | Media lost | Holes | Largest hole | Duplicated | Continuity errors |
+|---|---|---|---|---|---|---|---|
+| none (control) | 20 Mb/s | — | **0.000 s** | 0 | — | 0.000 s | 0 |
+| 1.2× for 60 s | 11.94 Mb/s | **none: +20 % headroom** | **0.000 s** | 0 | — | 0.000 s | 0 |
+| 0.9× for 60 s | 8.96 Mb/s | −10 % | **0.000 s** | 0 | — | 1.575 s | 0 |
+| 0.8× for 5 s | 7.96 Mb/s | −20 %, transient | **0.000 s** | 0 | — | 0.725 s | 0 |
+| 0.8× permanent (45 s) | 7.96 Mb/s | −20 %, chronic | **1.000 s** ‡ | 1 | 1.000 s | 14.225 s | 0 |
+| 0.5× for 60 s | 4.97 Mb/s | −50 % | **3.100 s** | 3 | 1.800 s | 17.350 s | 0 |
+
+‡ One draw from a cell that straddles the absorption threshold: nine further replicates span
+0.000–0.850 s, four of them losing nothing. See *The chronic rung straddles the absorption
+threshold* below. Treat this rung as bimodal, not as a 1.000 s cost.
+
+**A mild sustained shortfall is absorbed entirely, and that is the cell the ladder existed to
+measure.** Sixty seconds at 0.9× stream rate is a real and sustained deficit — about 60 Mbit of
+programme the link cannot carry in the window — and none of it was lost. The `cake` queue plus the
+3 s latency budget covered a shortfall four times longer than the transient rung. **The lane's
+absorption is therefore bounded by depth rather than by duration** over the range tested: a 60 s
+−10 % costs nothing where a 45 s −20 % costs programme.
+
+**Beyond that the lane sheds in proportion to severity, cleanly.** 1.000 s at −20 % chronic and
+3.100 s at −50 %, in one and three holes respectively. The lane does not degrade gracefully into a
+lower-rate version of the programme — it cannot, because the stream is CBR and the bitrate is not
+the lane's to change — so it discards whole groups on a deadline and keeps the rest current. That is
+the deadline-shedding mechanism [T8b](test-8b-congestion-control.md) attributed, measured here as
+programme cost rather than as delivered fraction.
+
+**Duplication rises with severity and is not attributed.** 0.000 s clean, 1.575 s at −10 %, 14.225 s
+at −20 % chronic and 17.350 s at −50 %. This is the same unattributed signal
+[T28](test-28-failure-injection-matrix.md) records on the same grader and the same rig, and nothing
+above rests on it; it is reported because suppressing a column that moves monotonically with the
+impairment would be worse than admitting it is unexplained.
+
+### The chronic rung straddles the absorption threshold, and the QUIC backend is not why
+
+The absolute-rate ladder had measured **7.050 s in six holes** at 8 Mb/s chronic where this one
+measures 1.000 s in one hole at 7.96 Mb/s — the same shortfall to within 0.5 %, a factor of seven
+apart. Two things had changed between those runs and one sample each could not separate them: the
+build (`0.11.0-fd4f5d82e` → `84b34f54`) and, inside it, the **quinn → noq QUIC backend**. Three arms
+of three replicates each separate them, because commit `5d0991b9` builds on both backends and is
+therefore the clean instrument for the backend alone.
+
+| Arm | Build | QUIC backend | Control | Chronic 0.8× replicates | Range |
 |---|---|---|---|---|---|
-| none (control) | — | **0.000 s** | 0 | — | 0 |
-| 20 → 8 Mb/s for 5 s | −20 % of stream rate | **0.000 s** | 0 | — | 0 |
-| 20 → 12 Mb/s for 60 s | **none: 12 > 9.95** | **0.000 s** | 0 | — | 0 |
-| 20 → 8 Mb/s permanent (45 s) | −20 % of stream rate | **7.050 s** | 6 | 3.225 s | 0 |
+| A | `5d0991b9` | quinn | 0.000 s | 0.000, 0.000, 0.775 s | 0.000–0.775 s |
+| B | `5d0991b9` | noq | 0.000 s | 0.000, 0.550, 0.300 s | 0.000–0.550 s |
+| C | `84b34f54` | noq | 0.000 s | 0.850, 0.000, 0.250 s | 0.000–0.850 s |
 
-**The transient step is absorbed completely.** Five seconds at 8 Mb/s against a stream needing
-9.95 Mb/s is a real shortfall of about 10 Mbit of programme, and none of it was lost: the `cake` queue
-plus the 3 s latency budget covered it. This is the ceiling criterion 1 asks for, and on the durations
-tested the transient ceiling was not reached.
+**Neither the backend nor the build explains the disagreement.** A and B are the same source commit
+and differ only in QUIC stack; their distributions overlap completely. B and C share a backend and
+differ by build; those overlap too. All **nine replicates fall between 0.000 and 0.850 s**, and no
+arm produced anything within a factor of eight of 7.050 s. The absolute-rate ladder's chronic figure
+is therefore **withdrawn as unreproduced** rather than explained: whatever produced it was not the
+QUIC stack and was not the build, and it did not recur in ten samples at that shortfall across three
+builds.
 
-**The chronic step sheds, and sheds repeatedly rather than once.** Six holes in 45 s, the largest
-3.225 s, totalling 7.05 s. The lane does not degrade gracefully into a lower-rate version of the
-programme — it cannot, because the stream is CBR and the bitrate is not the lane's to change — so it
-discards whole groups on a deadline and keeps the rest current. That is the deadline-shedding
-mechanism [T8b](test-8b-congestion-control.md) attributed, now measured as programme cost rather than
-as delivered fraction.
+**What the replicates do establish is that the chronic −20 % rung sits on the absorption threshold.**
+Ten samples at one impairment span 0.000 s to 1.000 s, and four of them lost nothing at all. That is
+not measurement noise around a central value; it is a cell where the queue plus the 3 s budget
+sometimes covers the deficit for the whole window and sometimes does not. **The single 1.000 s in
+the table above is one draw from that spread, not the rung's cost**, and no sizing claim should be
+made from it. The rungs that carry this experiment's headline — 1.2×, 0.9× and the 0.8× transient,
+all at zero — are unaffected, and 0.9× for 60 s losing nothing is the more robust of the two
+boundaries because it is zero rather than a number near one.
 
-### The specified 12 Mb/s cell does not test what it was specified to test
+### The rungs had to be re-based, and the earlier ladder is superseded
 
-The procedure calls the 20 → 12 Mb/s step a "sustained moderate shortfall". Against this campaign's
-~9.95 Mb/s fixture, 12 Mb/s carries **20 % headroom** — it is not a shortfall at all, which is why the
-cell returned zero and why its zero means nothing about capacity. The ladder's rungs were written as
-absolute rates while the result depends on the rate *relative to the stream*. **Re-base the ladder on
-multiples of stream rate** — 1.2×, 0.9×, 0.8×, 0.5× — before any further cells are run, or the
-sustained-moderate rung will keep returning a null for arithmetic reasons. The gap this leaves is
-real: between "absorbed entirely" at a transient −20 % and "7.05 s lost" at a chronic −20 %, nothing
-measures a *mild* sustained shortfall, which is the commonest real under-provision.
+The procedure originally called a 20 → 12 Mb/s step a "sustained moderate shortfall". Against this
+campaign's ~9.95 Mb/s fixture, 12 Mb/s carries **20 % headroom** — it is not a shortfall at all, which
+is why that cell returned zero and why its zero said nothing about capacity. The rungs were written
+as absolute rates while the result depends on the rate *relative to the stream*, so the ladder had a
+hole exactly where the commonest real under-provision sits: between "absorbed entirely" at a
+transient −20 % and programme loss at a chronic −20 %, nothing measured a *mild* sustained shortfall.
+
+Re-basing closed it. [`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh) now takes
+`STREAM_MBIT` and derives each rung as a multiple of it, so the ladder follows the fixture instead of
+being re-specified whenever the fixture changes. **The figures in this section supersede the
+absolute-rate ladder entirely**, and the method rule is in
+[method-notes](method-notes.md) § *An impairment rung has to be expressed in the units the result
+depends on*.
 
 ## Pass criteria, fixed before running
 
@@ -205,9 +268,9 @@ failure mode is a finding.
 
 | # | Criterion | Verdict |
 |---|---|---|
-| 1 | Longest step absorbed with zero media lost and 0 continuity errors | **Reported for the MoQ lane**: a 5 s transient at −20 % of stream rate, absorbed completely. The transient ceiling was not reached, so it is a lower bound rather than a ceiling. No figure for the segmented lane, which has not run |
+| 1 | Longest step absorbed with zero media lost and 0 continuity errors | **Reported for the MoQ lane**: 60 s at 0.9× of stream rate, absorbed completely, and a 5 s transient at 0.8×. Both are **lower bounds rather than ceilings** — no rung between 0.9× and 0.8× was run, and no duration beyond 60 s. No figure for the segmented lane, which has not run |
 | 2 | Recovery operating point | **Not measured.** Delivery returned (subsequent cells were clean through the same rig) but buffer occupancy was not instrumented, so neither the 5 % rate nor the 10 % buffer test was applied |
-| 3 | MoQ integrity invariant — any non-zero continuity error fails the cell | **Pass on every cell run.** 0 throughout, including the chronic step that lost 7.05 s |
+| 3 | MoQ integrity invariant — any non-zero continuity error fails the cell | **Pass on every cell on every rung.** 0 throughout, including the two that lost programme |
 | 4 | C2 re-run validity | **Not run.** The withheld segmented C2 cells remain withheld |
 | 5 | Latency-max ladder at n ∈ {2, 3} | **Not run at contention.** The budget axis was exercised only at n = 1, and only against an outage rather than a capacity step — recorded in [T28](test-28-failure-injection-matrix.md), where it produced a non-monotonic result that this criterion's phrasing assumes cannot happen |
 
@@ -218,11 +281,16 @@ this criterion should settle, but the criterion as written cannot express the an
 
 ## What remains
 
-The rig is up on the EC2 secondary and nothing here waits on a third party.
+The rig tears down and rebuilds from `t8b-netns.sh` on the EC2 secondary, and nothing here waits on
+a third party.
 
-- **Re-base the rungs on stream rate** (1.2×, 0.9×, 0.8×, 0.5×) and re-run, for the reason in the
-  measured section. The absolute-rate rungs cannot express a mild sustained shortfall against a
-  10 Mb/s fixture.
+- **Rungs between 0.9× and 0.8×, and a duration beyond 60 s at 0.9×**, to turn criterion 1's lower
+  bound into a ceiling. This is now the most valuable outstanding cell: the absorption boundary lies
+  between the two rungs, and the replicates show 0.8× chronic is already *on* it, so the boundary is
+  somewhere in a 10 % band and the lane's usable headroom margin is not yet stated.
+- **Enough replicates to characterise the chronic rung's bimodality rather than bound it.** Ten
+  samples establish the spread is real and that neither backend nor build causes it; they do not say
+  what decides which mode a run lands in, and that mechanism is the interesting part.
 - **The latency-max × contention matrix** (criterion 5) at n ∈ {2, 3}, against capacity steps rather
   than outages, and phrased so a non-monotonic answer is expressible.
 - **Buffer and RSS instrumentation** for criterion 2, which the current rig does not collect.

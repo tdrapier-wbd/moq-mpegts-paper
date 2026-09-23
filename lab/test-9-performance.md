@@ -677,175 +677,115 @@ only ever went up. A longer run, or a look at what the pool is sized against, wo
 
 ## Relay memory: the one failing role
 
-The relay grows under sustained subscriber load, at a rate neither documented cache knob bounds. The
-controlled A/B is the authoritative measurement; the standing-relay soak below is the observation that
-prompted it, and its decaying shape is a property of that particular deployment rather than the general
-behaviour.
+The relay retains **~9 KiB per ingested group** and does not release it. The mechanism is upstream of
+`moq` entirely, the growth plateaus at a soft ceiling, and neither documented cache control bounds it.
+Filed as [#2745](https://github.com/moq-dev/moq/issues/2745).
 
-**As observed on the standing relay during soak #2.** Read as a single linear fit, +3.2 MB/h overstates
-the end state by roughly double, because on this relay the curve decays:
+### The mechanism: quinn-proto stream recycling, not moq state
 
-| Window | Relay RSS | Slope |
-|---|---|---:|
-| 0–6 h | 77 → 176 MB | +16.47 MB/h |
-| 6–12 h | 177 → 195 MB | +2.83 MB/h |
-| 12–18 h | 195 → 211 MB | +2.49 MB/h |
-| 18–26.5 h | 212 → 226 MB | +1.84 MB/h |
-| 23–26.5 h (tail) | 221 → 226 MB | **+1.57 MB/h** |
+`quinn-proto` pre-allocates a slot in `StreamsState::recv` for every stream the peer is permitted to
+open. When a received stream is freed its `Recv` goes onto a `free_recv` pool and the replacement slot
+immediately takes it back — and the recycling path deliberately keeps the buffer:
 
-The decay **does not reach zero**: the last three and a half hours still add 1.57 MB/h, which
-annualises to about 13.8 GB and would exhaust this 3.8 GB box in roughly three months. That is not
-dismissible as settling. The deceleration is specific to this run — a long-lived standing relay
-carrying a mix of subscribed and unsubscribed broadcasts — and does not appear under a controlled
-workload, where the growth is strictly linear.
+```rust
+// quinn-proto 0.11.16, connection/assembler.rs
+pub(super) fn reinit(&mut self) {
+    let old_data = mem::take(&mut self.data);   // chunk heap kept for reuse
+    *self = Self::default();
+    self.data = old_data;
+    self.data.clear();                          // cleared, not deallocated
+}
+```
 
-Two further observations sharpen it, and they pull in opposite directions:
+So every ingested group permanently converts an empty slot into one holding a recycled `Recv` plus its
+retained assembler capacity. Every property measured on this rig falls out of that, and the four
+sections below are the measurements that discriminate it from the alternatives.
 
-- **It did not release.** When the soak's publisher and two subscribers exited, relay RSS went 226 →
-  224 MB over the following 11 hours. Memory acquired while serving was not returned. On its own this
-  is weak evidence — allocators routinely keep pages — but it rules out "transient per-session
-  buffers".
-- **With no subscribers it is genuinely flat.** A 90-minute sampler on the same standing relay
-  (`~/t9/relay_now.sh`) measured **+0.000 MB/h at 218.8 MB**. The relay only pulls a track when
-  something subscribes, so this says the growth tracks *served* load rather than uptime — consistent
-  with either a working set that ratchets up per served session, or a slow leak charged to serving.
+- **Flat in subscriber count** — only *remote-initiated* streams consume recv slots. Egress group
+  streams are locally initiated, so the whole cost lands on the publisher connection.
+- **No cache setting touches it** — `--cache-capacity` bounds moq's own payload pool and structurally
+  cannot bound quinn's per-connection stream state. Nor can `--cache-duration`.
+- **Not a regression** — the quinn behaviour predates 0.11.13 (Aug 2025).
+- **~9.9 KiB per group** — a patched probe upstream measured retained bytes per slot scaling with
+  frame size (360 B at 200-byte frames, 1,965 B at 20 KB frames); extrapolated to our ~46 KB frames it
+  lands on our figure. Two `malloc_history` snapshots 240 s apart showed exactly two growing stacks,
+  both in quinn (`StreamsState::received`, `Recv::ingest → Assembler::insert`) and none in moq.
 
-### Controlled A/B: not a regression, and linear
+**The ceiling is soft, and that doubles the operational figure.** Growth slows once every uni slot is
+filled: `moq-relay` raises the limit from moq-native's 1,024 to `DEFAULT_MAX_STREAMS = 10_000`, so the
+*slot* ceiling is **~10,000 × 9.9 KiB ≈ 99 MB above baseline, per publisher connection**, reached
+after ~10,000 ingested groups — ~3.1 h at 3,222 groups/h, ~1.55 h at 6,445. But a second, far slower
+term keeps adding past it: [T8b](test-8b-congestion-control.md) C6 crossed +99 MB at 0.83 h and went
+on to **+200.5 MB (2.03×)**, its slope decaying monotonically 13× and still positive at 14 h. **Read
+the slot arithmetic as the knee location and about half the final figure, and budget ~200 MB per
+ingested channel.**
+
+Soak #2's standing relay shows the same approach from the other side, over 26.5 hours: +16.47 MB/h
+across 0–6 h, then +2.83, +2.49, +1.84, and **+1.57 MB/h over the final three and a half hours**
+(221 → 226 MB). Two properties of that tail bear on the mechanism. **It did not release** — when the
+publisher and both subscribers exited, RSS went 226 → 224 MB over the following 11 hours, which rules
+out transient per-session buffers even though allocators routinely keep pages. And **with nothing
+subscribed it is exactly flat**: a 90-minute sampler on the same relay measured +0.000 MB/h at
+218.8 MB, so what the relay retains tracks bytes it actually moves rather than uptime.
+
+### Not a regression, and not the payload cache
 
 `~/t9/relay_ab.sh` held the workload fixed and varied only the binary — the same video-only publisher
 and four steady subscribers against a **private** relay (no standing-service history, no session churn
-from the looping publisher), 2.5 h per build, sampled every 30 s. A third leg repeated it on 0.14.9
-with `--cache-capacity 256MiB`.
+from the looping publisher), 2.5 h per build, sampled every 30 s. Two further legs varied the cache
+controls instead.
 
 | Leg | RSS over the run | Slope past 30 min warm-up |
 |---|---|---:|
 | 0.14.8, default cache | 34.1 → 101.5 MB (2.49 h) | **+27.14 MB/h** |
 | 0.14.9, default cache | 54.8 → 142.7 MB (2.49 h) | **+27.74 MB/h** |
 | 0.14.9, `--cache-capacity 256MiB` | 54.6 → 129.9 MB (1.78 h) | **+28.43 MB/h** |
+| 0.14.9, `--cache-capacity 32MiB` | 54.5 → 128.3 MB, peak 133.7 (2.5 h) | **+27.15 MB/h** |
+| 0.14.9, `--cache-duration 5s` | original source | **+27.00 MB/h** (8.64 KiB/group) |
 
-Three conclusions, in order of confidence.
+**It is not a 0.14.9 regression.** The two builds grow at the same rate to within 2 %, inside
+run-to-run noise. One real build difference shows up in the baseline rather than the slope: both
+0.14.9 legs start at ~54.7 MB against 0.14.8's 34.1 MB, so 0.14.9 carries roughly 20 MB more fixed
+overhead.
 
-**It is not a 0.14.9 regression.** The two builds grow at the same rate to within 2 %, which is inside
-run-to-run noise. Soak #1's flat 102.1 MB was a property of its *workload*, not its build. One real
-build difference does show up, but in the baseline rather than the slope: both 0.14.9 legs start at
-~54.7 MB against 0.14.8's 34.1 MB, so 0.14.9 carries roughly 20 MB more fixed overhead.
+**The 256 MiB leg proves less than it appears to**, and the 32 MiB leg is why it was repeated.
+`--cache-capacity` counts *payload bytes*, not process RSS, and a 256 MiB (268 MB) budget against an
+RSS that only reached 131 MB was never engaged — so that leg cannot distinguish "the cap does not bind
+this" from "the cap was not reached". At 32 MiB the relay confirmed the setting at startup (`cache
+capacity set capacity=33554432`) and then ran straight through it: a 32 MiB budget on a 54.5 MB
+baseline should plateau RSS near 88 MB, and the relay crossed 88 MB at around 55 minutes and carried
+on to 128 MB — **more than twice the cap above baseline, with no inflection whatsoever at the
+crossing**. Its windowed slopes (+34.86, +29.22, +29.69, +28.98, +28.94) are indistinguishable before
+and after the crossing, and from the uncapped legs. Subscriber count held at 4 for all 300 samples and
+the relay logged no errors.
 
-**The growth is linear across this window.** Five consecutive 30-minute windows on 0.14.8 read
-+25.43, +27.05, +27.64, +26.80 and +28.13 MB/h — no decay whatsoever over 2.5 hours.
+**`--cache-duration 5s` changes nothing either** — +27.00 MB/h, 8.64 KiB/group, indistinguishable from
+the same source uncapped. **Both documented memory controls have been tested and neither binds this**:
+capacity bounds payload bytes and the growth is not payload, duration bounds retained history and the
+growth is not history. **There is no configuration an operator can set to stop it**, which is why "set
+a cache bound" was an insufficient answer both for operators and as an upstream response.
 
-> **Corrected after the upstream root cause (see below).** The extrapolation drawn here at the time —
-> "+27 MB/h is 650 MB/day" — was wrong, and so was retiring soak #2's decaying curve as the misleading
-> signature. The growth *does* plateau, at ~10,000 ingested groups per publisher connection; every leg
-> in this campaign was shorter than that knee, so linearity within the window says nothing about the
-> ceiling. Soak #2's decay was the approach to the plateau and was the more informative shape all
-> along. The measurements stand; the extrapolation from them does not.
+An arithmetic check predicted this before the legs ran. The source is 9.4 Mbps ≈ 4,230 MB/h of media
+and the relay grows at 27 MB/h, so it retains about **0.6 %** of what it carries; history accumulating
+under an unbounded window would be three orders of magnitude larger.
 
-**The 256 MiB cap leg proves less than it appears to, and this matters.** It grew at the same rate as
-uncapped — but RSS only reached 131 MB, and `--cache-capacity` counts *payload bytes*, not process
-RSS. A 256 MiB (268 MB) payload budget was nowhere near full, so the cap was never engaged. That leg
-cannot distinguish "the cap does not bind this" from "the cap was not reached", which is why
-`~/t9/relay_cap2.sh` repeats it at 32 MiB, small enough to engage within the hour.
+**What the source says the knobs do**, which is worth reading before giving operational advice: with
+no flags the pool is unbounded **and** the age ceiling is `Duration::MAX`, so the only thing bounding
+relay memory by default is each track's own advertised retention window — a property of the publisher,
+not the relay. `--cache-capacity` is explicitly "a target that usage converges toward as tracks write,
+**not a hard limit**". `--cache-duration` *clamps down* a publisher advertising a longer window, which
+for a live broadcast relay is arguably the more appropriate knob of the two: primary distribution
+wants the live edge, not history.
 
-### The cache is not what grows: a 32 MiB cap changes nothing
+### The cost is per ingested group, not per subscriber
 
-The relay confirmed the setting at startup — `cache capacity set capacity=33554432` — and then ignored
-it, in the sense that mattered:
-
-| Window | RSS | Slope |
-|---|---|---:|
-| 0–30 min | 54.5 → 76.1 MB | +34.86 MB/h |
-| 30–60 min | 74.6 → 91.2 MB | +29.22 MB/h |
-| 60–90 min | 89.2 → 101.7 MB | +29.69 MB/h |
-| 90–120 min | 103.6 → 114.4 MB | +28.98 MB/h |
-| 120–150 min | 118.2 → 128.3 MB | +28.94 MB/h |
-| **Total, past warm-up** | **54.5 → 128.3 MB (peak 133.7)** | **+27.15 MB/h** |
-
-A 32 MiB payload budget on a 54.5 MB baseline should plateau RSS somewhere near 88 MB. The relay
-crossed 88 MB at around the 55-minute mark and carried straight on to 128 MB — **more than twice the
-cap above baseline — with no inflection whatsoever at the crossing**. The slope after the crossing
-(+29.69, +28.98, +28.94) is indistinguishable from the slope before it, and from the uncapped legs
-(+27.14, +27.74). Four legs, two builds, three cache settings, one answer: ~27 MB/h. Subscriber count
-held at 4 for all 300 samples and the relay logged no errors.
-
-This is the result the 0.6 % arithmetic predicted. **The growth is not cached payload, and the
-documented byte-budget control does not bound it.** `--cache-capacity` can only evict what the pool
-accounts for, and whatever is growing here is not registered with the pool. That makes this a leak
-rather than a tuning question, and it makes "set a cache bound" an insufficient answer both for
-operators and as an upstream response.
-
-### What the source says the knobs actually do
-
-Worth reading `rs/moq-relay/src/cache.rs` before drawing operational conclusions, because it changes
-the advice this project has been giving:
-
-- With no flags the pool is unbounded **and** the age ceiling is `Duration::MAX`. The only thing
-  bounding relay memory by default is *each track's own advertised retention window* — a property of
-  the publisher, not the relay.
-- `--cache-capacity` is explicitly "a target that usage converges toward as tracks write, **not a hard
-  limit**", and it counts payload bytes rather than RSS.
-- `--cache-duration` is the age ceiling, and it *clamps down* a publisher advertising a longer window.
-  For a live broadcast relay this is arguably the more appropriate knob than `capacity`: primary
-  distribution wants the live edge, not history, and bounding by age bounds the thing that actually
-  accumulates.
-
-**An arithmetic check that points away from the payload cache.** The source is 9.4 Mbps ≈ 4,230 MB/h
-of media. The relay grows at 27 MB/h, so it retains about **0.6 %** of what it carries. If this were
-history accumulating under an unbounded window, growth would be three orders of magnitude larger. At
-roughly one key-frame-aligned group per second, 27 MB/h works out at ~7.5 kB retained per group —
-which looks far more like per-group bookkeeping that is never released than like cached payload. If
-that is right, `--cache-capacity` will *not* bound it, because the pool only accounts payload. The
-32 MiB leg tested exactly this, and confirmed it.
-
-### Answered: the cost is per ingested group, not per subscriber
-
-*Run record: N = 0 completed first, then the runner killed itself — its cleanup
-`pkill -f "t9.nsweep"` used an unescaped dot, which also matches its own path `t9/nsweep.sh`. Pattern
-tightened to `t9\.nsweep\.n[0-9]+\.hang` and verified both ways; legs 1/2/4/8 re-run to completion.*
-
-Everything up to here said "a leak, ~27 MB/h at N=4". That is a symptom, not a report. The sweep
-(`nsweep.sh`) runs N = 0, 1, 2, 4, 8 subscribers for 90 minutes each against a fresh relay, and reads
-the answer off the shape:
-
-- **rate proportional to N** → per-session state, and the fix is in session teardown;
-- **rate flat in N for N ≥ 1** → per-group ingest bookkeeping never released, and N only decides how
-  fast groups are pulled through;
-- **N = 0 flat** → the control, consistent with the standing relay's 7 h at 224 MB.
-
-It also enables `--internal-listen` with `--stats-enabled=true` and scrapes `moq_relay_groups_total`
-and `moq_relay_bytes_total`, so growth can be divided by groups and bytes *actually transferred*
-rather than inferred from the nominal source bitrate — which converts "~7.5 kB per group" from an
-estimate into a measurement. Note that `--stats-enabled` is off by default and gates the traffic
-counters entirely; with only `--internal-listen` the `/metrics` endpoint serves accept-listener series
-and nothing else, which is a trap worth remembering. Enabling stats does add a stats broadcast, but it
-is constant across all five legs, so the N-dependence stays clean.
-
-#### N = 0 control: the relay ingests nothing without a subscriber
-
-The control leg ran 90 minutes with the publisher connected and the source live, and the relay held
-**19.6 → 19.7 MB, +0.00 MB/h** — flat to the resolution of the measurement across all three windows
-(+0.02, +0.01, +0.00). No idle or timer-driven growth exists.
-
-But the counters show the control is weaker than intended, in an interesting way. After 90 minutes
-`moq_relay_bytes_total`, `groups_total` and `frames_total` were **all still exactly 0**, for both the
-publisher and subscriber roles, with one session opened. The publisher was genuinely running — `tsp`
-was logging PCR cycling warnings throughout — so the source was live and connected, and the relay
-pulled **not one byte** of it.
-
-So the relay's *media* path is demand-driven end to end: it accepts the session and, as
-[comparison](../docs/comparison.md) §12 records, it interrogates the publisher and the
-publisher announces — but no track is actually subscribed upstream until something downstream wants
-it. This leg therefore proves "no traffic, no growth" rather than "publisher load, no growth", which
-is a weaker statement than planned. It is still the right control for the leak question (it rules out
-a clock-driven leak), and it independently explains two earlier observations: the standing relay
-sitting flat at 224 MB for seven hours with no subscribers, and soak #1 growing less than soak #2
-under a lighter subscriber load. **What the relay retains tracks bytes it actually moves.**
-
-It also sharpens the discriminator for the remaining legs. With N subscribers the relay ingests the
-source once and fans it out N times, so ingest groups are constant in N while egress groups scale with
-N. A rate proportional to N therefore localises the cost to the egress/per-session side; a rate flat
-in N for N ≥ 1 localises it to per-group ingest bookkeeping.
-
-#### Result: flat in N
+The sweep (`nsweep.sh`) runs N = 0, 1, 2, 4, 8 subscribers for 90 minutes each against a fresh relay.
+With N subscribers the relay ingests the source once and fans it out N times, so ingest groups are
+constant in N while egress groups scale with N: a rate proportional to N localises the cost to the
+egress/per-session side, a rate flat in N for N ≥ 1 localises it to per-group ingest bookkeeping, and
+N = 0 is the control against a clock-driven leak. The legs also scrape `moq_relay_groups_total` and
+`moq_relay_bytes_total`, so growth is divided by groups and bytes *actually transferred* rather than
+inferred from the nominal bitrate.
 
 | N | baseline RSS | slope past warm-up | groups/h (total) | **groups/h ingested** | egress/ingress |
 |---:|---:|---:|---:|---:|---:|
@@ -860,34 +800,40 @@ Subscriber counts held for all 180 samples of every leg and the relay logged no 
 **The slope does not move.** Eight times the subscribers, eight times the egress, and the growth rate
 is unchanged at ~28 MB/h — a spread of 0.84 MB/h across the four legs, smaller than the variation
 between consecutive windows within a single leg. Fan-out is free, in the sense that matters here.
-
-**Ingested groups are constant at 3,200/h** (measured 3,199 / 3,200 / 3,200 / 3,200, recovered as
-total ÷ (N+1) and confirmed against the per-role byte counters). Dividing one constant by the other:
+Dividing the constant slope by the constant 3,200 ingested groups/h:
 
 > **~9.0 KiB retained per ingested group**, independent of how many subscribers consume it.
 >
 > (9.19 / 8.92 / 8.96 / 9.00 KiB at N = 1/2/4/8; mean 9.02.)
 
-That is the number the earlier arithmetic estimated at ~7.5 kB from the nominal bitrate, now measured
-from the relay's own counters. It is also ~0.7 % of a group's ~1.3 MB of payload, so the relay is not
-retaining groups — it is retaining something small and per-group, once per ingest, for the lifetime of
-the process rather than the lifetime of the group.
+That is ~0.7 % of a group's ~1.3 MB of payload, so the relay is not retaining groups — it is retaining
+something small and per-group, once per ingest, for the lifetime of the process rather than the
+lifetime of the group.
 
 **Two separate costs, only one of which grows.** Baseline RSS rises cleanly with subscriber count —
 fitting the four baselines gives **43.9 MB + 3.22 MB per subscriber** — so a session does carry real
-per-connection state. But that cost is *fixed*: it is paid once at join and does not accumulate. The
-growth is entirely on the ingest side.
+per-connection state. But that cost is *fixed*: paid once at join, and it does not accumulate.
 
-**Backlog is now excluded at every N, not just N=1.** The relay's own role labels are from its point
-of view: `role="subscriber"` counts what it pulls from the publisher, `role="publisher"` what it
-serves. Egress was exactly N × ingress at every leg (5,973.7 MB in / 5,973.7 out at N=1; 5,989.8 in /
-47,850.8 out at N=8, a ratio of 7.99). Every subscriber received every byte, at the highest load the
-box will carry, so nothing is queuing undelivered and this is not the per-subscription backlog of
-upstream [#2733](https://github.com/moq-dev/moq/issues/2733).
+**Backlog is excluded at every N.** The relay's role labels are from its own point of view:
+`role="subscriber"` counts what it pulls from the publisher, `role="publisher"` what it serves. Egress
+was exactly N × ingress at every leg (5,973.7 MB in / 5,973.7 out at N = 1; 5,989.8 in / 47,850.8 out
+at N = 8, a ratio of 7.99). Every subscriber received every byte at the highest load the box will
+carry, so nothing is queuing undelivered and this is not the per-subscription backlog of upstream
+[#2733](https://github.com/moq-dev/moq/issues/2733).
 
-#### Causal confirmation: double the group rate, double the leak (`gopx.sh`)
+**The N = 0 control is weaker than it was designed to be, in an informative way.** It held 19.6 →
+19.7 MB, +0.00 MB/h across all three windows (+0.02, +0.01, +0.00) — but after 90 minutes
+`moq_relay_bytes_total`, `groups_total` and `frames_total` were **all still exactly 0** for both roles,
+with one session opened. The publisher was genuinely running, so the relay pulled not one byte of a
+live source: its media path is demand-driven end to end, accepting the session and interrogating the
+publisher ([comparison](../docs/comparison.md) §12) without subscribing upstream until something
+downstream wants it. **The leg therefore proves "no traffic, no growth" rather than "publisher load,
+no growth"**, which is weaker than planned. It still rules out a clock-driven leak, and it explains
+why a standing relay sat flat at 224 MB for seven hours with no subscribers.
 
-"~9 KiB per ingested group" was still a correlation — across the sweep, group rate never varied.
+### Causal confirmation: double the group rate, double the leak
+
+The per-group figure was still a correlation, because group rate never varied across the sweep.
 `gop28` and `gop14` are re-encodes of the same content with identical settings (`libx264 -preset
 veryfast -b:v 9M -sc_threshold 0`, both verified at 9.3 Mbps) differing only in `-g`, so **group rate
 is the single variable**. The prediction was registered before the run: per-group doubles the slope,
@@ -898,99 +844,26 @@ per-byte leaves it unchanged.
 | `gop28` | 3,222 | ~31 MB/h | **+31.22 MB/h** | 9.92 KiB |
 | `gop14` | 6,445 | ~62 MB/h | **+62.30 MB/h** | 9.90 KiB |
 
-**The ratio is 1.995 against a group-rate ratio of 2.000, and kB-per-group agrees to three
-significant figures across the pair.** Identical bitrate, identical content, identical encoder — only
-the group count differs, and the leak follows it exactly. The cost is *caused* by ingesting a group,
-not by carrying bytes.
-
-Both legs are linear within themselves (`gop28` +33.89 then +30.64; `gop14` +62.12 then +60.21), and
+**The ratio is 1.995 against a group-rate ratio of 2.000, and kB-per-group agrees to three significant
+figures across the pair.** Identical bitrate, content and encoder — only the group count differs, and
+the leak follows it exactly. The cost is *caused* by ingesting a group, not by carrying bytes. Both
+legs are linear within themselves (`gop28` +33.89 then +30.64; `gop14` +62.12 then +60.21), with
 subscriber count held at 4 for all 180 samples of each.
 
 The per-group constant is a property of the content, not a universal: the original source gives
-8.6–9.2 KiB/group across five legs against 9.9 KiB for the re-encodes, which differ in frames per
-group and structure. What is invariant is that *within* a source, the leak is exactly proportional to
-groups ingested.
+8.6–9.2 KiB/group across five legs against 9.9 KiB for the re-encodes, which differ in frames per group
+and structure. What is invariant is that *within* a source, the leak is exactly proportional to groups
+ingested.
 
-#### `--cache-duration` does not bound it either
+**Latency tuning changes how fast the ceiling arrives, not how high it is.** Group cadence is how MoQ
+trades latency, and shorter groups leak proportionally faster: at ~9.9 KiB/group the same 9.3 Mbps
+channel grows about **18 MB/h at a 2 s GOP, 31 MB/h at 1.1 s and 62 MB/h at 0.56 s**. But the retained
+state is one slot per *stream* and the slot count is capped, so the **ceiling is the same** and a
+shorter GOP reaches it sooner rather than climbing higher. Retained bytes per slot are set by frame
+size, not group size, which is why `gop14` and `gop28` measured 9.90 and 9.92 KiB despite `gop14`'s
+groups carrying half the bytes.
 
-The `dur5` leg ran the original source with `--cache-duration 5s`, confirmed at startup
-(`cache duration ceiling set duration=5s`). It grew **+27.00 MB/h — 8.64 KiB/group — indistinguishable
-from the same source uncapped.** A five-second age ceiling on retained history changes nothing,
-which is what the 0.7 %-of-payload arithmetic predicted: history is not what accumulates.
-
-**Both documented memory controls have now been tested and neither binds this.** `--cache-capacity`
-bounds payload bytes and the growth is not payload; `--cache-duration` bounds retained history and the
-growth is not history. There is no configuration an operator can set to stop it.
-
-#### Latency tuning changes how fast the ceiling arrives, not how high it is
-
-Group cadence is how MoQ trades latency, and shorter groups do leak proportionally faster: at
-~9.9 KiB/group the same 9.3 Mbps channel grows about **18 MB/h at a 2 s GOP, 31 MB/h at 1.1 s and
-62 MB/h at 0.56 s**.
-
-But because the retained state is one slot per *stream* and the slot count is capped (below), the
-**ceiling is the same** — a shorter GOP reaches it sooner rather than climbing higher. The retained
-bytes per slot are set by frame size, not group size, which is why `gop14` and `gop28` measured
-9.90 and 9.92 KiB despite `gop14`'s groups carrying half the bytes: same encoder, same bitrate, same
-frame rate, so the same frames, just fewer of them per group.
-
-*(This section originally concluded that low-latency deployments leak proportionally more in total.
-They do not. Corrected after the root cause below.)*
-
-### Root cause: quinn-proto stream recycling, not moq state (upstream #2745)
-
-The maintainer reproduced and root-caused this within a day, and the answer is **not in `moq` at
-all**. `quinn-proto` pre-allocates a slot in `StreamsState::recv` for every stream the peer is
-permitted to open. When a received stream is freed its `Recv` goes onto a `free_recv` pool and the
-replacement slot immediately takes it back — and the recycling path deliberately keeps the buffer:
-
-```rust
-// quinn-proto 0.11.16, connection/assembler.rs
-pub(super) fn reinit(&mut self) {
-    let old_data = mem::take(&mut self.data);   // chunk heap kept for reuse
-    *self = Self::default();
-    self.data = old_data;
-    self.data.clear();                          // cleared, not deallocated
-}
-```
-
-So every ingested group permanently converts an empty slot into one holding a recycled `Recv` plus its
-retained assembler capacity. Each property we measured falls out of that:
-
-- **Flat in subscriber count** — only *remote-initiated* streams consume recv slots. Egress group
-  streams are locally initiated, so the whole cost lands on the publisher connection.
-- **No cache setting touches it** — `--cache-capacity` bounds moq's own payload pool and structurally
-  cannot bound quinn's per-connection stream state. Nor can `--cache-duration`.
-- **Not a regression** — the quinn behaviour predates 0.11.13 (Aug 2025).
-- **~9.9 KiB per group** — a patched probe measured retained bytes per slot scaling with frame size
-  (360 B at 200-byte frames, 1,965 B at 20 KB frames); extrapolated to our ~46 KB frames it lands on
-  our figure. Two `malloc_history` snapshots 240 s apart showed exactly two growing stacks, both in
-  quinn (`StreamsState::received`, `Recv::ingest → Assembler::insert`) and none in moq.
-
-#### The correction that matters: it is bounded
-
-Growth stops once every uni slot is filled. `moq-relay` raises the limit from moq-native's 1,024 to
-`DEFAULT_MAX_STREAMS = 10_000`, so the slot ceiling is **~10,000 × 9.9 KiB ≈ 99 MB above baseline, per
-publisher connection** — reached after ~10,000 ingested groups, which at 3,222 groups/h is ~3.1 h and
-at `gop14`'s 6,445 is ~1.55 h.
-
-**"Stops" is too strong, and a 14 h leg is what showed it.** The soft residual noted below as an open
-question is a real second term, not allocator drift:
-[T8b](test-8b-congestion-control.md) C6 crossed +99 MB at 0.83 h and went on to **+200.5 MB (2.03×)**,
-its slope decaying monotonically 13× and still positive at 14 h. So read the slot ceiling as the *knee
-location* and roughly half the *final* figure; budget ~200 MB per ingested channel.
-
-**Every leg in this campaign was shorter than that knee.** The A/B and cap legs ran 2.5 h, the sweep
-and GOP legs 90 minutes. That is why the slope looked unbounded, and it is a straightforward
-measurement-window error on our part: we established linearity carefully and then extrapolated it past
-the range we had evidence for.
-
-It also retro-explains the two results this file previously treated as anomalies. Soak #2's decaying
-tail (+1.57 MB/h and falling) was the approach to the plateau, not a mysterious partial leak — and it
-was the *more* informative shape, which we set aside in favour of the cleaner-looking linear legs. The
-standing relay sitting flat at 224 MB for seven hours had simply finished filling its slots.
-
-#### Verified on this rig: the knee is where it was predicted, and capping streams caps the footprint
+### The knee is where it was predicted, and capping streams caps the footprint
 
 `~/t9/knee.sh`, two legs on `gop14` (1.79 ingested groups/s), 4 h on the default 10,000 slots and 2 h
 with `--server-quic-max-streams 1024`. Half-hourly slopes:
@@ -1043,7 +916,7 @@ One caveat on the capped leg's own numbers: its knee at 570 s lands inside the s
 pre-knee slope cannot be separated from the working set settling. It establishes the plateau and the
 ceiling, not the pre-knee rate.
 
-#### Mitigation, and why there is no quick fix
+### Mitigation, and why there is no quick fix
 
 The real fix is upstream in `quinn-proto` — shrink the oversized chunk heap in `Assembler::reinit`, or
 normalise capacity when a `Recv` enters `free_recv`, keeping the allocation-reuse win without the

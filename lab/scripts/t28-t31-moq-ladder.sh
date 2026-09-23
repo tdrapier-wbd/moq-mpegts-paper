@@ -15,7 +15,12 @@
 # that floor is indistinguishable from the impairment's cost.
 #
 # Usage: sudo t28-t31-moq-ladder.sh [cell ...]        (default: all)
-#   cells: control step-8-5s step-12-60s step-8-perm outage-0.5s outage-5s outage-20s outage-30s outage-40s
+#   cells: control step-0.8x-5s step-1.2x-60s step-0.9x-60s step-0.5x-60s step-0.8x-perm
+#          outage-0.5s outage-5s outage-20s outage-30s outage-40s
+#
+# T31's rungs are multiples of STREAM_MBIT, the fixture's own rate, because a shortfall is only
+# a shortfall relative to the stream. 0.9x is the mild sustained case the absolute-rate ladder
+# could not express; 1.2x is the headroom control that ladder mistook for one.
 #
 # The 20s/30s/40s outages bracket `--quic-idle-timeout`, which defaults to 30s on both the relay and
 # the client. A 30s outage therefore lands exactly on the boundary and cannot distinguish a starved
@@ -38,7 +43,16 @@ CLIP="${CLIP:-$HOME/clip120.ts}"
 GRADER="${GRADER:-$HOME/t28-media-lost.py}"
 OUT="${OUT:-$HOME/t28t31}"
 
-PROV_MBIT=20    # provisioned rate: comfortably above the ~9.95 Mb/s clip
+PROV_MBIT=20    # provisioned rate: comfortably above the clip
+# T31's rungs are multiples of the *stream* rate, not absolute rates. Written as absolute
+# rates they measured something else: against this campaign's ~9.95 Mb/s fixture the specified
+# "sustained moderate shortfall" of 12 Mb/s carries 20 % headroom and is not a shortfall at
+# all, so the cell returned zero for arithmetic reasons and its zero said nothing about
+# capacity. Set STREAM_MBIT to the fixture's own rate and the ladder follows it.
+STREAM_MBIT="${STREAM_MBIT:-9.95}"
+# Multiple of stream rate -> shaped bandwidth in Mb/s, to two decimals so a 0.9x rung does not
+# round into headroom.
+rate_for() { awk -v s="$STREAM_MBIT" -v m="$1" 'BEGIN{printf "%.2f", s*m}'; }
 DELAY_MS=50     # 100 ms base RTT, as T8b
 LATMAX="${LATMAX:-3s}"
 SETTLE=20       # seconds of clean delivery before the impairment
@@ -52,8 +66,19 @@ for f in "$NETNS" "$MOQ" "$RELAY" "$CLIP" "$GRADER"; do
 done
 command -v tsp >/dev/null || { echo "FAIL: tsp not found" >&2; exit 1; }
 
+# A survivor from a previous pass still holds :$PORT in the t8b-pub namespace, so this run's relay
+# dies at bind while the old one answers the subscriber and the cell silently measures the wrong
+# relay. Refuse to start rather than produce that. One replicate is one invocation of this script:
+# the teardown that releases the port runs on exit, not between cells.
+if pgrep -f "t28t31[.]bench" >/dev/null 2>&1; then
+	echo "FAIL: a t28t31.bench process from a previous pass is still running:" >&2
+	pgrep -af "t28t31[.]bench" >&2
+	echo "kill it and let $PORT clear before re-running" >&2
+	exit 1
+fi
+
 CELLS=("$@")
-[ ${#CELLS[@]} -eq 0 ] && CELLS=(control step-8-5s step-12-60s step-8-perm outage-0.5s outage-5s outage-30s)
+[ ${#CELLS[@]} -eq 0 ] && CELLS=(control step-0.8x-5s step-1.2x-60s step-0.9x-60s step-0.5x-60s step-0.8x-perm outage-0.5s outage-5s outage-30s)
 
 mkdir -p "$OUT"
 SUMMARY="$OUT/summary.csv"
@@ -83,9 +108,11 @@ run_cell() {
 	local exp impair window
 	case "$cell" in
 	control)      exp=both;  impair="none";                      window=$((SETTLE + 10 + RECOVER)) ;;
-	step-8-5s)    exp=T31;   impair="rate 20->8 Mb/s for 5s";     window=$((SETTLE + 5 + RECOVER)) ;;
-	step-12-60s)  exp=T31;   impair="rate 20->12 Mb/s for 60s";   window=$((SETTLE + 60 + RECOVER)) ;;
-	step-8-perm)  exp=T31;   impair="rate 20->8 Mb/s permanent";  window=$((SETTLE + 45 + 10)) ;;
+	step-0.8x-5s)   exp=T31; impair="rate -> 0.8x stream for 5s";      window=$((SETTLE + 5 + RECOVER)) ;;
+	step-1.2x-60s)  exp=T31; impair="rate -> 1.2x stream for 60s";     window=$((SETTLE + 60 + RECOVER)) ;;
+	step-0.9x-60s)  exp=T31; impair="rate -> 0.9x stream for 60s";     window=$((SETTLE + 60 + RECOVER)) ;;
+	step-0.5x-60s)  exp=T31; impair="rate -> 0.5x stream for 60s";     window=$((SETTLE + 60 + RECOVER)) ;;
+	step-0.8x-perm) exp=T31; impair="rate -> 0.8x stream permanent";   window=$((SETTLE + 45 + 10)) ;;
 	outage-0.5s)  exp=T28;   impair="100% loss for 0.5s";         window=$((SETTLE + 1 + RECOVER)) ;;
 	outage-5s)    exp=T28;   impair="100% loss for 5s";           window=$((SETTLE + 5 + RECOVER)) ;;
 	outage-20s)   exp=T28;   impair="100% loss for 20s";          window=$((SETTLE + 20 + RECOVER)) ;;
@@ -126,9 +153,11 @@ run_cell() {
 	t_impair=$(date +%s.%N)
 	case "$cell" in
 	control)     sleep 10 ;;
-	step-8-5s)   set_rate 8;  sleep 5;  set_rate $PROV_MBIT ;;
-	step-12-60s) set_rate 12; sleep 60; set_rate $PROV_MBIT ;;
-	step-8-perm) set_rate 8;  sleep 45 ;;
+	step-0.8x-5s)   set_rate "$(rate_for 0.8)"; sleep 5;  set_rate $PROV_MBIT ;;
+	step-1.2x-60s)  set_rate "$(rate_for 1.2)"; sleep 60; set_rate $PROV_MBIT ;;
+	step-0.9x-60s)  set_rate "$(rate_for 0.9)"; sleep 60; set_rate $PROV_MBIT ;;
+	step-0.5x-60s)  set_rate "$(rate_for 0.5)"; sleep 60; set_rate $PROV_MBIT ;;
+	step-0.8x-perm) set_rate "$(rate_for 0.8)"; sleep 45 ;;
 	outage-0.5s) set_loss 100; sleep 0.5; clear_loss ;;
 	outage-5s)   set_loss 100; sleep 5;   clear_loss ;;
 	outage-20s)  set_loss 100; sleep 20;  clear_loss ;;
@@ -137,7 +166,7 @@ run_cell() {
 	esac
 	echo "   impairment applied at $t_impair, now recovering for ${RECOVER}s"
 	case "$cell" in
-	step-8-perm) sleep 10 ;;
+	step-0.8x-perm) sleep 10 ;;
 	*) sleep "$RECOVER" ;;
 	esac
 

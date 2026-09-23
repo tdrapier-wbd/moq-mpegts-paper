@@ -71,10 +71,13 @@ Each experiment is its own file, structured as Objective / Environment / Procedu
 Observations / Conclusion / References. The pyramid tier and acceptance gate are from
 [evidence](../docs/evidence.md) §1.2.
 
-**The per-experiment file is authoritative for that experiment's measurements, scope and
-qualifications.** The *Current finding* column below is an index entry, not a summary of the
-evidence: one line, no qualifications, and no number that is not stated with its conditions in the
-file it points at.
+**This is every experiment the campaign has specified, run or not** — the record and the roadmap's
+index in one place, so that "what has been done" and "what is left" can be read off one table. The
+per-experiment file is authoritative for that experiment's measurements, scope and qualifications;
+the *State* column says how far it has got, and the *Current finding* column is an index entry
+rather than a summary of the evidence — one line, no qualifications, and no number that is not
+stated with its conditions in the file it points at. An experiment with nothing to report yet shows
+`—`.
 
 | # | Experiment | Pyramid rung | Gate | State | Current finding | File |
 |---|---|---|---|---|---|---|
@@ -88,6 +91,7 @@ file it points at.
 | T8 | SRT vs MoQ comparative benchmark | 7 (comparative lab) | feeds [economics](../docs/economics.md) §4, §9 | partial | At a matched congestion controller MoQ and SRT are on par through 10 % loss | [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) |
 | T8b | Congestion control for a permanent fixed-rate trunk | 7 (comparative lab) | extends T8 | complete — C1–C6, 68 cells and a 14.006 h soak | **No controller recommendation is supportable**: three conditions rank them three ways. What governs the feed is the provisioning margin, the bottleneck queue discipline and the receiver's latency budget. MoQ thins where SRT damages | [test-8b-congestion-control.md](test-8b-congestion-control.md) |
 | T9 | System performance & resource utilisation | 5 (scale/soak) | feeds [architecture](../docs/architecture.md) §9, [economics](../docs/economics.md) §3.1, §4, §9 | partial | Publisher and subscriber pass; relay growth is root-caused to `quinn-proto` and convergent, at about twice the slot arithmetic. Its N = 55 knee was the test box (T26) | [test-9-performance.md](test-9-performance.md) |
+| T10 | MPTS / multiple concurrent services | 3 (carriage fidelity) + 5 (scale) | supports Gate 1; feeds [architecture](../docs/architecture.md) §9 | specified, not run | — | [test-10-mpts-multiservice.md](test-10-mpts-multiservice.md) |
 | T11 | Cross-implementation interop | 7 (comparative lab) | transport neutrality | T11a partial; T11b open | Media flows within one implementation and through none of eight others, with at least four distinct causes | [test-11-interop.md](test-11-interop.md) |
 | T12 | End-to-end 1+1 dual-path delivery and hand-off | 6 (redundancy drill) | Gate 3 — resilience; de-risks Gate 2 | complete for a co-started pair, arms A–D; independent restart blocked upstream | Two stream-clocked groomers are byte-identical and hitless with no shared component at all — **on single-track content**. A multi-track mux over independent chains does not merge at the byte | [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md) |
 | T13 | Off-the-shelf CBR/PCR grooming of an MPEG-TS egress | 4 (file), plus wire cadence | supports Gate 2; decides how the grooming requirement can be documented | complete for TSDuck, FFmpeg, GStreamer and `rawsendmpeg2ts` on both data planes | **The answer depends on the lane**: off-the-shelf `tsp -P pcradjust -P regulate` grooms a segmented egress to all four criteria with the mux intact; behind a MoQ egress nothing off the shelf passes, and the missing half is carriage | [test-13-downstream-grooming.md](test-13-downstream-grooming.md) |
@@ -105,6 +109,19 @@ file it points at.
 | T25 | Isolation under abuse: can one receiver degrade the others? | R2/R7 — the multi-tenancy exposure [comparison](../docs/comparison.md) §2 asserts and had never tested | tests a claim the paper was making unsupported | complete, five arms plus a control | **The media plane is isolated**; what abuse costs is the relay's memory, and four further arms attribute it to **abandoned-session retention** — not the group cache, not concurrency. It scales with the idle timeout, which is both mechanism and mitigation, so this is an operational property with a knob rather than a defect | [test-25-isolation-under-abuse.md](test-25-isolation-under-abuse.md) |
 | T26 | Cross-host fan-out: the scaling model, and whose limit the knee is | R2 — fan-out at near-zero marginal cost | retires the caveat on every fan-out figure in the paper: all of them had the subscribers co-resident with the relay | complete, three arms | **The relay's marginal cost is small, constant and linear, and relay CPU binds first — at the point the model predicts**, confirmed by pinning the relay to one core. Saturation *collapses* rather than degrades, so a relay needs headroom and admission control. Two AZs in one region, so this bounds relay capacity and says nothing about internet-scale fan-out | [test-26-cross-host-fanout.md](test-26-cross-host-fanout.md) |
 | T27 | The per-PID liveness detector: built, made to work in a real lane, and what it found | R8 (observability) — turns T24's recommendation into a running detector | proves the *only sufficient* detector survives the distribution path | complete, seven arms plus fault injection against the detector itself | The detector measures the same suppression **live at a cross-host groomed output** as T24 measured offline, so the fine structure it needs survives a relay, the exporter's PCR regeneration and a CBR groomer. It catches the audio case, which has no other wire-observable signature. **Its first live run found a real fault**, bisected to the #3375 merge — the rewind fix this campaign's own T23 prompted | [test-27-liveness-detector.md](test-27-liveness-detector.md) |
+| T28 | Failure injection and recovery, scored in media lost rather than recovery time | 6 (redundancy drill) | Gate 3 — resilience; feeds [comparison](../docs/comparison.md) | partial — MoQ and SRT run across three impairment shapes; segmented lane and infrastructure axis not run | **Three impairment shapes rank the two lanes three ways** at one matched latency: MoQ ahead under a discrete outage, SRT ahead under sustained partial loss, neither ahead under reorder. A resilience claim that does not name its impairment shape is unsupported | [test-28-failure-injection-matrix.md](test-28-failure-injection-matrix.md) |
+| T29 | MoQ distributed resilience above the egress 1+1 pair | 6 (redundancy drill) | Gate 3 — resilience | specified, not run | — | [test-29-moq-distributed-resilience.md](test-29-moq-distributed-resilience.md) |
+| T30 | Segmented distributed resilience: two-host store, edge and origin failure | 6 (redundancy drill) | Gate 3 — resilience | specified, not run | — | [test-30-segmented-distributed-resilience.md](test-30-segmented-distributed-resilience.md) |
+| T31 | Congestion and capacity: the step ladders, extending T8b | 7 (comparative lab) | feeds sizing, [problem](../docs/problem.md) R4/R5 | partial — MoQ ladder run on rungs re-based as multiples of stream rate; segmented ladder not run | A **mild sustained shortfall (0.9× stream rate for 60 s) is absorbed entirely**; beyond that the lane sheds in proportion to severity, at 0 continuity errors on every rung. A three-arm replicate shows the QUIC backend does not change this, and that the chronic rung is bimodal rather than costing a fixed amount | [test-31-congestion-capacity-ladders.md](test-31-congestion-capacity-ladders.md) |
+| T32 | Observability: would commercial monitoring have caught T22, T24 and T27's failures? | R8 (observability) | scores the monitoring argument | specified, not run | — | [test-32-observability-survey.md](test-32-observability-survey.md) |
+| T33 | Gate 2 preparation: boundary fixtures and the acceptance harness | 3/4 (pre-hardware) | **de-risks Gate 2** | run — Parts A–C complete except one arm; nine of ten criteria met, one partially | The lane carried every boundary condition that could be built — placed 33-bit PCR wrap, signalled discontinuity, PMT version increment, source-clock offsets to 20,000 ppm — with **zero continuity errors on every capture of every arm**, and the harness is rehearsed end to end with its pass table fixed in advance | [test-33-gate2-preparation.md](test-33-gate2-preparation.md) |
+| T34 | A real encoder against the continuous-source fence | 2 (E2E, real source) | supports Gate 3 | partial — SRT+recording arm run; export comparison blocked | Grades whether a real encoder triggers the dev-line join failure in practice. Needs the live feed | [test-34-real-encoder-severity.md](test-34-real-encoder-severity.md) |
+| T35 | LEO / Starlink handover impairment | 2 (E2E under impairment) | candidate, not committed | specified, not run | — | [test-35-leo-handover-impairment.md](test-35-leo-handover-impairment.md) |
+| T36 | Entitlement enforcement: what the relay refuses, and when | control plane | scores [control-plane](../docs/control-plane.md) | complete — all six pass criteria met | The relay admits exactly the paths a credential names and refuses everything else **before any media is delivered** | [test-36-entitlement-enforcement.md](test-36-entitlement-enforcement.md) |
+| T37 | Provisioning and de-provisioning: what actually stops a feed | control plane | scores [control-plane](../docs/control-plane.md) | complete — five of six criteria met; criterion 2 failed | **The binding finding is correctness, not speed**: `max-age=0`, a sub-second `max-age` and an omitted `Cache-Control` each disable re-checking permanently and silently, so a withdrawn grant never takes effect. The latency failure does not bind a primary-broadcast deployment | [test-37-entitlement-revocation.md](test-37-entitlement-revocation.md) |
+| T38 | The affiliate estate: many channels, many affiliates, a licensing matrix with holes | control plane | scores [control-plane](../docs/control-plane.md) | complete — six of seven criteria met; criterion 4 not gradeable on memory | **The key-per-entitlement estate scales**: launch, RSS and time-to-first-byte flat from 10 to 20,000 keys, because the relay reads the key a token names on demand and caches nothing | [test-38-entitlement-estate.md](test-38-entitlement-estate.md) |
+| T39 | Observability across the administrative boundary | R8 (observability) | scores [control-plane](../docs/control-plane.md) | partial — Part A run and passed; Part B blocked on a CLI gap | A standalone process at the client edge catches a T24-class partial fault **no relay-side telemetry can express**. The return path is authorized, routed and protocol-legal, but nothing shipped can construct it | [test-39-cross-boundary-observability.md](test-39-cross-boundary-observability.md) |
+| T40 | The content-join stall through the SRT contribution chain | 2 (E2E, deployed shape) | supports Gate 3 | complete, conclusive | **The two-stage SRT ingest does not absorb #3533's trigger** — it carries it, exactly as the local-pipe reproducer does. #3533's export stall is fixed on later builds, where a different failure takes its place on import | [test-40-continuous-join-through-srt.md](test-40-continuous-join-through-srt.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -170,44 +187,26 @@ still working, with inputs, arithmetic and limitations recorded the same way.
 Unlike the rig work, this one is reproducible by anyone with Python: every rate is a constant at the
 top of the script, so re-pricing against a different tariff or a negotiated rate is a one-line edit.
 
-## Roadmap — specified but not yet run
+## Roadmap — where the outstanding work is written down
 
-**Every specified experiment has its own per-test file, whether or not it has run.** An unrun file
-carries the objective, environment, procedure, metrics and pass criteria fixed in advance, and says
-so in a `State:` line at its head. [planned-experiments.md](planned-experiments.md) is the register
-of what is outstanding — a line per item, ranked P0/P1/P2 by what a result could change, pointing
-here for the protocol. It holds no protocols and no findings of its own.
+**Where the campaign stands.** Gate 1 is largely proven in software on both data planes. **Gate 2 has
+never been attempted**: nothing has been graded on hardware and no P2 result exists from a live wire,
+which is the make-or-break gap and waits on an analyser and an IRD bank. Gate 3 is measured on the
+MoQ and SRT lanes and **not on the segmented lane** — the largest gap the lab could close by itself,
+and it waits on one instrument this lab has not built, a byte-faithful HTTP/3 HLS receiver.
+Permanence fails in one role, on the importer's memory growth rather than on the media path.
+
+**The table above is the record; [planned-experiments.md](planned-experiments.md) is the roadmap.**
+Every specified experiment has its own per-test file whether or not it has run, carrying the
+objective, environment, procedure, metrics and pass criteria fixed in advance, with a `State:` line
+at the head that is authoritative for how far it has got. What is *outstanding*, what blocks it and
+in what order it should be run is stated once, in the register, ranked P0/P1/P2 by what a result
+could change. Nothing here restates it: a second copy of a register goes stale without anyone
+noticing.
 
 **The programme has two strands.** The original asks which of two data planes can be run
 permanently, at scale, by an operations team, for years. The second scores against
-[control-plane.md](../docs/control-plane.md), which has no evidence behind it at all.
-
-Runnable now — no hardware, no live source, no third party:
-
-| # | Test | Purpose |
-|---|---|---|
-| [T36](test-36-entitlement-enforcement.md) | Entitlement enforcement | What the relay refuses, and whether anything is delivered before it refuses |
-| [T37](test-37-entitlement-revocation.md) | Provisioning and de-provisioning | What actually stops a feed, the bound on how fast, and what that bound costs |
-| [T38](test-38-entitlement-estate.md) | The affiliate estate | Many channels, many affiliates, a licensing matrix with holes, and what entitlement costs the scaling model |
-| [T33](test-33-gate2-preparation.md) | Gate 2 preparation | Boundary fixtures and the acceptance harness, dry-run before the hardware arrives |
-| [T28](test-28-failure-injection-matrix.md) | Failure injection and recovery | The matrix, both planes, scored in media lost rather than in recovery time |
-| [T29](test-29-moq-distributed-resilience.md) | MoQ distributed resilience | Multi-relay, multi-publisher and receiver-side selection, above the egress 1+1 pair |
-| [T30](test-30-segmented-distributed-resilience.md) | Segmented distributed resilience | Two-host segment store, edge and origin failure, and the silent-misconfiguration class |
-| [T31](test-31-congestion-capacity-ladders.md) | Congestion and capacity | The step ladders on both planes, extending T8b |
-| [T40](test-40-continuous-join-through-srt.md) | The content-join stall through the SRT chain | Whether the deployed two-stage contribution ingest absorbs #3533's trigger, or carries it |
-| [T32](test-32-observability-survey.md) | Observability | Whether commercial monitoring would have caught the silent failures T22, T24 and T27 found |
-
-Blocked, and on what:
-
-| # | Test | Purpose | Blocked on |
-|---|---|---|---|
-| [T7](test-7-timing-integrity.md)/P2 | Hardware TR 101 290 P1/P2 soak | The make-or-break gate on a real IRD, on the live wire, sustained (≥ 72 h — the PCR base wraps at 26.51 h) incl. ST 2022-7 under loss | IRD + analyser loan — **Gate 2** |
-| [T34](test-34-real-encoder-severity.md) | A real encoder against the continuous-source fence | Whether a never-repeating source triggers the per-track backwards-step fence in practice, and how severely | a live TS source |
-| [T10](test-10-mpts-multiservice.md) | MPTS / multiple concurrent services | Per-service PSI/SI, PCR and continuity at egress, and relay fan-out under N services | partly a media-aware packaging edge |
-| [T14](test-14-data-plane-comparison.md) (remainder) | The blocked comparison cells | A commercial ABR-to-TS gateway on P1/P2, which also gates the segmented plane's low-latency arm; and MPTS through a real CDN | hardware; a CDN account |
-| [T12](test-12-dual-path-handoff.md)/E | Restart one leg of a live pair | Byte-identity on independent restart, and a grader that can score a pair that is not byte-identical | [#2779](https://github.com/moq-dev/moq/issues/2779) |
-| [T35](test-35-leo-handover-impairment.md) | LEO / Starlink handover | Periodic handover gaps; continuity and redundancy behaviour. A candidate, not yet committed | — |
-| T3/T4+ | Opaque lane over the wire | Deploy the opaque publisher on EC2 to run opaque transparency over a real path (T3/T4 are currently localhost/file-fed on the opaque lane) | supports Gate 1 & 3 |
+[control-plane.md](../docs/control-plane.md).
 
 ## Cross-cutting limitations (stated up front)
 

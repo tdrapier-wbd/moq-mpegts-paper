@@ -681,101 +681,67 @@ Segmented lane, same clip and host:
 
 ## Corrections
 
-> The general method rules extracted from this section, together with those from every other
-> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
-> specific record of what this experiment got wrong.
+> What stays here is what *this experiment* believed and what is true instead. The transferable
+> method rules each correction yields live once, in [method-notes.md](method-notes.md), and are
+> cross-referenced rather than restated.
 
-**The segmented arm's continuity column was a matcher that could not match.** It counted lines of
-`tsp -P continuity` output containing the word "discontinuity", which the plugin prints only in its
-`--help`; the per-event line reads `missing 14 packets`. Every `cc_disc` this rig reported was
-therefore a structural zero, and the finding built on it — that the counter "sees nothing" during the
-two-packager oscillation — was drawn from an instrument that could not have seen anything on any
-input. Re-graded from the same captures, the dual-source cells post 95–96 events and the shared-name
-hard-kill cells still post 0, so the *hitless* result stands and was accidentally right while the
-*blind counter* claim was wrong. The underlying argument survives in better shape: CC does fire, and
-what it reports — a few hundred missing packets — describes neither the magnitude nor the nature of a
-timeline that jumped backwards five times. **Method rule:** an instrument that returns the expected
-answer has not thereby been tested; feed it a known-bad input before trusting a column of zeros. The
-same defect was present in six rigs and is recorded in full in the
-[T5 Corrections](test-5-network-impairment.md).
+**The segmented arm's continuity column could not match.** It counted lines of `tsp -P continuity`
+output containing the word "discontinuity", which the plugin prints only in its `--help`; the
+per-event line reads `missing 14 packets`. Every `cc_disc` this rig reported was a structural zero,
+so the claim built on it — that the counter "sees nothing" during the two-packager oscillation — came
+from an instrument that could not have seen anything on any input. Re-graded from the same captures,
+the dual-source cells post 95–96 events and the shared-name hard-kill cells still post 0: the
+*hitless* result stands and was accidentally right, the *blind counter* claim was wrong. The
+underlying argument survives in better shape, because CC does fire and what it reports — a few
+hundred missing packets — describes neither the magnitude nor the nature of a timeline that jumped
+backwards five times. The same defect was present in six rigs
+([method-notes](method-notes.md) § *Controls*).
 
-Four issues were reported upstream from this work. **Two were real defects; two were artefacts of our
-own harness.** The artefacts are the more useful record, because each yields a method rule that any
-redundancy drill needs.
+**Retracted — "the standby route never reaches the relay serving the active source".** Announce
+interest is unconditional across the cluster, so this was an artefact: the drill killed the publisher
+at t = 22 and graded at t = 43, **21 s into a 30 s idle timeout**, which no build could have passed.
+The baseline "no failover on `moq-lite-05`" conclusion stands regardless, corroborated by an extended
+window control that stayed frozen for a full 68 s.
 
-**Real — the shared-`--origin` `Unroutable` teardown.** A shared-origin standby joining a carrying
-relay tore that relay's subscriber down. Real but pre-existing (it reproduces as `json: dropped`), and
-now fixed: a standby wins dispatch the moment it attaches, *before* a real publisher has lazily created
-every track, and a per-track refusal was being charged as a strike against the whole logical track.
-Refusals are now scoped per track with fallback to the incumbent. The drill found a genuine bug the
-unit tests missed, because a model-level standby accepts a track request immediately whereas a real
-publisher does not.
+**Retracted — the "8–9 s stall at the standby join".** The symptom reproduces, but it is not a
+routing defect. Two publishers replaying *independent copies of the same clip from its start* leave
+the standby's media timeline lagging the active one by exactly the join delay, so on splice the
+exporter is handed timestamps in the past and emits nothing until the new source overtakes. The stall
+tracks the join delay with slope 1 — under 2 s at a t = 4 join, 9 s at t = 10, 18 s at t = 20 — while
+the relay's own switch is immediate, relay B logging `subscribe started` for all three tracks in the
+millisecond the standby connects.
 
-**Real — the exporter's fatal `json: dropped`** on session loss, fixed by #2469.
+**Re-walked — the segmented arm's first active/active drill measured its own start skew**, breaking
+the rule the paragraph above had just produced. Each packager got its own `tsp -I file` read of the
+clip, started twelve seconds apart, so the pair sat twenty seconds apart in the media timeline and
+the ±20 s oscillation is a property of the rig rather than of segmented HTTP. It is kept in the
+results above because the naive configuration is a real deployment mistake with a genuinely
+interesting signature — silent, CC-clean corruption — but **"does an active/active segmented pair
+fail over" is answered only by the `gtee` common-source variant**
+([method-notes](method-notes.md): *"same file" is not "same stream"*).
 
-**Retracted — "the standby route never reaches the relay serving the active source".** This was an
-artefact of the drill, not a defect: announce-interest is unconditional across the cluster. The drill
-killed the publisher at t=22 and graded at t=43 — **21 s into a 30 s idle timeout** — so *no* build
-could have passed it. (The baseline "no failover on `moq-lite-05`" conclusion nevertheless stands,
-corroborated by an extended-window control that stayed frozen for a full 68 s.) *Rule: grade beyond
-one full idle timeout, or the drill measures the timeout rather than the mechanism.*
+**Rig — a previous cell's origin answered on the port and served the wrong directory.** One hard-kill
+cell reported a clean hitless result it had not earned: its own origin failed to bind with `Address
+already in use`, and the client spent the drill talking to the previous cell's server over the
+previous cell's document root, where nothing was being killed. Every delivered number was plausible —
+good rate ratio, no continuity errors, no rewinds — and only the traceback in the origin's log gave
+it away ([method-notes](method-notes.md): prove identity, not liveness).
 
-**Retracted — the "8–9 s stall at the standby join".** The reported symptom was that a subscriber on a
-relay merely *carrying* the broadcast froze 8–9 s whenever a redundant publisher attached locally. It
-does reproduce, but it is not a routing defect: two publishers replaying *independent copies of the
-same clip from its start* leave the standby's media timeline lagging the active one by exactly the
-join delay, so on splice the exporter is handed timestamps in the past and emits nothing until the new
-source overtakes. The stall tracks the join delay with slope 1:
+**Rig — the rewind metric was reading an unsigned column.** Differencing `pcrextract`'s "Value offset
+in PID" wrapped on the one event the metric exists to catch, reporting a 6.8 × 10¹¹ second rewind;
+differencing the PCR value column gives the physically sensible 12–24 s. Intervals used elsewhere are
+unaffected, because for a monotonic clock the two columns difference identically — which is why the
+bug survived until a stream ran backwards ([method-notes](method-notes.md)).
 
-| `pubB` joins at | measured stall |
-|---|---|
-| t=4 | < 2 s (below the warn threshold) |
-| t=10 | 9 s |
-| t=20 | 18 s |
-
-The relay's own switch is immediate (relay B logs `subscribe started` for all three tracks in the same
-millisecond the standby connects). *Rule: any redundancy test whose sources are started independently
-measures its own clock skew unless the feeds are timestamp-aligned.*
-
-**Re-walked — the segmented arm's first active/active drill measured its own start skew.** The rule
-directly above was written by this experiment, and the segmented arm broke it anyway: the first
-two-packager drill gave each packager its own `tsp -I file` read of the clip, started twelve seconds
-apart, so the pair sat twenty seconds apart in the media timeline and the ±20 s oscillation that
-produced is a property of the rig, not of segmented HTTP. It is kept in the results above because
-the naive configuration is a real deployment mistake with a genuinely interesting failure signature
-— silent, CC-clean corruption — but the question "does an active/active segmented pair fail over"
-is only answered by the `gtee` common-source variant. *Rule, restated because writing it down once
-was not enough: a redundancy drill must feed its sources from one stream, and "same file" is not
-"same stream".*
-
-**Rig — a previous cell's origin answered on the port and served the wrong directory.** One
-hard-kill cell reported a clean hitless result it had not earned: its own origin had failed to bind
-with `Address already in use`, and the client had spent the drill talking to the *previous* cell's
-server over the *previous* cell's document root, where nothing was being killed. The delivered
-numbers were entirely plausible — a good rate ratio, no continuity errors, no rewinds — and only the
-traceback in the origin's log gave it away. This is the same defect as T5's uncancelled `netem`
-watchdog wearing different clothes: a process that outlives its own cell and quietly serves the
-next one. The fix is a positive identity check rather than a liveness check — each cell writes a
-unique token into its document root and refuses to proceed until an HTTP fetch of that token returns
-*its own* value — plus a pre-flight that will not start on a port somebody else is holding.
-*Rule: "the server is up" is not "my server is up"; on a fixed port, prove identity, not liveness.*
-
-**Rig — the metric that catches a two-source lane was reading the wrong column.** Rewind detection
-initially differenced `pcrextract`'s "Value offset in PID" column, which is unsigned: on the one
-event the metric exists to catch it wrapped, reporting a 6.8 × 10¹¹ second rewind. Differencing the
-PCR value column gives the physically sensible 12–24 s. The intervals used elsewhere are unaffected
-— for a monotonic clock the two columns difference identically, which is exactly why the bug
-survived until a stream ran backwards. *Rule: a metric that only ever fires on an anomaly is only
-ever exercised by one, so check its arithmetic against a case where it fires rather than against the
-baseline where it reads zero.*
-
-Both of the original rules are baked into the drill offered upstream as
-[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`), which generates its own
-`ffmpeg` source clip (no private capture), grades failover and standby-join survival, reports the join
-stall as a measured `WARN`, and depends on `moq --origin` from #2473 (exiting with a diagnostic on
-builds without it). It was declined in favour of model unit tests that run on every PR;
-[#2713](https://github.com/moq-dev/moq/pull/2713) carried its one load-bearing insight — that a
-reselect must be graded *per track* — into those tests instead. See
+**Two of the four issues reported upstream from this work were real defects**, and both are fixed:
+the shared-`--origin` `Unroutable` teardown, where a standby wins dispatch the moment it attaches —
+before a real publisher has lazily created every track — and a per-track refusal was charged as a
+strike against the whole logical track, now scoped per track with fallback to the incumbent; and the
+exporter's fatal `json: dropped` on session loss, fixed by #2469. The drill found the first because a
+model-level standby accepts a track request immediately where a real publisher does not. The
+contribution record, including the declined failover drill
+([#2545](https://github.com/moq-dev/moq/pull/2545)) and the insight
+[#2713](https://github.com/moq-dev/moq/pull/2713) carried into the model tests instead, is in
 [upstream-contributions.md](upstream-contributions.md) §3.
 
 ## Observations

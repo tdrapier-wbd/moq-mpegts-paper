@@ -1899,6 +1899,23 @@ repetition until the matched values were examined, at which point they read as t
 > valid at the value it did run — it simply establishes one condition rather than a ladder, and the
 > write-up has to say which.
 
+### An impairment rung has to be expressed in the units the result depends on
+
+*From [T31](test-31-congestion-capacity-ladders.md).* The capacity ladder specified its rungs as
+absolute shaped rates — 12 Mb/s for the "sustained moderate shortfall", 8 Mb/s for the deep one.
+Against a ~9.95 Mb/s fixture, 12 Mb/s is 20 % of *headroom*, so the cell that was supposed to measure
+a mild sustained shortfall measured an unimpaired link and returned zero. The zero was correct and
+meant nothing, and because it was sitting in a ladder next to two cells that did mean something, it
+read as a result. Re-based on multiples of stream rate, the same rung at 0.9× measures the thing it
+was specified for, and the ladder's most useful cell — a sustained shortfall absorbed entirely — was
+inside the gap the absolute rungs had left.
+
+> **Write a rung in the quantity the outcome is a function of, and derive the absolute value from
+> the fixture at run time.** Programme loss depends on the shaped rate *relative to* the stream, so a
+> rate in Mb/s is a rung whose meaning changes whenever the fixture does. The failure is quiet: the
+> cell runs, grades clean and reports a plausible number, and nothing in the output says the
+> impairment was never applied.
+
 ### A median across a window containing a step measures where the step fell
 
 *From [T28](test-28-failure-injection-matrix.md) P1-m.* Two replicates of the same MoQ outage cell
@@ -1952,6 +1969,24 @@ matching mistake with `pkill -f` is worse: the same self-match terminated the SS
 > cannot match a command line that quotes it. Better still for sequencing, wait on a marker the run
 > writes at the end rather than on the absence of a process, since absence is also what a crash on
 > the first cell looks like.
+
+### A replicate loop inside one script invocation re-uses the fixed port the last replicate held
+
+*From [T31](test-31-congestion-capacity-ladders.md), the QUIC-backend arms.* A wrapper asked for
+three replicates of one cell by naming that cell three times in a single invocation of the ladder
+script. Two of the three came back VOID. The relay log said `Address already in use (os error 98)`
+and the subscriber log said `received goaway` / `peer redirected immediately`: the script binds a
+fixed port per cell, the previous replicate's relay had not released it, so the new relay died at
+bind while the **old one stayed up and answered the new subscriber**, then issued a GOAWAY when its
+own teardown arrived. The cell had a publisher, a subscriber and a relay, and was measuring the
+wrong relay.
+
+> **This is the identity-not-liveness trap of *A process that is still there is not the process you
+> started* (§ above), reappearing in our own replicate harness rather than in the system under
+> test.** Where a rig binds fixed ports, one replicate is one invocation, so the full teardown that
+> releases them runs between replicates; leave a gap for the socket to clear and write each
+> replicate to its own output directory. A cheaper standing guard is to have the rig fail loudly if
+> its port is already bound *before* it starts anything, rather than let a survivor serve the run.
 
 ### A subscriber that ran for the whole window and did not die may still have measured nothing
 
