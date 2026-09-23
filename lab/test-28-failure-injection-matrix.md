@@ -349,8 +349,7 @@ recovering the large majority of a 5 s outage.
 
 **It is not free, and what it costs is delivery latency that does not come back inside the window.**
 Late-window latency rises with the allowance, from ~4.5 s at the 0.5 s budget to 10.7–12.3 s at 6 s,
-against a ~2 s unimpaired baseline on the same cells; and it is still rising when each 60 s window
-ends, so these are lower bounds rather than settled values. **The induced latency is not bounded by
+against a ~2 s unimpaired baseline on the same cells. **The induced latency is not bounded by
 the allowance that induced it**: at a 6 s `--max-age` the lane runs roughly twice that far behind. The
 plausible mechanism is contention — backfill and live share one shaped 20 Mb/s egress, so a deeper
 allowance means more backfill, which means falling further behind — but this rig does not separate
@@ -378,6 +377,41 @@ its sibling. **The late-window figure is the statistic reported above for exactl
 bounded buffer, which would have to drop or drift instead of lagging. Single host, one netns path at
 20 Mb/s and 100 ms RTT; not cross-host. One impairment shape — a single 5 s total outage — so this
 says nothing about partial loss, and the loss ladder elsewhere in this file is the place for that.*
+
+#### The lane does not re-converge: it steps once and holds the new latency
+
+The 60 s cells above could not distinguish a lane still falling behind from one that had settled at a
+worse operating point, because each window ended while the figure was still moving. A longer pass
+settles it. Two cells at the 2 s and 6 s budgets, same rig and same 5 s outage, run out to **117.8 s
+of wall clock — about 93 s after the outage, against roughly 35 s in the short cells.** Plotting
+delivery latency *added since the first sample* against wall clock:
+
+| budget | latency added by t≈45 s | over the remaining ~74 s | drift across that span |
+|---|---:|---:|---:|
+| 2 s | 7.33 s | 7.26 – 7.66 s | **+0.24 s** |
+| 6 s | 11.85 s | 11.81 – 12.23 s | **+0.19 s** |
+
+**The step is a step, not a ramp.** Latency climbs once while the backfill is delivered, reaches its
+new level within about 20 s of the outage ending, and then holds flat to within a quarter of a second
+for the next seventy-odd seconds. It neither continues to degrade nor recovers: over ~75 s of healthy
+path after a 5 s outage, **the lane gives back none of the delay it took on**. Absolute late-window
+latency on these two cells is **8,036 ms** and **12,538 ms**, consistent with the short cells.
+
+This corrects a reading the short cells invited. The large "trend" figures there — up to +10.5 s
+first-third to last-third — were the *transition* being captured mid-step, not evidence of unbounded
+growth, so the 60 s numbers are settled values rather than the lower bounds they first appeared to
+be.
+
+**The operational consequence is the one R4 names.** A lane that permanently absorbs an outage into
+its delivery latency has a buffer that is neither bounded nor stable across a fault, and
+[`problem.md`](../docs/problem.md) §5 treats a drifting buffer as itself a fault for downstream
+playout and ad insertion. On this evidence recovery is available on the MoQ lane, but only by
+re-timing the service, and nothing observed here re-times it back.
+
+*Both cells ran one replicate. The window was limited to 117.8 s by the source clip rather than by
+the commanded `RECOVER=280`, so "does it recover after several minutes" remains formally open — but
+a lane flat to ±0.24 s over 75 s is not converging on any timescale that matters to the question.
+Same domain and topology caveats as the matched ladder above.*
 
 ## Objective
 
