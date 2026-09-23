@@ -505,8 +505,10 @@ equated**, and an experiment that sets them equal and compares the residual loss
 that is an artefact of the pairing rather than a property of either transport. Anything that reads
 `--max-age` as "the latency this lane will deliver" — a sizing table, a comparison arm, an SLA — is
 reading a budget for recovery as a commitment about steady state. *Measurement point P1, cross-host
-through the namespace rig, three replicates; the MoQ half only, because the SRT arm's instrumentation
-is not yet sound.*
+through the namespace rig, three replicates; the MoQ half only. The SRT half is still unrun: its
+instrument is now sound — the artefact was a source-side pass-through tap, and a mirroring tap grades
+identically to no tap at all ([T28](../lab/test-28-failure-injection-matrix.md)) — but the arm itself
+has not been re-taken.*
 
 The operational consequence is the one in [Architecture](architecture.md) §8.5: pin the controller
 explicitly, because the resolved default is backend-specific, and choose it against the route's own

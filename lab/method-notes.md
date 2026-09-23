@@ -1285,6 +1285,18 @@ complement.** *(T27, on this campaign's own contribution.)*
 
 ## 5. Rig hygiene
 
+**A `pkill -f` pattern sent over SSH matches the SSH command line that carries it, so the cleanup
+kills its own session and the process it was aimed at survives.** *(P1-m tap validation.)*
+
+> `ssh host 'pkill -9 -f t18-tap-perturbation.sh; …'` returns 255 with no output, the stale run keeps
+> going, and the relaunch silently lands beside it rather than replacing it — so the next result
+> comes from the *old* build of the rig. The pattern is present twice on that host: once in the
+> target's command line and once in the `bash -c` string the SSH daemon forked. The remedy is the
+> bracket idiom the local scripts already use for the same reason, `pkill -9 -f "[t]18-tap-perturb"`,
+> which no longer matches itself. **Verify the kill rather than assuming it** — end the command with
+> `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean` and read the answer, because a failed
+> cleanup is indistinguishable from a successful one in the exit status when SSH dies mid-command.
+
 **When arms run back to back against a service that caches an admission decision, the cache carries
 the previous arm's answer into the next one.** *(T37, T38.)*
 
@@ -1811,10 +1823,21 @@ continuity counters and PCR — and launders any damage done upstream of it.
 > the comparison silently becomes a measurement of the instrument. Had this run been graded without
 > its controls, SRT would have looked catastrophically worse than MoQ on entirely fabricated evidence.
 
-> **Prefer a mirroring tap to a pass-through one.** Tee to a file, or derive source timestamps offline
-> from a known fixture, rather than routing the media through a process that has to re-emit it. And
-> keep an unimpaired control for **every** lane at **every** setting: this was caught only because the
-> SRT controls refused to grade clean.
+> **Prefer a mirroring tap to a pass-through one.** `tsp -P fork --nowait --ignore-abort` hands the
+> instrument a copy while the graded stream continues to its output, so the capture never passes
+> through the instrument's process. And keep an unimpaired control for **every** lane at **every**
+> setting: this was caught only because the SRT controls refused to grade clean.
+
+> **"The tap" was two taps, and only one of them did it — so attribute the position, not the
+> technique.** The rig tapped both the source and the egress, and removing both together fixed it,
+> which made "inline taps corrupt streams" look like the lesson. Arming the two separately says
+> otherwise: the **egress** tap grades 0.000 s and 0 continuity errors inline, identically to no tap
+> at all, while the **source** tap alone reproduces the full 4.563–4.693 s and 6,001–6,493 errors.
+> The difference is what sits behind each one. The source tap is a Python reader between a
+> `regulate`-paced sender and a real-time SRT transmitter, so its cost is paid as backpressure on a
+> stage that cannot wait; the egress tap has only a file behind it and may lag as much as it likes.
+> *A pass-through instrument is dangerous where it feeds something real-time, not everywhere — and a
+> fix that removes two suspects at once has not identified either.*
 
 ### Never edit a shell script while it is running
 

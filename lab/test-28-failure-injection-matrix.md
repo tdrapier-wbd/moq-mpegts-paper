@@ -222,9 +222,47 @@ fabricated evidence. Method rule in [method-notes](method-notes.md) § *An inlin
 one lane and was invisible on the other*.
 
 **What the SRT arm needs before it can rank anything**: a latency tap that mirrors rather than passes
-through — tee to a file, or derive source timestamps offline from the known fixture — and then SRT's
-`--latency` set to the MoQ lane's *measured* unimpaired delivery latency rather than to its nominal
-budget. Both are changes to the rig, not to the question.
+through, and then SRT's `--latency` set to the MoQ lane's *measured* unimpaired delivery latency
+rather than to its nominal budget. Both are changes to the rig, not to the question. **The first is
+now built and validated** — see below; the second is outstanding.
+
+#### The artefact attributed: it is the source-side tap alone, and a mirroring tap removes it
+
+The paragraph above named "the pass-through tap" without saying *which* of the two the rig ran. There
+were two — one between `regulate` and the SRT sender, one on the egress — and they do not behave
+alike. Five arms on one clean SRT lane, differing only in how the stream is observed
+([`t18-tap-perturbation.sh`](scripts/t18-tap-perturbation.sh), `53f8aa99d` host, netns at 20 Mb/s and
+100 ms RTT, `--latency 2000`, 60 s per arm):
+
+| arm | what observes the stream | media lost | continuity errors | pictures seen |
+|---|---|---:|---:|---:|
+| `none` | nothing — the reference | **0.000 s** | **0** | — |
+| `inline` | egress tap, in the path | **0.000 s** | **0** | 2,099 |
+| `mirror` | egress tap, off a `tsp -P fork` copy | **0.000 s** | **0** | 2,099 |
+| `src-inline` | **source** tap, in the path | **4.693 / 4.563 s** | **6,001 / 6,493** | 2,206 |
+| `src-mirror` | **source** tap, off a `tsp -P fork` copy | **0.000 / 0.000 s** | **0 / 0** | 2,154 |
+
+*Two cells are quoted twice because the source arms were replicated; the two runs agree on the
+picture counts exactly and on the loss to within 0.13 s.*
+
+**The egress tap is innocent and the source tap is the whole artefact.** `src-inline` lands inside the
+originally observed 4.196–5.391 s and 5,704–8,930 continuity errors, so the defect is reproduced
+rather than merely hypothesised; `inline` sits at zero on the same rig in the same session. The
+mechanism follows from where each one sits: the source tap is a Python reader between a
+`regulate`-paced sender and a real-time SRT transmitter, so whatever it costs is paid as backpressure
+on a stage that cannot wait, while the egress tap has only a file behind it and can lag freely.
+
+**The fix is `tsp -P fork --nowait --ignore-abort`**, which hands the tap a *copy* of each packet
+while the main chain continues to its output, so the graded capture never passes through Python.
+`src-mirror` grades identically to the untouched reference while still seeing 2,154 pictures against
+`src-inline`'s 2,206 — the instrument survives the change, which is the half that makes it a fix
+rather than a removal.
+
+*One run per arm for the egress three; the two source arms replicated. Domain: file, on the
+subscriber's capture. This validates the instrument only — it re-opens the SRT arm rather than
+grading it, and no loss figure in this experiment's tables is restored by it. The second rig change
+the arm needs, matching SRT's `--latency` to the MoQ lane's measured delivery latency, is still
+outstanding.*
 
 One incidental rig defect worth keeping, because it cost a whole pass: TSDuck's `tsp` does not start
 its output plugin until the `regulate` input stage has filled, which takes **~8 s** with this source,
