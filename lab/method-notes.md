@@ -1832,12 +1832,24 @@ continuity counters and PCR — and launders any damage done upstream of it.
 > technique.** The rig tapped both the source and the egress, and removing both together fixed it,
 > which made "inline taps corrupt streams" look like the lesson. Arming the two separately says
 > otherwise: the **egress** tap grades 0.000 s and 0 continuity errors inline, identically to no tap
-> at all, while the **source** tap alone reproduces the full 4.563–4.693 s and 6,001–6,493 errors.
-> The difference is what sits behind each one. The source tap is a Python reader between a
-> `regulate`-paced sender and a real-time SRT transmitter, so its cost is paid as backpressure on a
-> stage that cannot wait; the egress tap has only a file behind it and may lag as much as it likes.
+> at all, while the **source** arm alone reproduces the full 4.563–4.693 s and 6,001–6,493 errors.
 > *A pass-through instrument is dangerous where it feeds something real-time, not everywhere — and a
 > fix that removes two suspects at once has not identified either.*
+
+> **The second attribution was confounded too, in exactly the way the sentence above warns about —
+> the cause is a process boundary, not an instrument.** Putting a Python reader in the source path
+> requires splitting the publisher into `tsp … -O file - | python3 … | tsp -I file - -O srt`, which
+> also moves `regulate --pcr-synchronous` out of the process that owns the SRT sender. The source arm
+> therefore changed two things at once. Separating them: a publisher that kept the two-`tsp` split
+> but mirrored its tap, so that **no Python sat in the path**, still graded **4.601–4.602 s lost with
+> 6,104–6,133 continuity errors**, and delivered **65.0 s of programme in a 60 s run** where the same
+> rig's MoQ lane delivered 57.1 s. Collapsing it to a single `tsp` holding both stages returned
+> **0.000 s, 0 errors and a 57.6 s span**. `regulate` paces against the stream's own PCRs; a pipe to
+> a second `tsp` inserts an unpaced buffer between that clock and the transmitter, and a live SRT
+> sender drops rather than waits. *Keep a real-time pacing stage and the transmitter it feeds in one
+> process. Where an instrument seems to be the cause, check first whether accommodating it moved a
+> process boundary — and treat "delivers more programme time than the run lasted" as the signature of
+> a lost clock, because loss and continuity counts alone do not distinguish it from a bad link.*
 
 ### Never edit a shell script while it is running
 

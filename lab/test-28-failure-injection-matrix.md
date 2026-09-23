@@ -215,8 +215,8 @@ one buffer measured twice.
 controls do not grade clean: unimpaired cells lost 4.196–5.391 s with 5,704–8,930 continuity errors.
 Re-run through the identical netns path **with the inline tap removed**, the same lane graded
 **0.000 s lost, 0 holes, 0 continuity errors** over a 27.7 s span. A pass-through tap was corrupting
-the transport stream — **the source-side one, as the next section establishes; the egress tap is
-harmless** — and **the MoQ lane never showed it** because `moq export ts` re-synthesises the stream at
+the transport stream — or rather, as the next section establishes, the **split publisher** that a
+source-side tap forces; the egress tap is harmless — and **the MoQ lane never showed it** because `moq export ts` re-synthesises the stream at
 egress and regenerates the continuity counters, laundering any upstream damage. Had the SRT
 controls been omitted, this rig would have reported SRT as catastrophically worse than MoQ on entirely
 fabricated evidence. Method rule in [method-notes](method-notes.md) § *An inline instrument damaged
@@ -227,7 +227,7 @@ through, and then SRT's `--latency` set to the MoQ lane's *measured* unimpaired 
 rather than to its nominal budget. Both are changes to the rig, not to the question. **The first is
 now built and validated** — see below; the second is outstanding.
 
-#### The artefact attributed: it is the source-side tap alone, and a mirroring tap removes it
+#### The artefact attributed: it is the source-side *process split*, and the Python tap only forced one
 
 The paragraph above named "the pass-through tap" without saying *which* of the two the rig ran. There
 were two — one between `regulate` and the SRT sender, one on the egress — and they do not behave
@@ -246,21 +246,35 @@ alike. Five arms on one clean SRT lane, differing only in how the stream is obse
 *Two cells are quoted twice because the source arms were replicated; the two runs agree on the
 picture counts exactly and on the loss to within 0.13 s.*
 
-**The egress tap is innocent and the source tap is the whole artefact.** `src-inline` lands inside the
-originally observed 4.196–5.391 s and 5,704–8,930 continuity errors, so the defect is reproduced
-rather than merely hypothesised; `inline` sits at zero on the same rig in the same session. The
-mechanism follows from where each one sits: the source tap is a Python reader between a
-`regulate`-paced sender and a real-time SRT transmitter, so whatever it costs is paid as backpressure
-on a stage that cannot wait, while the egress tap has only a file behind it and can lag freely.
+**The egress tap is innocent and the damage is entirely on the source side.** `src-inline` lands
+inside the originally observed 4.196–5.391 s and 5,704–8,930 continuity errors, so the defect is
+reproduced rather than merely hypothesised; `inline` sits at zero on the same rig in the same session.
 
-**The fix is `tsp -P fork --nowait --ignore-abort`**, which hands the tap a *copy* of each packet
-while the main chain continues to its output, so the graded capture never passes through Python.
+**But "the source tap" is not the cause — the process split it requires is.** These five arms cannot
+separate the two, because the only way to put a Python reader in the source path is to break the
+publisher into `tsp … -O file - | python3 … | tsp -I file - -O srt`, which also takes
+`regulate --pcr-synchronous` out of the process that owns the SRT sender. The arm that separates them
+came later, from the P1-m ladder itself: its SRT publisher kept the two-`tsp` split for unrelated
+reasons while running `SRC_TAP=mirror`, so **no Python sat in the path at all** — and it graded
+**4.601 / 4.602 s lost with 6,104 / 6,133 continuity errors**, reproducing `src-inline` to within
+0.1 s and 400 errors. It also delivered **65.0 s of programme in a 60 s run** against the MoQ lane's
+57.1 s on the same rig, which is the tell: the transmitter had lost its pacing and was running ~8 %
+fast. Collapsing the publisher back to a single `tsp` holding both `regulate` and `-O srt`, with the
+tap still mirrored, returned **0.000 s lost, 0 continuity errors and a 57.6 s span**, and a median
+delivery latency of 2,028.1 ms against a commanded 2,029 ms.
+
+**So the rule is about process boundaries, not instrumentation.** `regulate --pcr-synchronous` paces
+a stream against its own PCRs; a pipe to a second `tsp` puts an unpaced buffer between that clock and
+the transmitter, and a live SRT sender drops rather than waits. `tsp -P fork --nowait --ignore-abort`
+is the right way to observe the source not because it avoids Python but because it keeps the whole
+chain in one process: it hands the tap a *copy* while the main chain continues to its output.
 `src-mirror` grades identically to the untouched reference while still seeing 2,154 pictures against
 `src-inline`'s 2,206 — the instrument survives the change, which is the half that makes it a fix
 rather than a removal.
 
-*One run per arm for the egress three; the two source arms replicated. Domain: file, on the
-subscriber's capture. This validates fidelity only.*
+*One run per arm for the egress three; the two source arms replicated; the separating evidence from
+the P1-m SRT ladder, two cells plus a single-cell control. Domain: file, on the subscriber's capture.
+This validates fidelity only.*
 
 #### …but mirroring the *egress* tap breaks the other half of what it measures
 

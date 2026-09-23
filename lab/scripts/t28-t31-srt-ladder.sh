@@ -227,10 +227,21 @@ run_cell() {
 	srt)
 		# The publisher listens and the subscriber calls, so the media crosses the shaped
 		# egress in the same direction as the MoQ lane's.
-		pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \
+		# `regulate --pcr-synchronous` and the SRT sender must live in the *same* `tsp`.
+		# Splitting them across a pipe costs the transmitter its pacing: the arm then
+		# delivers 65 s of programme in a 60 s run and grades at ~4.6 s lost with ~6,100
+		# continuity errors on an unimpaired link. Only the inline source tap needs the
+		# split, and it pays that price for it.
+		if [ -n "$SRC_INLINE" ]; then
+			pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous \
                 -O file - 2>/dev/null $SRC_INLINE \
               | tsp -I file - -O srt --listener '0.0.0.0:$SRT_PORT' \
                 --transtype live --latency $srt_ms" >"$d/pub.log" 2>&1 &
+		else
+			pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \
+                -O srt --listener '0.0.0.0:$SRT_PORT' \
+                --transtype live --latency $srt_ms" >"$d/pub.log" 2>&1 &
+		fi
 		# Wait for the port, not for a guessed interval. `tsp` does not start its output
 		# plugin until the `regulate` input stage has filled, which takes ~8 s with this
 		# source — and TSDuck's SRT caller does not retry, so a 3 s sleep here made the
