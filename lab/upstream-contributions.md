@@ -1822,7 +1822,7 @@ Three decisions inside that round worth keeping:
   regardless of which way the implementer jumps. The two are cross-linked so neither looks like a
   single-venue complaint.
 
-### moq-dev#3731 answered: agreement on the diagnosis, a concession on mux rate, and one correction owed
+### moq-dev#3731 answered, and our re-assessment returned: agreement on the diagnosis, a concession on mux rate, one structural disagreement left
 
 The implementer replied within hours, and the useful content is narrower than the agreement suggests.
 
@@ -1858,22 +1858,30 @@ do not.
 argues the MUST has no literal solution because audio and video access units do not share a grid, and
 "optional" resolves that without anyone having to concede the stronger claim.
 
-**The reply is deliberately held until the next MSFTS revision publishes, and then sent once.** The
-thread's open questions all turn on how far the draft's ES-level carriage moves toward the
-implementation, which the revision decides; answering before it lands would mean answering twice.
-**Three points are owed when it goes**, recorded here so the delay does not lose them:
+**The reply was held until the revision published, and went once, on 2026-09-22.** The thread's open
+questions all turned on how far the draft's ES-level carriage moved toward the implementation, which
+only the revision could decide; answering earlier would have meant answering twice. It reports
+**four of six points resolved, three in the direction the implementer argued for**, and names the
+payload unit — filtered 188-octet packets against access units — as the single structural
+disagreement, tracked at msfts#33 and left with its editor rather than pushed.
 
-1. **Bank the mux-rate offer** — catalog field plus padding on export is msfts#25's ask, volunteered,
-   and it is the one place the two venues can converge on a concrete field.
-2. **Correct "just always pad."** Padding unconditionally is the bare-MUST error msfts#32 exists to
-   prevent: re-pacing costs latency equal to its buffer and buys nothing for a file, a software
-   decoder or a downstream multiplexer. The ask is a conditional MUST plus a SHOULD NOT plus
-   configurability.
-3. **Clarify the PCR position rather than contest it.** He is right that transmitting PCR is not what
-   recovers a decoder's clock; our architecture *regenerates* PCR at egress, which is what T19
-   grades. On the current text it reads as disagreement when it is not, and the whole IRD-facing case
-   depends on that regeneration being done correctly — so the risk is "kind of dumb" hardening into a
-   reason not to regenerate it either.
+Of the three points the delay was protecting, two went as planned and the third was made in a
+different form:
+
+1. **The mux-rate offer is banked.** Both venues landed it in the same week and agree on the
+   semantics: a stuffing target, not a timing source, counted over 188-octet packets and declared
+   once the publisher has removed nulls. `mpegts.muxRate` and `mpeg2tsMuxRate` are the same quantity.
+2. **"Just always pad" was corrected on the substance rather than as a drafting ask** — that padding
+   to a rate makes the *total* correct without making the byte *positions* correct, and a receiver
+   clocking off packet arrival grades the positions. The measurements sizing that gap were kept out
+   of a design thread deliberately and filed as
+   [#3925](https://github.com/moq-dev/moq/issues/3925) instead.
+3. **The PCR clarification was carried implicitly, not stated.** The reply endorses the revision's
+   Egress Timing position — that delivery-schedule conformance belongs to how the *subscriber* hands
+   packets to its receiver — which is the regeneration-at-egress point in the draft's own words. It
+   never says in as many words that we regenerate PCR rather than transmit it. The residual risk is
+   unchanged but small: *"kind of dumb"* hardening into a reason not to regenerate PCR either. **Not
+   worth a message of its own**; fold it into the next substantive reply on the thread.
 
 ### The maintainer's objection to the round, and why the volume half of it is right
 
