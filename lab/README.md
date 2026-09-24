@@ -193,9 +193,12 @@ top of the script, so re-pricing against a different tariff or a negotiated rate
 **Where the campaign stands.** Gate 1 is largely proven in software on both data planes. **Gate 2 has
 never been attempted**: nothing has been graded on hardware and no P2 result exists from a live wire,
 which is the make-or-break gap and waits on an analyser and an IRD bank. Gate 3 is measured on the
-MoQ and SRT lanes and **not on the segmented lane** — the largest gap the lab could close by itself,
-and it waits on one instrument this lab has not built, a byte-faithful HTTP/3 HLS receiver.
-Permanence fails in one role, on the importer's memory growth rather than on the media path.
+MoQ and SRT lanes and **not on the segmented lane** — the largest gap the lab could close by itself.
+Its two halves are differently blocked, and conflating them has cost the campaign time: the
+**impairment ranking** (P1-a and P1-d's segmented ladders) grades programme survival, needs no byte
+fidelity and **can be run now on apparatus that exists**, while the **carriage-fidelity** half waits
+on an instrument this lab has not built, a byte-faithful HTTP/3 HLS receiver (P0-e). Permanence fails
+in one role, on the importer's memory growth rather than on the media path.
 
 **The table above is the record; [planned-experiments.md](planned-experiments.md) is the roadmap.**
 Every specified experiment has its own per-test file whether or not it has run, carrying the
