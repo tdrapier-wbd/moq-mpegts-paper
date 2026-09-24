@@ -483,7 +483,19 @@ across two runs. Two consequences, and they are separate:
   primary-distribution chain the publisher is restarted for a version bump, a failover or an
   encoder reboot, and the egress must not be what has to be restarted alongside it.
 - **The exit is an error rather than an end of stream**, so a supervisor cannot distinguish a
-  broadcast that ended normally from one that failed. This is the same *shape* as the defect
+  broadcast that ended normally from one that failed. **Measured as an exit code on `ffa5b81b`:
+  `moq export ts` exits 1 when the publisher is killed and it also exits 1 when the publisher
+  finishes its tracks and exits 0** ([`t13-export-teardown.sh`](scripts/t13-export-teardown.sh)).
+  There is no teardown on this path that produces a clean exit, which is the distinction upstream's
+  own plan for [#3926](https://github.com/moq-dev/moq/issues/3926) specifies as the fix — *"0 when
+  the catalog track finished cleanly, 1 when it was dropped or anything else failed"*. The error
+  *text* varies with which track ends first and is not a reliable discriminator either: one
+  condition produces `Error: json: dropped`, `Error: moq: dropped` and
+  `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed` in different runs,
+  the last of which reports a normal end of broadcast as a layout change that did not happen and
+  reproduces in upstream's own `test/ts/run.sh --pair` with the publisher exiting 0.
+
+  This is the same *shape* as the defect
   [#3897](https://github.com/moq-dev/moq/issues/3897) reported and
   [#3907](https://github.com/moq-dev/moq/pull/3907) fixed — a transport condition reaching the
   snapshot consumer as a fatal error — but a different path: #3907 gave the group read a skip, and

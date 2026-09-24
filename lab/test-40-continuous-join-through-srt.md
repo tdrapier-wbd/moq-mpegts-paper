@@ -7,7 +7,11 @@ local-pipe reproducer. On **`5d0991b9`** (`main` after [#3793](https://github.co
 which carries [#3784](https://github.com/moq-dev/moq/pull/3784) closing
 [#3533](https://github.com/moq-dev/moq/issues/3533), the **0.31 Mb/s export stall is gone** — the
 acceptance oracle reads full rate through the first join — but a **homogeneous** build hits a different
-failure at the join: `moq import ts` exits with *frame timestamp is below the live edge*.
+failure at the join: `moq import ts` exits with *frame timestamp is below the live edge*. **That
+successor failure is still present on `ffa5b81b`**, re-measured through this rig after
+[#3987](https://github.com/moq-dev/moq/pull/3987) closed
+[#3798](https://github.com/moq-dev/moq/issues/3798) without changing any code; the mechanism is
+characterised per stream kind in [T41](test-41-import-reanchor-coverage.md).
 
 ## Objective
 

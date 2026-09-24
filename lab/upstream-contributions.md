@@ -1044,6 +1044,23 @@ Grader validation, since a comparison tool that cannot fail is not evidence: a c
 itself gives 100 % on every table, and nulling every second PAT/PMT emission on one leg drops those
 two to 50.60 % and 51.63 % and fails while the untouched tables stay at 100 %.
 
+**Merged 2026-09-23 as `d571aed2`, and it reports the defect from inside the tree.** Run as
+`test/ts/run.sh --pair` on `ffa5b81b`, against the harness's own generated clip with the second leg
+joining 5 s in and a 40.5 s shared media window:
+
+| Table | Anchored? | Agreement | What the grader says |
+|---|---|---:|---|
+| PAT | yes | **97.58 %** | — |
+| PMT 0x1000 | yes | **97.58 %** | — |
+| SDT/BAT | **no** | **0.00 %** | both legs emit every 2.000 s, 0.261 s out of phase — *"a timer started with the exporter, not an anchor in the media"* |
+
+The figures are the same phenomenon as the pre-merge run at a different join offset, which is what
+the mechanism predicts: the period is identical between legs and the phase is wherever the second
+exporter started. [#3948](https://github.com/moq-dev/moq/issues/3948) is therefore still live and now
+has evidence from a merged in-tree gate rather than from a campaign script, which is the most useful
+form it can take. The arm is opt-in, so nothing in CI turns red while the anchoring question is
+decided.
+
 ### A takeover livelock — closed
 
 A relay could stay *running* and stop *serving*: a livelock pinned every worker thread inside one
@@ -1546,6 +1563,56 @@ would therefore emit a stream an IRD still cannot clock off, that the schedule i
 sink, and that the sink should wait behind it. Filing the weaker ask alongside the evidence against
 prioritising it is the honest form when the campaign is not a customer and cannot supply the customer
 ask that was requested.
+
+### Four of these were closed as completed, by a planning document that changed no code
+
+On 2026-09-23 [#3798](https://github.com/moq-dev/moq/issues/3798),
+[#3925](https://github.com/moq-dev/moq/issues/3925),
+[#3926](https://github.com/moq-dev/moq/issues/3926) and
+[#3731](https://github.com/moq-dev/moq/issues/3731) were all closed as *completed via*
+[#3987](https://github.com/moq-dev/moq/pull/3987). **#3987 is eight files of Markdown under
+`quest/` and no code at all**, and each document it adds ends with the line *"close this issue when
+the quest finishes"*. The closures moved the tracker; they did not move the defects, and the
+documents say as much in their own present tense — #3798's records *"Known triggers, none yet
+reproduced in-tree"*, and #3925's says *"Today the average rate is right (#3831) but the bytes
+clump"*.
+
+This is a reasonable way to run a backlog and it is not a complaint. It matters here only because
+**a closed issue is the campaign's usual signal to re-test and unblock**, and on this occasion
+re-testing found every defect intact. All four were therefore re-verified on `ffa5b81b` — from the
+source as well as the wire, since a closure is exactly the circumstance in which inferring from a
+changelog is cheapest and least safe:
+
+| Issue | Re-verified on `ffa5b81b` | How |
+|---|---|---|
+| [#3798](https://github.com/moq-dev/moq/issues/3798) | **live** — import exits *frame timestamp is below the live edge* at the first content join | [T40](test-40-continuous-join-through-srt.md) rig; `reanchor` still only in `impl LegacyStream` |
+| [#3925](https://github.com/moq-dev/moq/issues/3925) | **live** — median PCR byte gap **1,316 B** against a 31,124 B nominal, 3.8 % of intervals within 1 % | [T13](test-13-downstream-grooming.md) § *The residual measured*, `pcr-residual.py` |
+| [#3926](https://github.com/moq-dev/moq/issues/3926) | **live** — no `--linger` flag exists; export exits 1 on a clean publisher exit 0; 0 B recovered after restart | [T13](test-13-downstream-grooming.md) § *Liveness* |
+| [#3731](https://github.com/moq-dev/moq/issues/3731) | **not actionable either way** — the quest defers to msfts#33, which is where this record already had it | `quest/m4/msfts-convergence.md` |
+
+The practical consequence is that **nothing the campaign had blocked on these is unblocked**: the
+#3493 permanence re-soak still cannot run a continuous source ([T21](test-21-permanence-soak.md)),
+the deterministic-groomer experiment still has no byte schedule to work against
+([planned-experiments](planned-experiments.md) P1-o), and the real-encoder arm still needs its
+publisher pinned or its importer fixed ([T34](test-34-real-encoder-severity.md)). Method rule in
+[`method-notes.md`](method-notes.md) § *A closed issue is a claim about a tracker, not about a
+binary*.
+
+### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
+
+The quest for #3798 names three triggers and states that none is reproduced in-tree. Its second
+claim — that `LegacyStream::reanchor` *"is set once, so a second unflagged loop wrap lands below the
+edge again"* — is the one that decides whether the fix is "apply the re-anchor everywhere" or "apply
+it **and** make it cumulative". [T41](test-41-import-reanchor-coverage.md) measures it: with one
+elementary stream per fixture, H.264 aborts on wrap **1.00** and legacy audio on wrap **1.98**. The
+claim holds, and the offset has to grow rather than merely exist.
+
+The same measurement corrects the plan's scope. It describes the re-anchoring path as *"legacy MPEG
+audio"* and lists AC-3 among the kinds that abort immediately, but AC-3 measures identically to
+MPEG-1 Layer II at wrap 1.98 — because `StreamType::DolbyDigitalUpToSixChannelAudio` dispatches to
+`legacy_stream` and `LegacyStream` is documented in-tree as carrying *"MP2, AC-3, E-AC-3"*. The
+dividing line is the type, not the codec, and it already spans three codecs. **Drafted, not yet
+posted** — see [`docs/upstream/`](../docs/upstream/).
 
 ---
 

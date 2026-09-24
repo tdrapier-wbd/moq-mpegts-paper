@@ -475,7 +475,15 @@ and a defect reported upstream should rest on the latter.
 **`3493-loop-2h` — invalid (same blocker).** `SOURCE_MODE=loop` (`tsp --infinite`) on the same build.
 Import exited at the first loop wrap (~631 s) with the same [#3798](https://github.com/moq-dev/moq/issues/3798)
 error. Import RSS grew from ~38 MB to ~112 MB before exit (571 s of samples); a 2 h slope confirmation
-on `5d0991b9` is **blocked until #3798 is fixed** — neither continuous nor loop source modes survive.
+is **blocked until #3798 is fixed** — neither continuous nor loop source modes survive.
+
+**Still blocked on `ffa5b81b`, and the closure of #3798 does not change that.** The issue was closed
+as completed by [#3987](https://github.com/moq-dev/moq/pull/3987), which added a plan and no code;
+re-measured on the current build, the importer still exits *frame timestamp is below the live edge*
+at the first join. [T41](test-41-import-reanchor-coverage.md) additionally shows why no source mode
+escapes it: non-legacy streams abort on the first backward timestamp and legacy audio on the second,
+so a clip carrying video fails at wrap 1 whatever its length. A 2 h continuous soak needs either the
+upstream fix or a single-pass source long enough not to wrap.
 
 **Per-PID confirmation, 6 h on the merged build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
 `lab/scripts/t21-role-memory.sh`, graded by `lab/scripts/t21-role-fit.py`), 157 M packets at 0

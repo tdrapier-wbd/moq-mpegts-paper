@@ -1809,6 +1809,38 @@ suffix. Arguing about it from the string is unresolvable.
 > identity comes from the `bin-<sha>.sha` sidecar that `ec2-build-main.sh` writes, and every rig
 > that records a build must print that file rather than `--version`.
 
+### A closed issue is a claim about a tracker, not about a binary
+
+*From the [#3987](https://github.com/moq-dev/moq/pull/3987) round.* Four defects the campaign had
+blocked work on — [#3798](https://github.com/moq-dev/moq/issues/3798),
+[#3925](https://github.com/moq-dev/moq/issues/3925),
+[#3926](https://github.com/moq-dev/moq/issues/3926),
+[#3731](https://github.com/moq-dev/moq/issues/3731) — were closed *as completed* on one day, by a
+pull request that added eight Markdown files under `quest/` and changed no code. Every document in it
+ends *"close this issue when the quest finishes"*, and every defect re-measured as live. Treating the
+closures as the usual unblock signal would have restarted a permanence soak that cannot run, and
+would have put "fixed upstream" into the record on the strength of a state transition in a tracker.
+
+> **Re-test on the closure; never read it as the fix.** Before acting on a closed upstream issue,
+> establish what actually changed: read the closing commit's diff, check the code path the defect
+> lives in, and only then run the rig. A closure can mean fixed, re-planned, de-duplicated,
+> won't-fix or triaged, and only the first of those unblocks anything. The cheapest reliable
+> discriminator is `git log <closing-ref>` plus a diffstat — a PR that touches no source file cannot
+> have fixed a runtime defect, whatever its title says.
+
+### A watcher that polls for absence must wait for presence first
+
+*From [T41](test-41-import-reanchor-coverage.md).* An arm was scored by waiting for the process under
+test to disappear. All three arms reported dying at t=1.0 s, identically and implausibly, because the
+pipeline feeding them takes a few seconds to start and the watcher's first poll ran before the
+process existed. The rig had measured its own start-up latency and called it the defect.
+
+> **Absence is what "not started yet" looks like as well as what "died" looks like** — the same
+> ambiguity as *A subscriber that ran for the whole window and did not die may still have measured
+> nothing*, inverted. Wait for the process to appear, record *that* moment as t=0, and only then
+> watch for it to go; treat a failure to appear as its own void outcome rather than as an instant
+> death. An arm whose lifetime comes back equal to the rig's own start-up delay is the signature.
+
 ### A control made of two production deployments is a coincidence, not an experiment
 
 *From [T34](test-34-real-encoder-severity.md) and [T40](test-40-continuous-join-through-srt.md).* Two
