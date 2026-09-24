@@ -123,7 +123,7 @@ second reason: no shipped CLI can dump a parsed catalog, so no catalog field can
 | P2-b | Isolation under abuse | run | **run** | [T25](test-25-isolation-under-abuse.md) | **closed.** Victims byte-identical across all four arms; origin RSS stays within 0.6 MB of baseline — an upper bound, inside that baseline's own drift — against the relay's 22x |
 | P2-c | A standby packager joining an already-running feed | — | not run | [T30](test-30-segmented-distributed-resilience.md) | sits behind P1-c |
 | P2-d | Differential delay on a real pair rather than modelled with `netem` | not run | — | [T12](test-12-dual-path-handoff.md) | the live feed gives the pair; see below |
-| P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | owed | — | [T31](test-31-congestion-capacity-ladders.md) | deprioritised behind P1-d |
+| P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | owed | **owed** | [T31](test-31-congestion-capacity-ladders.md) | **nothing — P1-d is run and this no longer sits behind it.** The segmented ladder is one sample per cell throughout, so it needs replicates on the same footing as the MoQ half |
 | P2-f | LEO / Starlink handover impairment — a candidate, not yet committed | not run | — | [T35](test-35-leo-handover-impairment.md) | — |
 | P2-g | Reproduce the transparency and three-lane arms from an office network, for its UDP/QUIC posture | not run | not run | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) | — |
 | P2-h | The opaque lane over a real path — T3/T4 are localhost and file-fed on that lane | not run | — | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) | deploying the opaque publisher on EC2 |
