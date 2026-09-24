@@ -53,14 +53,17 @@ the origin's bytes exactly over both substrates. **P0-f and P2-b have since been
 the segmented lane**, and P2-a's segmented half proves never to have been apparatus-blocked at all:
 it is vendor outreach, and the entry that listed it against P0-e was wrong.
 
-The instrument also forced one re-measurement and will force more. T20's clean-baseline PCR figures
-for the HLS arms were the old receiver's, and the wire is **conformant** where the receiver reported
-95 % of intervals out of gate. T20's *impairment* cells have not been re-run and still carry it.
-**Any segmented carriage figure taken before T42 needs re-measuring, not re-qualifying.**
+The instrument also forced re-measurement, and every cell it has reached has moved in the segmented
+lane's favour. T20's clean-baseline PCR figures for the HLS arms were the old receiver's, and the
+wire is **conformant** where the receiver reported 95 % of intervals out of gate; **T20's impairment
+cells have since been re-run through it** and two of them were receiver artefacts as well. **Any
+segmented carriage figure taken before T42 needs re-measuring, not re-qualifying.**
 
-What remains on this lane is the part that never needed the instrument: the segmented ladders of
-P1-a and P1-c–P1-d have simply not been run, which is why two experiments that compare architectures
-currently rank only the MoQ and SRT lanes.
+What remains on this lane has narrowed. **P1-d's segmented ladders are run** — the T28 impairment
+shapes and the T31 capacity rungs both — but in T20's loopback/`netem` rig rather than the
+`netns`/`cake` one the MoQ and SRT arms used, so the three-way ranking those experiments exist to
+publish is still not drawable. What that now needs is not a measurement but a rig: an HTTP origin
+reachable from inside the namespace. P1-a's and P1-c's segmented halves have not been run.
 
 **Most of the rest waits on apparatus that is arriving.** A live feed, a professional DVB analyser and
 a bank of IRDs are expected together; between them they discharge P0-j, P0-k, P0-d, P1-i, P2-d and
@@ -90,7 +93,7 @@ scope for that entry.
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
 | P1-a | Failure-injection and recovery, graded in the media domain | **run** across three impairment shapes (outage, sustained loss, reorder), MoQ and SRT matched on measured latency | **not run — no ranking without it** | [T28](test-28-failure-injection-matrix.md) | nothing — it can be run now. Also outstanding on the MoQ side: the infrastructure axis, and replicates of the latency-budget cells |
-| P1-d | Congestion and capacity: the step ladders | **run**, rungs re-based on multiples of stream rate | **not run** | [T31](test-31-congestion-capacity-ladders.md) | nothing — it can be run now. Also outstanding: rungs between 0.9× and 0.8× to locate the absorption boundary, the latency-max × contention matrix, and buffer instrumentation |
+| P1-d | Congestion and capacity: the step ladders | **run** in `netns`/`cake`, rungs re-based on multiples of stream rate | **run** in T20's loopback/`netem` rig | [T31](test-31-congestion-capacity-ladders.md) | nothing. The ladders are in **different rigs**, so what is still outstanding is a like-for-like: the segmented ladder inside the namespace, which needs an origin reachable from it. Also outstanding: rungs between 0.9× and 0.8× (both lanes) and 0.8×–0.5× (segmented), the latency-max × contention matrix, and buffer instrumentation |
 | P1-b | Distributed resilience above the egress 1+1 pair | not run | — | [T29](test-29-moq-distributed-resilience.md) | — |
 | P1-c | Distributed resilience: two-host segment store, edge and origin failure | — | not run | [T30](test-30-segmented-distributed-resilience.md) | — |
 | P1-f | The scaling model | run | not run | [T26](test-26-cross-host-fanout.md) | — |
@@ -215,13 +218,15 @@ feed through `moq export ts` with TSDuck *before* anyone reads an analyser front
 
 Grouped so nothing in a group contaminates anything else in it. Each group is one run.
 
-- **The segmented group, which is now the biggest single win and no longer blocked.** P0-e's
-  receiver is the instrument and it now exists ([T42](test-42-h3-receiver-fidelity.md)), so P1-a's
-  and P1-d's segmented ladders, P1-c's two-host segment store and P1-f's fan-out half are all
-  runnable against T20's existing HTTP/3 and HLS apparatus on the same host. Run the fan-out
-  **last**, because it deliberately saturates a box, and keep a segmented origin off any box
-  carrying a MoQ relay. Note that the receiver is validated for byte fidelity and **not** for
-  timing, so any latency arm in this group needs its per-cycle `curl` overhead characterised first.
+- **The segmented group, part run.** P0-e's receiver is the instrument and it now exists
+  ([T42](test-42-h3-receiver-fidelity.md)). **P1-d's segmented ladders are done**; P1-a's
+  infrastructure axis, P1-c's two-host segment store and P1-f's fan-out half remain, all runnable
+  against T20's existing HTTP/3 and HLS apparatus on the same host. Run the fan-out **last**,
+  because it deliberately saturates a box, and keep a segmented origin off any box carrying a MoQ
+  relay. Two constraints the first pass produced: the receiver is validated for byte fidelity and
+  **not** for timing, so any latency arm needs its per-cycle `curl` overhead characterised first;
+  and its per-fetch timeout must be swept rather than defaulted on any impaired cell
+  ([method-notes](method-notes.md) § *A receiver's per-fetch timeout is a measurement parameter*).
 - **The entitlement follow-up.** All of the family has run except **P1-k**: a real `--auth-api`
   endpoint serving a licensing matrix, rather than the stub that drove every run from
   [T36](test-36-entitlement-enforcement.md) to [T38](test-38-entitlement-estate.md). A component to
@@ -230,7 +235,9 @@ Grouped so nothing in a group contaminates anything else in it. Each group is on
 - **The cheap ladder cells** *(EC2 secondary; see P1-a and P1-d)*. The MoQ ladders run in network
   namespaces against a stopped loop publisher and grade on a per-cell aggregate, so the remaining
   cells — P1-d's 0.9×–0.8× rungs, P2-e's error bars, P1-a's infrastructure axis — are the right
-  filler for a window whose main item is posting, reviewing or building.
+  filler for a window whose main item is posting, reviewing or building. The one cell that is
+  **not** cheap is putting the segmented ladder inside the namespace, which needs an origin
+  reachable from it and is a rig change.
 - **The long runs.** P0-g's soak and P1-g's memory arm want days rather than minutes, and a soak
   measures the machine it runs on, so neither shares a window.
 - **The injection matrix.** P1-a and P0-f share a harness: both interrupt a component and grade the

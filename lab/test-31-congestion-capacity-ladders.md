@@ -1,7 +1,9 @@
 # Test 31 — Congestion and capacity: the step ladders, both planes
 
-**State: the MoQ step-capacity ladder is run, on rungs re-based as multiples of stream rate; the
-segmented ladder and the latency-max × contention matrix are not.**
+**State: both step-capacity ladders are run — the MoQ one in the `netns`/`cake` rig, the segmented
+one in T20's loopback/`netem` rig — and the latency-max × contention matrix is not. The two ladders
+are in different rigs and their figures are not interchangeable; see *The segmented ladder is in a
+different rig* below before reading them side by side.**
 [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
 discipline, and attributed the MoQ lane's shared-bottleneck collapse to per-subscriber deadline
 shedding at `--latency-max`. This experiment asks a different question — how much impairment each
@@ -14,6 +16,15 @@ programme at all**, and neither does a five-second transient at 0.8×. A chronic
 sheds about three times as much. **0 continuity errors in every cell on every rung**, so the ladder's
 integrity invariant (criterion 3) holds throughout — this lane discards whole groups on a deadline
 rather than corrupting packets.
+
+**Second headline: the segmented lane absorbs one rung deeper, and when it does break it breaks by a
+different mechanism.** Over HTTP/3 it delivers the 0.9×-for-60 s and 0.8×-transient rungs
+**byte-identically to its own headroom control**, and carries chronic 0.8× at **zero continuity
+errors and a 24.95 ms worst-case PCR interval** while running 12.7 % behind the live edge. It fails
+at 0.5×, and not by shedding: the receiver falls far enough behind that the origin has already
+deleted the segment it asks for, and it takes a 404. **Under-provision costs this lane latency until
+the availability window runs out, and then it costs it the programme** — a cliff where the MoQ lane
+has a slope.
 
 **The substrate was never missing, and that was this file's error.** The rig is `t8b-netns.sh` — two
 network namespaces joined by a veth — which is Linux-only, and the campaign's workstation is macOS.
@@ -209,6 +220,98 @@ made from it. The rungs that carry this experiment's headline — 1.2×, 0.9× a
 all at zero — are unaffected, and 0.9× for 60 s losing nothing is the more robust of the two
 boundaries because it is zero rather than a number near one.
 
+## Measured — the segmented step-capacity ladder
+
+**Environment.** EC2 secondary, 8 vCPU / 15 GB. Source the same ~9.95 Mb/s CBR slice of
+`CNNiEMEA2.ts`, packaged by `tsp -O hls` to nginx and pulled over **HTTP/3** by
+[`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py), the byte-faithful receiver — an FFmpeg
+receiver re-muxes and would grade itself rather than the wire ([T42](test-42-h3-receiver-fidelity.md)).
+Provisioned rate 20 Mb/s, rungs derived from `STREAM_MBIT=9.95` exactly as the MoQ ladder derives
+them. Rig [`t28-t31-segmented-ladder.sh`](scripts/t28-t31-segmented-ladder.sh) over
+[`t20-h3-arm.sh`](scripts/t20-h3-arm.sh), one sample per cell, **wire** domain, at **P1**.
+
+**Delivery is quoted against the ladder's own headroom control, not against 1.0.** The receiver
+joins by fetching the segments already in the playlist, so it captures about 6.6 s of backlog beyond
+its window and every healthy cell reads above unity. The 60 s cells are referenced to the 20 Mb/s
+control and the 90 s cells to the 1.2× rung, which the procedure already nominates as the ladder's
+negative control.
+
+| Step | Shaped rate | Delivered bytes | Of control | Media lost | Continuity errors | PCR max | Carriage |
+|---|---|---|---|---|---|---|---|
+| none (control, 60 s) | 20 Mb/s | 82,851,600 | — | **0.000 s** | 0 | 24.95 ms | yes |
+| 1.2× for 60 s (control, 90 s) | 11.94 Mb/s | 118,560,320 | — | **0.000 s** | 0 | 24.95 ms | yes |
+| 0.9× for 60 s | 8.96 Mb/s | 118,560,320 | **100.0 %** | **0.000 s** | 0 | 24.95 ms | yes |
+| 0.8× for 5 s | 7.96 Mb/s | 82,851,600 | **100.0 %** | **0.000 s** | 0 | 24.95 ms | yes |
+| 0.8× permanent | 7.96 Mb/s | 97,653,216 | 82.4 % | **0.000 s** | 0 | 24.95 ms | yes |
+| 0.5× for 60 s | 4.97 Mb/s | 96,203,924 | 81.1 % | **17.979 s** | 32 | 8,471 ms | no: 404, receiver exited 1 |
+
+**The two absorbed rungs are absorbed exactly, not approximately.** 0.9×-for-60 s returns
+118,560,320 bytes and the headroom control returns 118,560,320 bytes; 0.8×-for-5 s returns
+82,851,600 and its control returns 82,851,600. These are not close figures, they are the same
+figure — the shortfall is carried entirely inside the origin's segment store and the receiver never
+observes it. That is the same property [T20](test-20-segmented-http3.md) measures under loss, seen
+from the capacity side: **an HTTP lane converts a rate deficit into a fetch that takes longer, and a
+fetch that takes longer is invisible until something else runs out.**
+
+**Chronic 0.8× is the interesting cell, because it costs delivery without costing programme.** The
+receiver ends 12.7 % of a 90 s window behind — 78.5 s of media where the control carried 95.3 s —
+and the bytes it did get are clean: 0 continuity errors, 24.95 ms worst-case PCR interval, 0.00 %
+of intervals above the 40 ms gate, no holes, carriage valid. **The lane is not degrading, it is
+lagging**, and an operator watching programme integrity would see nothing wrong while an operator
+watching the live edge would see the stream drifting away from it. Both instruments are needed;
+either alone misreads this cell.
+
+**At 0.5× the lag becomes a loss, and the mechanism is the availability window.** The receiver's
+fetch of `seg-000025.ts` returns **404**: it had fallen so far behind that the origin's rolling
+playlist had already evicted the segment. What follows is 17.979 s of lost programme in three holes
+and 32 continuity errors — the first non-zero continuity count anywhere in the segmented ladder, and
+it appears only once the receiver has been forced to skip. This is the failure
+[T8b C1](test-8b-congestion-control.md) named as ordered fetch falling behind the availability
+window, measured here as programme cost. **The lane's ceiling is therefore set by the origin's
+retention, not by its throughput**, which is the same conclusion the outage cell reaches in
+[T28](test-28-failure-injection-matrix.md) from the other direction.
+
+**The byte counts at 0.8× chronic and 0.5× are nearly equal and mean opposite things**, which is
+the trap in reading this table on delivery alone. 82.4 % and 81.1 % of control, 1.3 points apart —
+but the first is 78.5 s of unbroken programme arriving late, and the second is 95.3 s of span with
+17.979 s missing out of the middle of it. A lane that skips forward recovers its *span* by
+abandoning its *content*, so delivered bytes alone cannot distinguish the cell that is merely
+behind from the cell that has given up. The media-lost and continuity columns are what separate
+them, and neither cell is legible without the other two.
+
+**Where the knee sits is bounded but not located.** Absorption is complete at 0.9× sustained and at
+0.8× transient, costs 17.6 % of delivery but no programme at 0.8× chronic, and breaks somewhere
+between 0.8× and 0.5×. No rung was run in that gap and no duration beyond 60 s at 0.9×, so the
+usable margin is a band rather than a number — the same limitation the MoQ ladder carries, and for
+the same reason.
+
+### The segmented ladder is in a different rig, and the two columns must not be subtracted
+
+The MoQ ladder above ran in `t8b-netns.sh`: two namespaces joined by a veth, `cake` at the
+bottleneck, 100 ms base RTT. The segmented ladder cannot run there, because it needs an HTTP origin
+with both a TCP and a QUIC listener and the only one this campaign has is T20's nginx pair on the
+host. It therefore runs on **loopback with `netem`, no added RTT, and a token bucket rather than an
+AQM**. That is a materially easier path in one respect and a materially harsher one in another, and
+neither difference is small.
+
+The size of it is measurable, because the segmented rig also carries a MoQ arm. Re-run in the
+loopback rig on the same rungs in the same session, **the MoQ lane loses programme at 0.9×, where
+the `netns`/`cake` ladder records 0.000 s**; its delivered video falls to 76.2 % of source at that
+rung and 64.1 % at chronic 0.8×. The `netem` token bucket at `limit 1000` has no AQM and a shallow
+queue, and a controller that probes in bursts pays for that in a way it does not pay `cake`. **The
+disagreement is a property of the shaper, not of the lane**, which is precisely why the two ladders
+are reported as two ladders.
+
+What follows for reading them:
+
+- **The segmented column is sound against its own controls**, which ran in the same rig in the same
+  session, and every claim above is of that form.
+- **The MoQ column from the loopback rig is reported only to size the rig difference.** It is not a
+  re-measurement of the MoQ ladder and does not supersede it.
+- **No rung-for-rung ranking of the two lanes is supportable from this experiment.** The arm that
+  would support one is the segmented ladder inside the `netns` rig, which needs an origin reachable
+  from inside the namespace; that is a rig change, not a re-run.
+
 ### The rungs had to be re-based, and the earlier ladder is superseded
 
 The procedure originally called a 20 → 12 Mb/s step a "sustained moderate shortfall". Against this
@@ -268,7 +371,7 @@ failure mode is a finding.
 
 | # | Criterion | Verdict |
 |---|---|---|
-| 1 | Longest step absorbed with zero media lost and 0 continuity errors | **Reported for the MoQ lane**: 60 s at 0.9× of stream rate, absorbed completely, and a 5 s transient at 0.8×. Both are **lower bounds rather than ceilings** — no rung between 0.9× and 0.8× was run, and no duration beyond 60 s. No figure for the segmented lane, which has not run |
+| 1 | Longest step absorbed with zero media lost and 0 continuity errors | **Reported for both lanes, in different rigs.** MoQ (`netns`/`cake`): 60 s at 0.9×, absorbed completely, and a 5 s transient at 0.8×. Segmented (loopback/`netem`): the same two rungs byte-identically to its own control, **and chronic 0.8× as well** — 0 continuity errors and a 24.95 ms PCR maximum at 82.4 % of control delivery, so it meets this criterion one rung deeper than the MoQ lane meets it. All are **lower bounds rather than ceilings**: no rung between 0.9× and 0.8× was run on either lane, no rung between 0.8× and 0.5× on the segmented one, and no duration beyond 60 s. The rigs differ, so the two columns are not subtracted |
 | 2 | Recovery operating point | **Not measured.** Delivery returned (subsequent cells were clean through the same rig) but buffer occupancy was not instrumented, so neither the 5 % rate nor the 10 % buffer test was applied |
 | 3 | MoQ integrity invariant — any non-zero continuity error fails the cell | **Pass on every cell on every rung.** 0 throughout, including the two that lost programme |
 | 4 | C2 re-run validity | **Not run.** The withheld segmented C2 cells remain withheld |
@@ -294,8 +397,16 @@ a third party.
 - **The latency-max × contention matrix** (criterion 5) at n ∈ {2, 3}, against capacity steps rather
   than outages, and phrased so a non-monotonic answer is expressible.
 - **Buffer and RSS instrumentation** for criterion 2, which the current rig does not collect.
-- **The segmented ladder**, using T20's HTTP/3 and HLS apparatus on the same host. Without it there is
-  no lane-versus-lane comparison, which is the experiment's point.
+- ~~**The segmented ladder**, using T20's HTTP/3 and HLS apparatus on the same host.~~ **Run** — see
+  §*Measured — the segmented step-capacity ladder*. It leaves the lane-versus-lane comparison still
+  undrawn, because it is in a different rig.
+- **The segmented ladder inside the `netns`/`cake` rig**, which is now the single most valuable
+  outstanding cell in this experiment: it is what turns two ladders into one comparison, and the
+  MoQ arm's disagreement between the rigs at 0.9× shows the gap is large enough to matter. It needs
+  an HTTP origin reachable from inside the namespace, which is a rig change rather than a re-run.
+- **A rung between 0.8× and 0.5× on the segmented lane.** Chronic 0.8× costs delivery but no
+  programme and 0.5× costs 17.979 s, so the availability-window cliff is somewhere in that band and
+  its position is what an operator provisioning retention would size against.
 - **The withheld C2 cells** remain unpublished until the competing-flow instrumentation this protocol
   adds is in place — publishing them without it was judged worse than silence
   ([T8b § C2 withheld](test-8b-congestion-control.md#the-segmented-rows-of-c2-are-withheld-pending-a-re-run)).

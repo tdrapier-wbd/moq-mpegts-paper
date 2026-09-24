@@ -1,8 +1,10 @@
 # Test 28 — Failure-injection and recovery matrix
 
 **State: run in part. The MoQ and SRT lanes are measured across three impairment shapes — discrete
-outage, sustained partial loss and reorder — matched on measured latency; the segmented lane and the
-infrastructure axis are not.** Infrastructure and transport failures have been probed one at a
+outage, sustained partial loss and reorder — matched on measured latency in the `netns`/`cake` rig;
+the segmented lane is measured on the same three shapes in T20's loopback rig, which is not the same
+rig and whose figures are not interchangeable with them; the infrastructure axis is not run.**
+Infrastructure and transport failures have been probed one at a
 time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported as
 recovery *time*; what a distributor buys is programme continuity, and the two are not the same number.
 This experiment applies one media-domain grader across a full matrix on both lanes.
@@ -12,6 +14,12 @@ cost of a longer one scales with the budget rather than with the outage.** That 
 intuition the register was built on, and it is the result an operator sizes against. Every cell
 returned **0 continuity errors**: when this lane loses programme it loses whole groups cleanly, and a
 receiver sees absence rather than corruption.
+
+**Second headline: the segmented lane's resilience is bounded by the origin's retention and by
+almost nothing else.** Sustained loss at 5 % and at 10 % returns bytes **identical to the
+unimpaired control**, and a 5 s total outage does too; a 30 s outage costs 17.134 s because it
+outlasts the segment store. Three impairment shapes and one boundary — how long the origin keeps a
+segment — where the MoQ lane has a different boundary for each shape.
 
 **What changed.** The reason this test had never run was that its shared grader did not exist, so no
 cell could be scored in the media domain. **That grader now exists and has been validated against
@@ -573,6 +581,115 @@ re-synthesises SI and reads 0 by construction — and are not netted into loss. 
 again one buffer (≈2 s) run three times rather than a sweep, for the reason in
 §*Sustained partial loss*.*
 
+## Measured — the transport axis, segmented lane
+
+The third lane runs the same three impairment shapes over segmented HTTP/3, so that a resilience
+statement about this architecture rests on a measurement rather than on the absence of one.
+
+**Environment.** EC2 secondary. `tsp -O hls` to nginx, pulled over HTTP/3 by
+[`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py); the FFmpeg receiver re-muxes and would grade
+itself ([T42](test-42-h3-receiver-fidelity.md)). Loopback with `netem`, 20 Mb/s provisioned, no added
+RTT — **not** the `netns`/`cake`/100 ms rig the MoQ and SRT arms above used, for the reason in
+[T31](test-31-congestion-capacity-ladders.md) § *The segmented ladder is in a different rig*. One
+sample per cell, **wire** domain, at **P1**, receiver per-fetch timeout 15 s unless stated.
+
+| Shape | Delivered bytes | Of control | Media lost | Continuity errors | PCR max | Carriage |
+|---|---|---|---|---|---|---|
+| none (control) | 82,851,600 | — | **0.000 s** | 0 | 24.95 ms | yes |
+| sustained loss 5 % | 82,851,600 | **100.0 %** | **0.000 s** | 0 | 24.95 ms | yes |
+| sustained loss 10 % | 82,851,600 | **100.0 %** | **0.000 s** | 0 | 24.95 ms | yes |
+| outage 5 s | 100,837,560 (75 s window) | — | **0.000 s** | 0 | 24.95 ms | yes |
+| outage 30 s | 79,533,400 (75 s window) | 78.9 % of the 5 s cell | 17.134 s | 10 | 17,139 ms | no: receiver exited 1 |
+
+**Sustained loss is not merely survived, it is invisible.** At 5 % and at 10 % the receiver returns
+**82,851,600 bytes — the same number, to the byte, as the unimpaired control** — with zero
+continuity errors and a 24.95 ms worst-case PCR interval. [T20](test-20-segmented-http3.md) measures
+the same thing at 20 %. Three loss rates spanning a factor of four produce one answer, because
+QUIC's loss recovery sits underneath the media and the media never learns a packet was lost. The
+cost is paid in time, and at these rates the segment budget absorbs it without the receiver falling
+behind at all.
+
+**A 5 s total outage also costs nothing.** 100,837,560 bytes over a 75 s window, 0 continuity
+errors, PCR max 24.95 ms, no holes, carriage valid. The receiver's fetches fail while the lane is
+down, it retries, and when the lane returns the segments it missed are still in the origin's
+playlist. **The outage is shorter than the retention, so the lane behaves as though it never
+happened.**
+
+**A 30 s outage exhausts the retention and costs 17.134 s of programme.** One hole, 10 continuity
+errors, and a 17,139 ms worst-case PCR interval that *is* the hole. The loss is not 30 s because the
+origin's window still held part of the gap; it is 30 s minus whatever retention covered. **This lane
+converts an outage into lost programme only once the outage outlasts the segment store**, which is
+the same boundary [T31](test-31-congestion-capacity-ladders.md) finds from the capacity side.
+[T20](test-20-segmented-http3.md) reaches it from a third: at 30 s its HTTP/1.1 and HTTP/3 arms
+deliver **byte-identical** output, so the substrate makes no difference to a recovery the origin's
+retention is setting. Retention, not transport, is the design parameter.
+
+**Reorder is the shape that hurts this lane, and the first reading of it was six times too harsh.**
+At the receiver's default 15 s per-fetch budget, `delay 30ms reorder 25% 50%` returned 3,002,360
+bytes — 4 % of control — and exited with `segment seg-000001.ts is not a valid transport stream
+(3002302 bytes is not a multiple of 188)`. The timeout had cut a transfer in half and the receiver
+refused the fragment, which is correct behaviour rather than a defect: concatenating a truncated
+segment produces a corrupt stream that grades as a wire fault. Raising the budget to 60 s changes
+the answer:
+
+| Receiver per-fetch budget | Delivered | Of control | Media captured | Holes | Continuity errors |
+|---|---|---|---|---|---|
+| 15 s (default) | 3,002,360 | 4.0 % | 2.4 s | — (refused) | 0 |
+| 60 s | 18,967,320 | **25.4 %** | 57.0 s | 11 | 40 |
+
+**Neither figure is a stable lane constant, and the spread between them is the finding.** A
+six-fold move from a receiver setting means this cell measures the instrument as much as the lane,
+and the method rule is in [method-notes](method-notes.md) § *A receiver's per-fetch timeout is a
+measurement parameter*. What both readings agree on is the direction: **the segmented lane is badly
+hurt by reordering where it is untouched by loss.** At 60 s it spans the window but delivers a
+quarter of the bytes in 11 holes with 40 continuity errors — the worst carriage anywhere in the
+segmented columns of T28 and T31 — against 100.0 % and zero holes at 10 % loss. QUIC's loss
+detector reads reordering as loss, and the retransmissions it triggers compete with the fetch they
+are meant to rescue.
+
+**The 0.5× rung is not the same kind of cell, and the same test says so.** Re-run at the 60 s budget
+it returns 96,203,924 bytes — **byte-identical to the 15 s run** — so its 404 and its 17.979 s of
+lost programme are the lane falling off the availability window, not the instrument giving up. The
+timeout test distinguishes the two cases rather than excusing both.
+
+### The MoQ arm in this rig measures its congestion controller, not its lane
+
+The segmented rig carries a MoQ arm so the rig difference can be sized, and on the outage shape that
+arm produced the sharpest instance yet of a pattern this campaign now has three of.
+
+| Outage | MoQ, BBRv3 (`delay`, shipped default) | MoQ, CUBIC (`loss`), idle timeout 120 s |
+|---|---|---|
+| 5 s | 0.227 delivered, 15.8 s of media, session cancelled at the outage | **0.961 delivered, 70.0 s of media, 0 continuity errors, carriage valid** |
+| 30 s | 0.220 delivered, 16.5 s of media | 0.270 delivered, 15.4 s of media |
+
+Under the shipped default the relay logs `subscribe canceled (idle)` at the moment the lane drops
+and the session never recovers; the arm reads 0.220–0.227 whether the outage is 5 s or 30 s, because
+what it is measuring is the time before the outage, not the outage. Pinned to CUBIC the same 5 s
+outage costs 3.9 % of delivery. **A four-fold difference in the headline, from a flag that was not
+set.**
+
+**The 30 s cell is fatal under both controllers**, with the idle timeout already raised to 120 s so
+that the teardown characterised in §*The 30 s cell was the QUIC idle timeout* is not the cause. Both
+arms stop at the outage and neither resumes. In the `netns`/`cake` rig the same outage at a 120 s
+timeout became ordinary starvation, so this is a rig difference and not a correction to that
+section; what it shows is that on this path the segmented lane's 0.853 and the MoQ lane's 0.22–0.27
+are not two readings of one phenomenon.
+
+This is the third impairment shape on which the MoQ arm's result turned out to be the controller's:
+[T20](test-20-segmented-http3.md) found it under reorder, where BBRv3 delivers zero bytes in 60 s
+and CUBIC delivers 55.2 s of span, and [T31](test-31-congestion-capacity-ladders.md) finds it on the
+capacity rungs. **No MoQ impairment cell in this campaign should be read without the controller
+named beside it**, and cells measured before the controller was pinned cannot be assumed to have
+used the one their file implies.
+
+*Domain wire, measurement point P1, one sample per cell, single host over loopback with `netem` and
+no added RTT. Delivery is quoted against the ladder's own control because the receiver joins on the
+playlist backlog and reads above unity when healthy ([T31](test-31-congestion-capacity-ladders.md)).
+Continuity errors are not comparable across the lanes — `moq export ts` re-synthesises SI and reads
+0 by construction — and are not netted into loss. Not cross-host, and not the `netns`/`cake` rig the
+MoQ and SRT arms above ran in, so the segmented column is sound against its own controls and is not
+a rung-for-rung ranking against them.*
+
 ## Objective
 
 For each defined failure on each lane, measure how much *programme* is lost or corrupted before
@@ -717,8 +834,8 @@ reported as tied.
 | # | Criterion | Verdict |
 |---|---|---|
 | 1 | Grader validity: a control reports 0 s lost and 0 continuity errors **on both lanes**; a synthetic hole reproduces the injected duration ± 100 ms | **Now passes on both lanes.** Every unimpaired control on the matched ladder grades 0.000 s lost and 0 continuity errors on MoQ *and* SRT. The earlier SRT failure (controls at 4.196–5.391 s lost) was real and the criterion is what caught it; its cause was the split publisher a source-side tap forces, not the tap, and a single-`tsp` publisher clears it |
-| 2 | Matrix completeness | **Partial.** Both transport lanes are now run on three transport axes, all matched on measured latency and all two replicates deep: the outage axis (six budgets, plus four outage durations on MoQ and a re-convergence pass), sustained partial loss at 5 % and 10 %, and reorder at 5 % and 20 %. The bandwidth step, the infrastructure axis and the segmented lane are not |
-| 3 | Ranking published | **Met for MoQ against SRT on all three axes run, and they rank three different ways.** By criterion 5's rule — lower median media lost wins — MoQ is superior under a discrete outage at every budget from 2 s up (0.20–2.23 s against SRT's 3.46–3.76 s); SRT is superior under sustained partial loss at every budget and both rates (0.000 s against 0.33–3.88 s at 5 %); and **reorder does not resolve into a ranking at all**, with SRT delivering the whole programme carrying 430–692 continuity errors and MoQ delivering it clean but losing 60 % of its picture match. All three are published, with the reason the first is incomplete: the lanes do not pay in the same currency, and a rule that scores only media lost cannot see that MoQ buys its content with delivery latency it never gives back. **A single-axis ranking of these two lanes is therefore not supportable, and no impairment shape stands for the others — that is now measured on three shapes rather than argued.** The segmented lane is still unrun, so the three-way ranking is not |
+| 2 | Matrix completeness | **Partial.** MoQ and SRT are run on three transport axes, all matched on measured latency and all two replicates deep: the outage axis (six budgets, plus four outage durations on MoQ and a re-convergence pass), sustained partial loss at 5 % and 10 %, and reorder at 5 % and 20 %. The segmented lane is run on the same three shapes but in a different rig and at one sample per cell, and its reorder cell is void on the receiver's fetch timeout. The bandwidth step and the infrastructure axis are not run |
+| 3 | Ranking published | **Met for MoQ against SRT on all three axes run, and they rank three different ways.** By criterion 5's rule — lower median media lost wins — MoQ is superior under a discrete outage at every budget from 2 s up (0.20–2.23 s against SRT's 3.46–3.76 s); SRT is superior under sustained partial loss at every budget and both rates (0.000 s against 0.33–3.88 s at 5 %); and **reorder does not resolve into a ranking at all**, with SRT delivering the whole programme carrying 430–692 continuity errors and MoQ delivering it clean but losing 60 % of its picture match. All three are published, with the reason the first is incomplete: the lanes do not pay in the same currency, and a rule that scores only media lost cannot see that MoQ buys its content with delivery latency it never gives back. **A single-axis ranking of these two lanes is therefore not supportable, and no impairment shape stands for the others — that is now measured on three shapes rather than argued.** **The three-way ranking is still not published**, and now for a different reason: the segmented lane is measured on all three shapes, but in the loopback rig rather than the `netns`/`cake` one, so its column cannot be set against the other two rung for rung. What the segmented column does establish on its own controls is that loss at 5 % and 10 % is byte-identical to unimpaired, a 5 s outage likewise, a 30 s outage costs 17.134 s, and reorder is the shape that hurts it |
 | 4 | Comparability | **Pass on the cells run.** One host, one rig, one build, one clip, one grader and one domain across every cell, with an unimpaired control through the same path. On the matched ladder the SRT arm's `--latency` is additionally set from the MoQ lane's measured median rather than its nominal budget |
 | 5 | Segmented receiver axis | **Not run.** The apparatus is on the same host (T20's HTTP/3 and HLS lane), so this is now a session's work rather than a blocker |
 
@@ -747,7 +864,9 @@ to record was against a stale figure.
 - ~~**The loss step.**~~ **Done, and it reverses the outage ordering** — see §*Sustained partial
   loss*. What it leaves open is narrower: the 10 % MoQ cells are unranked on unequal spans and want
   a re-run, the duplication signal is unattributed, and a genuine SRT budget sweep under loss was
-  not run because matching on measured latency collapsed the three budgets onto one setting.
+  not run because matching on measured latency collapsed the three budgets onto one setting. **The
+  segmented arm's answer is that loss at 5 % and 10 % is byte-identical to its control**, so this
+  axis now separates all three lanes.
 - ~~**The reorder step.**~~ **Done, and it ranks the lanes a third way** — see §*Reorder is a third
   pattern*. It leaves one question sharper than it found it: MoQ's matched-picture count falls to
   ~40 % at 20 % reorder, which is currently a caveat on the latency column and may be a real
@@ -756,8 +875,15 @@ to record was against a stale figure.
 - **The bandwidth step**, the last of the transport axes, on the rig as it stands.
 - **The infrastructure axis**: kill and restart a publisher, a relay and an exporter. This needs no
   emulator and could equally run on the macOS workstation.
-- **The segmented lane**, using T20's HTTP/3 and HLS apparatus already built on the same host. Until
-  it runs there is no ranking, which is criterion 3.
+- ~~**The segmented lane**, using T20's HTTP/3 and HLS apparatus already built on the same host.~~
+  **Run on all three shapes** — see §*Measured — the transport axis, segmented lane*. Three things
+  it leaves: the reorder cell is void on the receiver's 15 s per-fetch timeout and needs re-running
+  with the budget raised; every cell is one sample where the other lanes are two; and it is in the
+  loopback rig rather than the `netns`/`cake` one, so criterion 3's three-way ranking still cannot
+  be drawn from it.
+- **The segmented lane inside the `netns` rig**, which is what a rung-for-rung three-way ranking
+  needs and is a rig change rather than a re-run: the origin has to be reachable from inside the
+  namespace.
 
 Quoting [T6](test-6-relay-resilience.md) recovery times as programme-loss figures remains
 methodologically out of bounds, but the MoQ lane now has real programme-loss figures of its own for

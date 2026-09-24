@@ -143,9 +143,16 @@ had GSO disabled: **1,209 packets averaging 34,380 bytes against 29,062 averagin
 | As originally measured | 0.995 | 0.995 | 0.125 |
 
 Original conditions reproduce exactly — sound measurement, wrong reading. **On HTTP/3 the lanes
-overlap**; on TCP the segmented lane keeps a smaller advantage. HTTP/3 costs reordering and wins loss
-(0.10 on TCP against **0.70** on HTTP/3 at ~20 % applied loss) and the 30 s outage (0.51 against
-**0.76**); unimpaired, byte-identical output ([T20](../lab/test-20-segmented-http3.md)).
+overlap**; on TCP the segmented lane keeps a smaller advantage. Unimpaired, the two substrates give
+byte-identical output ([T20](../lab/test-20-segmented-http3.md)).
+
+**Two of those impairment cells were the receiver, and both correct in the segmented lane's
+favour.** Re-measured through a byte-faithful HTTP/3 receiver rather than one that re-muxes, **20 %
+commanded loss over HTTP/3 costs the lane nothing** — byte-identical to its clean baseline, 0
+continuity errors, against a published 0.70 — and under the **30 s outage the two substrates are
+byte-identical at 0.853**, against a published 0.51-versus-0.76 split. Recovery there is set by the
+origin's retention, not by the transport. The re-measured MoQ figures from the same cells are
+controller-dependent and are qualified in [Evidence](evidence.md) §3.3.
 
 **Trunking several feeds down one congested path is a third result — a latency decision, not a lane
 defect.** Two or three media-aware feeds at a 2 s subscriber budget deliver less in total than one
@@ -159,11 +166,18 @@ intervals above 40 ms in every *loss* cell, including where it delivered a sixth
 the availability window it sheds *time*, not *bytes*; past 7.7–12.2 % applied loss the client re-anchors
 and leaves holes of 7.2 s, 24 s and 82 s — silently past ~20 % loss when the origin returns only 200s
 ([T5](../lab/test-5-network-impairment.md)). The ladder arm was a single origin over HTTP/1.1; on
-HTTP/3 the same lane holds 0.70 at ~20 % applied loss where TCP holds 0.10.
+HTTP/3 the same lane loses **nothing at all** at 5 %, 10 % or ~20 % applied loss, returning bytes
+identical to its unimpaired control at every rate, where TCP holds 0.13
+([T28](../lab/test-28-failure-injection-matrix.md), [T20](../lab/test-20-segmented-http3.md)).
 
-**Under sustained capacity shortfall the lanes fail differently.** At 8 Mb/s against a 9.95 Mb/s
-stream, segmented arms deliver 0.79–0.81 (lateness); the media-aware lane delivers 0.46 (discarded
-programme). Transient degradations are absorbed by all three ([Evidence](evidence.md) §3.3). The
+**Under sustained capacity shortfall the lanes fail differently, and the segmented lane's failure
+has a different shape.** At 8 Mb/s against a 9.95 Mb/s stream it takes lateness rather than
+discarding programme — re-measured, it runs 12.7 % behind the live edge at **0 continuity errors
+and a 24.95 ms worst-case PCR interval**, so an integrity monitor sees nothing wrong while the
+stream drifts off the live edge. That holds until the receiver falls far enough behind that the
+origin has evicted the segment it asks for, at which point the lane takes a 404 and loses programme
+outright. **Its ceiling is set by retention, not throughput** — a cliff where the media-aware lane
+has a slope. Transient degradations are absorbed by all three ([Evidence](evidence.md) §3.3). The
 media-aware lane's PCR non-conformance sat unchanged at 7.9–9.2 % in every cell — a groomer defect since
 fixed, and independent of the impairment either way (§5.1).
 
@@ -846,7 +860,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched — they trade cells** | **M** | **measured head-to-head, then re-measured on a shared substrate.** Loss does not separate the lanes given the same controller (1.04 and 0.96 on BBR to 10 %; 0.17 and 0.13 on CUBIC), so "segment fetching degrades under loss" is a controller comparison. **Reordering, the one axis that did separate them, no longer does** — equalised for packet size it reads 0.44 on TCP, **0.18 on HTTP/3 and 0.13 media-aware, overlapping**. On the shared substrate the segmented lane instead wins loss (0.70 against 0.10 on TCP at ~20 % applied) and the 30 s outage (0.76 against 0.51), and under *sustained* under-capacity delivers 0.79 against 0.46, taking lateness where the other discards programme (§3.1). **The same pattern now holds for a second, unrelated pairing**: matched on measured latency, MoQ beats SRT under a discrete outage and loses to it under sustained partial loss, so "which lane is more resilient" has no answer that is not indexed to an impairment shape ([Evidence](evidence.md) §3.3) |
+| Reliability under impairment (R5) | **neither, once substrate-matched — they trade cells** | **M** | **measured head-to-head, then re-measured on a shared substrate.** Loss does not separate the lanes given the same controller (1.04 and 0.96 on BBR to 10 %; 0.17 and 0.13 on CUBIC), so "segment fetching degrades under loss" is a controller comparison. **Reordering, the one axis that did separate them, no longer does** — equalised for packet size it reads 0.44 on TCP, **0.18 on HTTP/3 and 0.13 media-aware, overlapping**. On the shared substrate, re-measured through a byte-faithful receiver, the segmented lane **loses nothing at all** under loss at 5 %, 10 % or ~20 % applied — bytes identical to its unimpaired control, against 0.13 on TCP — and the 30 s outage no longer separates the substrates at all (0.853 on both), because recovery there is the origin's retention rather than the transport. Under *sustained* under-capacity it takes lateness where the other discards programme, running 12.7 % behind the live edge at 0 continuity errors, and fails only when it falls off the availability window (§3.1). **The same pattern now holds for a second, unrelated pairing**: matched on measured latency, MoQ beats SRT under a discrete outage and loses to it under sustained partial loss, so "which lane is more resilient" has no answer that is not indexed to an impairment shape ([Evidence](evidence.md) §3.3) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | **retry splits: no resilience of *rate*, and resilience of *content* only inside the origin's availability window** — 0 continuity errors and 0 PCR intervals above 40 ms throughout a ladder to 10 % loss, so within the window the lane sheds time rather than data. The window is crossed between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s holes, past ~20 % loss without the origin returning a single error. Edge and Pathway selection remains specification-only (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning, but the media-aware exporter skips to the live edge and loses the media produced during the outage where the segmented client refetches it losslessly. Neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all, so it took a purpose-written client to show (§3.2) |
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured.** A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. **Conditional** because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright (§3.3) |
@@ -870,7 +884,9 @@ Mux-content fidelity is not on that list: the two planes are a wash on it, and t
 reproduces the source's *clock* is neither of them (§8). The receive-path condition is not a formality
 either: it is the layer this evaluation did not close (§6.1).
 On HTTP/3 the impairment trade favours segmented HTTP on loss, outage recovery and sustained
-under-capacity, not reordering ([T20](../lab/test-20-segmented-http3.md)). **MoQ's case is
+under-capacity. **Reordering hurts both and ranks neither**: it is the segmented lane's weak shape,
+and the media-aware figure beside it is set by the congestion controller rather than by the lane
+([T20](../lab/test-20-segmented-http3.md), [T28](../lab/test-28-failure-injection-matrix.md)). **MoQ's case is
 route-specific and narrower than the headline latency figure suggests:** smaller bursts for the groomer,
 multi-programme carriage, portable enforcement, ~7 % less wire volume, and — at equal conformance —
 2,447 ms against 9,286 ms, which is decisive for a route in the two-to-nine-second band and is not a

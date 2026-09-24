@@ -2611,6 +2611,34 @@ arm most likely to fail, and it is selected by saying nothing.
 > comparing two stacks. One related trap: **the iroh backend cannot turn GSO off and rejects an
 > explicit `false`**, so `--quic-gso=false` only works on a build that dropped the iroh feature —
 > which `ec2-build-main.sh` does, and a default-feature build does not.
+>
+> **The size of the effect has since been measured on three impairment shapes, and on each of them
+> the controller decides the headline.** Under reorder, BBRv3 delivers **zero bytes in 60 s** where
+> CUBIC delivers 55.2 s of media span ([T20](test-20-segmented-http3.md)). Under a 5 s total
+> outage, BBRv3 reads 0.227 delivered with the relay logging `subscribe canceled (idle)` at the
+> break, where CUBIC reads **0.961** ([T28](test-28-failure-injection-matrix.md)). On the capacity
+> rungs the two rigs disagree at 0.9× ([T31](test-31-congestion-capacity-ladders.md)). So the rule
+> is not only "pin it": **a MoQ impairment figure quoted without its controller is not a lane
+> result**, and a figure taken before the rig pinned the controller cannot be assumed to have used
+> the one its file implies. Re-check rather than infer.
+
+### A receiver's per-fetch timeout is a measurement parameter, and on an impaired lane it can be the whole result
+
+*(From the T28/T31 segmented lane.)* `hls-verbatim-recv.py` refuses any segment that is not a whole
+number of 188-byte packets, which is right — concatenating a truncated fetch produces a corrupt
+stream that grades as a wire fault, so the receiver would be manufacturing the defect it is there to
+detect. But the refusal is triggered by the per-fetch timeout, and the timeout is a knob with a
+default.
+
+> At 25 % reorder the same cell reads **4.0 % of control at a 15 s budget and 25.4 % at 60 s** — a
+> six-fold move from a receiver setting, with the lower reading looking exactly like a lane that
+> collapsed. The T20 loss-20 arm read *nothing at all* at 15 s and 0.131 at 60 s.
+>
+> **Quote the timeout beside any impaired segmented cell, and use it as a test rather than a
+> setting**: re-run the cell at a longer budget, and if the byte count moves the cell was measuring
+> the instrument. When it does not move the result is the lane's — the 0.5× capacity rung returned
+> a byte-identical 96,203,924 at both budgets, which is what licensed reading its 404 as the origin
+> evicting a segment rather than the receiver giving up.
 
 ### A cleanup pattern keyed on a flag name stops matching when the flag is renamed
 

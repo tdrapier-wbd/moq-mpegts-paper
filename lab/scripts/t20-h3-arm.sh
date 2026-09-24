@@ -158,7 +158,14 @@ start_moq() {
 # origin with ten excised packets it reports zero continuity errors (T42). It is kept only to
 # reproduce the original T20 cells. RECV=verbatim is the byte-faithful receiver and is what any
 # carriage claim must use. Delivery-ratio and substrate cells are unaffected by the choice.
+#
+# RECV_TIMEOUT is the receiver's per-fetch budget and is a measurement parameter rather than a
+# detail of the harness. The receiver refuses any segment that is not a whole number of 188-byte
+# packets, so a fetch cut short by this timeout is discarded entire; on a badly impaired lane that
+# turns a slow arm into an empty one, and the cell then reads as a lane failure when it is a
+# receiver policy. Quote the value alongside any impaired cell. The default matches the receiver's.
 RECV="${RECV:-verbatim}"
+RECV_TIMEOUT="${RECV_TIMEOUT:-15}"
 VERBATIM="${VERBATIM:-$HOME/hls-verbatim-recv.py}"
 CURL_H3="${CURL_H3:-$HOME/h3/bin/curl}"
 
@@ -179,7 +186,8 @@ recv_hls() {
 		# which is recorded rather than swallowed because a hole voids carriage grading.
 		python3 "$VERBATIM" "https://127.0.0.1:$port/index.m3u8" -o "$OUT" \
 			--http-version "$maj" --curl "$CURL_H3" --insecure \
-			--seconds "$WINDOW" --summary "$OUTDIR/${ARM}_recv.json" >>"$LOG" 2>&1
+			--seconds "$WINDOW" --timeout "$RECV_TIMEOUT" \
+			--summary "$OUTDIR/${ARM}_recv.json" >>"$LOG" 2>&1
 		RECV_RC=$?
 	else
 		timeout --signal=INT "$WINDOW" "$FFMPEG" -hide_banner -loglevel warning -nostdin \
@@ -243,7 +251,7 @@ grade() {
 		label=$LABEL arm=$ARM window=$WINDOW impair='${IMPAIR:-none}'
 		bytes=$bytes delivered_ratio=$ratio
 		cc_errors=$cc pcr_max_ms=$pcrmax pcr_over40_pct=$over media_seconds=$pcrspan
-		receiver=$([ "$ARM" = moq ] && echo 'moq export ts' || echo "$RECV") recv_rc=${RECV_RC:-na} recv_holes=$holes
+		receiver=$([ "$ARM" = moq ] && echo 'moq export ts' || echo "$RECV") recv_timeout=$([ "$ARM" = moq ] && echo na || echo "$RECV_TIMEOUT") recv_rc=${RECV_RC:-na} recv_holes=$holes
 		carriage_valid=$(carriage_valid)
 		lane_applied='${LANE_APPLIED:-unsampled}'
 	EOF

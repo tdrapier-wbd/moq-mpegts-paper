@@ -407,12 +407,21 @@ as a discriminator between the two architectures entirely.
 **Reordering was a packet-size artefact, not a lane property** ([T20](../lab/test-20-segmented-http3.md),
 P1): unequal MTU gave the segmented lane **24× fewer** reorder events. Equalised, HTTP/3 cells overlap
 (segmented 0.18, media-aware 0.13); the original 0.98/0.19 separation was substrate and size, not
-architecture.
+architecture. Re-measured, the segmented figure holds at 0.166 and the media-aware one does not
+resolve: it reads 0.000 pinned to the shipped BBRv3 default and 0.039 pinned to CUBIC, so **this
+axis ranks the congestion controllers and not the lanes.**
 
-**The substrate change is a trade rather than a loss.** Moving the segmented lane to HTTP/3 costs it
-the reordering cell and wins it two others: at ~20 % *applied* loss it reads **0.10 on TCP against
-0.70 on HTTP/3**, and under a 30 s total outage **0.51 against 0.76**. Under no impairment the two
-substrates produce byte-identical output, so nothing in carriage fidelity turns on the choice.
+**The substrate change is a trade rather than a loss, and re-measurement widened one side of it
+while closing the other.** Moving the segmented lane to HTTP/3 costs it the reordering cell and wins
+it loss decisively: re-measured through a byte-faithful receiver, at ~20 % *applied* loss HTTP/3
+returns **bytes identical to its unimpaired control** — it loses nothing — against **0.13** on TCP,
+where the published pair was 0.70 against 0.10. Under a 30 s total outage the substrates are **no
+longer distinguishable at all**, both reading 0.853 against a published 0.51-versus-0.76 split,
+because what limits recovery there is the origin's retention rather than the transport. Under no
+impairment the two substrates produce byte-identical output, so nothing in carriage fidelity turns
+on the choice. *Re-measured cells are P1, wire domain, one sample each
+([T20](../lab/test-20-segmented-http3.md) §4a); the superseded figures came from a receiver that
+re-muxed and so graded itself.*
 
 **Segmented HTTP did not corrupt what it delivered at any loss level in this ladder, and the ladder has
 a boundary** — 0 continuity discontinuities and 0 PCR intervals above 40 ms in every loss cell of the
@@ -583,6 +592,28 @@ shapes on one rig, at one matched latency, rank these two lanes three different 
 a discrete outage, SRT ahead under sustained loss, neither ahead under reorder. **A resilience claim
 about either lane that does not name its impairment shape is not supported.** This is measured across
 three shapes rather than inferred from one.
+
+**The segmented lane has now been measured on the same three shapes, and it has one boundary rather
+than three.** Sustained loss at 5 % and at 10 % returns bytes **identical to the unimpaired
+control**, as a 5 s total outage does; a 30 s outage costs 17.134 s of programme because it outlasts
+what the origin retains; and on the capacity rungs the lane absorbs a chronic 20 % shortfall at zero
+continuity errors and a 24.95 ms worst-case PCR interval, failing only at 50 % and then by taking a
+404 for a segment the origin had already evicted. **What bounds this lane is the origin's retention,
+not its transport.** Reorder is its weak shape, and the figure is unstable — 4.0 % of control at the
+receiver's default per-fetch budget against 25.4 % at a longer one — so only the direction is
+claimed. *These cells ran in the loopback/`netem` rig rather than the `netns`/`cake` rig the MoQ and
+SRT columns used, at one sample per cell, so the segmented column is sound against its own controls
+and **is not a rung-for-rung ranking against them**; the like-for-like arm needs an origin reachable
+from inside the namespace. Measurement point P1, domain wire, byte-faithful receiver
+([T28](../lab/test-28-failure-injection-matrix.md) §*the transport axis, segmented lane*,
+[T31](../lab/test-31-congestion-capacity-ladders.md) §*the segmented step-capacity ladder*).*
+
+**A caution that cuts across every MoQ impairment figure here: on three shapes the congestion
+controller decided the headline.** Pinned to the shipped BBRv3 default the MoQ arm delivers nothing
+in 60 s under reorder and 0.227 of a 5 s outage cell; pinned to CUBIC the same cells deliver 55.2 s
+of media span and 0.961. Figures taken before the rigs pinned the controller cannot be assumed to
+have used the one their source implies, and the ones above are being re-checked rather than
+inferred.
 
 *Measurement point P1, domain wire on both lanes; both unimpaired controls grade 0.000 s lost, which
 is what licenses the domain. Two replicates per cell, same host and namespace path as above, so not
