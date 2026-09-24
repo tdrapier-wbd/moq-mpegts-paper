@@ -117,7 +117,7 @@ second reason: no shipped CLI can dump a parsed catalog, so no catalog field can
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
 | P2-a | What commercial monitoring would have caught | not run | fault mapping run; survey not | [T32](test-32-observability-survey.md) | **never apparatus-blocked** — the segmented half is vendor outreach, and listing it against P0-e was a register error. Its fault-to-telemetry mapping is now measured |
-| P2-b | Isolation under abuse | run | **run** | [T25](test-25-isolation-under-abuse.md) | **closed.** Victims byte-identical across all four arms; origin RSS moves 0.6 MB against the relay's 22x |
+| P2-b | Isolation under abuse | run | **run** | [T25](test-25-isolation-under-abuse.md) | **closed.** Victims byte-identical across all four arms; origin RSS stays within 0.6 MB of baseline — an upper bound, inside that baseline's own drift — against the relay's 22x |
 | P2-c | A standby packager joining an already-running feed | — | not run | [T30](test-30-segmented-distributed-resilience.md) | sits behind P1-c |
 | P2-d | Differential delay on a real pair rather than modelled with `netem` | not run | — | [T12](test-12-dual-path-handoff.md) | the live feed gives the pair; see below |
 | P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | owed | — | [T31](test-31-congestion-capacity-ladders.md) | deprioritised behind P1-d |

@@ -2106,6 +2106,25 @@ what looked like an intermittent packager fault.
 > concurrent passes over one rig directory produce failures that read as flaky apparatus and are
 > not.
 
+### An idle-memory baseline drifts by more than a null result's whole excursion
+
+*From [T25](test-25-isolation-under-abuse.md) P2-b.* The abuse arms moved the origin's resident set
+from 103.6 MB to a 104.2 MB peak, and it was tempting to publish 0.6 MB as the measured cost of
+abuse. A contaminated pass discarded for unrelated reasons had recorded the same idle origin at
+102.8 MB twenty minutes earlier — an 0.8 MB spread between two baselines with no load difference
+between them, larger than the excursion itself.
+
+The conclusion was unaffected, because it rests on the absence of the relay's 22× excursion rather
+than on the size of this one. But 0.6 MB would have been quoted as a figure, and it is not one.
+
+> **Where a resource result is a null, report the bound, not the number.** A small excursion is
+> evidence of no excursion only if the instrument's own variation is smaller, and an idle RSS
+> baseline taken once does not establish that. Either take the baseline per pass and quote the
+> spread, or state the excursion as an upper bound and say what the conclusion actually rests on.
+>
+> **A discarded run's control arm is still data about the instrument**, even when its treatment arms
+> are void. Read it before throwing the pass away.
+
 ---
 
 ## 6. Claims, and their scope

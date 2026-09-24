@@ -19,8 +19,9 @@ So this is an operational property with a knob on it rather than a defect, and *
 warranted** — see [Open](#open). Specified as [P2-b](planned-experiments.md#p2--completeness).
 
 **The segmented lane is isolated too, and more cleanly.** All three victims received byte-identical
-streams in all four arms at 0 continuity errors, and the origin's working set moved 103.6 → 104.2 MB
-against the relay's 87 MB → 1.9 GB. The retained-session cost that dominates the MoQ result has no
+streams in all four arms at 0 continuity errors, and the origin's working set stayed within 0.6 MB of
+its 103.6 MB baseline — inside the run-to-run variation of that baseline — against the relay's
+87 MB → 1.9 GB. The retained-session cost that dominates the MoQ result has no
 counterpart on a stateless static origin. That is an advantage of statelessness, bought with the
 latency and per-request overhead measured elsewhere, and it is scoped to a static origin — see
 *The segmented lane* below for what a stateful one would reintroduce.
@@ -294,9 +295,12 @@ managed — bit-for-bit equal, 82,851,600 bytes twelve times over, at zero conti
 holes. On this lane the isolation result is stronger than on the media-aware one.
 
 **The memory cost that dominates the MoQ result does not exist here.** The relay went from 87 MB to
-1.9 GB under `churn`, a 22× excursion that took four further arms to attribute. The origin moves
-from 103.6 MB to 104.2 MB — 0.6 MB, 0.6 % — and `churn` specifically costs **nothing measurable**.
-The mechanism is structural rather than a matter of tuning: nginx serves static files statelessly
+1.9 GB under `churn`, a 22× excursion that took four further arms to attribute. The origin stays
+within 0.6 MB of its 103.6 MB baseline across every arm, and `churn` specifically costs **nothing
+measurable**. Read that 0.6 MB as an upper bound rather than a cost: a separate baseline taken on
+the same origin the same morning read 102.8 MB, so run-to-run variation in the idle figure is itself
+larger than the excursion any abuse arm produced. What the arms establish is the absence of an
+excursion, not its size. The mechanism is structural rather than a matter of tuning: nginx serves static files statelessly
 per request, so an abandoned connection leaves no subscription, no group cache and no media
 accumulating for a receiver that will never collect it. There is nothing to retain, so no idle
 timeout has to be chosen to bound it.
