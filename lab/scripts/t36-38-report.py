@@ -16,7 +16,7 @@ RATE = 9945951 / 8.0        # bytes/s of programme, from the clip's own PCR bitr
 
 
 def load(path):
-    return [json.loads(l) for l in open(path)]
+    return [json.loads(ln) for ln in open(path)]
 
 
 def arm(mark):

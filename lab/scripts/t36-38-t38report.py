@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Report T38's topology arms: what de-provisioning one channel cost the other."""
 import json
-import subprocess
 import re
-import sys
+import subprocess
 
 W = "/tmp/t36"
 
@@ -35,8 +34,8 @@ def gaps(profile, thresh=0.5):
 
 
 def main():
-    lbs = {r["mark"]: r for r in (json.loads(l) for l in open(f"{W}/lastbyte.jsonl"))}
-    decs = [json.loads(l) for l in open(f"{W}/decisions.jsonl")]
+    lbs = {r["mark"]: r for r in (json.loads(ln) for ln in open(f"{W}/lastbyte.jsonl"))}
+    decs = [json.loads(ln) for ln in open(f"{W}/decisions.jsonl")]
 
     def dec(sub):
         m = [d for d in decs if sub in (d.get("mark") or "")]

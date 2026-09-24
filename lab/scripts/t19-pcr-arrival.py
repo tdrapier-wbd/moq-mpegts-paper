@@ -81,7 +81,7 @@ try:
     vol = st.get("voluntary_ctxt_switches", "?").strip()
     invol = st.get("nonvoluntary_ctxt_switches", "?").strip()
     print()
-    print(f"--- this reader's scheduling ---")
+    print("--- this reader's scheduling ---")
     print(f"voluntary ctxt switches {vol}   involuntary (preempted) {invol}")
     if invol.isdigit() and span > 0:
         print(f"involuntary preemptions per second: {int(invol)/span:.1f}")

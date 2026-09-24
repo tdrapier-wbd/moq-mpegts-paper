@@ -35,7 +35,6 @@ Conditions:
 """
 
 import argparse
-import sys
 
 TS = 188
 SYNC = 0x47

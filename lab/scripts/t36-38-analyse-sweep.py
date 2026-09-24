@@ -11,9 +11,9 @@ import json
 import statistics as st
 
 W = "/tmp/t36"
-auth = [json.loads(l) for l in open(f"{W}/authlog.jsonl")]
-decs = {d["mark"]: d for d in (json.loads(l) for l in open(f"{W}/decisions.jsonl")) if d.get("mark")}
-lbs = {r["mark"]: r for r in (json.loads(l) for l in open(f"{W}/lastbyte.jsonl"))}
+auth = [json.loads(ln) for ln in open(f"{W}/authlog.jsonl")]
+decs = {d["mark"]: d for d in (json.loads(ln) for ln in open(f"{W}/decisions.jsonl")) if d.get("mark")}
+lbs = {r["mark"]: r for r in (json.loads(ln) for ln in open(f"{W}/lastbyte.jsonl"))}
 
 rows = []
 for line in open(f"{W}/sweep-d2.tsv"):

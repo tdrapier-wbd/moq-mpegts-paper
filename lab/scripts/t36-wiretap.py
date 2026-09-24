@@ -24,7 +24,6 @@ from the subscriber's own output.
 import argparse
 import json
 import socket
-import sys
 import threading
 import time
 

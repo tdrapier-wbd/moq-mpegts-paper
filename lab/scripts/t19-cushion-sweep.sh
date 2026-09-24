@@ -55,7 +55,7 @@ for cushion in $CUSHIONS; do
 	outp=$(field output_packets)
 	placed=$((content + late + over))
 
-	cc=$(tsp -I file "$out" -P continuity -O drop 2>&1 | grep -c 'TS:')
+	cc=$(tsp -I file "$out" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 	tsp -I file "$out" -P pcrextract --pcr --csv -o "${out%.ts}.csv" -O drop >/dev/null 2>&1
 	pcr=$(awk -F, 'NR>1{c=$7;if(p!=""){d=(c-p)/27000;n++;if(d>m)m=d;if(d>40)o++}p=c}
 		END{if(n)printf "%d\t%.2f\t%.1f",n,o/n*100,m; else printf "0\t0.00\t0.0"}' "${out%.ts}.csv")

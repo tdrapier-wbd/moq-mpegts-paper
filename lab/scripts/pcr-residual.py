@@ -17,8 +17,8 @@ PCR-bearing PID is reported so a pooled reading cannot be made by accident.
 
   pcr-residual.py <capture.ts> [--pid N] [--nominal BPS]
 """
-import sys
 import statistics
+import sys
 
 TS = 188
 

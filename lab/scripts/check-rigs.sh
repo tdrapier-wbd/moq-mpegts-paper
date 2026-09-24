@@ -56,7 +56,18 @@ hits=$(rg -n -- '(pgrep|pkill|proc_of|rss_of|ps -o).*(--server-bind|--listen )' 
 [ -n "$hits" ] && fail "a cleanup pattern keys on a flag name that changed" \
 	"$(printf '%s\n' "$hits" 'a pattern that no longer matches leaves the relay holding the port,')"
 
-# --- 5. shell hygiene ---------------------------------------------------------------------------
+# --- 5. every continuity count must use a pattern that tsp actually emits ----------------------
+# `tsp -P continuity` writes `* continuity: packet index: N, PID: 0xNN (n), missing K packets`.
+# Three rigs counted `TS:` and one counted `discontinuity` alone; both return **zero on a stream
+# with known missing packets**, so those cells could not fail. Found in T42 after the same class of
+# bug nearly inverted its own result. Match the wording, or the grader reports universal success.
+hits=$(rg -n -- 'continuity' --glob '*.sh' 2>/dev/null | rg -- 'grep' |
+	rg -v "^($EXEMPT):" | rg -v ':[0-9]+:\s*#' |
+	rg -v "missing .\* packets\|discontinuity" | rg -v "grep -c \"continuity:\"")
+[ -n "$hits" ] && fail "a rig counts continuity errors with a pattern tsp does not emit" \
+	"$(printf '%s\n' "$hits" "use: grep -cE 'missing .* packets|discontinuity'")"
+
+# --- 6. shell hygiene ---------------------------------------------------------------------------
 for f in *.sh; do
 	bash -n "$f" 2>/dev/null || fail "$f does not parse" "$(bash -n "$f" 2>&1 | head -3)"
 done
@@ -65,8 +76,21 @@ if command -v shellcheck >/dev/null; then
 	[ -n "$sc" ] && fail "shellcheck reports errors" "$(printf '%s' "$sc" | head -20)"
 fi
 
+# --- 7. python hygiene --------------------------------------------------------------------------
+# Half this directory is Python and none of it was gated, which is how 31 ruff findings accumulated
+# across 14 files without anyone seeing them.
+for f in *.py; do
+	python3 -m py_compile "$f" 2>/dev/null ||
+		fail "$f does not compile" "$(python3 -m py_compile "$f" 2>&1 | tail -3)"
+done
+rm -rf __pycache__
+if command -v ruff >/dev/null; then
+	rf=$(ruff check --quiet -- *.py 2>&1)
+	[ -n "$rf" ] && fail "ruff reports findings" "$(printf '%s' "$rf" | tail -20)"
+fi
+
 if [ "$fails" -eq 0 ]; then
-	note "check-rigs: clean ($(ls -1 -- *.sh | wc -l | tr -d ' ') scripts)"
+	note "check-rigs: clean ($(ls -1 -- *.sh | wc -l | tr -d ' ') shell, $(ls -1 -- *.py | wc -l | tr -d ' ') python)"
 	exit 0
 fi
 note ""

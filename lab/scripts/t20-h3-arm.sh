@@ -170,7 +170,7 @@ grade() {
 	bytes=$(stat -c%s "$OUT" 2>/dev/null || echo 0)
 	ratio=$(python3 -c "print(f'{$bytes*8/($SOURCE_BPS*$WINDOW):.3f}')")
 
-	cc=$(tsp -I file "$OUT" -P continuity -O drop 2>&1 | grep -c 'TS:' || true)
+	cc=$(tsp -I file "$OUT" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 
 	tsp -I file "$OUT" -P pcrextract --pcr --csv -o "$OUTDIR/${ARM}_pcr.csv" -O drop \
 		>/dev/null 2>&1

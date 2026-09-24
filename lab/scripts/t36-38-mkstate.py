@@ -5,7 +5,10 @@ flip a lever mid-session; the write is the instant of the control-plane decision
     mkstate.py --cache-control "max-age=5" --enable affakey,affbkey,wbdkey,rivalkey
     mkstate.py --mode refuse
 """
-import argparse, json, os, sys, time
+import argparse
+import json
+import os
+import time
 
 W = "/tmp/t36"
 STATE = f"{W}/authstate.json"

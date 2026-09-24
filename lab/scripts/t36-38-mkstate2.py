@@ -10,7 +10,10 @@ it by naming the cell rather than by restating the estate.
     mkstate2.py --relicense affdkey=tnt --mark "narrow D to tnt only"
     mkstate2.py --keymap affakey=/path/other.pub.jwk
 """
-import argparse, json, os, time
+import argparse
+import json
+import os
+import time
 
 W = "/tmp/t36"
 STATE = f"{W}/authstate.json"

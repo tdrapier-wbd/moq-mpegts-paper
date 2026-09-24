@@ -105,7 +105,10 @@ def main():
     for pid, entry in sorted(si_of(final).items(), key=lambda kv: int(kv[0])):
         sections = entry.get("sections", [])
         b = sum((len(s) * 3) // 4 for s in sections)
-        print(f"  PID 0x{int(pid):04x}             {len(sections)} sections, {b:,} B binary, interval {entry.get('interval')} ms")
+        print(
+            f"  PID 0x{int(pid):04x}             {len(sections)} sections, "
+            f"{b:,} B binary, interval {entry.get('interval')} ms"
+        )
 
 
 if __name__ == "__main__":

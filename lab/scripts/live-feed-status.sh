@@ -44,7 +44,7 @@ fi
 echo "  captured $BYTES bytes in ${SECS}s => $(awk -v b="$BYTES" -v s="$SECS" 'BEGIN{printf "%.2f Mb/s", (b*8)/(s*1000000)}')"
 echo "  PIDs: $("$TSP" -I file "$CAP" -P analyze --normalized -O drop 2>/dev/null |
 	sed -nE 's/^pid:.*pid=([0-9]+).*/\1/p' | sort -n | tr '\n' ' ')"
-echo "  continuity errors: $("$TSP" -I file "$CAP" -P continuity -O drop 2>&1 | grep -ci 'discontinuity' | head -1)"
+echo "  continuity errors: $("$TSP" -I file "$CAP" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' | head -1)"
 echo "  services: $("$TSP" -I file "$CAP" -P analyze --normalized -O drop 2>/dev/null |
 	sed -nE 's/^service:.*name=([^:]*).*/\1/p' | head -3 | tr '\n' ' ')"
 rm -f "$CAP"

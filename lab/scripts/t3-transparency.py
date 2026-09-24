@@ -282,16 +282,23 @@ def main():
     if sprof and eprof:
         fmt = lambda p: " / ".join(f"{x:.2f}" for x in p)  # noqa: E731
         spread = max(sprof) - min(sprof)
+        verdict = (
+            "homogeneous, so the census rows measure the lane"
+            if spread < 1.0
+            else "**NOT homogeneous — census rows carry the window, not only the lane**"
+        )
         print(f"\nStuffing by quarter — source {fmt(sprof)} %, egress {fmt(eprof)} %. "
               f"Reference spread {spread:.2f} points: "
-              f"{'homogeneous, so the census rows measure the lane' if spread < 1.0 else '**NOT homogeneous — census rows carry the window, not only the lane**'}.")
+              f"{verdict}.")
     print()
 
     print("| Field (source → egress) | source | egress | |")
     print("|---|---|---|---|")
     ss, es = S["service"], E["service"]
     print(row("Transport Stream Id", "0x%04X" % int(ss.get("tsid", -1)), "0x%04X" % int(es.get("tsid", -1))))
-    print(row("Original Network Id", "0x%04X" % int(ss.get("orignetwid", -1)), "0x%04X" % int(es.get("orignetwid", -1))))
+    print(row("Original Network Id",
+              "0x%04X" % int(ss.get("orignetwid", -1)),
+              "0x%04X" % int(es.get("orignetwid", -1))))
     print(row("Service name", ss.get("name", "—"), es.get("name", "—")))
     print(row("Service provider", ss.get("provider", "—"), es.get("provider", "—")))
     print(row("Service type", "0x%02X" % int(ss.get("servtype", 0)), "0x%02X" % int(es.get("servtype", 0))))

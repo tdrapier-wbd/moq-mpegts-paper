@@ -74,7 +74,7 @@ for f in "$OUT/burst-moderate.ts" "$OUT/burst-high.ts"; do
 	echo "  bytes: $(wc -c <"$f")"
 	tsp -I file "$f" -P analyze --normalized -O drop 2>/dev/null |
 		grep '^ts:' | tr ':' '\n' | grep -E '^(packets|bitrate|pcrbitrate|services)=' | sed 's/^/  /'
-	echo "  continuity errors: $(tsp -I file "$f" -P continuity -O drop 2>&1 | grep -c 'TS:')"
+	echo "  continuity errors: $(tsp -I file "$f" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)"
 	tsp -I file "$f" -P pcrextract --pcr --csv -o "${f%.ts}-pcr.csv" -O drop >/dev/null 2>&1
 	awk -F, 'NR>1{c=$7;if(p!=""){d=(c-p)/27000;n++;if(d>m)m=d;if(d>40)o++}p=c}
 		END{printf "  reference PCR: n=%d >40ms=%d worst=%.1f ms\n",n,o,m}' "${f%.ts}-pcr.csv"

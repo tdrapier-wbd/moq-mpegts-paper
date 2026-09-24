@@ -5,13 +5,18 @@ Compares the two legs datagram by datagram at equal RTP sequence numbers, raw
 and with the continuity counter masked, to separate a groomer that placed the
 wrong bytes from an upstream stage that renumbered the right ones.
 """
-import argparse, importlib.util, os
+import argparse
+import importlib.util
+import os
+
 TS = 188
 DEFAULT_ORACLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "t12-merge-oracle.py")
 
 def load(path):
 	spec = importlib.util.spec_from_file_location("o", path)
-	m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+	m = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(m)
+	return m
 
 def mask(dg, keep_adaptation):
 	out = []
@@ -30,11 +35,14 @@ o = load(a.oracle)
 legs = {a.leg_a_port: {}, a.leg_b_port: {}}
 for _, link, frame in o.read_pcap(a.pcap):
 	u = o.parse_udp(link, frame)
-	if not u: continue
+	if not u:
+		continue
 	port, payload = u
-	if port not in legs: continue
+	if port not in legs:
+		continue
 	r = o.parse_rtp(payload)
-	if r: legs[port].setdefault(r[0], r[-1])
+	if r:
+		legs[port].setdefault(r[0], r[-1])
 A, B = legs[a.leg_a_port], legs[a.leg_b_port]
 common = sorted(set(A) & set(B))
 n = len(common) or 1
