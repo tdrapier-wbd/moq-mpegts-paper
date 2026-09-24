@@ -1486,7 +1486,10 @@ re-measured, and the wire-cost figures for H3 and H2 remain labelled *derived* w
 regenerates continuity counters and re-times PCR, so on the H3 and H1 arms **continuity and PCR grade
 the receiver rather than the wire**, and a `cc_errors=0` there is true by construction. The
 byte-faithful `tsp -I hls` receiver used for the carriage work cannot negotiate HTTP/3, so this lane
-trades carriage fidelity for substrate reach, and a byte-faithful H3 receiver is not yet built. And a
+traded carriage fidelity for substrate reach. A byte-faithful HTTP/3 receiver has since been built
+and validated ([T42](../lab/test-42-h3-receiver-fidelity.md)), so the limit is now an owed
+re-measurement rather than a missing instrument; the figures above are unrevised until that run
+happens. And a
 per-packet impairment is still not a per-byte one: at matched MTU the QUIC arm sends ~1.5× the packets
 of the TCP arm for the same media, a residual that runs against QUIC and that no setting in the rig
 removes — far smaller than the 24× it replaced, but the reordering figures should be read as "same

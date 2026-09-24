@@ -45,11 +45,16 @@ across the two strands is a judgement rather than a derivation.
 
 Two facts organise almost everything below, and both are worth reading before the tables.
 
-**The segmented lane is the single largest gap, and one missing instrument causes most of it.**
-Nothing in the lab receives an HTTP/3 HLS stream byte-faithfully — the current receiver re-muxes — so
-the segmented plane cannot be graded on carriage fidelity at all. That is **P0-e**, a build task
-rather than an experiment, and it gates the segmented halves of P0-f, P2-b and
-[T32](test-32-observability-survey.md). Separately, and not blocked on it, the segmented ladders of
+**The segmented lane is the single largest gap, and the instrument that caused most of it now
+exists.** Until [T42](test-42-h3-receiver-fidelity.md) nothing in the lab received an HTTP/3 HLS
+stream byte-faithfully, so the segmented plane could not be graded on carriage fidelity at all. That
+was **P0-e**, a build task rather than an experiment, and it gated the segmented halves of P0-f, P2-b
+and [T32](test-32-observability-survey.md). It is closed:
+[`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py) reproduces the origin's bytes exactly over
+both substrates, and those three segmented halves are now runnable. The same experiment showed what
+the previous receiver cost — it reports zero continuity errors on an origin with ten excised packets
+— so **any segmented carriage figure taken before it must be re-measured, not merely re-qualified**.
+Separately, and never blocked on the instrument, the segmented ladders of
 P1-a and P1-c–P1-d have simply not been run, which is why two experiments that compare architectures
 currently rank only the MoQ and SRT lanes.
 
@@ -66,8 +71,8 @@ scope for that entry.
 
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
-| P0-e | A byte-faithful HTTP/3 HLS receiver — **the instrument three other entries wait on** | — | **the gap** | *a build task, not an experiment* | us |
-| P0-f | Silent media-plane failure | run | not run | [T22](test-22-silent-media-plane-failure.md), [T24](test-24-partial-media-plane-stall.md) | P0-e |
+| P0-e | A byte-faithful HTTP/3 HLS receiver — **the instrument three other entries waited on** | — | **built and validated** | [T42](test-42-h3-receiver-fidelity.md) | **closed** |
+| P0-f | Silent media-plane failure | run | not run | [T22](test-22-silent-media-plane-failure.md), [T24](test-24-partial-media-plane-stall.md) | **unblocked** by P0-e ([T42](test-42-h3-receiver-fidelity.md)) |
 | P0-g | Permanence: the seven-day arm, and the segmented soak | 24 h run; 7 d owed | not run | [T21](test-21-permanence-soak.md) | P0-h for the MoQ arm |
 | P0-h | Re-soak the importer after the memory fix lands | owed | — | [T21](test-21-permanence-soak.md) | [#3493](https://github.com/moq-dev/moq/issues/3493) closed in `5d0991b9`, but both 2 h checks are invalidated by [#3798](https://github.com/moq-dev/moq/issues/3798); blocked until the import re-anchor lands. **#3798 was closed as completed on 2026-09-23 by a planning PR that changed no code, and re-measured live on `ffa5b81b`** — the closure is not an unblock ([T41](test-41-import-reanchor-coverage.md)) |
 | P0-j | A real never-repeating encoder against the continuous-source fence | SRT+recording arm run | — | [T34](test-34-real-encoder-severity.md) | the live feed; export comparison also blocked on the import re-anchor |
@@ -107,8 +112,8 @@ second reason: no shipped CLI can dump a parsed catalog, so no catalog field can
 
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
-| P2-a | What commercial monitoring would have caught | not run | not run | [T32](test-32-observability-survey.md) | segmented half on P0-e |
-| P2-b | Isolation under abuse | run | not run | [T25](test-25-isolation-under-abuse.md) | P0-e |
+| P2-a | What commercial monitoring would have caught | not run | not run | [T32](test-32-observability-survey.md) | segmented half **unblocked** by P0-e ([T42](test-42-h3-receiver-fidelity.md)) |
+| P2-b | Isolation under abuse | run | not run | [T25](test-25-isolation-under-abuse.md) | **unblocked** by P0-e ([T42](test-42-h3-receiver-fidelity.md)) |
 | P2-c | A standby packager joining an already-running feed | — | not run | [T30](test-30-segmented-distributed-resilience.md) | sits behind P1-c |
 | P2-d | Differential delay on a real pair rather than modelled with `netem` | not run | — | [T12](test-12-dual-path-handoff.md) | the live feed gives the pair; see below |
 | P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | owed | — | [T31](test-31-congestion-capacity-ladders.md) | deprioritised behind P1-d |
@@ -206,11 +211,13 @@ feed through `moq export ts` with TSDuck *before* anyone reads an analyser front
 
 Grouped so nothing in a group contaminates anything else in it. Each group is one run.
 
-- **The segmented group, which is now the biggest single win.** P0-e's receiver is the instrument,
-  and once it exists P1-a's and P1-d's segmented ladders, P1-c's two-host segment store and P1-f's
-  fan-out half all become runnable against T20's existing HTTP/3 and HLS apparatus on the same host.
-  Build the receiver first; run the fan-out **last**, because it deliberately saturates a box, and
-  keep a segmented origin off any box carrying a MoQ relay.
+- **The segmented group, which is now the biggest single win and no longer blocked.** P0-e's
+  receiver is the instrument and it now exists ([T42](test-42-h3-receiver-fidelity.md)), so P1-a's
+  and P1-d's segmented ladders, P1-c's two-host segment store and P1-f's fan-out half are all
+  runnable against T20's existing HTTP/3 and HLS apparatus on the same host. Run the fan-out
+  **last**, because it deliberately saturates a box, and keep a segmented origin off any box
+  carrying a MoQ relay. Note that the receiver is validated for byte fidelity and **not** for
+  timing, so any latency arm in this group needs its per-cycle `curl` overhead characterised first.
 - **The entitlement follow-up.** All of the family has run except **P1-k**: a real `--auth-api`
   endpoint serving a licensing matrix, rather than the stub that drove every run from
   [T36](test-36-entitlement-enforcement.md) to [T38](test-38-entitlement-estate.md). A component to
@@ -230,6 +237,49 @@ us.
 
 ---
 
+## The UDP sink: deferred, with the reason it will return
+
+[#3923](https://github.com/moq-dev/moq/issues/3923) asked for `moq export ts --udp <addr:port>`. The
+maintainer pushed back softly, suggesting an external tool, and **the campaign agrees and is
+deferring it — with no reply posted**. Three reasons, in order of weight, none of which is "it does
+not matter":
+
+1. **It is already served, and measured to be.** The deployed contribution chain is two stages joined
+   by a loopback multicast group, with `tsp` doing the socket work on both sides
+   ([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*), and
+   [T40](test-40-continuous-join-through-srt.md) drives media through that exact shape. A pipe into
+   `tsp -O ip` is not a workaround here; it is the thing the lab has been running all along.
+2. **The sink is not the bottleneck — the byte schedule is.** #3923's own filing subordinated itself
+   to [#3925](https://github.com/moq-dev/moq/issues/3925) and that judgement has strengthened: on
+   `ffa5b81b` the exporter's median PCR byte gap is 1,316 B against a 31,124 B nominal
+   ([T13](test-13-downstream-grooming.md) § *The residual measured*). An in-process socket emitting
+   that stream to multicast would be **worse than the pipe**, because an external stage can at least
+   re-clock it and a built-in one that does not would look like a supported hand-off while carrying a
+   grid no IRD can lock to.
+3. **It belongs to the edge gateway, not to the reference CLI.**
+   [`docs/architecture.md`](../docs/architecture.md) §4 already places *egress formatting — RTP/UDP
+   or raw UDP, unicast or multicast, with optional SMPTE 2022-1 FEC and ST 2022-7* inside the
+   gateway's ordered responsibilities, and §3.1 places multicast **ingest** in the pluggable ingest
+   layer. So the maintainer's scope judgement and this campaign's architecture agree, and deferring
+   costs the design nothing.
+
+**Why it will come back, and on which side.** Where a distributor moves all feeds internally over a
+managed multicast network, the pressure falls on **ingest** rather than egress — a globally
+multicast contribution network wants `moq import ts` to read a group directly, and the extra `tsp`
+stage becomes a per-service process multiplied by the channel count. That is an operational cost
+question (process count, CPU, failure domains at hundreds of services), not a capability gap, and it
+is the form in which the ask should return if it returns. Egress-side, the last hop into a facility's
+IRDs is a *local* conversion at the edge, which is where the gateway already sits.
+
+**One thing the campaign does not know, and should not assume.** Whether receive-side head-ends,
+affiliates and licensees actually require a UDP or multicast hand-off into their IRDs, or whether a
+unicast hand-off suffices, is **unestablished here**. Multicast does not traverse the public
+internet, so external hand-off is unicast in practice (SRT, Zixi, RIST) while internal facility
+distribution is multicast — but which side of that line a given licensee sits on is a deployment fact
+this lab has never measured and cannot infer. It is recorded as an open question in
+[`docs/problem.md`](../docs/problem.md) R3's terms rather than answered, and the arriving IRD bank is
+the first opportunity to ask it of real equipment.
+
 ## Deliberately not doing
 
 Recorded so they are not proposed again. Each was considered and dropped; where a result exists, it
@@ -248,8 +298,10 @@ is in the file named.
 - **The wire-cost leg on the EC2 path**, whose HTTP-layer term is path-independent and whose framing
   multiplier is measured elsewhere; and per-track wire-byte attribution.
 - **The segmented HTTP/3 arm** — run, and both the original motivation and its successor are
-  answered ([T20](test-20-segmented-http3.md)). What survives is P0-e, an instrument gap rather than
-  an open question.
+  answered ([T20](test-20-segmented-http3.md)). What survived it was P0-e, an instrument gap rather
+  than an open question, and that gap is now closed ([T42](test-42-h3-receiver-fidelity.md)). What
+  the instrument reopens is narrow and specific: T20's continuity and PCR figures on the H3 and H1
+  arms were the receiver's, so they are owed a re-measurement.
 - **Conditional-access carriage through the opaque lane, and the apparatus for it.** It would need a
   BISS-CA scrambler and an entitled receiver alongside the loaned analyser. The complexity is real,
   the requirement is unestablished, and [`docs/control-plane.md`](../docs/control-plane.md) §9

@@ -123,6 +123,7 @@ stated with its conditions in the file it points at. An experiment with nothing 
 | T39 | Observability across the administrative boundary | R8 (observability) | scores [control-plane](../docs/control-plane.md) | partial — Part A run and passed; Part B blocked on a CLI gap | A standalone process at the client edge catches a T24-class partial fault **no relay-side telemetry can express**. The return path is authorized, routed and protocol-legal, but nothing shipped can construct it | [test-39-cross-boundary-observability.md](test-39-cross-boundary-observability.md) |
 | T40 | The content-join stall through the SRT contribution chain | 2 (E2E, deployed shape) | supports Gate 3 | complete, conclusive | **The two-stage SRT ingest does not absorb #3533's trigger** — it carries it, exactly as the local-pipe reproducer does. #3533's export stall is fixed on later builds, where a different failure takes its place on import | [test-40-continuous-join-through-srt.md](test-40-continuous-join-through-srt.md) |
 | T41 | Which TS stream kinds re-anchor below the live edge | 3 (carriage fidelity) | characterises [#3798](https://github.com/moq-dev/moq/issues/3798); supports Gate 3 | complete, conclusive | **#3798 has two parts.** Non-legacy streams never re-anchor and abort on the first backward timestamp (H.264 at wrap 1.00); `LegacyStream` — MP2, AC-3 and E-AC-3 — re-anchors exactly once and aborts on the second (wrap 1.98). A fix must make the offset cumulative, not merely universal | [test-41-import-reanchor-coverage.md](test-41-import-reanchor-coverage.md) |
+| T42 | A byte-faithful HTTP/3 HLS receiver, and what the previous one was grading | 3 (carriage fidelity) | closes **P0-e**; unblocks the segmented halves of P0-f, P2-b, T32 | built and validated | **The instrument exists and the old one was a constant.** [`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py) reproduces the origin's bytes exactly over HTTP/1.1 and HTTP/3, matching `tsp -I hls` hash-for-hash. `ffmpeg -c copy -f mpegts` reports **0 continuity events on an origin with 10 excised packets**, renumbers every PID and drops the NIT and TDT/TOT, so T20's H3/H1 carriage figures are owed a re-measurement | [test-42-h3-receiver-fidelity.md](test-42-h3-receiver-fidelity.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -193,12 +194,15 @@ top of the script, so re-pricing against a different tariff or a negotiated rate
 **Where the campaign stands.** Gate 1 is largely proven in software on both data planes. **Gate 2 has
 never been attempted**: nothing has been graded on hardware and no P2 result exists from a live wire,
 which is the make-or-break gap and waits on an analyser and an IRD bank. Gate 3 is measured on the
-MoQ and SRT lanes and **not on the segmented lane** — the largest gap the lab could close by itself.
-Its two halves are differently blocked, and conflating them has cost the campaign time: the
-**impairment ranking** (P1-a and P1-d's segmented ladders) grades programme survival, needs no byte
-fidelity and **can be run now on apparatus that exists**, while the **carriage-fidelity** half waits
-on an instrument this lab has not built, a byte-faithful HTTP/3 HLS receiver (P0-e). Permanence fails
-in one role, on the importer's memory growth rather than on the media path.
+MoQ and SRT lanes and **not on the segmented lane** — the largest gap the lab could close by itself,
+and it is now unblocked in both halves. The **impairment ranking** (P1-a and P1-d's segmented
+ladders) grades programme survival, needs no byte fidelity and could always have been run on
+apparatus that exists. The **carriage-fidelity** half waited on an instrument the lab did not have,
+a byte-faithful HTTP/3 HLS receiver (P0-e); that is built and validated
+([T42](test-42-h3-receiver-fidelity.md)), which also showed the receiver it replaces to have been
+reporting a clean carriage grade unconditionally, so T20's continuity and PCR figures on the H3 and
+H1 arms are owed a re-measurement rather than a caveat. Permanence fails in one role, on the
+importer's memory growth rather than on the media path.
 
 **The table above is the record; [planned-experiments.md](planned-experiments.md) is the roadmap.**
 Every specified experiment has its own per-test file whether or not it has run, carrying the

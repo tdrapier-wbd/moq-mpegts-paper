@@ -2031,6 +2031,28 @@ silently inverted (§5), a whole arm could have scored as a clean survival.
 > capture is below a floor as *void* rather than as a survivor, and print it. A null result needs
 > positive evidence that the rig was working, and "nothing crashed" is not that evidence.
 
+### A grader whose pattern does not match its tool's wording scores every input as clean
+
+*From [T42](test-42-h3-receiver-fidelity.md) P0-e.* The laundering rig counted `tsp -P continuity`
+output lines matching `discontinuity`. The plugin writes `* continuity: packet index: 87,252, PID:
+0x006F (111), missing 9 packets` — the word never appears. The grader therefore returned zero for
+every arm, including an origin from which ten packets had just been excised on purpose. The
+conclusion it was about to support was that a re-muxing receiver and a byte-faithful one agree on
+continuity, which is the opposite of the truth and would have retired the instrument that the
+segmented lane needed.
+
+What caught it was not review. The rig computes the damaged origin's error count first and aborts if
+it is zero, on the stated grounds that a fixture whose damage is invisible cannot discriminate
+between receivers. That guard fired, and the silent-pattern bug surfaced as a `FATAL` instead of a
+published finding.
+
+> **A grader must demonstrate, in the same run that uses it, that it detects known damage.** Build
+> the positive control into the rig rather than into a separate validation exercise: damage the
+> input by a known amount, require the grader to report it, and abort the run if it does not. This
+> costs one arm and is the only thing standing between a mis-typed pattern and a confident inverted
+> result. It generalises past text matching — any grader reading a tool's output is one upstream
+> rewording away from reporting universal success.
+
 ---
 
 ## 6. Claims, and their scope

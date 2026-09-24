@@ -1611,8 +1611,15 @@ The same measurement corrects the plan's scope. It describes the re-anchoring pa
 audio"* and lists AC-3 among the kinds that abort immediately, but AC-3 measures identically to
 MPEG-1 Layer II at wrap 1.98 — because `StreamType::DolbyDigitalUpToSixChannelAudio` dispatches to
 `legacy_stream` and `LegacyStream` is documented in-tree as carrying *"MP2, AC-3, E-AC-3"*. The
-dividing line is the type, not the codec, and it already spans three codecs. **Drafted, not yet
-posted** — see [`docs/upstream/`](../docs/upstream/).
+dividing line is the type, not the codec, and it already spans three codecs. **Posted to #3798**
+(2026-09-24) as a comment on the closed thread rather than a new issue, with the fixture recipe and
+an offer — not an unasked contribution — to write the in-tree tests the quest already enumerates.
+
+The exit-code baseline for [#3926](https://github.com/moq-dev/moq/issues/3926) went to its thread the
+same way: the plan there specifies *"0 when the catalog track finished cleanly, 1 when it was
+dropped"*, and the original filing recorded only the error text, so the comment supplies the "before"
+side — **1 in both cases, including a publisher that exits 0** — and notes that the error string is
+not a discriminator either.
 
 ---
 

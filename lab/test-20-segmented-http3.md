@@ -354,9 +354,13 @@ From the baseline captures and origin logs:
   by construction and is **not** evidence about transport integrity, and their PCR distribution
   (max 80 ms, ~95 % above the 40 ms gate) is a property of FFmpeg's mpegts muxer, identical on both
   arms. The byte-faithful `tsp -I hls` receiver used in [T14](test-14-data-plane-comparison.md) cannot
-  negotiate HTTP/3, so this experiment trades carriage fidelity for substrate reach. **A byte-faithful
-  H3 receiver is the obvious next instrument** and is not yet built. Only the MoQ arm's PCR figures
-  here are wire-domain.
+  negotiate HTTP/3, so this experiment trades carriage fidelity for substrate reach. Only the MoQ
+  arm's PCR figures here are wire-domain. **That instrument has since been built**
+  ([T42](test-42-h3-receiver-fidelity.md)), and it measured how strong this limit is: on an origin
+  with ten deliberately excised packets, `ffmpeg -c copy -f mpegts` reported zero continuity events
+  where the origin and two byte-faithful receivers reported ten missing packets. It also renumbers
+  every PID and drops the NIT and TDT/TOT. These two columns are therefore owed a **re-measurement**
+  through the new receiver, not a re-qualification — nothing in them can be rescued by wording.
 - **A per-packet impairment is not a per-byte impairment, even normalised.** At MTU 1500 the QUIC
   arm still sends ~1.5× the packets of the TCP arm for the same media (109,657 against 71,389), so at
   a fixed per-packet reorder probability it takes ~1.5× the events. That residual runs against the
