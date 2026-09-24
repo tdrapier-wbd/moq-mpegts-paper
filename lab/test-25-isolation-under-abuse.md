@@ -17,6 +17,13 @@ accumulating media it will never deliver.
 
 So this is an operational property with a knob on it rather than a defect, and **no upstream report is
 warranted** — see [Open](#open). Specified as [P2-b](planned-experiments.md#p2--completeness).
+
+**The segmented lane is isolated too, and more cleanly.** All three victims received byte-identical
+streams in all four arms at 0 continuity errors, and the origin's working set moved 103.6 → 104.2 MB
+against the relay's 87 MB → 1.9 GB. The retained-session cost that dominates the MoQ result has no
+counterpart on a stateless static origin. That is an advantage of statelessness, bought with the
+latency and per-request overhead measured elsewhere, and it is scoped to a static origin — see
+*The segmented lane* below for what a stateful one would reintroduce.
 Rig: [`f11-isolation.sh`](scripts/f11-isolation.sh), graded with
 [`t8b-c3-span.py`](scripts/t8b-c3-span.py).
 
@@ -265,6 +272,51 @@ That last figure is the one worth carrying forward. **A dead peer is not flow-co
 arm — a subscriber that stays connected and stops reading — cost nothing measurable, because QUIC flow
 control pushes back on a live receiver that will not drain. A killed peer offers no such feedback, so
 the relay queues for the full retention window at the full media rate.
+
+### The segmented lane: isolated too, and with no retained-state cost at all
+
+This is the segmented half of **P2-b**, unblocked by [T42](test-42-h3-receiver-fidelity.md) — a
+victim's continuity is the measurement here, and the previous receiver reported zero continuity
+errors whatever arrived. Arms are chosen to map onto the MoQ ones above rather than to be
+exhaustive. Rig: [`t25-segmented-abuse.sh`](scripts/t25-segmented-abuse.sh), driven by
+[`t25-segmented-abuse-all.sh`](scripts/t25-segmented-abuse-all.sh); three victims, twelve abusers,
+60 s, HLS over HTTP/3 from nginx.
+
+| Arm | What the abusers do | victim 1 | victim 2 | victim 3 | cc errors | Holes | Origin peak RSS |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `control` | nothing | 82,851,600 | 82,851,600 | 82,851,600 | 0 | 0 | 103.6 MB |
+| `churn` | connect, killed after 0.3 s, never closed | 82,851,600 | 82,851,600 | 82,851,600 | 0 | 0 | 103.6 MB |
+| `slow` | read at 1 B/s and stall | 82,851,600 | 82,851,600 | 82,851,600 | 0 | 0 | 103.6 MB |
+| `flood` | unthrottled parallel fetch loops | 82,851,600 | 82,851,600 | 82,851,600 | 0 | 0 | 104.2 MB |
+
+**Every victim received exactly the same bytes in every arm.** Not "within 8 KB", as the MoQ lane
+managed — bit-for-bit equal, 82,851,600 bytes twelve times over, at zero continuity errors and zero
+holes. On this lane the isolation result is stronger than on the media-aware one.
+
+**The memory cost that dominates the MoQ result does not exist here.** The relay went from 87 MB to
+1.9 GB under `churn`, a 22× excursion that took four further arms to attribute. The origin moves
+from 103.6 MB to 104.2 MB — 0.6 MB, 0.6 % — and `churn` specifically costs **nothing measurable**.
+The mechanism is structural rather than a matter of tuning: nginx serves static files statelessly
+per request, so an abandoned connection leaves no subscription, no group cache and no media
+accumulating for a receiver that will never collect it. There is nothing to retain, so no idle
+timeout has to be chosen to bound it.
+
+**The comparison to draw, and the one not to.** This is a real advantage for the segmented lane on
+R7, and it is an advantage of *statelessness*, which the lane buys with the latency and the
+per-request overhead measured in [T20](test-20-segmented-http3.md) and
+[T18](test-18-delivery-latency.md). It is not evidence that the segmented lane is more robust in
+general, and it says nothing about an origin doing per-subscriber work — a packager, an entitlement
+check or a personalised manifest would reintroduce exactly the state this arm shows nginx not
+holding. What is measured is a static-origin CDN edge, which is the deployed shape, not a bound on
+segmented architectures.
+
+**Limits.** One 60 s window per arm on one host, twelve abusers against three victims, with origin
+and clients co-resident so no network separates them; the abuse is client-behavioural rather than
+protocol-level, so a malformed-request or QUIC-level attack is untested. The victim figures are
+identical across arms, which is a strong null, but a null from a load level that never stressed the
+origin — nginx never exceeded 104 MB or showed a non-200. A saturating arm on the scale of
+[T26](test-26-cross-host-fanout.md)'s fan-out knee would be the way to find where this stops being
+true, and was not run.
 
 ### What this establishes, and the claim it revises
 

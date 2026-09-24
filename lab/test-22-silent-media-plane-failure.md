@@ -1,6 +1,14 @@
 # T22 — silent media-plane failure: the feed stops, the transport does not
 
-> **State:** complete for the MoQ media-aware lane. Six arms, one of them a control.
+> **State:** complete on both lanes. Six arms on the media-aware lane and three on the segmented
+> lane, each with a control.
+>
+> **The segmented lane is equally silent, and the silence is not a property of MoQ.** With the
+> source frozen for 30 s the origin returned 200 to all 171 requests and the byte-faithful receiver
+> exited cleanly having delivered a stream **byte-identical to the control**. What the segmented
+> lane does have is the playlist: its media sequence advances every ≤3.1 s normally and froze for
+> 31.5 s across the stall, which is an application-level liveness signal over plain HTTP that the
+> media-aware lane has no counterpart for.
 >
 > **The transport never detects a stalled source.** With the source frozen for **120 s** while every
 > process stayed running and every session stayed established, the publisher, relay and exporter logged
@@ -143,6 +151,52 @@ at the live edge: it does not replay what it missed and it does not attempt to c
 appears downstream as a clean discontinuity of exactly its own length. For primary distribution that is
 the right behaviour — the alternative is a feed that runs late for ever after a hiccup — but it means
 **the programme lost is gone**, and the only mitigation is redundancy, not buffering.
+
+### The segmented lane: the transport is equally silent, but the playlist is not
+
+This is the segmented half of **P0-f**, which could not be run until the byte-faithful HTTP/3
+receiver existed ([T42](test-42-h3-receiver-fidelity.md)): the previous receiver re-muxes, so it
+would have manufactured a continuous, clean-looking stream out of a stalled one. The injection is
+deliberately identical to the `input` arm above — `SIGSTOP` on the source for 30 s — so the two lanes
+answer the same question. Rig: [`t22-segmented-stall.sh`](scripts/t22-segmented-stall.sh), three
+arms, 70 s window, HLS over HTTP/3 from nginx.
+
+| Arm | Delivered | Media | cc errors | Receiver exit | Holes | Origin requests | Non-200 | Longest playlist freeze |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `control` | 94,728,876 | 76.2 s | 0 | 0 | 0 | 171 | **0** | **3.1 s** |
+| `input` (source frozen 30 s) | 94,728,876 | 76.2 s | 0 | 0 | 0 | 171 | **0** | **31.5 s** |
+| `origin` (nginx down 30 s) | 76,974,908 | 76.2 s | **12** | **1** | **1** | 106 | 0 | 31.4 s |
+
+**The segmented lane's transport is exactly as silent as MoQ's.** Under `input` the origin served 171
+requests and returned **200 to every one of them**, the receiver exited 0 reporting no holes, and the
+delivered stream was **byte-for-byte identical to the control** — same 94,728,876 bytes, same 76.2 s
+of media, zero continuity errors. An operator alarming on HTTP status, request rate or receiver
+health sees a perfectly healthy service for the whole outage. This reproduces the finding on a lane
+with no sessions at all, which is worth stating precisely: the silence is not a property of QUIC or
+of MoQ's session model, it is what happens whenever the transport's health is defined without
+reference to the media.
+
+**What the segmented lane has that the media-aware lane does not is the playlist.** The media
+sequence advances every ≤3.1 s in steady state and froze for 31.5 s across the stall — the full
+injection, resolved to the 1 s sampling interval. That is an application-level liveness signal
+available to any client or monitor over plain HTTP, needing no media parsing, no PCR extraction and
+no cooperation from the sender. Its detection latency is bounded below by the segment duration
+(2 s here), so it is slower than the media plane's 1.69–1.88 s but in the same order, and far
+cheaper to implement.
+
+**A transport failure, by contrast, is loud — and only because the receiver is byte-faithful.** The
+`origin` arm produced 30 failed playlist fetches, a receiver exit of 1, one reported hole and **12
+continuity errors** against a 17.75 MB shortfall. Run through the previous `ffmpeg -c copy` receiver
+those 12 would have read as 0 ([T42](test-42-h3-receiver-fidelity.md)), turning the one arm that the
+segmented lane detects cleanly into another silent failure. The instrument is what separates the two
+cases here.
+
+**One limit specific to this arm, and it matters.** The source is a file and `tsp --realtime` catches
+up after `SIGCONT`, so the stall *delays* media rather than destroying it — which is why `input`
+delivers the same byte count as the control. With a live feed the frozen interval would be gone for
+good, and the delivered stream would be short by the stall. The arm therefore measures **what the
+lane reports about a stall**, which is the question, and not what a stall costs in programme. The
+MoQ `input` arm shares this property, so the comparison between them is sound.
 
 ## What this establishes
 

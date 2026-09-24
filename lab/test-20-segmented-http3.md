@@ -32,6 +32,14 @@
 > T5's numbers come back exactly — 0.995 segmented against 0.125 MoQ. Equalise the packet sizes and the
 > separation collapses. **This was a rig asymmetry wearing a protocol result's name.**
 >
+> **A later correction, in the segmented lane's favour: its wire is PCR-conformant.** The max 80 ms
+> and ~95 %-above-gate this experiment first reported for the HLS arms were the FFmpeg mpegts
+> muxer's, not the wire's. Re-measured through the byte-faithful receiver built in
+> [T42](test-42-h3-receiver-fidelity.md), the same clean baseline reads **max 24.95 ms and 0.00 %
+> above the 40 ms gate** on both HLS arms, against MoQ's 25.00 ms. Both lanes carry the PCR grid of
+> the same source, and a lane that moves bytes without rewriting them preserves it. The impairment
+> cells in measurements 4–6 have **not** been re-run and still carry the old receiver.
+>
 > **The substrate change is not uniformly bad for the segmented lane — it is bad only for reordering.**
 > Under loss the same change runs strongly the other way: at ~20 % *applied* loss the segmented lane
 > reads **0.10 on TCP and 0.70 on HTTP/3**, and under a 30 s total outage **0.51 on TCP against 0.76 on
@@ -190,8 +198,33 @@ by the build and by the server independently.
 no impairment the substrate change is invisible at the media plane, which is the precondition the rest
 of the experiment needs.
 
-MoQ's PCR reads max 25.00 ms and 0 % above the 40 ms gate; the HLS arms read max 80.00 ms and ~95 %
-above it. **That is not a transport result** — see the limits below.
+#### Re-measured through a byte-faithful receiver: the HLS wire is PCR-conformant
+
+The PCR figures this experiment originally reported for the HLS arms — max 80.00 ms, ~95 % above the
+40 ms gate — were **the FFmpeg mpegts muxer's, not the wire's**. Re-run on the same rig at the same
+60 s clean baseline, with the only change being the receiver
+([`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py), [T42](test-42-h3-receiver-fidelity.md)):
+
+| Receiver | Arm | Bytes | Delivered ratio | cc errors | PCR max | PCR > 40 ms |
+|---|---|---|---:|---:|---:|---:|
+| `ffmpeg -c copy -f mpegts` | H1 | 74,233,492 | 0.995 | 0 | 80.00 ms | **95.13 %** |
+| `ffmpeg -c copy -f mpegts` | H3 | 74,233,492 | 0.995 | 0 | 80.00 ms | **95.13 %** |
+| `hls-verbatim-recv.py` | H1 | 82,851,600 | 1.111 | 0 | **24.95 ms** | **0.00 %** |
+| `hls-verbatim-recv.py` | H3 | 82,851,600 | 1.111 | 0 | **24.95 ms** | **0.00 %** |
+
+**The segmented lane's wire meets the 40 ms gate, and always did.** 24.95 ms against MoQ's 25.00 ms
+is not a coincidence: both lanes carry the PCR grid of the same `-P regulate --pcr-synchronous`
+source, and a lane that transports bytes without rewriting them preserves it. The 95 % failure rate
+was manufactured entirely inside the receiver, and it is the one figure in this experiment that
+reversed rather than merely tightened.
+
+The byte counts differ between receivers for a reason that is also the mechanism: the verbatim
+receiver keeps the null packets and the NIT and TDT/TOT that the re-mux discards, so its delivered
+ratio exceeds 1.0 where FFmpeg's sits just under. The two HLS arms remain identical to each other
+under both receivers, which is the property this baseline exists to establish.
+
+The verbatim runs reported **0 holes and exit 0**, so these cells are graded on a complete capture
+rather than on one that quietly lost segments.
 
 ### 4. Reordering (P0) — and the control that reinterprets T5
 
@@ -349,18 +382,17 @@ From the baseline captures and origin logs:
 
 ## Limits
 
-- **The HLS arms' CC and PCR columns grade the receiver, not the wire.** `ffmpeg -c copy -f mpegts`
-  re-muxes: it regenerates continuity counters and re-times PCR. `cc_errors=0` on those arms is true
-  by construction and is **not** evidence about transport integrity, and their PCR distribution
-  (max 80 ms, ~95 % above the 40 ms gate) is a property of FFmpeg's mpegts muxer, identical on both
-  arms. The byte-faithful `tsp -I hls` receiver used in [T14](test-14-data-plane-comparison.md) cannot
-  negotiate HTTP/3, so this experiment trades carriage fidelity for substrate reach. Only the MoQ
-  arm's PCR figures here are wire-domain. **That instrument has since been built**
-  ([T42](test-42-h3-receiver-fidelity.md)), and it measured how strong this limit is: on an origin
-  with ten deliberately excised packets, `ffmpeg -c copy -f mpegts` reported zero continuity events
-  where the origin and two byte-faithful receivers reported ten missing packets. It also renumbers
-  every PID and drops the NIT and TDT/TOT. These two columns are therefore owed a **re-measurement**
-  through the new receiver, not a re-qualification — nothing in them can be rescued by wording.
+- **The *impairment* cells' CC and PCR columns still grade the receiver, not the wire.** This limit
+  is discharged for the clean baseline, which has been re-measured above, and **not** for the
+  impairment cells in measurements 4–6, which were taken through `ffmpeg -c copy -f mpegts` and have
+  not been re-run. That receiver re-muxes: it regenerates continuity counters and re-times PCR, so
+  `cc_errors=0` there is true by construction. [T42](test-42-h3-receiver-fidelity.md) measures how
+  strong the effect is — on an origin with ten deliberately excised packets it reported zero
+  continuity events where the origin and two byte-faithful receivers reported ten missing packets,
+  and it also renumbers every PID and drops the NIT and TDT/TOT. Those cells are owed a
+  re-measurement, not a re-qualification. **The delivered-ratio columns, which carry this
+  experiment's headline, are unaffected**: they count bytes arriving, which the re-mux does not
+  invent or destroy at the scale the impairment cells separate on.
 - **A per-packet impairment is not a per-byte impairment, even normalised.** At MTU 1500 the QUIC
   arm still sends ~1.5× the packets of the TCP arm for the same media (109,657 against 71,389), so at
   a fixed per-packet reorder probability it takes ~1.5× the events. That residual runs against the
@@ -372,6 +404,27 @@ From the baseline captures and origin logs:
 - **The FFmpeg patch is local and unmerged.** Reproducing this needs it (measurement 1).
 
 ## Corrections
+
+**The HLS arms' PCR distribution was the receiver's, and the wire passes the gate.** This experiment
+reported max 80.00 ms and ~95 % of intervals above 40 ms on both HLS arms, correctly labelling it a
+property of FFmpeg's mpegts muxer rather than a transport result — but labelling a figure is not the
+same as knowing the one it displaced. The wire reads max 24.95 ms and 0.00 % above gate. The method
+rule is that **an instrument known to distort a quantity should be recorded as producing no
+measurement of it, not a caveated one**: the caveated 95 % sat in this file and in
+[`docs/evidence.md`](../docs/evidence.md) for months, and a caveat is not load-bearing enough to stop
+a reader carrying the number forward.
+
+**The continuity count in this rig never worked.** `grade()` counted `tsp -P continuity` output lines
+matching `TS:`, which the plugin does not emit; it writes `missing N packets`. The count returned
+zero on any input, so `cc_errors=0` here was doubly unable to fail — the grader could not see a
+defect and the receiver would have repaired it first. Fixed in the rig and gated in
+[`check-rigs.sh`](scripts/check-rigs.sh); the rule is in [`method-notes.md`](method-notes.md).
+
+**The MoQ arm is stale against the current build.** It passes `--quic-gso=false`, which `ffa5b81b`
+rejects with *unexpected argument*, so the arm produces nothing. The MoQ figures in this file were
+taken on `~/bin-3006` and are unaffected — `moq export ts` writes the transport stream it received,
+so they were always wire-domain — but the arm needs the flag taking from
+[`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) before it can be re-run.
 
 **Believed:** segmented HTTP's resistance to reordering was a property of the lane — bounded,
 independently addressable objects retried over a fresh request — and would survive a change of

@@ -2002,6 +2002,14 @@ matching mistake with `pkill -f` is worse: the same self-match terminated the SS
 > writes at the end rather than on the absence of a process, since absence is also what a crash on
 > the first cell looks like.
 
+**Bracketing is not sufficient when the pattern is a bare substring.** [T25](test-25-isolation-under-abuse.md)
+lost a session to `pkill -9 -f "t25seg"` issued inside an `ssh` command line that itself contained
+`t25seg` — there was no bracket, but adding one would not have helped either, because the literal
+appears in the remote shell's own argv whatever its spelling. The reliable fix is to **put the
+cleanup in a script file on the host and invoke the file**, so the pattern never enters the caller's
+command line. Both this campaign's self-kills have come from patterns typed into the command that
+issues them.
+
 ### A replicate loop inside one script invocation re-uses the fixed port the last replicate held
 
 *From [T31](test-31-congestion-capacity-ladders.md), the QUIC-backend arms.* A wrapper asked for
@@ -2052,6 +2060,51 @@ published finding.
 > costs one arm and is the only thing standing between a mis-typed pattern and a confident inverted
 > result. It generalises past text matching — any grader reading a tool's output is one upstream
 > rewording away from reporting universal success.
+
+An audit of every rig after this found the same bug in four of them: three counted `TS:` and one
+counted `discontinuity` alone, and all four return zero on a stream with ten known-missing packets.
+Two of the four fed published tables — T20's `cc_errors` column and T19's cushion sweep. The check
+is now in [`check-rigs.sh`](scripts/check-rigs.sh), which rejects any continuity count whose pattern
+`tsp` does not emit. **When a class of bug is found once, grep the whole rig directory for it before
+assuming it was one rig's mistake.**
+
+### A metric that spans the rig's startup transient puts a floor under the control
+
+*From [T22](test-22-silent-media-plane-failure.md) P0-f.* The segmented stall arm scored "longest
+interval with no playlist advance". The first measurement gave 8.1 s for the control against 30.5 s
+for a 30 s stall — a real effect, but a weak-looking one. The 8.1 s was entirely the live window
+filling: until a segment rolls off, the media sequence legitimately sits at 0 and nothing has gone
+wrong. Excluding everything before the first advance put the control at **3.1 s**, and the same
+stall then read 31.5 s.
+
+Nothing about the stall changed. What changed was whether the baseline measured the steady state the
+arm is about, or the startup the arm is not about.
+
+> **Define a metric over the regime the experiment is about, and discard the transient explicitly.**
+> A startup plateau folded into a null makes the control look like a weak positive, which costs the
+> result its discrimination in the direction that is hardest to notice — the finding still holds, so
+> nothing prompts a re-examination.
+
+### A bare `wait` returns only when the rig's infinite producers do, which is never
+
+*From [T25](test-25-isolation-under-abuse.md) P2-b.* The segmented abuse rig backgrounds a packager
+running `--infinite`, three victim receivers with a fixed window, and up to twelve abuse loops
+written as `while :`. It then called `wait` with no arguments to collect the victims. `wait` waits
+for *every* background job, so it waited on the packager and the abuse loops, and the pass hung —
+for sixteen minutes before it was noticed, because the output was pipe-buffered and showed nothing.
+
+The second cost was worse than the delay. The hung run was never killed, so when the pass was
+restarted the two competed for the same output directory and the same origin path, and the first arm
+of every subsequent attempt died with its packager killed underneath it. Three arms were lost to
+what looked like an intermittent packager fault.
+
+> **Wait on the specific PIDs the measurement depends on, never on all of them.** Collect the
+> measured children into their own array and wait on that.
+>
+> **A backgrounded run that has not returned is still a running experiment.** Before re-running
+> anything, confirm the previous attempt is dead — not merely that its terminal is quiet. Two
+> concurrent passes over one rig directory produce failures that read as flaky apparatus and are
+> not.
 
 ---
 

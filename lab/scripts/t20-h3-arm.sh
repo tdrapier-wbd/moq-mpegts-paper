@@ -150,12 +150,40 @@ start_moq() {
 }
 
 # ------------------------------------------------------------------------ receive
+# RECV=ffmpeg re-muxes, so the cc and PCR columns grade the receiver and not the wire: on an
+# origin with ten excised packets it reports zero continuity errors (T42). It is kept only to
+# reproduce the original T20 cells. RECV=verbatim is the byte-faithful receiver and is what any
+# carriage claim must use. Delivery-ratio and substrate cells are unaffected by the choice.
+RECV="${RECV:-verbatim}"
+VERBATIM="${VERBATIM:-$HOME/hls-verbatim-recv.py}"
+CURL_H3="${CURL_H3:-$HOME/h3/bin/curl}"
+
 recv_hls() {
 	local port="$1" ver="$2"
-	timeout --signal=INT "$WINDOW" "$FFMPEG" -hide_banner -loglevel warning -nostdin \
-		-prefer_libcurl 1 -http_version "$ver" -tls_verify 0 \
-		-i "https://127.0.0.1:$port/index.m3u8" \
-		-c copy -f mpegts -y "$OUT" >>"$LOG" 2>&1
+	if [ "$RECV" = verbatim ]; then
+		# ffmpeg spells these "1.1" and "3only"; the verbatim receiver takes a bare major.
+		local maj
+		case "$ver" in
+		1 | 1.1) maj=1 ;;
+		3 | 3only) maj=3 ;;
+		*)
+			log "unknown http version $ver"
+			return 2
+			;;
+		esac
+		# --seconds is the capture window; the receiver exits non-zero if it left a hole,
+		# which is recorded rather than swallowed because a hole voids carriage grading.
+		python3 "$VERBATIM" "https://127.0.0.1:$port/index.m3u8" -o "$OUT" \
+			--http-version "$maj" --curl "$CURL_H3" --insecure \
+			--seconds "$WINDOW" --summary "$OUTDIR/${ARM}_recv.json" >>"$LOG" 2>&1
+		RECV_RC=$?
+	else
+		timeout --signal=INT "$WINDOW" "$FFMPEG" -hide_banner -loglevel warning -nostdin \
+			-prefer_libcurl 1 -http_version "$ver" -tls_verify 0 \
+			-i "https://127.0.0.1:$port/index.m3u8" \
+			-c copy -f mpegts -y "$OUT" >>"$LOG" 2>&1
+		RECV_RC=$?
+	fi
 }
 
 recv_moq() {
@@ -165,8 +193,28 @@ recv_moq() {
 }
 
 # ------------------------------------------------------------------------ grading
+# A cc/PCR pair is worth reading only if a byte-faithful receiver produced the bytes AND it
+# produced all of them. An empty or holed capture grades as flawless, so those cases are named
+# rather than left to the reader to notice the zero.
+carriage_valid() {
+	# bytes/holes are set by grade() before this is called.
+	if [ "${bytes:-0}" -eq 0 ]; then
+		echo "no: receiver produced nothing"
+	elif [ "$ARM" = moq ]; then
+		echo yes
+	elif [ "$RECV" != verbatim ]; then
+		echo "no: $RECV re-muxes, so cc and PCR grade the receiver"
+	elif [ "${RECV_RC:-1}" -ne 0 ]; then
+		echo "no: receiver exited ${RECV_RC:-?}"
+	elif [ "${holes:--1}" -ne 0 ]; then
+		echo "no: ${holes} hole(s) in the capture"
+	else
+		echo yes
+	fi
+}
+
 grade() {
-	local bytes cc pcrmax over ratio pcrspan
+	local cc pcrmax over ratio pcrspan
 	bytes=$(stat -c%s "$OUT" 2>/dev/null || echo 0)
 	ratio=$(python3 -c "print(f'{$bytes*8/($SOURCE_BPS*$WINDOW):.3f}')")
 
@@ -179,10 +227,19 @@ grade() {
 		END{printf "%.2f %.4f %.1f", m+0, (n?o/n*100:0), (p-f)/27000000}' \
 		"$OUTDIR/${ARM}_pcr.csv")
 
+	# Which receiver produced these bytes decides whether cc and PCR mean anything, so it is
+	# recorded in the result rather than left to the invocation to remember.
+	holes=-1
+	if [ -s "$OUTDIR/${ARM}_recv.json" ]; then
+		holes=$(python3 -c "import json;print(len(json.load(open('$OUTDIR/${ARM}_recv.json'))['holes']))" 2>/dev/null || echo -1)
+	fi
+
 	cat >"$OUTDIR/${ARM}.result" <<-EOF
 		label=$LABEL arm=$ARM window=$WINDOW impair='${IMPAIR:-none}'
 		bytes=$bytes delivered_ratio=$ratio
 		cc_errors=$cc pcr_max_ms=$pcrmax pcr_over40_pct=$over media_seconds=$pcrspan
+		receiver=$RECV recv_rc=${RECV_RC:-na} recv_holes=$holes
+		carriage_valid=$(carriage_valid)
 		lane_applied='${LANE_APPLIED:-unsampled}'
 	EOF
 	cat "$OUTDIR/${ARM}.result" | tee -a "$LOG"

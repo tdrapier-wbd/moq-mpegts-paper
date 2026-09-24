@@ -1482,18 +1482,29 @@ capacity on it. Everything outside those cells (interop, economics, maturity, av
 behaviour, carriage fidelity) is a property of the object model and the specification and was not
 re-measured, and the wire-cost figures for H3 and H2 remain labelled *derived* wherever they appear.
 
-**Two limits of the H3 lane itself.** Its receiver is `ffmpeg -c copy -f mpegts`, which re-muxes: it
-regenerates continuity counters and re-times PCR, so on the H3 and H1 arms **continuity and PCR grade
-the receiver rather than the wire**, and a `cc_errors=0` there is true by construction. The
-byte-faithful `tsp -I hls` receiver used for the carriage work cannot negotiate HTTP/3, so this lane
-traded carriage fidelity for substrate reach. A byte-faithful HTTP/3 receiver has since been built
-and validated ([T42](../lab/test-42-h3-receiver-fidelity.md)), so the limit is now an owed
-re-measurement rather than a missing instrument; the figures above are unrevised until that run
-happens. And a
-per-packet impairment is still not a per-byte one: at matched MTU the QUIC arm sends ~1.5× the packets
-of the TCP arm for the same media, a residual that runs against QUIC and that no setting in the rig
-removes — far smaller than the 24× it replaced, but the reordering figures should be read as "same
-shaper setting" rather than "same impairment".
+**Two limits of the H3 lane itself.** The first was its receiver, `ffmpeg -c copy -f mpegts`, which
+re-muxes: it regenerates continuity counters and re-times PCR, so on the H3 and H1 arms continuity
+and PCR graded the receiver rather than the wire. **That is now measured rather than reasoned, and
+it is stronger than the caveat implied**: on an origin with ten deliberately excised transport
+packets the re-muxing receiver reports **0 continuity errors** where the origin and two independent
+byte-faithful receivers report 10 missing packets, and it also renumbers every PID and discards the
+NIT and TDT/TOT ([T42](../lab/test-42-h3-receiver-fidelity.md), `file` domain, P2). A `cc_errors=0`
+from it was not a weak reading but a constant.
+
+A byte-faithful HTTP/3 receiver has since been built and validated, and the clean baseline has been
+re-measured through it. **The correction runs in the segmented lane's favour**: the HLS wire reads
+**max 24.95 ms and 0.00 % of PCR intervals above the 40 ms gate**, against the 80 ms and ~95 %
+previously reported, and against MoQ's 25.00 ms on the same source (`wire`, P2, cross-checked
+against an independent byte-faithful receiver hash-for-hash). Both lanes carry the PCR grid of the
+same `-P regulate --pcr-synchronous` source, and a lane that moves bytes without rewriting them
+preserves it. **T20's impairment cells have not been re-run** and still carry the old receiver, so
+their continuity and PCR columns remain receiver-graded; the delivered-ratio columns, which carry
+the reordering and loss findings, are unaffected.
+
+The second limit stands: a per-packet impairment is still not a per-byte one. At matched MTU the
+QUIC arm sends ~1.5× the packets of the TCP arm for the same media, a residual that runs against
+QUIC and that no setting in the rig removes — far smaller than the 24× it replaced, but the
+reordering figures should be read as "same shaper setting" rather than "same impairment".
 
 **Impairment matrices are one run per condition**, on an over-provisioned path, with `netem` models
 that approximate loss as Bernoulli where real loss is bursty and RTT-coupled, and whose "jitter"

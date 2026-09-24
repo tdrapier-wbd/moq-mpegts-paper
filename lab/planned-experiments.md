@@ -45,16 +45,20 @@ across the two strands is a judgement rather than a derivation.
 
 Two facts organise almost everything below, and both are worth reading before the tables.
 
-**The segmented lane is the single largest gap, and the instrument that caused most of it now
-exists.** Until [T42](test-42-h3-receiver-fidelity.md) nothing in the lab received an HTTP/3 HLS
+**The segmented lane was the single largest gap; the instrument is built and the gap has largely
+closed.** Until [T42](test-42-h3-receiver-fidelity.md) nothing in the lab received an HTTP/3 HLS
 stream byte-faithfully, so the segmented plane could not be graded on carriage fidelity at all. That
-was **P0-e**, a build task rather than an experiment, and it gated the segmented halves of P0-f, P2-b
-and [T32](test-32-observability-survey.md). It is closed:
-[`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py) reproduces the origin's bytes exactly over
-both substrates, and those three segmented halves are now runnable. The same experiment showed what
-the previous receiver cost — it reports zero continuity errors on an origin with ten excised packets
-— so **any segmented carriage figure taken before it must be re-measured, not merely re-qualified**.
-Separately, and never blocked on the instrument, the segmented ladders of
+was **P0-e**, and it is closed — [`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py) reproduces
+the origin's bytes exactly over both substrates. **P0-f and P2-b have since been run and closed on
+the segmented lane**, and P2-a's segmented half proves never to have been apparatus-blocked at all:
+it is vendor outreach, and the entry that listed it against P0-e was wrong.
+
+The instrument also forced one re-measurement and will force more. T20's clean-baseline PCR figures
+for the HLS arms were the old receiver's, and the wire is **conformant** where the receiver reported
+95 % of intervals out of gate. T20's *impairment* cells have not been re-run and still carry it.
+**Any segmented carriage figure taken before T42 needs re-measuring, not re-qualifying.**
+
+What remains on this lane is the part that never needed the instrument: the segmented ladders of
 P1-a and P1-c–P1-d have simply not been run, which is why two experiments that compare architectures
 currently rank only the MoQ and SRT lanes.
 
@@ -72,7 +76,7 @@ scope for that entry.
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
 | P0-e | A byte-faithful HTTP/3 HLS receiver — **the instrument three other entries waited on** | — | **built and validated** | [T42](test-42-h3-receiver-fidelity.md) | **closed** |
-| P0-f | Silent media-plane failure | run | not run | [T22](test-22-silent-media-plane-failure.md), [T24](test-24-partial-media-plane-stall.md) | **unblocked** by P0-e ([T42](test-42-h3-receiver-fidelity.md)) |
+| P0-f | Silent media-plane failure | run | **run** | [T22](test-22-silent-media-plane-failure.md), [T24](test-24-partial-media-plane-stall.md) | **closed.** Both lanes are silent; the segmented lane's playlist is the one application-layer signal that moves |
 | P0-g | Permanence: the seven-day arm, and the segmented soak | 24 h run; 7 d owed | not run | [T21](test-21-permanence-soak.md) | P0-h for the MoQ arm |
 | P0-h | Re-soak the importer after the memory fix lands | owed | — | [T21](test-21-permanence-soak.md) | [#3493](https://github.com/moq-dev/moq/issues/3493) closed in `5d0991b9`, but both 2 h checks are invalidated by [#3798](https://github.com/moq-dev/moq/issues/3798); blocked until the import re-anchor lands. **#3798 was closed as completed on 2026-09-23 by a planning PR that changed no code, and re-measured live on `ffa5b81b`** — the closure is not an unblock ([T41](test-41-import-reanchor-coverage.md)) |
 | P0-j | A real never-repeating encoder against the continuous-source fence | SRT+recording arm run | — | [T34](test-34-real-encoder-severity.md) | the live feed; export comparison also blocked on the import re-anchor |
@@ -112,8 +116,8 @@ second reason: no shipped CLI can dump a parsed catalog, so no catalog field can
 
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
-| P2-a | What commercial monitoring would have caught | not run | not run | [T32](test-32-observability-survey.md) | segmented half **unblocked** by P0-e ([T42](test-42-h3-receiver-fidelity.md)) |
-| P2-b | Isolation under abuse | run | not run | [T25](test-25-isolation-under-abuse.md) | **unblocked** by P0-e ([T42](test-42-h3-receiver-fidelity.md)) |
+| P2-a | What commercial monitoring would have caught | not run | fault mapping run; survey not | [T32](test-32-observability-survey.md) | **never apparatus-blocked** — the segmented half is vendor outreach, and listing it against P0-e was a register error. Its fault-to-telemetry mapping is now measured |
+| P2-b | Isolation under abuse | run | **run** | [T25](test-25-isolation-under-abuse.md) | **closed.** Victims byte-identical across all four arms; origin RSS moves 0.6 MB against the relay's 22x |
 | P2-c | A standby packager joining an already-running feed | — | not run | [T30](test-30-segmented-distributed-resilience.md) | sits behind P1-c |
 | P2-d | Differential delay on a real pair rather than modelled with `netem` | not run | — | [T12](test-12-dual-path-handoff.md) | the live feed gives the pair; see below |
 | P2-e | Replicates for the congestion cells, to put an error bar on the quoted aggregate | owed | — | [T31](test-31-congestion-capacity-ladders.md) | deprioritised behind P1-d |

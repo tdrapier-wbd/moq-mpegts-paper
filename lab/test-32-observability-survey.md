@@ -1,12 +1,14 @@
 # Test 32 — Observability: what commercial monitoring would have caught
 
-**State: specified, not run.** The MoQ lane's silent failure classes are measured and a per-PID
-liveness detector is built ([T22](test-22-silent-media-plane-failure.md),
-[T24](test-24-partial-media-plane-stall.md), [T27](test-27-liveness-detector.md)). What remains is a
-**structured procurement survey**: whether commercial TR 101 290 monitoring and ABR/OTT monitoring
-products expose the detectors those experiments proved necessary, and by what mechanism. This is
-desk research plus fault-to-telemetry mapping, not a rig run; it has not started because engineering
-work on the detector took precedence over vendor outreach.
+**State: the fault-to-telemetry mapping is measured on both lanes; the vendor survey has not
+started.** The MoQ lane's silent failure classes are measured and a per-PID liveness detector is
+built ([T22](test-22-silent-media-plane-failure.md),
+[T24](test-24-partial-media-plane-stall.md), [T27](test-27-liveness-detector.md)), and the segmented
+lane's equivalent mapping is now measured too — see *The segmented lane's fault-to-telemetry
+mapping* below. What remains is the **structured procurement survey**: whether commercial TR 101 290
+monitoring and ABR/OTT monitoring products expose the detectors those experiments proved necessary,
+and by what mechanism. That is desk research and vendor outreach, **not a rig run and never blocked
+on apparatus**; it has not started because engineering work on the detector took precedence.
 
 Specified as the procurement half of [P2-a](planned-experiments.md#p2--completeness) and
 [P2-a](planned-experiments.md#p2--completeness). The measured MoQ arms are **not** repeated here.
@@ -137,7 +139,38 @@ Judgement criteria, stated as judgement ([P2-a](planned-experiments.md#p2--compl
 - **Security and pen-test scope excluded.** Deliberately matches [T25](test-25-isolation-under-abuse.md):
   operational failure modes, not adversarial worst case.
 
-## Why this has not run
+## The segmented lane's fault-to-telemetry mapping, as measured
+
+The survey asks which commercial product exposes a given signal. That question is only answerable
+once the signals a fault *produces* are known, and for the segmented lane they now are — measured,
+not reasoned — by the segmented arms of [T22](test-22-silent-media-plane-failure.md) and
+[T25](test-25-isolation-under-abuse.md). This fills the left-hand column the vendor survey will be
+scored against; **it does not discharge any part of the survey itself**.
+
+| Induced fault | HTTP status at origin | Receiver-visible | Playlist-visible | Media-visible |
+|---|---|---|---|---|
+| Source stalls 30 s | **nothing — 200 on all 171 requests** | **nothing** — clean exit, no holes, byte-identical to control | **media sequence frozen 31.5 s** against ≤3.1 s steady state | nothing, on a file source that catches up |
+| Origin down 30 s | connection refused, no log entries | exit 1, 1 hole, **12 continuity errors**, 17.75 MB short | 30 failed fetches | 12 continuity errors |
+| Client abuse (churn, slow, flood) | 200 throughout | **nothing** — victims byte-identical across all arms | nothing | nothing |
+
+Three things follow for the survey, and each is a question to put to a vendor rather than an answer:
+
+1. **The most operationally likely fault is invisible to every HTTP-layer signal.** A stalled source
+   produces a perfectly healthy origin and a perfectly healthy client. Any product that monitors the
+   segmented lane at the HTTP layer — status codes, request rates, CDN logs, synthetic fetches —
+   reports green. The survey should ask specifically whether a product tracks **playlist media-sequence
+   advancement**, because on the measured evidence that is the only HTTP-layer signal that moves.
+2. **Continuity errors are only observable through a byte-faithful receiver.** The 12 errors in the
+   origin-down row read as **0** through `ffmpeg -c copy`, which is a common basis for probe
+   implementations ([T42](test-42-h3-receiver-fidelity.md)). A monitoring product that re-muxes before
+   grading has the same defect this lab had, and the survey must establish, per product, whether it
+   grades the received bytes or a re-multiplexed copy of them. This is a sharper procurement question
+   than the survey originally carried.
+3. **Isolation faults generate no telemetry because there is nothing to detect** — the victims were
+   unaffected. This row is included so the survey does not go looking for a signal that should not
+   exist.
+
+## Why the rest has not run
 
 Engineering closed the MoQ detection gap first — T27 built and validated the only sufficient detector
 before asking whether anyone sells one. Vendor outreach and datasheet archaeology were deprioritised as
