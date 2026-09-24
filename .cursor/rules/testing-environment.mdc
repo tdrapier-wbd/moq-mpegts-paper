@@ -164,14 +164,55 @@ the rotation is the point, because the files a session touches are the ones leas
 If the session has no spare budget, say which group was due and carry it; do not skip the rotation
 silently.
 
-| # | Group | What this pass is looking for |
+### The three lenses, applied to every group
+
+One full rotation has been completed, and it found the document set has little duplication left.
+Duplication was the easiest defect to find and is now the least of them. Every pass applies all
+three lenses below, in this order, and the report says what each one found — including when it
+found nothing, which is a result.
+
+**1. Duplication.** A finding stated in more than one place where one should be a cross-reference.
+The original lens. Keep it, but do not stop at it.
+
+**2. Staleness — is this still true?** Not "is it well written" but "would the campaign still
+write this today". A passage goes on the list when:
+
+- a later measurement has overtaken it, and nothing in the file says so;
+- it describes an instrument, build, flag, rig or upstream state that has since changed;
+- it is hedged against an uncertainty that has since been resolved in either direction — a
+  discharged caveat is as misleading as a missing one, because it tells the reader to discount a
+  result that now stands;
+- it says something is "not yet built", "not yet run", "blocked on" or "expected shortly", and the
+  claim has aged. **Grep each group for those phrases every pass**; they are the cheapest reliable
+  staleness detector in the repository, and three of them were found wrong in a single session.
+- it is a *register* or *index* entry whose dependency has been discharged or was never real. The
+  register is the most stale-prone file in the repository because every entry is a claim about the
+  future.
+
+**3. Weight — is this carrying anything?** A passage earns its place by changing what a reader
+would conclude or do. Put it on the list when it restates the obvious, hedges without saying what
+would settle the matter, describes apparatus at length without a result, or narrates process. Two
+specific patterns:
+
+- **A caveat that names no discharging measurement.** "This may not generalise" carries weight only
+  with "the arm that would settle it is X". Without that it is an unfalsifiable disclaimer, and it
+  crowds out the load-bearing limits next to it.
+- **A result quoted without the decision it affects.** A number that appears in no argument is
+  either owed a sentence saying what it decides, or belongs only in `lab/`.
+
+**What the weight lens must not touch.** Open questions, stated limits, self-critical
+qualifications and negative results are load-bearing by default and the burden is on the pass to
+show otherwise. The failure mode here is a pass that mistakes intellectual honesty for padding, and
+it is worse than the accretion it is correcting. When in doubt, keep and report.
+
+| # | Group | Specifics for this group, on top of the three lenses |
 |---|---|---|
-| 1 | `docs/evidence.md` | A finding stated in more than one section; a §2 summary row that no longer matches the §3 it points at; a result whose measurement point, domain or build has gone missing |
-| 2 | `docs/comparison.md` + `docs/problem.md` | Restatement of evidence that should be a cross-reference; a verdict cell whose qualification lives only in `evidence.md` |
+| 1 | `docs/evidence.md` | A §2 summary row that no longer matches the §3 it points at; a result whose measurement point, domain or build has gone missing |
+| 2 | `docs/comparison.md` + `docs/problem.md` | Restatement of evidence that should be a cross-reference; a verdict cell whose qualification lives only in `evidence.md`; a requirement scored against a lane on evidence that has since been re-measured |
 | 3 | `docs/architecture.md` + `docs/control-plane.md` | Design that a later measurement has overtaken; unimplemented design presented without its weight |
 | 4 | `docs/economics.md` + `docs/glossary.md` | A modelled rate that has lost its *hypothetical* label; a term defined in two places |
-| 5 | `lab/` experiment files, two per session, oldest reviewed first | A heading or summary contradicted by the file's own later section; a `Corrections` section that has become a narrative; chronology that belongs in `notebook.local.md` |
-| 6 | `lab/method-notes.md` + `lab/planned-experiments.md` + `lab/upstream-contributions.md` | A rule whose incident is now told twice; an experiment entry that will not be run; an upstream item whose state has moved |
+| 5 | `lab/` experiment files, two per session, oldest reviewed first | A heading or summary contradicted by the file's own later section; a `Corrections` section that has become a narrative; chronology that belongs in `notebook.local.md`; a rig whose flags the current build rejects |
+| 6 | `lab/method-notes.md` + `lab/planned-experiments.md` + `lab/upstream-contributions.md` | A rule whose incident is now told twice; an experiment entry that will not be run; an upstream item whose state has moved; a blocker that has been discharged |
 
 **The standing backlog, inherited from the deferred editorial pass.** These are the known items; take
 them within their group's turn rather than as a separate exercise:
