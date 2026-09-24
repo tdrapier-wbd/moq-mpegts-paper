@@ -11,7 +11,7 @@
 #   ...
 #   moq_require_bytes "$OUT/capture.ts" 200000 "subscriber" || return 1
 #
-# Sets: MOQ_CLI_NEW RELAY_CLI_NEW MOQ_DIAL MOQ_LAT MOQ_FP
+# Sets: MOQ_CLI_NEW RELAY_CLI_NEW MOQ_DIAL MOQ_LAT MOQ_FP MOQ_GSO
 #       RELAY_BIND RELAY_TLS RELAY_GSO RELAY_AUTH RELAY_CC_FLAG RELAY_IDLE_FLAG RELAY_GREP
 #
 # ## Why this file exists rather than a set of literals in each rig
@@ -34,11 +34,14 @@
 # literal cannot carry a build comparison across the migration — which is exactly what a positive
 # control on a pre-migration binary is.
 #
-# **2. GSO must be off, and the flag was renamed.** Generic segmentation offload on the relay's
-# egress produces datagrams the capture tooling mis-accounts, so every carriage-overhead and
-# pacing figure taken with it on is wrong. Pre-migration `--server-quic-gso=false`, post-migration
-# `--quic-gso=false`; passing the wrong one is a hard error rather than a silent one, but only if
-# the relay is started in the foreground where something reads its exit.
+# **2. GSO must be off, and the flag was renamed — on both sides.** Generic segmentation offload
+# on the relay's egress produces datagrams the capture tooling mis-accounts, so every
+# carriage-overhead and pacing figure taken with it on is wrong. The relay's flag was
+# `--server-quic-gso=false` pre-migration and `--quic-gso=false` after; the *client's* was
+# `--client-quic-gso=false` and is now the same `--quic-gso=false`, which is why the merged name
+# looks safe to hard-code and is not. Passing the wrong one is a hard error rather than a silent
+# one, but only if something reads the exit status: a client spawned into a pipeline exits 2 and
+# the rig sees an empty capture, not a flag error. Use `MOQ_GSO` and `RELAY_GSO`.
 #
 # **3. The default congestion controller is now BBRv3, and it is the one known to abort.** The flag
 # takes `loss` (CUBIC) or `delay` (BBRv3) and **defaults to `delay`**. `lab/test-8-srt-vs-moq.md`
@@ -76,11 +79,13 @@ moq_cli_detect() {
 		MOQ_DIAL=(--connect-tls-insecure --connect)
 		MOQ_LAT=(--max-age)
 		MOQ_FP=(--connect-tls-fingerprint)
+		MOQ_GSO=(--quic-gso=false)
 	else
 		MOQ_CLI_NEW=0
 		MOQ_DIAL=(--client-tls-disable-verify --client-connect)
 		MOQ_LAT=(--latency-max)
 		MOQ_FP=(--client-tls-fingerprint)
+		MOQ_GSO=(--client-quic-gso=false)
 	fi
 
 	RELAY_CLI_NEW=$MOQ_CLI_NEW

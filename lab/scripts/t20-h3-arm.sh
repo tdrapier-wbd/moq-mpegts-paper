@@ -48,9 +48,13 @@ PCAP="${PCAP:-0}"
 
 FFMPEG="${FFMPEG:-$HOME/h3/bin/ffmpeg}"
 CURL="${CURL:-$HOME/h3/bin/curl}"
-MOQ="${MOQ:-$HOME/bin-3006/moq}"
-moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
-MOQ_RELAY="${MOQ_RELAY:-$HOME/bin-3006/moq-relay}"
+# The MoQ arm follows the build under test, not the build the experiment first ran on. Override
+# both together with MOQ_BIN to reproduce an older cell; they must come from one directory or the
+# detected client surface does not describe the relay.
+MOQ_BIN="${MOQ_BIN:-$HOME/bin-ffa5b81b}"
+MOQ="${MOQ:-$MOQ_BIN/moq}"
+MOQ_RELAY="${MOQ_RELAY:-$MOQ_BIN/moq-relay}"
+moq_cli_detect "$MOQ" "$MOQ_RELAY"
 HLS_DIR="${HLS_DIR:-/srv/hls}"
 NGINX_LOG="${NGINX_LOG:-/var/log/nginx/h3lab.log}"
 
@@ -138,13 +142,13 @@ start_hls_publisher() {
 
 start_moq() {
 	"$MOQ_RELAY" "${RELAY_BIND[@]}" "127.0.0.1:$MOQ_PORT" "${RELAY_TLS[@]}" localhost \
-		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" >>"$LOG" 2>&1 &
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" >>"$LOG" 2>&1 &
 	RELAY=$!
 	sleep 3
 	tsp --realtime -I file "$SRC" --infinite -P regulate --pcr-synchronous -O file - 2>>"$LOG" |
 		"$MOQ" "${MOQ_DIAL[0]}" \
 			"${MOQ_DIAL[1]}" "https://127.0.0.1:$MOQ_PORT/anon" \
-			--quic-gso=false --broadcast t20.bench.hang import ts >>"$LOG" 2>&1 &
+			"${MOQ_GSO[@]}" --broadcast t20.bench.hang import ts >>"$LOG" 2>&1 &
 	PUB=$!
 	sleep 6
 }
@@ -188,8 +192,9 @@ recv_hls() {
 
 recv_moq() {
 	timeout --signal=INT "$WINDOW" "$MOQ" "${MOQ_DIAL[0]}" \
-		"${MOQ_DIAL[1]}" "https://127.0.0.1:$MOQ_PORT/anon" --quic-gso=false \
+		"${MOQ_DIAL[1]}" "https://127.0.0.1:$MOQ_PORT/anon" "${MOQ_GSO[@]}" \
 		--broadcast t20.bench.hang export ts >"$OUT" 2>>"$LOG"
+	RECV_RC=$?
 }
 
 # ------------------------------------------------------------------------ grading
@@ -238,7 +243,7 @@ grade() {
 		label=$LABEL arm=$ARM window=$WINDOW impair='${IMPAIR:-none}'
 		bytes=$bytes delivered_ratio=$ratio
 		cc_errors=$cc pcr_max_ms=$pcrmax pcr_over40_pct=$over media_seconds=$pcrspan
-		receiver=$RECV recv_rc=${RECV_RC:-na} recv_holes=$holes
+		receiver=$([ "$ARM" = moq ] && echo 'moq export ts' || echo "$RECV") recv_rc=${RECV_RC:-na} recv_holes=$holes
 		carriage_valid=$(carriage_valid)
 		lane_applied='${LANE_APPLIED:-unsampled}'
 	EOF
@@ -251,7 +256,10 @@ norm_lo
 
 case "$ARM" in
 h1 | h3) start_hls_publisher || exit 1 ;;
-moq) start_moq ;;
+moq)
+	moq_record_build "$MOQ" "$MOQ_RELAY" | tee -a "$LOG"
+	start_moq
+	;;
 *)
 	log "unknown arm $ARM"
 	exit 2

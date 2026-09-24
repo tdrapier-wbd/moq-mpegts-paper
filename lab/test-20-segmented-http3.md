@@ -37,14 +37,25 @@
 > muxer's, not the wire's. Re-measured through the byte-faithful receiver built in
 > [T42](test-42-h3-receiver-fidelity.md), the same clean baseline reads **max 24.95 ms and 0.00 %
 > above the 40 ms gate** on both HLS arms, against MoQ's 25.00 ms. Both lanes carry the PCR grid of
-> the same source, and a lane that moves bytes without rewriting them preserves it. The impairment
-> cells in measurements 4–6 have **not** been re-run and still carry the old receiver.
+> the same source, and a lane that moves bytes without rewriting them preserves it.
 >
-> **The substrate change is not uniformly bad for the segmented lane — it is bad only for reordering.**
-> Under loss the same change runs strongly the other way: at ~20 % *applied* loss the segmented lane
-> reads **0.10 on TCP and 0.70 on HTTP/3**, and under a 30 s total outage **0.51 on TCP against 0.76 on
-> HTTP/3**. Moving segmented HTTP onto QUIC costs it the reordering cell and buys it the loss and
-> outage cells. No single-sentence verdict survives that, which is the finding.
+> **The impairment cells have since been re-measured too, and two of them moved materially**
+> (measurement 4a). At 20 % commanded loss the segmented lane over HTTP/3 loses **nothing** where
+> 0.703 was published, and under a 30 s outage the two substrates are **byte-identical at 0.853**
+> where a 0.764-against-0.507 split was published — recovery is governed by what the origin retains,
+> not by the transport. Both corrections are the re-mux, and both run in the segmented lane's favour.
+>
+> **The substrate change is bad for the segmented lane only in the reordering cell.** Under loss
+> the same change runs strongly the other way — at 20 % commanded, 0.131 on TCP against **1.111** on
+> HTTP/3 — and under a 30 s outage the substrate makes no difference at all. Moving segmented HTTP
+> onto QUIC costs it the reordering cell and buys it the loss cell outright. No single-sentence
+> verdict survives that, which is the finding.
+>
+> **On the MoQ arm the reordering figure turns out to be the congestion controller's.** Pinned to the
+> shipped BBRv3 default it delivers **zero** in 60 s, on the current build and the original one
+> alike; pinned to CUBIC on the same rig it delivers. The published 0.13 was taken with the
+> controller unpinned, so this cell — like the loss cell before it — is a controller comparison
+> wearing a lane comparison's name (measurement 4a).
 
 ## Environment
 
@@ -265,6 +276,85 @@ within run-to-run spread. **The result is real; its interpretation was wrong.**
 MoQ was the only arm with segmentation offload disabled — a correct fix, applied to one arm — and
 that is precisely what created the asymmetry.
 
+### 4a. The impairment cells re-measured, and the metric that had to change with them
+
+Measurements 5–7 below are the original cells, graded through `ffmpeg -c copy -f mpegts` on
+`bin-3006`. They have been re-run on the build under test (`ffa5b81b`) through the byte-faithful
+receiver. **Two instrument changes forced a change of metric before any cell could be read.**
+
+**`delivered_ratio` stopped measuring delivered content on the MoQ arm.** `ffa5b81b`'s
+`export ts` pads to the `mpegts.muxRate` the catalog recorded from a constant-rate source, so the
+capture is mostly stuffing — 47.7 % null packets in the loss cell, 55.3 % in the capacity cell and
+**94.1 %** in one reordering arm — and the byte ratio rises *above* 1.0 on cells that lost most of
+the programme. The PCR-timeline grader ([`t28-media-lost.py`](scripts/t28-media-lost.py)) fails the
+same way and for the same reason: padding keeps the clock advancing on schedule, so it reports
+8.3 s lost on an arm that in fact delivered 3.9 % of the video.
+
+**What is used instead is delivered video packets against the source's own video rate** (9,021,203
+b/s on PID 111) over the window. It is unaffected by padding, and on the HLS arms it reproduces the
+byte ratio to three decimal places — 174,442 packets is 0.485 where the byte ratio reads 0.485 —
+which is the check that it is measuring the same thing where nothing distorts it.
+
+| Cell | Arm | As published (`ffmpeg`, `bin-3006`) | Re-measured (video packets, `ffa5b81b`) | Nulls |
+|---|---|---:|---:|---:|
+| reorder `delay 30ms reorder 25% 50%` | H1 | 0.44 | **0.485** | 4.6 % |
+| | H3 | 0.18 | **0.166** | 4.6 % |
+| | MoQ | 0.13 | **0.000** BBRv3 / **0.039** CUBIC | 94.1 % |
+| loss 20 % commanded | H1 | 0.096 | **0.131** ‡ | 4.5 % |
+| | H3 | 0.703 | **1.111** | 4.6 % |
+| | MoQ | 0.984 | **0.704** | 47.7 % |
+| outage 30 s | H1 | 0.507 | **0.853** | 4.6 % |
+| | H3 | 0.764 | **0.853** | 4.6 % |
+| | MoQ | 0.596 | **0.222**; 0.233 at a 120 s idle timeout | 12.9 % |
+| capacity 8 Mb/s permanent | H1 | 0.808 | **0.953** | 4.6 % |
+| | H3 | 0.789 | **1.005** | 4.6 % |
+| | MoQ | 0.456 | **0.638** | 55.3 % |
+
+‡ At the receiver's default 15 s per-fetch timeout the H1 arm emits **nothing**: no segment completes,
+and the receiver refuses to concatenate a partial one because a non-188-multiple join grades as a
+wire defect. At a 60 s timeout it delivers 0.131. The zero is the instrument's policy, not the lane's
+capability, and **the per-fetch timeout is a measurement parameter that has to be stated** on any
+severely impaired segmented arm.
+
+**Read the two columns differently.** On the HLS arms the only thing that changed is the receiver, so
+the movement is a correction. On the MoQ arm the build, the QUIC backend and the congestion
+controller all changed at once, so those cells are a **re-run on the current configuration and not a
+correction of the old number**.
+
+**Three findings come out of the re-run, in descending order of what they change.**
+
+**1. The 30 s outage no longer separates the two substrates — they are byte-identical.** H1 and H3
+both deliver 383,754 video packets, 79,533,400 bytes, 17.134 s of media lost, largest hole 17.134 s.
+The published reading had HTTP/3 recovering *more* than the outage cost (0.764 against a 0.60 floor)
+while TCP delivered *less* (0.507), and that separation was the re-mux. Recovery here is governed by
+what the origin's live window still holds, which is a property of the origin and not of the
+transport, so identity is the result the mechanism predicts.
+
+**2. At 20 % commanded loss the segmented lane over HTTP/3 loses nothing at all.** 0.000 s of media
+lost, 0 continuity errors, PCR max 24.95 ms, 0.00 % above the gate, and the capture is
+byte-identical to the clean baseline. The published 0.703 was the re-mux discarding content the wire
+had carried. The lane's advantage in this cell is larger than the experiment claimed.
+
+**3. The MoQ arm's reordering result is set by the congestion controller, not by the lane.** With the
+controller pinned to BBRv3 — the shipped default — the arm delivers **zero bytes in 60 s**, on
+`ffa5b81b` and on `bin-3006` alike, so it is not the build. Pinned to CUBIC on the same rig it
+delivers 55.2 s of media span and 3.9 % of the video. The published 0.13 was measured with the
+controller unpinned. This makes reordering the second axis on which *both* lanes turn out to be
+reporting their controller rather than their architecture, the first being loss
+(Conclusion 3 below, and [`docs/comparison.md`](../docs/comparison.md) §3.1).
+
+**The MoQ outage cell is bounded by `--quic-idle-timeout` and cannot be read as a delivery result.**
+A 30 s outage against the 30 s default kills the session with `Error: json: dropped`, which is the
+deployment rule [T28](test-28-failure-injection-matrix.md) already records, reproduced here in a
+second rig. Raising the timeout to 120 s keeps the session alive and moves delivery only from 0.222
+to 0.233, so the timeout is not the whole of that cell's cost — but no MoQ outage figure from this
+rig should be quoted without the timeout beside it.
+
+**Carriage columns are void on every impaired cell except two.** The byte-faithful receiver exits
+non-zero when it leaves a hole, and under impairment it usually does; only `loss20`/H3 and the
+capacity H1 arm returned complete captures. That is the receiver working: the old one returned
+`cc_errors=0` and a clean-looking file on exactly these cells.
+
 ### 5. Loss ladder — compare at *applied* loss, not commanded
 
 `netem loss X%`, 60 s. The commanded figure is not the delivered one, and the error is
@@ -286,8 +376,11 @@ per-packet shaper does not treat the two transports alike. Every comparison belo
 
 Up to ~10 % applied, nothing separates the arms: loopback has roughly a thousand times the headroom
 the 9.95 Mb/s media needs, so retransmission absorbs the loss invisibly. **The cell only discriminates
-at ~20 % applied**, and there the ranking is the reverse of the reordering cell: MoQ 0.98, segmented
-over HTTP/3 0.70, segmented over TCP 0.10.
+at ~20 % applied.** The ranking there is superseded by the re-measurement in 4a: on the byte-faithful
+receiver the segmented lane over HTTP/3 loses **nothing** rather than 30 %, so the cell separates it
+from both the TCP arm (0.131) and MoQ (0.704) in its favour, where the published figures put it
+between them. The rows above are retained for the *applied*-versus-commanded comparison, which is
+what this measurement exists for and which the receiver change does not touch.
 
 ### 6. Total outage — 500 ms, 5 s, 30 s
 
@@ -301,17 +394,17 @@ is 0.60 if nothing is made up, and above 0.60 if backlog is recovered.
 | 5 s | 0.995 | 0.974 | 0.928 |
 | 30 s | **0.507** | **0.764** | 0.596 |
 
-A 500 ms outage is invisible to all three and a 5 s outage nearly so. At 30 s the arms separate and
-the ordering is again not the reordering ordering: the segmented lane over HTTP/3 recovers **more than
-the outage cost it** (0.764 against the 0.60 floor), because the origin's live window still holds the
-segments it missed and it fetches them back. The same lane over TCP delivers **less** than the floor
-(0.507). MoQ lands at 0.596 — the floor almost exactly — which is what a live-edge transport with no
-back-catalogue should do, and its output carries a single 28,725 ms PCR gap that is the outage itself,
-cleanly bounded.
+A 500 ms outage is invisible to all three and a 5 s outage nearly so. At 30 s the arms separate from
+MoQ but **not from each other**: re-measured, both segmented arms deliver 0.853 and are byte-identical
+(4a). Each recovers **more than the outage cost it** — against a 0.60 floor — because the origin's
+live window still holds the segments they missed and they fetch them back. The published 0.764 / 0.507
+split between HTTP/3 and TCP was the re-muxing receiver; recovery is governed by the origin's
+retention rather than by the substrate, which is why the two agree to the byte.
 
 **This is the segmented lane's structural advantage showing up where it should:** addressable, retained
 objects let a client recover content after the fact. It is visible here only because the metric is
-content delivered rather than session recovered.
+content delivered rather than session recovered. The MoQ arm's figure in this cell is bounded by
+`--quic-idle-timeout` rather than by the lane (4a) and should not be read against these two.
 
 ### 7. Capacity degradation
 
@@ -331,11 +424,12 @@ each other throughout.
 
 The architectures separate only under *sustained* insufficiency. With the lane held at 8 Mb/s against a
 9.95 Mb/s stream for the last 70 s of a 90 s window, the arithmetic ceiling is about **0.85** of source.
-Both segmented arms land just under it (0.808 / 0.789), i.e. they deliver very nearly everything the
-reduced pipe can carry and take the shortfall as growing lateness. MoQ delivers **0.456** — roughly half
-of what the same pipe carried for the segmented arms — because it discards groups that miss the
-subscriber's release deadline rather than falling behind, which is the deadline-shedding behaviour
-characterised in [T8b](test-8b-congestion-control.md) C3.
+Re-measured (4a), both segmented arms **exceed** it — 0.953 on TCP and 1.005 on HTTP/3 — because the
+window's first 20 s run at the full 20 Mb/s and the client spends them fetching ahead, which the
+ceiling arithmetic does not allow for. MoQ delivers **0.638**, still well below either, because it
+discards groups that miss the subscriber's release deadline rather than falling behind: the
+deadline-shedding behaviour characterised in [T8b](test-8b-congestion-control.md) C3. The direction of
+the published result survives the re-measurement; its margin narrows from roughly 1.7× to 1.5×.
 
 **For permanent primary distribution this is the sharper of the two behaviours to know about.** Under a
 lasting capacity shortfall the segmented lane loses nothing it can still fetch and degrades into
@@ -368,12 +462,18 @@ From the baseline captures and origin logs:
 2. **The reordering advantage of segmented HTTP is not a lane property.** It reproduces only when the
    segmented lane is given packets ~24× larger than the lane it is compared against. Equalised, it
    falls from 0.98 to 0.44 on TCP and to 0.18 on HTTP/3, against MoQ's 0.13.
-3. **On HTTP/3, segmented HTTP and MoQ are not separated by reordering at all.** Their spreads
-   overlap. The one impairment axis that was said to separate the two data planes does not, once both
-   are on QUIC.
-4. **The substrate change is a trade, not an upgrade.** Segmented HTTP loses the reordering cell by
-   moving to QUIC and wins the loss cell (0.10 → 0.70 at ~20 % applied) and the 30 s outage cell
-   (0.51 → 0.76).
+3. **Reordering does not separate the two architectures; it separates two congestion controllers.**
+   The published overlap (0.18 against 0.13) held with the MoQ controller unpinned. Pinned, the MoQ
+   arm reads **0.000 on BBRv3 and 0.039 on CUBIC** on the same rig, so its value spans the whole
+   range of the cell and is set by a flag rather than by the object model. The segmented arm sits at
+   0.166 either way. What can be said is that the segmented lane over HTTP/3 is *stable* under
+   reordering where the media-aware lane is controller-dependent — which is a weaker and more useful
+   claim than the one this conclusion originally made (measurement 4a).
+4. **The substrate change is a trade, and a smaller one than published.** Segmented HTTP loses the
+   reordering cell by moving to QUIC (0.485 on TCP against 0.166 on HTTP/3) and wins the loss cell
+   outright (**0.131 against 1.111** at 20 % commanded). It gains nothing in the 30 s outage cell,
+   where the two substrates are byte-identical: recovery there is the origin's retention, not the
+   transport's (measurement 4a).
 5. **Under no impairment the substrate is invisible** — byte-identical output — so nothing in carriage
    or timing fidelity turns on it.
 6. **A single-connection, sequential-fetch HLS client gets no multiplexing benefit from HTTP/3.** Any
@@ -420,11 +520,32 @@ zero on any input, so `cc_errors=0` here was doubly unable to fail — the grade
 defect and the receiver would have repaired it first. Fixed in the rig and gated in
 [`check-rigs.sh`](scripts/check-rigs.sh); the rule is in [`method-notes.md`](method-notes.md).
 
-**The MoQ arm is stale against the current build.** It passes `--quic-gso=false`, which `ffa5b81b`
-rejects with *unexpected argument*, so the arm produces nothing. The MoQ figures in this file were
-taken on `~/bin-3006` and are unaffected — `moq export ts` writes the transport stream it received,
-so they were always wire-domain — but the arm needs the flag taking from
-[`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) before it can be re-run.
+**The MoQ arm's GSO flag was hard-coded, and the diagnosis of it was wrong.** The rig passed a
+literal `--quic-gso=false` on the client while defaulting `MOQ` to `~/bin-3006`, whose client flag is
+`--client-quic-gso` — so the arm exited 2 into a pipeline and produced nothing. It was recorded here
+as `ffa5b81b` rejecting the flag; in fact `ffa5b81b` accepts it and the *old* build rejects it, which
+is the opposite way round. The repair is `MOQ_GSO`, detected in
+[`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) alongside `RELAY_GSO`, and the rig now defaults to the
+build under test. **Method rule:** when two sides of a migration converge on the same flag name, the
+name stops looking like a migration hazard and starts looking safe to hard-code — which is precisely
+when it becomes one.
+
+**`delivered_ratio` stopped measuring delivered content, and nothing in the rig noticed.** On
+`ffa5b81b` `export ts` pads to the catalog's recorded `mpegts.muxRate`, so MoQ captures run to 94 %
+null packets and the byte ratio exceeds 1.0 on cells that lost most of the programme. The PCR-timeline
+grader fails identically, because padding keeps the clock advancing on schedule. Both metrics were
+reporting the padding. Replaced by delivered video packets against the source's video rate, which
+reproduces the byte ratio exactly on unpadded arms. **Method rule:** *a delivery metric denominated in
+bytes or in clock time assumes the sender does not manufacture either; when a sender gains the ability
+to pad, every such metric silently becomes a measure of the padding.*
+
+**The reordering cell was comparing congestion controllers.** The published MoQ figure of 0.13 was
+taken with the controller unpinned. Pinned, the same rig gives 0.000 on BBRv3 and 0.039 on CUBIC —
+the cell's whole range — on both the current build and the original one, so it is neither the build
+nor the backend. The conclusion that "segmented HTTP and MoQ are not separated by reordering" rested
+on one draw from a distribution that a flag selects. **Method rule:** already in
+[`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) — *always pass `RELAY_CC_FLAG`* — and this is the cell
+that shows what not passing it costs: a published architectural conclusion.
 
 **Believed:** segmented HTTP's resistance to reordering was a property of the lane — bounded,
 independently addressable objects retried over a fresh request — and would survive a change of

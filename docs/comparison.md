@@ -96,7 +96,16 @@ re-establishing a session. MoQ and SRT fan-out is stateful — losing a relay lo
 Per-subscription state costs the relay memory under churn — forty crashing receivers every five seconds
 take it from 87 MB to 1.9 GB in 60 s ([Evidence](evidence.md) §3.14) — but buys no access to anyone
 else's stream; well-behaved subscribers stayed within 8 KB of a control across 198 MB at zero
-continuity errors. The idle timeout prices the exposure. The segmented lane's half is unrun.
+continuity errors. The idle timeout prices the exposure.
+
+**The segmented lane has now been measured under the same abuse and carries no equivalent cost.**
+Against churn, slow-reader and flood arms the static origin's working set stayed within 0.6 MB of
+baseline — inside that baseline's own run-to-run drift, so an upper bound rather than a measured cost
+— while victim output was byte-identical rather than merely close ([Evidence](evidence.md) §3.14).
+The difference is structural, not a matter of tuning: there is no per-subscriber session to retain,
+so no idle timeout has to be chosen to bound one. It is an advantage of statelessness, bought with
+the latency and per-request overhead in §5, and it is scoped to a *static* origin — a segmented
+origin that terminated sessions or personalised responses would reintroduce the term.
 
 **Nobody here does point-to-multipoint at the last mile.** DVB-MABR is specified and deployed, but
 inside an access network the operator controls — consumer distribution, not affiliate distribution
@@ -180,6 +189,15 @@ across the same outage holds its latency and discards the content instead ([Evid
 the rig survives an origin restart** — TSDuck and FFmpeg abandon at the first failed playlist reload —
 so a purpose-written client was needed ([T6](../lab/test-6-relay-resilience.md)). Edge and Pathway
 selection under Content Steering remains specification-only.
+
+**Neither lane's transport reports a stalled source, and only the segmented one offers a substitute.**
+With the source frozen, the segmented origin answered every request with a 200 and the receiver exited
+clean on bytes identical to the control, exactly as the media-aware lane holds a healthy session over
+a dead feed ([Evidence](evidence.md) §3.12). The difference is one level up: the playlist's media
+sequence stops advancing, measurably — frozen 31.5 s against a steady state under 3.1 s — and a poller
+can alarm on that without parsing media, where MoQ exposes no equivalent counter. That is a monitoring
+hook rather than a protocol guarantee, and it does not make the segmented transport self-reporting;
+it means an operator has something cheap to watch that the other lane does not.
 
 ### 3.3 Where broadcast actually gets its reliability, and why it is common to both
 

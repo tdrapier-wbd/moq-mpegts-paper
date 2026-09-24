@@ -2106,6 +2106,58 @@ what looked like an intermittent packager fault.
 > concurrent passes over one rig directory produce failures that read as flaky apparatus and are
 > not.
 
+### A sender that can pad turns every byte-denominated and clock-denominated delivery metric into a measure of its padding
+
+*From [T20](test-20-segmented-http3.md) measurement 4a.* `ffa5b81b` gave `moq export ts` a
+`--mux-rate` that defaults to the `mpegts.muxRate` the catalog recorded from a constant-rate source,
+so the exporter now pads to a constant rate unless told otherwise. Nothing in the rig changed and two
+independent metrics stopped working at once:
+
+- **`delivered_ratio`** — output bytes against source rate — rose *above 1.0* on cells that lost most
+  of the programme. The captures ran to 47.7 %, 55.3 % and **94.1 %** null packets.
+- **`media_lost_s`** from the PCR timeline, which was supposed to be immune to exactly this, failed
+  the same way: padding keeps PCR advancing on schedule, so the clock and the bytes agree and the
+  grader finds no hole. It reported 8.3 s lost on an arm that delivered **3.9 %** of the video.
+
+The metric that survived is delivered packets on a *content* PID against that PID's source rate. It
+reproduces the byte ratio to three decimals on unpadded arms, which is the check that it measures the
+same thing where nothing distorts it.
+
+> **Before trusting a delivery metric, ask what the sender is allowed to manufacture.** Bytes and
+> clock time are both manufacturable by a padding sender; access units and content-PID packets are
+> not. Where a build gains a padding option, re-validate every delivery figure taken after it rather
+> than only the ones that look wrong — the ratio above 1.0 was noticeable, the 8.3 s was not.
+>
+> **Report the null-packet share beside any byte-denominated figure on a lane that can pad.** It is
+> one column, and it makes the failure visible instead of plausible.
+
+### A continuity count detects loss and cannot measure it: the counter is four bits
+
+*From [T19](test-19-pcr-grid-verification.md), re-grading the cushion sweep.* The sweep's shallow
+rungs shed 82,104 packets of 106,382 offered. Re-graded with a working pattern, the continuity check
+reported 15 events accounting for **110 missing packets** — three orders of magnitude under. That is
+not a second grader defect. `continuity_counter` is a four-bit field, so the largest gap a receiver
+can distinguish on one PID is fifteen packets, and sixteen consecutive losses restore exactly the
+value it expected.
+
+Measured rather than derived, excising a known run from the busiest PID of a real capture
+([`cc-aliasing-probe.py`](scripts/cc-aliasing-probe.py)):
+
+| excised | 1 | 5 | 10 | 15 | **16** | 17 | **32** | **160** |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| reported missing | 1 | 5 | 10 | 15 | **0** | 1 | **0** | **0** |
+
+The practical consequence is that a *low* continuity count on an arm that lost a lot of content is
+not evidence the loss was orderly — it is the expected reading, and the two are indistinguishable
+from the count alone.
+
+> **Read continuity for whether a wire is clean, and conservation for how much survived.** A zero on
+> an arm whose delivered ratio is also ~1.0 is a real result and the campaign's clean-wire findings
+> stand on that pairing. A zero, or a small number, on an arm that shed content says nothing.
+>
+> **Never quote a continuity count as a loss magnitude**, and where a table carries both, put the
+> conservation or delivered-ratio column next to it so the pairing is visible in one row.
+
 ### An idle-memory baseline drifts by more than a null result's whole excursion
 
 *From [T25](test-25-isolation-under-abuse.md) P2-b.* The abuse arms moved the origin's resident set

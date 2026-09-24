@@ -776,20 +776,43 @@ an order of magnitude above the pre-#2967 control (#2967's regression, measureme
 11 Mb/s. Stream clocking places by slot and does not use the media clock at all, so this arm grades the
 PCR change alone; the two groomers were run at every cushion in the same session.
 
-| cushion | conserved | continuity errors | PCR > 40 ms, control | PCR > 40 ms, fixed | worst, control | worst, fixed | max buffer |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 250 ms | 17.2 % | 0 | 1.22 % | 0.50 % | 847.3 ms | 557.6 ms | 5,082 |
-| 500 ms | 21.2 % | 0 | 1.37 % | 0.16 % | 733.3 ms | 557.6 ms | 5,077 |
-| 800 ms | 20.2 % | 0 | 1.55 % | 0.16 % | 733.3 ms | 646.4 ms | 6,028 |
-| **1,000 ms** | **99.37 %** | 0 | 10.46 % | **0.00 %** | 633.2 ms | **30.1 ms** | 6,715 |
-| 1,500 ms | 99.60 % | 0 | 10.44 % | **0.00 %** | 633.2 ms | **30.1 ms** | 6,946 |
-| 2,000 ms | 99.37 % | 0 | 10.46 % | **0.00 %** | 633.2 ms | **30.1 ms** | 6,708 |
+| cushion | conserved | continuity events, control | continuity events, fixed | PCR > 40 ms, control | PCR > 40 ms, fixed | worst, control | worst, fixed | max buffer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 250 ms | 17.2 % | **15** | **16** | 1.22 % | 0.50 % | 847.3 ms | 557.6 ms | 5,082 |
+| 500 ms | 21.2 % | **5** | **5** | 1.37 % | 0.16 % | 733.3 ms | 557.6 ms | 5,077 |
+| 800 ms | 20.2 % | **13** | **14** | 1.55 % | 0.16 % | 733.3 ms | 646.4 ms | 6,028 |
+| **1,000 ms** | **99.37 %** | **0** | **0** | 10.46 % | **0.00 %** | 633.2 ms | **30.1 ms** | 6,715 |
+| 1,500 ms | 99.60 % | **0** | **0** | 10.44 % | **0.00 %** | 633.2 ms | **30.1 ms** | 6,946 |
+| 2,000 ms | 99.37 % | **0** | **0** | 10.46 % | **0.00 %** | 633.2 ms | **30.1 ms** | 6,708 |
 
-Conservation, continuity, buffer depth and late drops are **identical to the packet** between the two
-groomers at every rung: the change costs 348 inserted packets and 0.3 pp of stuffing, and buys the gate.
-The recovery point is between 800 ms and 1,000 ms, consistent with the 761 ms displacement. Below it the
-arm is shedding 80 % of its content and resyncing, and the gate figure there is not meaningful — those
-rungs fail on conservation.
+The continuity column is **re-graded from the retained wires**; the sweep originally reported 0 at
+every rung because it counted output lines matching `TS:`, which `tsp -P continuity` never writes
+(see *Corrections*). The three deep rungs are genuinely clean, so the conclusion this sweep exists to
+support is unchanged. The three shallow rungs are not, and the column now discriminates.
+
+**What the column cannot say is how much was lost, and the gap is three orders of magnitude.** At the
+250 ms rung the groomer shed **82,104 packets** and the continuity events account for **110** of them.
+That is not a grading error; it is the field. `continuity_counter` is four bits, so a receiver can
+distinguish at most fifteen consecutive losses on a PID and sixteen restore the expected value exactly.
+Measured on this fixture with [`cc-aliasing-probe.py`](scripts/cc-aliasing-probe.py), excising a known
+run from the busiest PID:
+
+| packets excised | 1 | 5 | 10 | 15 | **16** | 17 | **32** | **160** | 1,600 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| events reported | 1 | 1 | 1 | 1 | **0** | 1 | **0** | **0** | 8 |
+| packets reported missing | 1 | 5 | 10 | 15 | **0** | 1 | **0** | **0** | 57 |
+
+Up to fifteen it is exact. At sixteen the loss is **invisible**, and every multiple of sixteen after it
+is invisible too. So a continuity count is a *detector* — it says a discontinuity happened at this
+point in this PID — and it is not a loss measure at any scale above a handful of packets. Read the
+conservation column for magnitude, and the continuity column only for whether the wire is clean.
+
+Conservation, buffer depth and late drops are **identical to the packet** between the two groomers at
+the three deep rungs; at the shallow rungs they differ slightly (18,268 against 18,247 content packets
+at 250 ms) and so does the continuity count. The change costs 348 inserted packets and 0.3 pp of
+stuffing, and buys the gate. The recovery point is between 800 ms and 1,000 ms, consistent with the
+761 ms displacement. Below it the arm is shedding 80 % of its content and resyncing, and neither the
+gate figure nor the continuity figure there is meaningful — those rungs fail on conservation.
 
 > The accuracy column is graded with `pcrverify --bitrate 11000000` rather than against TSDuck's own
 > estimate. On a rung that has shed most of its content the estimate lands tens of kb/s off nominal, and
@@ -1100,6 +1123,22 @@ source, including arms that are shedding 80 % of their content.
   error is the difference between a groomer-repairable stream and an unrepairable one. **Method rule:**
   an undefined measurement can still be a usable diagnostic if the statistic read is the distribution
   rather than the verdict.
+- **Believed:** the cushion sweep's continuity column read 0 at every rung, so the shallow rungs shed
+  their content cleanly. **True:** the column was counting `tsp -P continuity` lines matching `TS:`, a
+  string the plugin never writes, so it could only ever read 0. Re-graded from the retained wires, the
+  three deep rungs really are clean — the conclusion the sweep supports is unchanged — while the
+  shallow rungs carry 15, 5 and 13 events on the control and 16, 5 and 14 on the fixed build, so the
+  column also stops being identical between the two groomers. **Method rule:** a grader's pattern is
+  part of the measurement and needs a positive control; the campaign now gates this one in
+  `check-rigs.sh`.
+- **Believed:** a continuity count is a measure of how much a stage lost. **True:** it is a detector
+  with a fifteen-packet ceiling, because `continuity_counter` is four bits. At the 250 ms rung the
+  groomer shed 82,104 packets and the continuity events account for 110. Measured directly with
+  [`cc-aliasing-probe.py`](scripts/cc-aliasing-probe.py): excising 15 packets from a PID reports 15,
+  excising **16 reports nothing at all**, and every multiple of sixteen after it is equally invisible.
+  **Method rule:** read continuity for *whether* a wire is clean and conservation for *how much*
+  survived; never quote a continuity count as a loss magnitude, and never read a low count on an arm
+  whose conservation figure is bad as evidence that the loss was orderly.
 
 ## References
 

@@ -1219,6 +1219,14 @@ content-liveness alarm fired at **1.69–1.88 s** in every injected arm; PCR pro
 output stopped within the 100 ms observation tick, its true floor being the 40 ms P1 repetition limit it
 tests against. The control arm fired nothing.
 
+**The segmented lane's transport is equally silent, and its playlist is not.** Run on the same
+stimulus, the origin answered **200 to all 171 requests** while the source was stopped, the receiver
+exited clean, and its bytes were byte-identical to the control — no transport-layer signal of any
+kind. The playlist is the difference: its media sequence **froze for 31.5 s against a ≤3.1 s steady
+state**, which an HTTP poller can alarm on without parsing media. That is an application-layer
+detector the media-aware lane has no counterpart for, and it is weaker than per-PID access-unit
+liveness — it sees a stopped *packager*, not a dead elementary stream behind a live mux (`wire`, P2).
+
 **PCR progression fails on partial stalls** ([T24](../lab/test-24-partial-media-plane-stall.md)):
 dead video behind a live mux passes **the entire TR 101 290 P1 set** — 0 CC, worst interval 30.080 ms,
 identical to control. Stuffing ratio and underrun counters fire for video (**13.7 % → 95.2 %**,
@@ -1384,7 +1392,17 @@ idempotent GETs. The exposure is real, reachable with the shipped CLI, and **con
 own memory** — not to any other subscriber's stream. It also qualifies this campaign's own "relay
 memory is not an audience term" ([T9](../lab/test-9-performance.md)): that holds for a *steady*
 audience, confirmed here at 1.6 MB per held subscriber, and **the growth term is subscription lifetime
-against churn rate**. The segmented lane's half of this is **not measured**, so no comparison is drawn.
+against churn rate**.
+
+**The segmented lane has now been measured on the same question and has no retained-state term at
+all.** Twelve abusers against three victims across churn, slow-reader and flood arms left the static
+origin's working set **within 0.6 MB of its 103.6 MB baseline**, and every victim capture was
+byte-identical rather than merely close (`wire`, P2). Read the 0.6 MB as an upper bound, not a cost:
+an independent baseline on the same origin that morning read 102.8 MB, so the idle figure's own drift
+exceeds the excursion. **What the arms establish is the absence of the relay's 22× excursion, not the
+size of a small one.** The mechanism is structural — a static origin holds no per-subscriber session,
+so there is no retention to bound and no idle timeout to set — and the result is therefore scoped to
+a *static* origin; one terminating sessions or personalising responses would reintroduce the term.
 
 ### 3.15 Does the subscriber survive the loss it is designed to absorb? — Not always: a lost catalog group still takes it off air
 
