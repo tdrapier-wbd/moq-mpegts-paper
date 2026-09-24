@@ -162,9 +162,20 @@ moq_require_bytes() {
 # moq_record_build <moq-binary> [relay-binary]
 #
 # One line naming the build and backend, for the head of every run log. Any figure crossing #3811
-# carries a QUIC backend change, so the log has to say which side of it the run is on.
+# carries a QUIC backend change, so the log has to say which side of it the run is on. The backend is
+# read from the binary, not inferred from the CLI generation: `5d0991b9` has the new CLI and can be
+# built on either stack. The old CLI lists its backends in `--help`; the new one does not, and links
+# only the stack it was built with, so its protocol crate names it.
 moq_record_build() {
-	local moq="${1:?moq binary}" relay="${2:-}"
+	local moq="${1:?moq binary}" relay="${2:-}" bin backends s
+	bin="${relay:-$moq}"
 	echo "build: $("$moq" --version 2>&1 | head -1)${relay:+ / $("$relay" --version 2>&1 | head -1)}"
-	echo "backend: $([ "${MOQ_CLI_NEW:-0}" -eq 1 ] && echo 'noq (post-#3811; quinn no longer exists)' || echo 'quinn (pre-#3811)')"
+	backends=$("$bin" --help 2>&1 | grep -A12 -E -- '--(server|client)-backend ' |
+		sed -nE 's/^ +- (quinn|noq|quiche|iroh):.*/\1/p' | sort -u | paste -sd, -)
+	if [ -z "$backends" ]; then
+		for s in quinn noq quiche; do
+			grep -aq "$s-proto-\|/$s-[0-9]" "$bin" && backends="${backends:+$backends,}$s"
+		done
+	fi
+	echo "backend: ${backends:-unknown}"
 }

@@ -1,30 +1,42 @@
 # Test 31 — Congestion and capacity: the step ladders, both planes
 
-**State: both step-capacity ladders are run — the MoQ one in the `netns`/`cake` rig, the segmented
-one in T20's loopback/`netem` rig — and the latency-max × contention matrix is not. The two ladders
-are in different rigs and their figures are not interchangeable; see *The segmented ladder is in a
-different rig* below before reading them side by side.**
+**State: both step-capacity ladders are run and graded on content in the `netns`/`cake` rig, one
+sample per segmented cell, and the segmented one also in T20's loopback/`netem` rig, which carries a
+MoQ arm; the segmented outage and loss cells under `cake` are being re-run with a receiver policy
+that does not void them, and the latency-max × contention matrix is not run. Every MoQ figure in this file is graded by
+[`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to
+carry were an artefact of the exporter and are withdrawn (see *Corrections*).**
 [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
 discipline, and attributed the MoQ lane's shared-bottleneck collapse to per-subscriber deadline
 shedding at `--latency-max`. This experiment asks a different question — how much impairment each
 lane absorbs before programme is lost — and extends T8b with step-capacity ladders on both planes
 plus the withheld segmented C2 cells.
 
-**Headline: the MoQ lane absorbs a mild sustained shortfall entirely, and sheds in proportion to
-severity beyond it.** Against a 9.95 Mb/s stream, sixty seconds at **0.9× stream rate costs no
-programme at all**, and neither does a five-second transient at 0.8×. A chronic 0.8× sheds, and 0.5×
-sheds about three times as much. **0 continuity errors in every cell on every rung**, so the ladder's
-integrity invariant (criterion 3) holds throughout — this lane discards whole groups on a deadline
-rather than corrupting packets.
+**Headline: the MoQ lane loses picture at every sustained shortfall tested, including the mildest,
+and keeps its sound.** Against a 9.95 Mb/s stream, sixty seconds at **0.9× stream rate costs
+13.4–16.3 s of video** across three arms on `ffa5b81b`, in holes of up to 2.4 s, while audio loses
+0–1.7 s. Chronic 0.8× costs 13.4–24.8 s of video and 0.5× costs 65.1–75.6 s — at 0.5× the picture
+stops for most of the dip. These are the holes; each shedding cell is a further 1.5–9.4 s short
+when its window closes. Only headroom (1.2×) is clean, and a 5 s transient at 0.8× costs 0–1.1 s in
+holes and is 1.6–4.3 s short at close, which may be lag rather than loss.
+The lane sheds more picture than the deficit it is short of — which, by reasoning rather than
+measurement, follows from discarding whole groups on a deadline — and it sheds each track
+separately: video is evicted while audio continues. Neither padding nor the
+congestion controller changes these figures beyond single-sample scatter.
 
-**Second headline: the segmented lane absorbs one rung deeper, and when it does break it breaks by a
-different mechanism.** Over HTTP/3 it delivers the 0.9×-for-60 s and 0.8×-transient rungs
-**byte-identically to its own headroom control**, and carries chronic 0.8× at **zero continuity
-errors and a 24.95 ms worst-case PCR interval** while running 12.7 % behind the live edge. It fails
-at 0.5×, and not by shedding: the receiver falls far enough behind that the origin has already
-deleted the segment it asks for, and it takes a 404. **Under-provision costs this lane latency until
-the availability window runs out, and then it costs it the programme** — a cliff where the MoQ lane
-has a slope.
+**Second headline: the segmented lane absorbs three rungs the MoQ lane does not, and when it does
+break it breaks by a different mechanism.** Over HTTP/3 it delivers the 0.9×-for-60 s and
+0.8×-transient rungs **byte-identically to its own headroom control**, and carries chronic 0.8× at
+**zero content lost and a 24.95 ms worst-case PCR interval** while running 12.7 % behind the live
+edge. It fails at 0.5×, and not by shedding: the receiver falls far enough behind that the origin has
+already deleted the segment it asks for, and it takes a 404. **Under-provision costs this lane
+latency until the availability window runs out, and then it costs it the programme; it costs the MoQ
+lane picture from the first sustained rung.** In the loopback rig, where both lanes ran in the same
+session, the ranking is direct: 0.000 s of video lost against the MoQ arm's 19.7 s at 0.9× and
+34.6 s at chronic 0.8×. **The ranking holds in the `netns`/`cake` rig**, where the segmented lane
+loses nothing at 0.9× against the MoQ lane's 13–16 s, but there its availability window runs out at
+chronic 0.8× too (2.4 s lost, 12.4 s short at close). It is not a comparison at equal latency: the
+segmented lane absorbs by lagging up to ~21 s, the MoQ lane holds a 2 s budget and discards.
 
 **The substrate was never missing, and that was this file's error.** The rig is `t8b-netns.sh` — two
 network namespaces joined by a veth — which is Linux-only, and the campaign's workstation is macOS.
@@ -34,9 +46,12 @@ But both EC2 Linux hosts have `netem` and namespaces and had already used them f
 [T28](test-28-failure-injection-matrix.md)'s transport axis exactly as planned. Re-basing on macOS
 dummynet would still have been wrong, for the comparability reason, and was not done.
 
-The media-domain grading half is no longer missing: [T28](test-28-failure-injection-matrix.md)'s
-`t28-media-lost.py` is built and validated against known answers, and is the scorer for "how much
-programme is lost" on these ladders too.
+**Programme lost is graded on content, per elementary stream.** On the MoQ lane that is
+[`t28-content-lost.py`](scripts/t28-content-lost.py), which reads presentation timestamps; the PCR
+grader `t28-media-lost.py` cannot be used there, because `moq export ts` keeps writing PCR across
+the pictures it has lost ([method-notes](method-notes.md) § *The exporter manufactures bytes and
+clock*). On the segmented lane the receiver is byte-faithful and the two graders agree to within
+0.14 s on every retained capture, so the PCR figures in that table stand.
 
 Registered as [P1-d](planned-experiments.md#p1--establishes-where-one-architecture-is-superior),
 sustained capacity degradation. Extends [T8b](test-8b-congestion-control.md); does not re-run C1–C6.
@@ -89,7 +104,7 @@ survival rather than average throughput — have not been run ([P1-d](planned-ex
 | Primary rig | T8b namespace harness (`t8b-netns.sh`): two netns joined by veth, bottleneck downstream, base RTT emulated both ways. Same class as [T8b](test-8b-congestion-control.md) — reproducible on any Linux host without shared-host SSH risk. |
 | Queue discipline | `cake` at the bottleneck so bufferbloat is not the variable ([P1-d](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), [method-notes](method-notes.md) on pairing figures with conditions). |
 | Source | ~10 Mb/s CBR fixture, loop-publisher stopped during cells that only need downstream contention ([P1-d](planned-experiments.md#p1--establishes-where-one-architecture-is-superior) Group B: ~20 minutes for the MoQ half alone). |
-| MoQ lane | `moq import ts` → relay → `moq export ts` + `mpegts-pacer`; pin build and `--server-quic-congestion-control` per [T8b](test-8b-congestion-control.md). Controller choice follows T8b's provisioning conclusion (BBRv1 on a sized link unless an arm explicitly varies it). |
+| MoQ lane | `moq import ts` → relay → `moq export ts`; build named per table. The relay's controller is pinned with `--quic-congestion-control` (`--server-quic-congestion-control` on pre-migration builds) to `delay` unless an arm varies it; that is also what every build tested resolves an unset flag to — BBRv1 on quinn builds, BBRv3 on noq builds ([method-notes](method-notes.md) § *The default congestion controller changed*). Padding is suppressed with `--mux-rate 0` on the builds that pad by default. |
 | Segmented lane | HLS origin → `tsp -I hls` and the minimal re-anchoring client from [T6](test-6-relay-resilience.md)/[T8b](test-8b-congestion-control.md), both clients where the ladder compares lane behaviour rather than one implementation. |
 | C2 re-run cells | Identical shaping to T8b C2: 15 Mb/s cap, greedy TCP bulk flow 40–80 s into a 120 s window; **add** competing-flow throughput sampled per second so delivery collapse can be attributed to the impairment. |
 | Placeholders | `<EC2_IP>` / `<subscriber-home-ip>` only if a corroborating real-path variant is added; not required for the primary ladder. |
@@ -144,81 +159,99 @@ Per cell, per lane:
 relay, a publisher and a subscriber without the knee being the host's. Two network namespaces joined
 by veth (`t8b-netns.sh`), `cake` at the bottleneck, 100 ms base RTT (50 ms each way). Source a 120 s
 ~9.95 Mb/s CBR slice of `CNNiEMEA2.ts` paced with `tsp regulate --pcr-synchronous`. Build
-**`84b34f54`** (noq), `--latency-max 3s`, n = 1 subscriber, **no groomer in the path**. Rig
+**`ffa5b81b`** (noq), `--max-age 3s`, n = 1 subscriber, **no groomer in the path**. Rig
 [`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh) with `STREAM_MBIT=9.95`; graded with
-[`t28-media-lost.py`](scripts/t28-media-lost.py) in the **wire** domain, at **P1**, one sample per
-cell — except the chronic 0.8× rung, which has ten across three builds, for the reason below. Steps are re-shaped with `tc qdisc change` so the queue is not torn down and re-added, which
-would itself drop the backlog and be scored as the impairment.
+[`t28-content-lost.py`](scripts/t28-content-lost.py) on the exporter's output (**P1**, content
+domain), the first 8 s excluded because every capture carries a ~0.9 s join hole that is not the
+impairment. Three arms, one sample per cell each: padded with the controller at `delay` (BBRv3),
+unpadded at `delay`, and unpadded at `loss` (CUBIC). Steps are re-shaped with `tc qdisc change` so
+the queue is not torn down and re-added, which would itself drop the backlog and be scored as the
+impairment.
 
 **The rungs are multiples of the stream's own rate, not absolute rates.** `STREAM_MBIT=9.95` is the
 fixture's measured rate and the script derives each rung from it, for the reason in *The rungs had to
 be re-based* below. The table gives the multiple, the shaped rate it computes to, and the shortfall
 that leaves against the programme.
 
-| Step | Shaped rate | Shortfall vs stream | Media lost | Holes | Largest hole | Duplicated | Continuity errors |
+Video lost in holes is given per arm, in the order padded at `delay` / unpadded at `delay` /
+unpadded at `loss`; the other columns give the range across the three. **Short at close** is the
+further video the cell had not delivered when its window ended, conserved against the same arm's
+control by [`t2831-conservation.py`](scripts/t2831-conservation.py): a hole count sees only gaps
+between pictures that arrived, so a picture that stops before the window does leaves nothing to
+count. It is lost or late by up to the 3 s budget, and its resolution is about ±1 s — the clean
+rungs read 0.0–0.9 s.
+
+| Step | Shaped rate | Shortfall vs stream | Video lost in holes (three arms) | Short at close | Largest video hole | Audio lost | Continuity errors |
 |---|---|---|---|---|---|---|---|
-| none (control) | 20 Mb/s | — | **0.000 s** | 0 | — | 0.000 s | 0 |
-| 1.2× for 60 s | 11.94 Mb/s | **none: +20 % headroom** | **0.000 s** | 0 | — | 0.000 s | 0 |
-| 0.9× for 60 s | 8.96 Mb/s | −10 % | **0.000 s** | 0 | — | 1.575 s | 0 |
-| 0.8× for 5 s | 7.96 Mb/s | −20 %, transient | **0.000 s** | 0 | — | 0.725 s | 0 |
-| 0.8× permanent (45 s) | 7.96 Mb/s | −20 %, chronic | **1.000 s** ‡ | 1 | 1.000 s | 14.225 s | 0 |
-| 0.5× for 60 s | 4.97 Mb/s | −50 % | **3.100 s** | 3 | 1.800 s | 17.350 s | 0 |
+| none (control) | 20 Mb/s | — | **0.00 / 0.00 / 0.00 s** | reference | — | 0.00 s | 0 |
+| 1.2× for 60 s | 11.94 Mb/s | **none: +20 % headroom** | **0.00 / 0.00 / 0.00 s** | 0.0–0.6 s | — | 0.00 s | 0 |
+| 0.9× for 60 s | 8.96 Mb/s | −10 % | **16.00 / 16.28 / 13.40 s** | 1.5–5.9 s | 2.36–2.40 s | 0.00–1.73 s | 0 |
+| 0.8× for 5 s | 7.96 Mb/s | −20 %, transient | **0.00 / 0.28 / 1.12 s** | 1.6–4.3 s | 0.28–1.12 s | 0.00 s | 0 |
+| 0.8× permanent (45 s) | 7.96 Mb/s | −20 %, chronic | **13.44 / 22.76 / 24.84 s** | 2.3–9.4 s | 2.40–10.84 s | 0.29–1.30 s | 0 |
+| 0.5× for 60 s | 4.97 Mb/s | −50 % | **65.12 / 69.84 / 75.64 s** | 2.4–3.0 s | 32.36–64.76 s | 0.00 s | 0 |
 
-‡ One draw from a cell that straddles the absorption threshold: nine further replicates span
-0.000–0.850 s, four of them losing nothing. See *The chronic rung straddles the absorption
-threshold* below. Treat this rung as bimodal, not as a 1.000 s cost.
+The continuity column is zero by construction and tests nothing on this lane: the exporter writes
+its own continuity counters over whatever it re-muxes, so a discarded group leaves no gap in them
+([method-notes](method-notes.md) § *A continuity count detects loss and cannot measure it*).
 
-**A mild sustained shortfall is absorbed entirely, and that is the cell the ladder existed to
-measure.** Sixty seconds at 0.9× stream rate is a real and sustained deficit — about 60 Mbit of
-programme the link cannot carry in the window — and none of it was lost. The `cake` queue plus the
-3 s latency budget covered a shortfall four times longer than the transient rung. **The lane's
-absorption is therefore bounded by depth rather than by duration** over the range tested: a 60 s
-−10 % costs nothing where a 45 s −20 % costs programme.
+**Only headroom is clean.** Sixty seconds at 0.9× stream rate is a mild deficit — about 60 Mbit the
+link cannot carry in the window — and it costs 13.4–16.3 s of picture, 22–27 % of the video in the
+dip for a 10 % shortfall. It arrives as 11–14 holes of up to 2.4 s each, which is the shape of whole
+groups discarded on a deadline. **The lane loses more picture than it is short of capacity.** That
+follows, by reasoning rather than measurement, from discarding at group granularity: a group that
+misses its deadline after being partly delivered spent link capacity on bytes that are then thrown
+away. The deeper rungs scale the same way; at 0.5× the largest hole is 32–65 s and the picture is
+effectively absent for the dip.
 
-**Beyond that the lane sheds in proportion to severity, cleanly.** 1.000 s at −20 % chronic and
-3.100 s at −50 %, in one and three holes respectively. The lane does not degrade gracefully into a
-lower-rate version of the programme — it cannot, because the stream is CBR and the bitrate is not
-the lane's to change — so it discards whole groups on a deadline and keeps the rest current. That is
-the deadline-shedding mechanism [T8b](test-8b-congestion-control.md) attributed, measured here as
-programme cost rather than as delivered fraction.
+**The sound survives, because it is a different track.** Audio loses 0–1.7 s where video loses
+13–25 s, and nothing at 0.5× where video loses 65–76 s. MoQ carries each elementary stream as its own
+track and sheds each on its own deadline, so the small audio track keeps up while the video track's
+groups are evicted. The broadcast consequence is a programme with continuous sound and a picture
+that freezes or drops out, delivered as a transport stream with no continuity error and — because
+the exporter keeps writing PCR across the missing pictures — a clean clock.
 
-**Duplication rises with severity and is not attributed.** 0.000 s clean, 1.575 s at −10 %, 14.225 s
-at −20 % chronic and 17.350 s at −50 %. This is the same unattributed signal
-[T28](test-28-failure-injection-matrix.md) records on the same grader and the same rig, and nothing
-above rests on it; it is reported because suppressing a column that moves monotonically with the
-impairment would be worse than admitting it is unexplained.
+**Neither padding nor the controller decides these cells.** Padded against unpadded at `delay`:
+16.00 against 16.28 s at 0.9×, 65.12 against 69.84 s at 0.5×. Padding is applied at the subscriber,
+after the link, so it cannot change what was delivered, and it did not. BBRv3 against CUBIC, both
+unpadded: 16.28 against 13.40, 22.76 against 24.84 and 69.84 against 75.64 s, no consistent
+direction. The chronic rung's 13.44–24.84 s spread across three arms is single-sample scatter of the
+same size as the retained replicates below; replicates are what would resolve a controller effect
+smaller than that.
 
-### The chronic rung straddles the absorption threshold, and the QUIC backend is not why
+**Whether a transient is absorbed is not settled.** Five seconds at 0.8× costs 0.00–1.12 s of video
+in holes, and the cell is a further 1.6–4.3 s short at close. That is within or just beyond the 3 s
+budget, so it may be residual lag rather than loss; the arm that separates the two extends the
+recovery period past the budget and conserves again.
 
-The absolute-rate ladder had measured **7.050 s in six holes** at 8 Mb/s chronic where this one
-measures 1.000 s in one hole at 7.96 Mb/s — the same shortfall to within 0.5 %, a factor of seven
-apart. Two things had changed between those runs and one sample each could not separate them: the
-build (`0.11.0-fd4f5d82e` → `84b34f54`) and, inside it, the **quinn → noq QUIC backend**. Three arms
-of three replicates each separate them, because commit `5d0991b9` builds on both backends and is
-therefore the clean instrument for the backend alone.
+### The chronic rung sheds every time; the earlier builds agree
 
-| Arm | Build | QUIC backend | Control | Chronic 0.8× replicates | Range |
+Three earlier arms had replicated the chronic 0.8× rung to separate the QUIC backend from the build:
+`5d0991b9` on quinn (A) and on noq (B), which isolates the backend, and `84b34f54` on noq (C). All
+three ran with the controller unset, which on every one of these builds resolves to `delay`. The rig
+then deleted any capture it graded as clean, so the replicates that survive to be graded on content
+are the five below, plus the single chronic and 0.5× captures of the first `84b34f54` ladder.
+
+| Arm | Build | QUIC backend | Video lost, retained chronic 0.8× captures | Largest hole | Audio lost |
 |---|---|---|---|---|---|
-| A | `5d0991b9` | quinn | 0.000 s | 0.000, 0.000, 0.775 s | 0.000–0.775 s |
-| B | `5d0991b9` | noq | 0.000 s | 0.000, 0.550, 0.300 s | 0.000–0.550 s |
-| C | `84b34f54` | noq | 0.000 s | 0.850, 0.000, 0.250 s | 0.000–0.850 s |
+| A | `5d0991b9` | quinn (BBRv1) | 36.36 s | 20.28 s | 0.84 s |
+| B | `5d0991b9` | noq (BBRv3) | 14.08, 17.28 s | 2.40–3.84 s | 0.00 s |
+| C | `84b34f54` | noq (BBRv3) | 18.36, 17.70 s | 2.52–3.16 s | 0.00 s |
+| first ladder | `84b34f54` | noq (BBRv3) | 17.24 s | 2.88 s | 0.00 s |
 
-**Neither the backend nor the build explains the disagreement.** A and B are the same source commit
-and differ only in QUIC stack; their distributions overlap completely. B and C share a backend and
-differ by build; those overlap too. All **nine replicates fall between 0.000 and 0.850 s**, and no
-arm produced anything within a factor of eight of 7.050 s. The absolute-rate ladder's chronic figure
-is therefore **withdrawn as unreproduced** rather than explained: whatever produced it was not the
-QUIC stack and was not the build, and it did not recur in ten samples at that shortfall across three
-builds.
+**Every retained capture of the chronic rung lost 14–36 s of picture**, in line with the 13.4–24.8 s
+the `ffa5b81b` arms lose on the same rung; the first ladder's 0.5× capture lost 66.92 s against
+65.1–75.6 s. So the rung is not on an absorption threshold, and the lane's behaviour under a
+sustained shortfall has not moved materially between `5d0991b9` and `ffa5b81b`. **What the retained
+set cannot answer is the backend comparison the arms were built for**: which replicates were kept
+was decided by the invalid grader, so the set is selected, and arm A has one survivor. Nor was A
+against B ever the clean instrument for the backend it was designed as: `delay` is BBRv1 on quinn
+and BBRv3 on noq, so the two arms varied the controller along with the stack. Whether quinn and noq
+shed differently is open, and the arm that would settle it re-runs A and B with every capture
+retained and the controller pinned to one algorithm both stacks implement.
 
-**What the replicates do establish is that the chronic −20 % rung sits on the absorption threshold.**
-Ten samples at one impairment span 0.000 s to 1.000 s, and four of them lost nothing at all. That is
-not measurement noise around a central value; it is a cell where the queue plus the 3 s budget
-sometimes covers the deficit for the whole window and sometimes does not. **The single 1.000 s in
-the table above is one draw from that spread, not the rung's cost**, and no sizing claim should be
-made from it. The rungs that carry this experiment's headline — 1.2×, 0.9× and the 0.8× transient,
-all at zero — are unaffected, and 0.9× for 60 s losing nothing is the more robust of the two
-boundaries because it is zero rather than a number near one.
+The absolute-rate ladder's chronic cell, on `fd4f5d82e` at 8 Mb/s, stays **withdrawn**, now for a
+different reason: its retained capture spans only 19 s past the join, and a capture that stops
+early grades as clean on any grader.
 
 ## Measured — the segmented step-capacity ladder
 
@@ -282,35 +315,100 @@ them, and neither cell is legible without the other two.
 **Where the knee sits is bounded but not located.** Absorption is complete at 0.9× sustained and at
 0.8× transient, costs 17.6 % of delivery but no programme at 0.8× chronic, and breaks somewhere
 between 0.8× and 0.5×. No rung was run in that gap and no duration beyond 60 s at 0.9×, so the
-usable margin is a band rather than a number — the same limitation the MoQ ladder carries, and for
-the same reason.
+usable margin is a band rather than a number. The MoQ ladder has the same limitation one band
+higher, between 1.2× and 0.9×.
 
-### The segmented ladder is in a different rig, and the two columns must not be subtracted
+### The loopback segmented ladder is in a different rig, and its column must not be subtracted
 
 The MoQ ladder above ran in `t8b-netns.sh`: two namespaces joined by a veth, `cake` at the
-bottleneck, 100 ms base RTT. The segmented ladder cannot run there, because it needs an HTTP origin
-with both a TCP and a QUIC listener and the only one this campaign has is T20's nginx pair on the
-host. It therefore runs on **loopback with `netem`, no added RTT, and a token bucket rather than an
-AQM**. That is a materially easier path in one respect and a materially harsher one in another, and
+bottleneck, 100 ms base RTT. The segmented ladder in the table above ran against T20's nginx pair on
+the host instead, so on **loopback with `netem`, no added RTT, and a token bucket rather than an
+AQM**; the same ladder inside the namespace rig is in the next section. That is a materially easier path in one respect and a materially harsher one in another, and
 neither difference is small.
 
-The size of it is measurable, because the segmented rig also carries a MoQ arm. Re-run in the
-loopback rig on the same rungs in the same session, **the MoQ lane loses programme at 0.9×, where
-the `netns`/`cake` ladder records 0.000 s**; its delivered video falls to 76.2 % of source at that
-rung and 64.1 % at chronic 0.8×. The `netem` token bucket at `limit 1000` has no AQM and a shallow
-queue, and a controller that probes in bursts pays for that in a way it does not pay `cake`. **The
-disagreement is a property of the shaper, not of the lane**, which is precisely why the two ladders
-are reported as two ladders.
+The size of it is measurable, because the segmented rig also carries a MoQ arm, run on the same
+rungs in the same session on `ffa5b81b` and graded on content. The figures are video lost in
+holes on both MoQ columns; the loopback rig has no per-window conservation, so they are lower
+bounds there:
 
-What follows for reading them:
+| Step | MoQ video lost, loopback/`netem` | MoQ video lost, `netns`/`cake` (three arms) | Segmented video lost, loopback/`netem` |
+|---|---|---|---|
+| none (control) | 0.00 s | 0.00 s | 0.00 s |
+| 0.9× for 60 s | 19.74 s | 13.40–16.28 s | 0.00 s |
+| 0.8× for 5 s | 0.88 s | 0.00–1.12 s | 0.00 s |
+| 0.8× permanent | 34.64 s | 13.44–24.84 s | 0.00 s |
+| 0.5× for 60 s | 57.16 s | 65.12–75.64 s | 17.84 s |
 
-- **The segmented column is sound against its own controls**, which ran in the same rig in the same
-  session, and every claim above is of that form.
-- **The MoQ column from the loopback rig is reported only to size the rig difference.** It is not a
-  re-measurement of the MoQ ladder and does not supersede it.
-- **No rung-for-rung ranking of the two lanes is supportable from this experiment.** The arm that
-  would support one is the segmented ladder inside the `netns` rig, which needs an origin reachable
-  from inside the namespace; that is a rig change, not a re-run.
+**The two rigs agree about the MoQ lane in kind and roughly in size.** Both lose picture from the
+first sustained rung. The loopback rig costs more at 0.9× and chronic 0.8× and less at 0.5×, with one
+sample against three, and the `netem` token bucket at `limit 1000` has no AQM and a shallow queue, so
+some difference is expected. The loopback arm's audio loses 1.7–2.7 s on those rungs and 20.3 s at
+0.5×, more than under `cake`. Its outage cells are not usable: their captures stop about 8 s after
+the join, and a capture that stops early grades as clean.
+
+What follows for reading them: **within the loopback rig the lanes are ranked directly**, same
+rungs, same session, same grader — the segmented lane loses no picture on three rungs where the MoQ
+lane loses 0.9–34.6 s, and less at 0.5× (17.84 against 57.16 s). The `netns`/`cake` ranking is below.
+
+### In the `netns`/`cake` rig the ranking holds, and the segmented lane sheds at chronic 0.8× too
+
+[`t31-seg-netns.sh`](scripts/t31-seg-netns.sh) puts an HTTP/3 origin inside the publisher namespace
+— its own nginx on 10.99.0.1, QUIC only, `http3_stream_buffer_size 16m` — and the byte-faithful
+receiver inside the subscriber namespace, holding **one connection for the run** as a player does.
+Both settings are required: at nginx's 64k default the origin caps a stream at ~4.8 Mb/s at this RTT,
+and a receiver that reconnects every cycle falls behind the live window on the unimpaired control
+([T42](test-42-h3-receiver-fidelity.md) § *What the receiver costs in time*). Same veth, `cake` at
+20 Mb/s, 100 ms RTT, the same rungs as multiples of 9.95 Mb/s and the same settle/recover timeline
+as the MoQ ladder; content-graded from 8 s and conserved against the invocation's own control.
+Packager `tsp -O hls --live 6 --live-extra-segments 3 --duration 2`, segments ~2.46 s. One sample
+per cell, **wire** domain, **P1**, one host.
+
+| Step | Segmented video lost in holes | Short at close | Holes (cause) | Lag max | MoQ video lost, same rig, three arms |
+|---|---:|---:|---|---:|---:|
+| none (control) | 0.00 s | 0.0 s | 0 | 8.5 s | 0.00 s |
+| 1.2× for 60 s | 0.00 s | 0.0 s | 0 | 8.2 s | 0.00 s |
+| 0.9× for 60 s | 0.00 s | 0.0 s | 0 | 21.4 s | 13.40–16.28 s |
+| 0.8× for 5 s | 0.00 s | 0.0 s | 0 | 6.9 s | 0.00–1.12 s |
+| 0.8× permanent | **2.40 s** | **12.4 s** | 1 (a segment evicted before it was fetched) | 21.3 s | 13.44–24.84 s |
+| 0.5× for 60 s | **20.36 s** | 0.0 s | 3 (two 404s, then six segments evicted) | 21.9 s | 65.12–75.64 s |
+| outage 5 s | 0.00 s | 0.0 s | 0 | 18.5 s | 16.96–20.84 s missing ¹ |
+| outage 30 s | void | | a fetch caught by the outage outlasted the 15 s timeout; the truncated segment ended the run | | |
+| loss 5 %, 10 % | void | | the first segment reached 31 KB in 15 s and was truncated; see below | | |
+
+¹ Conserved (holes plus short at close) on the MoQ ladder's three arms. Audio on the segmented lane
+tracks video to within 0.12 s on every cell, because a segment carries both. "Short at close" of
+−1.3 to 0 s on clean cells is within the conservation's ±1 s resolution and is shown as 0.0.
+
+**The lane ranking survives the move to the AQM rig.** At every rung and at the 5 s outage the
+segmented lane loses less picture than any MoQ arm: nothing where the MoQ lane loses 13–16 s at
+0.9×, 2.4 s against 13–25 s at chronic 0.8×, 20.4 s against 65–76 s at 0.5×. **It is not a
+comparison at equal latency.** The segmented lane absorbs a shortfall by falling behind — its lag
+reaches 21–22 s on every shedding or near-shedding rung, against ~2.4 s median on the control — while
+the MoQ lane holds its 2 s release budget and discards. Which currency a route can spend is the
+requirement's question ([R4](../docs/problem.md)), not this table's.
+
+**What `cake` changes on the segmented lane is chronic 0.8×.** On loopback it lost nothing and ran
+12.7 % behind; here it lags the same way until the live window runs out, loses one segment (2.4 s) to
+eviction and is still 12.4 s short at close. The lane's cliff is the availability window in both
+rigs, and under `cake` at 100 ms RTT it arrives sooner. 0.9× for 60 s is clean in both, and the lag
+it builds (21.4 s) is recovered before the window closes.
+
+**The loss cells are void, and not only because of the receiver.** With the receiver's default policy
+a truncated segment ends the run, and under 5 % random loss the first segment reached 31 KB in 15 s.
+That is the origin's congestion controller: nginx's QUIC sender is loss-based, and at 100 ms RTT
+random loss bounds a loss-based flow to well under 1 Mb/s (the Mathis bound is ~0.5 Mb/s at 5 %;
+reasoned, not measured here). **The segmented lane's "loss is invisible" result is a loopback
+result**: at near-zero RTT the same bound is far above the stream, which is why T28's loopback cells
+return bytes identical to the control. The 30 s outage and both loss rates are re-run with truncation
+recorded as a hole and a 60 s timeout, so the cells measure what the lane delivers rather than when
+the receiver gives up ([`t2831-boundaries.sh`](scripts/t2831-boundaries.sh), `seghole` phase).
+
+The two 115 s windows that lost nothing (1.2× and 0.9×) read 75 continuity jumps and a PCR
+"duplication" of 119.9 s on the PCR grader, with identical byte counts, where the content grader
+reads one timestamp discontinuity and nothing lost. They are attributed to the window crossing the
+120 s clip's loop point in the packager — the same count on two cells with identical bytes is not
+something a lane impairment produces — but not verified: grading the origin's own segment at the loop
+would settle it.
 
 ### The rungs had to be re-based, and the earlier ladder is superseded
 
@@ -318,8 +416,8 @@ The procedure originally called a 20 → 12 Mb/s step a "sustained moderate shor
 campaign's ~9.95 Mb/s fixture, 12 Mb/s carries **20 % headroom** — it is not a shortfall at all, which
 is why that cell returned zero and why its zero said nothing about capacity. The rungs were written
 as absolute rates while the result depends on the rate *relative to the stream*, so the ladder had a
-hole exactly where the commonest real under-provision sits: between "absorbed entirely" at a
-transient −20 % and programme loss at a chronic −20 %, nothing measured a *mild* sustained shortfall.
+hole exactly where the commonest real under-provision sits: between a transient −20 % and a chronic
+−20 %, nothing measured a *mild* sustained shortfall.
 
 Re-basing closed it. [`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh) now takes
 `STREAM_MBIT` and derives each rung as a multiple of it, so the ladder follows the fixture instead of
@@ -371,9 +469,9 @@ failure mode is a finding.
 
 | # | Criterion | Verdict |
 |---|---|---|
-| 1 | Longest step absorbed with zero media lost and 0 continuity errors | **Reported for both lanes, in different rigs.** MoQ (`netns`/`cake`): 60 s at 0.9×, absorbed completely, and a 5 s transient at 0.8×. Segmented (loopback/`netem`): the same two rungs byte-identically to its own control, **and chronic 0.8× as well** — 0 continuity errors and a 24.95 ms PCR maximum at 82.4 % of control delivery, so it meets this criterion one rung deeper than the MoQ lane meets it. All are **lower bounds rather than ceilings**: no rung between 0.9× and 0.8× was run on either lane, no rung between 0.8× and 0.5× on the segmented one, and no duration beyond 60 s. The rigs differ, so the two columns are not subtracted |
+| 1 | Longest step absorbed with zero media lost and 0 continuity errors | **MoQ: no sustained shortfall rung is absorbed**, in either rig; only 1.2× headroom is clean, and the 5 s transient at 0.8× costs 0.00–1.12 s of video in holes and is 1.6–4.3 s short at close, unresolved between lag and loss. The absorption boundary is therefore somewhere between 1.2× and 0.9×. **Segmented, loopback/`netem`: 0.9× for 60 s, the 0.8× transient and chronic 0.8×** — byte-identical to its own control on the first two, 0 content lost and a 24.95 ms PCR maximum at 82.4 % of control delivery on the third. **Segmented, `netns`/`cake`: 0.9× for 60 s and the 0.8× transient**, and the 5 s outage; chronic 0.8× loses 2.4 s to eviction. One sample per cell; no rung between 0.8× and 0.5× run yet and no duration beyond 60 s. The lanes are ranked directly in both rigs, not at equal latency |
 | 2 | Recovery operating point | **Not measured.** Delivery returned (subsequent cells were clean through the same rig) but buffer occupancy was not instrumented, so neither the 5 % rate nor the 10 % buffer test was applied |
-| 3 | MoQ integrity invariant — any non-zero continuity error fails the cell | **Pass on every cell on every rung.** 0 throughout, including the two that lost programme |
+| 3 | MoQ integrity invariant — any non-zero continuity error fails the cell | **Passes, and tests nothing.** 0 throughout, including the cells that lost 65–76 s of picture, because the exporter writes its own continuity counters. The criterion was written on the assumption that the MoQ egress's counters could show loss; they cannot, and content lost is the only integrity measure on this lane |
 | 4 | C2 re-run validity | **Not run.** The withheld segmented C2 cells remain withheld |
 | 5 | Latency-max ladder at n ∈ {2, 3} | **Not run at contention.** The budget axis was exercised only at n = 1, and only against an outage rather than a capacity step — recorded in [T28](test-28-failure-injection-matrix.md), where it produced a non-monotonic result that this criterion's phrasing assumes cannot happen |
 
@@ -387,26 +485,36 @@ this criterion should settle, but the criterion as written cannot express the an
 The rig tears down and rebuilds from `t8b-netns.sh` on the EC2 secondary, and nothing here waits on
 a third party.
 
-- **Rungs between 0.9× and 0.8×, and a duration beyond 60 s at 0.9×**, to turn criterion 1's lower
-  bound into a ceiling. This is now the most valuable outstanding cell: the absorption boundary lies
-  between the two rungs, and the replicates show 0.8× chronic is already *on* it, so the boundary is
-  somewhere in a 10 % band and the lane's usable headroom margin is not yet stated.
-- **Enough replicates to characterise the chronic rung's bimodality rather than bound it.** Ten
-  samples establish the spread is real and that neither backend nor build causes it; they do not say
-  what decides which mode a run lands in, and that mechanism is the interesting part.
+- **Rungs between 1.2× and 0.9× on the MoQ lane**, to locate the headroom it needs. Every shortfall
+  rung sheds and 20 % headroom does not, so the boundary is in a 30 % band, and whether it sits at or
+  above 1.0× decides whether the lane can be provisioned to the stream's rate at all.
+- **Replicates of the MoQ shedding rungs**, enough to resolve a controller or backend effect smaller
+  than the ±5 s single-sample scatter, with every capture retained so the set is not selected by the
+  grader.
 - **The latency-max × contention matrix** (criterion 5) at n ∈ {2, 3}, against capacity steps rather
   than outages, and phrased so a non-monotonic answer is expressible.
 - **Buffer and RSS instrumentation** for criterion 2, which the current rig does not collect.
-- ~~**The segmented ladder**, using T20's HTTP/3 and HLS apparatus on the same host.~~ **Run** — see
-  §*Measured — the segmented step-capacity ladder*. It leaves the lane-versus-lane comparison still
-  undrawn, because it is in a different rig.
-- **The segmented ladder inside the `netns`/`cake` rig**, which is now the single most valuable
-  outstanding cell in this experiment: it is what turns two ladders into one comparison, and the
-  MoQ arm's disagreement between the rigs at 0.9× shows the gap is large enough to matter. It needs
-  an HTTP origin reachable from inside the namespace, which is a rig change rather than a re-run.
-- **A rung between 0.8× and 0.5× on the segmented lane.** Chronic 0.8× costs delivery but no
-  programme and 0.5× costs 17.979 s, so the availability-window cliff is somewhere in that band and
-  its position is what an operator provisioning retention would size against.
+- **Rungs between 0.8× and 0.6× on the segmented lane, replicated, and its outage and loss cells
+  under `cake`** with truncation recorded as a hole — queued as the `boundary` and `seghole` phases of
+  [`t2831-boundaries.sh`](scripts/t2831-boundaries.sh). The availability-window cliff for a 60 s
+  shortfall is between 0.9× (clean) and 0.5× (20.4 s lost), and its position is what an operator
+  provisioning retention would size against.
 - **The withheld C2 cells** remain unpublished until the competing-flow instrumentation this protocol
   adds is in place — publishing them without it was judged worse than silence
   ([T8b § C2 withheld](test-8b-congestion-control.md#the-segmented-rows-of-c2-are-withheld-pending-a-re-run)).
+
+## Corrections
+
+- **The MoQ ladder was graded on the exporter's clock, and it said the lane absorbed what it shed.**
+  This file reported 0.9× for 60 s and the 0.8× transient as absorbed with 0.000 s lost, chronic
+  0.8× as bimodal around 0.000–1.000 s, and 0.5× as 3.100 s, all from the PCR grader. Graded on
+  content, 0.9× loses 13.4–16.3 s of video, chronic 0.8× loses 13–36 s on every retained capture, and
+  0.5× loses 65–76 s. `moq export ts` keeps writing adaptation-only PCR packets across the pictures
+  it has lost, so a PCR timeline sees continuous clock over a hole in the programme; the
+  "duplication" the PCR grader reported rising with severity was the same artefact, and the content
+  grader finds none. The PCR grader had passed its self-test because excising bytes removes clock and
+  content together, which is not how this lane fails. Method rule: [method-notes](method-notes.md)
+  § *The exporter manufactures bytes and clock*. The content grader's hole count is itself a lower
+  bound, since a picture that stops before the window closes leaves no hole; the *Short at close*
+  column conserves against the control for that reason ([method-notes](method-notes.md) § *A hole
+  count sees only gaps between what arrived*).

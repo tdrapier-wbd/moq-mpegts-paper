@@ -22,7 +22,10 @@
 > at **0.98** delivered rate under 25 % reordering against MoQ's **0.19**, and that separation is the
 > single impairment result on which the paper's reliability verdict turns. Re-run with the packet sizes
 > equalised, segmented HTTP over TCP reads **0.44**, segmented HTTP over HTTP/3 reads **0.18**, and MoQ
-> reads **0.13**. The lane that was said to be immune to reordering is, on QUIC, within noise of MoQ.
+> reads **0.13**. The lane that was said to be immune to reordering is not: on QUIC it keeps about a
+> quarter of the stream or less (0.166–0.263 across re-measurements, measurement 4a). MoQ's
+> figure turned out to be its congestion controller's (below), so the two are not "within noise" of
+> each other either; what survives is that reordering hurts both lanes badly.
 >
 > **The mechanism is packet size, and it is measured, not inferred.** T5's rig left loopback at its
 > default 65536-byte MTU while correctly disabling GSO on the MoQ arm only. The segmented lane
@@ -298,7 +301,7 @@ which is the check that it is measuring the same thing where nothing distorts it
 | Cell | Arm | As published (`ffmpeg`, `bin-3006`) | Re-measured (video packets, `ffa5b81b`) | Nulls |
 |---|---|---:|---:|---:|
 | reorder `delay 30ms reorder 25% 50%` | H1 | 0.44 | **0.485** | 4.6 % |
-| | H3 | 0.18 | **0.166** | 4.6 % |
+| | H3 | 0.18 | **0.166** § | 4.6 % |
 | | MoQ | 0.13 | **0.000** BBRv3 / **0.039** CUBIC | 94.1 % |
 | loss 20 % commanded | H1 | 0.096 | **0.131** ‡ | 4.5 % |
 | | H3 | 0.703 | **1.111** | 4.6 % |
@@ -315,6 +318,14 @@ and the receiver refuses to concatenate a partial one because a non-188-multiple
 wire defect. At a 60 s timeout it delivers 0.131. The zero is the instrument's policy, not the lane's
 capability, and **the per-fetch timeout is a measurement parameter that has to be stated** on any
 severely impaired segmented arm.
+
+§ Every H3 cell here ran against nginx's default 64k `http3_stream_buffer_size`, which caps a stream at
+~64 KB per round trip ([T42](test-42-h3-receiver-fidelity.md) § *What the receiver costs in time*).
+At this rig's RTT it binds nowhere except, possibly, under reordering. Re-run at 16m, three
+replicates of the reorder cell read **0.259–0.263** by bytes, with 11 holes each (void for carriage),
+which matches [T28](test-28-failure-injection-matrix.md)'s 25.4 % at a 60 s budget on the same rig.
+The 0.166 is not reproduced and its cause is not isolated; the ordering against TCP and MoQ holds at
+every reading.
 
 **Read the two columns differently.** On the HLS arms the only thing that changed is the receiver, so
 the movement is a correction. On the MoQ arm the build, the QUIC backend and the congestion
@@ -465,12 +476,14 @@ From the baseline captures and origin logs:
 3. **Reordering does not separate the two architectures; it separates two congestion controllers.**
    The published overlap (0.18 against 0.13) held with the MoQ controller unpinned. Pinned, the MoQ
    arm reads **0.000 on BBRv3 and 0.039 on CUBIC** on the same rig, so its value spans the whole
-   range of the cell and is set by a flag rather than by the object model. The segmented arm sits at
-   0.166 either way. What can be said is that the segmented lane over HTTP/3 is *stable* under
-   reordering where the media-aware lane is controller-dependent — which is a weaker and more useful
-   claim than the one this conclusion originally made (measurement 4a).
+   range of the cell and is set by a flag rather than by the object model. The segmented arm does not
+   depend on that flag, but it does depend on its origin and receiver: 0.166 as re-measured here,
+   0.259–0.263 with the origin's stream buffer at 16m (§ note under the 4a table). What can be said is
+   that the segmented lane over HTTP/3 is *not controller-dependent* under reordering where the
+   media-aware lane is, and sits between TCP and MoQ on every reading — which is a weaker and more
+   useful claim than the one this conclusion originally made (measurement 4a).
 4. **The substrate change is a trade, and a smaller one than published.** Segmented HTTP loses the
-   reordering cell by moving to QUIC (0.485 on TCP against 0.166 on HTTP/3) and wins the loss cell
+   reordering cell by moving to QUIC (0.485 on TCP against 0.166–0.263 on HTTP/3) and wins the loss cell
    outright (**0.131 against 1.111** at 20 % commanded). It gains nothing in the 30 s outage cell,
    where the two substrates are byte-identical: recovery there is the origin's retention, not the
    transport's (measurement 4a).
@@ -482,17 +495,17 @@ From the baseline captures and origin logs:
 
 ## Limits
 
-- **The *impairment* cells' CC and PCR columns still grade the receiver, not the wire.** This limit
-  is discharged for the clean baseline, which has been re-measured above, and **not** for the
-  impairment cells in measurements 4–6, which were taken through `ffmpeg -c copy -f mpegts` and have
-  not been re-run. That receiver re-muxes: it regenerates continuity counters and re-times PCR, so
-  `cc_errors=0` there is true by construction. [T42](test-42-h3-receiver-fidelity.md) measures how
-  strong the effect is — on an origin with ten deliberately excised packets it reported zero
-  continuity events where the origin and two byte-faithful receivers reported ten missing packets,
-  and it also renumbers every PID and drops the NIT and TDT/TOT. Those cells are owed a
-  re-measurement, not a re-qualification. **The delivered-ratio columns, which carry this
-  experiment's headline, are unaffected**: they count bytes arriving, which the re-mux does not
-  invent or destroy at the scale the impairment cells separate on.
+- **The impairment cells have no carriage grade, except two.** Measurements 5–7 were taken through
+  `ffmpeg -c copy -f mpegts`, which re-muxes: it regenerates continuity counters and re-times PCR, so
+  `cc_errors=0` there is true by construction ([T42](test-42-h3-receiver-fidelity.md) measures how
+  strong the effect is — zero continuity events reported on an origin with ten deliberately excised
+  packets). Re-run through the byte-faithful receiver (measurement 4a), the carriage columns are
+  void on every impaired cell except `loss20`/H3 and the capacity H1 arm, because that receiver
+  stopped at the first truncated segment. `--truncated hole` now records a truncation as a hole
+  instead; carriage under impairment on this rig needs the cells re-run with it. The limit is
+  discharged for the clean baseline. **The delivered-ratio columns, which carry this experiment's
+  headline, are unaffected**: they count bytes arriving, which the re-mux does not invent or destroy
+  at the scale the impairment cells separate on.
 - **A per-packet impairment is not a per-byte impairment, even normalised.** At MTU 1500 the QUIC
   arm still sends ~1.5× the packets of the TCP arm for the same media (109,657 against 71,389), so at
   a fixed per-packet reorder probability it takes ~1.5× the events. That residual runs against the

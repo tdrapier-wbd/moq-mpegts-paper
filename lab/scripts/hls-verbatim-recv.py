@@ -35,12 +35,30 @@ because every failure mode here looks like clean output:
 All three abort or are counted and reported on stderr and in the JSON summary. **A run that
 reports any hole is void for carriage grading**, and the exit status says so.
 
+## What it costs, which a latency arm has to subtract
+
+Each reload cycle is two `curl` processes -- the playlist, then every fresh segment in one
+invocation -- so each cycle pays two connection setups, each from slow start: negligible on
+loopback, more than a 2 s segment's period behind a 20 Mb/s bottleneck at 100 ms RTT. `--libcurl`
+loads the same library in-process and keeps one connection for the run instead. `--timeout` is
+curl's `--max-time`, which curl applies to each transfer, not to the invocation: a batch may run
+far past it, and a segment is cut short only when it alone takes longer, i.e. when its size over
+the path's rate exceeds the timeout. A segment cut short is not whole packets and by default ends
+the run, without a summary (`--truncated hole` records it instead). Reloads come every half target
+duration, so a segment waits up to that long after it appears; the first reload fetches the whole
+live window, so the first few segments' lag is the join, not the lane. `--trace` writes each
+segment's handshake, time to first byte, batch time and, with `--origin-dir` on a co-resident
+origin, its lag behind the segment file's creation.
+
 Usage:
     hls-verbatim-recv.py <playlist-url> -o out.ts [--http-version 1|3] [--seconds N]
                          [--curl PATH] [--insecure] [--summary out.json]
+                         [--trace t.csv] [--origin-dir DIR] [--truncated abort|hole]
+                         [--libcurl PATH]
 """
 
 import argparse
+import io
 import json
 import os
 import shutil
@@ -62,12 +80,19 @@ class Fetcher:
     """Thin wrapper over curl. One invocation may carry several URLs so the connection is
     reused within a reload cycle; that matters for throughput, not for byte fidelity."""
 
+    # One line per transfer on stdout, which the segment fetch otherwise leaves empty. The
+    # handshake is `appconnect`: every invocation is a fresh process and so a fresh connection.
+    # The marker must not start with `@`, which curl reads as "take the format from this file".
+    WRITE_OUT = "TRACE %{time_appconnect} %{time_starttransfer} %{time_total} %{size_download} %{http_code}\\n"
+
     def __init__(self, curl, http_version, insecure, timeout):
         self.curl = curl
         self.http_version = http_version
         self.insecure = insecure
         self.timeout = timeout
         self.requests = 0
+        self.last_rc = 0
+        self.last_timings = []
 
     def _base(self):
         argv = [self.curl, "--silent", "--show-error", "--fail", "--max-time", str(self.timeout)]
@@ -90,7 +115,8 @@ class Fetcher:
 
     def files(self, urls, destdir):
         """Fetch several URLs into destdir, preserving order. Returns list of (url, path|None)."""
-        argv = self._base()
+        # `--max-time` applies to each transfer, so a batch is not bounded as a whole.
+        argv = self._base() + ["--write-out", self.WRITE_OUT]
         out = []
         for i, u in enumerate(urls):
             p = os.path.join(destdir, f"seg{i:06d}")
@@ -98,6 +124,10 @@ class Fetcher:
             out.append((u, p))
         self.requests += len(urls)
         r = subprocess.run(argv, capture_output=True)
+        self.last_rc = r.returncode
+        self.last_timings = [
+            line.split()[1:] for line in r.stdout.decode(errors="replace").splitlines() if line.startswith("TRACE ")
+        ]
         results = []
         for u, p in out:
             if os.path.exists(p) and os.path.getsize(p) > 0:
@@ -106,6 +136,98 @@ class Fetcher:
                 log(f"  !! FETCH FAILED {u}: {r.stderr.decode(errors='replace').strip()[:160]}")
                 results.append((u, None))
         return results
+
+
+class PersistentFetcher:
+    """The same transfers through one libcurl easy handle for the whole run, so every request
+    after the first reuses one connection and its congestion window, as a player's does. The
+    per-process `Fetcher` opens two connections a cycle, each from slow start; behind a 20 Mb/s
+    bottleneck at 100 ms RTT that alone costs more than a 2 s segment's period. Same library as
+    the `curl` binary it replaces, same `--max-time`-per-transfer and `--fail` semantics."""
+
+    OPT_WRITEDATA, OPT_URL, OPT_WRITEFUNCTION = 10001, 10002, 20011
+    OPT_FAILONERROR, OPT_SSL_VERIFYPEER, OPT_SSL_VERIFYHOST = 45, 64, 81
+    OPT_HTTP_VERSION, OPT_NOSIGNAL, OPT_TIMEOUT_MS = 84, 99, 155
+    HTTP_1_1, HTTP_3ONLY = 2, 31
+    INFO_TOTAL, INFO_SIZE, INFO_STARTTRANSFER, INFO_APPCONNECT = 0x300003, 0x300008, 0x300011, 0x300021
+    INFO_NUM_CONNECTS = 0x20001A
+
+    def __init__(self, libpath, http_version, insecure, timeout):
+        import ctypes
+
+        self.c = ctypes
+        self.lib = ctypes.CDLL(libpath)
+        self.lib.curl_easy_init.restype = ctypes.c_void_p
+        self.lib.curl_easy_strerror.restype = ctypes.c_char_p
+        self.lib.curl_global_init(ctypes.c_long(3))
+        self.h = ctypes.c_void_p(self.lib.curl_easy_init())
+        self.sink = None
+        write_fn = ctypes.CFUNCTYPE(ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_void_p)
+        self._cb = write_fn(self._write)
+        self._set(self.OPT_WRITEFUNCTION, self._cb)
+        self._set(self.OPT_NOSIGNAL, ctypes.c_long(1))
+        self._set(self.OPT_FAILONERROR, ctypes.c_long(1))
+        self._set(self.OPT_TIMEOUT_MS, ctypes.c_long(int(timeout * 1000)))
+        self._set(self.OPT_HTTP_VERSION, ctypes.c_long(self.HTTP_3ONLY if http_version == "3" else self.HTTP_1_1))
+        if insecure:
+            self._set(self.OPT_SSL_VERIFYPEER, ctypes.c_long(0))
+            self._set(self.OPT_SSL_VERIFYHOST, ctypes.c_long(0))
+        self.requests = 0
+        self.connects = 0
+        self.last_rc = 0
+        self.last_timings = []
+
+    def _set(self, opt, val):
+        self.lib.curl_easy_setopt(self.h, self.c.c_int(opt), val)
+
+    def _write(self, ptr, size, nmemb, _):
+        self.sink.write(self.c.string_at(ptr, size * nmemb))
+        return size * nmemb
+
+    def _info(self, what, ctype):
+        v = ctype()
+        self.lib.curl_easy_getinfo(self.h, self.c.c_int(what), self.c.byref(v))
+        return v.value
+
+    def _perform(self, url, sink):
+        self.requests += 1
+        self.sink = sink
+        self._set(self.OPT_URL, self.c.c_char_p(url.encode()))
+        rc = self.lib.curl_easy_perform(self.h)
+        self.connects += self._info(self.INFO_NUM_CONNECTS, self.c.c_long)
+        return rc
+
+    def text(self, url):
+        buf = io.BytesIO()
+        rc = self._perform(url, buf)
+        if rc != 0:
+            raise IOError(f"curl {rc} for {url}: {self.lib.curl_easy_strerror(rc).decode()}")
+        return buf.getvalue().decode("utf-8", errors="replace")
+
+    def files(self, urls, destdir):
+        out, self.last_timings, self.last_rc = [], [], 0
+        for i, u in enumerate(urls):
+            p = os.path.join(destdir, f"seg{i:06d}")
+            with open(p, "wb") as fh:
+                rc = self._perform(u, fh)
+            d = self.c.c_double
+            self.last_timings.append(
+                [
+                    f"{self._info(self.INFO_APPCONNECT, d):.6f}",
+                    f"{self._info(self.INFO_STARTTRANSFER, d):.6f}",
+                    f"{self._info(self.INFO_TOTAL, d):.6f}",
+                    f"{self._info(self.INFO_SIZE, d):.0f}",
+                    "",
+                ]
+            )
+            if rc != 0:
+                self.last_rc = rc
+                if os.path.getsize(p) == 0:
+                    log(f"  !! FETCH FAILED {u}: curl {rc}: {self.lib.curl_easy_strerror(rc).decode()}")
+                    out.append((u, None))
+                    continue
+            out.append((u, p))
+        return out
 
 
 def parse_media_playlist(text, base_url):
@@ -176,12 +298,30 @@ def main():
     ap.add_argument("--insecure", action="store_true")
     ap.add_argument("--timeout", type=float, default=15.0, help="per-request timeout")
     ap.add_argument("--summary", help="write a JSON summary here")
+    ap.add_argument("--trace", help="per-segment timing CSV: the receiver's own cost, for a latency arm")
+    ap.add_argument(
+        "--origin-dir",
+        help="the origin's segment directory, when co-resident: adds each segment's lag behind its file's mtime",
+    )
+    ap.add_argument(
+        "--truncated",
+        choices=["abort", "hole"],
+        default="abort",
+        help="a segment that is not whole packets -- what a timeout leaves -- ends the run (default) or is a hole",
+    )
+    ap.add_argument(
+        "--libcurl",
+        help="libcurl.so to load instead of spawning curl: one connection for the whole run, as a player keeps",
+    )
     args = ap.parse_args()
 
     if not shutil.which(args.curl) and not os.path.isfile(args.curl):
         raise SystemExit(f"no curl at {args.curl}")
 
-    fetch = Fetcher(args.curl, args.http_version, args.insecure, args.timeout)
+    if args.libcurl:
+        fetch = PersistentFetcher(args.libcurl, args.http_version, args.insecure, args.timeout)
+    else:
+        fetch = Fetcher(args.curl, args.http_version, args.insecure, args.timeout)
 
     if args.http_version == "3":
         v = subprocess.run([args.curl, "--version"], capture_output=True).stdout.decode()
@@ -205,6 +345,14 @@ def main():
     reloads = 0
     next_expected = None  # absolute sequence we expect to write next
 
+    trace = None
+    if args.trace:
+        trace = open(args.trace, "w")
+        trace.write(
+            "cycle,seq,playlist_s,batch_n,batch_s,curl_rc,appconnect_s,ttfb_s,total_s,bytes,written_epoch,origin_mtime,lag_s\n"
+        )
+    timeouts = 0
+
     started = time.time()
     tmp = tempfile.mkdtemp(prefix="hlsverbatim-")
     try:
@@ -217,6 +365,7 @@ def main():
                     log(f"  !! playlist fetch failed: {e}")
                     time.sleep(1.0)
                     continue
+                playlist_s = time.time() - cycle
                 reloads += 1
                 media_seq, segs, endlist, target = parse_media_playlist(body, url)
 
@@ -235,19 +384,45 @@ def main():
                         )
 
                 if fresh:
+                    batch_at = time.time()
                     got = fetch.files([u for (_, u, _) in fresh], tmp)
-                    for (seq, uri, disc), (_, path) in zip(fresh, got):
+                    batch_s = time.time() - batch_at
+                    if fetch.last_rc == 28:
+                        timeouts += 1
+                        log(f"  !! TIMEOUT: a segment took longer than {args.timeout:g} s")
+                    for k, ((seq, uri, disc), (_, path)) in enumerate(zip(fresh, got)):
                         if path is None:
                             holes.append((seq, "fetch failed"))
                             seen.add(seq)
                             next_expected = seq + 1
                             continue
                         bad = validate_ts(path)
+                        if bad and args.truncated == "hole":
+                            log(f"  !! HOLE: segment {seq} truncated ({bad}), not emitted")
+                            holes.append((seq, f"truncated: {bad}"))
+                            seen.add(seq)
+                            next_expected = seq + 1
+                            os.unlink(path)
+                            continue
                         if bad:
                             raise SystemExit(
                                 f"segment {uri} is not a valid transport stream ({bad}). "
                                 "Refusing to emit it: verbatim concatenation of non-TS produces "
                                 "a corrupt stream that grades as a wire defect."
+                            )
+                        if trace:
+                            t = fetch.last_timings[k] if k < len(fetch.last_timings) else ["", "", "", "", ""]
+                            mtime = lag = ""
+                            if args.origin_dir:
+                                try:
+                                    m = os.stat(os.path.join(args.origin_dir, os.path.basename(uri.split("?")[0])))
+                                    mtime = f"{m.st_mtime:.3f}"
+                                    lag = f"{time.time() - m.st_mtime:.3f}"
+                                except OSError:
+                                    pass
+                            trace.write(
+                                f"{reloads},{seq},{playlist_s:.4f},{len(fresh)},{batch_s:.4f},{fetch.last_rc},"
+                                f"{t[0]},{t[1]},{t[2]},{os.path.getsize(path)},{time.time():.3f},{mtime},{lag}\n"
                             )
                         if disc:
                             discontinuities.append(seq)
@@ -272,6 +447,8 @@ def main():
                     time.sleep(nap - slept)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+        if trace:
+            trace.close()
 
     elapsed = time.time() - started
     summary = {
@@ -281,11 +458,13 @@ def main():
         "elapsed_s": round(elapsed, 2),
         "playlist_reloads": reloads,
         "http_requests": fetch.requests,
+        "connections": getattr(fetch, "connects", None),
         "segments_written": written_segments,
         "bytes_written": written_bytes,
         "ts_packets": written_bytes // TS_PACKET,
         "playlist_discontinuities": discontinuities,
         "holes": [{"after_sequence": s, "detail": d} for s, d in holes],
+        "batch_timeouts": timeouts,
         "byte_faithful": len(holes) == 0,
     }
 

@@ -8,8 +8,10 @@
 > above it every controller is comfortable and indistinguishable. An AQM removes bufferbloat outright
 > for every controller and transport at once (554–584 ms → 101–119 ms). What is stable across all five
 > conditions is the failure *mode*: the MoQ lane loses content and never integrity — **0 continuity
-> errors in every one of its ~40 cells** — while SRT inverts that and gets worse the better-behaved the
-> network is, reaching 17,652–22,365 errors under an AQM while taking the most bytes of any lane.
+> errors in every one of its ~40 cells**, a zero the exporter guarantees by writing its own counters,
+> so the loss is read from delivered fraction and never from the count — while SRT inverts that and
+> gets worse the better-behaved the network is, reaching 17,652–22,365 errors under an AQM while
+> taking the most bytes of any lane.
 > **C3 is where the media-aware lane loses, and the mechanism is explained while the magnitudes are
 > not.** Sharing a congested bottleneck, MoQ's *aggregate* falls below what a single flow carried
 > unopposed while SRT's rises and holds — and the collapse is neither the controller (loss-based CUBIC
@@ -513,8 +515,9 @@ rather than an untested caveat: whatever causes C3 is not bufferbloat.
 
 Two side results. SRT's scaling is unchanged (84 → 84 → 89 %) and the separation from MoQ is intact —
 **13.29 against 6.04 Mb/s at `n=3`, a factor of 2.2**. But SRT's continuity errors rise **four- to sevenfold** under
-the AQM, to 26,211 and 27,256, while MoQ records zero in all four of its contended cells. So SRT's larger total is
-not more delivered programme; it is the same shortfall taken as corruption instead of as absence.
+the AQM, to 26,211 and 27,256, while MoQ records zero in all four of its contended cells — by construction, since
+its exporter writes its own counters. So SRT's larger total is not more delivered programme; it is the same
+shortfall taken as corruption instead of as absence.
 
 #### The mechanism: the shed tracks the subscriber's latency budget
 
@@ -818,8 +821,9 @@ soak should log `/proc/pressure/memory` beside RSS and settle it outright.
   BBRv1 rather than the C2 winner-on-paper.
 - **MoQ and SRT fail in opposite directions, and this is the result that holds in every condition.**
   MoQ sheds *whole groups* and emits a syntactically clean TS — **0 continuity errors in every MoQ cell
-  of C1, C2 and C4**, across four controllers, three queue disciplines and two provisioning levels —
-  paying instead in content, visible as PCR gaps up to 7.1 s. SRT keeps the most bytes of any lane and
+  of C1, C2 and C4**, across four controllers, three queue disciplines and two provisioning levels,
+  which its exporter guarantees whatever arrived — paying instead in content, visible as PCR gaps up
+  to 7.1 s. SRT keeps the most bytes of any lane and
   damages them: 4,279 continuity errors under a FIFO, and **17,652–22,365 under an AQM**, because early
   deliberate drops defeat its ARQ where a full tail-drop buffer merely delayed it. **SRT's failure mode
   gets four to five times worse on exactly the queue discipline a well-run network is most likely to

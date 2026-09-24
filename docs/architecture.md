@@ -739,10 +739,11 @@ bytes).
 
 ### 8.5 Congestion control is a deployment decision
 
-Congestion controller is selectable and decisive: CUBIC collapses under uniform loss; BBR holds full rate
-on par with SRT ([Evidence](evidence.md) §3.3). **Pin it explicitly** — defaults differ per QUIC backend,
-and the flag selects different BBR generations. **No recommendation for a permanent fixed-rate trunk**
-from what has been run.
+Congestion controller is selectable and decisive: CUBIC collapses under uniform loss; BBRv1 holds full
+rate on par with SRT, and BBRv3 — which reads loss as a congestion signal — collapses as CUBIC does at
+100 ms RTT ([Evidence](evidence.md) §3.3). **Pin the controller and the QUIC backend explicitly** —
+defaults differ per backend, and the same flag selects different BBR generations on each. **No
+recommendation for a permanent fixed-rate trunk** from what has been run.
 
 ### 8.6 Federation, as a research direction
 

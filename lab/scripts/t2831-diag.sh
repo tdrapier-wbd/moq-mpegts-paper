@@ -13,7 +13,8 @@
 #        at 5 s (0.227 -> 0.961) and neither at 30 s.
 #   3-4. Two segmented cells returned a receiver exit of 1 after refusing a segment that was not a
 #        multiple of 188 bytes -- the per-fetch timeout cutting a transfer in half. Re-running at a
-#        60 s budget says whether the cell was the timeout: reorder moved six-fold and was, the
+#        60 s budget says whether the cell was the timeout: reorder moved six-fold and was (with the
+#        origin at nginx's 64k stream buffer; at 16m the 15 s budget reads the 60 s figure), the
 #        0.5x capacity rung returned a byte-identical figure and was not.
 #
 # The general form is worth more than these four results: on an impaired cell, re-run with the one

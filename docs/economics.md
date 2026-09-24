@@ -418,9 +418,11 @@ most of the *engineering*.
   byte (§4.6) and reach is not binding inside the footprint.
 
 **Two measured qualifications cut the other way.** SRT continuity degrades under well-behaved AQM —
-4,279 errors under FIFO but **17,652–22,365 under `codel`** at the same shortfall, where MoQ takes none
+4,279 errors under FIFO but **17,652–22,365 under `codel`** at the same shortfall
 ([Evidence](evidence.md) §3.3, [T8b](../lab/test-8b-congestion-control.md)) — byte transparency delivers
-shortfall as corrupted bytes, not absent ones. SRT's latency advantage is a buffer setting, paid from the
+shortfall as corrupted bytes, not absent ones. MoQ's counters read zero there, but by construction: its
+exporter writes its own continuity counters, so its shortfall surfaces as absent content instead, and
+the zero is not a measurement of it. SRT's latency advantage is a buffer setting, paid from the
 resilience budget.
 
 ### 7.4 The criteria that actually decide it

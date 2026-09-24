@@ -1458,8 +1458,9 @@ layer and applies to every streaming format equally, so it belongs in the transp
 Two things this campaign can bring there, neither of them MPEG-specific but both measured here:
 
 - **MoQ sheds whole groups, so its loss granularity is a GOP, and FEC and ARQ recover partial damage.**
-  Measured: outages shorter than `--latency-max` cost nothing and longer ones shed in group-sized units
-  at **0 continuity errors throughout** ([T28](test-28-failure-injection-matrix.md),
+  Measured: impairments shed programme in group-sized units, with the continuity count at 0 by
+  construction because the exporter writes its own counters, and on content the lane loses more
+  picture than a 5 s outage lasted in all but one of the cells measured ([T28](test-28-failure-injection-matrix.md),
   [T31](test-31-congestion-capacity-ladders.md)). For broadcast a clean group drop may be preferable to
   a partially corrupt GOP, which weakens the FEC case relative to RTP — but it also means loss that
   would have been a brief artefact becomes a full GOP outage. The trade is visible in those ladders.

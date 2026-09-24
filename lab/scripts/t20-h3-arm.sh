@@ -159,13 +159,20 @@ start_moq() {
 # reproduce the original T20 cells. RECV=verbatim is the byte-faithful receiver and is what any
 # carriage claim must use. Delivery-ratio and substrate cells are unaffected by the choice.
 #
-# RECV_TIMEOUT is the receiver's per-fetch budget and is a measurement parameter rather than a
-# detail of the harness. The receiver refuses any segment that is not a whole number of 188-byte
-# packets, so a fetch cut short by this timeout is discarded entire; on a badly impaired lane that
-# turns a slow arm into an empty one, and the cell then reads as a lane failure when it is a
-# receiver policy. Quote the value alongside any impaired cell. The default matches the receiver's.
+# RECV_TIMEOUT is the receiver's fetch budget and is a measurement parameter rather than a detail
+# of the harness. It bounds one curl invocation, and every fresh segment in a reload cycle goes
+# through one invocation, so segments fetched together share it. A segment it cuts short is not a
+# whole number of 188-byte packets, and by default that **ends the capture** rather than costing
+# the one segment -- RECV_TRUNCATED=hole records a hole and carries on. On a badly impaired lane
+# either turns a slow arm into a short or empty one, and the cell then reads as a lane failure
+# when it is a receiver policy. Quote both alongside any impaired cell.
+#
+# Every verbatim capture also writes `${ARM}_trace.csv`: per segment, the handshake and time to
+# first byte curl reports, the batch time, and the segment's lag behind its file's creation in
+# HLS_DIR. That is the receiver's own contribution to any latency figure taken through it.
 RECV="${RECV:-verbatim}"
 RECV_TIMEOUT="${RECV_TIMEOUT:-15}"
+RECV_TRUNCATED="${RECV_TRUNCATED:-abort}"
 VERBATIM="${VERBATIM:-$HOME/hls-verbatim-recv.py}"
 CURL_H3="${CURL_H3:-$HOME/h3/bin/curl}"
 
@@ -186,7 +193,8 @@ recv_hls() {
 		# which is recorded rather than swallowed because a hole voids carriage grading.
 		python3 "$VERBATIM" "https://127.0.0.1:$port/index.m3u8" -o "$OUT" \
 			--http-version "$maj" --curl "$CURL_H3" --insecure \
-			--seconds "$WINDOW" --timeout "$RECV_TIMEOUT" \
+			--seconds "$WINDOW" --timeout "$RECV_TIMEOUT" --truncated "$RECV_TRUNCATED" \
+			--trace "$OUTDIR/${ARM}_trace.csv" --origin-dir "$HLS_DIR" \
 			--summary "$OUTDIR/${ARM}_recv.json" >>"$LOG" 2>&1
 		RECV_RC=$?
 	else
@@ -251,7 +259,7 @@ grade() {
 		label=$LABEL arm=$ARM window=$WINDOW impair='${IMPAIR:-none}'
 		bytes=$bytes delivered_ratio=$ratio
 		cc_errors=$cc pcr_max_ms=$pcrmax pcr_over40_pct=$over media_seconds=$pcrspan
-		receiver=$([ "$ARM" = moq ] && echo 'moq export ts' || echo "$RECV") recv_timeout=$([ "$ARM" = moq ] && echo na || echo "$RECV_TIMEOUT") recv_rc=${RECV_RC:-na} recv_holes=$holes
+		receiver=$([ "$ARM" = moq ] && echo 'moq export ts' || echo "$RECV") recv_timeout=$([ "$ARM" = moq ] && echo na || echo "$RECV_TIMEOUT") recv_truncated=$([ "$ARM" = moq ] && echo na || echo "$RECV_TRUNCATED") recv_rc=${RECV_RC:-na} recv_holes=$holes
 		carriage_valid=$(carriage_valid)
 		lane_applied='${LANE_APPLIED:-unsampled}'
 	EOF

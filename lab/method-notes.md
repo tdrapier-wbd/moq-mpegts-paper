@@ -1939,8 +1939,9 @@ Against a ~9.95 Mb/s fixture, 12 Mb/s is 20 % of *headroom*, so the cell that wa
 a mild sustained shortfall measured an unimpaired link and returned zero. The zero was correct and
 meant nothing, and because it was sitting in a ladder next to two cells that did mean something, it
 read as a result. Re-based on multiples of stream rate, the same rung at 0.9× measures the thing it
-was specified for, and the ladder's most useful cell — a sustained shortfall absorbed entirely — was
-inside the gap the absolute rungs had left.
+was specified for, and the ladder's most useful cell — the mildest sustained shortfall, where the MoQ
+lane already loses picture and the segmented lane loses none — was inside the gap the absolute rungs
+had left.
 
 > **Write a rung in the quantity the outcome is a function of, and derive the absolute value from
 > the fixture at run time.** Programme loss depends on the shaped rate *relative to* the stream, so a
@@ -2028,6 +2029,15 @@ wrong relay.
 > replicate to its own output directory. A cheaper standing guard is to have the rig fail loudly if
 > its port is already bound *before* it starts anything, rather than let a survivor serve the run.
 
+**The same trap returned between cells, and by a build rather than a harness.** The MoQ ladder tore
+a cell down with `kill` and a one-second sleep, which every earlier build tolerated. `5d0991b9`'s
+relay drains its sessions on SIGTERM for longer than that, so in the build bisection the cell after
+every successful one found the port still held and captured nothing: on both of that commit's
+backends, in every replicate, the 5 s outage and the 0.9× rung were void while the cells either side
+were sound. The ladder now waits for the relay to exit, forces it after 10 s, and says so in the log
+if the relay it started is not running three seconds later. **A teardown timed against one build is
+an assumption about that build**; wait for the process, not for a clock.
+
 ### A subscriber that ran for the whole window and did not die may still have measured nothing
 
 *From [T8b](test-8b-congestion-control.md) P0-i.* The rig's outcome is "did the process exit", so a
@@ -2106,30 +2116,57 @@ what looked like an intermittent packager fault.
 > concurrent passes over one rig directory produce failures that read as flaky apparatus and are
 > not.
 
-### A sender that can pad turns every byte-denominated and clock-denominated delivery metric into a measure of its padding
+### The exporter manufactures bytes and clock, so neither measures what the media-aware lane delivered
 
-*From [T20](test-20-segmented-http3.md) measurement 4a.* `ffa5b81b` gave `moq export ts` a
-`--mux-rate` that defaults to the `mpegts.muxRate` the catalog recorded from a constant-rate source,
-so the exporter now pads to a constant rate unless told otherwise. Nothing in the rig changed and two
-independent metrics stopped working at once:
+*From [T20](test-20-segmented-http3.md) measurement 4a, and the T28/T31 re-grade.* Two metrics the
+campaign graded the MoQ lane with measure something the exporter writes rather than something the
+network delivered.
 
-- **`delivered_ratio`** — output bytes against source rate — rose *above 1.0* on cells that lost most
-  of the programme. The captures ran to 47.7 %, 55.3 % and **94.1 %** null packets.
-- **`media_lost_s`** from the PCR timeline, which was supposed to be immune to exactly this, failed
-  the same way: padding keeps PCR advancing on schedule, so the clock and the bytes agree and the
-  grader finds no hole. It reported 8.3 s lost on an arm that delivered **3.9 %** of the video.
+- **Bytes.** From moq-dev #3831 onward `moq export ts --mux-rate` defaults to the `mpegts.muxRate`
+  the catalog recorded, so the exporter pads to a constant rate. `delivered_ratio` — output bytes
+  against source rate — rose *above 1.0* on cells that lost most of the programme; the captures ran
+  to 47.7 %, 55.3 % and **94.1 %** null packets. `--mux-rate 0` turns the padding off.
+- **Clock.** `t28-media-lost.py` reads the PCR timeline, and **the exporter keeps writing PCR across
+  a hole in the picture, padded or not.** MoQ carries each elementary stream as its own track; under
+  congestion the video track's groups are evicted while audio carries on, and the exporter keeps
+  emitting adaptation-only PCR packets on the video PID at its 25 ms cadence straight across the gap.
+  On an *unpadded* chronic-congestion capture the PCR grader scored **0.775 s** lost; the video
+  timeline has **36.4 s** of holes, the picture count implies about 35 s, the video bytes about the
+  same, and the subscriber logged 22 group evictions. The error runs the other way too: a transient
+  0.8× cell scored 2.375 s on the clock with **no** picture missing.
 
-The metric that survived is delivered packets on a *content* PID against that PID's source rate. It
-reproduces the byte ratio to three decimals on unpadded arms, which is the check that it measures the
-same thing where nothing distorts it.
+What survives is what the exporter cannot manufacture: packets on a content PID against that PID's
+source rate, and the content's own presentation timestamps (`t28-content-lost.py`), graded per
+elementary stream because the streams do not fail together.
 
-> **Before trusting a delivery metric, ask what the sender is allowed to manufacture.** Bytes and
-> clock time are both manufacturable by a padding sender; access units and content-PID packets are
-> not. Where a build gains a padding option, re-validate every delivery figure taken after it rather
-> than only the ones that look wrong — the ratio above 1.0 was noticeable, the 8.3 s was not.
+> **Before trusting a delivery metric, ask what the sender is allowed to manufacture.** On a lane
+> whose egress re-synthesises the stream, bytes, clock and continuity counters are all the egress's
+> own work; access units are not. Report the null-packet share beside any byte-denominated figure,
+> and grade picture and sound separately.
 >
-> **Report the null-packet share beside any byte-denominated figure on a lane that can pad.** It is
-> one column, and it makes the failure visible instead of plausible.
+> **Validate a grader against the lane's failure, not against an excision.** The PCR grader passed its
+> self-test exactly, and the self-test was never evidence for an impaired MoQ cell: cutting bytes out
+> of a capture removes clock and content together, which is precisely the case a clock grader gets
+> right. The failure it missed only exists in the lane's own output. A grader for a re-synthesising
+> egress is validated when it agrees with an independent count — pictures, content-PID packets, the
+> subscriber's own eviction log — on an impaired capture of that egress.
+
+### A hole count sees only gaps between what arrived, so conserve against the window
+
+*From the T28 matched ladder, content-graded.* At a 0.5 s budget under 5 % random loss the content
+grader scored the MoQ lane **2.76 s** lost. The capture was half the control's size, and its video
+timeline advanced 20.5 s where the control's advanced 48.1 s: the egress tap's last picture was
+29.6 s into a 60 s window, and the subscriber logged a video group eviction every second or two
+from then until the window closed. The picture had stopped. A grader that measures gaps between
+adjacent pictures has no gap to measure after the last one, so a capture whose picture stops early
+— a dead session, a subscriber evicting every group — grades as nearly clean. Two earlier
+instances of the same shape had been caught only because their captures were visibly short.
+
+> **Grade programme lost as expected content minus content present, not as the sum of the holes.**
+> The expected content comes from the window and a clean cell of the same run
+> ([`t2831-conservation.py`](scripts/t2831-conservation.py)); the hole count is a lower bound and
+> the difference is content not delivered by window close. Report the two separately where the
+> lane's latency budget is long enough that "not yet delivered" may mean late rather than lost.
 
 ### A continuity count detects loss and cannot measure it: the counter is four bits
 
@@ -2150,6 +2187,13 @@ Measured rather than derived, excising a known run from the busiest PID of a rea
 The practical consequence is that a *low* continuity count on an arm that lost a lot of content is
 not evidence the loss was orderly — it is the expected reading, and the two are indistinguishable
 from the count alone.
+
+**On the media-aware lane's egress the count cannot even detect loss.** `moq export ts` re-muxes
+the stream and writes its own continuity counters over what it emits, so a group evicted upstream
+leaves no gap in them. The [T31](test-31-congestion-capacity-ladders.md) ladder reads 0 continuity
+errors on a cell that lost 75.64 s of picture. A zero there is by construction, and it is evidence of
+nothing about delivery; only a byte-faithful path — the segmented receiver, SRT, a relay tap —
+carries counters that the loss could have disturbed.
 
 > **Read continuity for whether a wire is clean, and conservation for how much survived.** A zero on
 > an arm whose delivered ratio is also ~1.0 is a real result and the campaign's clean-wire findings
@@ -2612,23 +2656,38 @@ arm most likely to fail, and it is selected by saying nothing.
 > explicit `false`**, so `--quic-gso=false` only works on a build that dropped the iroh feature —
 > which `ec2-build-main.sh` does, and a default-feature build does not.
 >
-> **The size of the effect has since been measured on three impairment shapes, and on each of them
-> the controller decides the headline.** Under reorder, BBRv3 delivers **zero bytes in 60 s** where
-> CUBIC delivers 55.2 s of media span ([T20](test-20-segmented-http3.md)). Under a 5 s total
-> outage, BBRv3 reads 0.227 delivered with the relay logging `subscribe canceled (idle)` at the
-> break, where CUBIC reads **0.961** ([T28](test-28-failure-injection-matrix.md)). On the capacity
-> rungs the two rigs disagree at 0.9× ([T31](test-31-congestion-capacity-ladders.md)). So the rule
-> is not only "pin it": **a MoQ impairment figure quoted without its controller is not a lane
-> result**, and a figure taken before the rig pinned the controller cannot be assumed to have used
-> the one its file implies. Re-check rather than infer.
+> **The size of the effect has since been measured, and it depends on the rig as much as the
+> shape.** On loopback with a `netem` token bucket it decides the headline: under reorder BBRv3
+> delivers **zero bytes in 60 s** where CUBIC delivers 55.2 s of media span
+> ([T20](test-20-segmented-http3.md)), and under a 5 s total outage BBRv3 reads 0.227 delivered with
+> the relay logging `subscribe canceled (idle)` at the break, where CUBIC reads **0.961**
+> ([T28](test-28-failure-injection-matrix.md)). In the `netns`/`cake` rig, graded on content, it
+> moves neither the capacity rungs nor the 5 s outage beyond single-sample scatter
+> ([T31](test-31-congestion-capacity-ladders.md)). So the rule is not only "pin it": **a MoQ
+> impairment figure quoted without its controller is not a lane result**, and a figure taken before
+> the rig pinned the controller cannot be assumed to have used the one its file implies. Re-check
+> rather than infer.
+>
+> **Re-checked, for every unpinned cell the campaign published.** From `fd4f5d82e` to `ffa5b81b`
+> every backend resolves an unset controller through one `unwrap_or(Delay)`; a doc comment at
+> `5d0991b9` claiming noq defaulted to `loss` is contradicted by that code. So an unpinned cell ran
+> **BBR, whose generation is the backend's**: BBRv1 on the quinn builds (`fd4f5d82e`, `5d0991b9`) and
+> BBRv3 on every noq build. Two consequences: any comparison across #3811 changed the BBR generation
+> as well as the stack, and a rig file that promised BBRv1 on a noq build delivered BBRv3.
+>
+> **Read the backend from the binary, not from the CLI generation.** The rig helper used to infer
+> "noq" from the post-migration flag names, and `5d0991b9` has those names on either stack, so a
+> quinn build's run log said noq. `moq_record_build` now takes the backend from the binary's own
+> `--*-backend` values where the CLI lists them, and from the one QUIC protocol crate linked into it
+> where it does not.
 
 ### A receiver's per-fetch timeout is a measurement parameter, and on an impaired lane it can be the whole result
 
-*(From the T28/T31 segmented lane.)* `hls-verbatim-recv.py` refuses any segment that is not a whole
-number of 188-byte packets, which is right — concatenating a truncated fetch produces a corrupt
-stream that grades as a wire fault, so the receiver would be manufacturing the defect it is there to
-detect. But the refusal is triggered by the per-fetch timeout, and the timeout is a knob with a
-default.
+*(From the T28/T31 segmented lane; timing characterised in [T42](test-42-h3-receiver-fidelity.md).)*
+`hls-verbatim-recv.py` refuses any segment that is not a whole number of 188-byte packets, which is
+right — concatenating a truncated fetch produces a corrupt stream that grades as a wire fault, so the
+receiver would be manufacturing the defect it is there to detect. But the refusal is triggered by the
+per-fetch timeout, and the timeout is a knob with a default.
 
 > At 25 % reorder the same cell reads **4.0 % of control at a 15 s budget and 25.4 % at 60 s** — a
 > six-fold move from a receiver setting, with the lower reading looking exactly like a lane that
@@ -2639,6 +2698,41 @@ default.
 > the instrument. When it does not move the result is the lane's — the 0.5× capacity rung returned
 > a byte-identical 96,203,924 at both budgets, which is what licensed reading its 404 as the origin
 > evicting a segment rather than the receiver giving up.
+
+The timeout is curl's `--max-time`, applied **per transfer**: batches of six segments ran 19.4 s at a
+15 s timeout with curl exiting 0. So it binds only where one segment's goodput falls below
+`segment bytes / timeout` — about 2 Mb/s for this campaign's ~3–3.7 MB segments at 15 s — and the
+cells above are exactly those. Where goodput stays above it the timeout is inert: a permanent 0.8×
+shortfall and 10 % loss read identically at 15 and 60 s, and with truncation recorded as a hole. The
+arithmetic tells you in advance which cells need the sweep.
+
+The reorder cell's six-fold move was not the timeout alone. It ran against nginx's default 64k
+per-stream buffer (next rule), which slowed each segment enough that the first one crossed 15 s; with
+the buffer at 16m the same cell at the default 15 s read 19.34–19.60 MB with 11 holes in each of three
+replicates, which is the 60 s reading. The timeout decides whether a slow segment is truncated; what
+makes it slow can be the origin.
+
+### An origin or a receiver can be the bottleneck at the rig's RTT, and loopback will never show it
+
+*(From T31's segmented ladder in the namespace rig; [T42](test-42-h3-receiver-fidelity.md).)* The
+segmented lane was moved from loopback, where its RTT is near zero, into the T8b namespace rig at
+100 ms. Its unimpaired control fell behind the live window and took a 404 — a result that would have
+graded every cell of the ladder, and that had nothing to do with the lane.
+
+> **Two defects, both invisible at zero RTT.** nginx's `http3_stream_buffer_size` defaults to 64k,
+> which caps one stream at ~64 KB per round trip: 4.57–4.89 Mb/s at 100 ms whatever the bottleneck,
+> under a ~10 Mb/s stream. And the receiver spawned `curl` per cycle, so each playlist and each batch
+> opened a new connection from slow start; behind 20 Mb/s at 100 ms that costs more than a segment's
+> period. Raising the buffer fixed the first and not the second — the control still 404'd — and
+> holding one connection for the run, as a player does, fixed the second: 70 requests, one
+> connection, 0 holes.
+>
+> **Before a lane's first impaired cell on a new rig, run its unimpaired control and check that the
+> delivery machinery keeps up with margin**: fetch time against segment period, and a bulk transfer
+> through the path at each origin setting that could bind. A per-stream window and a per-request
+> connection both scale their cost with RTT, so a rig that changes the RTT has to re-establish that
+> the instrument and the origin are still not the thing being measured.
+> [`t31-origin-window.sh`](scripts/t31-origin-window.sh) is the check for the origin.
 
 ### A cleanup pattern keyed on a flag name stops matching when the flag is renamed
 

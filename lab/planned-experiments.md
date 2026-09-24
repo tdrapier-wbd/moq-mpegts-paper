@@ -59,11 +59,13 @@ wire is **conformant** where the receiver reported 95 % of intervals out of gate
 cells have since been re-run through it** and two of them were receiver artefacts as well. **Any
 segmented carriage figure taken before T42 needs re-measuring, not re-qualifying.**
 
-What remains on this lane has narrowed. **P1-d's segmented ladders are run** — the T28 impairment
-shapes and the T31 capacity rungs both — but in T20's loopback/`netem` rig rather than the
-`netns`/`cake` one the MoQ and SRT arms used, so the three-way ranking those experiments exist to
-publish is still not drawable. What that now needs is not a measurement but a rig: an HTTP origin
-reachable from inside the namespace. P1-a's and P1-c's segmented halves have not been run.
+What remains on this lane has narrowed. **P1-d's segmented ladders are run** in both rigs: the T28
+impairment shapes and the T31 capacity rungs in T20's loopback/`netem` rig, and the capacity rungs and
+a 5 s outage in the `netns`/`cake` rig the MoQ and SRT arms used, with its own HTTP/3 origin inside the
+publisher namespace ([`t31-seg-netns.sh`](scripts/t31-seg-netns.sh)). The capacity ranking is drawable
+there and holds, though not at equal latency. The segmented lane's 30 s outage and loss cells in that
+rig were void under the receiver's default truncation policy and are queued with truncation recorded
+as a hole. P1-a's and P1-c's segmented halves have not been run.
 
 **Most of the rest waits on apparatus that is arriving.** A live feed, a professional DVB analyser and
 a bank of IRDs are expected together; between them they discharge P0-j, P0-k, P0-d, P1-i, P2-d and
@@ -93,7 +95,7 @@ scope for that entry.
 | # | What is outstanding | MoQ | Segmented | Protocol | Blocked on |
 |---|---|---|---|---|---|
 | P1-a | Failure-injection and recovery, graded in the media domain | **run** across three impairment shapes (outage, sustained loss, reorder), MoQ and SRT matched on measured latency | **not run — no ranking without it** | [T28](test-28-failure-injection-matrix.md) | nothing — it can be run now. Also outstanding on the MoQ side: the infrastructure axis, and replicates of the latency-budget cells |
-| P1-d | Congestion and capacity: the step ladders | **run** in `netns`/`cake`, rungs re-based on multiples of stream rate | **run** in T20's loopback/`netem` rig | [T31](test-31-congestion-capacity-ladders.md) | nothing. The ladders are in **different rigs**, so what is still outstanding is a like-for-like: the segmented ladder inside the namespace, which needs an origin reachable from it. Also outstanding: rungs between 0.9× and 0.8× (both lanes) and 0.8×–0.5× (segmented), the latency-max × contention matrix, and buffer instrumentation |
+| P1-d | Congestion and capacity: the step ladders | **run** in `netns`/`cake`, rungs re-based on multiples of stream rate | **run** in T20's loopback/`netem` rig | [T31](test-31-congestion-capacity-ladders.md) | nothing. Both ladders are content-graded; the MoQ lane sheds at every sustained shortfall. The like-for-like — the segmented ladder inside the namespace, with its own origin there — is run (`t31-seg-netns.sh`): the ranking holds and the segmented lane sheds at chronic 0.8× there too; its 30 s outage and loss cells are queued with truncation recorded as a hole. Also outstanding: rungs between 1.2× and 0.9× (MoQ) and 0.8×–0.5× (segmented), both queued in `t2831-boundaries.sh`; the latency-max × contention matrix; buffer instrumentation |
 | P1-b | Distributed resilience above the egress 1+1 pair | not run | — | [T29](test-29-moq-distributed-resilience.md) | — |
 | P1-c | Distributed resilience: two-host segment store, edge and origin failure | — | not run | [T30](test-30-segmented-distributed-resilience.md) | — |
 | P1-f | The scaling model | run | not run | [T26](test-26-cross-host-fanout.md) | — |

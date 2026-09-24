@@ -140,11 +140,17 @@ had GSO disabled: **1,209 packets averaging 34,380 bytes against 29,062 averagin
 | 25 % reordering, 3 replicates | Segmented / TCP | Segmented / **HTTP/3** | Media-aware / QUIC |
 |---|---|---|---|
 | Equal packet sizes | 0.44 | **0.18** | **0.13** |
+| Equal sizes, re-measured: byte-faithful receiver, controller pinned | 0.485 | **0.166–0.263** | **0.000** BBRv3 / **0.039** CUBIC |
 | As originally measured | 0.995 | 0.995 | 0.125 |
 
-Original conditions reproduce exactly — sound measurement, wrong reading. **On HTTP/3 the lanes
-overlap**; on TCP the segmented lane keeps a smaller advantage. Unimpaired, the two substrates give
-byte-identical output ([T20](../lab/test-20-segmented-http3.md)).
+Original conditions reproduce exactly — sound measurement, wrong reading. **Once the controller is
+pinned the cell ranks controllers, not lanes**: the media-aware figure spans the whole range on one
+flag, where the segmented lane on HTTP/3 keeps a quarter of the stream or less whatever the
+controller. The segmented range is two instrument configurations — 0.166 re-measured on the T20 rig,
+0.259–0.263 with the origin's HTTP/3 stream buffer raised from nginx's 64k default, the latter with
+11 holes a replicate and so void for carriage — and neither is controller-dependent. On TCP the
+segmented lane keeps a smaller advantage. Unimpaired, the two substrates give byte-identical output
+([T20](../lab/test-20-segmented-http3.md)).
 
 **Two of those impairment cells were the receiver, and both correct in the segmented lane's
 favour.** Re-measured through a byte-faithful HTTP/3 receiver rather than one that re-muxes, **20 %
@@ -157,8 +163,10 @@ controller-dependent and are qualified in [Evidence](evidence.md) §3.3.
 **Trunking several feeds down one congested path is a third result — a latency decision, not a lane
 defect.** Two or three media-aware feeds at a 2 s subscriber budget deliver less in total than one
 (9.44 Mb/s against 5.39 and 4.48) while SRT rises to 12.65 Mb/s; widening `--latency-max` from 500 ms
-to 30 s takes the two-flow aggregate under `cake` from 4.29 to 10.35 Mb/s at **0 continuity errors**,
-where SRT under the same queue discipline converts the shortfall into ~26,000 continuity errors. A
+to 30 s takes the two-flow aggregate under `cake` from 4.29 to 10.35 Mb/s, where SRT under the same
+queue discipline converts the shortfall into ~26,000 continuity errors. (The media-aware lane's
+continuity count is zero by construction — its exporter writes its own counters — so its shortfall
+shows only as absent content.) A
 trunk must be provisioned in latency as well as rate ([Evidence](evidence.md) §3.3).
 
 **Segmented HTTP did not corrupt what it delivered at any loss level:** 0 continuity errors and 0 PCR
@@ -860,7 +868,7 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two* — both put a cache in the path and so both clear the requirement the tunnel incumbents fail; statelessness and supplier count are the only difference left (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched — they trade cells** | **M** | **measured head-to-head, then re-measured on a shared substrate.** Loss does not separate the lanes given the same controller (1.04 and 0.96 on BBR to 10 %; 0.17 and 0.13 on CUBIC), so "segment fetching degrades under loss" is a controller comparison. **Reordering, the one axis that did separate them, no longer does** — equalised for packet size it reads 0.44 on TCP, **0.18 on HTTP/3 and 0.13 media-aware, overlapping**. On the shared substrate, re-measured through a byte-faithful receiver, the segmented lane **loses nothing at all** under loss at 5 %, 10 % or ~20 % applied — bytes identical to its unimpaired control, against 0.13 on TCP — and the 30 s outage no longer separates the substrates at all (0.853 on both), because recovery there is the origin's retention rather than the transport. Under *sustained* under-capacity it takes lateness where the other discards programme, running 12.7 % behind the live edge at 0 continuity errors, and fails only when it falls off the availability window (§3.1). **The same pattern now holds for a second, unrelated pairing**: matched on measured latency, MoQ beats SRT under a discrete outage and loses to it under sustained partial loss, so "which lane is more resilient" has no answer that is not indexed to an impairment shape ([Evidence](evidence.md) §3.3) |
+| Reliability under impairment (R5) | **neither, once substrate-matched — they trade cells** | **M** | **measured head-to-head, then re-measured on a shared substrate.** Loss does not separate the lanes given the same controller (1.04 and 0.96 on BBR to 10 %; 0.17 and 0.13 on CUBIC), so "segment fetching degrades under loss" is a controller comparison. **Reordering, the one axis that did separate them, no longer ranks the lanes** — equalised for packet size, the segmented lane keeps a quarter of the stream or less on HTTP/3 (0.166–0.263 across re-measurements, 0.44–0.49 on TCP), and the media-aware figure is its congestion controller's (0.000 on BBRv3, 0.039 on CUBIC), so the cell ranks controllers. On the shared substrate at loopback RTT, re-measured through a byte-faithful receiver, the segmented lane **loses nothing at all** under loss at 5 %, 10 % or ~20 % applied — bytes identical to its unimpaired control, against 0.13 on TCP — and the 30 s outage no longer separates the substrates at all (0.853 on both), because recovery there is the origin's retention rather than the transport. Under *sustained* under-capacity it takes lateness where the other discards programme, running 12.7 % behind the live edge at 0 continuity errors, and fails only when it falls off the availability window (§3.1). Against SRT the answer is not indexed to the shape: matched on measured latency and graded on content, the media-aware lane loses more programme under a discrete outage, sustained loss and reorder alike, by a margin its build and QUIC stack set — under sustained loss the loss-blind quinn builds tie SRT and the noq builds lose most of the window ([Evidence](evidence.md) §3.3) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | **retry splits: no resilience of *rate*, and resilience of *content* only inside the origin's availability window** — 0 continuity errors and 0 PCR intervals above 40 ms throughout a ladder to 10 % loss, so within the window the lane sheds time rather than data. The window is crossed between 7.7 % and 12.2 % applied loss, after which the client re-anchors and leaves 7–82 s holes, past ~20 % loss without the origin returning a single error. Edge and Pathway selection remains specification-only (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive on the protocol, blocked on the tooling.** Both lanes resume within a few seconds of the node returning, but the media-aware exporter skips to the live edge and loses the media produced during the outage where the segmented client refetches it losslessly. Neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart at all, so it took a purpose-written client to show (§3.2) |
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured.** A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. **Conditional** because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright (§3.3) |

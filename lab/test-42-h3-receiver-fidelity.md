@@ -1,6 +1,6 @@
 # Test 42 — A byte-faithful HTTP/3 HLS receiver, and what the previous one was grading
 
-**State: built and validated; P0-e is closed.** The campaign now has an HLS receiver that both
+**State: built and validated for byte fidelity and for timing; P0-e is closed.** The campaign now has an HLS receiver that both
 negotiates HTTP/3 and reproduces the packager's bytes exactly
 ([`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py)). Over both HTTP/1.1 and HTTP/3 its output is
 **byte-identical** to the origin's own segment files — the same SHA-256 that `tsp -I hls`
@@ -150,12 +150,82 @@ On the clean fixture `ffmpeg` also logged `corrupt input packet in stream 2` aga
 independent byte-faithful receivers reproduce exactly. The complaint describes its own parsing, not
 the origin.
 
+### What the receiver costs in time, and where it — or its origin — becomes the bottleneck
+
+Measured with [`t20-recv-timing.sh`](scripts/t20-recv-timing.sh) on T20's loopback H3 arm, and in
+the T8b namespace rig for the last two rows; live `tsp -O hls`, 2 s target segments of ~3 MB, 60 s
+windows, one sample per cell. Fetch and lag exclude the first reload, which takes the whole live
+window at once and so measures the join, not the lane. Lag is the time from the segment file's last
+write at the origin to its arrival at the receiver.
+
+| Path | Origin buffer | Receiver | Segments | Holes | Fetch p50 / p95 | Lag p50 / p95 / max |
+|---|---|---|---:|---:|---|---|
+| loopback, no delay | 64k default | curl per cycle | 27 | 0 | 13 / 21 ms | 0.52 / 0.93 / 1.06 s |
+| loopback, 100 ms RTT, no rate limit | 64k default | curl per cycle | 13 | 3, exit 1 | 4.5–5.3 s per segment | — |
+| loopback, 100 ms RTT, no rate limit | 16m | curl per cycle | 27 | 0 | 1.34 / 2.41 s | 2.23 / 3.41 / 4.04 s |
+| netns, `cake` 20 Mb/s, 100 ms RTT | 16m | curl per cycle | — | 404 on the control | ~2.1 s for one 3 MB object ¹ | — |
+| netns, `cake` 20 Mb/s, 100 ms RTT | 16m | one connection | 29 | 0 | 1.56 / 2.38 s | 2.53 / 6.90 / 8.54 s |
+
+¹ From [`t31-origin-window.sh`](scripts/t31-origin-window.sh): 0.21 s to first byte and 1.87 s in
+total on a fresh connection, against a ~2.46 s segment period that also has to carry a two-round-trip
+playlist fetch.
+
+**Three findings, in the order a rig meets them.**
+
+**1. With nginx's defaults the origin, not the lane, is the bottleneck at 100 ms RTT.**
+`http3_stream_buffer_size` defaults to 64k, and a stream then carries about 64 KB per round trip:
+4.57–4.89 Mb/s at 100 ms whether the bottleneck is 20 or 1,000 Mb/s, against 11.95–12.85 Mb/s through
+the 20 Mb/s bottleneck at 256k, 1m and 16m (eight of nine fetches; one at 1m read 9.68), and 23.6 Mb/s
+at 16m through 1,000 Mb/s — three fetches of one 3 MB object per setting, each from slow start. The stream is
+~10 Mb/s, so every segmented cell at that RTT measured the origin's buffer. At loopback's near-zero
+RTT the same window is never reached, which is why no earlier loopback cell showed it. The lab's
+`h3lab` vhost and the namespace origin both now set 16m.
+
+**2. A receiver that reconnects every cycle falls behind a live window that a player would hold.**
+The receiver spawns `curl` twice a reload cycle, so each playlist and each batch opens a new QUIC
+connection and restarts slow start. On loopback that costs 7.8 ms a playlist and 2.8 ms a handshake,
+which is nothing against the reload period. Behind 20 Mb/s at 100 ms RTT it costs more than a segment's
+period: the control cell fell behind until the origin evicted a segment it had not fetched. Held on
+one connection (`--libcurl`, the same curl 8.18 / ngtcp2 library loaded in-process), the same control
+fetched 70 requests over **one** connection with 0 holes. The per-cycle design is kept for loopback,
+where it is measured to be harmless, and the namespace rig uses one connection.
+
+**3. Lag through this receiver is dominated by its reload period, not by its fetch.** Reloads come
+every half target duration, so a segment waits up to ~1 s after it appears even where the fetch takes
+13 ms: the unimpaired loopback lag of 0.52 s median is almost entirely that quantisation. A latency
+figure taken through the receiver carries up to one reload period of its own, and on the namespace rig
+its tail (6.9 s p95) is also the fetch competing with the next segment. This is a floor on what the
+instrument can resolve, not a property of the lane, and it applies to delivery-latency figures only:
+loss and conservation grades close the window long after the lag has settled.
+
+**The per-fetch timeout is per transfer, and binds only when one segment takes longer than it.**
+`--timeout` is curl's `--max-time`, which curl applies to each transfer rather than to the invocation:
+at 15 s, batches of six segments ran 19.4 s with curl exiting 0. With ~3–3.7 MB segments a 15 s timeout
+binds only where one segment's goodput falls below ~2 Mb/s:
+
+| Cell (loopback, one sample each) | 4 s | 15 s | 60 s | 15 s, truncation as hole |
+|---|---|---|---|---|
+| 0.8× permanent shortfall (7.96 Mb/s) | exit 1 at segment 19 (3.67 MB) | 32 segments, 0 holes, 0.873 | identical | identical |
+| 10 % loss | 27 segments, 0 holes | identical | identical | identical |
+
+At 0.8× a 3.67 MB segment needs 3.7 s at the bottleneck rate plus queueing, which a 4 s timeout
+truncates; at 15 s nothing does, and the lane's lag grows to 21.2 s by window close with every segment
+delivered. The cells that do depend on the timeout are those that push one segment's goodput below
+`segment bytes / timeout`: 25 % reorder, and HTTP/1.1 at 20 % loss
+([method-notes](method-notes.md) § *A receiver's per-fetch timeout is a measurement parameter*).
+
 ## What this does not show
 
-- **The instrument is validated for byte fidelity, not for timing.** It spawns one `curl` invocation
-  per reload cycle, batching that cycle's new segments so the connection is reused within it but not
-  across cycles. That is irrelevant to the hashes above and **not yet characterised for latency**, so
-  it should not be used for a delivery-latency figure without first measuring that overhead.
+- **Timing is characterised on one host, one sample per cell.** The reload-period floor and the
+  two bottlenecks above are mechanisms and should transfer; the specific lags are loopback and
+  namespace figures, not cross-host ones. The one-connection mode has been run on the namespace rig
+  only, and its byte fidelity rests on the same concatenation code rather than on a repeat of the
+  hash arms.
+- **TCP through the namespace rig's `cake` is unexplained.** In the same diagnostic, HTTP/1.1 over TCP
+  fetched the 3 MB object at 4.15 Mb/s through the 20 Mb/s bottleneck (three fetches, identical) and at
+  21.5–23.7 Mb/s through 1,000 Mb/s, where HTTP/3 at 16m managed ~12.8 and ~23.6. No campaign lane runs
+  TCP in that rig today; one that does has to resolve this first — a TCP bulk transfer through the rig
+  with `ss -i` on the sender would show whether it is the congestion window, the pacing or the qdisc.
 - **The measurements here are `file`-domain at P2**, taken against a VOD fixture on one host with the
   origin and receiver co-resident. They establish what each receiver does to bytes. They are not
   cross-host delivery measurements and carry none of T20's substrate comparison.

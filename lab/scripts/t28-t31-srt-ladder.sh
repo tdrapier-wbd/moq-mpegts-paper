@@ -33,6 +33,12 @@
 # lane's unimpaired cell does not grade at ~0 lost, its domain is wrong and its impaired cells
 # say nothing.
 #
+# **The PCR column is not the result on the MoQ lane.** `export ts` keeps writing PCR across the
+# video groups it evicts while audio carries on, so the clock shows a fraction of what the picture
+# lost, padded or not. Both lanes are therefore graded by `t28-content-lost.py` as well, on video
+# and audio PTS, and those columns rank them. The PCR grade stays so the two can be compared; on
+# SRT, which passes the source's bytes through, the two should agree.
+#
 # Continuity errors are reported beside programme loss and never netted into it. The two lanes
 # fail in opposite directions — MoQ sheds whole groups and stays syntactically clean, SRT keeps
 # the bytes and damages them — so a single "loss" column would hide the entire distinction.
@@ -43,8 +49,10 @@
 #
 #   sudo t28-t31-srt-ladder.sh <label>
 #
-# Env: MOQ/RELAY (binary dir via BIN), BUDGETS, REPS, LANES, CAP_MBIT, OUTAGE, CLIP, VPID,
-#      NETNS, GRADER, LATENCY, OUT.
+# Env: MOQ/RELAY (binary dir via BIN), BUDGETS, REPS, LANES, IMPAIRS, CAP_MBIT, OUTAGE, CLIP,
+#      VPID, NETNS, GRADER, CONTENT, LATENCY, OUT, MATCH_FILE,
+#      MOQ_CC (relay controller, `delay` = BBRv3 default | `loss` = CUBIC),
+#      MOQ_MUX_RATE (`export ts --mux-rate`; `0` suppresses padding), KEEP_TS=1 (keep captures).
 set -uo pipefail
 
 # Post-#3793 CLI flags, detected per binary rather than assumed.
@@ -58,8 +66,12 @@ CLIP=${CLIP:-/home/ubuntu/clip120.ts}
 VPID=${VPID:-111}
 NETNS=${NETNS:-/home/ubuntu/t8b-netns.sh}
 GRADER=${GRADER:-/home/ubuntu/t28-media-lost.py}
+CONTENT=${CONTENT:-/home/ubuntu/t28-content-lost.py}
 LATENCY=${LATENCY:-/home/ubuntu/t18-latency.py}
 OUT=${OUT:-/home/ubuntu/p1m}/$LABEL
+MOQ_CC=${MOQ_CC:-delay}
+MUX=""
+[ -n "${MOQ_MUX_RATE:-}" ] && MUX="--mux-rate $MOQ_MUX_RATE"
 
 BUDGETS=${BUDGETS:-"0.5 1 2 3 4 6"}
 REPS=${REPS:-3}
@@ -77,7 +89,7 @@ PUBIP=10.99.0.1
 	echo "run as root (sudo)" >&2
 	exit 1
 }
-for f in "$NETNS" "$CLIP" "$GRADER" "$LATENCY" "$BIN/moq" "$BIN/moq-relay"; do
+for f in "$NETNS" "$CLIP" "$GRADER" "$CONTENT" "$LATENCY" "$BIN/moq" "$BIN/moq-relay"; do
 	[ -r "$f" ] || {
 		echo "FAIL: missing $f" >&2
 		exit 1
@@ -93,7 +105,7 @@ moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 SUMMARY=$OUT/summary.csv
-echo "lane,budget_s,srt_ms,matched_how,impair,rep,capture_bytes,media_lost_s,media_dup_s,holes,largest_hole_s,continuity_errors,lat_median_ms,lat_p95_ms,matched_pictures,session" >"$SUMMARY"
+echo "lane,budget_s,srt_ms,matched_how,impair,rep,capture_bytes,media_lost_s,media_dup_s,holes,largest_hole_s,continuity_errors,lat_median_ms,lat_p95_ms,matched_pictures,session,video_lost_s,video_largest_s,audio_lost_s,null_pct,cc,mux_rate" >"$SUMMARY"
 
 pub() { ip netns exec t8b-pub "$@"; }
 sub() { ip netns exec t8b-sub "$@"; }
@@ -126,8 +138,12 @@ cleanup_procs() {
 trap 'cleanup_procs; bash "$NETNS" down >/dev/null 2>&1' EXIT
 
 echo "=== $(date -u) p1m $LABEL ==="
-"$BIN/moq" --version
-tsp --version 2>&1 | head -1
+{
+	moq_record_build "$BIN/moq" "$BIN/moq-relay"
+	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
+	echo "relay controller: $MOQ_CC; export mux-rate: ${MOQ_MUX_RATE:-build default}"
+	tsp --version 2>&1 | head -1
+} | tee "$OUT/build.txt"
 
 RATE_MBIT=$CAP_MBIT DELAY_MS=$DELAY_MS bash "$NETNS" up || exit 1
 RATE_MBIT=$CAP_MBIT DELAY_MS=$DELAY_MS bash "$NETNS" cake || exit 1
@@ -217,11 +233,11 @@ run_cell() {
 		# `RELAY_AUTH`, never a literal: `--auth-public` inverted at the CLI migration and the
 		# wrong value delivers nothing without erroring anywhere.
 		pub "$BIN/moq-relay" "${RELAY_BIND[@]}" "$PUBIP:$PORT" "${RELAY_TLS[@]}" "$PUBIP" \
-			"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" --log-level warn >"$d/relay.log" 2>&1 &
+			"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$MOQ_CC" --log-level warn >"$d/relay.log" 2>&1 &
 		sleep 3
 		# Subscriber first: reservation gating publishes the catalog once tracks resolve.
 		sub bash -c "timeout $((window + 3)) '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
-                --broadcast '$BC' export ts ${MOQ_LAT[*]} ${budget}s \
+                --broadcast '$BC' export ts ${MOQ_LAT[*]} ${budget}s $MUX \
               | $EG_SINK" >"$d/sub.log" 2>&1 &
 		sleep 2
 		pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \
@@ -309,12 +325,15 @@ run_cell() {
 
 	if [ "$bytes" -lt 200000 ]; then
 		echo "   VOID: ${bytes}B captured — the lane delivered nothing"
-		echo "$lane,$budget,$srt_ms,$matched_how,$impair,$rep,$bytes,VOID,VOID,VOID,VOID,VOID,VOID,VOID,VOID,$session" >>"$SUMMARY"
+		echo "$lane,$budget,$srt_ms,$matched_how,$impair,$rep,$bytes,VOID,VOID,VOID,VOID,VOID,VOID,VOID,VOID,$session,VOID,VOID,VOID,VOID,$MOQ_CC,${MOQ_MUX_RATE:-default}" >>"$SUMMARY"
 		return 0
 	fi
 
 	python3 "$GRADER" --input "$d/out.ts" --domain wire --label "$lane-b$budget-$impair-$rep" \
 		--json "$d/grade.json" 2>&1 | tail -1
+	# From 8 s in, past the join hole every MoQ capture opens with -- the latency tap's settle.
+	python3 "$CONTENT" --input "$d/out.ts" --from-s 8 --label "$lane-b$budget-$impair-$rep" \
+		--json "$d/content.json" 2>&1 | tail -1
 
 	# The matched-buffer half. `--settle 8` drops the join transient; a figure still moving
 	# at the end of the window is a settling rig rather than a lane's latency, which is why
@@ -325,20 +344,30 @@ run_cell() {
 	lat_median=NA lat_p95=NA matched=NA
 	[ -r "$d/lat.kv" ] && . "$d/lat.kv"
 
+	local cc=na mux=na
+	[ "$lane" = moq ] && cc=$MOQ_CC mux=${MOQ_MUX_RATE:-default}
 	python3 - "$d/grade.json" "$lane" "$budget" "$srt_ms" "$matched_how" "$impair" "$rep" "$bytes" \
-		"${lat_median:-NA}" "${lat_p95:-NA}" "${matched:-NA}" "$session" "$SUMMARY" <<-'PY'
+		"${lat_median:-NA}" "${lat_p95:-NA}" "${matched:-NA}" "$session" "$SUMMARY" \
+		"$d/content.json" "$cc" "$mux" <<-'PY'
 		import json, sys
 		g = json.load(open(sys.argv[1]))
+		try:
+		    c = json.load(open(sys.argv[14]))
+		except (OSError, ValueError):
+		    c = {}
 		# argv[2:9] is lane..capture_bytes: the slice stopped at 8 and silently dropped
 		# capture_bytes, leaving 15 fields under a 16-column header and shifting every
 		# name-based read by one from media_lost_s onward.
 		row = sys.argv[2:9] + [
 		       g["media_lost_s"], g["media_duplicated_s"], g["hole_count"],
-		       g["largest_hole_s"], g.get("continuity_errors", "na")] + sys.argv[9:13]
+		       g["largest_hole_s"], g.get("continuity_errors", "na")] + sys.argv[9:13] + [
+		       c.get("content_lost_s", "NA"), c.get("largest_hole_s", "NA"), c.get("audio_lost_s", "NA"),
+		       c.get("null_pct", "NA"), sys.argv[15], sys.argv[16]]
 		open(sys.argv[13], "a").write(",".join(str(x) for x in row) + "\n")
 	PY
 	grep -E "latency ms|trend" "$d/lat.txt" 2>/dev/null | sed 's/^/   /'
-	rm -f "$d/out.ts" # the grade is the measurement; 70 MB a cell is not
+	# The grade is the measurement and 70 MB a cell adds up; KEEP_TS=1 keeps them for re-grading.
+	[ "${KEEP_TS:-0}" = 1 ] || rm -f "$d/out.ts"
 }
 
 for rep in $(seq 1 "$REPS"); do
