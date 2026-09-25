@@ -125,8 +125,8 @@ seconds, replicates in order:
 | Build | Backend | 5 s outage, 3 s budget | 30 s outage | 0.9× stream rate for 60 s |
 |---|---|---|---|---|
 | `fd4f5d82e` | quinn | 8.52, 8.52, 4.84 | 33.32, 33.64, 33.60 — session survives | 5.16, 7.84, 6.04 |
-| `5d0991b9` | quinn | void ¹ | 63.24, 63.52, 63.52 — session ends | void ¹ |
-| `5d0991b9` | noq | void ¹ | 63.52, 62.92, 63.52 — session ends | void ¹ |
+| `5d0991b9` | quinn | 20.56, 16.96, 18.80 ¹ | 63.24, 63.52, 63.52 — session ends | 54.48, 9.86, 13.90 ² |
+| `5d0991b9` | noq | 18.80, 18.56, 17.28 ¹ | 63.52, 62.92, 63.52 — session ends | 20.34, 21.62, 17.76 ¹ |
 | `53f8aa99d` | noq | 18.80, 18.24, 17.92 | 63.52, 63.52, 62.92 — session ends | 24.04, 18.74, 18.32 |
 | `84b34f54` | noq | 18.20, 18.20, 16.98 | 62.92, 62.92, 62.92 — session ends | 21.74, 23.18, 34.62 |
 | `ffa5b81b` | noq | 21.12, 23.22, 19.72 | 63.52, 63.52, 63.52 — session ends | 28.44, 33.20, 18.02 |
@@ -147,10 +147,14 @@ about ±1 s.
 32.78–33.58 s on noq. `fd4f5d82e` on quinn agrees with the first, and every noq build with the
 second. § *Sustained partial loss* gives the mechanism and the CUBIC arm that excludes BBRv3 alone.
 
-**The outage cost rose with the builds, and on noq it is two to three times the quinn figure.** At a
-2 s budget the quinn builds lose 7.5–13.8 s and the noq builds 16.3–28.4 s; at 3 s `fd4f5d82e` loses
-4.8–8.5 s and the noq builds 17–23 s. This is not attributed: unlike sustained loss, a clean break
-gives a loss-responsive controller nothing to respond to until the path returns.
+**The outage cost rose with the builds; whether the stack adds to it depends on the budget.** At a
+2 s budget the quinn builds lose 7.5–13.8 s and the noq builds 16.3–28.4 s. At 3 s `fd4f5d82e` loses
+4.8–8.5 s and every later build 17.0–23.2 s — **including `5d0991b9` on quinn**, which loses
+17.0–20.6 s against 17.3–18.8 s on noq from the same commit. So at 3 s the step is between builds,
+not stacks, and the 2 s separation between the stacks rests on two quinn cells of one commit
+(13.84 and 8.10 s) against that commit's noq pair (17.68, 17.56 s). This is not attributed: unlike
+sustained loss, a clean break gives a loss-responsive controller nothing to respond to until the
+path returns.
 
 **Reorder at 20 % defeats every build and both stacks**, at 34.6–38.1 s.
 
@@ -159,12 +163,14 @@ timeout on both ends of every build here, so the cell sits on the boundary; `fd4
 three replicates and every later build ended the session in all three. What changed at that edge is
 not identified, and the deployment rule in § *The 30 s cell was the QUIC idle timeout* is unaffected.
 
-¹ **The `5d0991b9` 5 s outage and 0.9× cells are void** on both backends: that build's relay drains its
-sessions on SIGTERM for longer than the ladder's one-second teardown allowed, so each of those cells
-found the port still held ([method-notes](method-notes.md) § *A replicate loop inside one script
-invocation re-uses the fixed port*). The ladder now waits for the relay to exit, and the six cells
-are re-run by [`t2831-bisect-redo.sh`](scripts/t2831-bisect-redo.sh). Until they are, the
-build's matched cells at a 2 s budget, above, carry its place in the ordering.
+¹ **Re-run separately.** In the bisection's own pass the `5d0991b9` 5 s outage and 0.9× cells were
+void on both backends: that build's relay drains its sessions on SIGTERM for longer than the ladder's
+one-second teardown allowed, so each of those cells found the port still held
+([method-notes](method-notes.md) § *A replicate loop inside one script invocation re-uses the fixed
+port*). The ladder now waits for the relay to exit, and these cells come from
+[`t2831-bisect-redo.sh`](scripts/t2831-bisect-redo.sh), same rig and settings, every relay confirmed
+started. ² The first replicate lost its sound as well (62.38 s): the session did not carry the
+programme past the rung, which the other two did.
 
 **One earlier capture confirms the oldest build's lower figure.** The single retained capture of the
 original `fd4f5d82e` pass — a 5 s outage at 3 s — holds 0.20 s in holes and is an estimated
@@ -887,11 +893,11 @@ reported as tied.
 Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
 and the grader are all on the EC2 secondary.
 
-- **Why the noq builds lose two to three times what the quinn builds lose after a 5 s outage** —
-  17–28 s against 7–14 s at a 2 s budget, with the controller pinned to each stack's `delay`. The
-  sustained-loss cell is attributed to the controller's response to loss; the outage cell is not,
-  and a stack that does not yield to random loss would not obviously lose more of a clean break. The
-  arm that would separate it pins both stacks to CUBIC, which both implement, on the outage cell.
+- **What raised the outage cost after `fd4f5d82e`, and whether the stack adds to it** — at a 2 s
+  budget the noq builds lose 17–28 s against 7–14 s on quinn, but at 3 s `5d0991b9` loses the same
+  on both stacks (17.0–20.6 s against 17.3–18.8 s), so the build is established and the stack is
+  not. The arms that would separate them: the 2 s outage cell on `5d0991b9` both stacks with more
+  replicates, and both stacks pinned to CUBIC, which both implement.
 - **Why 20 % reorder defeats every build, the loss-blind ones included.** The reasoned mechanism —
   QUIC's packet-threshold loss detection reading reordering as loss — accounts for the noq builds and
   not for BBRv1 riding 5 % loss and failing here. The subscriber and relay logs of the retained
