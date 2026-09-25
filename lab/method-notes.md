@@ -758,6 +758,12 @@ follow-up run it forced.)*
 > is not good enough for a defect report going upstream. The fix is to resolve each role to a single
 > PID once, label it, and record a role that vanishes as gone rather than silently re-resolving the
 > pattern onto whatever now matches.
+>
+> Resolving it once by pattern is not enough either: take the PID from `$!` where the rig started the
+> process. [T43](test-43-fanout-current-build.md)'s relay side took the relay's PID from
+> `pgrep -f "[m]oq-relay.*0.0.0.0:$PORT" | head -1`, and a launch command that happened to contain
+> both strings made it the ssh shell's. When that shell exited, the rig declared the relay dead and
+> its cleanup shut down a healthy relay nine seconds into the run.
 
 **An instrument that blocks on its input cannot observe the absence of input.** *(T27.)*
 
@@ -785,6 +791,22 @@ step.** *(T27.)*
 > is information. **A monitoring tool that can be made to invent a fault by one bad byte is worse than
 > no monitoring**, because it produces a confident wrong answer; fault-inject the instrument, not only
 > the system.
+
+### A trace's labels are code
+
+*(T28, the reorder qlog.)* noq's relay qlog labelled all 1,619 of the packets it declared lost under
+20 % reorder `reordering_threshold`, and the campaign reported that the packet-reordering rule had
+declared every one and the time rule none. The label cannot say anything else. The qlog code, in noq
+and in the quinn it forks, computes the packet's send time minus the present, which saturates to zero
+and never reaches the loss delay, so every loss is labelled by reordering whichever rule fired.
+Raising the packet threshold to 1000 left 12,749–17,856 losses in place, which is how the time rule
+showed itself.
+
+> **Before quoting a field that attributes a cause, read the code that writes it**, and prefer the
+> evidence that does not depend on it. The spurious-loss result survived because it rested on the
+> acknowledgement frames, which record what happened, not on the trigger field, which records what
+> the logger computed. An arm that disables one of the candidate causes is the cheap test of a
+> label: if the label were right, the effect would have gone with it.
 
 ---
 
@@ -1607,7 +1629,10 @@ verify is not a reset.** *(T26.)*
 > parent whose argv contains the literal string. The fix is `f5-reset.sh` — patterns in a file, and a
 > verification pass that counts survivors and refuses to let a run start. Its own first version
 > repeated the mistake with an unbracketed `export ts --latency-max` and killed the ssh session that
-> called it.
+> called it. The file protects only a session that does nothing else: in
+> [T43](test-43-fanout-current-build.md) one ssh command ran the reset and then launched
+> `f5-relay-side.sh`, the launch text put that name in the session's argv, and the reset killed the
+> session before the launch. Run the reset in an ssh call of its own.
 
 **A workaround flag must record which platform it works around, and be re-tested when the platform
 changes.** *(T26.)*

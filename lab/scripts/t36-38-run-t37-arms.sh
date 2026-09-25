@@ -9,7 +9,7 @@ W=/tmp/t36
 cd $W
 M=~/bin-3529/moq
 FP=$(cat $W/fp.txt)
-LB=/Users/tdrapier/moq-mpegts-paper/lab/scripts/t37-lastbyte.py
+LB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/t37-lastbyte.py
 
 reset() { python3 $W/mkstate.py --cache-control "max-age=5" --mark "reset $1" >/dev/null; sleep 1; }
 

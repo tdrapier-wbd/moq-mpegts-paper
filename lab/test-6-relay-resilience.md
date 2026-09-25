@@ -172,21 +172,29 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   freeze at the kill, resume once the publisher re-announces, and are byte-identical before and after
   the gap. The gap = idle-timeout detection + reconnect backoff + re-announce: **automatic and
   bounded, not hitless**; the content gap is a clean object-boundary skip absorbed downstream.
-  **On the build under test both exporters exit instead.** Re-run on one host over loopback with
-  [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) (relay SIGKILL at 12 s, restart at 24 s, client idle
-  timeout 6 s, graded at 70 s):
+  **On the build under test both exporters exit instead, and a supervisor recovers them fully.**
+  Re-run on one host over loopback with [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) (relay SIGKILL
+  at 12 s, restart at 24 s, client idle timeout 6 s, graded at 70 s; two runs per row, two exporters
+  per run). `SUPERVISE=1` restarts an exporter whenever it exits and appends to the same capture:
 
-  | build | exporters at 70 s | written after the restart | exit |
-  |---|---|---|---|
-  | `fd4f5d82e` | both alive | 53.8 MB each | — |
-  | `ffa5b81b` | both exited | 0 B | `Error: json: dropped`, when the idle timeout closed the session |
+  | build | exporter | at 70 s | output resumes | written after the restart | exit |
+  |---|---|---|---|---|---|
+  | `fd4f5d82e` | unsupervised | all alive | t = 26–27 s | 52.4–53.8 MB | — |
+  | `fd4f5d82e` | supervised | never restarted | t = 27–29 s | 50.8–53.7 MB | — |
+  | `ffa5b81b` | unsupervised | all exited | never | 0 B | `Error: json: dropped`, when the idle timeout closed the session |
+  | `ffa5b81b` | supervised | one restart each | t = 25 s | 58.0 MB | `json: dropped` once, then the restarted exporter rides on |
 
-  The publisher reconnected to the restarted relay normally in both. The change is upstream's
+  The publisher reconnected to the restarted relay normally in every run. The change is upstream's
   [#2704](https://github.com/moq-dev/moq/pull/2704), which removed the client's linger: a broadcast
   fed by a reconnecting session used to outlive it for the reconnect budget plus one second, and now
   closes with it, taking the exporter's catalog track along
   ([T28](test-28-failure-injection-matrix.md) § *The build bisection*, the 30 s cell). A standing
-  egress on the current build therefore needs a supervisor to restart it after any session loss.
+  egress on the current build therefore needs a supervisor, and with one it resumes a second after the
+  relay returns, no later than the old build's own reconnect. What the restarted exporter writes is a
+  new process's transport stream appended to the old one, and the values it mints per process start
+  again ([upstream contributions](upstream-contributions.md#three-values-the-exporter-mints-per-process--one-closed-one-declined-one-open)),
+  so downstream receives a splice rather than a continuation; this drill counts bytes and does not
+  grade the splice.
 
 ### Limitations observed — media-aware lane
 
@@ -267,31 +275,41 @@ persists across every release tested. Proposed remedies: an announcement `epoch`
 The spec-level fix is moq-lite-06 **broadcast epochs / ended-broadcasts**
 ([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), which is not yet on the wire.
 
-### Single-relay reconnecting-publisher takeover is not clean
+### A reconnecting publisher stalls its subscribers for as long as the first one lived
 
 The scenario of [#2534](https://github.com/moq-dev/moq/pull/2534) (*"deliver groups from a takeover
 source that restarted its numbering"*, closed unmerged as *"fixed by #2556"*) on the TS path, drilled
-with `renumber_takeover.sh`: one relay, a `moq export ts` subscriber, pubA SIGKILLed after ~15 s, pubB
-rejoining the **same** broadcast ~1 s later as a fresh session with restarted group numbering. The
-same PR carries an independent production report — a `@moq/net` subscriber starved for the
-broadcast's age after a publisher restart, bisected clean on v0.14.1 and broken from v0.14.2 (the
-#2469 linger).
+with [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=publisher` on loopback: one relay, two
+exporters, pubA SIGKILLed and a fresh pubB process started under the **same** broadcast name a second
+later, with restarted group numbering. Both publishers read one continuous paced UDP feed
+(`tsp … -P regulate --pcr-synchronous`), so pubB continues pubA's media timeline rather than
+replaying the clip from its start. The same PR carries an independent production report — a
+`@moq/net` subscriber starved for the broadcast's age after a publisher restart, bisected clean on
+v0.14.1 and broken from v0.14.2.
 
-- *Fresh identity (no `--origin`):* the exporter **terminates** with `Error: json: dropped` the
-  instant pubB attaches — the takeover replaces rather than splices, dropping the catalog
-  subscription. Reproduced on every run.
-- *Shared `--origin` (interchangeable source):* the exporter **survives** and delivery **resumes**,
-  but only after a gap of ~the join delay (~17 s frozen for a 15 s pubA, then steady growth to the
-  end). That 1:1-with-join-delay scaling is exactly the independent-copy timeline-offset artefact
-  documented under [Corrections](#corrections) (both publishers replay the same clip from its start),
-  so this drill **cannot** separate it from the #2534 splice-floor starvation — a timeline-aligned
-  rerun (pubB's media clock continued from pubA's, not restarted) is needed to attribute it.
+| Build | Publisher identity | pubA lifetime | Exporters | Resumed, after pubB starts |
+|---|---|---|---|---|
+| `fd4f5d82e` | fresh | 12 s | both exit `json: dropped`, two runs | never |
+| `fd4f5d82e` | shared `--origin` | 12 s | survive, two runs | 12 s |
+| `fd4f5d82e` | shared `--origin` | 24 s | survive, one run | 23 s |
+| `ffa5b81b` | fresh (its client has no `--origin`) | 12 s | survive, two runs | 12 s |
+| `ffa5b81b` | fresh | 24 s | survive, two runs | 22 s |
+| `ffa5b81b` | fresh | 36 s | survive, one run | 35 s |
 
-**Bottom line:** #2556 does **not** make the single-relay TS reconnecting-publisher takeover hitless —
-fresh identity crashes the exporter, shared origin gaps it. The recommended posture (a fully doubled
-chain with receiver-side ST 2022-7 selection) does not depend on this path, but a naive "publisher
-reconnects to the same broadcast" is unsafe for a downstream `moq export ts`, and whether the
-shared-origin residual gap is our clock skew or the #2534 splice-floor is still open.
+Wherever the exporter survives, the stall matches pubA's lifetime to within 2 s and grows one for one
+with it, on both builds. With the timeline continuous this is not the clock-skew artefact of the
+earlier drill, whose publishers each replayed the clip from its start ([Corrections](#corrections)),
+and a floor on media time would give no stall at all. The figures fit a floor on the group sequence,
+under which a replacement that numbers from zero is starved until its numbering passes the old
+one's, which is what #2534 described. Whether the relay or the exporter holds that floor is not
+measured.
+
+**Bottom line:** a reconnecting publisher is not a failover mechanism on the TS path on either build.
+On `fd4f5d82e` a fresh identity kills the exporter and a shared origin stalls it; on `ffa5b81b` the
+exporter survives and stalls the same way. If the scaling holds beyond 36 s, which is reasoned and
+not measured, a publisher that restarts after a day of service would stall its subscribers for about
+a day. The recommended posture, a fully doubled chain with receiver-side ST 2022-7 selection, does
+not depend on this path.
 
 ### Single-source 1+1 failover — the requirement is a common source, not byte-identical numbering
 
@@ -669,14 +687,14 @@ placement decision is where to cut, and the picture type decides that.
 | Scenario | Recovery time | Continuity | Result |
 |---|---|---|---|
 | Relay restart — **publisher** | ~1 s after detection (= QUIC idle timeout, 30 s default) | resumes (re-announces) | ✅ transport reconnect works |
-| Relay restart — **`moq export ts` subscriber** | ~17 s (detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by #2469, on builds before the `dev` merge; ❌ exits `json: dropped` on the build under test (#2704) |
-| End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469, on builds before the `dev` merge; ❌ not without a supervisor on the build under test |
+| Relay restart — **`moq export ts` subscriber** | ~17 s (detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by #2469, on builds before the `dev` merge; ❌ exits `json: dropped` on the build under test (#2704), ✅ under a supervisor, which restarts it once |
+| End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469, on builds before the `dev` merge; ✅ on the build under test only under a supervisor, whose restart splices the exporter's per-process values |
 | Active/active — two publishers, **one relay** | n/a | **dies at 2nd announce** | ❌ `unroutable`, both torn down |
 | Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ since #2473; ❌ before it |
 | Active/active — **single source** into both publishers, co-started | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`/`sub3` identical per-second deltas pre-kill, separated by a constant 4-packet (752 B) startup offset |
 | Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) | resumes; 0 CC errors; exporter never re-subscribes | ✅ offset does not break failover; skips to live edge |
 | Active/active — active source exits **gracefully** | none — subscriber terminates | no failover | ❌ on merged `main` |
-| Active/active — single-relay **reconnecting** publisher (renumber takeover) | fresh id: none (exporter dies); shared origin: resumes after ~join-delay gap | fresh id: `json: dropped`; shared origin: resumes | 🟡 #2556 doesn't make it clean; shared-origin gap confounded with clock skew |
+| Active/active — single-relay **reconnecting** publisher (renumber takeover) | stalls for as long as the first publisher lived (12–35 s for 12–36 s) | `fd4f5d82e`: fresh id exits `json: dropped`, shared origin resumes; `ffa5b81b`: resumes | ❌ not a failover mechanism on either build; the stall fits a group-sequence floor (#2534) |
 | Shared-`--origin` standby joins a **carrying** relay | survives; splice immediate | far-relay subscriber keeps flowing | ✅ fixed on merged `main` (was `Unroutable` code=30) |
 | `moq-lite-06` cost/standby routing | — | — | 🟡 opt-in; **necessary-not-sufficient** |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ |

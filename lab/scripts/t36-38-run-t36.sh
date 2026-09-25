@@ -9,7 +9,7 @@ W=/tmp/t36
 cd $W
 FP=$(cat $W/fp.txt)
 SECS="${SECS:-6}"
-TAP=/Users/tdrapier/moq-mpegts-paper/lab/scripts/t36-wiretap.py
+TAP=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/t36-wiretap.py
 TAPPORT=9500
 RESULTS=$W/results-t36.tsv
 : > $RESULTS

@@ -33,7 +33,7 @@ set -u
 WATCH="${1:-75}"
 
 W=/tmp/t37st
-R=/Users/tdrapier/moq-mpegts-paper/lab/scripts
+R=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 M=~/bin-3529/moq
 PORT=9744
 HTTP=9781

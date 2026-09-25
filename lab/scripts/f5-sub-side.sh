@@ -4,6 +4,12 @@
 #   f5-sub-side.sh <label> <relay-ip> <n-schedule> [settle] [measure]
 #   e.g. f5-sub-side.sh ramp1 <EC2_IP> "1,5,10,25,50,100,150,200,250,300"
 #
+# CHANNELS=C publishes C broadcasts (`$BCAST.1` … `$BCAST.C`, each its own source chain) and deals
+# the subscribers across them in turn, so channel count and audience can be varied separately. A 0 in
+# the schedule measures the relay with only its publishers attached, which is the per-channel ingest
+# cost. PUB_URL sends the publishers somewhere other than the relay under test — to an origin relay
+# that the relay under test is clustered to, for a two-tier arm.
+#
 # Every subscriber runs here and the relay runs there, so the two costs are separated by *host*
 # rather than by process accounting. That matters because process accounting is what
 # [T9](../test-9-performance.md) had, and it still could not stop the subscribers' 118 % of a core
@@ -46,9 +52,15 @@ SRCGEN=${SRCGEN:-$HOME/f5/ts-continuous-source.py}
 OUT=${OUT:-$HOME/f5}/$LABEL
 GSO=${GSO:-true} # see the note in f5-relay-side.sh; must match the relay's setting
 
+CHANNELS=${CHANNELS:-1}
+PUB_URL=${PUB_URL:-https://$RELAY_IP:$PORT/anon}
+
 # Stopping conditions, fixed in advance.
 MIN_KEEP=${MIN_KEEP:-0.95} # per-subscriber rate as a fraction of the N=1 baseline
 BOX_LIMIT=${BOX_LIMIT:-85} # this host's busy %, above which the harness is the limit
+# This host's memory, below which the harness is the limit: the first high-fan-out soak recorded a
+# delivery collapse that was this host OOM-killing subscribers (f5-soak-side.sh).
+MIN_AVAIL_MB=${MIN_AVAIL_MB:-2500}
 #
 # The reference rate is *measured at the first schedule point*, not declared. A subscriber here is
 # `moq export ts` with no pacer behind it, so what arrives is the exporter's media stream at whatever
@@ -72,8 +84,8 @@ NIC=${NIC:-ens5}
 SUBS=()
 cleanup() {
 	for p in "${SUBS[@]+${SUBS[@]}}"; do kill -9 "$p" 2>/dev/null || true; done
-	pkill -f "[-]-broadcast $BCAST export ts" 2>/dev/null || true
-	pkill -f "[-]-broadcast $BCAST import ts" 2>/dev/null || true
+	pkill -f "[-]-broadcast ${BCAST}[.0-9]* export ts" 2>/dev/null || true
+	pkill -f "[-]-broadcast ${BCAST}[.0-9]* import ts" 2>/dev/null || true
 	pkill -f "[t]s-continuous-source.py" 2>/dev/null || true
 	pkill -f "[t]sp -I file $OUT/fifo" 2>/dev/null || true
 	rm -f "$OUT"/fifo.* 2>/dev/null || true
@@ -86,15 +98,17 @@ ulimit -n 65536 2>/dev/null || true
 
 {
 	echo "label=$LABEL relay=$RELAY_IP:$PORT schedule=$SCHEDULE settle=$SETTLE measure=$MEASURE"
-	echo "moq=$("$MOQ" --version 2>&1 | head -1) latency_max=$LATMAX"
+	echo "moq=$("$MOQ" --version 2>&1 | head -1) latency_max=$LATMAX channels=$CHANNELS publish_to=$PUB_URL"
 	echo "host=$(hostname) cores=$CORES nic=$NIC started=$(date -u +%FT%T%z)"
-	echo "stop_if: per_sub<${MIN_KEEP} OR box_busy>${BOX_LIMIT}% OR a subscriber exits"
+	echo "stop_if: per_sub<${MIN_KEEP} OR box_busy>${BOX_LIMIT}% OR MemAvailable<${MIN_AVAIL_MB}MB OR a subscriber exits"
 } >"$OUT/meta.txt"
 
 CONN=("${MOQ_DIAL[@]}" "https://$RELAY_IP:$PORT/anon"
 	"--quic-gso=$GSO")
-echo "f5 sub side: relay=$RELAY_IP:$PORT cores=$CORES client_gso=$GSO"
+PUB_CONN=("${MOQ_DIAL[@]}" "$PUB_URL" "--quic-gso=$GSO")
+echo "f5 sub side: relay=$RELAY_IP:$PORT cores=$CORES client_gso=$GSO channels=$CHANNELS"
 echo "client_quic_gso=$GSO" >>"$OUT/meta.txt"
+bcast() { if [ "$CHANNELS" -eq 1 ]; then echo "$BCAST"; else echo "$BCAST.$1"; fi; }
 
 # ---- publisher, here rather than on the relay host --------------------------
 # The continuous generator, not `tsp --infinite`: a looped clip rewinds its PCR
@@ -106,16 +120,23 @@ echo "client_quic_gso=$GSO" >>"$OUT/meta.txt"
 	echo "f5: missing source generator $SRCGEN" >&2
 	exit 1
 }
-(python3 "$SRCGEN" "$CLIP" |
-	tsp -I file - -P regulate --pcr-synchronous --wait-min 5 -O file - |
-	"$MOQ" "${CONN[@]}" --broadcast "$BCAST" import ts) >"$OUT/publisher.log" 2>&1 &
-PUB_PID=$!
+PUBS=()
+for c in $(seq 1 "$CHANNELS"); do
+	plog="$OUT/publisher.log"
+	[ "$CHANNELS" -gt 1 ] && plog="$OUT/publisher.$c.log"
+	(python3 "$SRCGEN" "$CLIP" |
+		tsp -I file - -P regulate --pcr-synchronous --wait-min 5 -O file - |
+		"$MOQ" "${PUB_CONN[@]}" --broadcast "$(bcast "$c")" import ts) >"$plog" 2>&1 &
+	PUBS+=("$!")
+done
 sleep 8
-kill -0 "$PUB_PID" 2>/dev/null || {
-	echo "f5: publisher died — see $OUT/publisher.log" >&2
-	exit 1
-}
-echo "  publisher up (pid $PUB_PID), feeding $BCAST to the remote relay"
+for p in "${PUBS[@]}"; do
+	kill -0 "$p" 2>/dev/null || {
+		echo "f5: a publisher died — see $OUT/publisher*.log" >&2
+		exit 1
+	}
+done
+echo "  $CHANNELS publisher(s) up, feeding $(bcast 1) onward via $PUB_URL"
 
 cpu_ticks() { awk '{print $14+$15}' "/proc/$1/stat" 2>/dev/null || echo 0; }
 wchar() { awk -F': *' '/^wchar/{print $2}' "/proc/$1/io" 2>/dev/null || echo 0; }
@@ -137,11 +158,13 @@ sum_of() {
 
 CSV="$OUT/subs.csv"
 echo "n_target,n_alive,window_s,sub_cpu_pct_core,sub_rss_kb,agg_bps,per_sub_bps,per_sub_frac,box_busy_pct,rx_bytes_delta,deaths,pub_cpu_pct_core,pub_rss_kb" >"$CSV"
-PUB_IMPORT=$(pgrep -f "[-]-broadcast $BCAST import ts" | head -1)
+PUB_IMPORT=$(pgrep -f "[-]-broadcast $(bcast 1) import ts" | head -1)
 : >"$OUT/phases.log"
 
 spawn_one() {
 	local idx=$1
+	local b
+	b=$(bcast $(((idx - 1) % CHANNELS + 1)))
 	if [ "$idx" -le "$NCAP" ]; then
 		# Graded: continuity counted as the bytes go past, nothing kept. Routed
 		# through a FIFO rather than a shell pipeline so that `$!` is the
@@ -158,15 +181,15 @@ spawn_one() {
 		# "no bytes". The interval is in packets (~400k is about a minute here).
 		tsp -I file "$f" -P continuity -P count --total --interval 400000 -O drop \
 			>"$OUT/cont.$idx.log" 2>&1 &
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$b" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>"$f" 2>"$OUT/sub.$idx.log" &
 		SUBS+=("$!")
 	elif [ "$idx" -eq $((NCAP + 1)) ]; then
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$b" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>/dev/null 2>"$OUT/sub.plain.log" &
 		SUBS+=("$!")
 	else
-		"$MOQ" "${CONN[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$LATMAX" \
+		"$MOQ" "${CONN[@]}" --broadcast "$b" export ts "${MOQ_LAT[@]}" "$LATMAX" \
 			>/dev/null 2>/dev/null &
 		SUBS+=("$!")
 	fi
@@ -215,7 +238,7 @@ for N in $(echo "$SCHEDULE" | tr ',' ' '); do
 	SUBCPU=$(awk -v c=$((C1 - C0)) -v w="$WIN" -v hz="$HZ" 'BEGIN{printf "%.2f", c/hz/w*100}')
 	AGG=$(awk -v b=$((W1 - W0)) -v w="$WIN" 'BEGIN{printf "%.0f", b*8/w}')
 	PER=$(awk -v a="$AGG" -v n="$NA" 'BEGIN{printf "%.0f", (n>0? a/n : 0)}')
-	if [ "$NOMINAL" -eq 0 ]; then
+	if [ "$NOMINAL" -eq 0 ] && [ "$N" -gt 0 ]; then
 		NOMINAL=$PER
 		echo "  reference per-subscriber rate calibrated at n=$N: $(awk -v p="$PER" 'BEGIN{printf "%.3f", p/1e6}') Mb/s"
 		echo "reference_per_sub_bps=$NOMINAL (measured at n=$N)" >>"$OUT/meta.txt"
@@ -238,15 +261,21 @@ for N in $(echo "$SCHEDULE" | tr ',' ' '); do
 
 	# Stopping conditions. Each names which side is responsible, because "the
 	# ramp ended here" is not a finding unless it says what ended it.
-	if ! kill -0 "$PUB_PID" 2>/dev/null; then
-		STOP_REASON="the PUBLISHER exited at n=$N — the source stopped, so nothing after this is a fan-out result"
-		break
-	fi
+	for p in "${PUBS[@]}"; do
+		kill -0 "$p" 2>/dev/null ||
+			STOP_REASON="a PUBLISHER exited at n=$N — the source stopped, so nothing after this is a fan-out result"
+	done
+	[ -n "$STOP_REASON" ] && break
 	if [ "$NA" -lt "$N" ]; then
 		STOP_REASON="subscriber(s) exited at n=$N ($((N - NA)) of $N) — investigate, not a capacity result"
 		break
 	fi
-	if awk -v f="$FRAC" -v m="$MIN_KEEP" 'BEGIN{exit !(f<m)}'; then
+	AV=$(awk '/^MemAvailable/{print int($2/1024)}' /proc/meminfo)
+	if [ "$AV" -lt "$MIN_AVAIL_MB" ]; then
+		STOP_REASON="THIS host (subscribers) fell to ${AV}MB available at n=$N — the harness is the limit, not the relay"
+		break
+	fi
+	if [ "$N" -gt 0 ] && awk -v f="$FRAC" -v m="$MIN_KEEP" 'BEGIN{exit !(f<m)}'; then
 		STOP_REASON="per-subscriber delivery fell to $(awk -v f="$FRAC" 'BEGIN{printf "%.1f", f*100}')% of the N=1 rate at n=$N"
 		break
 	fi

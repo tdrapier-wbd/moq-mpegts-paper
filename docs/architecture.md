@@ -326,12 +326,7 @@ are served by additional instances. Because grooming and egress are per-flow and
 across flows, this scales cleanly. The gateway is, however, the most CPU- and timing-sensitive
 component — CBR pacing and PCR re-stamping are real-time obligations — so capacity planning is
 dominated by timing headroom, not raw throughput. Relay and gateway therefore scale on different axes
-and should be capacity-planned separately (§8.3).
-
-Remote subscribers cost **0.806 % of a core, 1.39 MB and one full stream copy each** — **124–139 per
-core** at ~10 Mb/s ([Evidence](evidence.md) §3.6, §8.3). Past that limit throughput *collapses* (up
-to 95 % aggregate loss while CPU stays pinned); RSS jumps ~2.5× behind a saturated core. Admission
-control that refuses the N+1th subscriber beats serving it badly.
+and should be capacity-planned separately; §8.3 sizes the relay, and says how its limit ends.
 
 **Gateway placement is open** ([Comparison](comparison.md) §4.5, [Economics](economics.md) §4.5):
 close to endpoints for timing determinism and hitless pairing, versus regional PoPs to cut the delivery
@@ -479,9 +474,10 @@ slots under the same numbers, a median 10 ms from its partner.
 What stops both cases short of *byte*-identity is not the groomer but the exporter, which renders
 continuity counters from its own process state. So **which receiver a deployment uses decides whether
 a single leg can be restarted alone**: input-select protection returns immediately, while a
-sequence-merge receiver needs the pair restarted together until the upstream fix lands
-([Evidence](evidence.md) §3.4). This is an operational constraint on planned maintenance, and it is
-the reason §9's runbook says what it says.
+sequence-merge receiver needs the pair restarted together. Upstream has declined to change the
+counters, so that holds unless a filter outside upstream renumbers them ([Evidence](evidence.md)
+§3.4). This is an operational constraint on planned maintenance, and it is the reason §9's runbook
+says what it says.
 
 ### 5.3 A groomer must stop when its content stops, and only the groomer can
 
@@ -559,8 +555,10 @@ coarser.** Under congestion it sheds **whole groups** that missed the subscriber
 which is not selective by track and does not preferentially preserve the primary programme; the
 degradation is in *time*, uniformly across the mux ([Evidence](evidence.md) §3.3). Two measured
 consequences bound how much comfort to take from this section. The process doing the shedding did
-not reliably survive doing it — `moq export ts` exited on an evicted group — and a subscriber that
-exits is off air rather than degraded. And where the subscriber's budget is widened so that groups
+not reliably survive doing it — `moq export ts` exited on an evicted group until upstream gave both its
+media and its catalog consumers a skip, which a re-run is consistent with but at too low an event rate
+to establish ([Evidence](evidence.md) §3.15) — and it still exits when its session drops (§8.4). A
+subscriber that exits is off air rather than degraded. And where the subscriber's budget is widened so that groups
 are recovered instead of shed, the lane absorbs the impairment as a **permanent step in delivery
 latency** rather than as lost media, which is a different failure and not obviously the better one
 for a route with a fixed playout schedule. **No priority-ordered shedding policy has been built or
@@ -702,9 +700,11 @@ not fall seconds behind.
 Relay cost tracks **session count**, not bitrate: a session costs ~0.34 % / 0.87 % / 1.18 % of a core
 at 2 / 10 / 27 Mbps co-resident, so nearly fourteen times the bitrate costs about three and a half times
 the CPU and cost per Mbps *falls* as bitrate rises. One core carries roughly a gigabit. **Size a tier
-from the cross-host figure — 0.806 % of a core per remote subscriber, 124–139 per core — not from the
-co-resident one** ([Evidence](evidence.md) §3.6, and §4.4 for how the limit ends). Three planning
-consequences:
+from the cross-host figure — 0.806 % of a core, 1.39 MB and one full stream copy per remote
+subscriber, 124–139 per core at ~10 Mb/s — not from the co-resident one** ([Evidence](evidence.md)
+§3.6). Past that limit throughput *collapses* (up to 95 % aggregate loss while CPU stays pinned), and
+RSS jumps ~2.5× behind a saturated core, so admission control that refuses the N+1th subscriber beats
+serving it badly. Three planning consequences:
 
 - **Count sessions, not gigabits.** High-bitrate contribution feeds are the *cheapest per Mbps* to
   relay; the expensive part of an always-on high-bitrate service is egress, not compute.

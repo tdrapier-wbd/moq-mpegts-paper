@@ -30,7 +30,7 @@ STAG="${3:-1}"
 SETTLE="${4:-25}"
 
 W=/tmp/t37ms
-R=/Users/tdrapier/moq-mpegts-paper/lab/scripts
+R=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 M=~/bin-3529/moq
 PORT=9743
 HTTP=9780

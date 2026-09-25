@@ -32,7 +32,7 @@ PRE="${1:-20}"
 POST="${2:-20}"
 
 W=/tmp/t39a
-R=/Users/tdrapier/moq-mpegts-paper/lab/scripts
+R=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 M=~/bin-3529/moq
 PT=$(cd ~/mpegts-pacer && cargo metadata --format-version 1 --no-deps 2>/dev/null |
 	python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')/release

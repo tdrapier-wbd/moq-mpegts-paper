@@ -44,6 +44,9 @@
 #   MOQ_MUX_RATE  passed to `export ts --mux-rate`. `0` suppresses the padding builds from
 #                 moq-dev #3831 onward apply by default; unset leaves the build's default.
 #   KEEP_TS=1     keeps every capture for re-grading, not just the lossy ones.
+#   SUPERVISE=1   restarts the exporter whenever it exits, appending to the same capture, as a
+#                 process supervisor on a standing egress would; each exit is logged to
+#                 `<cell>.restarts`.
 
 set -u
 
@@ -119,8 +122,9 @@ clear_loss() { ip netns exec t8b-pub tc qdisc change dev veth-pub root handle 1:
 # the next cell's relay then fails to bind :$PORT while the old one answers the subscriber. Wait for
 # the relay to exit, and force it after 10 s.
 cleanup_procs() {
-	pkill -f "t28t31.bench" 2>/dev/null
+	# The subscriber first: under SUPERVISE it is the supervisor, which would restart its exporter.
 	[ -n "${SUB_PID:-}" ] && kill "$SUB_PID" 2>/dev/null
+	pkill -f "t28t31.bench" 2>/dev/null
 	[ -n "${PUB_PID:-}" ] && kill "$PUB_PID" 2>/dev/null
 	if [ -n "${RELAY_PID:-}" ]; then
 		kill "$RELAY_PID" 2>/dev/null
@@ -176,9 +180,23 @@ run_cell() {
 	kill -0 "$RELAY_PID" 2>/dev/null || echo "   RELAY DID NOT START ($(tail -1 "$log.relay.log")) — this cell is void"
 
 	# Subscriber first: reservation gating publishes the catalog once tracks resolve.
-	ip netns exec t8b-sub "$MOQ" "${MOQ_DIAL[0]}" \
-		"${MOQ_DIAL[1]}" "https://$IP_PUB:$PORT" --broadcast "$BC" \
-		export ts "${MOQ_LAT[@]}" "$LATMAX" "${MUX[@]}" >"$cap" 2>"$log.sub.log" &
+	if [ "${SUPERVISE:-0}" = 1 ]; then
+		: >"$cap"
+		(
+			while :; do
+				ip netns exec t8b-sub "$MOQ" "${MOQ_DIAL[0]}" \
+					"${MOQ_DIAL[1]}" "https://$IP_PUB:$PORT" --broadcast "$BC" \
+					export ts "${MOQ_LAT[@]}" "$LATMAX" "${MUX[@]}" >>"$cap" 2>>"$log.sub.log"
+				rc=$?
+				echo "$(date +%s.%N) exit $rc" >>"$log.restarts"
+				sleep 1
+			done
+		) &
+	else
+		ip netns exec t8b-sub "$MOQ" "${MOQ_DIAL[0]}" \
+			"${MOQ_DIAL[1]}" "https://$IP_PUB:$PORT" --broadcast "$BC" \
+			export ts "${MOQ_LAT[@]}" "$LATMAX" "${MUX[@]}" >"$cap" 2>"$log.sub.log" &
+	fi
 	SUB_PID=$!
 	sleep 2
 
@@ -212,6 +230,7 @@ run_cell() {
 	esac
 
 	cleanup_procs
+	[ "${SUPERVISE:-0}" = 1 ] && echo "   exporter exits under supervision: $( (wc -l <"$log.restarts") 2>/dev/null || echo 0)"
 	local bytes
 	bytes=$(stat -c%s "$cap" 2>/dev/null || echo 0)
 	if [ "$bytes" -lt 200000 ]; then

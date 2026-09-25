@@ -54,6 +54,9 @@ GSO=${GSO:-true}
 # Pinning to one core halves the prediction and brings the cliff inside range, which
 # turns "extrapolated ceiling" into a number the rig can either hit or miss.
 CPUSET=${CPUSET:-}
+# Further relay arguments, word-split: `--cluster-connect <origin URL>` makes this relay an edge
+# that pulls from an origin, for a two-tier arm.
+read -r -a EXTRA <<<"${RELAY_EXTRA:-}"
 
 NIC=$(ip -o -4 route show to default | awk '{print $5}' | head -1)
 NIC=${NIC:-ens5}
@@ -62,6 +65,7 @@ NIC=${NIC:-ens5}
 	echo "f5: missing binary $RELAY" >&2
 	exit 1
 }
+moq_cli_detect "${MOQ:-$(dirname "$RELAY")/moq}" "$RELAY"
 
 if ss -ulnp 2>/dev/null | grep -q ":$PORT "; then
 	echo "f5: something is already bound to UDP $PORT — its numbers would not be ours" >&2
@@ -90,7 +94,7 @@ PIN=()
 # but the flag *name* still comes from the detected surface, which renamed at the CLI migration.
 GSO_FLAG="${RELAY_GSO[0]%%=*}=$GSO"
 "${PIN[@]}" "$RELAY" "${RELAY_BIND[@]}" "0.0.0.0:$PORT" "${RELAY_TLS[@]}" "$(hostname -I | awk '{print $1}')" \
-	"${RELAY_AUTH[@]}" "$GSO_FLAG" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
+	"${RELAY_AUTH[@]}" "$GSO_FLAG" "$RELAY_CC_FLAG" "${MOQ_CC:-delay}" "${EXTRA[@]+"${EXTRA[@]}"}" \
 	>"$OUT/relay.log" 2>&1 &
 RELAY_PID=$!
 KIDS+=("$RELAY_PID")
@@ -100,9 +104,9 @@ kill -0 "$RELAY_PID" 2>/dev/null || {
 	exit 1
 }
 
-relay_pid() { pgrep -f "[m]oq-relay.*0.0.0.0:$PORT" | head -1; }
-
-RP=$(relay_pid)
+# `$!` and not `pgrep`: taskset execs in place, so this is the relay, whereas a pattern can match
+# the ssh shell that launched this script and lose the relay when that shell exits.
+RP=$RELAY_PID
 echo "f5 relay side: label=$LABEL relay_pid=$RP nic=$NIC rate=$RATE total=${TOTAL}s"
 
 # The standing load, measured rather than assumed, so the box column can be read
@@ -117,7 +121,7 @@ IDLE_BUSY=$(awk -v dt=$((BT1 - BT0)) -v di=$((BI1 - BI0)) 'BEGIN{printf "%.1f", 
 	echo "relay=$("$RELAY" --version 2>&1 | head -1) relay_pid=$RP"
 	echo "host=$(hostname) cores=$(nproc) started=$(date -u +%FT%T%z)"
 	echo "publisher=remote (on the subscriber host) role=relay-only"
-	echo "server_quic_gso=$GSO cpuset=${CPUSET:-all}"
+	echo "server_quic_gso=$GSO cpuset=${CPUSET:-all} extra=${RELAY_EXTRA:-}"
 	echo "standing_box_busy_pct_before_subscribers=$IDLE_BUSY"
 } >"$OUT/meta.txt"
 echo "  standing load on this host, before any subscriber: ${IDLE_BUSY}% of $(nproc) cores"

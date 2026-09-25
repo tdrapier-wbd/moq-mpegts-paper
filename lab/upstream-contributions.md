@@ -1209,15 +1209,19 @@ A registered prediction was also tested and **failed**: exits do not fall monoto
 drift budget (6/9 at 500 ms, 4/15 at 2 s, 3/9 at 8 s on the pre-fix build), so the budget aggravates
 the failure without explaining it, and the frame-expiry hypothesis is not supported.
 
-**A second unguarded path on the same track is open and not yet reported.** When the publisher goes
-away, `moq export ts` exits `Error: json: dropped` rather than ending cleanly, and a restarted
-publisher reaches nothing — measured 0 B recovered over 25 s, reproduced across two runs
-([T13](test-13-downstream-grooming.md) § *Liveness*). This arrives at the track level through
-`poll_next_group` — the level #3907's own comment deliberately left alone ("a track- or session-level failure still arrives through `poll_next_group` above")
-— so it is a question about
-intended behaviour rather than a straightforward defect: a standing egress cannot outlive a
-publisher restart without supervision, and the error exit gives a supervisor no way to tell a
-broadcast that ended from one that failed.
+**A second exit on the same track, when the publisher goes away, was filed as a question rather than
+a defect**, and is tracked in § *The liveness exit* and § *Four of these were closed as completed*.
+
+### The qlog loss trigger is computed backwards — found, not reported
+
+Both QUIC stacks the lane has run on label every declared loss in their qlog by the reordering
+threshold, whichever rule fired. The trigger is computed as
+`time_sent.saturating_duration_since(now) >= loss_delay`, which subtracts the present from the send
+time, saturates to zero and is never true, so the `TimeThreshold` branch is dead. The line is
+identical in `quinn-proto` 0.11.17 and on quinn's `main`, and in the noq fork (`noq-proto` 1.3.0); no
+quinn issue about it was found. It cost the campaign a published attribution that had to be withdrawn
+([T28](test-28-failure-injection-matrix.md) § *Corrections*). The fix is reversing the operands. **Not
+reported; the venue would be quinn, with noq to follow.**
 
 ---
 

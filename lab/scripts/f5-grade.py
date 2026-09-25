@@ -156,8 +156,10 @@ def main():
             f"{row['subcores']:>10.2f} {row['subbox']:>6.1f}%"
         )
 
-    # Pre-collapse points only: a fit that spans the cliff describes neither side of it.
-    good = [r for r in table if r["frac"] >= 95.0]
+    # Pre-collapse points only: a fit that spans the cliff describes neither side of it. A point
+    # with no subscribers measures the relay with only its publishers attached; it is the fit's
+    # intercept, and has no delivery to hold.
+    good = [r for r in table if r["n"] == 0 or r["frac"] >= 95.0]
     print()
     if len(good) >= 3:
         xs = [r["n"] for r in good]
@@ -180,13 +182,13 @@ def main():
                 f"\n  At {rc:.4f} % of a core per subscriber, one core serves ~{100 / rc:.0f} "
                 f"and this {a.cores}-core host ~{100 * a.cores / rc:.0f} before CPU alone binds."
             )
-        pers = [r["per"] for r in good]
+        pers = [r["per"] for r in good if r["n"] > 0]
         print(
             f"  Per-subscriber delivery across those points: "
             f"{min(pers):.2f}-{max(pers):.2f} Mb/s (spread {(max(pers) - min(pers)) / st.mean(pers) * 100:.2f} %)"
         )
 
-    bad = [r for r in table if r["frac"] < 95.0]
+    bad = [r for r in table if r["n"] > 0 and r["frac"] < 95.0]
     if bad:
         b = bad[0]
         last = good[-1] if good else None

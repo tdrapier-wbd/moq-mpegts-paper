@@ -42,6 +42,10 @@ PORT=${PORT:-4443}
 LATMAX=${LATMAX:-3s}
 CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
 SRCGEN=${SRCGEN:-$HOME/f5/ts-continuous-source.py}
+# A script whose stdout is a TS that never ends, used instead of the clip generator: on builds
+# carrying #3798 a clip-fed publisher exits at its first lap, so a soak longer than the clip needs a
+# live encoder (ts-testsrc-live.sh).
+SOURCE=${SOURCE:-}
 LIVENESS=${LIVENESS:-$HOME/f5/ts-liveness.py}
 OUT=${OUT:-$HOME/f5}/$LABEL
 GSO=${GSO:-true}
@@ -66,6 +70,8 @@ cleanup() {
 	pkill -f "[-]-broadcast $BCAST export ts" 2>/dev/null || true
 	pkill -f "[-]-broadcast $BCAST import ts" 2>/dev/null || true
 	pkill -f "[t]s-continuous-source.py" 2>/dev/null || true
+	pkill -f "[t]s-testsrc-live.sh" 2>/dev/null || true
+	pkill -f "[f]fmpeg .*lavfi -i testsrc2" 2>/dev/null || true
 	pkill -f "[t]sp -I file $OUT/fifo" 2>/dev/null || true
 	pkill -f "[t]s-liveness.py $OUT/fifo" 2>/dev/null || true
 	rm -f "$OUT"/fifo.* 2>/dev/null || true
@@ -82,6 +88,7 @@ box_busy() { awk '/^cpu /{i=$5+$6; t=0; for(j=2;j<=NF;j++)t+=$j; print t, i}' /p
 {
 	echo "label=$LABEL relay=$RELAY_IP:$PORT n=$N duration=${DURATION}s sample=${SAMPLE}s"
 	echo "moq=$("$MOQ" --version 2>&1 | head -1) latency_max=$LATMAX client_quic_gso=$GSO"
+	echo "source=${SOURCE:-$SRCGEN $CLIP}"
 	echo "host=$(hostname) cores=$(nproc) nic=$NIC mem_total_mb=$(awk '/^MemTotal/{print int($2/1024)}' /proc/meminfo)"
 	echo "started=$(date -u +%FT%T%z)"
 	echo "stop_if: MemAvailable<${MIN_AVAIL_MB}MB OR a subscriber exits OR the publisher exits"
@@ -91,11 +98,16 @@ CONN=("${MOQ_DIAL[@]}" "https://$RELAY_IP:$PORT/anon"
 	"--quic-gso=$GSO")
 echo "f5 soak side: n=$N for ${DURATION}s, relay=$RELAY_IP:$PORT, stop below ${MIN_AVAIL_MB}MB free"
 
-[ -f "$SRCGEN" ] || {
-	echo "f5-soak: missing source generator $SRCGEN" >&2
+if [ -n "$SOURCE" ]; then
+	SRC=(bash "$SOURCE")
+else
+	SRC=(python3 "$SRCGEN" "$CLIP")
+fi
+[ -f "${SRC[1]}" ] || {
+	echo "f5-soak: missing source ${SRC[1]}" >&2
 	exit 1
 }
-(python3 "$SRCGEN" "$CLIP" |
+("${SRC[@]}" |
 	tsp -I file - -P regulate --pcr-synchronous --wait-min 5 -O file - |
 	"$MOQ" "${CONN[@]}" --broadcast "$BCAST" import ts) >"$OUT/publisher.log" 2>&1 &
 PUB_PID=$!

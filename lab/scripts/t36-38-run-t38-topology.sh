@@ -20,7 +20,7 @@
 W=/tmp/t36
 cd $W
 FP=$(cat $W/fp.txt)
-LB=/Users/tdrapier/moq-mpegts-paper/lab/scripts/t37-lastbyte.py
+LB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/t37-lastbyte.py
 SETTLE="${SETTLE:-10}"
 OBS="${OBS:-25}"
 TOTAL=$((SETTLE+OBS))

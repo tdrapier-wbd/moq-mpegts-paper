@@ -1,0 +1,17 @@
+--- a/rs/moq-tokio/src/quinn.rs
++++ b/rs/moq-tokio/src/quinn.rs
+@@ -70,6 +70,14 @@
+ 	apply_windows(transport, quic);
+ 
+ 	transport.congestion_controller_factory(congestion_factory(quic.congestion()));
++
++	// Lab instrument, not for upstream: the loss-detection thresholds, 3 packets and 9/8 RTT by default.
++	if let Some(n) = std::env::var("MOQ_LAB_PACKET_THRESHOLD").ok().and_then(|v| v.parse().ok()) {
++		transport.packet_threshold(n);
++	}
++	if let Some(t) = std::env::var("MOQ_LAB_TIME_THRESHOLD").ok().and_then(|v| v.parse().ok()) {
++		transport.time_threshold(t);
++	}
+ }
+ 
+ /// Apply the flow-control windows, leaving each at the backend default when unset.

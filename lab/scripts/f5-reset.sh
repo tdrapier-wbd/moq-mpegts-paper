@@ -28,11 +28,14 @@ PATTERNS=(
 	"[f]5-sub-side.sh"
 	"[f]5-relay-side.sh"
 	"[t]s-continuous-source.py"
+	"[t]s-testsrc-live.sh"
+	"[f]fmpeg .*lavfi -i testsrc2"
 	"[m]oq-relay.*0.0.0.0:${PORT}"
 	# Bracketed like the rest: unbracketed, this matched any shell whose command
 	# line merely contained the string — including the ssh invocation that called
 	# this script, which then killed its own caller before doing anything else.
-	"[e]xport ts ${MOQ_LAT[*]}"
+	# Both names of the export's latency flag, so the reset needs no binary to detect.
+	"[e]xport ts --(max-age|latency-max)"
 )
 # The broadcast name is built at runtime so it never appears literally in an argv
 # that an operator might paste into a remote shell.

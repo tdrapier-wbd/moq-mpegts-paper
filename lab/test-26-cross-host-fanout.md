@@ -6,6 +6,10 @@ Driving the subscribers from a second host retires the caveat on every fan-out f
 [T9](test-9-performance.md)'s knee at N = 55 was the *box*, and cross-host the same relay class
 carries **150 subscribers at 1,426 Mb/s aggregate** with per-subscriber delivery flat within 1.5 %.
 
+**The model below describes `moq-relay` 0.14.15 on quinn, a backend upstream has since deleted.** On
+the current noq build the per-subscriber cost is 1.26 % of a core and 2.6 MB, and channel count adds
+a cost of its own ([T43](test-43-fanout-current-build.md)).
+
 The model, fitted over the points that held delivery and identical in shape across all three arms:
 
 | Per additional subscriber | Cost | Fit |

@@ -15,8 +15,20 @@
 #            then the 2 s matched cell under both controllers.
 #   idle     Whether `fd4f5d82e` survives an outage at the idle timeout because it reconnects: an
 #            outage well past the timeout.
+#   supervise  What a supervised exporter recovers on the current build, whose exporter exits at the
+#            session drop: the 30 s outage cell with the ladder restarting it (SUPERVISE=1).
+#   qlog-quinn  The qlog arm on quinn: `5d0991b9`'s relay built with `--features quinn,qlog`, in
+#            `$HOME/bin-5d0991b9-qlog`, to count what the loss-blind stack declares lost.
+#   pthresh  `ffa5b81b`'s relay with noq's packet reordering threshold raised from 3 and the time
+#            threshold untouched, under a qlog (a local diagnostic build, `$HOME/bin-ffa5b81b-thresh`,
+#            from t2831-loss-thresholds-noq.patch via t2831-build-diag.sh).
+#   thresh   Whether spurious loss is the whole reorder cost: both loss-detection thresholds relaxed
+#            (1000 packets, 2 RTT) on noq and on quinn (`$HOME/bin-5d0991b9-thresh`), and the time
+#            threshold alone on noq, each under a qlog. The cell reorders by up to its 50 ms one-way
+#            delay against a 100 ms RTT, so a 2 RTT time threshold clears it with the ACK delay.
 #
-# Usage: t2831-attrib.sh [outroot] [phase...]   (phases: reorder qlog cubic idle; default all but qlog)
+# Usage: t2831-attrib.sh [outroot] [phase...]
+#        (phases: reorder qlog cubic idle supervise qlog-quinn pthresh thresh; default reorder cubic idle)
 # shellcheck disable=SC2024  # the logs belong to the invoking user, by intent
 set -uo pipefail
 ROOT=${1:-$HOME/t2831-attrib}
@@ -41,7 +53,7 @@ ladder() { # <label> <bindir> <cc> <cells...>
 	shift 3
 	echo "=== $(date -u +%FT%TZ) ladder $label ==="
 	sudo env "${COMMON[@]}" MOQ="$bin/moq" RELAY="$bin/moq-relay" OUT="$ROOT/$label" MOQ_CC="$cc" \
-		bash "$HERE/t28-t31-moq-ladder.sh" "$@" >"$ROOT/$label.log" 2>&1
+		SUPERVISE="${SUPERVISE:-0}" bash "$HERE/t28-t31-moq-ladder.sh" "$@" >"$ROOT/$label.log" 2>&1
 	sudo python3 "$HERE/t2831-conservation.py" "$ROOT/$label" --csv "$ROOT/$label/conservation.csv" 2>/dev/null |
 		sed "s/^/  $label /"
 	grep -h "DID NOT START" "$ROOT/$label.log" | sed "s/^/  $label /"
@@ -87,6 +99,37 @@ for phase in $PHASES; do
 		for rep in 1 2; do
 			ladder "i-fd4f5d82e-r$rep" "$HOME/bin-3529" delay control outage-40s
 		done
+		;;
+	supervise)
+		for rep in 1 2; do
+			SUPERVISE=1 ladder "s-ffa5b81b-r$rep" "$FFA" delay control outage-30s
+			grep -h "exits under supervision" "$ROOT/s-ffa5b81b-r$rep.log" | sed "s/^/  s-ffa5b81b-r$rep /"
+		done
+		;;
+	qlog-quinn)
+		[ -x "$Q5D-qlog/moq-relay" ] || { echo "no $Q5D-qlog/moq-relay (build with --features quinn,qlog)"; continue; }
+		sudo mkdir -p "$ROOT/qlog-quinn"
+		matched r-qlog-quinn "$Q5D-qlog" IMPAIRS="none reorder20" REPS=1 \
+			RELAY_EXTRA="--quic-qlog $ROOT/qlog-quinn"
+		;;
+	pthresh)
+		[ -x "$FFA-thresh/moq-relay" ] || { echo "no $FFA-thresh/moq-relay (t2831-build-diag.sh thresh-noq)"; continue; }
+		for th in ${THRESHOLDS:-1000}; do
+			sudo mkdir -p "$ROOT/qlog-pthresh-$th"
+			matched "r-pthresh-$th" "$FFA-thresh" "${R2[@]}" MOQ_LAB_PACKET_THRESHOLD="$th" \
+				RELAY_EXTRA="--quic-qlog $ROOT/qlog-pthresh-$th"
+		done
+		;;
+	thresh)
+		[ -x "$FFA-thresh/moq-relay" ] && [ -x "$Q5D-thresh/moq-relay" ] ||
+			{ echo "no threshold relays (t2831-build-diag.sh thresh-noq thresh-quinn)"; continue; }
+		sudo mkdir -p "$ROOT/qlog-thresh-noq" "$ROOT/qlog-thresh-noq-t2" "$ROOT/qlog-thresh-quinn"
+		matched r-thresh-noq "$FFA-thresh" "${R2[@]}" MOQ_LAB_PACKET_THRESHOLD=1000 MOQ_LAB_TIME_THRESHOLD=2.0 \
+			RELAY_EXTRA="--quic-qlog $ROOT/qlog-thresh-noq"
+		matched r-thresh-noq-t2 "$FFA-thresh" "${R2[@]}" MOQ_LAB_TIME_THRESHOLD=2.0 \
+			RELAY_EXTRA="--quic-qlog $ROOT/qlog-thresh-noq-t2"
+		matched r-thresh-quinn "$Q5D-thresh" IMPAIRS="none reorder20" REPS=2 \
+			MOQ_LAB_PACKET_THRESHOLD=1000 MOQ_LAB_TIME_THRESHOLD=2.0 RELAY_EXTRA="--quic-qlog $ROOT/qlog-thresh-quinn"
 		;;
 	esac
 done

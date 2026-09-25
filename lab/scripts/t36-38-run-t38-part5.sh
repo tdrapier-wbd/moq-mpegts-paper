@@ -8,7 +8,7 @@ W=/tmp/t36
 cd $W
 M=~/bin-3529/moq
 FP=$(cat $W/fp.txt)
-LB=/Users/tdrapier/moq-mpegts-paper/lab/scripts/t37-lastbyte.py
+LB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/t37-lastbyte.py
 
 echo "################ 5a — key rotation with overlapping validity ################"
 # Mint the successor key and a token under it.

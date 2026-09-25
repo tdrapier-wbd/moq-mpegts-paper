@@ -15,10 +15,12 @@ under every impairment shape run at matched latency, and how much more depends o
 the QUIC stack.** At a 2 s budget a 5 s total outage costs SRT 3.9–5.3 s of video; it costs the MoQ
 lane 7.5 s on the oldest build and 16.3–28.4 s on every later one, where one commit loses the same on
 both stacks and under either controller. Under 5 % random loss SRT
-loses nothing, and the MoQ lane loses 0–0.6 s on quinn, whose `delay` controller is the loss-blind
-BBRv1, but 26.6–37.5 s of a 60 s window on noq, under BBRv3 and CUBIC alike. Under 20 % reorder SRT
+loses nothing, and the MoQ lane loses 0–0.6 s on quinn, whose `delay` controller is BBRv1, with a
+bandwidth model that ignores loss, but 26.6–37.5 s of a 60 s window on noq, under BBRv3 and CUBIC alike. Under 20 % reorder SRT
 loses no pictures and carries several hundred continuity errors; the MoQ lane loses 30.8–38.3 s on
-every build, both stacks included. **This reverses what the file published before** — that an outage shorter
+every build, both stacks included. On noq nearly all of that is the stack's loss detection: a relay
+patched to relax its thresholds, which no flag exposes, loses 2–3 s. On quinn the same patch does not
+save the programme. **This reverses what the file published before** — that an outage shorter
 than the budget was free and that the MoQ lane was ahead under a discrete outage — and the reason
 is the grader: § *Corrections*. Every MoQ cell still returns 0 continuity errors, which on this lane
 is a property of the exporter and measures nothing.
@@ -171,6 +173,23 @@ it, not between the stacks, and it does not depend on the controller. It is not 
 loss-responsive controller nothing to respond to until the path returns, which is consistent with a
 change in the lane's code rather than in its transport.
 
+**The cost came in with upstream's `dev` branch, in at least two steps.** `5d0991b9` merges `dev`
+into `main`, and its two parents were probed on the same 5 s outage cell at the 3 s budget, three
+replicates each, graded by the programme missing ([`t2831-idle-bisect.sh`](scripts/t2831-idle-bisect.sh)
+`JUDGE=missing --step`):
+
+| Build | Where | 5 s outage, video missing (s) |
+|---|---|---|
+| `fd4f5d82e` | `main`, 2026-09-08 | 8.2, 8.2, 8.2 |
+| `1cb2a7360` | `main` at the merge (first parent) | 4.92, 6.4, 7.0 |
+| `c74e99d9` | `dev`, 2026-09-02 | 3.92, 4.8, 9.08 |
+| `e5a8fb51` | `dev`, 2026-09-13 | 12.76, 11.24, 11.56 |
+| `46dc064a` | `dev` at the merge (second parent) | 17.28, 8.82, 17.56 |
+
+`main` never regressed, so the cost is `dev`'s. It rises once between the two `dev` probes and again
+after the second, and the tip is bimodal (8.82 s against 17.3–17.6 s), so a median judge misreads it
+and each half is bisected on the worst replicate against its own threshold.
+
 **Under a 0.9× capacity step the stack does separate, and the controller does not change that.** The
 same `cubic` pass ran the 3 s ladder's 0.9× rung for 60 s: quinn lost 15.90, 20.88 and 19.18 s and noq
 22.78, 38.46 and 25.74 s, where under `delay` the same commit lost 9.86 and 13.90 s on quinn (the first
@@ -206,7 +225,7 @@ the subscriber, from the qlog:
 
 | | Unimpaired | 20 % reorder |
 |---|---|---|
-| Packets declared lost | 0 | 1,619, all by the packet-reordering threshold, none by the time threshold |
+| Packets declared lost | 0 | 1,619 |
 | Of those, acknowledged afterwards | — | **1,619** — every one spurious |
 | Packets sent per 10 s, after the impairment starts | 10,245–10,706 | 1,533–3,674 |
 | Congestion window, median (p10–p90) | 426,721 B (120,872–538,942) | 30,110 B (19,308–370,226) |
@@ -214,12 +233,64 @@ the subscriber, from the qlog:
 | Smoothed RTT, median | 108.9 ms | 105.8 ms |
 
 The first loss is declared 2 s after the impairment begins and the send rate falls with it. The
-smoothed RTT does not move, so this is not queueing: `netem` delivers every packet, the relay reads a
-packet overtaken by three later ones as lost, and BBRv3 takes the loss as congestion and holds its
-window at about a fourteenth of the unimpaired one. This is measured on `ffa5b81b`, noq, BBRv3. It
-explains why capacity, windows and budget are irrelevant here. It does not by itself explain the
-loss-blind quinn builds, whose BBRv1 does not treat loss as a congestion signal and which lose as much
-(§ *What remains*).
+smoothed RTT does not move, so this is not queueing: `netem` delivers every packet, the relay declares
+reordered packets lost that the subscriber then acknowledges, and BBRv3 takes the loss as congestion
+and holds its window at about a fourteenth of the unimpaired one. This is measured on `ffa5b81b`, noq,
+BBRv3, and it explains why capacity, windows and budget are irrelevant here.
+
+The trace does not say which of noq's two loss rules fired. A packet is declared lost once three later
+packets are acknowledged (the packet threshold) or once it is 9/8 of an RTT old with a later one
+acknowledged (the time threshold). The trace labels all 1,619 `reordering_threshold`, but its qlog
+code computes the send time minus the present, which saturates to zero, so it can label no loss by
+time (§ *Corrections*).
+
+**On noq, relaxing both loss rules removes almost the whole reorder cost; relaxing either alone
+removes none of it.** The same cell on `ffa5b81b`'s relay patched to take noq's two thresholds from
+the environment (`t2831-loss-thresholds-noq.patch`; phases `pthresh` and `thresh`), two replicates
+per arm under a qlog. A packet threshold of 1000 cannot fire. A time threshold of 2 RTT clears the
+cell's reordering, which overtakes a packet by at most the 50 ms one-way delay:
+
+| noq relay | Programme missing | Declared lost | Of those, acknowledged afterwards | Window median after |
+|---|---|---|---|---|
+| Default (3 packets, 9/8 RTT) | 37.38–38.1 s | 1,619 | all | 26,958 B |
+| Packet threshold 1000 only | 34.90–36.22 s | 12,749–17,856 | 80–90 % | 88,824–95,585 B |
+| Time threshold 2 RTT only | 36.72–36.92 s | 1,347–5,131 | 43–100 % | 24,480–34,347 B |
+| **Both** | **2.12–3.0 s** | 2,779–3,308 | 25–42 % | 196,676–211,200 B |
+
+*Measured, P1, on `ffa5b81b`, noq, BBRv3, the 2 s matched cell. The default row's programme range
+spans the unpatched base arm (two replicates) and the `qlog` arm (one); its loss and window figures
+are the `qlog` arm's. Window medians are the summariser's (`t2831-qlog-summary.py`), which samples the
+metric differently from the first table: on the default-threshold trace it reads 486,626 B before the
+impairment and 26,958 B after.*
+
+Either rule alone declares enough reordered packets lost to hold the window down. With the packet
+rule out of play the time rule declares about ten times as many losses, most of them spurious. With
+the time rule relaxed alone, the packet rule declares them as before. So both have to be relaxed.
+With both relaxed the relay still declares a few thousand packets lost, most of them never
+acknowledged, and the lane delivers all but 2–3 s. So on noq the reorder cost is the stack's loss
+detection, not the lane or its buffering. The fix is a configuration the relay does not expose. RFC
+9002 permits a sender to raise its thresholds when it sees spurious loss, and neither stack does.
+
+**quinn declares two-thirds of its packets lost, and its window collapses too.** The same cell on
+`5d0991b9`'s relay on quinn (BBRv1), built with qlog (phase `qlog-quinn`, one replicate), lost 37.78 s,
+all of it as a stream short at close. On the relay's connection to the subscriber it declared 55,546
+of the 84,005 packets it sent lost, from 22.0 s, the moment the impairment starts, and its window
+median fell from 12,128,845 B before to 183,580 B after; the smoothed RTT stayed at about 100 ms.
+quinn's trace carries no frames, so whether those packets were acknowledged later is not recorded,
+and its loss labels have the same defect as noq's. BBRv1's bandwidth model ignores loss, but quinn's
+BBRv1 also bounds its window by packet conservation while in recovery (`quinn-proto` 0.11.17,
+`congestion/bbr`), which a continuous stream of declared losses would hold it in.
+
+**On quinn the same relaxation keeps the window and does not save the programme.** Two replicates on
+the patched `5d0991b9` relay, both thresholds relaxed. The programme missing is 27.42 s and 32.36 s.
+The window median after the impairment starts is 407,757–441,497 B, against 183,580 B with the
+default thresholds. The first loss moves from 22.0 s to 24.5–25.7 s. Yet the relay still declares
+86,272 of its 126,940 packets lost and 83,694 of 117,810, 68–71 %. Under a 2 RTT time threshold, a
+packet overtaken by 50 ms is not declared lost. So these packets were plausibly dropped, or delayed
+by more than two round trips, and quinn's reorder cost would then lie outside loss detection. That
+reading is not established: quinn's trace carries no frames and does not record its thresholds, and
+the rig does not sample the bottleneck's drop counter. The arm that settles it is the same cell with
+`tc -s qdisc` sampled at the shaper.
 
 **At an outage equal to the idle timeout, only builds from before upstream's `dev` merge survive,
 because one commit on that branch closes a broadcast with its session.** 30 s is the default idle
@@ -249,6 +320,12 @@ states the mechanism: broadcasts fed by a reconnecting session "linger across a 
 long as the reconnect loop keeps retrying", so that "consumers ride out a relay restart instead of
 tearing down". The same change ends T6's relay-restart drill on the build under test
 ([T6](test-6-relay-resilience.md) § *Transport-resilience drills*).
+
+**A supervisor restores the older build's figure.** With the ladder restarting the exporter whenever
+it exits (`SUPERVISE=1`, [`t2831-attrib.sh`](scripts/t2831-attrib.sh) phase `supervise`), `ffa5b81b`
+loses 34.72 s in both replicates of the 30 s cell, against 63.52 s unsupervised and 33.32–33.64 s on
+`fd4f5d82e`; each replicate restarted its exporter once, after `json: dropped`. The capture after the
+restart is a second process's stream appended to the first, graded on content like any other.
 
 The branch failed the same cell in two other ways on the way there, which a bisection judged on
 survival alone could not separate from this one, and neither is seen on any later build. A reconnect
@@ -697,10 +774,10 @@ the ones that did not.
 
 The bisection runs the 2 s / 20 % cell on every build and both stacks, and **every one loses
 30.8–38.3 s** — `fd4f5d82e` on quinn included — so unlike sustained loss this shape is not the
-backend's, and with CUBIC pinned on `ffa5b81b` it is not the controller's either (34.66–37.7 s). QUIC's
-loss detector declares a packet lost when three later ones are acknowledged, so 20 % reordering reads
-as heavy loss to the sender whatever it then does with that signal; that is reasoned, and it does not
-by itself explain why the loss-blind BBRv1 builds fail here when they ride 5 % loss.
+backend's, and with CUBIC pinned on `ffa5b81b` it is not the controller's either (34.66–37.7 s). On
+noq it is the stack's loss detection: the relay declares reordered packets lost, and relaxing both
+loss thresholds brings the cell to 2.12–3.0 s (§ *The build bisection*). On quinn the same relaxation
+keeps the window and not the programme, so quinn's cost is not attributed.
 
 *Point P1, both lanes graded on the taps' picture count against each budget's clean cell. Two
 replicates per cell, one control per budget, single host and namespace path at 20 Mb/s and 100 ms
@@ -1031,20 +1108,20 @@ reported as tied.
 Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
 and the grader are all on the EC2 secondary.
 
-- **What raised the outage cost after `fd4f5d82e`.** The stack and the controller are excluded: at one
-  commit both stacks lose the same at both budgets and under CUBIC as under their own `delay`
-  (§ *The build bisection*). What is left is the lane's code between the two builds. The arm that
-  settles it is a bisection of that range on the 5 s outage cell at 2 s, which, unlike the idle
-  cell's, is not a race and needs three replicates a step to separate 7.5 s from 16–22 s.
+- **Which `dev` commits raised the outage cost.** The stack and the controller are excluded, and the
+  probes place the cost on `dev` in at least two steps (§ *The build bisection*). The arms that name
+  them are two bisections of the 5 s outage cell at 3 s, three replicates a step, each judged on its
+  worst replicate: `c74e99d9..e5a8fb51` against 10 s, and `e5a8fb51..46dc064a` against 14 s. Each
+  commit found should then be confirmed against its parent at more replicates.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.
-- **Why 20 % reorder defeats the loss-blind quinn builds too.** On noq it is measured: every declared
-  loss is spurious, and BBRv3 cuts its window about fourteen-fold (§ above). quinn's BBRv1 does not
-  cut on loss, so its failure needs another path; spurious retransmission and a recovery-state window
-  are candidates, and neither is measured. The arm that settles it is the same qlog cell on a
-  `5d0991b9` quinn relay built with the `qlog` feature, if quinn's backend writes one. A stack that
-  adapts its reordering threshold on spurious loss, which RFC 9002 permits, would be the fix to test.
+- **Where quinn's reorder cost lies.** On noq it is the loss detection: relaxing both thresholds
+  takes the cell from 37.38–38.1 s to 2.12–3.0 s (§ *The build bisection*). On quinn the same
+  relaxation keeps the window and still loses 27.42–32.36 s, with two-thirds of its packets declared
+  lost even under the 2 RTT time threshold. The arm that settles it samples the shaper's drop counter
+  (`tc -s qdisc`) through the quinn reorder cell. If the shaper drops them, quinn's cost is real
+  loss from its own sending, not detection.
 - **Add the latency axis to the pre-registered scoring rule.** Criterion 5 ranks on media lost alone.
   On content the MoQ lane now loses on that axis as well, so the omission no longer flatters it, but
   it still cannot see that the lane also re-times the service after an outage; any future lane
@@ -1057,8 +1134,9 @@ and the grader are all on the EC2 secondary.
 - **A genuine SRT budget sweep under sustained loss.** Matching on measured latency collapsed the
   three budgets onto one ≈2 s setting.
 - **The bandwidth step** is in [T31](test-31-congestion-capacity-ladders.md); **the infrastructure
-  axis** — kill and restart a publisher, a relay and an exporter — is not run. It needs no emulator
-  and could equally run on the macOS workstation.
+  axis** — kill and restart a publisher, a relay and an exporter — is not run in this rig and graded
+  on content. [T6](test-6-relay-resilience.md) drills the relay and publisher restarts on loopback,
+  counting bytes rather than pictures.
 - **The segmented lane in the `netns` rig**: reorder is not run there, the 5 s outage is one sample,
   and the loss collapse is attributed to the origin's loss-based sender by reasoning; the arm that
   would test it runs the origin with BBR. Criterion 3's three-way ranking needs the reorder cell and
@@ -1086,3 +1164,14 @@ validated on a lane whose egress synthesises the clock; grade such a lane on the
 timeline, conserve against the window, and treat a clean control as necessary rather than sufficient
 ([method-notes](method-notes.md) § *The exporter manufactures bytes and clock*, § *A hole count sees
 only gaps between what arrived*).
+
+**Believed:** noq's relay declared every reordered packet lost by the packet-reordering threshold and
+none by the time threshold, because its qlog labels all 1,619 losses `reordering_threshold`.
+**True:** the label cannot say otherwise. The qlog code in noq, and in the quinn it forks, computes
+the packet's send time minus the present, which saturates to zero and never reaches the loss delay,
+so every loss is labelled by reordering whichever rule fired. Raising the packet threshold to 1000
+left thousands of losses in place, and so the time threshold was firing too. The spurious-loss
+finding stands, because it rests on the acknowledgement frames, not on the label. **Rule:** a field
+that attributes a cause is code like any other; read the code that emits it before quoting it, and
+prefer the evidence that does not depend on it ([method-notes](method-notes.md) § *A trace's labels
+are code*).
