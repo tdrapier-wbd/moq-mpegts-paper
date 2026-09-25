@@ -12,6 +12,8 @@
 # separate shell invocations in this environment.
 #
 # Usage: export-determinism.sh <moq-binary> <relay-binary> <label> [source.ts] [join_s] [window_s]
+# Env: MOQ_TREE, the checkout whose demo/relay/localhost.toml the relay runs (default ~/moq-dev);
+#      MOQ_MUX_RATE, passed to `export ts --mux-rate` (`0` exports unpadded on builds that pad).
 
 set -euo pipefail
 
@@ -41,7 +43,7 @@ trap cleanup EXIT
 
 # GSO off: it stalls on macOS loopback. https:// + pinned fingerprint: the http://
 # bootstrap is broken in these builds.
-( cd ~/moq-dev && "$RELAY" demo/relay/localhost.toml "${RELAY_GSO[@]}" ) \
+( cd "${MOQ_TREE:-$HOME/moq-dev}" && "$RELAY" demo/relay/localhost.toml "${RELAY_GSO[@]}" ) \
 	>"$HOME/det_${LABEL}_relay.log" 2>&1 &
 PIDS+=($!)
 
@@ -54,7 +56,7 @@ done
 
 sub() {
 	"$MOQ" "${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 \
-		--quic-gso=false --broadcast "$BROADCAST" export ts
+		--quic-gso=false --broadcast "$BROADCAST" export ts ${MOQ_MUX_RATE:+--mux-rate "$MOQ_MUX_RATE"}
 }
 
 # Subscriber A first, then the publisher: reservation gating publishes the catalog once

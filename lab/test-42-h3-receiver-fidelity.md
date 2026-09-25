@@ -221,11 +221,18 @@ delivered. The cells that do depend on the timeout are those that push one segme
   namespace figures, not cross-host ones. The one-connection mode has been run on the namespace rig
   only, and its byte fidelity rests on the same concatenation code rather than on a repeat of the
   hash arms.
-- **TCP through the namespace rig's `cake` is unexplained.** In the same diagnostic, HTTP/1.1 over TCP
-  fetched the 3 MB object at 4.15 Mb/s through the 20 Mb/s bottleneck (three fetches, identical) and at
-  21.5–23.7 Mb/s through 1,000 Mb/s, where HTTP/3 at 16m managed ~12.8 and ~23.6. No campaign lane runs
-  TCP in that rig today; one that does has to resolve this first — a TCP bulk transfer through the rig
-  with `ss -i` on the sender would show whether it is the congestion window, the pacing or the qdisc.
+- **TCP through the namespace rig's `cake` is slowed by the rig, not by the receiver.** In the same
+  diagnostic, HTTP/1.1 over TCP fetched the 3 MB object at 4.15 Mb/s through the 20 Mb/s bottleneck
+  (three fetches, identical) and at 21.5–23.7 Mb/s through 1,000 Mb/s, where HTTP/3 at 16m managed
+  ~12.8 and ~23.6. A calibration with no media and no receiver in the path
+  ([`rig-capacity.sh`](scripts/rig-capacity.sh)) reproduced the order of it: a 3 MB bulk TCP transfer
+  ran at 5.92 Mb/s, because CUBIC took an early drop at about 45 % of the path's BDP and left slow
+  start there. It ran at 15.3 Mb/s once the delay moved from in front of the shaper to the
+  acknowledgement path, while paced UDP passed the full rate in both placements. The rig's placement
+  of the delay penalises any ack-clocked bulk transfer, the HTTP/3 fetches included, so the
+  ~12.8 Mb/s above is a rig figure as well; the live media lanes do not move with it
+  ([method notes](method-notes.md) § *Delay in front of the shaper*). The
+  receiver's fidelity results are unaffected, since they are byte comparisons.
 - **The measurements here are `file`-domain at P2**, taken against a VOD fixture on one host with the
   origin and receiver co-resident. They establish what each receiver does to bytes. They are not
   cross-host delivery measurements and carry none of T20's substrate comparison.

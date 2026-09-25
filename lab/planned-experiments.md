@@ -158,7 +158,7 @@ Between them they discharge the two apparatus dependencies that gate the most en
 
 | Entry | Was waiting on | Effect |
 |---|---|---|
-| **P0-j** | a live TS source | **The live feed is that source.** A real encoder's hard cut on a continuous transport timeline is the exact trigger for [#3533](https://github.com/moq-dev/moq/issues/3533), which is open and unfixed, so this arm should be expected to *reproduce* the stall rather than clear it |
+| **P0-j** | a live TS source | **The live feed is that source.** A real encoder's hard cut on a continuous transport timeline is the exact trigger for [#3533](https://github.com/moq-dev/moq/issues/3533). That stall is fixed from `5d0991b9`, but on the same stimulus the importer exits instead, still on `ffa5b81b` ([T40](test-40-continuous-join-through-srt.md)), so this arm should be expected to *reproduce* a failure at the cut rather than clear it |
 | **P0-k** | IRD + analyser loan | The hardware TR 101 290 P1/P2 soak becomes bookable; it is the only route to a `hardware:` domain figure |
 | **P0-d** | analyser-specific pass-table rows | The rows [T33](test-33-gate2-preparation.md) dry-ran against the model can be taken against the instrument |
 | **P1-i** | hardware | Two of the three remaining comparison cells are analyser-scored |
@@ -301,8 +301,9 @@ is in the file named.
 - **The arrival oracle on a bigger host** — run, and the caveat it existed to retire is retired
   ([T19](test-19-pcr-grid-verification.md)).
 - **The clean two-host 1+1 arm, and the full two-publisher two-relay topology** — both run. Remaining
-  multi-track identity is an upstream fix, not another cell here
-  ([T12](test-12-dual-path-handoff.md), [#2829](https://github.com/moq-dev/moq/issues/2829)).
+  multi-track identity is an upstream fix, not another cell here: the interleave half was fixed by
+  [#4001](https://github.com/moq-dev/moq/pull/4001) and verified, and per-leg packet placement is
+  what remains ([T12](test-12-dual-path-handoff.md) § *After the media-time interleave*).
 - **The congestion cells under an AQM** — run, and it falsified the prediction it was meant to test
   rather than leaving it open. Do not re-run it as a rescue ([T8b](test-8b-congestion-control.md)).
 - **Hunting a lower-layer mechanism for the shed** — the sweep discriminated; there is nothing left

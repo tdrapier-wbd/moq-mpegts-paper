@@ -14,8 +14,10 @@
 > **This verdict holds for the six arms measured here.** It does **not** extend to a continuous
 > timeline whose content restarts: no arm below runs one, and
 > [T27](test-27-liveness-detector.md) has bisected a permanent video and primary-audio stall on
-> exactly that stimulus to `0e61e3520` itself — **still present, unchanged, on `fd4f5d82e`**, so a
-> deployment on current `main` must still pin or patch the client. Read everything before
+> exactly that stimulus to `0e61e3520` itself. The stall is fixed from `5d0991b9`, where the importer
+> exits at the same restart instead, still on `ffa5b81b` ([T40](test-40-continuous-join-through-srt.md),
+> [T41](test-41-import-reanchor-coverage.md)), so a deployment must still pin or patch the client.
+> Read everything before
 > § Against the fix as the behaviour of builds earlier than `0e61e3520`.
 
 ## Objective
@@ -428,9 +430,11 @@ cross-host rig, with the relay held at `bin-3515` so the client build is the onl
 | `025613d` pre-#3375 | 9.41–9.64 | 9.46 | **9.10–9.81 Mb/s throughout** |
 | `0e61e35` #3375 merge | 8.95–9.34 | 1.90 | **0.31 Mb/s, no recovery** |
 
-Current `main` is indistinguishable from the #3375 merge itself. That is what the code predicts, and
-upstream is explicit about it: [#3533](https://github.com/moq-dev/moq/issues/3533) is open and
-labelled `quest` with its own plan, `quest/m0/3533-ts-export-restart-stall.md`, which #3529 edited only
+`main` at `fd4f5d82e` was indistinguishable from the #3375 merge itself, which is what the code
+predicted; the fix came later, with [#3784](https://github.com/moq-dev/moq/pull/3784) closing
+[#3533](https://github.com/moq-dev/moq/issues/3533) from `5d0991b9`
+([T40](test-40-continuous-join-through-srt.md)). Upstream had been explicit that #3529 was not it:
+#3533 was labelled `quest` with its own plan, `quest/m0/3533-ts-export-restart-stall.md`, which #3529 edited only
 to remove the note that it must land *after* #3529. Upstream also supplies the trigger this campaign
 declined to guess at: the legacy audio importer extrapolates timestamps from the last PES header and,
 after a resync at the join, re-locks a frame a few milliseconds below its own extrapolated high-water

@@ -23,7 +23,7 @@
 > single impairment result on which the paper's reliability verdict turns. Re-run with the packet sizes
 > equalised, segmented HTTP over TCP reads **0.44**, segmented HTTP over HTTP/3 reads **0.18**, and MoQ
 > reads **0.13**. The lane that was said to be immune to reordering is not: on QUIC it keeps about a
-> quarter of the stream or less (0.166–0.263 across re-measurements, measurement 4a). MoQ's
+> quarter of the stream (0.259–0.263 in three replicates, measurement 4a). MoQ's
 > figure turned out to be its congestion controller's (below), so the two are not "within noise" of
 > each other either; what survives is that reordering hurts both lanes badly.
 >
@@ -301,7 +301,7 @@ which is the check that it is measuring the same thing where nothing distorts it
 | Cell | Arm | As published (`ffmpeg`, `bin-3006`) | Re-measured (video packets, `ffa5b81b`) | Nulls |
 |---|---|---:|---:|---:|
 | reorder `delay 30ms reorder 25% 50%` | H1 | 0.44 | **0.485** | 4.6 % |
-| | H3 | 0.18 | **0.166** § | 4.6 % |
+| | H3 | 0.18 | 0.166 §, void: a truncated capture | 4.6 % |
 | | MoQ | 0.13 | **0.000** BBRv3 / **0.039** CUBIC | 94.1 % |
 | loss 20 % commanded | H1 | 0.096 | **0.131** ‡ | 4.5 % |
 | | H3 | 0.703 | **1.111** | 4.6 % |
@@ -324,8 +324,13 @@ severely impaired segmented arm.
 At this rig's RTT it binds nowhere except, possibly, under reordering. Re-run at 16m, three
 replicates of the reorder cell read **0.259–0.263** by bytes, with 11 holes each (void for carriage),
 which matches [T28](test-28-failure-injection-matrix.md)'s 25.4 % at a 60 s budget on the same rig.
-The 0.166 is not reproduced and its cause is not isolated; the ordering against TCP and MoQ holds at
-every reading.
+**The 0.166 is a capture the receiver's timeout ended, not a delivery reading.** At the 64k buffer a
+segment took 12–15 s to fetch under reordering, against a 15 s per-fetch timeout. Segment 19 crossed
+it at 3,451,143 of 3,753,420 bytes, the receiver refused to concatenate the fragment and exited 1,
+and the 12,396,532 bytes captured are exactly the four segments fetched before that. It is the same
+failure as T28's 4.0 % at the same settings, which crossed at segment 1; at a 60 s timeout the 64k
+buffer reads 25.4 %, so once no fetch is truncated the cell reads a quarter of the stream at either
+buffer. The ordering against TCP and MoQ holds at every reading.
 
 **Read the two columns differently.** On the HLS arms the only thing that changed is the receiver, so
 the movement is a correction. On the MoQ arm the build, the QUIC backend and the congestion
@@ -477,13 +482,14 @@ From the baseline captures and origin logs:
    The published overlap (0.18 against 0.13) held with the MoQ controller unpinned. Pinned, the MoQ
    arm reads **0.000 on BBRv3 and 0.039 on CUBIC** on the same rig, so its value spans the whole
    range of the cell and is set by a flag rather than by the object model. The segmented arm does not
-   depend on that flag, but it does depend on its origin and receiver: 0.166 as re-measured here,
-   0.259–0.263 with the origin's stream buffer at 16m (§ note under the 4a table). What can be said is
+   depend on that flag, nor, once no fetch is truncated, on its origin's stream buffer: 0.259–0.263
+   at 16m and 25.4 % at nginx's 64k default with a 60 s timeout, where the 0.166 first re-measured
+   here was a capture the receiver's timeout ended (§ note under the 4a table). What can be said is
    that the segmented lane over HTTP/3 is *not controller-dependent* under reordering where the
    media-aware lane is, and sits between TCP and MoQ on every reading — which is a weaker and more
    useful claim than the one this conclusion originally made (measurement 4a).
 4. **The substrate change is a trade, and a smaller one than published.** Segmented HTTP loses the
-   reordering cell by moving to QUIC (0.485 on TCP against 0.166–0.263 on HTTP/3) and wins the loss cell
+   reordering cell by moving to QUIC (0.485 on TCP against 0.259–0.263 on HTTP/3) and wins the loss cell
    outright (**0.131 against 1.111** at 20 % commanded). It gains nothing in the 30 s outage cell,
    where the two substrates are byte-identical: recovery there is the origin's retention, not the
    transport's (measurement 4a).

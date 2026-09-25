@@ -27,8 +27,8 @@ distribution has been re-architected before (analogue to digital, ASI to IP, SDI
 time the transport was the least interesting part of the transition: what changed the industry was the
 operating model the transport made possible.
 
-Claims here are marked *established*, *likely* or *uncertain*. Nothing in this document is a
-measurement; the measurements are in [Evidence](evidence.md).
+Claims here are marked *established*, *likely* or *uncertain*. Nothing is measured in this document;
+the measurements, including the two latency figures quoted in §5, are in [Evidence](evidence.md).
 
 ---
 
@@ -269,8 +269,7 @@ and staff skills that are already in place. That is a real advantage and it will
 it does not do is change the marginal economics of the thousandth destination, which is the one thing
 §2.3 cannot fix from the control plane.
 
-**The second attacks R2 from the opposite direction, and it is the one this document previously left
-out.** Rather than looking for an IP fan-out model whose marginal cost approaches zero, the
+**The second attacks R2 from the opposite direction.** Rather than looking for an IP fan-out model whose marginal cost approaches zero, the
 satellite-hybrid architectures keep the medium that already has that property and use IP only where the
 broadcast medium fails: satellite carries the feed to the whole footprint, and a receiver that loses
 data requests just that data over RIST from a buffered recovery server, falling back to a full IP copy

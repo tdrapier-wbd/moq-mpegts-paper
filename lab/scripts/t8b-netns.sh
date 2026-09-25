@@ -22,6 +22,11 @@
 #   sudo ./t8b-netns.sh down
 #
 # Env: RATE_MBIT(5) DELAY_MS(50) QUEUE_MS(500)
+#      PATH_DELAY_MS / ACK_DELAY_MS (default DELAY_MS each): where the RTT sits. The default puts
+#      half in front of the bottleneck, which costs an ack-clocked sender its slow start: TCP CUBIC
+#      exits at about 45 % of the path's BDP and a 3 MB transfer runs at 5.9 Mb/s through 20 Mb/s,
+#      against 15.3 Mb/s with PATH_DELAY_MS=0 ACK_DELAY_MS=100 (rig-capacity.sh). Paced UDP passes
+#      the configured rate either way.
 
 set -euo pipefail
 
@@ -35,6 +40,8 @@ PREFIX=24
 
 RATE_MBIT="${RATE_MBIT:-5}"
 DELAY_MS="${DELAY_MS:-50}"
+PATH_DELAY_MS="${PATH_DELAY_MS:-$DELAY_MS}"
+ACK_DELAY_MS="${ACK_DELAY_MS:-$DELAY_MS}"
 QUEUE_MS="${QUEUE_MS:-500}"
 
 RATE="${RATE_MBIT}mbit"
@@ -65,9 +72,9 @@ up() {
 
   # upstream: base delay only (acks)
   ip netns exec "$NS_SUB" tc qdisc add dev "$VETH_SUB" root \
-    netem delay "${DELAY_MS}ms" limit 100000
+    netem delay "${ACK_DELAY_MS}ms" limit 100000
 
-  echo "t8b-netns: up — pub=$IP_PUB sub=$IP_SUB, base RTT ~$(( DELAY_MS * 2 )) ms"
+  echo "t8b-netns: up — pub=$IP_PUB sub=$IP_SUB, base RTT ~$(( PATH_DELAY_MS + ACK_DELAY_MS )) ms"
   echo "t8b-netns: no bottleneck applied yet — run 'bloat', 'codel' or 'cake'"
 }
 
@@ -79,7 +86,7 @@ apply() {
 
   # stage 1 — base one-way delay; must not drop, the bottleneck queue below is the subject
   ip netns exec "$NS_PUB" tc qdisc add dev "$VETH_PUB" root handle 1: \
-    netem delay "${DELAY_MS}ms" limit 100000
+    netem delay "${PATH_DELAY_MS}ms" limit 100000
 
   if [ "$mode" = "cake" ]; then
     ip netns exec "$NS_PUB" tc qdisc add dev "$VETH_PUB" parent 1:1 handle 10: \
@@ -97,7 +104,7 @@ apply() {
     esac
   fi
 
-  echo "t8b-netns: $mode — rate=$RATE delay=${DELAY_MS}ms/direction queue=${QUEUE_MS}ms (${QBYTES}B)"
+  echo "t8b-netns: $mode — rate=$RATE delay=${PATH_DELAY_MS}ms path, ${ACK_DELAY_MS}ms ack queue=${QUEUE_MS}ms (${QBYTES}B)"
 }
 
 show() {

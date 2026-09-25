@@ -112,8 +112,8 @@ echo "cell,experiment,impairment,window_s,capture_bytes,media_lost_s,media_dup_s
 # Re-shape the live bottleneck without tearing the qdisc down: `change` keeps the queue in
 # place, where a del/add would itself drop the backlog and be scored as the impairment.
 set_rate() { ip netns exec t8b-pub tc qdisc change dev veth-pub parent 1:1 handle 10: cake bandwidth "${1}mbit" >/dev/null 2>&1; }
-set_loss() { ip netns exec t8b-pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" loss "${1}%" limit 100000 >/dev/null 2>&1; }
-clear_loss() { ip netns exec t8b-pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" limit 100000 >/dev/null 2>&1; }
+set_loss() { ip netns exec t8b-pub tc qdisc change dev veth-pub root handle 1: netem delay "${PATH_DELAY_MS:-$DELAY_MS}ms" loss "${1}%" limit 100000 >/dev/null 2>&1; }
+clear_loss() { ip netns exec t8b-pub tc qdisc change dev veth-pub root handle 1: netem delay "${PATH_DELAY_MS:-$DELAY_MS}ms" limit 100000 >/dev/null 2>&1; }
 
 # Some relay builds drain their sessions on SIGTERM for longer than a second (`5d0991b9` does), and
 # the next cell's relay then fails to bind :$PORT while the old one answers the subscriber. Wait for

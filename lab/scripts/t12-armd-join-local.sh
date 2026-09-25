@@ -43,6 +43,10 @@
 # the moment it is sent; two legs emitting the same section then means they agree, rather than
 # meaning the source repeated itself.
 #
+# EXPORT_ARGS is appended to both legs' `export ts`. Builds from moq-dev#3831 on pad the export to
+# the catalog's mux rate by default, placing the padding by arrival; `--mux-rate 0` restores the
+# unpadded export the pair was first graded on.
+#
 # Usage: t12-armd-join-local.sh <moq> <moq-relay> <pacer-dir> <label> <source.ts> [join_s] [window_s] [rate_bps]
 
 set -euo pipefail
@@ -150,8 +154,9 @@ sleep 1
 # with nothing ever expiring a leg that falls behind is never forced to skip. It is what
 # decides whether a stalled leg lags or loses media.
 # The config is copied out so a relay from a worktree build is not made to read, or to be
-# blamed for, whatever branch ~/moq-dev happens to be sitting on.
-cp ~/moq-dev/demo/relay/localhost.toml "$OUT/relay.toml"
+# blamed for, whatever branch ~/moq-dev happens to be sitting on. RELAY_TOML overrides it: the
+# demo config's `[iroh]` section is rejected by a relay built without that feature.
+cp "${RELAY_TOML:-$HOME/moq-dev/demo/relay/localhost.toml}" "$OUT/relay.toml"
 # `exec` so the recorded pid is the relay itself. Without it `$!` is the subshell, teardown
 # kills only that, and the relay survives to hold :4443 into the next run.
 # shellcheck disable=SC2086
@@ -190,8 +195,9 @@ export_ts() { # broadcast logfile
 	# The whole crate rather than the consumer module: "starting track" then appears on every
 	# run, so a run with no skip lines is one where the filter was demonstrably live, rather
 	# than one where the directive silently failed to match.
+	# shellcheck disable=SC2086  # EXPORT_ARGS is a flag list
 	RUST_LOG="${RUST_LOG:-warn,moq_mux=debug}" \
-		"$MOQ" "${CONNECT[@]}" --broadcast "$1" export ts "${MOQ_LAT[@]}" "$LATENCY_MAX" 2>>"$2"
+		"$MOQ" "${CONNECT[@]}" --broadcast "$1" export ts "${MOQ_LAT[@]}" "$LATENCY_MAX" ${EXPORT_ARGS:-} 2>>"$2"
 }
 
 # SC2094: every stage appends to the one log; none of them reads it.

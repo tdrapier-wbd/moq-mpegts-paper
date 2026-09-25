@@ -436,10 +436,12 @@ single-track content is byte-identical on every shared datagram (46,778/46,778, 
 continuity counters and RTP headers included. A seven-stream mux over the same topology reaches
 **75.56 %**: every media PID carries an identical packet count, **99.95 %** of packets are common as a
 multiset, but the legs disagree on *order* because the exporter picks the earliest *available* frame
-rather than the earliest frame — reordering, not damage
-([Evidence](evidence.md) §3.4). **The groomer constraint is necessary but not sufficient:** the stage
-above it must order deterministically, and today does so only for single-track content. Until that
-changes, carry multi-track 1+1 as one pair per elementary stream or merge above the transport.
+rather than the earliest frame — reordering, not damage. Upstream has since made that order a function
+of media time and the legs now agree on it, but each still places a few packets of its own, which
+shifts every later slot ([Evidence](evidence.md) §3.4). **The groomer constraint is necessary but not
+sufficient:** the stage above it must place packets deterministically, and today does so only for
+single-track content. Until that changes, carry multi-track 1+1 as one pair per elementary stream or
+merge above the transport.
 
 **Prerequisite:** slot derivation assumes PCR *value* and *position* advance together. A stream whose
 PCR values are an even grid but whose PCR packets arrive bunched — the fixed MoQ exporter over a byte
@@ -452,7 +454,7 @@ both domains on any new upstream build before promoting it.
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
-| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave | as above | nothing mergeable at the byte; merge above the transport instead |
+| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -990,9 +992,10 @@ Ranked by how much a negative answer would change the architecture.
    software on both lanes — on the media-aware lane over 24.01 h and 632 M packets, crossing the 33-bit
    rollover in flight** ([T21](../lab/test-21-permanence-soak.md)). **Nothing has been near an IRD**, so
    the gate is not complete. Two qualifications travel with the software result. It is bounded by build
-   rather than by duration: the soak ran pre-#3375, and on current `main` a continuous timeline whose
-   content restarts stalls video and primary audio permanently, so a deployment must pin or patch
-   (§12.3). And it costs 2,447 ms of delivery latency, an order of magnitude above the lane's fastest
+   rather than by duration: the soak ran pre-#3375, and no build since carries a continuous timeline
+   whose content restarts — #3375 stalled video and primary audio on it, and from `5d0991b9` the
+   importer exits at the restart instead ([T40](../lab/test-40-continuous-join-through-srt.md)) — so
+   a deployment must pin or patch (§12.3). And it costs 2,447 ms of delivery latency, an order of magnitude above the lane's fastest
    measured figure ([Comparison](comparison.md) §5.1).
 2. **How is the edge gateway's buffer sized for a feed it has not seen?** (§4.2.) The media-aware lane
    costs a buffer bound set by the **peak coded frame**, not by the bitrate: three sources at
@@ -1010,15 +1013,18 @@ Ranked by how much a negative answer would change the architecture.
    end to end, and since [#3375](https://github.com/moq-dev/moq/pull/3375) so are rewinds, forward
    jumps and an encoder restart — all six *placed* classes at the control's content gap, the forward
    jump's missing flag since fixed upstream and re-verified
-   ([T23](../lab/test-23-pcr-discontinuity-classes.md)). **A seventh case is now failing and it is the
-   ordinary one**: on a continuous timeline whose content restarts,
-   #3375 itself stalls video and primary audio permanently
-   ([T27](../lab/test-27-liveness-detector.md)), so a deployment on current `main` must pin or patch
-   the client. What remains untested is
+   ([T23](../lab/test-23-pcr-discontinuity-classes.md)). **A seventh case fails and it is the ordinary
+   one**: a continuous timeline whose content restarts. #3375 itself stalled video and primary audio
+   on it permanently ([T27](../lab/test-27-liveness-detector.md)); that is fixed from `5d0991b9`,
+   where the importer exits at the restart instead, still on `ffa5b81b`
+   ([T40](../lab/test-40-continuous-join-through-srt.md),
+   [T41](../lab/test-41-import-reanchor-coverage.md)), so a deployment must pin or patch the client.
+   What remains untested is
    source-clock drift, mid-stream PID change and T-STD occupancy; each has a reproducible stimulus and
    an instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled
-   (§5.1); what remains is upstream's arrival-ordered interleave on a mux.
+   (§5.1). On a mux the interleave is now deterministic upstream; what remains is per-leg packet
+   placement and per-process continuity counters.
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves
    most of the delivery bill.
 6. **Relay portability between implementations (§8).** This architecture treats the relay as a

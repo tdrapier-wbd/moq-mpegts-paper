@@ -993,9 +993,10 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   earliest frame, so legs whose bytes arrive at different moments order the same media differently.
   Multi-track content therefore stops at 94–96 % even when co-started, and at 75.56 % once the two
   chains are fully independent. Filed as
-  [#2829](https://github.com/moq-dev/moq/issues/2829). **Open**, and the counter fix above is
-  conditional on it: the counter becomes an index within a span, so wherever the legs order media
-  differently the renumbering diverges with it.
+  [#2829](https://github.com/moq-dev/moq/issues/2829). **Fixed by
+  [#4001](https://github.com/moq-dev/moq/pull/4001)**, verified below (§ *#2829 and #3948, closed by
+  #4001*). The counter fix above was conditional on it: the counter becomes an index within a span,
+  so wherever the legs order media differently the renumbering diverges with it.
   **Now measured on fully independent chains and posted to the issue.** A publisher, relay, exporter and
   groomer per host across two availability zones, sharing nothing but a verified-identical source file:
   a single-track feed is byte-identical on all 46,778 shared datagrams, and a seven-stream mux over the
@@ -1056,10 +1057,9 @@ joining 5 s in and a 40.5 s shared media window:
 
 The figures are the same phenomenon as the pre-merge run at a different join offset, which is what
 the mechanism predicts: the period is identical between legs and the phase is wherever the second
-exporter started. [#3948](https://github.com/moq-dev/moq/issues/3948) is therefore still live and now
-has evidence from a merged in-tree gate rather than from a campaign script, which is the most useful
-form it can take. The arm is opt-in, so nothing in CI turns red while the anchoring question is
-decided.
+exporter started. [#3948](https://github.com/moq-dev/moq/issues/3948) was then fixed by
+[#4001](https://github.com/moq-dev/moq/pull/4001), which puts unchanged SI repeats on the media-time
+grid; on the same gate and the CNN clip, SDT/BAT reads 90.91 % (§ *#2829 and #3948, closed by #4001*).
 
 ### A takeover livelock — closed
 
@@ -1499,8 +1499,9 @@ won't-fix on merge and remove its `quest` label)." A deliberate decision, with a
 record. The posted version instead accepts the closure and draws the consequence, which is the
 stronger argument anyway: with the counter permanently out of scope upstream, renumbering has to
 happen downstream, and a downstream filter is then capped by the interleave — 100.00 % on
-single-track with the counter masked against 94.09 % on the real multi-track feed. **#2829 is
-therefore the whole of what remains in-tree, rather than one of two halves.** Method rule in
+single-track with the counter masked against 94.09 % on the real multi-track feed. That made #2829
+the whole of what remained in-tree for the interleave, and #4001 has since fixed it; what is left is
+the byte schedule (§ *#2829 and #3948, closed by #4001*). Method rule in
 [`method-notes.md`](method-notes.md) §6.
 
 ### The byte schedule — a successor to #3334, not a reopen of it
@@ -1598,6 +1599,30 @@ the deterministic-groomer experiment still has no byte schedule to work against
 publisher pinned or its importer fixed ([T34](test-34-real-encoder-severity.md)). Method rule in
 [`method-notes.md`](method-notes.md) § *A closed issue is a claim about a tracker, not about a
 binary*.
+
+### #2829 and #3948, closed by #4001 — real code, and verified
+
+On 2026-09-25 [#2829](https://github.com/moq-dev/moq/issues/2829) and
+[#3948](https://github.com/moq-dev/moq/issues/3948) were closed as completed via
+[#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`), which, unlike #3987, changes the
+exporter: the earliest pending frame waits, bounded by `max_age`, until every other track has shown
+it cannot precede it, and unchanged SI repeats are floored on the media-time grid. Re-verified on the
+primary against `84b34f54`, two replicates each, on the raw exporter output
+([T12](test-12-dual-path-handoff.md) § *After the media-time interleave*):
+
+| Issue | `84b34f54` | `66440a6c` | Verdict |
+|---|---|---|---|
+| #2829 — interleave by arrival | 98.33 %, 98.90 % of cross-PID adjacent pairs in the same order | **100.00 %, 100.00 %** | **fixed** |
+| #3948 — SI phase set by exporter start | SDT 0.00 %, NIT 0.00 % | **SDT 91.67 %, 95.65 %**; NIT 66.67 %, 80.00 % | **fixed for the repeats**; the late leg adds one or two emissions of each table |
+
+What it leaves is outside both issues. TDT/TOT stays off the shared grid (0.00 %, 20.00 %). The legs
+still differ by one or two PCR-only packets per 40 s, which with the join-time tables is enough to
+defeat a slot-level merge (24.7–24.9 % of groomed slots identical, masked). And continuity counters
+remain per process, since [#2779](https://github.com/moq-dev/moq/issues/2779) was abandoned rather
+than fixed. The byte-identical multi-track pair therefore now waits on
+[#3925](https://github.com/moq-dev/moq/issues/3925)'s byte schedule and on downstream renumbering,
+and no longer on the interleave. Nothing is to be filed: the residue is the byte schedule's
+territory, which already has an issue.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
 

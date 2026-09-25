@@ -52,7 +52,9 @@
 # Env: MOQ/RELAY (binary dir via BIN), BUDGETS, REPS, LANES, IMPAIRS, CAP_MBIT, OUTAGE, CLIP,
 #      VPID, NETNS, GRADER, CONTENT, LATENCY, OUT, MATCH_FILE,
 #      MOQ_CC (relay controller, `delay` = BBRv3 default | `loss` = CUBIC),
-#      MOQ_MUX_RATE (`export ts --mux-rate`; `0` suppresses padding), KEEP_TS=1 (keep captures).
+#      MOQ_MUX_RATE (`export ts --mux-rate`; `0` suppresses padding), KEEP_TS=1 (keep captures),
+#      RELAY_EXTRA / SUB_EXTRA (further relay / subscriber flags, e.g. `--quic-send-window 1048576`),
+#      EXPORT_BUDGET (the subscriber's `--max-age`, when it must differ from the cell's budget).
 set -uo pipefail
 
 # Post-#3793 CLI flags, detected per binary rather than assumed.
@@ -70,6 +72,8 @@ CONTENT=${CONTENT:-/home/ubuntu/t28-content-lost.py}
 LATENCY=${LATENCY:-/home/ubuntu/t18-latency.py}
 OUT=${OUT:-/home/ubuntu/p1m}/$LABEL
 MOQ_CC=${MOQ_CC:-delay}
+read -r -a RELAY_X <<<"${RELAY_EXTRA:-}"
+SUB_X=${SUB_EXTRA:-}
 MUX=""
 [ -n "${MOQ_MUX_RATE:-}" ] && MUX="--mux-rate $MOQ_MUX_RATE"
 
@@ -110,13 +114,13 @@ echo "lane,budget_s,srt_ms,matched_how,impair,rep,capture_bytes,media_lost_s,med
 pub() { ip netns exec t8b-pub "$@"; }
 sub() { ip netns exec t8b-sub "$@"; }
 
-set_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" loss "${1}%" limit 100000 >/dev/null 2>&1; }
+set_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${PATH_DELAY_MS:-$DELAY_MS}ms" loss "${1}%" limit 100000 >/dev/null 2>&1; }
 # netem reorders only against a delay, and the reordered packets are the ones sent *early* —
 # `reorder P% 50%` sends P% of packets immediately and delays the rest by DELAY_MS, with 50 %
 # correlation. The base delay is already there, so reorder costs no extra latency and the arm
 # isolates ordering from the loss and latency axes rather than confounding all three.
 set_reorder() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" reorder "${1}%" 50% limit 100000 >/dev/null 2>&1; }
-clear_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" limit 100000 >/dev/null 2>&1; }
+clear_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${PATH_DELAY_MS:-$DELAY_MS}ms" limit 100000 >/dev/null 2>&1; }
 
 # Every pattern here has to match the worker and nothing that merely *mentions* the worker.
 # `[t]18-latency.py` looked safe — the bracket stops pkill matching its own command line — but
@@ -142,6 +146,7 @@ echo "=== $(date -u) p1m $LABEL ==="
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
 	echo "relay controller: $MOQ_CC; export mux-rate: ${MOQ_MUX_RATE:-build default}"
+	echo "relay extra: ${RELAY_EXTRA:-none}; subscriber extra: ${SUB_EXTRA:-none}; export budget: ${EXPORT_BUDGET:-per cell}; cap: ${CAP_MBIT} Mb/s"
 	tsp --version 2>&1 | head -1
 } | tee "$OUT/build.txt"
 
@@ -233,11 +238,11 @@ run_cell() {
 		# `RELAY_AUTH`, never a literal: `--auth-public` inverted at the CLI migration and the
 		# wrong value delivers nothing without erroring anywhere.
 		pub "$BIN/moq-relay" "${RELAY_BIND[@]}" "$PUBIP:$PORT" "${RELAY_TLS[@]}" "$PUBIP" \
-			"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$MOQ_CC" --log-level warn >"$d/relay.log" 2>&1 &
+			"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$MOQ_CC" "${RELAY_X[@]}" --log-level warn >"$d/relay.log" 2>&1 &
 		sleep 3
 		# Subscriber first: reservation gating publishes the catalog once tracks resolve.
-		sub bash -c "timeout $((window + 3)) '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
-                --broadcast '$BC' export ts ${MOQ_LAT[*]} ${budget}s $MUX \
+		sub bash -c "timeout $((window + 3)) '$BIN/moq' $SUB_X ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
+                --broadcast '$BC' export ts ${MOQ_LAT[*]} ${EXPORT_BUDGET:-$budget}s $MUX \
               | $EG_SINK" >"$d/sub.log" 2>&1 &
 		sleep 2
 		pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \

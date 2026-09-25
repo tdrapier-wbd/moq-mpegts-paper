@@ -568,6 +568,19 @@ unalignable, and two that agree would look identical for a trivial reason.
 > that are 93 % null packets is **void, not a pass** — there is no media to align on, and matching
 > stuffing would be the most confident meaningless result available.
 
+**A slot-by-slot comparison measures the first inserted packet, not the property after it.**
+*([T12](test-12-dual-path-handoff.md) § After the media-time interleave.)* Upstream's interleave fix
+was graded first on the groomed RTP pair, and it read 24.7 % identical, against 94 % on an older
+build. Keyed instead by what each access unit is — its PID and PTS — the same pair was **100 %**
+identical in order, and its video packetisation matched packet for packet. The difference was one or
+two PCR-only packets per 40 s and the late leg's join-time tables. Each shifted every later slot, and
+the lockstep and slot comparisons then measured the shift.
+
+> **Before quoting a slot-identity figure, check what it is identical in.** A lockstep or
+> sequence-keyed comparison is valid only while the legs emit the same number of packets. Grade the
+> property the fix claims — order, placement, table phase — on a key the processes cannot mint, and
+> census packet kinds over a content-bounded span to see what the slot figure is really counting.
+
 **Pass `pcrverify --bitrate` explicitly whenever the arm might not be carrying full programme. Grading
 PCRs against a rate TSDuck derived from those PCRs turns a conservation failure into a PCR failure.**
 *(T19 measurement 11.)*
@@ -2011,6 +2024,16 @@ cleanup in a script file on the host and invoke the file**, so the pattern never
 command line. Both this campaign's self-kills have come from patterns typed into the command that
 issues them.
 
+**A bracketed pattern still matches the next waiter in the queue.** *From
+[T28](test-28-failure-injection-matrix.md)'s attribution runs.* Three runs were queued behind one
+another: the first waited on `pgrep -f "[t]2831-attrib\.sh"`, the second on the first's PID, and the
+third on the second's PID before running `t2831-attrib.sh … qlog`. The bracket kept the first waiter
+from matching itself, but the third waiter's command line named the script, so the first waited on
+the third, which waited on the second, which waited on the first. Nothing ran after the attribution
+pass finished. **Queue a chain as one sequential command**, `a; b; c`, or wait on PIDs and end
+markers only; a name pattern matches every command line that mentions the name, including the
+queue's own.
+
 ### A replicate loop inside one script invocation re-uses the fixed port the last replicate held
 
 *From [T31](test-31-congestion-capacity-ladders.md), the QUIC-backend arms.* A wrapper asked for
@@ -2220,6 +2243,41 @@ than on the size of this one. But 0.6 MB would have been quoted as a figure, and
 >
 > **A discarded run's control arm is still data about the instrument**, even when its treatment arms
 > are void. Read it before throwing the pass away.
+
+### Delay in front of the shaper costs an ack-clocked sender, and not a paced one
+
+*From [T42](test-42-h3-receiver-fidelity.md)'s TCP anomaly and
+[`rig-capacity.sh`](scripts/rig-capacity.sh).* TCP through the namespace rig's 20 Mb/s `cake` at
+100 ms ran at 4–6 Mb/s. Calibrated with no media in it, the rig as every ladder runs it — `cake` the
+child of the data path's `netem` delay — passed paced UDP losslessly to 19 Mb/s and saturated at
+19.32 Mb/s of payload, which is the full 20 Mb/s once headers are counted. A 3 MB TCP transfer ran at
+5.92 Mb/s in three of three runs, and 30 MB at 11.37 Mb/s: CUBIC took a drop early, at about 45 % of
+the path's 172-segment BDP, and left slow start with a threshold of 39 segments. With `cake` the data
+path's root and the whole RTT on the acknowledgement path, the 3 MB transfer ran at 15.3 Mb/s with a
+threshold of 245, and UDP was unchanged. Keeping `cake` under a data-path `netem` set to 0 ms, which
+the ladders need in order to impair the path, gave the same TCP figures. Any lane whose sender is ack-clocked — TCP, and QUIC under
+any controller — could therefore be slowed by the rig in a way a paced SRT sender is not. The
+topology arm re-ran both media lanes with the delay on the acknowledgement path, and neither moved
+outside its scatter ([T28](test-28-failure-injection-matrix.md) § *The rig's delay placement moves
+neither lane*). The bias is real for a bulk transfer and not visible in these lanes — reasoned: the
+placement slows the climb to the bottleneck's rate, which a bulk transfer must make from slow start
+and a live stream at the source's rate mostly need not — and only the calibration and the re-run
+together could say which.
+
+> **Calibrate a new or changed rig with bulk and paced traffic before the first lane runs**, and say
+> where the delay sits relative to the bottleneck. A comparison between an ack-clocked and a paced
+> lane on a rig that penalises one of them measures the rig as well; the topology arm
+> ([`t2831-topology.sh`](scripts/t2831-topology.sh)) is how the campaign separates the two.
+
+### A diagnostic flag can exist in `--help` and not in the build
+
+*From [T28](test-28-failure-injection-matrix.md)'s reorder attribution.* The relay advertises
+`--quic-qlog` in every build, and a release build refuses it at init because the `qlog` feature is
+compiled out, so the qlog arm produced NA in every cell and no trace. The help text says so, two lines
+below the flag.
+
+> **Run a diagnostic arm's flag once against the exact binary before queueing it**, and make the
+> arm check for the capability rather than discover its absence in the results.
 
 ---
 

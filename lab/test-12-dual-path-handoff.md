@@ -535,6 +535,48 @@ the interleave, which is a race; the single-track pair is 100 % every time.
 - **The publisher is not implicated.** Running the same cell with two importers fed by one `tee`,
   the topology the campaign used, gives 100.00 % on the single-track source, unchanged.
 
+### After the media-time interleave: the legs agree on order and on SI, and the slots still do not
+
+[#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`) orders the export by media time
+rather than arrival and puts unchanged SI repeats on the media-time grid, closing
+[#2829](https://github.com/moq-dev/moq/issues/2829) and
+[#3948](https://github.com/moq-dev/moq/issues/3948). It was graded against the standing `84b34f54`
+on the primary, two replicates each, `CNNiEMEA2.ts`, leg B joining 20 s late, the export unpadded
+(`--mux-rate 0`), by three instruments that each ask one question of the raw exporter output
+([`export-determinism.sh`](scripts/export-determinism.sh)):
+
+| Question | Instrument | `84b34f54` | `66440a6c` (#4001) |
+|---|---|---|---|
+| Same access-unit order across PIDs | [`ts-interleave.py`](scripts/ts-interleave.py), cross-PID adjacent pairs | 98.33 %, 98.90 % | **100.00 %, 100.00 %** |
+| SDT on a shared grid | [`ts-table-anchor.py`](scripts/ts-table-anchor.py) | 0.00 %, 0.00 % | **91.67 %, 95.65 %** |
+| NIT on a shared grid | the same | 0.00 %, 0.00 % | 66.67 %, 80.00 % |
+| TDT/TOT on a shared grid | the same | 0.00 %, 0.00 % | 0.00 %, 20.00 % |
+| PAT/PMT on a shared grid | the same | 96.03 %, 96.06 % | 97.66 %, 100.00 % |
+| PCR-only video packets over the same PTS span, A / B | per-kind census | 1,740 / 1,758, 1,753 / 1,771 | 1,788 / 1,790, 1,753 / 1,752 |
+
+Every other kind of video packet — payload only, and adaptation field plus payload — matches in
+count exactly between the legs on both builds, and PCR minus PTS at the same access unit is 0.000 ms
+at the median on both, so the legs packetise the video identically and carry the same PCR values.
+Where #4001 misses, the late leg has extra emissions: all 22 of A's SDT emissions are in B, which has
+one or two more, and NIT behaves the same way. Upstream's own gate, `test/ts/run.sh --pair --source`,
+agrees on the same clip (SDT/BAT 90.91 %, PAT and PMT 100 %) and fails on its generated clip
+(PAT/PMT 88.06 %, SDT 80.00 %) on this 2-vCPU host; why the generated clip scores lower is not
+examined here.
+
+**The slot-level pair does not follow.** Through this section's rig on the primary — the August
+`moq_egress` stream-clocked groomer at 15 Mb/s — the groomed legs are **24.72–24.86 %** identical
+with the counter masked on #4001 and **4.07–7.86 %** on `84b34f54`, padded or not. The 94.09 %
+above was `eab960192` on the laptop rig, so the fall from it spans both a build range and a rig
+change and is not attributed; on one rig, #4001 improves on the build before it. A handful of extra packets in one leg — one to two PCR-only packets
+and the join-time table emissions over about 40 s on #4001 — shifts every later slot, and a slot
+comparison then measures the shift. So a byte-identical multi-track pair now needs the exporter's
+packet schedule to be a function of the broadcast, which is the byte schedule
+[#3925](https://github.com/moq-dev/moq/issues/3925) plans. It also needs the continuity counters to
+be, and [#2779](https://github.com/moq-dev/moq/issues/2779) was closed without that fix. The
+content is ready for a merge; the slots are not. What the rig cannot say is whether the groomed
+figure would recover with a groomer that places packets by media time rather than by stream
+position; that arm is not run.
+
 ### Whether a leg ever drops media the other keeps
 
 A pair graded on field identity is only an upper bound until the legs are known to be carrying the
