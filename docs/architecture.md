@@ -702,7 +702,8 @@ at 2 / 10 / 27 Mbps co-resident, so nearly fourteen times the bitrate costs abou
 the CPU and cost per Mbps *falls* as bitrate rises. One core carries roughly a gigabit. **Size a tier
 from the cross-host figure — 0.806 % of a core, 1.39 MB and one full stream copy per remote
 subscriber, 124–139 per core at ~10 Mb/s — not from the co-resident one** ([Evidence](evidence.md)
-§3.6). Past that limit throughput *collapses* (up to 95 % aggregate loss while CPU stays pinned), and
+§3.6). The cross-host figure was measured on `moq-relay` 0.14.15 on quinn, not on the build under
+test. Past that limit throughput *collapses* (up to 95 % aggregate loss while CPU stays pinned), and
 RSS jumps ~2.5× behind a saturated core, so admission control that refuses the N+1th subscriber beats
 serving it badly. Three planning consequences:
 
@@ -732,7 +733,9 @@ linear in subscribers and is the line that dominates a real bill** ([Economics](
 Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill — recovery
 **automatic and bounded, not hitless**. The subscriber's exporter survived it too on builds before
 upstream's `dev` merge; on the build under test it exits at the session drop and needs a supervisor
-to restart it ([Evidence](evidence.md) §3.4).
+to restart it, which brings a 30 s outage back to about what the older build lost
+([Evidence](evidence.md) §3.4). The edge stage should treat that supervisor as part of the egress, not
+as operations tooling, because on the build under test every session loss ends the exporter.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.

@@ -98,8 +98,9 @@ forwards on the order of a gigabit. High-bitrate contribution feeds are the *che
 which cuts against the intuition that they are the expensive case. They are — but on the egress line.
 **For a sizing decision use the cross-host figure instead**: with the relay alone on its own instance and
 every subscriber elsewhere, a remote subscriber costs **0.806 % of a core** and the tier sizes as
-**124–139 subscribers per core** ([Evidence](evidence.md) §3.6). Two cautions travel with it — a
-GSO-disabled run understates relay CPU by ~29 %, and past the limit throughput *collapses* rather than
+**124–139 subscribers per core**, measured on `moq-relay` 0.14.15 on quinn rather than the build under
+test ([Evidence](evidence.md) §3.6). Two cautions travel with it — a
+GSO-disabled run overstates relay CPU, which GSO cut by ~29 %, and past the limit throughput *collapses* rather than
 degrading, so the purchasable capacity is below the measured ceiling.
 
 Cloud instances sustain well below headline network capacity — **relay sizing is an instance-family
@@ -237,7 +238,7 @@ cloud egress; MoQ relay from one supplier at 5–10× commodity today.
 
 **Relay fan-out does not reduce last-mile egress** — measured: 150 subscribers get **9.84 Mb/s each, a
 full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state* (1.39 MB, 0.806 % core per
-subscriber). Upstream backhaul economises where receivers cluster (~$11,500/yr flat vs $185,000 for
+subscriber, on `moq-relay` 0.14.15). Upstream backhaul economises where receivers cluster (~$11,500/yr flat vs $185,000 for
 sixteen without relay on the eight-service model) — same topology as HTTP cache (§4.6). **Carriage
 overhead is not where the money is** — 5.3 % wire saving is real but dwarfed by supplier choice (§3).
 

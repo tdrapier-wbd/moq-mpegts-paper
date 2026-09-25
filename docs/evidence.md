@@ -105,9 +105,9 @@ every "not established" entry recurs in §4 or §5.
 |---|---|---|---|
 | **Carriage** | All three lanes carry a full broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing — **stuffing and mux rate were also missing until [the upstream change that restores stuffing and mux rate](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer), which restores both to within 0.36 %** | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **It also holds over a day** — 24.01 h on a continuous timeline, clean on continuity, repetition, underruns and respawns, crossing the 33-bit rollover in flight ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; anything beyond a day, or on a real encoder's timeline rather than a synthetic clock over a repeating clip | §3.2 |
-| **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched, reordering no longer separates the media-aware lane from segmented HTTP** — the separation that used to do so was a packet-size artefact. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable**: what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. **Matched at equal *measured* delivered latency and graded on the content delivered, SRT loses less programme than the media-aware lane under every impairment shape run** — a 5 s outage, sustained 5–10 % loss and 20 % reorder — and the MoQ figure is set by build and QUIC stack: under sustained loss the loss-blind quinn builds tie SRT and the noq builds lose most of the window whichever controller they run. On content `--max-age` buys back none of an outage, and it is spent in a delivery-latency step that is not bounded by the allowance and does not reverse. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline rather than the controller or bufferbloat. **`--max-age` is a recovery allowance and not a latency setting** — a twelve-fold change in it moves delivered latency not at all on a healthy path, where SRT's `--latency` sets delivered latency exactly, so the two cannot be matched against each other | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge; why 20 % reorder defeats the loss-blind builds too, where on noq it is spurious loss, and what raised the outage cost after the oldest build, the QUIC stack being excluded; SRT below ≈2 s of buffer under loss, which the matched arm could not reach; what segmented HTTP delivers under loss at a non-loopback RTT, where its origin's loss-based sender stalls; whether the latency step ever reverses beyond the two minutes observed | §3.3 |
+| **Loss** | The controller decides the result on both data planes, and **once the lanes are substrate-matched, reordering no longer separates the media-aware lane from segmented HTTP** — the separation that used to do so was a packet-size artefact. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable**: what governs the feed is the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget. **Matched at equal *measured* delivered latency and graded on the content delivered, SRT loses less programme than the media-aware lane under every impairment shape run** — a 5 s outage, sustained 5–10 % loss and 20 % reorder — and the MoQ figure is set by build and QUIC stack: under sustained loss the quinn builds, whose BBRv1 bandwidth model ignores loss, tie SRT and the noq builds lose most of the window whichever controller they run. On content `--max-age` buys back none of an outage, and it is spent in a delivery-latency step that is not bounded by the allowance and does not reverse. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline rather than the controller or bufferbloat. **`--max-age` is a recovery allowance and not a latency setting** — a twelve-fold change in it moves delivered latency not at all on a healthy path, where SRT's `--latency` sets delivered latency exactly, so the two cannot be matched against each other | Where the latency knee sits, and whether it tracks RTT, group duration or relay buffering; the same ladder against a real CDN edge; why 20 % reorder defeats the loss-blind builds too, where on noq it is spurious loss, and what raised the outage cost after the oldest build, the QUIC stack being excluded; SRT below ≈2 s of buffer under loss, which the matched arm could not reach; what segmented HTTP delivers under loss at a non-loopback RTT, where its origin's loss-based sender stalls; whether the latency step ever reverses beyond the two minutes observed | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** — separate publisher, relay, exporter and host in two availability zones. **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which with the exporter's interleave since fixed now needs its packet placement fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
-| **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core, confirmed against a predicted cliff. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; channel-count scaling; high fan-out held for longer than 45 s | §3.5, §3.6 |
+| **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host on `moq-relay` 0.14.15 on quinn, not the build under test, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core, confirmed against a predicted cliff. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; channel-count scaling; high fan-out held for longer than 45 s | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention** rather than cached payload or concurrency, each of which §3.14 rules out with its own control. Tunable: 30 s → 10 s idle timeout takes it to 489 MB | The segmented lane's half of the same experiment, so no comparison; anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
 | **Availability** | Shedding a late group is the lane's designed response to congestion, and **the subscriber process did not reliably survive doing it**: `moq export ts` exited on an evicted group, silently, leaving a syntactically perfect capture behind. [the container-consumer eviction skip](../lab/upstream-contributions.md#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) fixed the container consumer and not the catalog one; [the catalog-track eviction skip](../lab/upstream-contributions.md#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) closed the residual, and the re-run records 0 of 10 against a control's 1 of 10 on the same rig — consistent with the fix, though the event rate is too low for the count alone to establish it | Whether any other consumer carries the same unguarded path; the exit is not a function of budget, so what does determine its rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure** — a source frozen for 120 s produced no log line anywhere, and a dead video path behind a live mux passes the *whole* of TR 101 290 P1 with a worst PCR interval identical to the control's. What does detect every case is **per-PID access-unit liveness**, and that is now a running detector rather than a recommendation: live at the groomed output of a cross-host lane it measures a 60 s video suppression as **57.212 s** against an offline grader's 57.22 s, catches a dead *audio* stream — which has no other wire-observable signature at all — in **0.7–1.4 s**, localises it to the PID, and fires nothing on a healthy lane | Whether commercial monitoring exposes per-PID liveness rather than only per-PID bitrate, which inherits the proportional-sensitivity problem; a **frozen picture** in valid advancing access units, which defeats every transport-layer detector here and over SDI equally; detection-to-response, since only signal availability is measured | §3.12 |
@@ -577,9 +577,11 @@ MoQ lane lost **23.4–33.6 s** — most of the 40 s; the low end is the taps' c
 one build, the high end the bisection's captures at a 2 s budget — and pinning the relay to CUBIC instead of BBRv3 does
 not rescue it; on the quinn builds it lost **0.00–0.64 s** at 5 %, a tie with SRT. At one commit on
 both stacks the figure moves from 0 to 33 s with the backend alone. What the quinn builds' `delay`
-controller has and the others lack is indifference to loss: BBRv1 does not treat a lost packet as a
-congestion signal, and BBRv3 and CUBIC both do. The mechanism is *reasoned*: at 5 % random loss and
-100 ms RTT a loss-responsive sender is held far below a 10 Mb/s stream, so the backlog grows until
+controller has and the others lack is indifference to random loss: BBRv1's bandwidth model does not
+treat a lost packet as a congestion signal, and BBRv3 and CUBIC both do. It is not blind to loss
+altogether: quinn's BBRv1 also bounds its window while in recovery (read from its source), and under
+20 % reorder, where losses are declared continuously, that window is measured to collapse too
+(below). The mechanism is *reasoned*: at 5 % random loss and 100 ms RTT a loss-responsive sender is held far below a 10 Mb/s stream, so the backlog grows until
 the subscriber's release deadline discards it, while SRT's live mode has no congestion controller
 and retransmits inside a fixed delay at whatever rate the loss demands. **So this shape measures
 whether the lane's sender yields to random loss**, and the lane rides it only with a controller that
@@ -592,16 +594,27 @@ picture and carries **430–692 continuity errors** in four of six cells, damage
 decoder is not measured. The MoQ lane's output stays syntactically clean and loses **30.8–38.3 s** of
 a 60 s window. At 5 % neither lane moves.
 
-**On noq the reorder cost is spurious loss, and no buffer or headroom moves it.** A relay qlog on
-`ffa5b81b` (noq, BBRv3) shows every one of the 1,619 packets it declared lost under 20 % reorder
-acknowledged afterwards; the controller holds its
-congestion window at about a fourteenth of the unimpaired median (30,110 B against 426,721 B) with the
-smoothed RTT unchanged, so the sender runs far below the stream. Relay and subscriber windows from
-64 KiB to 64 MiB, an 8 s release budget and five times the bottleneck capacity each leave the loss at
-36.5–38.3 s against the base arm's 37.4–37.6 s. *Measured, P1, the 2 s matched cell; one qlog
-replicate, two per buffering arm.* The quinn builds lose as much with five times the capacity, and
-why is not attributed here ([T28](../lab/test-28-failure-injection-matrix.md) § *The build
-bisection*).
+**On noq the reorder cost is the stack's loss detection: no buffer or headroom moves it, and relaxing
+the loss thresholds removes almost all of it.** A relay qlog on `ffa5b81b` (noq, BBRv3) shows every
+one of the 1,619 packets it declared lost under 20 % reorder acknowledged afterwards; the controller
+holds its congestion window at about a fourteenth of the unimpaired median (30,110 B against
+426,721 B) with the smoothed RTT unchanged, so the sender runs far below the stream. Relay and
+subscriber windows from 64 KiB to 64 MiB, an 8 s release budget and five times the bottleneck capacity
+each leave the loss at 36.5–38.3 s against the base arm's 37.4–37.6 s. A relay patched to relax both
+of QUIC's loss rules — the packet threshold to 1,000 and the time threshold to 2 RTT, neither of which
+any flag exposes — loses **2.12–3.0 s** of the same cell. Relaxing either rule alone leaves the loss at
+34.90–36.92 s, because the other rule then declares the reordered packets lost instead. RFC 9002
+permits a sender to raise its thresholds when it detects spurious loss, and noq does not. *Measured,
+P1, the 2 s matched cell; one qlog replicate, two per buffering and threshold arm.*
+
+**On quinn the same relaxation keeps the window and not the programme.** At `5d0991b9` on quinn
+(BBRv1) the default relay declares 55,546 of 84,005 packets lost and its window median falls from
+12,128,845 B to 183,580 B. Patched the same way, it holds its window at 407,757–441,497 B and still
+loses 27.42–32.36 s, with 68–71 % of its packets declared lost even under the relaxed time threshold.
+Whether those packets were dropped at the bottleneck rather than reordered is not measured, so quinn's
+cost is not attributed; the arm that settles it samples the shaper's drop counter through the same
+cell. *Measured, P1, the 2 s matched cell; one replicate at default, two patched*
+([T28](../lab/test-28-failure-injection-matrix.md) § *The build bisection*).
 
 **The consequence for any comparison is that an impairment figure on this lane has to name its shape,
 its build and its QUIC stack**, and that on content no shape measured favours the media-aware lane over
@@ -686,8 +699,13 @@ evicted group and resuming byte-identical output automatically — a clean objec
 the build under test it exits at the session drop instead** (`json: dropped`; P1, one host over
 loopback), because upstream now closes a broadcast with its last session by design. A standing egress
 therefore needs a supervisor to restart it after any session loss, whether a relay restart or an
-outage that reaches the idle timeout ([T6](../lab/test-6-relay-resilience.md) § *Transport-resilience
-drills*; [T28](../lab/test-28-failure-injection-matrix.md) § *The build bisection*).
+outage that reaches the idle timeout. With one, the build under test loses **34.72 s** of programme
+to a 30 s outage in both replicates, against 63.52 s unsupervised and 33.32–33.64 s on the oldest
+build, whose exporter rides the outage. What follows the restart is a new process's stream, with
+continuity counters of its own, which the edge stage downstream has to absorb. *Measured, P1, `ffa5b81b` on noq, the 3 s ladder on one host at
+20 Mb/s and 100 ms RTT, two replicates* ([T6](../lab/test-6-relay-resilience.md)
+§ *Transport-resilience drills*; [T28](../lab/test-28-failure-injection-matrix.md) § *The build
+bisection*).
 
 **Source failover across a relay mesh works, and is bounded by detection rather than recovery.** A
 relay advertises, per peer, the best route whose hop chain *excludes* the requester, and a shared
@@ -852,7 +870,8 @@ gigabit — about 110–120 sessions at 10 Mbps. Count sessions rather than giga
 contribution-grade high-bitrate feeds are the *cheapest per Mbps* to relay.
 
 **The fan-out limit is the relay's CPU, and it arrives where a linear model says it will.** Measured
-cross-host, with the relay alone on one instance and the publisher and every subscriber on another
+cross-host, with the relay alone on one instance and the publisher and every subscriber on another,
+on `moq-relay` 0.14.15 on quinn rather than the build under test
 ([T26](../lab/test-26-cross-host-fanout.md), P0/P1) — because the earlier N = 55 knee was the *test
 box*: co-located subscribers cost ~2.4× the relay's own CPU, so a 2-vCPU host hit 94 % of both cores
 while the relay used under half of one. Moved off the box, the same relay class carries **150
@@ -894,7 +913,7 @@ the same moment rather than merely slowing down.
 
 **Host configuration outweighs anything else measured**, and it is worth more than a caveat: enabling
 UDP GSO cut per-subscriber relay CPU by **29 %** (1.135 → 0.806 % of a core) and raised the usable
-ceiling by half, on Linux, from one flag. The same relay version had cost ~6× more CPU per Mbps on
+ceiling by half, on Linux, from one flag, on the same 0.14.15 build. The same relay version had cost ~6× more CPU per Mbps on
 macOS loopback with GSO disabled. **Any capacity figure for this lane is a figure about a
 configuration.**
 
@@ -1683,6 +1702,6 @@ verdict is the top open question outright**, and the two arms are equally ready 
 | 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
 | 17a | ~~**`moq import ts` linear memory growth (+2.83 MB/h) — leak or cache?**~~ **Answered on `5d0991b9`** (§3.6) | 2 h re-soak after [the import live-edge exit on content join](../lab/upstream-contributions.md), which is closed upstream but unfixed | [The importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks) closed in [the upstream release merge at `5d0991b9`](../lab/upstream-contributions.md); both continuous and loop re-soaks invalidated on homogeneous `5d0991b9` ([T21](../lab/test-21-permanence-soak.md)) |
 | 18 | ~~**Does segmented HTTP keep its reordering advantage over HTTP/3?**~~ **Answered — no, and it never held it for the reason assumed** (§3.3) | — | Answered by [T20](../lab/test-20-segmented-http3.md), and **the advantage proved not to be a substrate effect at all**: re-run with packet sizes equalised it falls to **0.44 even on TCP**, because the original cell gave the segmented lane 34 kB packets against the media-aware lane's 931 B ones and `netem` reorders per packet. §3.3 carries the H3 figures and the loss and outage cells the substrate change wins the segmented lane instead. **The successor question** is not which lane is more robust but which failure mode a primary feed should prefer — lateness with recoverable objects, or bounded latency with discarded programme |
-| 19 | **Why does the media-aware lane lose more programme than SRT, and why does its figure move with the build?** (§3.3) | A bisection of the 5 s outage cost between the oldest build and the next; a relay qlog of the reorder cell on quinn | Whether the margin by which SRT leads is a property of the lane or of one QUIC stack's configuration. **Partly answered.** The outage cost belongs to the build: at one later commit both stacks lose the same at either budget, under CUBIC as under their own controllers. On noq, 20 % reorder is spurious loss that cuts the sender's window about fourteen-fold, and neither buffering nor headroom moves it. Open: which change raised the outage cost, and why the loss-blind quinn builds fail reorder too |
+| 19 | **Why does the media-aware lane lose more programme than SRT, and why does its figure move with the build?** (§3.3) | A bisection of the 5 s outage cost; the quinn reorder cell with the shaper's drop counter sampled | Whether the margin by which SRT leads is a property of the lane or of one QUIC stack's configuration. **Partly answered.** The outage cost belongs to the build: at one later commit both stacks lose the same at either budget, under CUBIC as under their own controllers. On noq, 20 % reorder is the stack's loss detection: reordered packets are declared lost and the sender's window falls about fourteen-fold, which no buffering or headroom moves and relaxing both loss thresholds all but removes. Open: which change raised the outage cost, and what quinn's reorder cost is, since relaxing its thresholds keeps its window and not the programme |
 
 Protocols for the runnable ones are in [planned-experiments](../lab/planned-experiments.md).

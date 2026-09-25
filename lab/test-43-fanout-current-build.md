@@ -156,7 +156,11 @@ and the graded subscribers counted no continuity error.
 
 The memory term is the larger for sizing: at 60–69 MB a channel, an edge carrying a hundred 10 Mb/s
 channels would hold 6–7 GB before its first subscriber on each. That is extrapolated from 12 channels
-on one build, and which structure holds the memory is not measured.
+on one build, and which structure holds the memory is not measured. It is not the per-group stream-slot
+retention of [evidence §3.6](../docs/evidence.md), which at about 9 KiB a group comes to under 2 MB for
+a channel connected for three minutes. So it is an immediate cost per channel, and whether the ~200 MB
+long-run budget per ingested channel in [architecture §8.3](../docs/architecture.md) already includes
+it is not established.
 
 ### S3 — an edge clustered to an origin
 
@@ -203,6 +207,8 @@ separates them is the origin on a third host. Delivery 97.9–100 %, no continui
 
 - **S1 with `GSO=false` on `ffa5b81b`**, which says whether GSO takes effect on noq and so whether the
   56 % is the stack or the offload.
+- **What holds 60–69 MB per channel.** A read of the relay's ingest path first, then, if it names a
+  setting, S2's twelve-channel point at N = 12 with that setting reduced.
 - **The ceiling itself**, N = 125–200, which needs a second subscriber host or a lighter subscriber.
 - **The origin's CPU on a third host**, which separates the origin's own work from contention with
   the subscribers.
