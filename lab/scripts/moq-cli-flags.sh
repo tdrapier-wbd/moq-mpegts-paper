@@ -87,6 +87,13 @@ moq_cli_detect() {
 		MOQ_FP=(--client-tls-fingerprint)
 		MOQ_GSO=(--client-quic-gso=false)
 	fi
+	# The export's latency flag was renamed separately: commits inside the `dev` branch that #3793
+	# merged have the new dial flags and still `--latency-max`, so ask the subcommand itself.
+	if "$moq" export ts --help 2>&1 | grep -q -- '--latency-max'; then
+		MOQ_LAT=(--latency-max)
+	elif "$moq" export ts --help 2>&1 | grep -q -- '--max-age'; then
+		MOQ_LAT=(--max-age)
+	fi
 
 	RELAY_CLI_NEW=$MOQ_CLI_NEW
 	if [ -n "$relay" ]; then
@@ -111,6 +118,12 @@ moq_cli_detect() {
 		RELAY_AUTH=(--auth-public '')
 		RELAY_CC_FLAG=--server-quic-congestion-control
 		RELAY_IDLE_FLAG=--server-quic-idle-timeout
+	fi
+	# `--auth-public` became a glob separately from the `--listen` rename: inside the `dev` branch
+	# it is still a prefix, where `**` matches nothing and `""` matches everything.
+	if [ "$RELAY_CLI_NEW" -eq 1 ] && [ -n "$relay" ] &&
+		! "$relay" --help 2>&1 | grep -A3 -- '--auth-public <' | grep -q 'Patterns'; then
+		RELAY_AUTH=(--auth-public '')
 	fi
 	RELAY_GREP='[m]oq-relay'
 }

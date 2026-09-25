@@ -582,7 +582,8 @@ subscription, produces the individual renditions endpoints such as OTT origins w
 upstream project's own preference — so it is the approach most likely to attract ongoing investment.
 
 **Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque payload, packaged per
-the MSFTS `m2ts` profile, publishing an MSF catalog describing it. It preserves service signalling
+MSFTS in one of its unmodified modes (the draft's `mpeg2ts` packaging, `m2ts` in the revision
+`moq2ts` implements), publishing an MSF catalog describing it. It preserves service signalling
 and programme structure *by construction* and makes no assumptions about the source encode.
 
 **Media-aware is the default and preferred path; opaque carriage is the fallback.** That ordering is
@@ -726,10 +727,12 @@ number of subscribers, while per-region egress scales with local subscriber coun
 is the whole of the fan-out saving: it is on the inter-region line, while last-mile egress remains
 linear in subscribers and is the line that dominates a real bill** ([Economics](economics.md) §4.5).
 
-### 8.4 Resilience, and its two limits
+### 8.4 Resilience, and its limits
 
-Confirmed: byte-identical fan-out, publisher and subscriber survive relay restart/kill — recovery
-**automatic and bounded, not hitless** ([Evidence](evidence.md) §3.4).
+Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill — recovery
+**automatic and bounded, not hitless**. The subscriber's exporter survived it too on builds before
+upstream's `dev` merge; on the build under test it exits at the session drop and needs a supervisor
+to restart it ([Evidence](evidence.md) §3.4).
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.

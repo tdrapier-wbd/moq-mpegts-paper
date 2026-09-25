@@ -991,7 +991,7 @@ described, the grading is in [Evidence](evidence.md) §3.7 (interop) and §3.1 (
 - `moq-dev` — media-aware lane; publisher, relay, subscriber: https://github.com/moq-dev/moq
 - Cloudflare `moq-rs` — IETF-aligned transport library and production relay, media-agnostic: https://github.com/cloudflare/moq-rs
 - Cloudflare MoQ relay service and provisioning API: https://developers.cloudflare.com/moq/
-- `moq2ts` — transparent MPEG-TS publisher: https://github.com/mondain/moq2ts
+- `moq2ts` — transparent MPEG-TS publisher: https://github.com/openmoq/moq2ts
 - `moqxr` / OpenMOQ Publisher: https://github.com/mondain/moqxr
 - [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — MPEG-TS VBR-to-CBR grooming stage (§11)
 - `rawsendmpeg2ts` — datagram sender: https://github.com/EDIS-mx/rawsendmpeg2ts

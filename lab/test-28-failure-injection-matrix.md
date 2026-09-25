@@ -221,29 +221,43 @@ explains why capacity, windows and budget are irrelevant here. It does not by it
 loss-blind quinn builds, whose BBRv1 does not treat loss as a congestion signal and which lose as much
 (§ *What remains*).
 
-**At an outage equal to the idle timeout, only the oldest build survives, and it survives a race
-that every build runs.** 30 s is the default idle timeout on both ends of every build here, so the
-cell sits on the boundary, and on every build the session times out inside it: each subscriber logs
-`session closed, reconnecting`, drops every track and schedules a reconnect. The exporter then
-survives only if the reconnect resubscribes to the catalog before its catalog consumer ends. On
-`fd4f5d82e` the container consumer takes the dropped tracks as an evicted group
-(`Hang(Moq(Dropped))`), and in all three 30 s cells the client reconnected and resubscribed to the
-catalog and every track about 1.4 s later, so the cell costs the outage and little more. On every
-later build `moq export ts` exits `json: dropped`, the catalog subscription ending, before the
-reconnect completes — the exit [#3926](https://github.com/moq-dev/moq/issues/3926) asks about,
-reached through a transport outage alone. **At 40 s, where the reconnect waits about 10 s for the
-path, `fd4f5d82e` loses the race too**: one replicate resubscribed (43.0 s missing), and the other
-logged the same eviction and then exited `json: dropped` (72.92 s missing, all of it short at close)
-([`t2831-attrib.sh`](scripts/t2831-attrib.sh) phase `idle`). So the oldest build does not handle the
-teardown differently in kind; it loses the race less often, and the 30 s cell's window of about 1 s is
-where the builds separate. The export loop and the catalog consumer read the same in both builds;
-the commits between them rewrote how the exporter's source resolves the broadcast through the origin.
-Bisected on the 30 s cell, two replicates a step
-([`t2831-idle-bisect.sh`](scripts/t2831-idle-bisect.sh)), every `main` commit up to the merge
-survives in both, and the first that does not is `5d0991b9` itself — the merge of the `dev` branch,
-[#3793](https://github.com/moq-dev/moq/pull/3793), the breaking-change release that also migrated
-the CLI. The deployment rule in § *The 30 s cell
-was the QUIC idle timeout* is unaffected: raising the timeout keeps the session up on every build.
+**At an outage equal to the idle timeout, only builds from before upstream's `dev` merge survive,
+because one commit on that branch closes a broadcast with its session.** 30 s is the default idle
+timeout on both ends of every build here, so the cell sits on the boundary, and on every build the
+session times out inside it: each subscriber logs `session closed, reconnecting`, drops every track
+and schedules a reconnect. On the older builds the client keeps the broadcasts that session fed
+alive for the reconnect loop's give-up budget plus one second — 11 s by default — so the exporter
+survives if the reconnect resubscribes inside that window. On `fd4f5d82e` the container consumer
+takes the dropped tracks as an evicted group (`Hang(Moq(Dropped))`), and in all three 30 s cells the
+client reconnected and resubscribed to the catalog and every track about 1.4 s later, so the cell
+costs the outage and little more. **At 40 s, where the reconnect waits about 10 s for the path — the
+edge of that window — `fd4f5d82e` loses in one replicate of two**: one replicate resubscribed
+(43.0 s missing), and the other logged the same eviction and then exited `json: dropped` (72.92 s
+missing, all of it short at close) ([`t2831-attrib.sh`](scripts/t2831-attrib.sh) phase `idle`). On
+every later build `moq export ts` exits `json: dropped` at the session drop, before any reconnect —
+the exit [#3926](https://github.com/moq-dev/moq/issues/3926) asks about, reached through a transport
+outage alone.
+
+**The change is `e2c603c5`, "remove linger; a broadcast closes with its last source"
+([#2704](https://github.com/moq-dev/moq/pull/2704)), made on `dev` and reaching `main` with that
+branch's merge, `5d0991b9` ([#3793](https://github.com/moq-dev/moq/pull/3793)).** Bisected on the
+30 s cell, two replicates a step ([`t2831-idle-bisect.sh`](scripts/t2831-idle-bisect.sh)), every
+`main` commit up to the merge survives in both, and the first that does not is the merge. Inside
+`dev`, judged on the exit itself, `e2c603c5` exits `json: dropped` in both replicates and the three
+commits tested below it, its parent among them, survive in both. The commit's removed documentation
+states the mechanism: broadcasts fed by a reconnecting session "linger across a session drop for as
+long as the reconnect loop keeps retrying", so that "consumers ride out a relay restart instead of
+tearing down". The same change ends T6's relay-restart drill on the build under test
+([T6](test-6-relay-resilience.md) § *Transport-resilience drills*).
+
+The branch failed the same cell in two other ways on the way there, which a bisection judged on
+survival alone could not separate from this one, and neither is seen on any later build. A reconnect
+stall — output ends at the teardown, the client schedules its reconnect and never dials, and nothing
+errors — entered `dev` from `main` at its 29 July merge: that merge's `main` parent `27df65e3` stalls
+in 4 of 4, its `dev` parent `fc6efefa` survives 4 of 4, and `main` had fixed it by 29 August, when
+`d59008da` survives 2 of 2. Between 31 July and 5 August the exporter also exited
+`hang: moq error: old`. The deployment rule in § *The 30 s cell was the QUIC idle timeout* is
+unaffected: raising the timeout keeps the session up on every build.
 
 ¹ **Re-run separately.** In the bisection's own pass the `5d0991b9` 5 s outage and 0.9× cells were
 void on both backends: that build's relay drains its sessions on SIGTERM for longer than the ladder's

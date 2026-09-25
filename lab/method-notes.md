@@ -2269,6 +2269,36 @@ together could say which.
 > lane on a rig that penalises one of them measures the rig as well; the topology arm
 > ([`t2831-topology.sh`](scripts/t2831-topology.sh)) is how the campaign separates the two.
 
+### A bisect across a long-lived branch meets CLI states that neither endpoint has
+
+*From [T28](test-28-failure-injection-matrix.md)'s idle bisection.* The first-parent bisection landed
+on the merge of upstream's `dev` branch, so the second ran inside `dev`. Every step was skipped. The
+rig's flag library inferred the export's latency flag from the dial flags, which is right at both
+endpoints, but the commits inside `dev` had the new dial flags and still the old `--latency-max`, so
+`moq export ts` rejected its arguments and every cell captured 0 bytes. The step logged "no
+teardown", because a cell that never ran has no session to close, and git's bisect then failed on a
+full disk that the branch's builds had filled. With that flag fixed, the next cell was void for a
+second, independent reason: inside `dev` the relay already takes `--listen` and `--auth-public` is
+still a prefix, so the rig's `**` glob matched nothing and the lane delivered nothing, with no error —
+the silent failure described under "`--auth-public` inverted its meaning" below.
+
+> **Detect each flag from the subcommand that takes it**, not from a sibling flag's spelling, and
+> make a bisection step report a void cell as void, with the error it printed. A skip whose reason
+> is only an absence reads the same whether the build is ambiguous or the rig never ran. Before a
+> long bisection, check the build host's free disk against a few full builds; a cargo target
+> directory grows by gigabytes per distant commit.
+
+The merge itself was also a weaker result than it looked. The branch had forked two months earlier
+and absorbed `main` in batches, so its commits failing the cell at the end of August carried `main`
+only to ten days before the oldest good build. "Every `main` commit survives and the merge does not"
+therefore allowed two readings: a change made on the branch, or a fix on `main` that a later merge
+into the branch lost. A pair settled it — a `main` commit the branch absorbed, and the branch's merge
+of it.
+
+> **When a first-parent bisection lands on a merge, test a `main` commit the branch absorbed, and
+> the branch's merge of it, before bisecting the branch.** The branch's commits are not a range
+> above the good end: they need not contain it.
+
 ### A diagnostic flag can exist in `--help` and not in the build
 
 *From [T28](test-28-failure-injection-matrix.md)'s reorder attribution.* The relay advertises
@@ -2681,8 +2711,10 @@ without erroring anywhere.** *(T13 `3831-a`, P0-i, and both standing relays.)*
 > pre-migration build to `5d0991b9` with `--auth-public ""` carried across, so from the repoint
 > onward they accepted every session and would have served nothing. And a rig that hard-codes either
 > value cannot carry a build comparison across the migration: P0-i's positive control is a
-> pre-migration binary, and a literal `"**"` voided it on the first attempt. `moq-cli-flags.sh` now
-> derives `RELAY_AUTH` from the detected surface; use it rather than a literal.
+> pre-migration binary, and a literal `"**"` voided it on the first attempt. The meaning did not
+> change with the rest of the surface: commits inside the `dev` branch that the migration merged have
+> the new `--listen` and still the prefix meaning, where `""` grants everything. `moq-cli-flags.sh`
+> therefore reads `RELAY_AUTH` from the relay's own help text; use it rather than a literal.
 >
 > The general rule is the cheap one and would have caught all of it: **check the capture is non-empty
 > before grading it.** Hours went into bisecting a feature that was working, because a zero-byte file

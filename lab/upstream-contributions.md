@@ -1540,6 +1540,16 @@ made earlier in the same session. The issue asks which of the two it is, and sep
 having either way: a clean exit for "publisher gone" against an error for "something broke", so a
 supervisor can tell them apart.
 
+**The same exit on the subscriber's own session loss is by design, and not reported.** A relay
+restart, or an outage that reaches the idle timeout, ends the exporter the same way on every build
+since upstream's `dev` merge, and the change is [#2704](https://github.com/moq-dev/moq/pull/2704),
+*"remove linger; a broadcast closes with its last source"* — bisected in
+[T28](test-28-failure-injection-matrix.md) § *The build bisection* and re-drilled in
+[T6](test-6-relay-resilience.md) § *Transport-resilience drills*. The removed linger was what let
+consumers "ride out a relay restart instead of tearing down", so this is a deliberate trade and not a
+defect to file. What it leaves open is the distinction #3926 already asks for: a supervisor restarting
+the exporter cannot tell a session loss from a publisher that has gone.
+
 ### A UDP sink for `export ts` — asked once, declined, withdrawn, and re-asked narrowly
 
 [**#1839**](https://github.com/moq-dev/moq/issues/1839), *"feat(egress): generic TS output sink

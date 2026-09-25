@@ -662,12 +662,17 @@ conditions rather than against any of these matrices.
 
 ### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane it does not
 
-**Transport-level resilience is essentially free.** Two independent subscribers produce
-byte-identical continuous captures of one broadcast, so fan-out to N subscribers → N groomers → N
-IRDs needs no extra machinery. The publisher redials its relay with jittered backoff and re-announces
-on every session; two-relay clustering carries the feed; and the exporter survives a relay kill and
-restart, skipping the evicted group and resuming byte-identical output automatically — a clean
-object-boundary gap ([T6](../lab/test-6-relay-resilience.md)).
+**Transport-level resilience is essentially free, except at the exporter on the current build.** Two
+independent subscribers produce byte-identical continuous captures of one broadcast, so fan-out to N
+subscribers → N groomers → N IRDs needs no extra machinery. The publisher redials its relay with
+jittered backoff and re-announces on every session, and two-relay clustering carries the feed. On
+builds before upstream's `dev` merge the exporter also survived a relay kill and restart, skipping the
+evicted group and resuming byte-identical output automatically — a clean object-boundary gap. **On
+the build under test it exits at the session drop instead** (`json: dropped`; P1, one host over
+loopback), because upstream now closes a broadcast with its last session by design. A standing egress
+therefore needs a supervisor to restart it after any session loss, whether a relay restart or an
+outage that reaches the idle timeout ([T6](../lab/test-6-relay-resilience.md) § *Transport-resilience
+drills*; [T28](../lab/test-28-failure-injection-matrix.md) § *The build bisection*).
 
 **Source failover across a relay mesh works, and is bounded by detection rather than recovery.** A
 relay advertises, per peer, the best route whose hop chain *excludes* the requester, and a shared

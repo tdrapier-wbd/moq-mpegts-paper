@@ -15,6 +15,16 @@
 #   bad   in any replicate, after the session closes, the subscriber exits with an error
 #   skip  the build fails, the relay does not start, or a log shows no teardown to judge
 #
+# FIX=1 hunts the other way, for a range whose older end fails and newer end survives: GOOD is then
+# the newer, surviving end, BAD the older, failing one, and git reports the first surviving commit.
+# FIRST_PARENT=0 bisects every commit in the range, for a side branch with no runnable first-parent
+# anchor. JUDGE=bytes grades what the lane delivered rather than what the log says: `dev` builds from
+# late July resume without logging a resubscription, and stall at the teardown without logging an
+# error. MIN_BYTES (40 MB) sits between the cell's two outcomes on the 120 s clip, about 63 MB when
+# the exporter rides the teardown and about 22 MB when its output ends there. JUDGE=error hunts one
+# failure among several: a step is bad if any replicate exits `Error: $BAD_ERROR`, good if none does
+# and one survives by bytes, and skipped if every replicate fails some other way.
+#
 # Usage: t2831-idle-bisect.sh [outroot]        (needs passwordless sudo; the rig is shared, so
 #                                               never beside another rig)
 # The build tree is returned to the commit it was on; `target/release` holds the last step's build.
@@ -26,6 +36,11 @@ GOOD=${GOOD:-fd4f5d82e}
 BAD=${BAD:-5d0991b9}
 CELL=${CELL:-outage-30s}
 REPS=${REPS:-2}
+FIX=${FIX:-0}
+FIRST_PARENT=${FIRST_PARENT:-1}
+JUDGE=${JUDGE:-log}
+MIN_BYTES=${MIN_BYTES:-40000000}
+BAD_ERROR=${BAD_ERROR:-json: dropped}
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 HERE="$(dirname "$SELF")"
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -38,9 +53,11 @@ build() { # <package> <binary>
 
 step() {
 	cd "$SRC" || exit 125
-	local sha out log closed rep verdict=good
+	local sha out log closed rep n err survived=0 verdict=good
 	sha=$(git rev-parse --short=9 HEAD)
 	echo "--- $(date -u +%FT%TZ) $sha $(git log -1 --format=%s | cut -c1-90)" >>"$ROOT/build.log"
+	# A target directory grows by gigabytes per distant commit, and a full disk corrupts the bisect.
+	(($(df --output=avail -k "$SRC" | tail -1) < 6000000)) && cargo clean -q
 	build moq-cli moq || exit 125
 	build moq-relay moq-relay || exit 125
 	mkdir -p "$ROOT/bin"
@@ -54,6 +71,36 @@ step() {
 		log="$out/$CELL.sub.log"
 		[[ -f "$log" ]] || exit 125
 		grep -q "DID NOT START" "$out.log" && exit 125
+		if grep -q "CELL VOID" "$out.log"; then
+			echo "$sha r$rep skip: void, $(grep -m1 -E '^error' "$log")" >>"$ROOT/verdicts.txt"
+			exit 125
+		fi
+		if [[ "$JUDGE" != log ]]; then
+			# From the summary: the ladder deletes a capture whose content grades clean, and one that
+			# ends at the teardown grades clean over its span.
+			n=$(tail -1 "$out/summary.csv" 2>/dev/null | cut -d, -f5)
+			[[ "$n" =~ ^[0-9]+$ ]] || n=0
+			if [[ "$JUDGE" == error ]]; then
+				err=$(grep -m1 '^Error:' "$log")
+				if [[ "$err" == "Error: $BAD_ERROR"* ]]; then
+					echo "$sha r$rep bad: ${n}B $err" >>"$ROOT/verdicts.txt"
+					verdict=bad
+				elif ((n >= MIN_BYTES)); then
+					echo "$sha r$rep good: ${n}B" >>"$ROOT/verdicts.txt"
+					survived=1
+				else
+					echo "$sha r$rep other: ${n}B ${err:-no error}" >>"$ROOT/verdicts.txt"
+				fi
+				continue
+			fi
+			if ((n >= MIN_BYTES)); then
+				echo "$sha r$rep good: ${n}B" >>"$ROOT/verdicts.txt"
+			else
+				echo "$sha r$rep bad: ${n}B $(grep -m1 '^Error:' "$log")" >>"$ROOT/verdicts.txt"
+				verdict=bad
+			fi
+			continue
+		fi
 		closed=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -n -m1 "session closed" | cut -d: -f1)
 		[[ -n "$closed" ]] || { echo "$sha r$rep skip: no teardown" >>"$ROOT/verdicts.txt"; exit 125; }
 		if sed 's/\x1b\[[0-9;]*m//g' "$log" | tail -n "+$closed" | grep -q "subscribe started.*catalog.json"; then
@@ -66,6 +113,11 @@ step() {
 			exit 125
 		fi
 	done
+	[[ "$JUDGE" == error && "$verdict" == good && "$survived" == 0 ]] && exit 125
+	if [[ "$FIX" == 1 ]]; then
+		[[ "$verdict" == good ]] && exit 1
+		exit 0
+	fi
 	[[ "$verdict" == good ]] && exit 0
 	exit 1
 }
@@ -78,9 +130,15 @@ fi
 mkdir -p "$ROOT"
 cd "$SRC" || exit 1
 git bisect reset >/dev/null 2>&1
-git bisect start --first-parent "$BAD" "$GOOD" >>"$ROOT/bisect.log" 2>&1
+fp=()
+[[ "$FIRST_PARENT" == 1 ]] && fp=(--first-parent)
+if [[ "$FIX" == 1 ]]; then
+	git bisect start "${fp[@]}" --term-old=broken --term-new=fixed "$GOOD" "$BAD" >>"$ROOT/bisect.log" 2>&1
+else
+	git bisect start "${fp[@]}" "$BAD" "$GOOD" >>"$ROOT/bisect.log" 2>&1
+fi
 git bisect run bash "$SELF" --step "$ROOT" >>"$ROOT/bisect.log" 2>&1
 git bisect log >"$ROOT/bisect-final.log" 2>&1
-grep -m1 "is the first bad commit" -A6 "$ROOT/bisect.log"
+grep -m1 -E "is the first (bad|fixed) commit|only skipped commits left" -A6 "$ROOT/bisect.log"
 git bisect reset >/dev/null 2>&1
 echo "=== $(date -u +%FT%TZ) idle bisect done ==="

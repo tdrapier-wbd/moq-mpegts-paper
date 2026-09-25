@@ -59,8 +59,9 @@ store are already interchangeable, and the receiver never learns which one serve
 - **Builds.** The drill outcomes below are the current state on the **0.14.8 release** (`moq-relay`
   0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9). The same drills were run on each intervening release
   from 0.8.7 onward as the routing, detach and resume paths were rewritten upstream; the outcomes did
-  not change, and the two places where a *result* moved are called out where they occur (the 4-packet
-  startup offset, and the reconnect ceiling). Note some release binaries cosmetically self-report an
+  not change, and the places where a *result* moved are called out where they occur (the 4-packet
+  startup offset, the reconnect ceiling, and the exporter's survival of a relay restart, which the
+  relay-kill drill re-ran on the build under test). Note some release binaries cosmetically self-report an
   older `--version` string than the release they are built from; trust the in-tree crate versions.
 
 ## Procedure
@@ -153,7 +154,7 @@ the standard ST 2022-7 sender pattern — groom **once** and duplicate the ident
 both paths. Positioning: neither SRT nor Zixi hands a hardware IRD a native ST 2022-7 pair on its own,
 so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on this axis.
 
-### Transport-resilience drills — working
+### Transport-resilience drills — working, except the exporter's on the current build
 
 - **Redundant outputs (fan-out).** Two independent `moq export ts` subscribers produce byte-identical,
   continuous captures. Fan-out to N subscribers → N pacers → N IRDs works today with no extra
@@ -165,11 +166,27 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   auth errors terminal.
 - **A two-relay cluster forms and carries the media-aware TS end to end** (`moq-lite-05`), including
   two publishers of the same broadcast coexisting on separate relays without collision.
-- **`moq export ts` subscriber survives session loss and resumes automatically** (fixed by
+- **`moq export ts` subscriber survives session loss and resumes automatically — on builds before
+  upstream's `dev` merge, and not since** (fixed by
   [#2469](https://github.com/moq-dev/moq/pull/2469)). Across a relay kill+restart both exporters
   freeze at the kill, resume once the publisher re-announces, and are byte-identical before and after
   the gap. The gap = idle-timeout detection + reconnect backoff + re-announce: **automatic and
   bounded, not hitless**; the content gap is a clean object-boundary skip absorbed downstream.
+  **On the build under test both exporters exit instead.** Re-run on one host over loopback with
+  [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) (relay SIGKILL at 12 s, restart at 24 s, client idle
+  timeout 6 s, graded at 70 s):
+
+  | build | exporters at 70 s | written after the restart | exit |
+  |---|---|---|---|
+  | `fd4f5d82e` | both alive | 53.8 MB each | — |
+  | `ffa5b81b` | both exited | 0 B | `Error: json: dropped`, when the idle timeout closed the session |
+
+  The publisher reconnected to the restarted relay normally in both. The change is upstream's
+  [#2704](https://github.com/moq-dev/moq/pull/2704), which removed the client's linger: a broadcast
+  fed by a reconnecting session used to outlive it for the reconnect budget plus one second, and now
+  closes with it, taking the exporter's catalog track along
+  ([T28](test-28-failure-injection-matrix.md) § *The build bisection*, the 30 s cell). A standing
+  egress on the current build therefore needs a supervisor to restart it after any session loss.
 
 ### Limitations observed — media-aware lane
 
@@ -652,8 +669,8 @@ placement decision is where to cut, and the picture type decides that.
 | Scenario | Recovery time | Continuity | Result |
 |---|---|---|---|
 | Relay restart — **publisher** | ~1 s after detection (= QUIC idle timeout, 30 s default) | resumes (re-announces) | ✅ transport reconnect works |
-| Relay restart — **`moq export ts` subscriber** | ~17 s (detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by #2469 |
-| End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469 |
+| Relay restart — **`moq export ts` subscriber** | ~17 s (detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by #2469, on builds before the `dev` merge; ❌ exits `json: dropped` on the build under test (#2704) |
+| End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469, on builds before the `dev` merge; ❌ not without a supervisor on the build under test |
 | Active/active — two publishers, **one relay** | n/a | **dies at 2nd announce** | ❌ `unroutable`, both torn down |
 | Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ since #2473; ❌ before it |
 | Active/active — **single source** into both publishers, co-started | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`/`sub3` identical per-second deltas pre-kill, separated by a constant 4-packet (752 B) startup offset |
