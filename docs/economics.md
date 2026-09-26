@@ -93,15 +93,16 @@ the entire modelled transport line. **This is a transport-line comparison, not a
 Two of the model's inputs are measured rather than assumed ([Evidence](evidence.md) §3.5, §3.6).
 
 **Relay compute is not the constraint.** A subscriber session costs 0.34 % / 0.87 % / 1.18 % of a core
-at 2 / 10 / 27 Mbps *co-resident*, so cost per delivered Mbps *falls* as bitrate rises and one core
+at 2 / 10 / 27 Mbps *co-resident* (subscribers on the relay's own host), so cost per delivered Mbps *falls* as bitrate rises and one core
 forwards on the order of a gigabit. High-bitrate contribution feeds are the *cheapest per Mbps* to relay,
 which cuts against the intuition that they are the expensive case. They are — but on the egress line.
 **For a sizing decision use the cross-host figure instead**: with the relay alone on its own instance and
 every subscriber elsewhere, a remote subscriber costs **0.806 % of a core** and the tier sizes as
-**124–139 subscribers per core**, measured on `moq-relay` 0.14.15 on quinn rather than the build under
-test ([Evidence](evidence.md) §3.6). Two cautions travel with it — a
-GSO-disabled run overstates relay CPU, which GSO cut by ~29 %, and past the limit throughput *collapses* rather than
-degrading, so the purchasable capacity is below the measured ceiling.
+**124–139 subscribers per core**, measured on an earlier relay build (`moq-relay` 0.14.15, on the quinn
+QUIC stack) rather than the build under test ([Evidence](evidence.md) §3.6). Two cautions travel with
+it. A host without GSO, a Linux setting ([Glossary](glossary.md)), overstates relay CPU: enabling it cut
+the cost by ~29 %. And past the limit throughput *collapses* rather than degrading, so the purchasable
+capacity is below the measured ceiling.
 
 Cloud instances sustain well below headline network capacity — **relay sizing is an instance-family
 decision before core count.**

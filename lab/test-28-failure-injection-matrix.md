@@ -190,6 +190,13 @@ replicates each, graded by the programme missing ([`t2831-idle-bisect.sh`](scrip
 after the second, and the tip is bimodal (8.82 s against 17.3–17.6 s), so a median judge misreads it
 and each half is bisected on the worst replicate against its own threshold.
 
+**Neither step is attributed to a commit.** Bisected at three replicates a step, both halves end on
+a merge of `main` into `dev` — `b22ddbf59` against 10 s and `07f313286` against 14 s — and in each case
+both parents pass. The verdicts sit inside the replicate scatter: passing commits in the first half
+reach 9.72 s, and `07f313286` fails on one replicate of 38.22 s beside 7.52 s and 7.36 s. A step this
+small against the cell's scatter cannot be located by a three-replicate judge, and a merge whose
+parents both pass may be an interaction or noise.
+
 **Under a 0.9× capacity step the stack does separate, and the controller does not change that.** The
 same `cubic` pass ran the 3 s ladder's 0.9× rung for 60 s: quinn lost 15.90, 20.88 and 19.18 s and noq
 22.78, 38.46 and 25.74 s, where under `delay` the same commit lost 9.86 and 13.90 s on quinn (the first
@@ -1108,11 +1115,11 @@ reported as tied.
 Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
 and the grader are all on the EC2 secondary.
 
-- **Which `dev` commits raised the outage cost.** The stack and the controller are excluded, and the
-  probes place the cost on `dev` in at least two steps (§ *The build bisection*). The arms that name
-  them are two bisections of the 5 s outage cell at 3 s, three replicates a step, each judged on its
-  worst replicate: `c74e99d9..e5a8fb51` against 10 s, and `e5a8fb51..46dc064a` against 14 s. Each
-  commit found should then be confirmed against its parent at more replicates.
+- **Which `dev` changes raised the outage cost.** The stack and the controller are excluded, and the
+  probes place the cost on `dev` in at least two steps, but three-replicate bisections of each step
+  end on merges whose parents both pass (§ *The build bisection*). The arm that settles it runs each
+  merge and both its parents at ten replicates and compares distributions rather than worst cases,
+  about six hours of the secondary. What upstream could act on without it is the cell and the range.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.

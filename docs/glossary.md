@@ -1,7 +1,8 @@
 # Glossary: the two data planes in broadcast terms
 
-The documents in this repository use two vocabularies. This is the whole of each, in the nearest
-broadcast equivalent. The two are worth reading side by side, because several rows are the same idea
+The documents in this repository use two vocabularies, and both rest on a handful of internet-transport
+terms that a broadcast engineer need not have met. This is the whole of each, in the nearest broadcast
+equivalent. The two are worth reading side by side, because several rows are the same idea
 under different names — a **group** and a **segment** are both "the point a receiver can join at",
 and a **catalog** and a **Media Initialization Section** are both "what PAT/PMT tells you".
 
@@ -45,6 +46,23 @@ comparison that uses them is [Comparison](comparison.md).
 | **`EXT-X-DATERANGE`** | Where SCTE-35 goes: the specification defines an explicit mapping of `splice_info_section()` into a playlist tag, so splice signalling travels out of band rather than depending on an in-band PID surviving transit. |
 | **Redundant Variant Stream / Content Steering** | Two disjoint delivery paths for the same feed, and the mechanism by which a receiver moves between them. The specified equivalent of a 1+1 pair with receiver-side selection. |
 | **ABR2TS** *(vendor term, not in the specification)* | The stage that turns segments back into a continuous transport stream for the installed base. Professional IRDs and edge gateways list it as an input mode; a distributor may buy such a box as its *own* edge stage, but cannot assume a client's receiver has one, so this does not remove the hand-off obligation ([Comparison](comparison.md) §4). |
+
+## Transport and deployment terms
+
+These carry the reliability, scaling and cost arguments, so they appear in every document.
+
+| Term | What it means here |
+|---|---|
+| **QUIC** | The internet transport MoQ runs on (RFC 9000), carried in UDP. It encrypts the session, retransmits lost packets and controls its own sending rate, and it lets many independent streams share one connection so that a loss on one does not hold up the others. |
+| **QUIC stack** (quinn, noq) | The software library that implements QUIC inside the relay and its clients. `moq-dev` ran on quinn and now runs on noq, a fork of it. Results here name the stack because the same MoQ code behaves differently on the two under loss and reordering ([Evidence](evidence.md) §3.3). |
+| **Relay** | A server that takes in a feed once and forwards it to every subscriber that asks for it, keeping recent groups so that a late joiner can start at a group boundary. The MoQ counterpart of a CDN edge. It does not inspect or alter the media. |
+| **Fan-out** | Serving one feed to many destinations. On the internet the last hop to each destination is always its own copy; what a relay tree saves is the copies upstream of that, not the last-mile ones ([Economics](economics.md) §4.5). |
+| **Egress** | Traffic leaving a cloud provider or network towards the internet, usually billed per gigabyte. It is the line that dominates the cost model ([Economics](economics.md) §1). |
+| **Congestion controller** (BBR, CUBIC) | The sender's rule for how fast to send, given the loss and delay it observes. CUBIC backs off on packet loss; BBR estimates the path's bandwidth and round-trip time, and its versions differ in how much loss moves it. SRT in live mode has none: it sends at the source rate and retransmits within a fixed delay. |
+| **Loss, reordering, outage** | The three impairment shapes measured: packets that never arrive, packets that arrive out of order, and a path that carries nothing for a while. QUIC declares a packet lost once enough later packets have arrived, so heavy reordering can read to the sender as heavy loss. |
+| **Idle timeout** | How long a QUIC endpoint waits without hearing from its peer before it treats the session as dead — 30 s by default here. It bounds how quickly a hard failure is detected, and an outage longer than it ends the session ([Evidence](evidence.md) §3.4). |
+| **GSO** (generic segmentation offload) | A Linux host setting that lets a sender hand the kernel many packets in one call. It changes relay CPU cost materially, so every capacity figure names it ([Evidence](evidence.md) §3.6). |
+| **Supervisor** | A process manager, such as systemd, that restarts a program when it exits. On the current build the subscriber needs one to survive a lost session ([Evidence](evidence.md) §3.4). |
 
 ## Broadcast terms used without definition
 
