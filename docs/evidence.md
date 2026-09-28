@@ -841,7 +841,12 @@ know the packet count of every earlier group.
 
 ### 3.5 What does carriage cost on the wire? — MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056×
 
-Measured on a real WAN path (EC2 → home, ~25 ms RTT) with both protocols carrying the same clip over
+**For an operator:** the media-aware lane is the cheapest carriage here only because it declines to
+carry null stuffing, which the groomer regenerates downstream; every verbatim carriage, SRT or
+segmented HTTP, needs more than the source rate. Quote the source's stuffing ratio with any cost
+figure.
+
+Measured on a real WAN path (EC2 to home, ~25 ms RTT) with both protocols carrying the same clip over
 the same path in the same window ([T9](../lab/test-9-performance.md)):
 
 | Data plane | Wire vs source TS | Basis |
@@ -873,10 +878,9 @@ data plane sits between 1.03× and 1.06× whatever its framing, and **the only t
 HTTP/3; the two differ only in framing. So §3.1's fidelity result and this 7 % are one finding read
 twice.
 
-MoQ's return path is eight times SRT's (1.16 % vs 0.13 % of forward); counting both directions
-MoQ is still 4.3 % cheaper. **The advantage tracks the source's stuffing ratio** — quote stuffing
-with any cost figure. HTTP overhead is negligible (0.06–0.09 %); HTTP/3 costs ~2.6 points more than TCP
-for framing.
+MoQ's return path is eight times SRT's (1.16 % vs 0.13 % of forward); counting both directions,
+MoQ is still 4.3 % cheaper. **The advantage tracks the source's stuffing ratio.** HTTP overhead is
+negligible (0.06–0.09 %); HTTP/3 costs ~2.6 points more than TCP for framing.
 
 ### 3.6 What does a relay cost to run? — Cheap and predictable, with one bounded memory cost
 
@@ -1018,10 +1022,14 @@ contribution topology. Treat the shapes as the result and the constants as indic
 
 ### 3.7 Does it interoperate? — Within one implementation, and through none of eight others
 
+**For an operator:** do not plan on a MoQ relay from another vendor carrying this feed. It crosses
+`moq-dev`'s own relay and none of eight others, for at least four distinct reasons, so relay capacity
+cannot yet be treated as a substitutable commodity.
+
 Every other result in this repository was measured against `moq-dev` peers. That makes "a relay is a
-neutral transport fabric" — load-bearing in [Architecture](architecture.md) and the basis for
-treating relay capacity as a substitutable commodity in [Economics](economics.md) — an assumption
-normally granted without test.
+neutral transport fabric" — load-bearing in [Architecture](architecture.md) and the basis for treating
+relay capacity as a substitutable commodity in [Economics](economics.md) — an assumption normally
+granted without test.
 
 Testing it needs a media-level check rather than a handshake, so the fixture is a 20-second transport
 stream and the oracle is its own continuity counters and PSI/SI: **a TS validates itself, with no
@@ -1036,12 +1044,12 @@ relays** — Meta, Google, Cisco, Nokia, Meetecho, Cloudflare, OzU and openmoq.
 **Draft-version incompatibility, the expected culprit, is not the cause.** Negotiation succeeds
 widely, reaching `moq-transport-19` against two relays — above the ceiling the client's own help text
 advertises. The blocking cause is a convention above the version: **`moq-dev`'s publisher withholds
-its namespace announcement until a peer explicitly asks for it, and only `moq-dev`'s own relay asks.**
-Every other relay expects a publisher to announce on connect, so the publisher negotiates, reports no
-error, and then sends no control message at all. Two controls rule out the alternatives: with no
-subscriber connected, `moq-dev`'s relay still asks and its publisher still announces, so it is not
-downstream demand propagating; and instrumenting both ends confirms the silence is real rather than a
-logging artefact.
+its namespace [announcement](glossary.md#moq) until a peer explicitly asks for it, and only
+`moq-dev`'s own relay asks.** Every other relay expects a publisher to announce on connect, so the
+publisher negotiates, reports no error, and then sends no control message at all. Two controls rule
+out the alternatives: with no subscriber connected, `moq-dev`'s relay still asks and its publisher
+still announces, so it is not downstream demand propagating; and instrumenting both ends confirms the
+silence is real rather than a logging artefact.
 
 **Both behaviours are permitted by the draft** — announcing unprompted is a MAY — so this is
 underspecification surfacing as an interop hazard rather than a defect in anyone's code, and it is
@@ -1050,25 +1058,29 @@ passes cleanly, which confirms the transport itself carries broadcast MPEG-TS co
 
 **The eight failures resolve into at least four distinct causes**, so fixing the announce convention
 alone would not clear them: five relays establish a session and are blocked by the announce
-convention; a second hazard of the same kind sits behind it, since the subscriber opens discovery on
-an *empty* namespace prefix which one relay rejects outright and about which the draft is internally
-inconsistent; one relay refuses SETUP; and two never establish a connection at all. **The last three
-are undiagnosed.**
+convention; a second hazard of the same kind sits behind it, since the subscriber opens discovery on an
+*empty* namespace prefix (the feed-name prefix it asks about), which one relay rejects outright and
+about which the draft is internally inconsistent; one relay refuses SETUP, the session handshake; and
+two never establish a connection at all. **The last three are undiagnosed.**
 
-**Multi-vendor relay portability is absent in practice** — a client-side announce default, fixable,
-but the economic substitutability argument is unproven until a feed traverses someone else's relay.
-The community interop matrix is control-plane only; this project contributed a media-level profile
-([`interop/`](../interop/README.md)). The test client falls back to WebSocket after 200 ms, confounding
-distance tests.
+**Multi-vendor relay portability is absent in practice.** The cause is a client-side announce default,
+which is fixable, but the economic substitutability argument is unproven until a feed traverses someone
+else's relay. The community interop matrix is control-plane only; this project contributed a
+media-level profile ([`interop/`](../interop/README.md)). The test client falls back to WebSocket after
+200 ms, which confounds distance tests.
 
 ### 3.8 How do the data planes compare on delivery cadence? — Three structurally different classes
 
-All figures from the same clip through the same instrument, at a 1 ms burst-grouping threshold
+**For an operator:** the three classes hand a groomer very different input. MoQ delivers small bursts
+with short silences, SRT and RIST pass the source's own pacing through unchanged, and segmented HTTP
+delivers megabyte bursts separated by seconds of silence, which a groomer behind it must ride out.
+
+All figures come from the same clip through the same instrument, at a 1 ms burst-grouping threshold
 ([T14](../lab/test-14-data-plane-comparison.md), [T15](../lab/test-15-point-to-point-cadence.md)).
 
 | Class | Egress granularity is set by | Median burst | Largest gap | 10 ms peak/mean |
 |---|---|---|---|---|
-| **MoQ** | the object model — *re-paces*, finer than its input | 12.2–12.4 kB, whatever the source | 149 ms | 24× |
+| **MoQ** | the [object](glossary.md#moq) model — *re-paces*, finer than its input | 12.2–12.4 kB, whatever the source | 149 ms | 24× |
 | **RIST / SRT** | the source — *transparent* | 30.6 kB here, tracking the publisher exactly | ~35 ms | 3.4× |
 | **Segmented HTTP** | segment duration — *aggregates* | 2.95 MB at 2 s segments | 4.01 s | 231× |
 | libRIST with opt-in `cbr-output` | the receiver's own pacing | 1.3 kB | ~35 ms | 3.28× |
@@ -1081,15 +1093,14 @@ second of the window; segmented HTTP alternates between nothing and 20–30 Mb/s
 
 **RIST and SRT are indistinguishable from no transport at all.** Against a plain-UDP control through
 the same chain, median and p95 burst match to three significant figures, for RIST Main, RIST Simple
-and SRT, at two different source granularities. They neither coarsen their input nor refine it —
+and SRT, at two different source granularities. They neither coarsen their input nor refine it,
 though they do smooth *within* the burst, halving the 10 ms peak-to-mean against the raw control,
 because a jitter buffer drains a group over a longer sub-interval than the kernel does.
 
 **MoQ, by contrast, sets its own granularity.** Fed a source four times finer, its egress does not
 move: 12.2 kB median against 12.4 kB, and a 149 ms worst case either way. That is the structural
-difference, and it falsified the prediction that grooming burden would rank inversely to scalability
-— the most scalable candidate is also the finest-grained, and the incumbent tunnels sit in the
-middle.
+difference, and it falsified the prediction that grooming burden would rank inversely to scalability:
+the most scalable candidate is also the finest-grained, and the incumbent tunnels sit in the middle.
 
 **The two hand-off rankings disagree, and which one matters depends on the groomer.** MoQ delivers
 the smallest bursts; RIST and SRT the shortest silences, by a factor of four. A groomer's buffer is
@@ -1108,6 +1119,10 @@ below a 2 ms threshold.*
 
 ### 3.9 Can low-latency HLS carry MPEG-TS in practice? — It can be published free, and nothing free receives it
 
+**For an operator:** low-latency HLS with MPEG-TS parts can be published at no cost, but no free
+receiver fetches the parts, so TS-in-HLS runs at classic HLS latency unless a commercial ABR-to-TS
+receiver is bought.
+
 The HLS specification permits partial segments in MPEG-TS, and the low-latency ecosystem standardised
 on CMAF/fMP4 regardless. Measured rather than read off documentation, the gap sits **entirely on one
 side of the pipeline** ([T14](../lab/test-14-data-plane-comparison.md)).
@@ -1119,11 +1134,11 @@ preload hint for the part still being written. The tools are closed-source and m
 are free and it took one command.
 
 **Nothing free receives it.** Both freely available clients that can turn HLS back into a transport
-stream fetched **zero** parts from an origin advertising them, and fell back to whole segments.
-Repeated against two origins — a static one, and Apple's own low-latency origin example advertising
-`CAN-BLOCK-RELOAD=YES` and `PART-HOLD-BACK=0.900` and validating with zero MUST-fix issues — with the
-same outcome, and **zero blocking playlist reloads** from either client, so neither even attempted
-the low-latency handshake.
+stream fetched **zero** parts from an origin advertising them, and fell back to whole segments. The
+outcome was the same against two origins — a static one, and Apple's own low-latency origin example
+advertising `CAN-BLOCK-RELOAD=YES` and `PART-HOLD-BACK=0.900` and validating with zero MUST-fix
+issues — with **zero blocking playlist reloads** from either client, so neither even attempted the
+low-latency handshake.
 
 **The control that makes this a statement about clients rather than about the rig** is Apple's own
 `mediastreamvalidator`, which over the same origins fetched 21 parts against 5 segments, and 17
@@ -1146,7 +1161,7 @@ This is worth holding beside §3.7. **HLS has no normative reference implementat
 an Apple-authored informational document — and its authoritative implementation is closed-source, yet
 every cache, CDN and general-purpose client carries it. MoQ is standards-track with open
 implementations and no cross-implementation media interop. **Open source and interoperability are not
-the same axis, and here they point in opposite directions.** But the two results scope each other:
+the same axis, and here they point in opposite directions.** The two results scope each other, though:
 HLS's ubiquity is on the delivery path and among clients that terminate in a player, and this section
 is the measurement that it does *not* extend to a low-latency transport-stream receive path
 ([Comparison](comparison.md) §6.1).
