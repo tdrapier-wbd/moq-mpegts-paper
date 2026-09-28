@@ -1462,12 +1462,17 @@ per-stream liveness plus groomer counters are.
 
 ### 3.13 Which PCR timeline events does the lane survive? — All six placed classes, since the upstream rewind-recovery fix; the continuous content-restart export stall is fixed in `5d0991b9`
 
+**For an operator:** since the rewind-recovery fix, a PCR base rollover, a forward jump, a rewind and an
+encoder restart each cross the lane with no programme hole and without the deep buffer earlier builds
+needed. What still stops long-running continuous publishing is a separate importer exit at the first
+content join, described below.
+
 [T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software. Six arms, each placing exactly one
 deliberate timeline event at 45 s of a 105 s run, graded at the source, after the round trip and after
 grooming. The stimuli shift PTS and DTS as well as PCR, because the exporter schedules from media
 timestamps; moving PCR alone exercises a path the lane does not use. Measured three times on the same
 stimulus files and the same groomer `5ab84cd`, with the MoQ build as the only variable:
-`f8236680b` (the byte-adjacent PCR placement build, not the rewind-recovery one), `d88c2ee99` (contains `0e61e3520`, the rewind-recovery merge) and current `main`
+`f8236680b` (the byte-adjacent PCR placement build, not the rewind-recovery one), `d88c2ee99` (contains `0e61e3520`, the rewind-recovery merge) and
 `fd4f5d82e` (contains the forward-discontinuity merge `d4b5349`).
 
 | event | gap on `f8236680b` | **gap on `d88c2ee99`** | CC errors | drops | flag emitted | verdict now |
@@ -1481,7 +1486,7 @@ stimulus files and the same groomer `5ab84cd`, with the MoQ build as the only va
 
 **Every class the lane meets is now carried, and this campaign is why.**
 [The upstream rewind-recovery fix](../lab/upstream-contributions.md#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section) opened citing these measurements, merged as
-`0e61e3520` and closed [the maintainer's rewound-timeline stall issue](../lab/upstream-contributions.md#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section); re-running the arms unchanged against it puts all six at the control's
+`0e61e3520` and closed the maintainer's rewound-timeline stall issue; re-running the arms unchanged against it puts all six at the control's
 figure. The exporter follows the new timebase instead of waiting it out — arm B's export signals
 −599.525 s against the source's −599.989 s, rate ratio 1.004 — and flags it on exactly the three
 signalled arms while correctly leaving the rollover unflagged. On `d88c2ee99` the forward arm was the
@@ -1491,16 +1496,15 @@ the burst**: adaptive cushion 8,000 ms → 200–348 ms, high water 98,035 → 1
 discharges the *rewind × bitrate* provisioning rule the pre-fix build implied. **STRONGLY SUPPORTED**
 for the six classes at this rig's scale; one run per arm per build.
 
-**That export stall is fixed on `5d0991b9`.** [The continuous content-restart export stall report](../lab/upstream-contributions.md) —
-bisected to the rewind-recovery merge `0e61e35`, the 0.31 Mb/s residue signature, the named `Track::admit` fence
-and the video-only bystander control — is **closed** by [the export-side stall fix](../lab/upstream-contributions.md)
-in [the upstream release merge at `5d0991b9`](../lab/upstream-contributions.md). Upstream's `export_test` passes and
+**The continuous content-restart export stall that fix introduced is fixed on `5d0991b9`.** The
+[stall report](../lab/upstream-contributions.md), bisected to the rewind-recovery merge `0e61e35` with a
+0.31 Mb/s residue signature, is **closed** by the export-side stall fix in the upstream release merge at
+`5d0991b9`; the named code path and the control that confirmed it are recorded with the report. Upstream's `export_test` passes and
 [T40](../lab/test-40-continuous-join-through-srt.md) no longer reads the stall through the SRT chain.
 **On homogeneous `5d0991b9`, continuous-source publishing fails differently**: `moq import ts` exits
 at the first content join with *frame timestamp is below the live edge* — not the export-stall signature.
 That blocks permanence re-soak and any long run on `ts-continuous-source.py` until resolved. See
-[T27](../lab/test-27-liveness-detector.md) for the pre-fix bisect and
-[upstream contributions](../lab/upstream-contributions.md) for the filing history.
+[T27](../lab/test-27-liveness-detector.md) for the pre-fix bisect.
 
 **The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
 stream, unconditionally, and was the one timeline event a permanent feed cannot avoid. Placed rather
@@ -1511,14 +1515,18 @@ longer qualifies the permanence claim.**
 
 On pre-`0e61e3520` builds, rewinds cost their own duration linearly (1 s → 268 ms … 44.7 s →
 44,049 ms) via monotonic scheduling — **PROVEN**; the rewind-recovery fix removes the burst. **`discontinuity_indicator`**
-now emits on rewind classes ([the maintainer's rewound-timeline stall issue](../lab/upstream-contributions.md#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section)), and on the forward
-jump too since [the upstream forward-discontinuity fix](../lab/upstream-contributions.md#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section), which also reconstructs that jump to
+now emits on rewind classes, and on the forward jump too since
+[the upstream forward-discontinuity fix](../lab/upstream-contributions.md#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section), which also reconstructs that jump to
 within 11 ms of the source instead of 961 ms short — re-verified by re-running the arm on `fd4f5d82e`
 (T23 § against the forward-discontinuity fix). Pre-fix, wire conformance missed a 62.8 s programme hole
 (§3.12 asymmetry). T23 does not reproduce T21's counter degeneration — **UNRESOLVED** whether they
 share a root cause.
 
 ### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
+
+**For an operator:** on the media-aware lane a misbehaving receiver cannot damage another
+subscriber's programme, but receivers that crash or churn can drive relay memory into gigabytes. Size
+that exposure through the QUIC idle timeout; a static segmented origin shows no such term.
 
 [T25](../lab/test-25-isolation-under-abuse.md), P1, software. Five arms and a control against a running
 11 Mb/s feed on the 8-vCPU secondary, then four variants of the worst arm to attribute its cost. Every
@@ -1529,13 +1537,13 @@ generalises to a determined attacker.
 **The media plane is isolated, in every arm.** The two well-behaved subscribers deliver within **8 KB
 of the control across 198 MB** — a spread of 0.004 % — at **0 continuity errors** and no hole above
 100 ms, including in the arm expected to be worst, a subscriber that stays connected and stops reading.
-`accept_failures_total` and `accept_stalled_seconds` are **0 in every phase of every arm**, so the
-relay never refused or delayed a connection either. Threads (9) and file descriptors (12–13) are flat
+The relay's connection-accept counters are **0 in every phase of every arm**, so it never refused or
+delayed a connection either. Threads (9) and file descriptors (12–13) are flat
 throughout: nothing accumulates handles.
 
 **The cost lands entirely on relay memory, and it is large.** A subscription storm — 40 subscribers to
 the feed the victims are already watching, killed and relaunched every 5 s — takes relay RSS from
-**87 MB to 1.9 GB in 60 s**. Subscriptions to broadcasts that *do not exist* reach 903 MB, which is the
+**87 MB to 1.9 GB in 60 s**. Subscriptions to [broadcasts](glossary.md#moq) (named feeds) that *do not exist* reach 903 MB, which is the
 cheapest version available since it needs no knowledge of what the relay carries.
 
 **Four variants say what that memory is, and the answer changes the conclusion.** Each holds the cell
@@ -1548,8 +1556,9 @@ identical and varies one thing:
 | same 42 subscribers **held**, not churned | **144 MB** | **not concurrency** — 28× less for the same audience |
 | QUIC idle timeout 30 s → 10 s | **489 MB** | **it is retention** — 4.5× less growth for 3× less retention |
 
-A subscriber killed without a `CONNECTION_CLOSE` cannot be distinguished from a silent one, so the
-relay serves it until the idle timeout expires. At a 5 s churn period roughly **seven generations
+A subscriber killed without a `CONNECTION_CLOSE` (QUIC's explicit hang-up) cannot be distinguished from
+a silent one, so the relay serves it until the [idle timeout](glossary.md#transport-and-deployment-terms)
+expires. At a 5 s churn period roughly **seven generations
 coexist**, each still accruing media it will never deliver — ~44 MB per retained session against the
 ~37 MB that 30 s at 9.95 Mb/s implies. **A dead peer is not flow-controlled**, which is why one *live*
 non-draining reader costs nothing measurable while 42 dead ones cost 1.8 GB.
@@ -1579,7 +1588,11 @@ size of a small one.** The mechanism is structural — a static origin holds no 
 so there is no retention to bound and no idle timeout to set — and the result is therefore scoped to
 a *static* origin; one terminating sessions or personalising responses would reintroduce the term.
 
-### 3.15 Does the subscriber survive the loss it is designed to absorb? — Not always: a lost catalog group still takes it off air
+### 3.15 Does the subscriber survive the loss it is designed to absorb? — Not on earlier builds; on the build carrying both fixes none exited, consistent with the catalog-track fix though not established by the count alone
+
+**For an operator:** on builds before the catalog-track fix, the subscriber could exit silently on a
+group it was designed to discard, leaving a clean capture and no programme. An exit is invisible in the
+stream it produced, so only process supervision detects it.
 
 [T8b](../lab/test-8b-congestion-control.md), P1, three concurrent flows through a congested
 bottleneck on the namespace rig, 15 subscribers per arm over five interleaved replicates.
@@ -1600,13 +1613,13 @@ gone.
 **The fix was incomplete rather than absent, and the residual is now closed.**
 [The container-consumer eviction skip](../lab/upstream-contributions.md#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) gave the *container* consumer a skip for an
 evicted group and corrected the cursor that triggers it; the **catalog** consumer never got one,
-and `moq-json` declared its transport error `#[error(transparent)]`, so a lost catalog group
-propagated out unclassified, unlogged and fatal. On a snapshot track an `Old` error means *the
+and the catalog library passed its transport error through unclassified, so a lost catalog group
+propagated out unlogged and fatal (the code path is named in [T8b](../lab/test-8b-congestion-control.md)). On a snapshot track an `Old` error means *the
 value you hold has been superseded* — the correct response is to take the newer group, not to
 terminate the process. Reported upstream and fixed by a catalog-track eviction skip
 ([upstream contributions](../lab/upstream-contributions.md#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track)), which gives the snapshot consumer the skip for
-`Old`, `Evicted` and `Lagged` alike, logs the discarded group, and extends the same treatment to
-`moq-binary`.
+`Old`, `Evicted` and `Lagged` alike, logs the discarded group, and extends the same treatment to a
+second library with the identical unguarded path.
 
 **The verification is consistent with the fix without establishing it alone, and the distinction
 matters.** The re-run put the fixed build against `84b34f54` — the build carrying only the
@@ -1618,9 +1631,8 @@ and now logs, upstream added regression tests for it, and the control still prov
 on demand.
 
 The consequence for primary distribution is a class distinction the availability argument depends on:
-a subscriber that sheds groups is degraded but on air, and a subscriber that exits is off air. An
-operator watching for the second cannot see it in the stream, because the stream it produced is
-clean — only process supervision detects it. One further prediction was **refuted**: widening the
+a subscriber that sheds groups is degraded but on air, and a subscriber that exits is off air. The second
+cannot be seen in the stream, as above. One further prediction was **refuted**: widening the
 subscriber's budget does not monotonically reduce the exit rate, so the failure is not simply a
 function of how much eviction pressure the deadline creates.
 
