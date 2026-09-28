@@ -1259,7 +1259,7 @@ the failure without explaining it, and the frame-expiry hypothesis is not suppor
 **A second exit on the same track, when the publisher goes away, was filed as a question rather than
 a defect**, and is tracked in § *The liveness exit* and § *Four of these were closed as completed*.
 
-### The qlog loss trigger is computed backwards — reported
+### The qlog loss trigger is computed backwards — fix under review
 
 Both QUIC stacks the lane has run on label every declared loss in their qlog by the reordering
 threshold, whichever rule fired. The trigger is computed as
@@ -1269,9 +1269,13 @@ identical in `quinn-proto` 0.11.17 and on quinn's `main`, and in the noq fork (`
 quinn issue about it was found. It cost the campaign a published attribution that had to be withdrawn
 ([T28](test-28-failure-injection-matrix.md) § *Corrections*). The fix is reversing the operands. It is
 still on quinn's `main` as of 2026-09-28, and `noq-proto` 1.2.0 carries it too. **Reported** as
-[quinn-rs/quinn#2895](https://github.com/quinn-rs/quinn/issues/2895), with the fix and a test
-proposed, and pointed to from [n0-computer/noq#825](https://github.com/n0-computer/noq/issues/825).
-**Open**; T28's attribution does not depend on it, because it rests on the acknowledgement frames.
+[quinn-rs/quinn#2895](https://github.com/quinn-rs/quinn/issues/2895) and pointed to from
+[n0-computer/noq#825](https://github.com/n0-computer/noq/issues/825). The maintainers invited a PR;
+the fix is [quinn-rs/quinn#2896](https://github.com/quinn-rs/quinn/pull/2896), with a regression test
+that forces one loss by each rule and reads the trigger back from the qlog. The test fails on `main`
+with both losses labelled `ReorderingThreshold` and passes with the fix. It is gated on the `qlog`
+feature, which quinn's PR CI does not enable. **Approved, not yet merged**, and noq is unchanged. T28's
+attribution does not depend on it, because it rests on the acknowledgement frames.
 
 ---
 
@@ -1838,12 +1842,11 @@ reports one substrate and carries another, with no diagnostic anywhere in the pa
 comparison of HLS over HTTP/3 built on FFmpeg's HLS demuxer and this option is, unless the authors
 checked ALPN at the origin, a measurement of HTTP/1.1.
 
-**Status: drafted, not yet filed.** The whitelist and the libcurl options are unchanged on master
-`45f3fecca` (2026-09-22) by reading. The venue is FFmpeg's Forgejo (`code.ffmpeg.org`; the GitHub
-mirror takes no issues), where open PR
-[#24565](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24565) fixes the same class of bug for
-`local_addr` on the same line; the draft cites it. The patch is local to this campaign's build and is
-documented in T20's environment block so the experiment reproduces.
+**Status: reported** as [FFmpeg issue #24752](https://code.ffmpeg.org/FFmpeg/FFmpeg/issues/24752).
+The whitelist and the libcurl options are unchanged on master `45f3fecca` (2026-09-22) by reading.
+Open PR [#24565](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24565) fixes the same class of bug for
+`local_addr` on the same line; the report cites it. The patch remains local to this campaign's build
+and is documented in T20's environment block so the experiment reproduces.
 
 ---
 

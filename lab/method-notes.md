@@ -1195,6 +1195,13 @@ gets cited.** *(T18.)*
 > README and two other experiments — the versions a reader would actually act on. When restating a
 > finding in shorter form, restate the *mechanism*, not the symptom that made it visible.
 
+**Pin upstream-report links to a commit on `main`, not to a working branch.** *(T10, moq-dev/moq#4353.)*
+
+> The MPTS reproducer in the filed issue pointed at fixture, rig and grader scripts on branch
+> `exp/t10-mpts`. That branch merged and was deleted, so the issue body's links 404 while the scripts
+> live on `main`. **Use `https://github.com/<repo>/blob/<full-sha>/<path>` from the commit that holds
+> the cited tree**, and re-check after merge before filing.
+
 **A cleanup job must never run against a live results tree.** *(T8b.)*
 
 > A 68-cell matrix was writing a ~140 MB capture per cell onto a host with 3.3 GB free, so a janitor was
