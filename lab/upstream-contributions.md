@@ -983,8 +983,8 @@ failover*).
   live-edge error, 8 of 8, and only the two runs whose standby was already past the floor resumed
   (T6 § *Mesh source failover*). That this is the same check is inferred from the message; the
   diagnostic build was not run in the mesh. Why the two importers' numbering differs and why the
-  relay hands over older media are not established. **Open**; the mesh result on `main` is not yet
-  on the issue.
+  relay hands over older media are not established. **Open**; the mesh result on `main` is on the
+  issue, and so is the twelve-of-twelve on #4352.
 
 Two more mesh findings on `ffa5b81b` are not reported separately. Without
 a shared hop, the standby relay's own subscriber freezes silently at the failover; `main` no longer
@@ -1006,10 +1006,13 @@ list the other services. On `ffa5b81b` programmes on independent clocks abort th
 select one programme on purpose", not as MPTS support. Reported as
 [#4353](https://github.com/moq-dev/moq/issues/4353). Bisected since: #3997 (every TS elementary
 stream re-anchors below the live edge) removed the refusal, and #4122 (stdin imports publish on the
-broadcast clock) introduced the common-clock loss, each against a directly graded parent; #4122's
-mechanism is reasoned from its diff (T10 § *On upstream `main`*). The bisect is not yet on the
-issue. **Open**; the before/after verification is owed when a fix lands, on `mpts3.ts` and
-`mpts3-cc.ts` with the T10 rig.
+broadcast clock) introduced the common-clock loss, each against a directly graded parent. The
+bisect is on the issue, and so is a mechanism for #4122, offered as a reading of its diff: a
+section lane stepping back past `MAX_REORDER`. A dose run over fixtures on either side of that
+threshold has since refuted it. #4122 loses SCTE-35 on fixtures where no section lane steps back
+that far (T10 § *On upstream `main`*). That correction is owed on the issue. **Open**; the
+before/after verification is owed when a fix lands, on `mpts3.ts` and `mpts3-cc.ts` with the T10
+rig.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
 

@@ -26,7 +26,8 @@ and one SDT listing all three — was carried through both data planes and grade
   complete with exit 0 while programmes 1 and 3 lose 96–98 % of their video packets; on a common
   clock SCTE-35 and part of programme 1's audio are lost. The flattening is unchanged. Programme 1
   alone is clean on `main`. Bisected, the two changes are two upstream commits: #3997 removed the
-  refusal, and #4122 introduced the common-clock loss.
+  refusal, and #4122 introduced the common-clock loss. That loss appears even when the programmes'
+  clocks are within 120–130 ms of each other (median), and its mechanism is not isolated.
 
 The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
 media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
@@ -153,6 +154,18 @@ git bisect run bash t10-bisect-step.sh <root>                # common clock: 8 s
 git bisect start --first-parent --term-old=old --term-new=new 66440a6c ffa5b81b
 JUDGE=ic git bisect run bash t10-bisect-step.sh <root>       # independent clocks: 6 steps
 ```
+
+**Section-clock dose.** [`t10-section-clock.py`](scripts/t10-section-clock.py) reads a fixture
+directly and models the importer's section clock. It stamps each section start on PIDs 0x10, 0x11,
+0x12, 0x14 and 141–143 with the latest video PTS from any programme, then reports each lane's backwards steps
+over 500 ms and each programme's video offset from programme 1. Eight further common-clock fixtures
+were built with one command, `P2_OFFSET=25629.956 P3_OFFSET=25628.636 make-real-mpts.sh <out.ts> 60`.
+They differ only through the up-to-0.8 s variation in when `tsp merge` starts inserting, and all
+have 0 continuity events and a clean `pcrverify`. Seven of them (b2 duplicates b1's three steps)
+and `mpts3-cc.ts` were each run once through `t10-moq.sh` on `2f2ff7d3`,
+`c87159d8` and `2b689c24`, and graded by `t10-grade.py`. The criterion was fixed after modelling and
+before grading: #4122 is clean if and only if no section lane steps back past 500 ms, and its
+parent is clean on every fixture.
 
 **Arm C — several concurrent SPTS broadcasts (MoQ).** Not run; its channel-count question is
 answered by [T43](test-43-fanout-current-build.md) S2.
@@ -372,14 +385,37 @@ fixtures: one run of `mpts3.ts`, two of `mpts3-cc.ts`, and one programme-1 contr
 - **So #3997 turns the refusal into a re-timing, and #4122 turns the re-timing into loss.** #3997
   is what its title says: a timestamp below a stream's live edge is re-anchored rather than
   refused, and that refusal is what ended arm A.
-- **#4122's mechanism is *reasoned* from its diff, not isolated.** It maps each input onto the
-  broadcast clock through one anchor shared by every track. Each track keeps its own lane, and a
-  backwards step of more than 500 ms on any lane (`MAX_REORDER`, `rs/moq-mux/src/clock.rs`)
-  re-anchors the whole source forward. The tracks stamped from the importer's one section clock
-  (`last_pts`, which every programme's video advances) step back whenever the programmes
-  alternate, by up to the 0.82 s that separates the common-clock fixture's programmes. The arm that
-  would settle it is a common-clock fixture whose programmes sit within 500 ms of each other,
-  which should then be clean on `main`.
+- **The obvious mechanism for #4122 is refuted, and the real one is not isolated.** #4122 maps each
+  input onto the broadcast clock through one anchor shared by every track. Each track keeps its own
+  lane, and a backwards step of more than 500 ms on any lane (`MAX_REORDER`,
+  `rs/moq-mux/src/clock.rs`) re-anchors the whole source. The section tracks are stamped from the
+  importer's one section clock (`last_pts`, which every programme's video advances), so the
+  hypothesis was that those lanes step back past 500 ms when the programmes alternate. Modelled
+  over the fixture's bytes (§ *Section-clock dose*), the SCTE-35 lanes of `mpts3-cc.ts` never do.
+  They start a section about once a second, and each forward interval masks the offset between
+  programmes. Only the EIT lane steps back (9 times, up to 720 ms). The dose run below then graded
+  fixtures on either side of the threshold:
+
+  | Fixture | EIT steps > 500 ms (largest) | SCTE-35 lanes' steps > 500 ms | P2 / P3 median offset | SCTE-35 `2f2ff7d3` / `c87159d8` / `2b689c24` | PID 121 audio, same builds |
+  |---|---|---|---|---|---|
+  | b7 | 0 (160 ms) | 0 | −40 / +40 ms | 170 / 153 / 152 | 9,532 / 9,340 / 9,368 |
+  | b3 | 0 (320 ms) | 0 | +130 / −120 ms | 168 / 71 / 38 | 9,240 / 8,240 / 5,380 |
+  | b5 | 0 (280 ms) | 0 | +320 / +60 ms | 168 / 24 / 14 | 9,536 / 7,596 / 6,336 |
+  | b8 | 1 (520 ms) | 0 | 0 / −420 ms | 170 / 12 / 9 | 9,532 / 7,972 / 8,232 |
+  | b1 | 3 (640 ms) | 0 | −560 / −80 ms | 170 / 9 / 26 | 9,472 / 9,500 / 9,712 |
+  | b4 | 8 (920 ms) | 0 | −20 / +760 ms | 167 / 5 / 9 | 9,512 / 860 / 1,432 |
+  | `mpts3-cc` | 9 (720 ms) | 0 | +474 / −146 ms | 168 / 5 / 17 | 9,420 / 5,420 / 6,308 |
+  | b6 | 10 (1,760 ms) | 6–8 | −1,520 / +200 ms | 160 / 3 / 3 | 8,864 / 8,200 / 8,124 |
+
+  The prediction fixed before grading was that #4122 is clean if and only if no section lane steps
+  back past 500 ms, with its parent clean throughout. The parent is clean on all eight, so the
+  commit attribution stands. The prediction fails on b3 and b5, which lose 58–92 % of SCTE-35
+  with no lane stepping back past the threshold. SCTE-35 loss grows with the offset between
+  programmes; b7, the tightest, is 10 % short of its parent on one sample and is not distinguishable
+  from run-to-run variation. Audio loss does not follow either measure: b1 is intact, and b4 loses
+  91 %. The importer logs nothing in any of these runs. What in #4122 drops the frames is therefore
+  not known. The model covers only the section lanes; the arm that would settle it is a build of
+  `c87159d8` that logs each re-anchor and each frame it drops, run on b3.
 
 So on `main` the lane's MPTS failure moves from a loud refusal to silent loss, which is the worse
 failure for a broadcaster: a monitoring chain that watches for a publisher exit sees nothing, and
@@ -415,7 +451,9 @@ capture is complete, and it does not bear on any figure above.
   defects are structural — one section clock and one program record.
 - **The common clock is approximate.** Merge's start varies by up to ~0.8 s between builds, so A′'s
   clocks agree to 0.82 s, not exactly. The refusal disappearing on that input shows that clocks
-  25,628 s apart trigger it. It does not show how small an offset is safe.
+  25,628 s apart trigger it on `ffa5b81b`. On `main`, the dose run finds no safe offset: SCTE-35
+  is lost at median programme offsets of 120–130 ms. Tighter alignment than b7's is not reachable
+  with the fixture builder.
 - **The media-aware lane only.** The opaque lane of T3 is not in the build under test, so this is not
   a statement about opaque carriage of a multiplex.
 - **Join cost is not measured.** Criterion 5's comparison with T17's cold-join baseline needs its
@@ -429,10 +467,11 @@ capture is complete, and it does not bear on any figure above.
 - **A multiplex-aware media-aware lane** — one section clock per programme, and one program record
   per PMT, so the exporter can rebuild the PAT and every PMT. Until then an MPTS on this lane has to be
   split into one broadcast per programme at ingest, and that split is itself untested here.
-- **Whether #4122's shared anchor is the whole of the common-clock loss.** The commit is bisected;
-  its mechanism is reasoned. A common-clock fixture with programme offsets under 500 ms would
-  confirm or refute it. The upstream report asks for a refusal of any multi-programme input first,
-  which would make the question moot.
+- **What in #4122 produces the common-clock loss.** The commit is bisected. The section-lane
+  step-back past `MAX_REORDER` is refuted as its mechanism, because the loss appears on fixtures
+  where no section lane steps back that far. An instrumented `c87159d8` on b3 would locate it. The
+  upstream report asks for a refusal of any multi-programme input first, which would make the
+  question moot.
 - **Arm E**, blocked on a CDN account ([B-5](planned-experiments.md#blocked-on-apparatus)), and the
   SI carriage-cost scaling of [T17](test-17-si-snapshot-tracks.md), which needs many more services
   than three.
