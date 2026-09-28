@@ -439,11 +439,8 @@ closes the session on SIGTERM as on SIGINT (the `main` table below).*
   exporters end as they did on the earlier builds (§ *Graceful source departure*). On SIGINT the relay
   *does* reselect, since the other publisher's media subscriptions start at the signal, but the
   exporter then aborts with `TimestampRewind` (`rs/moq-mux/src/container/consumer.rs:472–489`), a
-  group whose timestamps sit below the live edge it had reached. Why the replacement's next group
-  starts behind the edge is not established. Offset group numbering between two importers that
-  joined the stream 2 s apart was the obvious candidate, and co-starting them does not remove the
-  rewind (below), so it is not the whole explanation. The measurement that would settle it is each
-  publisher's group sequence and first timestamp at the switch.
+  group whose timestamps sit below the live edge it had reached. What the exporter is handed at
+  that switch is measured on `main` (below).
 
 **On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8, after the CLI change that closes
 the session on SIGINT *and* SIGTERM), the same rig with `STAGGER`, the gap between the publishers'
@@ -473,6 +470,38 @@ starts, as a further variable:
   first hop differs does not qualify, and a front with nothing qualifying ends), so it is design
   rather than defect: on `main` the shared hop
   is the only declaration of a 1+1 pair, as the paper describes it.
+
+**What the exporter is handed at the switch.** A diagnostic `moq` built from `2b689c24` with three
+log lines in `container/consumer.rs` (one per group arriving, one at each `TimestampRewind` return,
+giving the group, its minimum timestamp, the previous group and the live edge; the patch is kept
+with the runs) ran seven further arms on the same rig. Both exporters in
+each arm reported the same group except where noted.
+
+| Stop | Stagger | Track | Standby's group | Last group read | Standby's first timestamp vs the live edge |
+|---|---:|---|---:|---:|---:|
+| SIGINT | 2 s | `1.ts` | 72 | 54 | 0.17 s behind |
+| SIGTERM | 2 s | `6.mp2` | 878 | 673 | 4.15 s behind |
+| end of input | 2 s | `5.ts` | 534 | 471 | 4.05 s behind |
+| end of input | 0 | `1.ts` | 65 | 45 | 5.61 s behind |
+| hard kill | 0 | `6.mp2` / `2.ts`, one per exporter | 1049 / 23 | 740 / 18 | 1.00 / 1.22 s behind |
+| hard kill | 2 s | — | — | — | survived, 7 s stall |
+| SIGINT | 0 | — | — | — | control: the signalled publisher was not serving, nothing switched |
+
+- **Every rewind is the across-groups check**, never the within-group one: at the switch the
+  subscriber is handed the standby's groups under *higher* sequence numbers than the last one it
+  read (by 5 to 309), carrying media that starts 0.17–5.6 s *before* its live edge. Co-starting the
+  publishers does not align their numbering, since each importer counts groups from its own start.
+- **The hard kill that survives fits the same picture.** Its switch comes after a 7 s stall, by
+  which time the standby's media is past the old edge again.
+- **Not established:** why two co-started importers are that far apart in numbering, and why the
+  relay hands over the standby's media from before the edge rather than its newest group.
+- With the publishers started together, which one the rig treats as newest is a race, so a
+  co-started arm can signal the idle publisher; this one did.
+
+This is the converse of the mesh result on `ffa5b81b`, where a standby numbered *behind* the active
+publisher extends the outage (§ *Mesh source failover*): in both, group sequence is compared across
+two publishers whose sequences are not comparable. Reported as
+[#4354](https://github.com/moq-dev/moq/issues/4354), with the mesh case included.
 
 This drill counts bytes and does not grade the splice for continuity or PCR. It runs on one host
 over loopback, one replicate per graceful arm, and the stall figures are at a 6 s idle timeout; at

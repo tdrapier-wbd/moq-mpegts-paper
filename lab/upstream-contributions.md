@@ -954,7 +954,7 @@ the *harder* failure mode (host loss) and not the easier, far more common one. T
 and is specified in [#2610](https://github.com/moq-dev/moq/issues/2610) as a publisher-minted epoch
 plus an explicit `Ended` flag. **Specified, not shipped.**
 
-**On the build under test the failover picture has moved: one finding is reported and one held.**
+**On the build under test the failover picture has moved, and both new findings are reported.**
 `ffa5b81b` renamed the knob to `--hop <id>` and refuses `--origin`. On one relay two publishers now
 coexist and a hard kill fails over within the idle timeout; in the mesh a hard kill fails over for the
 dead publisher's relay, bounded by the later of detection and the standby's group lag
@@ -973,18 +973,20 @@ failover*).
   SIGINT made the relay move to the standby and the exporter abort. On `main`, where the CLI closes
   the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
   the signal and aborts the exporter: six of six, whether the publishers started 2 s apart or
-  together. Co-starting them did not help, so the offset-numbering explanation is not the whole
-  cause, and the mechanism is not isolated.
+  together. A diagnostic exporter shows what it is handed at the switch: the standby's groups under
+  higher sequence numbers than the last one read, carrying media from 0.17–5.6 s before the live
+  edge, co-started or not (T6 § *What the exporter is handed at the switch*). **Reported as
+  [#4354](https://github.com/moq-dev/moq/issues/4354)**, with the mesh splice floor included as
+  the converse case. Why the two importers' numbering differs and why the relay hands over older
+  media are not established. **Open.**
 
-**The rewind is held until its mechanism is settled**, drafted as
-`docs/upstream/same-hop-switch-timestamp-rewind.local.md`; each publisher's group sequence and first
-timestamp at the switch would settle it. Two more mesh findings on `ffa5b81b` are not reported. Without
+Two more mesh findings on `ffa5b81b` are not reported separately. Without
 a shared hop, the standby relay's own subscriber freezes silently at the failover; `main` no longer
 fails over between publishers that declare no shared hop, which its front rules make deliberate, so
 the freeze describes a configuration `main` does not offer as a pair. The splice floor, which makes
 the standby's group lag add to the outage, is the group-sequence floor of #2534 met by a 1+1 standby,
-and the maintainer's position on #2545 covers it; it is drafted for the author as
-`docs/upstream/standby-group-lag.local.md`, not for filing as it stands.
+and the maintainer's position on #2545 covers it; rather than a separate report it went into #4354
+as the converse of the rewind, since both compare group sequence across two publishers.
 
 ### A multi-programme TS through `import ts` — reported
 
@@ -1257,7 +1259,7 @@ the failure without explaining it, and the frame-expiry hypothesis is not suppor
 **A second exit on the same track, when the publisher goes away, was filed as a question rather than
 a defect**, and is tracked in § *The liveness exit* and § *Four of these were closed as completed*.
 
-### The qlog loss trigger is computed backwards — found, not reported
+### The qlog loss trigger is computed backwards — reported
 
 Both QUIC stacks the lane has run on label every declared loss in their qlog by the reordering
 threshold, whichever rule fired. The trigger is computed as
@@ -1266,8 +1268,10 @@ time, saturates to zero and is never true, so the `TimeThreshold` branch is dead
 identical in `quinn-proto` 0.11.17 and on quinn's `main`, and in the noq fork (`noq-proto` 1.3.0); no
 quinn issue about it was found. It cost the campaign a published attribution that had to be withdrawn
 ([T28](test-28-failure-injection-matrix.md) § *Corrections*). The fix is reversing the operands. It is
-still on quinn's `main` as of 2026-09-28, and `noq-proto` 1.2.0 carries it too. **Not reported;
-drafted for quinn, with noq to follow**, as `docs/upstream/quinn-qlog-loss-trigger.local.md`.
+still on quinn's `main` as of 2026-09-28, and `noq-proto` 1.2.0 carries it too. **Reported** as
+[quinn-rs/quinn#2895](https://github.com/quinn-rs/quinn/issues/2895), with the fix and a test
+proposed, and pointed to from [n0-computer/noq#825](https://github.com/n0-computer/noq/issues/825).
+**Open**; T28's attribution does not depend on it, because it rests on the acknowledgement frames.
 
 ---
 
@@ -1834,8 +1838,12 @@ reports one substrate and carries another, with no diagnostic anywhere in the pa
 comparison of HLS over HTTP/3 built on FFmpeg's HLS demuxer and this option is, unless the authors
 checked ALPN at the origin, a measurement of HTTP/1.1.
 
-**Status: not yet filed.** The patch is local to this campaign's build and is documented in T20's
-environment block so the experiment reproduces.
+**Status: drafted, not yet filed.** The whitelist and the libcurl options are unchanged on master
+`45f3fecca` (2026-09-22) by reading. The venue is FFmpeg's Forgejo (`code.ffmpeg.org`; the GitHub
+mirror takes no issues), where open PR
+[#24565](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24565) fixes the same class of bug for
+`local_addr` on the same line; the draft cites it. The patch is local to this campaign's build and is
+documented in T20's environment block so the experiment reproduces.
 
 ---
 
