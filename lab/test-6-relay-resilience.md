@@ -347,8 +347,9 @@ MODE=standby HOP=42 LATE_SUBS=1 KILL_WHICH=newest SIG=KILL PORT=4470 KILL=15 END
 | End of input to the serving publisher, shared hop | the newest | 1 | **both exit** `TS track layout changed after PAT/PMT was emitted` | — |
 | End of input to the serving publisher, no hop | the newest | 1 | one exits on the live-edge error; the other stays alive and writes nothing for 38 s | — |
 
-*¹ SIGKILL, and SIGTERM, which is the same thing to this client: `moq` handles only Ctrl-C
-(`rs/moq-cli/src/main.rs:737–741`), so a SIGTERM ends it without a clean close.*
+*¹ SIGKILL, and SIGTERM, which is the same thing to this client: `moq` 0.12.1 handles only Ctrl-C
+(`rs/moq-cli/src/main.rs:737–741`), so a SIGTERM ends it without a clean close. From 0.12.8 it
+closes the session on SIGTERM as on SIGINT (the `main` table below).*
 
 - **A hard kill fails over on one relay, bounded by the idle timeout.** Every run in which the killed
   publisher was serving continued on the other with the same exporter process and no error, after a
@@ -376,15 +377,46 @@ MODE=standby HOP=42 LATE_SUBS=1 KILL_WHICH=newest SIG=KILL PORT=4470 KILL=15 END
   exporters end as they did on the earlier builds (§ *Graceful source departure*). On SIGINT the relay
   *does* reselect, since the other publisher's media subscriptions start at the signal, but the
   exporter then aborts with `TimestampRewind` (`rs/moq-mux/src/container/consumer.rs:472–489`), a
-  group whose timestamps sit below the live edge it had reached. The two publishers started 2 s
-  apart, so their group numbering is offset for the same media, which would put the replacement's
-  next group behind in time. That explanation is *reasoned* and not isolated; the arm that would
-  settle it is a SIGINT with the publishers co-started from the same byte.
+  group whose timestamps sit below the live edge it had reached. Why the replacement's next group
+  starts behind the edge is not established. Offset group numbering between two importers that
+  joined the stream 2 s apart was the obvious candidate, and co-starting them does not remove the
+  rewind (below), so it is not the whole explanation. The measurement that would settle it is each
+  publisher's group sequence and first timestamp at the switch.
+
+**On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8, after the CLI change that closes
+the session on SIGINT *and* SIGTERM), the same rig with `STAGGER`, the gap between the publishers'
+starts, as a further variable:
+
+| Arm | Stagger | Runs | Subscribers |
+|---|---:|---:|---|
+| Shared hop, standby arrives after the subscribers | 2 s | 2 | **both exit** `not found`, 15 ms after the standby connects |
+| Shared hop, subscribers first, publishers arrive together | 0 | 1 | no teardown; a hard kill of the serving one fails over, 3 s stall |
+| Hard kill of the serving publisher, shared hop | 2 s | 2 | alive, 3 and 7 s stall |
+| Hard kill of the serving publisher, shared hop | 0 | 1 | **both exit** on the rewind, at the switch |
+| SIGINT, SIGTERM or end of input to the serving publisher, shared hop | 2 s | 1 each | the relay switches **at the signal**; **both exit** on the rewind in the same second |
+| The same three | 0 | 1 each | the same |
+| Hard kill of the serving publisher, no hop | 2 s | 2 | **no failover**: the standby is never subscribed, both exit `internal error` about 6 s after the kill |
+| Any signal to the idle publisher (control) | 0–2 s | 6 | alive, 0 s |
+
+- **The arrival teardown is unchanged on `main`.** The standby is queried for every track within a
+  millisecond of connecting, has none yet, and the refusals end the subscribers. In the one run
+  where the publishers arrived together it did not occur, which fits the race described above.
+- **A clean exit is now switched, and the switch is fatal to `export ts`.** `ffa5b81b` passed a
+  stdin EOF on as completion; `main` reselects the standby at the signal for every clean exit. The
+  subscriber then exits on `TimestampRewind` in all six clean exits, co-started or not, and in the
+  co-started hard kill. Only the two hard kills with a 2 s stagger survived, their switch coming
+  about 11 s after the kill. So on `main` no clean exit on one relay fails over.
+- **Without a shared hop there is no failover on `main`**, where `ffa5b81b` failed over in 5 of 5.
+  This is what the current front rules say, read from `front.rs` rather than isolated (a route whose
+  first hop differs does not qualify, and a front with nothing qualifying ends), so it is design
+  rather than defect: on `main` the shared hop
+  is the only declaration of a 1+1 pair, as the paper describes it.
 
 This drill counts bytes and does not grade the splice for continuity or PCR. It runs on one host
 over loopback, one replicate per graceful arm, and the stall figures are at a 6 s idle timeout; at
 the 30 s default they would be expected to scale as the mesh drill's did, which is *reasoned*. The
-mesh drill itself has not been re-run on `ffa5b81b`.
+`main` arms ran beside a two-relay mesh drill on other ports of the same 8-vCPU host, with the load
+average under 2. The mesh drill itself has not been re-run on `ffa5b81b`.
 
 ### Single-source 1+1 failover — the requirement is a common source, not byte-identical numbering
 

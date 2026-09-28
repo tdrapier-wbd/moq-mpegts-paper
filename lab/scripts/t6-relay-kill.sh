@@ -9,9 +9,12 @@
 #                   so its media clock continues from the first one's.
 #   MODE=standby    Two publishers of one broadcast run from the start, fed the same live stream; at
 #                   KILL s the active one gets SIG and nothing restarts, so the subscribers can
-#                   continue only through the relay reselecting the standby. `moq` handles only
-#                   SIGINT, so TERM is a hard kill like KILL; INT exits through its own shutdown, and
-#                   EOF ends the importer's input, so it finishes the broadcast as a clean source end.
+#                   continue only through the relay reselecting the standby. `moq` 0.12.1 handles
+#                   only SIGINT, so TERM is a hard kill like KILL there; from 0.12.8 TERM and INT both
+#                   close the session. EOF ends the importer's input, a clean source end.
+#   STAGGER         Seconds between the two publishers' starts (default 2). They join the one live
+#                   stream at different keyframes, so their group numbers differ for the same media;
+#                   0 starts both on the same keyframe.
 #   HOP             One hop id for both publishers (`--hop`, or `--origin` on builds that predate
 #                   it), which declares them interchangeable. Unset, each mints its own.
 #   LATE_SUBS=1     Start the subscribers only once both publishers are producing. With a shared
@@ -37,6 +40,7 @@ MODE=${MODE:-relay}
 SUPERVISE=${SUPERVISE:-0}
 LATE_SUBS=${LATE_SUBS:-0}
 KILL_WHICH=${KILL_WHICH:-oldest}
+STAGGER=${STAGGER:-2}
 HOP=${HOP:-${ORIGIN:-}}
 SIG=${SIG:-KILL}
 KILL=${KILL:-12}
@@ -98,7 +102,7 @@ sub() { # <i>
 	fi
 }
 moq_record_build "$MOQ" "$RELAY" | tee "$OUT/build.txt"
-echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH hop=${HOP:-fresh} sig=$SIG kill=$KILL restart=$RESTART" | tee -a "$OUT/build.txt"
+echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER hop=${HOP:-fresh} sig=$SIG kill=$KILL restart=$RESTART" | tee -a "$OUT/build.txt"
 start_relay
 sleep 3
 kill -0 "$RLY" 2>/dev/null || { echo "RELAY DID NOT START: $(tail -3 "$OUT/relay.log")"; exit 1; }
@@ -123,7 +127,7 @@ elif [ "$MODE" = standby ]; then
 fi
 start_pub
 if [ "$MODE" = standby ]; then
-	sleep 2
+	sleep "$STAGGER"
 	ACTIVE=$PUB
 	start_pub $((UDP + 1)) pub2.log
 	STANDBY=$PUB

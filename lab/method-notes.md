@@ -2345,21 +2345,26 @@ subscribers.
 > **Treat a loopback rig that connects some clients and not others as the environment until shown
 > otherwise**, and run loopback drills on a host reached over ssh rather than from a sandboxed shell.
 
-### SIGTERM is not a graceful exit for `moq`
+### What a signal means to `moq` depends on the build
 
-*From the same drill.* The CLI waits only on Ctrl-C (`rs/moq-cli/src/main.rs:737–741`); SIGTERM gets
-the default action and ends the process without a clean close, so a "graceful" arm driven by SIGTERM
-measured a hard kill. It failed over like one.
+*From the same drill.* `moq` 0.12.1 (`ffa5b81b`) waits only on Ctrl-C
+(`rs/moq-cli/src/main.rs:737–741`); SIGTERM gets the default action and ends the process without a
+clean close, so a "graceful" arm driven by SIGTERM measured a hard kill. It failed over like one.
+From 0.12.8 the CLI closes the session on SIGINT and SIGTERM alike, and the same arm is a clean exit
+that the relay switches at once.
 
-> **Drive a graceful arm with SIGINT or by ending the importer's input, and say which.** The two
-> are not the same either: on `ffa5b81b` the relay reselects on one and not the other.
+> **Record which signal drove a graceful arm and which CLI version received it, and prefer ending
+> the importer's input as the build-independent clean exit.** Even the clean exits differ between
+> builds: on `ffa5b81b` the relay reselects on SIGINT and not on end of input, and on `main` it
+> reselects on both.
 
 ### With a shared hop the newest publisher serves, so a standby drill must know which one it killed
 
 *From the same drill.* Identical routes are ranked by recency. Started the obvious way, subscribers
 first and the standby second, the drill measured the standby's *arrival*, which on that build ended
 every subscriber, and never reached the kill. With separate identities the tie falls to a hash, so
-either publisher can be serving.
+either publisher can be serving. Six of the `main` arms signalled the idle publisher for this reason,
+and only the publisher logs showed it.
 
 > **Start subscribers after both publishers are producing, log each publisher separately, and read
 > which one received the media subscriptions before and after the signal.** A kill of the idle

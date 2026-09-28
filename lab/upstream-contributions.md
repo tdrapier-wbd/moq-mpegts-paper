@@ -963,15 +963,22 @@ current build*). The same drill found two things, neither reported:
   Identical routes rank by recency, the front switches to the newcomer before it has created its
   tracks, and each track's `NotFound` from it is recorded as an authoritative refusal. It is the
   single-relay form of the race the mesh drill found and #2473's successors fixed there; the per-track
-  fallback to the incumbent does not cover it. Reproducible in two of two runs, with the code path
-  cited in T6.
-- **On SIGINT the relay reselects, and the exporter then aborts with `TimestampRewind`.** A clean
-  shutdown now makes the relay move to the standby, which the earlier builds never did, but the
-  splice lands on a group whose timestamps are below the exporter's live edge. Two of two runs; the
-  offset-numbering explanation is reasoned, not isolated.
+  fallback to the incumbent does not cover it. Two of two runs on `ffa5b81b` and two of two on `main`
+  at `2b689c24`, with the code path cited in T6. Publishers that arrive together do not trigger it.
+- **A fast switch to a same-hop standby ends `export ts` with `TimestampRewind`.** On `ffa5b81b` a
+  SIGINT made the relay move to the standby and the exporter abort. On `main`, where the CLI closes
+  the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
+  the signal and aborts the exporter: six of six, whether the publishers started 2 s apart or
+  together. Co-starting them did not help, so the offset-numbering explanation is not the whole
+  cause, and the mechanism is not isolated.
 
-**Not reported; the author decides whether and when.** The mesh drill has not been re-run on this
-build.
+**Not reported; drafts for the author's review.** The arrival teardown is drafted as
+`docs/upstream/shared-hop-standby-arrival.local.md` and is ready as it stands. The rewind is drafted as
+`docs/upstream/same-hop-switch-timestamp-rewind.local.md`, but should wait until the mechanism is
+settled: each publisher's group sequence and first timestamp at the switch would do that. Separately,
+`main` no longer fails over between publishers that declare no shared hop, which the current front
+rules make deliberate, so it is not a finding to report. The mesh drill has not been re-run on these
+builds.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
 
