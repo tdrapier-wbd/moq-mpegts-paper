@@ -1168,8 +1168,13 @@ is the measurement that it does *not* extend to a low-latency transport-stream r
 
 ### 3.10 Is there a credible entitlement substrate? — Enforcement is measured and exact; revocation is a poll with a floor above the proposed target
 
-**Enforcement is exact, and it does not leak.** Presented with a credential, the relay admits exactly
-the paths that credential names and refuses everything else. Across eight refusing arms — out-of-scope
+**For an operator:** the relay enforces a licensing matrix exactly and discloses nothing it should
+not, but withdrawing a grant takes one to two re-check cadences and never less than about a second,
+three plausible cache settings silently disable it, and the revocable unit is the signing key, so
+provision one key per channel.
+
+**Enforcement is exact, and it does not leak.** The relay admits exactly the paths a credential names
+and refuses everything else. Across eight refusing arms — out-of-scope
 channel, sibling tenant, expired token, publish-only credential, parent path, three malformed
 tokens — **every arm delivered exactly zero payload bytes**, measured at the receiving endpoint rather
 than from a relay log. Path matching is segment-aware, so a grant on `cnn` does not reach `cnn-intl`.
@@ -1187,10 +1192,10 @@ misses it identically, so the miss is the ungroomed MoQ egress rather than a cos
 twenty-eight cells correct, with the channel no affiliate licenses reaching nobody
 ([T38](../lab/test-38-entitlement-estate.md); six of seven criteria met).
 
-**Revocation is a poll rather than a push, and the consequential finding is that three settings
-switch the poll off.** `max-age=0`, a sub-second `max-age`, and omitting `Cache-Control` each produce
+**Revocation is a poll rather than a push, and three settings switch the poll off.** `max-age=0`, a
+sub-second `max-age`, and omitting `Cache-Control` each produce
 no revalidation at all; in that state a withdrawn grant never takes effect, and one arm kept
-delivering for the full 50 s it was observed, having been re-checked once at admission. There is no
+delivering for the full 50 s it was observed, having been re-checked once at admission, with no
 startup warning and no signal in the session. **Three configurations silently yield an unrevocable
 session, and one of them, `max-age=0`, is what an operator writes meaning "ask me every time".** What
 makes them survivable is the backstop, which is real: a session ends 0.110 s after its token expires
@@ -1202,8 +1207,7 @@ re-check cadence the one that bounds a deliberate revocation
 change that.** Absent a `stale-if-error` or `stale-while-revalidate` directive the staleness window is
 a one-hour constant, independent of `max-age`: *measured*, a session on a one-second cadence kept
 delivering uninterrupted for the whole 70 s an outage was observed, while the relay made 202 failed
-re-check attempts. Revocation latency and outage tolerance are set by different parameters, and only
-the first is adjustable from the cadence an operator tunes.
+re-check attempts. Revocation latency and outage tolerance are therefore set by different parameters.
 
 **Both of the above are correctness findings — revocation that was asked for may not happen — and
 both bind a broadcast deployment. The latency result below does not**, because a few seconds is
@@ -1221,8 +1225,7 @@ second — the period is carried as integer `Cache-Control` delta-seconds and is
 a one-second floor — so **the best achievable worst case is about 1.7 s measured and 2.11 s as the
 implementation documents it, and [Control](control-plane.md) §8's sub-second target cannot be met at
 any setting** (the 2× figure is *specified* by the implementation, not measured here). The target is
-retired rather than restated; the figures remain the ones to quote for any case that is
-latency-sensitive.
+retired rather than restated.
 
 **De-provisioning granularity is a credential-topology decision, and it is the sharpest practical
 result.** The revocable unit is the *key*, not the grant inside the token, so an affiliate whose
@@ -1268,6 +1271,11 @@ irregular by construction but invented, and the scale is a handful of channels r
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are
 
+**For an operator:** at the only configurations measured conformant, SRT and RIST deliver fastest,
+because their latency is a jitter-buffer dial on the source's own grid; the media-aware lane beats
+segmented HTTP but not the tunnels, and its far lower non-conformant figure is not a deployment
+latency.
+
 Measured source-to-groomed-egress on the presentation timestamp each picture carries, so one instrument
 grades a byte-transparent tunnel and a remultiplexer alike; **every figure is paired with the conformance
 of the same bytes**, because a latency quoted without a conformance level ranks a non-conformant arm
@@ -1285,16 +1293,15 @@ public internet at a 12.8 ms round trip, over a 90 s cell per lane:
 | Segmented HTTP | 2 s | 3,497 ms | 4,067 ms | 13 / 3,486 | 131 ms |
 
 PCR jitter above 481 ns was zero on all nineteen loopback cells. **Continuity was not, and the column
-that originally said so was an instrument defect** — the matcher searched for a word the TSDuck
-continuity plugin never prints, so it returned zero on every input the campaign ever gave it. Re-graded
-from the same captured bytes: the MoQ arms are genuinely 0 at every cushion, and the **segmented arm
+that originally said so was an instrument defect** that returned zero on every input; the defect and
+its scope are recorded in [T18](../lab/test-18-delivery-latency.md) and
+[T5](../lab/test-5-network-impairment.md). Re-graded from the same captured bytes: the MoQ arms are genuinely 0 at every cushion, and the **segmented arm
 posts 583 continuity events at a 2,000 ms cushion, 78 at 4,000 ms and 64 at 8,000 ms** — the groomer
 starving between segment arrivals, the same mechanism measured directly at 311 events on a 1 s cushion
 against 2 s segments. The UDP, SRT and RIST arms sit at a common ~90-event floor that is not yet
 attributed: RIST logs a receiver FIFO overflow that accounts for its own, SRT does not, and until a
 source-side capture is graded beside the egress those three figures bound a rig artefact together with
-a transport result and should not be read as either. The defect and its scope are recorded in
-[T18](../lab/test-18-delivery-latency.md) and [T5](../lab/test-5-network-impairment.md).
+a transport result and should not be read as either.
 
 **MoQ delivers a picture across the internet in 109 ms**, 15× lower than SRT and 37× lower than segmented
 HTTP over the same path in the same window. On loopback, where the ladder also carried a plain-UDP control
@@ -1302,9 +1309,9 @@ with no transport buffer at all, MoQ came in **4.7× lower than that control** �
 raw datagrams, because what the control still pays and MoQ does not is groomer depth.
 
 **Not one cell in that table is P1-conformant, and the ranking changes when conformance is imposed.**
-Every arm above ran at the shallowest cushion it would run at; the byte-transparent arms sit at a floor
-of 12–21 marginal violations attributed to the rig's rate surplus rather than to the transports, and the
-MoQ arm fails outright at 504 of 3,310. **At the only configurations measured conformant:**
+Every arm above ran at the shallowest cushion it would run at. The byte-transparent arms miss by a few
+marginal violations attributed to the rig's rate surplus rather than to the transports (quantified in the
+caveats below), and the MoQ arm fails outright. **At the only configurations measured conformant:**
 
 | Plane | Conformant configuration | Delivery latency | Conformance measured |
 |---|---|---|---|
@@ -1365,6 +1372,10 @@ and absolute conformance only to within those few intervals.*
 
 ### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes if it has stopped completely, and only from per-stream instrumentation if it has stopped partly
 
+**For an operator:** session state, process liveness and the TR 101 290 P1 set do not catch a stalled
+programme, and P1 misses a partial stall entirely. Specify per-PID access-unit liveness at the groomed
+output, and do not leave the groomer to carry on at CBR when the programme stops.
+
 The failure a primary-distribution operator is least protected against is not a component dying — that
 case closes a socket and something notices. It is every component still running, still connected, and
 the programme off air. [T22](../lab/test-22-silent-media-plane-failure.md) induces exactly that with
@@ -1402,9 +1413,9 @@ nothing on the control. That is the detector to specify, and the distinction tha
 procuring monitoring is that per-PID *bitrate* inherits the same proportional-sensitivity problem: a
 dead stream's PID bitrate goes to zero, but the service bitrate barely moves.
 
-**That recommendation has since been built and run in the delivery path, and it holds**
-([T27](../lab/test-27-liveness-detector.md), P1). T24 measured with an offline grader over a capture
-on one host, which left open whether the fine structure a liveness detector needs survives a relay,
+**That detector has been built and run in the delivery path, and it holds**
+([T27](../lab/test-27-liveness-detector.md), P1). T24 measured offline, over a capture on one host, which
+left open whether the fine structure a liveness detector needs survives a relay,
 the exporter's PCR regeneration and a CBR groomer. It does, and the agreement is close enough to be
 the result: the same 60 s video suppression measured **57.212 s** by a live detector at the groomed
 output of a cross-host lane, against T24's **57.22 s** offline on loopback — different code,
