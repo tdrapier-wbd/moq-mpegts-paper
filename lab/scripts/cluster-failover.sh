@@ -35,8 +35,14 @@
 #           so it also bounds detection of a dead publisher. Unset = the build's default (30 s).
 #           When set, the relays' keep-alive drops to 2 s, which must stay below it.
 #      PORT_A / PORT_B (4480 / 5480), FEED (PORT_B + 1), JOIN (10), EVENT_AT (JOIN + 12), OBS (20),
-#      RLOG (relay log filter, default info,moq_net::model=debug), KEEP_TS (0 deletes the captures
-#      after grading and keeps their sizes in sizes.csv).
+#      RLOG / PLOG (relay / publisher log filters; the publishers' default logs each group they
+#      serve, which is what shows the group sequence a splice resumes at), KEEP_TS (0 deletes the
+#      captures after grading and keeps their sizes in sizes.csv).
+#
+# Each publisher numbers groups from its own start, so a standby that joined D seconds after the
+# active is D seconds of groups behind it. The verdict prints the last video group the active
+# served and the first the standby served after the event, with times, so a resume bounded by
+# detection can be told apart from one bounded by the sequence gap.
 #
 # Usage: cluster-failover.sh <bin-dir> <outdir>                    (SRC the source clip)
 #   HOP=424242 SIDLE=6s EVENT=kill cluster-failover.sh ~/bin-<sha> out/shared-kill-r1
@@ -57,6 +63,8 @@ EVENT_AT=${EVENT_AT:-$((JOIN + 12))}
 OBS=${OBS:-20}
 KEEP_TS=${KEEP_TS:-0}
 RLOG=${RLOG:-info,moq_net::model=debug}
+PLOG=${PLOG:-info,moq_net::lite::publisher=debug}
+export NO_COLOR=1
 IDLE=${SIDLE%s}
 IDLE=${IDLE:-30}
 DEADLINE=$((EVENT_AT + IDLE + 5))
@@ -81,9 +89,8 @@ mkdir -p "$OUT"
 rm -f "$OUT"/*.ts "$OUT"/*.log "$OUT"/*.exit "$OUT/sizes.csv" "$OUT/verdict.txt"
 size() { stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0; }
 now() { date +%s.%N; }
-# Seconds since the sampler's t=0, for an epoch or an RFC 3339 log timestamp.
+# Seconds from the sampler's t=0 to an epoch.
 rel() { awk -v a="$1" -v b="$T0" 'BEGIN { printf "%.1f", a - b }'; }
-logts() { date -d "$1" +%s.%N 2>/dev/null; }
 
 PIDS=()
 relayA="" relayB="" pubA="" sub1="" sub2="" sub3=""
@@ -111,7 +118,7 @@ start_relay() { # <name> <port> <cluster-id> [peer-port]
 start_pub() { # <name> <relay-port> <udp-port>
 	(
 		tsp -I ip "$3" -O file - 2>"$OUT/$1-tsp.log" |
-			"$MOQ" "${MOQ_DIAL[@]}" "https://localhost:$2" "${MOQ_GSO[@]}" --broadcast "$BC" \
+			RUST_LOG=$PLOG "$MOQ" "${MOQ_DIAL[@]}" "https://localhost:$2" "${MOQ_GSO[@]}" --broadcast "$BC" \
 				"${HOPARG[@]+"${HOPARG[@]}"}" import ts >"$OUT/$1.log" 2>&1
 		echo "$(date +%s.%N) tsp=${PIPESTATUS[0]} moq=${PIPESTATUS[1]}" >"$OUT/$1.exit"
 	) &
@@ -185,33 +192,38 @@ stall() { # <sub> <from> <to>
 }
 at() { awk -F, -v c="$(col "$1")" -v k="$2" 'NR > 1 && $1 == k { print $c }' "$OUT/sizes.csv"; }
 first_error() { grep -m1 -E '^Error:' "$OUT/$1.log" | cut -c1-160; }
-# The first ERROR line logged before the epoch. The exporter's closing `Error:` line carries no
-# timestamp; an exit before the epoch is caught by the liveness column instead.
-error_before() { # <sub> <epoch>
-	local line ts
-	while IFS= read -r line; do
-		ts=$(logts "${line%% *}")
-		if awk -v a="$ts" -v b="$2" 'BEGIN { exit !(a < b) }'; then echo "$line" | cut -c1-160; return; fi
-	done < <(grep ' ERROR ' "$OUT/$1.log")
+# Every timestamped line of a log, colour stripped, prefixed with its time in seconds from t=0.
+sod() { date -u -d "@$1" +%H:%M:%S.%N | awk -F: '{ print $1 * 3600 + $2 * 60 + $3 }'; }
+T0S=$(sod "$T0")
+TJ=$(rel "$T_JOIN")
+TE=$(rel "$T_EVENT")
+stamped() {
+	[ -f "$OUT/$1.log" ] || return 0
+	sed 's/\x1b\[[0-9;]*m//g' "$OUT/$1.log" | awk -v t0="$T0S" '$1 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ {
+		split(substr($1, 12), h, ":"); s = h[1] * 3600 + h[2] * 60 + h[3]
+		if (s < t0 - 43200) s += 86400
+		printf "%.3f %s\n", s - t0, $0 }'
 }
+# The first ERROR line logged before the event. The exporter's closing `Error:` line carries no
+# timestamp; an exit before the event is caught by the liveness column instead.
+error_before() { stamped "$1" | awk -v e="$TE" '$1 < e && / ERROR / { print; exit }' | cut -c1-200; }
 # Media subscriptions a publisher received, by phase: [start, JOIN), [JOIN, EVENT), [EVENT, END].
 subs_by_phase() {
-	local j=0 e=0 a=0 line ts
-	[ -f "$OUT/$1.log" ] || { echo "-"; return; }
-	while IFS= read -r line; do
-		ts=$(logts "${line%% *}")
-		if awk -v x="$ts" -v y="$T_JOIN" 'BEGIN { exit !(x < y) }'; then j=$((j + 1))
-		elif awk -v x="$ts" -v y="$T_EVENT" 'BEGIN { exit !(x < y) }'; then e=$((e + 1))
-		else a=$((a + 1)); fi
-	done < <(grep 'subscribed started' "$OUT/$1.log" | grep -v 'track=catalog')
-	echo "$j/$e/$a"
+	stamped "$1" | grep 'subscribed started' | grep -v 'track=catalog' |
+		awk -v j="$TJ" -v e="$TE" '{ if ($1 < j) a++; else if ($1 < e) b++; else c++ } END { printf "%d/%d/%d", a, b, c }'
 }
-# The first dead-session line on relayA after the event, i.e. when relayA detected pubA had gone.
-detect=""
-while IFS= read -r line; do
-	ts=$(logts "${line%% *}")
-	if awk -v x="$ts" -v y="$T_EVENT" 'BEGIN { exit !(x >= y) }'; then detect=$(rel "$ts"); break; fi
-done < <(grep -E 'connection (closed|error).*timed out' "$OUT/relayA.log")
+# The last video group a publisher served before the event and the first it served after, with
+# the time of each.
+video_groups() {
+	stamped "$1" | awk -v e="$TE" '/serving group/ && /track=0\.avc3/ {
+		match($0, /sequence=[0-9]+/); s = substr($0, RSTART + 9, RLENGTH - 9)
+		if ($1 < e) { bt = $1; bs = s } else if (at == "") { at = $1; as = s } }
+		END { printf "last-before=%s@t%s first-after=%s@t%s", bs != "" ? bs : "-", bt != "" ? bt : "-", as != "" ? as : "-", at != "" ? at : "-" }'
+}
+# relayA closing pubA's session, and relayA's first upstream video subscription after the event.
+detect=$(stamped relayA | awk -v e="$TE" '$1 >= e && /moq_relay::relay: connection closed/ { printf "%.1f", $1; exit }')
+detect_err=$(stamped relayA | awk -v e="$TE" '$1 >= e && /moq_relay::relay: connection closed/ { sub(/.*err=/, ""); print; exit }')
+reselect=$(stamped relayA | awk -v e="$TE" '$1 >= e && /subscriber: subscribe started/ && /track=0\.avc3/ { printf "%.1f", $1; exit }')
 
 R1=$(resumed sub1 "$EVENT_AT")
 S1=$(stall sub1 "$EVENT_AT" "$END")
@@ -220,23 +232,24 @@ TAIL1=$(($(at sub1 "$END") - $(at sub1 $((END - 5)))))
 A3=$(alive_until sub3)
 GROW3=$(($(at sub3 "$EVENT_AT") - $(at sub3 $((EVENT_AT - 5)))))
 E3=$(error_before sub3 "$T_EVENT")
-PRE1=$(at sub1 "$JOIN")
+PRE_AT=$((JOIN > 5 ? JOIN : 5))
+PRE1=$(at sub1 "$PRE_AT")
 
 {
 	echo "== $OUT"
-	echo "t0=$(date -u -d "@$T0" +%FT%T.%3NZ) join=$(rel "$T_JOIN") event=$(rel "$T_EVENT") ($EVENT) relayA_timeout=${detect:-none}"
+	echo "t0=$(date -u -d "@$T0" +%FT%T.%3NZ) join=$TJ event=$TE ($EVENT) relayA_closed_pubA=${detect:-none} (${detect_err:-no close logged}) relayA_resubscribed_video=${reselect:-none}"
 	for s in sub1 sub2 sub3; do
 		r=$(resumed "$s" "$EVENT_AT")
 		echo "$s: alive_until=$(alive_until "$s") resumed=${r:-no-stall} stall_after_event=$(stall "$s" "$EVENT_AT" "$END")s stall_join_to_event=$(stall "$s" "$JOIN" "$EVENT_AT")s final=$(at "$s" "$END")B error=$(first_error "$s")"
 	done
 	i=0
 	for p in pubA pubB; do
-		echo "$p: media subscriptions before-join/join-to-event/after-event=$(subs_by_phase "$p") exit: ${PUB_EXIT[$i]}"
+		echo "$p: media subscriptions before-join/join-to-event/after-event=$(subs_by_phase "$p") video $(video_groups "$p") exit: ${PUB_EXIT[$i]}"
 		i=$((i + 1))
 	done
 
 	if [ "${PRE1:-0}" -lt 1000000 ]; then
-		echo "VOID: sub1 held ${PRE1:-0} B at the join, so the chain never carried media"
+		echo "VOID: sub1 held ${PRE1:-0} B at t=$PRE_AT, so the chain never carried media"
 		c1=void c2=void c3=void
 	else
 		if [ "$A3" -ge "$EVENT_AT" ] && [ "$GROW3" -gt 0 ] && [ -z "$E3" ]; then c2=PASS; else c2=FAIL; fi
@@ -250,7 +263,7 @@ PRE1=$(at sub1 "$JOIN")
 	echo "CHECK 2 (standby arrival): $c2 — sub3 alive_until=$A3, +${GROW3}B in the 5 s before the event, error before it: ${E3:-none}"
 	[ "$EVENT" = kill ] && echo "CHECK 1 (failover): $c1 — sub1 resumed=${R1:-no-stall} (deadline t=$DEADLINE), alive_until=$A1 of $END, +${TAIL1}B over the last 5 s"
 	[ "$EVENT" = eof ] && echo "CHECK 3 (graceful end): sub1 $c3 — alive_until=$A1 of $END, +${TAIL1}B over the last 5 s, $(first_error sub1)"
-	echo "RESULT hop=${HOP:-fresh} idle=${IDLE}s event=$EVENT check1=$c1 check2=$c2 check3=$c3 event_t=$(rel "$T_EVENT") detect_t=${detect:-none} resumed_t=${R1:-none} stall1=${S1}s alive1=$A1/$END"
+	echo "RESULT hop=${HOP:-fresh} idle=${IDLE}s event=$EVENT join=$JOIN check1=$c1 check2=$c2 check3=$c3 event_t=$TE detect_t=${detect:-none} reselect_t=${reselect:-none} resumed_t=${R1:-none} stall1=${S1}s alive1=$A1/$END alive3=$A3"
 } | tee "$OUT/verdict.txt"
 
 if [ "$KEEP_TS" != 1 ]; then rm -f "$OUT"/sub?.ts; fi
