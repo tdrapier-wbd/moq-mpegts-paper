@@ -1,7 +1,7 @@
 # Test 10 — MPTS / multiple concurrent services
 
-**State: arms A, B and D run on build `ffa5b81b` (P1, file domain, all roles co-resident on one
-host); arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
+**State: arms A, B and D run on build `ffa5b81b`, and the MoQ arms re-run on upstream `main`
+`2b689c24` (P1, file domain, all roles co-resident on one host); arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
 and one SDT listing all three — was carried through both data planes and graded per programme.
 
 - **The MoQ lane refuses a multiplex whose programmes run on independent clocks, and not cleanly.**
@@ -20,6 +20,11 @@ and one SDT listing all three — was carried through both data planes and grade
   nearly every PCR, for the reason [T3](test-3-opaque-transparency.md) located on one programme: the
   packager adds a PAT/PMT pair at each segment head. In a multiplex that pair carries programme 1's
   PMT only.
+
+- **On upstream `main` (`2b689c24`) the refusal is gone and the loss is silent.** Independent clocks
+  complete with exit 0 while programmes 1 and 3 lose 96–98 % of their video packets; on a common
+  clock SCTE-35 and part of programme 1's audio are lost. The flattening is unchanged. Programme 1
+  alone is clean on `main`.
 
 The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
 media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
@@ -304,6 +309,45 @@ At teardown the subscriber exited with `TS track layout changed after PAT/PMT wa
 removed` in one run and `json: dropped` in the other. The single-programme controls ended with the
 same two errors, so this is the exporter's end-of-broadcast behaviour, not a multiplex effect.
 
+### On upstream `main` at `2b689c24`: no refusal, and silent loss
+
+The MoQ arms were re-run on `main` at `2b689c24` (`moq 0.12.8` / `moq-relay 0.15.8`), same rig and
+fixtures: one run of `mpts3.ts`, two of `mpts3-cc.ts`, and one programme-1 control (`spts1.ts`).
+
+| | Independent clocks (1 run) | Common clock (2 runs) | Programme 1 alone (1 run) |
+|---|---|---|---|
+| Publisher | exit 0, nothing logged | exit 0 | exit 0 |
+| Structure | flattened as on `ffa5b81b`: PAT lists programme 1 only, one PMT with all ten ES under PCR 111 | the same | CARRIED, PMT structure identical |
+| Programme 1 video (PID 111), packets | **8,424 of 359,960** | 338,723 and 355,920 of 359,960 | 349,302 of 359,273 |
+| Programme 2 video (529) | 73,023 of 74,441 | 70,588 and 73,105 of 74,529 | — |
+| Programme 3 video (785) | **546 of 14,398** | 12,605 and 12,929 of 14,956 | — |
+| SCTE-35, per PID (141/142/143) | 3 / 3 / 2 of ~60 | **1 / 2 / 1 and 7 / 4 / 7** of ~60 | 57 / 57 / 57 |
+| Programme 1 MPEG-1 audio (121) | 92 of 8,055 | 5,408 and 6,376 of 8,055 | 9,688 of 8,040 |
+| EIT carriage rate (PID 0x12), source 2.001 packets/s | 0.005 | **4.791 and 0.484** (+139 %, −76 %) | 1.092 (source 1.003) |
+| PCR 111, intervals > 40 ms | 0.34 %, largest step 51,197 s | 0.088 % and 0.312 % | 0 %, max 25.0 ms |
+| Continuity events | 0 | 0 | 0 |
+
+- **Independent clocks no longer abort; the output is corrupted instead.** The importer that exited
+  on `TimestampRewind` on `ffa5b81b` now completes with exit 0 and logs nothing, while programme 1's
+  and programme 3's video arrive at 2 % and 4 % of their packets. PCR 111 switches between clocks
+  13 times in the egress, and audio and teletext PTS land on values absent from the source.
+- **On a common clock, `main` loses content that `ffa5b81b` delivered.** Video is intact, but
+  SCTE-35 arrives at 1–7 packets of ~60 per PID, programme 1's audio is 21–33 % short, and the EIT
+  rate swings between runs. In the second common-clock run programme 1's MPEG-1 audio has eight
+  holes of 2.7–4.1 s, each about 0.45 s shorter than the last; its AC-3 has nine, and programme 3's
+  audio three of 0.8–1.8 s. The cause of the holes is not isolated.
+- **The loss is specific to the multiplex.** Programme 1 alone through `main` delivers its
+  SCTE-35 (57 of ~60 per PID), its audio and its EIT at +9 %, as on `ffa5b81b`.
+- **Candidate cause, not isolated.** Two upstream changes to the TS importer landed between the
+  builds: every elementary stream now re-anchors a timestamp below the live edge instead of
+  refusing it, and stdin imports publish on the broadcast clock. Either could turn the
+  cross-programme alternation of the importer's one section clock from a refusal into a silent
+  re-timing. The builds were not bisected.
+
+So on `main` the lane's MPTS failure moves from a loud refusal to silent loss, which is the worse
+failure for a broadcaster: a monitoring chain that watches for a publisher exit sees nothing, and
+continuity stays at 0.
+
 ### Arm D: carried, with a programme-1-only initialisation pair
 
 The packager published 25 segments of 2.0–2.4 s (`EXT-X-BITRATE:19426`), and the playlist ends
@@ -348,6 +392,9 @@ capture is complete, and it does not bear on any figure above.
 - **A multiplex-aware media-aware lane** — one section clock per programme, and one program record
   per PMT, so the exporter can rebuild the PAT and every PMT. Until then an MPTS on this lane has to be
   split into one broadcast per programme at ingest, and that split is itself untested here.
+- **Which importer change makes `main` lose content silently.** A bisect between `ffa5b81b` and
+  `2b689c24` on `mpts3-cc.ts` would name it; so would the upstream report, which asks for a refusal of
+  any multi-programme input first.
 - **Arm E**, blocked on a CDN account ([B-5](planned-experiments.md#blocked-on-apparatus)), and the
   SI carriage-cost scaling of [T17](test-17-si-snapshot-tracks.md), which needs many more services
   than three.

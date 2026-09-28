@@ -954,17 +954,21 @@ the *harder* failure mode (host loss) and not the easier, far more common one. T
 and is specified in [#2610](https://github.com/moq-dev/moq/issues/2610) as a publisher-minted epoch
 plus an explicit `Ended` flag. **Specified, not shipped.**
 
-**On the build under test the one-relay case has moved, and two findings are held.** `ffa5b81b` renamed
-the knob to `--hop <id>` and refuses `--origin`. On one relay two publishers now coexist and a hard kill
-fails over within the idle timeout ([T6](test-6-relay-resilience.md) § *Single-relay standby on the
-current build*). The same drill found two things, neither reported:
+**On the build under test the failover picture has moved: one finding is reported and one held.**
+`ffa5b81b` renamed the knob to `--hop <id>` and refuses `--origin`. On one relay two publishers now
+coexist and a hard kill fails over within the idle timeout; in the mesh a hard kill fails over for the
+dead publisher's relay, bounded by the later of detection and the standby's group lag
+([T6](test-6-relay-resilience.md) § *Single-relay standby on the current build*, § *Mesh source
+failover*).
 
-- **A shared-hop standby that arrives after the subscribers ends every one of them with `not found`.**
-  Identical routes rank by recency, the front switches to the newcomer before it has created its
-  tracks, and each track's `NotFound` from it is recorded as an authoritative refusal. It is the
-  single-relay form of the race the mesh drill found and #2473's successors fixed there; the per-track
-  fallback to the incumbent does not cover it. Two of two runs on `ffa5b81b` and two of two on `main`
-  at `2b689c24`, with the code path cited in T6. Publishers that arrive together do not trigger it.
+- **A shared-hop standby that arrives after the subscribers ends every one of them with `not found`
+  — reported as [#4352](https://github.com/moq-dev/moq/issues/4352).** Identical routes rank by
+  recency, the front switches to the newcomer before it has created its tracks, and each track's
+  `NotFound` from it is recorded as an authoritative refusal. It is the race the mesh drill once
+  found as `Unroutable`, back on these builds on one relay and in the mesh: two of two runs on one
+  relay on `ffa5b81b`, two of two on `main` at `2b689c24`, and ten of ten on the standby's relay in
+  the mesh on `ffa5b81b`, with the code path cited in T6. In the one run where the publishers arrived
+  together it did not occur. **Open**; the before/after verification is owed when a fix lands.
 - **A fast switch to a same-hop standby ends `export ts` with `TimestampRewind`.** On `ffa5b81b` a
   SIGINT made the relay move to the standby and the exporter abort. On `main`, where the CLI closes
   the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
@@ -972,13 +976,27 @@ current build*). The same drill found two things, neither reported:
   together. Co-starting them did not help, so the offset-numbering explanation is not the whole
   cause, and the mechanism is not isolated.
 
-**Not reported; drafts for the author's review.** The arrival teardown is drafted as
-`docs/upstream/shared-hop-standby-arrival.local.md` and is ready as it stands. The rewind is drafted as
-`docs/upstream/same-hop-switch-timestamp-rewind.local.md`, but should wait until the mechanism is
-settled: each publisher's group sequence and first timestamp at the switch would do that. Separately,
-`main` no longer fails over between publishers that declare no shared hop, which the current front
-rules make deliberate, so it is not a finding to report. The mesh drill has not been re-run on these
-builds.
+**The rewind is held until its mechanism is settled**, drafted as
+`docs/upstream/same-hop-switch-timestamp-rewind.local.md`; each publisher's group sequence and first
+timestamp at the switch would settle it. Two more mesh findings on `ffa5b81b` are not reported. Without
+a shared hop, the standby relay's own subscriber freezes silently at the failover; `main` no longer
+fails over between publishers that declare no shared hop, which its front rules make deliberate, so
+the freeze describes a configuration `main` does not offer as a pair. The splice floor, which makes
+the standby's group lag add to the outage, is the group-sequence floor of #2534 met by a 1+1 standby,
+and the maintainer's position on #2545 covers it; it is drafted for the author as
+`docs/upstream/standby-group-lag.local.md`, not for filing as it stands.
+
+### A multi-programme TS through `import ts` — drafted, not filed
+
+The importer scopes itself to single-programme input in a code comment, and a real MPTS shows what
+that costs ([T10](test-10-mpts-multiservice.md)). On both builds the exporter flattens the multiplex
+into one PAT entry and one PMT carrying every programme's streams, while the carried SDT and EIT still
+list the other services. On `ffa5b81b` programmes on independent clocks abort the publisher with
+*frame timestamp is below the live edge*. On `main` at `2b689c24` the same input completes with exit
+0 and loses most of two programmes' video, and even on a common clock SCTE-35 and part of programme
+1's audio are lost; programme 1 alone is clean. The ask is framed as "refuse an MPTS loudly, or
+select one programme on purpose", not as MPTS support. Drafted as
+`docs/upstream/ts-import-mpts.local.md`, awaiting the author's decision to file.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
 
