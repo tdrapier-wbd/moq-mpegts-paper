@@ -129,90 +129,96 @@ every "not established" entry recurs in §4 or §5.
 
 ### 3.1 Does the transport carry a broadcast mux intact? — Yes on all three lanes, each departing from verbatim in a different direction
 
+**For an operator:** no lane is ruled out on content — all three deliver the services, PIDs and splice
+signalling of a full contribution mux. SRT changes nothing else; segmented HTTP adds a PAT/PMT pair per
+segment; the media-aware lane loses the mux's timing, so it depends on the groomer of §3.2, and delivers
+TDT/TOT late.
+
 **End to end over the public internet.** Live MPEG-TS traverses the whole chain — SRT contribution
-into an AWS EC2 host, import → relay → a local export — with **0 continuity errors**
+into an AWS EC2 host, then import, relay and a local export — with **0 continuity errors**
 ([T4](../lab/test-4-remote-e2e-srt.md)), and the full ~9.93 Mbps contribution mux comes home over
 QUIC at **9.48 Mbps sustained for four minutes, 0 CC** ([T8](../lab/test-8-srt-vs-moq.md)). A
 third-party relay in Mexico, reached from an EC2 publisher in Ireland by a subscriber in London,
 carried 300 s at 9.47 Mbps with 0 CC, 0 reconnects and all 8 elementary streams reconstituted.
 
-**The service layer survives that path too, not only localhost.** Re-measured on the deployed build
+**The service layer survives that path too.** Re-measured on the deployed build
 (`0.9.11-eab96019`), a subscriber in London pulling the EC2 relay receives TSID, ONID, service name,
 provider and type, SDT, NIT, the **source** PMT and PCR PIDs, AC-3 with its typing, teletext and all
-three SCTE-35 PIDs, with 0 continuity errors — where the same leg, before the service-layer carriage fix
-this campaign asked for, delivered two renumbered streams and no service layer at all. **TDT/TOT is the sole exception** and has a merged
-upstream fix the deployed build predates. So the carriage result below is a real-path result, not a
-loopback one ([T4](../lab/test-4-remote-e2e-srt.md)).
+three SCTE-35 PIDs, with 0 continuity errors. Before the service-layer carriage fix this campaign asked
+for, the same leg delivered two renumbered streams and no service layer at all. **TDT/TOT is the sole
+exception**, and has a merged upstream fix the deployed build predates
+([T4](../lab/test-4-remote-e2e-srt.md)).
 
-**Three data planes have now been graded against each other over that path by one instrument, and they
-fail different halves of the question** ([T4](../lab/test-4-remote-e2e-srt.md), three-lane arm: same
-clip, same origin, same 198,389-packet window, ungroomed measurement point, `t3-transparency.py` on all
-three). **Byte-faithful SRT is transparent on every criterion** — 13 PIDs of 13 at their source numbers,
+**Graded against each other over that path by one instrument, the three data planes fail different
+halves of the question** ([T4](../lab/test-4-remote-e2e-srt.md), three-lane arm: same clip, same
+origin, same 198,389-packet window, ungroomed measurement point, `t3-transparency.py` on all three).
+**Byte-faithful SRT is transparent on every criterion** — 13 PIDs of 13 at their source numbers,
 SDT, NIT, TDT/TOT, three splice PIDs, stuffing preserved, the source mux rate exactly (9,945,951 b/s),
 an identical PSI cadence and PCR grid, 0 continuity errors, and **0 PCR-accuracy violations at the
 481 ns P2 gate**. **The media-aware lane is faithful to the mux as a set of bytes and unfaithful to it as
 a timed object:** identity, PIDs, SI and splice signalling all survive, while stuffing, the mux rate, PSI
 density (8.04 → **2.51 PAT/s**, mean gap 124 → **399 ms** against P1's 500 ms limit) and PCR spacing do
 not. The same capture's 0 continuity errors rule out the path as the cause.
-**Two of those have since been repaired upstream.** From
-[The upstream change that restores stuffing and mux rate](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer), `moq import ts` records the source's multiplex rate
-in the catalog and `moq export ts` pads back to it: measured **4.93 % stuffing and 9,981,799 b/s
-declared against a 9,945,951 b/s source, +0.36 %** (file domain, `0.11.2-615d166d`,
+
+**Two of those have since been repaired upstream.** Since
+[the upstream change that restores stuffing and mux rate](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer),
+`moq import ts` records the source's multiplex rate in the [catalog](glossary.md#moq) and
+`moq export ts` pads back to it: measured **4.93 % stuffing and 9,981,799 b/s declared against a
+9,945,951 b/s source, +0.36 %** (file domain, `0.11.2-615d166d`,
 [T13](../lab/test-13-downstream-grooming.md)). **PCR spacing and PCR accuracy are unmoved by it**, so
 the "unfaithful as a timed object" finding stands on those two.
 
-**Segmented HTTP's loopback carriage result generalises to a real path, tested as a prediction rather
-than confirmed after the fact.** Registered in advance from the loopback arm and then measured: content
-intact (13 of 13 PIDs, TDT/TOT, stuffing, 0 CC, the source PCR grid at 0 % above 40 ms), criterion 6
-failed by **+13 PAT and +13 PMT over equal media — exactly 1.00 pair per segment head** — at a cost of
-**302.148 µs** of PCR accuracy against **302.4 µs** predicted from 376 bytes at the source rate, plus
-0.043 % of added rate. **Per-segment TCP fetches across a ~125 ms path change none of the injection
-accounting**, which is not something that could be assumed of a lane whose delivery model is a sequence
-of separate HTTP requests. These two lanes also make the P2 gate usable over the wire for the first time
-— both retain a mux rate for it to grade against, and they bracket the range: SRT at the instrument's
-floor (1 tick, 37 ns), segmented HTTP at a fully explained displacement, with **0 violations at 500 µs**
-bounding that displacement rather than merely counting it.
+**The P2 accuracy gate was undefined on the media-aware lane's ungroomed egress**, which had no mux rate
+to grade against (22–32 Gb/s on 10–27 Mb/s content); on that lane the groomer *created* the quantity
+the gate names.
+**[The upstream change that restores stuffing and mux rate](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer)
+makes the gate answerable, and it is answered badly**: the padded egress declares a plausible rate and
+then puts **0 of 1,807 PCRs** inside the gate against it, at ~24 ms of jitter
+([T13](../lab/test-13-downstream-grooming.md)). The groomer is still what makes the lane conformant; it
+no longer has to invent the rate first.
 
 **Component fidelity on the media-aware lane** ([T2](../lab/test-2-media-aware-transparency.md), P1):
-every elementary stream, at its **original PID**, with `stream_type` and PMT descriptors intact —
+every elementary stream arrives at its **original PID**, with `stream_type` and PMT descriptors intact —
 AVC video, MPEG-1 audio, AC-3 with correct DVB signalling, teletext with its descriptor, and **all
-three SCTE-35 splice PIDs** with program-level CUEI registration. 0 continuity errors, 0 transport
-errors. The DVB service layer — SDT service name, provider and type, NIT, PMT PID, TSID, ONID — is
-threaded through the catalog and preserved.
+three SCTE-35 splice PIDs** with program-level CUEI registration — at 0 continuity errors and 0
+transport errors. The DVB service layer — SDT service name, provider and type, NIT, PMT PID, TSID,
+ONID — is carried in the catalog and preserved.
 
 **EIT round-trips, including the hard case** `[dev]` ([T17](../lab/test-17-si-snapshot-tracks.md)).
-Measured against the upstream change carrying SI on per-table snapshot tracks, since merged, across four
-sub-tables of an 8-day EPG, the set of distinct sections on the egress equals the source's exactly —
-none missing, none added, sizes and `last_section_number` preserved — against **zero EIT packets on
-the same fixture from the merge base**.
+Measured against the upstream change carrying SI on per-table snapshot tracks (each holding only its
+latest version), since merged, across four sub-tables of an 8-day EPG, the set of distinct sections on
+the egress equals the source's exactly — none missing, none added, sizes and `last_section_number`
+preserved — against **zero EIT packets on the same fixture from the merge base**. The hard case is a
+**sparse** schedule sub-table (32 sections against a declared 248): an importer must commit on
+transmission-cycle wrap, and a lost section is indistinguishable from one the source skipped. Carriage
+is **bitrate-neutral** (0.985×) and join costs **~1 ms** across six SI tracks.
 
-The hard case is a **sparse** schedule sub-table (32 sections against a declared 248): an
-importer must commit on transmission-cycle wrap, and a lost section is indistinguishable from one the
-source skipped. Carriage is **bitrate-neutral** (0.985×) and join costs **~1 ms** across six SI
-tracks. TDT/TOT is proxied byte-identically but re-emitted on the exporter's **~14 s grid** rather
-than the source's 0.5 s cadence — late and occasionally backwards-stepping
-([T15](../lab/test-15-point-to-point-cadence.md) measurement 4); upstream fix merged, not on the
-deployed build.
+**The EPG survives both lanes** on a synthetic 8-day fixture: 69 sections byte-identical, at 1.003× on
+segmented HTTP and 0.985× on MoQ ([T17](../lab/test-17-si-snapshot-tracks.md) §5). MoQ delivers
+snapshots in ~1 ms; a segmented client waits out the carousel.
 
-**Three real-feed import defects closed upstream**, each measured before and after: open-GOP
-(recovery-point SEI, not IDR — no video); audio frame-sync loss fatal to the whole publisher (now
-**one 24 ms frame** on one-byte damage); splice-as-substitution (continuity counter now checked on
-elementary streams). **Residuals**: ~1/16 splices invisible to the counter; **256 ms good AC-3 audio
-lost per splice** (MP2 unaffected); recovered gaps **signalled nowhere** (open question §5).
+**TDT/TOT is proxied byte-identically but re-emitted on the exporter's own 30 s grid**, so it arrives
+**~14 s** late against a source true to 0.5 s, and occasionally steps backwards
+([T15](../lab/test-15-point-to-point-cadence.md) measurement 4).
+
+**Three real-feed import defects closed upstream**, each measured before and after: an open-GOP
+source (recovery-point SEI, not IDR) produced no video; audio frame-sync loss was fatal to the whole
+publisher, and now costs **one 24 ms frame** on one-byte damage; and a splice substituted frames
+silently, where it now leaves a gap because the continuity counter is checked on elementary streams. **The residuals**: ~1/16 splices are invisible to the counter; **256 ms
+of good AC-3 audio is lost per splice** (MP2 is unaffected); and recovered gaps are **signalled
+nowhere** (open question §5).
 
 **The opaque lane is byte-transparent, on one run.** TSID, ONID, service name and type, all PSI/SI
-including TDT/TOT and CAT, PMT PID, PCR PID, every elementary stream and every SCTE-35 PID preserved
-verbatim; 0 CC and transport errors; CBR and PCR conformance preserved when fed raw
-([T3](../lab/test-3-opaque-transparency.md)). **Read that with §4's scope limit attached**: it is
-loopback, file-fed, on a pinned obsolete draft, against a private implementation, and it has never
-been repeated.
+including TDT/TOT and CAT, PMT PID, PCR PID, every elementary stream and every SCTE-35 PID are
+preserved verbatim, with 0 CC and transport errors, and CBR and PCR conformance are preserved when it
+is fed raw ([T3](../lab/test-3-opaque-transparency.md)). Read that with §4's scope limit attached.
 
 **Segmented HTTP is transparent to what a mux contains and not to when it was sent**, which is the
-opposite of what the specification's wording suggests. Measured two ways. Packet by packet against the
-source, a published segment differs in a 1,200-packet window in **two packets, both PSI, each in byte 3
-alone** — the continuity counter on the PAT and PMT the segmenter injects at each segment head, whose
-renumbering is forced; every media, audio, teletext, splice and stuffing packet is byte-identical and
-continuity is error-free across segment boundaries
+opposite of what the specification's wording suggests. It was measured two ways. Packet by packet
+against the source, a published segment differs in a 1,200-packet window in **two packets, both PSI,
+each in byte 3 alone** — the continuity counter on the PAT and PMT the segmenter injects at each segment
+head, whose renumbering is forced; every media, audio, teletext, splice and stuffing packet is
+byte-identical and continuity is error-free across segment boundaries
 ([T14](../lab/test-14-data-plane-comparison.md)). Scored against the opaque lane's own inventory on
 three clips ([T3](../lab/test-3-opaque-transparency.md), P1/file domain) it matches the opaque lane on
 content and beats the media-aware one: TSID, ONID, service name, provider and type, PMT PID (0x1000,
@@ -221,127 +227,130 @@ PID including visual-impaired commentary audio, every SCTE-35 PID, null stuffing
 no table re-versioned, 0 continuity errors, 0 transport errors, and 0 PCR repetition intervals above
 40 ms.
 
-**The packager itself is media-aware, and the distinction bounds what may be claimed.** `tsp -O hls`
-is not a byte splitter: it re-multiplexes, regenerates PSI and chooses segment boundaries by picture
-type, and on a *finite* input it truncates roughly the last 5 % rather than flushing it
-([T11](../lab/test-11-interop.md)). What the packet-by-packet comparison establishes is that those
-mechanisms happen to be payload-preserving on a live feed, not that nothing parses the stream. So the
-accurate form of the claim is **verbatim in payload, not as a mux**, and "nothing in the path parses
-the payload" is true of the *cache and the network* — which is where the scaling argument needs it —
-and not of the packager.
+**The packager itself is media-aware, and that bounds what may be claimed.** `tsp -O hls` is not a
+byte splitter: it re-multiplexes, regenerates PSI and chooses segment boundaries by picture type, and
+on a *finite* input it truncates roughly the last 5 % rather than flushing it
+([T11](../lab/test-11-interop.md)). The packet-by-packet comparison establishes that those mechanisms
+happen to be payload-preserving on a live feed, not that nothing parses the stream. The accurate claim
+is therefore **verbatim in payload, not as a mux**: "nothing in the path parses the payload" is true of
+the *cache and the network*, which is where the scaling argument needs it, and not of the packager.
 
-**The EPG survives both lanes** on a synthetic 8-day fixture (69 sections byte-identical at
-1.003× on segmented HTTP, 0.985× on MoQ — [T17](../lab/test-17-si-snapshot-tracks.md) §5). MoQ
-delivers snapshots in ~1 ms; a segmented client waits out the carousel.
-
-Segmented HTTP adds **exactly one PAT/PMT pair per segment** — 376 bytes displacing later PCRs by
-**~300 µs** predictable from the source rate (measured 297.7–301.9 µs on three clips). That takes
-2,453 of ~2,457 PCRs past the 481 ns P2 gate on the broadcast clip while P1 table margin improves;
-segment duration changes the violation *count* but not the max error (sweep detail:
-[T14](../lab/test-14-data-plane-comparison.md)). Groomed, the chain passes at 481 ns (§3.2). **The P2
-accuracy gate was undefined on the media-aware lane's ungroomed egress** — no mux rate to grade against
-(22–32 Gb/s on 10–27 Mb/s content); on that lane the groomer *created* the quantity the gate names.
-**[The upstream change that restores stuffing and mux rate](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer) makes it answerable and it is answered badly**: the
-padded egress declares a plausible rate and then fails the gate against it on **0 of 1,807 PCRs**, at
-~24 ms of jitter ([T13](../lab/test-13-downstream-grooming.md)). The groomer is still what makes the
-lane conformant; it no longer has to invent the rate first.
+**What segmented HTTP adds is exactly one PAT/PMT pair per segment head, and its cost is
+predictable.** On loopback the 376 bytes displace later PCRs by **~300 µs**, predictable from the source
+rate (measured 297.7–301.9 µs on three clips). That takes 2,453 of ~2,457 PCRs past the 481 ns P2 gate
+on the broadcast clip while P1 table margin improves; segment duration changes the violation *count*
+but not the max error (sweep detail: [T14](../lab/test-14-data-plane-comparison.md)). Groomed, the chain
+passes at 481 ns (§3.2). **The loopback result generalises to a real path, tested as a prediction rather
+than confirmed after the fact.** Registered in advance and then measured, the content was intact (13 of
+13 PIDs, TDT/TOT, stuffing, 0 CC, the source PCR grid at 0 % above 40 ms), and criterion 6 failed by
+**+13 PAT and +13 PMT over equal media — exactly 1.00 pair per segment head** — at a cost of
+**302.148 µs** of PCR accuracy against **302.4 µs** predicted from those 376 bytes at the source rate, plus
+0.043 % of added rate. Per-segment TCP fetches across a ~125 ms path change none of the injection accounting. These two
+lanes also make the P2 gate usable over the wire for the first time, because both retain a mux rate for
+it to grade against, and they bracket the range: SRT at the instrument's floor (1 tick, 37 ns),
+segmented HTTP at a fully explained displacement, with **0 violations at 500 µs** bounding that
+displacement rather than merely counting it.
 
 ### 3.2 What does delivery do to the clock, and can it be repaired? — Yes, on both lanes and on the wire in software; the wire is not the file, and on the media-aware lane the repair costs latency
+
+**For an operator:** put the groomer in front of every receiver fed by the media-aware lane. With it,
+both lanes pass TR 101 290 PCR repetition in software at the socket, for a day on a synthetic source.
+Size its buffer from the source's peak coded frame, not its bitrate; conformance costs this lane
+latency (§3.11).
+
 **The problem.** Bursty delivery leaves a reconstructed transport stream with PCR *intervals* that no
-longer track a constant mux rate: the bytes, PCR values included, are intact; the delivery *cadence*
-is not. Soft players tolerate this; hardware IRDs lock a PLL to PCR and raise TR 101 290 P1/P2 alarms
-in response. *(The IRD reaction is accepted broadcast practice, not something this campaign observed
-— no hardware has been fed by this chain.)*
+longer track a constant mux rate: the bytes, PCR values included, are intact, and the delivery
+*cadence* is not. Soft players tolerate this; hardware IRDs lock a PLL to PCR and raise TR 101 290 P1/P2
+alarms in response. *(The IRD reaction is accepted broadcast practice, not something this campaign
+observed — no hardware has been fed by this chain.)*
 
 **Ungroomed, at P1 (file)** ([T2](../lab/test-2-media-aware-transparency.md),
 [T7](../lab/test-7-timing-integrity.md)): **0–26 % of PCR intervals exceed the 40 ms limit, depending
 on the source** — 25.2 % on a synthetic 10 Mbps CBR reference, 13.9 % and 9.1 % on two real CNN
 contribution captures, and **0 % on a 27.5 Mbps broadcast mux whose native 27 ms PCR cadence is
 already inside the limit**. The opaque prototype holds 0 % on every clip
-([T3](../lab/test-3-opaque-transparency.md)), isolating cadence loss to the re-mux rather than to QUIC.
+([T3](../lab/test-3-opaque-transparency.md)), which isolates cadence loss to the re-mux rather than to
+QUIC.
 
-**The ungroomed egress manufactured its own interval distribution on the builds the census covered**
-([T4](../lab/test-4-remote-e2e-srt.md), public internet, pre-[the upstream stdout pacing fix](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it)):
+**The ungroomed egress of older builds manufactured its own interval distribution**
+([T4](../lab/test-4-remote-e2e-srt.md), public internet, before [the upstream stdout pacing fix](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it)):
 on a source at a flat ~24.4 ms grid with **not one interval above 40 ms**, the egress conserved the
 mean to within 0.7 ms while **1,123 of 1,307 intervals fell under 1 ms** and the residual collected
-into gaps to **319.94 ms**. **This sub-millisecond bursting is not present on current builds** — read
-live off the subscriber's pipe on `5d0991b9` and `615d166d`, PCRs arrive on a ~25 ms grid with *no*
-intervals under 1 ms ([T13](../lab/test-13-downstream-grooming.md); loopback, so the comparison with
-T4's WAN figure is indicative on condition as well as build). What the groomer still reconstructs is
-the clustering of packets *between* PCR slots and PCR accuracy against a constant-rate model, not the
-spacing of the slots themselves.
+into gaps to **319.94 ms**. **Current builds do not burst sub-millisecond**: read live off the
+subscriber's pipe on `5d0991b9` and `615d166d`, PCRs arrive on a ~25 ms grid with *no* intervals under
+1 ms ([T13](../lab/test-13-downstream-grooming.md); loopback, so the comparison with T4's WAN figure is
+indicative on condition as well as build). What the groomer still reconstructs is the clustering of
+packets *between* PCR slots and PCR accuracy against a constant-rate model, not the spacing of the
+slots themselves.
 
 **Groomed, on the wire — the figure to quote** ([T13](../lab/test-13-downstream-grooming.md),
-[T19](../lab/test-19-pcr-grid-verification.md) measurement 11): measured on the socket over 300 s, the
-current groomer delivers **0 of 20,193 PCR intervals above 40 ms, worst 30.1 ms**, with 0 continuity
-errors, 0 drops and exact CBR. **Any "0 %" figure must name its domain**: file analysis confirms
-re-stamp *arithmetic* ([T7](../lab/test-7-timing-integrity.md): 0 % above 40 ms, 0 `pcrverify`
-violations at ±500 ns, exact CBR) but does not prove wire-time placement; T13's original result was
-*"pass on file; **fail live**"* until the stage was corrected.
+[T19](../lab/test-19-pcr-grid-verification.md) measurement 11). Measured on the socket, the current
+groomer delivers **0 of 20,193 PCR intervals above 40 ms over 300 s, worst 30.1 ms**, with 0 continuity
+errors, 0 drops, 0 underruns and exact 11 Mb/s CBR. On the same 90 s live arm, the three groomer fixes
+below took continuity errors from **527 to 0** and intervals above 40 ms from **432/3,882 to 0/5,892**
+(worst **286.2 → 30.1 ms**). T19's three conformance criteria are met; its fourth — no regression in
+delivery latency — is **not**, because the arm that passes the other three delivers at 2,447 ms
+(§3.11). **Any "0 %" figure must name its domain**: file analysis confirms re-stamp *arithmetic*
+([T7](../lab/test-7-timing-integrity.md): 0 % above 40 ms, 0 `pcrverify` violations at ±500 ns, exact
+CBR) but does not prove wire-time placement, and T13's original result was *"pass on file; **fail
+live**"* until the stage was corrected.
 
 **Groomed, on file over a live chain** ([T8](../lab/test-8-srt-vs-moq.md), one run, indicative):
-EC2 → home takes egress from **10.78 % of intervals above 40 ms** to **0.06 %** — still not zero on
-the wire, pointing at real-time stage behaviour.
+EC2 to home takes egress from **10.78 % of intervals above 40 ms** to **0.06 %** —
+still not zero on the wire, pointing at real-time stage behaviour.
 
 **The segmented-HTTP lane** reaches the same standard on the wire
-([T16](../lab/test-16-grooming-segmented-http.md)): **0** intervals above 40 ms, **0** PCR violations
+([T16](../lab/test-16-grooming-segmented-http.md)): **0** intervals above 40 ms and **0** PCR violations
 at 481 ns over 2,496 PCRs, with nothing dropped — bounded to ~11.5 Mbps on this test host. Its
 ungroomed egress already carries the source PCR grid in segment payloads, so grooming there buys
 cadence and CBR rather than PCR repair.
 
-**On the MoQ lane, cushion depth is not the variable.** Sweeping the groomer's cushion across an
-eightfold ladder moved repetition **not at all** — ~490 intervals above 40 ms out of ~3,300 at every
-rung, 228 ms maximum unchanged — and the groomer's own insertions ran **137 → 0** at four insertion
-rates with one violation count ([T18](../lab/test-18-delivery-latency.md),
-[T19](../lab/test-19-pcr-grid-verification.md) measurement 11). The misread — that upstream headroom
-was the cause — failed because the groomer placed PCR only into slots the content scheduler declined;
-inside a burst there are none. **Pre-empting the slot — reserving it on the deadline and deferring the
-displaced packet by one — clears the gate at every depth tested**, independent of cushion, exporter
-cadence and content.
+**On the MoQ lane, cushion depth is not the variable.** Sweeping the groomer's cushion (its buffer
+depth) across an eightfold ladder moved repetition **not at all** — ~490 intervals above 40 ms out of
+~3,300 at every rung, with the 228 ms maximum unchanged — and the groomer's own insertions ran
+**137 → 0** at four insertion rates with one violation count ([T18](../lab/test-18-delivery-latency.md),
+[T19](../lab/test-19-pcr-grid-verification.md) measurement 11). The groomer placed PCR only into slots
+the content scheduler declined, and inside a burst there are none. **Pre-empting the slot — reserving
+it on the deadline and deferring the displaced packet by one — clears the gate at every depth tested**,
+independent of cushion, exporter cadence and content.
 
 **What the exporter did wrong is spacing, not rate** (P0/P1 comparison on the same clip: source via SRT
 **0 intervals > 40 ms, max 25.0 ms**; MoQ export **85 % sub-millisecond, 375–414 > 40 ms, max to
-1.84 s**). An even PCR train went in and the same quantity came out in bursts. Three upstream fixes
-landed — exact 25 ms values, stdout pacing and byte-adjacent placement
-([upstream contributions](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it)) — resolving value grid,
-release timing and positional clustering respectively — yet the wire gate still failed until **three
-groomer defects** were corrected ([T19](../lab/test-19-pcr-grid-verification.md) measurement 11;
-chronology and intermediate builds in [T19](../lab/test-19-pcr-grid-verification.md) and
+1.84 s**). An even PCR train went in, and the same quantity came out in bursts. Three upstream fixes —
+exact 25 ms values, stdout pacing and byte-adjacent placement
+([upstream contributions](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it))
+— resolved value grid, release timing and positional clustering respectively, yet the wire gate still
+failed until **three groomer defects** were corrected ([T19](../lab/test-19-pcr-grid-verification.md)
+measurement 11; intermediate builds in [T19](../lab/test-19-pcr-grid-verification.md) and
 [T18](../lab/test-18-delivery-latency.md)): opportunistic PCR re-insertion (fixed by pre-emption), a
 media-rate estimate biased low on uneven intervals (fixed by ratio-of-sums over 2 s), and open-loop
-release (fixed by occupancy-closed loop). **The refuted hypotheses matter**: denser upstream cadence
-would not help — extra PCRs land inside existing clusters; buffer depth cannot help — no cushion
-shortens a coded frame; and file-domain validation was optimistic relative to the wire throughout.
-
-After all three groomer fixes, on the same 90 s live arm: continuity **527 → 0**, intervals above
-40 ms **432/3,882 → 0/5,892** (worst **286.2 → 30.1 ms**). Over 300 s: **0 of 20,193 intervals above
-40 ms**, exact 11 Mb/s CBR, 0 drops, 0 underruns. T19's three conformance criteria are met; its fourth
-— no regression in delivery latency — is **not**, because the arm that passes the other three delivers
-at 2,447 ms (§3.11).
+release (fixed by an occupancy-closed loop). **The refuted hypotheses matter**: denser upstream cadence
+would not help, because extra PCRs land inside existing clusters; buffer depth cannot help, because no
+cushion shortens a coded frame; and file-domain validation was optimistic relative to the wire
+throughout.
 
 **It holds over a day** ([T21](../lab/test-21-permanence-soak.md)): 24.01 h on a continuous timeline —
 **632,199,204 packets, 5,947,298 PCRs, 0 continuity errors, 0 intervals above 40 ms (worst 30.08 ms),
-0 underruns, 0 respawns**, worst programme gap **27 ms**, **33-bit PCR rollover crossed in flight at
-19.4 h** at no cost. The source replays a clip with clocks advanced across joins
-(`ts-continuous-source.py`); it bounds the claim to a synthetic clock over repeating programme, not a
-real encoder's restarts.
-
-The nine-minute failure of an earlier attempt is a **rewind-recovery result, not permanence** (§3.13):
-the groomer's rate estimator ramped when the exporter's PCR degenerated on a looping stimulus — fixed
-in `mpegts-pacer` `5ab84cd` and upstream for the exporter half.
+0 underruns, 0 respawns**, worst programme gap **27 ms**, and the **33-bit PCR rollover crossed in
+flight at 19.4 h** at no cost. The source replays a clip with clocks advanced across joins, which bounds
+the claim to a synthetic clock over repeating programme rather than a real encoder's restarts. An
+earlier attempt's nine-minute failure is a **rewind-recovery result, not permanence** (§3.13): the
+groomer's rate estimator ramped when the exporter's PCR degenerated on a looping stimulus, fixed in
+`mpegts-pacer` `5ab84cd` and upstream for the exporter half.
 
 **Permanence on `d518b61b` was blocked by one resource series**: `moq import ts` resident memory grew
 **+2.83 MB/h** linearly with no drawdown over 24 h (~24 GB/year), failing
-[T21](../lab/test-21-permanence-soak.md)'s resource criterion in that role only ([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks),
-now closed in `5d0991b9`; 2 h re-soak blocked on [the import live-edge exit on content join](../lab/upstream-contributions.md) — §3.6). Every other role passes (groomer
-flat, exporter converged, relay logarithmic — §3.6). **Continuous-source publishing is separately
-blocked** at the first content join by import exiting with *frame timestamp is below the live
-edge* ([the import live-edge exit on content join](../lab/upstream-contributions.md),
-[T40](../lab/test-40-continuous-join-through-srt.md)). That issue now reads *closed* upstream, but it
-was closed by a planning document that changed no code and the defect is **re-measured as live on
-`ffa5b81b`**; it is characterised per stream kind in
-[T41](../lab/test-41-import-reanchor-coverage.md), where non-legacy streams abort on the first
-backward timestamp and legacy audio on the second.
+[T21](../lab/test-21-permanence-soak.md)'s resource criterion in that role only
+([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks),
+now closed in `5d0991b9`; 2 h re-soak blocked on
+[the import live-edge exit on content join](../lab/upstream-contributions.md) — §3.6). Every other role
+passes (groomer flat, exporter converged, relay logarithmic — §3.6). **Continuous-source publishing is
+separately blocked** at the first content join, where import exits with *frame timestamp is below the
+live edge* ([the import live-edge exit on content join](../lab/upstream-contributions.md),
+[T40](../lab/test-40-continuous-join-through-srt.md)). That issue now reads *closed* upstream, but a
+planning document that changed no code closed it, and the defect is **re-measured as live on
+`ffa5b81b`**. [T41](../lab/test-41-import-reanchor-coverage.md) characterises it per stream kind:
+non-legacy streams abort on the first backward timestamp, and legacy audio on the second.
 
 **The buffer bound is set by the peak coded frame, not bitrate.** Three sources at 9.5–9.9 Mb/s
 programme have peak coded frames of **256, 1,826 and 4,562 packets**; **3.6× the peak frame's carriage
@@ -349,21 +358,20 @@ duration** sufficed on all three where 2.5× did not. The cap governs loss; the 
 frame's carriage duration at the mux rate is the encoder's VBV occupancy moved downstream.
 
 **Off-the-shelf grooming** ([T13](../lab/test-13-downstream-grooming.md)): behind a MoQ egress
-**nothing passes all four criteria** (mux preserved, PCR accuracy, repetition, honest paced wire) —
-TSDuck cannot inflate stuffing, FFmpeg/GStreamer damage carriage. A dedicated datagram sender after the
-muxer passes wire timing; **carriage remains unsolved off the shelf on the MoQ lane**. On segmented
-HTTP, where stuffing and PCR grid survive, `tsp -P pcradjust -P regulate -O ip` passes all four. Full
-chain matrix: [T13](../lab/test-13-downstream-grooming.md).
+**nothing passes all four criteria** (mux preserved, PCR accuracy, repetition, honest paced wire).
+TSDuck cannot inflate stuffing, and FFmpeg and GStreamer damage carriage. A dedicated datagram sender
+after the muxer passes wire timing, but **carriage remains unsolved off the shelf on the MoQ lane**. On
+segmented HTTP, where stuffing and PCR grid survive, `tsp -P pcradjust -P regulate -O ip` passes all
+four. The full chain matrix is in [T13](../lab/test-13-downstream-grooming.md).
 
-**On the segmented lane, buffer depth is the binding constraint** — at 8 s cushion, 0 intervals above
-40 ms; at 1 s against 2 s segments, **311 continuity errors** and 1.85 s silences. Depth prevents a
-stage running dry; it does not buy PCR repetition on either lane.
+**On the segmented lane, buffer depth is the binding constraint**: at an 8 s cushion there are 0
+intervals above 40 ms, and at 1 s against 2 s segments there are **311 continuity errors** and 1.85 s
+silences. Depth prevents a stage running dry; it does not buy PCR repetition on either lane.
 
-**PCR discontinuity, wrap and drift stimuli** are reproducible as fixtures (`ts-pcr-fixtures.py`;
-graded by `ts-pcr-selftest.py`, 38 assertions). Pipeline response to each class: §3.13. Analyser
-defects found during fixture build are recorded in [T19](../lab/test-19-pcr-grid-verification.md); no
-published conformance figure changed.
-
+**PCR discontinuity, wrap and drift stimuli** are reproducible as fixtures with a 38-assertion
+self-test ([lab scripts](../lab/scripts/README.md)); the pipeline's response to each class is §3.13.
+Analyser defects found while building them are recorded in [T19](../lab/test-19-pcr-grid-verification.md);
+no published conformance figure changed.
 
 ### 3.3 How does the transport behave under loss? — The controller decides it, on every lane; once the lanes are substrate-matched, reordering does not separate them either; and where MoQ and SRT are matched on measured latency, SRT loses less under every shape measured, by a margin the build and QUIC stack set
 
