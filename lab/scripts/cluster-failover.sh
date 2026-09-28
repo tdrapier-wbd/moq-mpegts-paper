@@ -28,6 +28,10 @@
 #                         wrote in the 5 s before it, with no `Error:` line by then.
 #   CHECK 3 (EVENT=eof)   no pass/fail: sub1 `failed-over` (alive and writing at the end),
 #                         `terminated` (exporter exited) or `frozen` (alive, writing nothing).
+# The grades read capture sizes, and the exporter keeps writing on a subset of tracks, so a clean
+# end whose video completed but whose audio failed over still grades `failed-over`. CHECK 2 stops at
+# EVENT, so sub3 freezing after it is ungraded. cluster-failover-table.sh prints, per run, every
+# subscriber's resume and stall, which tracks completed to sub1 and which pubB served afterwards.
 #
 # Env: HOP  one hop id for both publishers (`--hop`, or `--origin` on builds that predate it),
 #           which declares them interchangeable. Default 424242; HOP= (empty) lets each mint its own.
