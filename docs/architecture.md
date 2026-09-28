@@ -522,7 +522,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a shared-origin standby, but only as a bounded reselect — one idle timeout of detection, ungraceful loss only, no seamless merge. Useful, not load-bearing |
+| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a shared-hop standby, but only as a bounded reselect — one idle timeout of detection, ungraceful loss only, no seamless merge. Useful, not load-bearing |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -700,17 +700,19 @@ not fall seconds behind.
 Relay cost tracks **session count**, not bitrate: a session costs ~0.34 % / 0.87 % / 1.18 % of a core
 at 2 / 10 / 27 Mbps co-resident, so nearly fourteen times the bitrate costs about three and a half times
 the CPU and cost per Mbps *falls* as bitrate rises. One core carries roughly a gigabit. **Size a tier
-from the cross-host figure — 0.806 % of a core, 1.39 MB and one full stream copy per remote
-subscriber, 124–139 per core at ~10 Mb/s — not from the co-resident one** ([Evidence](evidence.md)
-§3.6). The cross-host figure was measured on `moq-relay` 0.14.15 on quinn, not on the build under
-test. Past that limit throughput *collapses* (up to 95 % aggregate loss while CPU stays pinned), and
+from the cross-host figure, not from the co-resident one.** On the build under test that is **1.258 % of
+a core, 2.62 MB and one full stream copy per remote subscriber** with GSO on, and 1.69 % with it off,
+which on a 2-vCPU relay is about 100 subscribers, measured. The `moq-relay` 0.14.15 build on quinn
+measured 0.806 % and 1.39 MB, or 124–139 subscribers per core at ~10 Mb/s, and remains the evidence
+that the cost is linear and the cliff predictable ([Evidence](evidence.md) §3.6). Past that limit throughput *collapses* (up to 95 % aggregate loss while CPU stays pinned), and
 RSS jumps ~2.5× behind a saturated core, so admission control that refuses the N+1th subscriber beats
 serving it badly. Three planning consequences:
 
 - **Count sessions, not gigabits.** High-bitrate contribution feeds are the *cheapest per Mbps* to
   relay; the expensive part of an always-on high-bitrate service is egress, not compute.
 - **Host configuration outweighs anything else measured** — the same relay cost ~6× more CPU per Mbps
-  on macOS loopback with UDP GSO disabled than on Linux with it enabled. Host tuning is a first-order
+  on macOS loopback with UDP GSO disabled than on Linux with it enabled, and on Linux GSO alone moves
+  per-subscriber CPU by 25–29 % on both builds measured. Host tuning is a first-order
   deployment decision, and instance *family* matters before core count, because a cloud instance's
   sustained network allowance can discard more than half the relay's measured capacity.
 - **Size relay memory per channel carried, at about twice the slot arithmetic, and not per viewer.** The
@@ -722,6 +724,14 @@ serving it badly. Three planning consequences:
   range as two, which the mechanism predicts, since the retained state is a pool for streams the *peer*
   may open and a subscriber connection is one the relay opens streams on. No cache setting bounds it
   ([Evidence](evidence.md) §3.6).
+- **A second per-channel term is immediate, and a setting controls it.** The relay's group cache
+  holds each media track for its retention window, 30 s by default, which measured at 60–69 MB for a
+  10 Mb/s channel on the build under test, about 1.5 × bitrate × window. `--cache-duration` shortens it:
+  at 5 s, twelve channels held 196 MB instead of 766 MB. The window is the history the relay can serve
+  a late joiner, a segmented egress or a subscriber recovering from a stall, so it is set from the
+  longest recovery the service must absorb, not minimised. It is a different structure from the slot
+  retention above, and is present from the first minute where that one grows over hours above a
+  baseline, so the two add (*reasoned*, not measured together) ([Evidence](evidence.md) §3.6).
 
 Inter-region bandwidth scales with the number of *distinct tracks* crossing the boundary, not the
 number of subscribers, while per-region egress scales with local subscriber count. **That asymmetry
@@ -741,7 +751,7 @@ as operations tooling, because on the build under test every session loss ends t
 chain or external supervisor.
 
 **Source failover is bounded by QUIC idle timeout (~30 s default, ~11 s tuned)** and **blind to graceful
-exit** — SIGTERM propagates completion instead of reselecting ([Evidence](evidence.md) §3.4). Load-bearing
+exit** — a clean end of the publisher's input propagates completion instead of reselecting ([Evidence](evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).
 

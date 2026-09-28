@@ -83,8 +83,8 @@ the same topology — fetch once, serve N unicast connections — and neither br
 | Replication state | none — any edge can serve any object | per-subscriber, per-track, live | per-destination, live |
 | Who operates it | the commodity delivery market, from a dozen suppliers, today | one CDN today, at five to ten times commodity delivery; otherwise you | you, or a managed media service |
 | Adding a destination | a cache fill nobody provisions | a subscription and its relay state | a gateway output slot, and sometimes an instance |
-| Known hard ceilings | none at this scale | **relay CPU, at 124–139 subscribers per core** (~1.2–1.34 Gb/s of egress) measured cross-host, linear up to it and a hard collapse past it rather than a graceful thinning ([Evidence](evidence.md) §3.6) — still our own rig, and two availability zones in one region at 0.72 ms RTT. Relay memory grows per ingested group and plateaus softly, at a ceiling whose scaling term is open by a factor of two. Separately, subscription churn costs relay memory in retained sessions, not cache (below) | AWS MediaConnect: 50 outputs per flow |
-| Marginal cost of a destination | a cache fill: shared upstream, one egress copy | **0.806 % of a relay core, 1.39 MB of relay memory and one full stream copy** — linear, with no superlinear term and no per-subscriber cache duplication, on `moq-relay` 0.14.15 on quinn rather than the build under test ([Evidence](evidence.md) §3.6) | a session's worth of gateway CPU and one egress copy |
+| Known hard ceilings | none at this scale | **relay CPU**, linear up to it and a hard collapse past it rather than a graceful thinning, measured cross-host: 124–139 subscribers per core (~1.2–1.34 Gb/s of egress) on `moq-relay` 0.14.15 on quinn; on the build under test about 100 on a 2-vCPU relay with GSO off, measured, and about 80 per core with GSO on, extrapolated ([Evidence](evidence.md) §3.6) — still our own rig, and two availability zones in one region at 0.72 ms RTT. Relay memory grows per ingested group and plateaus softly, at a ceiling whose scaling term is open by a factor of two. Separately, subscription churn costs relay memory in retained sessions, not cache (below) | AWS MediaConnect: 50 outputs per flow |
+| Marginal cost of a destination | a cache fill: shared upstream, one egress copy | **1.258 % of a relay core, 2.62 MB of relay memory and one full stream copy** on the build under test with GSO on (0.806 % and 1.39 MB on `moq-relay` 0.14.15 on quinn) — linear, with no superlinear term and no per-subscriber cache duplication; each carried channel adds its retention window's worth of memory ([Evidence](evidence.md) §3.6) | a session's worth of gateway CPU and one egress copy |
 | Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network | none | none |
 
 Only statelessness is a differentiator between the two Internet-native candidates.
@@ -829,7 +829,7 @@ commercial one segmented HTTP's. Extending TSDuck's `hls` input for partial segm
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
 | Format standing | no IETF draft | **adopted WG format** + individual draft | N/A | internal |
 | Wire versions | moq-lite 03–06, **MOQT 14–19** | MOQT 16, 18 | MOQT 14, 16 and 18 | inherits `moq-dev` |
-| Source failover | route reselection via `--origin` | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
+| Source failover | route reselection, a 1+1 pair declared by a shared `--hop` (formerly `--origin`) | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
 | Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
 
 **No one else does the broadcast-specific layer** — PCR egress, CBR grooming, TR 101 290 conformance.

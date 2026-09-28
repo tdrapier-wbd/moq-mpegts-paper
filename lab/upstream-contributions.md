@@ -954,6 +954,25 @@ the *harder* failure mode (host loss) and not the easier, far more common one. T
 and is specified in [#2610](https://github.com/moq-dev/moq/issues/2610) as a publisher-minted epoch
 plus an explicit `Ended` flag. **Specified, not shipped.**
 
+**On the build under test the one-relay case has moved, and two findings are held.** `ffa5b81b` renamed
+the knob to `--hop <id>` and refuses `--origin`. On one relay two publishers now coexist and a hard kill
+fails over within the idle timeout ([T6](test-6-relay-resilience.md) § *Single-relay standby on the
+current build*). The same drill found two things, neither reported:
+
+- **A shared-hop standby that arrives after the subscribers ends every one of them with `not found`.**
+  Identical routes rank by recency, the front switches to the newcomer before it has created its
+  tracks, and each track's `NotFound` from it is recorded as an authoritative refusal. It is the
+  single-relay form of the race the mesh drill found and #2473's successors fixed there; the per-track
+  fallback to the incumbent does not cover it. Reproducible in two of two runs, with the code path
+  cited in T6.
+- **On SIGINT the relay reselects, and the exporter then aborts with `TimestampRewind`.** A clean
+  shutdown now makes the relay move to the standby, which the earlier builds never did, but the
+  splice lands on a group whose timestamps are below the exporter's live edge. Two of two runs; the
+  offset-numbering explanation is reasoned, not isolated.
+
+**Not reported; the author decides whether and when.** The mesh drill has not been re-run on this
+build.
+
 ### Three values the exporter mints per process — one closed, one declined, one open
 
 A 1+1 pair cannot be byte-identical while the exporter renders anything from its own process state

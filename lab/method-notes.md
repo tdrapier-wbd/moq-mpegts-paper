@@ -2334,6 +2334,47 @@ below the flag.
 > **Run a diagnostic arm's flag once against the exact binary before queueing it**, and make the
 > arm check for the capability rather than discover its absence in the results.
 
+### A sandboxed shell can bind loopback and not connect to it
+
+*From [T6](test-6-relay-resilience.md)'s single-relay standby drill.* Run locally from a sandboxed
+agent shell, the relay logged `listening addr=127.0.0.1:…`, its publishers logged `connected`, and
+every subscriber timed out connecting, so each capture was 0 bytes. The same script on a Linux host
+over ssh ran cleanly. Nothing in the output names the sandbox; it reads as a relay that refuses
+subscribers.
+
+> **Treat a loopback rig that connects some clients and not others as the environment until shown
+> otherwise**, and run loopback drills on a host reached over ssh rather than from a sandboxed shell.
+
+### SIGTERM is not a graceful exit for `moq`
+
+*From the same drill.* The CLI waits only on Ctrl-C (`rs/moq-cli/src/main.rs:737–741`); SIGTERM gets
+the default action and ends the process without a clean close, so a "graceful" arm driven by SIGTERM
+measured a hard kill. It failed over like one.
+
+> **Drive a graceful arm with SIGINT or by ending the importer's input, and say which.** The two
+> are not the same either: on `ffa5b81b` the relay reselects on one and not the other.
+
+### With a shared hop the newest publisher serves, so a standby drill must know which one it killed
+
+*From the same drill.* Identical routes are ranked by recency. Started the obvious way, subscribers
+first and the standby second, the drill measured the standby's *arrival*, which on that build ended
+every subscriber, and never reached the kill. With separate identities the tie falls to a hash, so
+either publisher can be serving.
+
+> **Start subscribers after both publishers are producing, log each publisher separately, and read
+> which one received the media subscriptions before and after the signal.** A kill of the idle
+> publisher is the control, and it should show no stall.
+
+### The client's idle timeout sets the relay's detection
+
+*From the same drill.* QUIC uses the smaller of the two endpoints' idle timeouts, so the 6 s the
+drill's clients advertised became the relay's detection budget as well: `connection error: timed out`
+7–9 s after the kill, without any relay flag. A stall figure is therefore a figure about both sides'
+settings.
+
+> **Record the idle timeout on both sides of every session a failover figure crosses**, not only
+> the relay's.
+
 ---
 
 ## 6. Claims, and their scope

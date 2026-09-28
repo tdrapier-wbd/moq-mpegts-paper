@@ -21,7 +21,7 @@ which is what the prototype runs on.
 | **Object** | The individual unit of delivery within a group, roughly a frame's worth of bytes. Loss stalls one object rather than the whole multiplex. |
 | **Catalog** | The manifest saying which tracks exist and how they are coded. The closest analogue is PAT/PMT. |
 | **Announce** | How a publisher advertises that a feed exists, so relays learn where to route it from. |
-| **Origin** (`--origin <id>`) | An identifier by which two publishers declare they carry interchangeable content, i.e. a 1+1 pair. |
+| **Hop** (`--hop <id>`, formerly `--origin`) | An identifier a publisher stamps as the first hop of its route, by which two publishers declare they carry interchangeable content, i.e. a 1+1 pair. Current builds refuse `--origin`; unset, each publisher mints its own. |
 | **Route reselect** | A relay switching from a failed publisher to a standby carrying the same feed. |
 | **Publisher / subscriber** | The sending and receiving endpoints. In this work they are `moq import ts` and `moq export ts`, which convert between MPEG-TS and MoQ tracks. |
 | **Media-aware lane** | Carriage that demultiplexes the transport stream into MoQ tracks and re-muxes at the subscriber. The preferred path, and the one almost every measurement here was taken on. |
