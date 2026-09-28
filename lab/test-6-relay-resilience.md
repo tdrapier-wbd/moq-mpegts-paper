@@ -226,10 +226,10 @@ with both relays and all clients opted in (#2424 — a standby seeds a high `rou
 drops to 0 while it carries), the mesh drill behaved exactly as before, because pricing decides
 between the routes a relay is willing to offer and does not create one.
 
-### Mesh source failover works, bounded by detection
+### Mesh source failover: a hard kill fails over, bounded by the later of detection and the standby's lag; a shared-hop standby ends its own relay's subscribers
 
 [#2473](https://github.com/moq-dev/moq/pull/2473) (*"fail over across redundant publishers via
-per-peer route selection"*, addressing #2461) is what makes the two-relay drill pass. It adds per-peer
+per-peer route selection"*, addressing #2461) is what first made the two-relay drill pass. It adds per-peer
 announce selection (a relay advertises the best route whose hop chain *excludes* the requesting peer),
 exclusion-aware serving, first-hop content identity in SETUP, and a `moq --origin <id>` knob (now
 `--hop <id>`) so a 1+1 pair declares itself interchangeable. Model/wire unit tests pass
@@ -237,20 +237,63 @@ exclusion-aware serving, first-hop content identity in SETUP, and a `moq --origi
 `test_standby_join_splices_live_subscriber`, `origin_round_trip`, plus per-track regressions
 `test_standby_missing_track_keeps_incumbent`, `test_unservable_track_retried_by_a_later_request`).
 
-- **Failover works.** `sub1` on relay A resumes **~30 s after `pubA` is killed** and runs to the end
-  of the window. The debug log shows the whole mechanism: relay A announces its local route
-  (`announce broadcast=red.hang hops=1`); while relay B is merely carrying via relay A it correctly
-  advertises nothing (`no advertisable route for this peer exclude_hop=…`); the instant standby `pubB`
-  joins relay B it emits `announce broadcast=red.hang hops=2` to relay A, so relay A holds the standby
-  **before** it needs it; on detection relay A reselects (`unannounce (filtered route)` →
-  `reannounce`).
-- **The shared-`--origin` teardown is fixed.** `sub3` on relay B survives `pubB`'s join with **zero
-  `unroutable`** in any client log, where it previously died with `Error::Unroutable` (`code=30`).
-- **Recovery latency is one QUIC idle timeout** — detection-bound, not mechanism-bound. Lower
-  `--server-quic-idle-timeout` to shorten it.
-- **Reliability:** with the pipeline SIGKILLed in one pass, **4 of 4 runs failed over at full rate**,
-  resuming at 30, 32, 32 and 33 s. Recovery is *complete*, not merely present. Repeat runs across
-  every subsequent release land in the same 29–34 s band.
+The mechanism, from the debug log of the builds that first passed: relay A announces its local route
+(`announce broadcast=red.hang hops=1`); while relay B is merely carrying via relay A it correctly
+advertises nothing (`no advertisable route for this peer exclude_hop=…`); the instant standby `pubB`
+joins relay B it emits `announce broadcast=red.hang hops=2` to relay A, so relay A holds the standby
+**before** it needs it; on detection relay A reselects (`unannounce (filtered route)` →
+`reannounce`). On those builds, with the pipeline SIGKILLed in one pass, 4 of 4 runs failed over at
+full rate, resuming 30–33 s after the kill, and `sub3` on relay B survived `pubB`'s join, where the
+earliest builds had ended it with `Error::Unroutable` (`code=30`).
+
+**On `ffa5b81b`**, [`cluster-failover.sh`](scripts/cluster-failover.sh) with `--hop`: two meshed relays,
+one live source (`tsp … -P regulate --pcr-synchronous -P fork`) into both publishers, `sub1` and
+`sub2` on relay A, `sub3` on relay B, `pubB` joining at t=10 and the event at t=22 (seconds after the
+subscribers attach), relays at a 6 s idle timeout with a 2 s keep-alive unless noted. Pass criteria,
+fixed before the runs: **CHECK 1**, `sub1` resumes within one idle timeout + 5 s of the kill and
+runs to the end; **CHECK 2**, `sub3` survives `pubB`'s arrival. Driven by
+[`cluster-failover-arms.sh`](scripts/cluster-failover-arms.sh) and tabulated per subscriber and per
+track by [`cluster-failover-table.sh`](scripts/cluster-failover-table.sh).
+
+| Arm | Runs | Relay A detects the kill | `sub1` resumes | `sub3` on relay B | CHECK 1 | CHECK 2 |
+|---|---:|---|---|---|---|---|
+| Shared hop, 6 s | 3 | kill + 8 s | kill + 14 s, 11 s stall | exits `Error: moq: not found` **at the join** | fail ×3 | fail ×3 |
+| Fresh identities, 6 s | 3 | kill + 8 s | kill + 14 s, 11 s stall | survives the join, then **frozen, no error**, from the failover to the end | fail ×3 | pass ×3 |
+| Shared hop, 30 s default | 1 | kill + 32 s | kill + 33 s, 30 s stall | `not found` at the join | pass | fail |
+| Fresh identities, 30 s default | 1 | kill + 35 s | kill + 36 s, 33 s stall | frozen | fail, by 1 s | pass |
+| Shared hop, 6 s, join at t=0 | 1 | kill + 8 s | kill + 10 s, 7 s stall | `not found` at the join | pass | fail |
+| Shared hop, 6 s, join at t=20 | 1 | kill + 7 s | kill + 23 s, 20 s stall | `not found` at the join | fail | fail |
+| Fresh identities, 6 s, relay debug logging | 1 | kill + 8 s | kill + 14 s | frozen | fail | pass |
+
+Neither exporter on relay A exited in any run.
+
+- **A hard kill fails over for the subscribers on the dead publisher's relay**, with or without a
+  shared hop.
+- **The resume is bounded by the later of detection and the standby's lag in group numbering.**
+  Each importer numbers groups from its own start, and relay A's splice does not deliver below the
+  last group it delivered (`pubA`'s last video group was 21 in every run; `pubB` served group 21 at
+  t≈34.7). `pubA` starts about 4 s before t=0, so the standby lags by the join time + 4 s. At a
+  ~4 s lag the resume is detection-bound (kill + 10 s); at ~14 s it is kill + 14 s, and at ~24 s
+  kill + 23 s. At the 30 s default, detection covers a 14 s lag. So the 6 s CHECK 1 failures are
+  lag, not detection, and a standby restarted long after the active would add its whole lag to the
+  outage. That extrapolation is *reasoned* from three lag points.
+- **A shared-hop standby ends the subscribers of the relay it joins**, `not found` at the join in
+  10 of 10 shared-hop runs plus two smoke runs: the same race as on one relay (§ *Single-relay standby
+  on the current build*), which the fix that removed `Unroutable` does not cover on this build.
+- **Without a shared hop, relay B's subscriber freezes silently at the failover**, 5 of 5. Relay B
+  served 1,688 groups on `sub3`'s session before relay A dropped `pubA` and none after; it logs `no
+  route can serve the rest of this group group=21 frame=30 err=cancelled` for `sub3` and releases
+  `pubB`'s tracks as idle, then re-subscribes them for relay A. Why it does not attach `sub3` to them
+  is *inferred*, not established; that nothing is served and no error is sent is measured.
+- **No configuration passes both checks**: a shared hop costs relay B's subscribers at the join, and
+  fresh identities cost them at the failover.
+
+The mesh arms ran co-resident on one 8-vCPU host over loopback, including the cluster link, beside
+the single-relay drill on other ports, at 99 % disk, with UDP socket buffers below what `moq`
+requested. Replicates were tightly consistent. The 30 s arms have one replicate each; a cross-host
+run is owed before any sizing use. Splice quality is ungraded: resuming at group 21 frame 30 of a
+differently numbered GOP may start mid-GOP, and the arm that would settle it is one `KEEP_TS=1` run
+decoded across the splice.
 
 One adjacent fix that does *not* touch this case, since it is easy to assume it would:
 [#2556](https://github.com/moq-dev/moq/pull/2556) (*"prefer the newest route so a reconnect takes over
@@ -259,9 +302,9 @@ shared-origin 1+1 standbys are unaffected. Its same-origin recency tie-break can
 the active (local, `hops=1`) and standby (mesh, `hops=2`) routes differ on cost, so cost decides
 before recency.
 
-### Graceful source departure is not failed over at all
+### Graceful source departure is never reliably failed over
 
-When the active publisher exits *cleanly* instead of being killed, the relay does **not** reselect
+On the builds before `ffa5b81b`, when the active publisher exits *cleanly* instead of being killed, the relay does **not** reselect
 onto the announced standby; it propagates completion. Both media tracks log `subscribe complete`, the
 catalog subscription is `canceled (idle)`, no route change is attempted, and the subscriber's `moq
 export ts` **terminates** with `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3'
@@ -276,6 +319,25 @@ persists across every release tested. Proposed remedies: an announcement `epoch`
 (#2216/#2217); an independent report on #2330 measures the same gap as a multi-second consumer outage.
 The spec-level fix is moq-lite-06 **broadcast epochs / ended-broadcasts**
 ([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), which is not yet on the wire.
+
+**On `ffa5b81b`, in the mesh, the outcome varies from run to run.** The mesh drill's `EVENT=eof` ends
+`pubA`'s input by terminating its `tsp -I ip` reader, never by signalling `moq`, and the importer
+exited 0 in all eight runs. Relay A saw a clean close (`err=no error`) in one of eight; in the other
+seven it timed out one idle timeout later. Each of the ten media tracks then either completed to the
+subscriber or was treated as lost and re-routed to `pubB`, and the mix differed per run:
+
+| Arm | Runs | `sub1` outcome |
+|---|---:|---|
+| Shared hop, 6 s | 3 | frozen; terminated (`'5.ts' removed`); terminated (`'6.mp2' removed`) after `pubB` served four tracks |
+| Fresh identities, 6 s | 3 | failed over like a kill; terminated (`'4.ts' removed`, `sub2` on the same relay froze); "failed over" on audio and two data tracks after video had completed |
+| Shared hop, 30 s | 1 | terminated (`'5.ts' removed`) |
+| Fresh identities, 30 s | 1 | frozen |
+
+Four terminated, two froze, one failed over fully and one partly, without video. A grade from capture
+sizes alone calls the last a failover; `cluster-failover-table.sh` prints the per-track outcome that
+exposes it. On one relay on `main` a clean exit is switched at once and the exporter then aborts on
+a timestamp rewind (§ *Single-relay standby on the current build*). So across builds and topologies
+a graceful exit is never reliably failed over; only the mechanism of the failure differs.
 
 ### A reconnecting publisher stalls its subscribers for as long as the first one lived
 
@@ -416,9 +478,10 @@ This drill counts bytes and does not grade the splice for continuity or PCR. It 
 over loopback, one replicate per graceful arm, and the stall figures are at a 6 s idle timeout; at
 the 30 s default they would be expected to scale as the mesh drill's did, which is *reasoned*. The
 `main` arms ran beside a two-relay mesh drill on other ports of the same 8-vCPU host, with the load
-average under 2. The mesh drill itself has not been re-run on `ffa5b81b`.
+average under 2. The mesh drill on `ffa5b81b` is § *Mesh source failover*; it has not been run on
+`main`.
 
-### Single-source 1+1 failover — the requirement is a common source, not byte-identical numbering
+### Single-source 1+1 failover — a common source is required; on `ffa5b81b` offset numbering also costs outage
 
 The maintainer's position on #2545 is that *"if you're publishing two separate broadcasts (different
 timestamps, codecs, segments) with the same name then failover is impossible … the application needs
@@ -455,16 +518,21 @@ a late/mid-stream joiner is offset in group numbering (its group 0 = the primary
   the two legs were byte-for-byte equal including the preamble.) Kill pubA → `sub1` resumed **~31 s
   later**, output TS **0 CC errors**, one `current group evicted; skipping to next buffered group`.
   `gtee` kept feeding pubB throughout (sub3 uninterrupted).
-- **E2 — the mid-stream offset does NOT break failover.** Despite pubB's group numbers being offset,
+- **E2 — on those builds the mid-stream offset did not break failover.** Despite pubB's group numbers being offset,
   `sub1` still reselected onto pubB and resumed **~30 s after the kill**, TS **0 CC errors**, and the
   exporter **subscribed once** (`catalog.json`, `0.avc3`, `1.ts`, `2.ts`, `3.ts`, `4.ts`, `0.mp2`,
   `0.ts`) and **never re-subscribed or reinitialised the catalog** across the switch — a single
   `current group evicted; skipping to next buffered group error=Hang(Moq(Remote(24)))`.
-- **Mechanism.** The exporter navigates by track name + live edge, not absolute group number: on the
-  reselect it drops the evicted (dead-pubA) group and resumes at pubB's current live edge. So the
-  binding requirement is a **common source** — identical PMT/track layout and a consistent PTS
-  timeline, both guaranteed by one feed — **not** byte-identical segmentation. Exact group-sequence
-  identity is *sufficient* (E1) but not *necessary* (E2).
+- **Mechanism, on those builds.** The exporter navigated by track name + live edge, not absolute
+  group number: on the reselect it dropped the evicted (dead-pubA) group and resumed at pubB's
+  current live edge. So the binding requirement was a **common source** — identical PMT/track layout
+  and a consistent PTS timeline, both guaranteed by one feed — **not** byte-identical segmentation.
+  Exact group-sequence identity was *sufficient* (E1) but not *necessary* (E2).
+- **On `ffa5b81b` the offset is no longer free.** The relay's splice does not deliver below the last
+  group it delivered, so the subscriber waits until the standby's numbering reaches it, and the
+  standby's lag adds to the outage (§ *Mesh source failover*: kill + 23 s at a 24 s lag, against
+  kill + 10 s at 4 s). A common source is still necessary; on this build aligned group numbering
+  across the pair is what keeps the outage at the detection bound.
 
 **"0 CC errors" is not "hitless."** Continuity_counter is a property of the exporter's single output
 mux, which never resets, so it stays clean across the splice and the TS is structurally valid/playable.
@@ -490,9 +558,10 @@ The common-source result above is exactly what makes that receiver-side hitless 
 two legs are the same broadcast, so an IRD can merge them. MoQ does not do this dual-carriage natively.
 
 **Bearing on the maintainer's claim.** Confirmed in substance: with a common source the switch is not
-hitless and the consumer does re-anchor to the new live edge. Refined in one respect: byte-identical
-*segmentation* is not required — a mid-stream joiner with offset group numbers still fails over
-cleanly, because the exporter skips to live rather than demanding group-number continuity. What would
+hitless and the consumer does re-anchor to the new live edge. Refined in one respect, on the builds
+of E1/E2: byte-identical *segmentation* was not required, because the exporter skipped to live
+rather than demanding group-number continuity. On `ffa5b81b` the relay's splice floor reintroduces a
+cost for offset numbering — not impossibility, but an outage extended by the standby's lag. What would
 genuinely make failover "impossible" is a divergent **track layout / codec** across the pair (two
 independent encodes), which a single shared source rules out by construction.
 
@@ -799,12 +868,12 @@ placement decision is where to cut, and the picture type decides that.
 | Active/active — two publishers, **one relay**, early builds | n/a | **dies at 2nd announce** | ❌ `unroutable`, both torn down |
 | Active/active — two publishers, **one relay**, `ffa5b81b`, hard kill of the serving one | 2–10 s at a 6 s idle timeout | resumes, same exporter process | ✅ with or without a shared `--hop`, 9 runs |
 | Shared-`--hop` standby arrives at the **serving** relay after the subscribers, `ffa5b81b` | — | every subscriber exits `not found` | ❌ open; the single-relay form of the race fixed for the mesh |
-| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) | resumes after detection | ✅ since #2473; ❌ before it |
+| Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) on the builds after #2473; on `ffa5b81b` the later of detection and the standby's group lag: kill + 10–23 s at 6 s, kill + 33–36 s at the 30 s default | relay A's subscribers resume; relay B's end at a shared-hop join or freeze at the failover without one | ✅ for the dead publisher's relay; ❌ for the standby's relay on `ffa5b81b`, either way; ❌ before #2473 |
 | Active/active — **single source** into both publishers, co-started | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`/`sub3` identical per-second deltas pre-kill, separated by a constant 4-packet (752 B) startup offset |
-| Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) | resumes; 0 CC errors; exporter never re-subscribes | ✅ offset does not break failover; skips to live edge |
-| Active/active — active source exits **gracefully** | none — subscriber terminates | no failover | ❌ on merged `main`, and on one relay on `ffa5b81b`: not reselected at end of input; reselected on SIGINT, where the exporter then aborts on a timestamp rewind |
+| Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) on the E2 builds; on `ffa5b81b` extended by the standby's lag | resumes; 0 CC errors; exporter never re-subscribes | ✅ on the E2 builds, skipping to the live edge; 🟡 on `ffa5b81b`, where the splice waits for the standby's numbering |
+| Active/active — active source exits **gracefully** | none reliably | no reliable failover | ❌ on every build: earlier builds not reselected; `ffa5b81b` one relay, not reselected at end of input and reselected on SIGINT with a rewind abort; `ffa5b81b` mesh, 4 terminated / 2 frozen / 1 failed over / 1 partial of 8; `main` one relay, switched at once and aborted on the rewind |
 | Active/active — single-relay **reconnecting** publisher (renumber takeover) | stalls for as long as the first publisher lived (12–35 s for 12–36 s) | `fd4f5d82e`: fresh id exits `json: dropped`, shared origin resumes; `ffa5b81b`: resumes | ❌ not a failover mechanism on either build; the stall fits a group-sequence floor (#2534) |
-| Shared-`--origin` standby joins a **carrying** relay | survives; splice immediate | far-relay subscriber keeps flowing | ✅ fixed on merged `main` (was `Unroutable` code=30) |
+| Shared-hop standby joins a **carrying** relay | survives on the builds after the `Unroutable` fix; on `ffa5b81b` ends at the join | far-relay subscriber | ✅ once fixed (was `Unroutable` code=30); ❌ on `ffa5b81b`, `not found` in 10 of 10 runs |
 | `moq-lite-06` cost/standby routing | — | — | 🟡 opt-in; **necessary-not-sufficient** |
 | Redundant outputs (N subscribers) | n/a | byte-identical, continuous | ✅ |
 | ST 2022-7 single-path loss (hitless drill) | **0 lost packets** at the merged output | **hitless** — blackout, 1 %/3 % loss and up to 200 ms skew all covered | ✅ measured in [T12](test-12-dual-path-handoff.md) against a reference receiver, both for one groomer duplicated onto both paths and for two independent stream-clocked pacers; the on-hardware merge is Gate 2 |
@@ -881,8 +950,9 @@ bug survived until a stream ran backwards ([method-notes](method-notes.md)).
 in the case they were reported on: the shared-`--origin` `Unroutable` teardown in the mesh, where a
 standby wins dispatch the moment it attaches — before a real publisher has lazily created every
 track — and a per-track refusal was charged as a strike against the whole logical track, now scoped
-per track with fallback to the incumbent (the same race on one relay is open on `ffa5b81b`, § *Single-relay
-standby on the current build*); and the
+per track with fallback to the incumbent (on `ffa5b81b` the same race is open again, on one relay and
+in the mesh, surfacing as `not found`: § *Single-relay standby on the current build*, § *Mesh source
+failover*); and the
 exporter's fatal `json: dropped` on session loss, fixed by #2469. The drill found the first because a
 model-level standby accepts a track request immediately where a real publisher does not. The
 contribution record, including the declined failover drill
@@ -920,16 +990,18 @@ contribution record, including the declined failover drill
   best property in this experiment is one that no off-the-shelf TS client in the rig could actually
   use.
 - Endpoint *reconnect* is solid (publisher and, since #2469, the exporter). Active/active *source*
-  failover across a mesh ships (#2473) but is **bounded, not hitless** (one idle timeout), and does
-  not cover a graceful source exit at all. This survived the cluster-extension (#2629), detach
+  failover across a mesh ships (#2473) but is **bounded, not hitless** (one idle timeout, and on
+  `ffa5b81b` the standby's group lag too), does not cover a graceful source exit reliably, and on
+  `ffa5b81b` loses the standby relay's own subscribers with or without a shared hop. This survived the cluster-extension (#2629), detach
   (#2616/#2654/#2659/#2664) and resume-hardening (#2666) rewrite without regression, and the resume
   path the mid-stream-standby drill exercises is now the hardened one (#2666 keeps the incumbent when
   a partially-joined standby refuses a track, and stops an empty-segment failover from backfilling the
   whole history).
 - The binding precondition for mesh source failover is a **common source** — identical PMT/track
-  layout + consistent PTS — not byte-identical segmentation. A mid-stream/late-joining standby with
-  offset group numbering still fails over cleanly (the exporter skips to the new live edge; it does
-  not require group-number continuity). Enforce one ingest path into both publishers and the pair is
+  layout + consistent PTS — not byte-identical segmentation. On the E2 builds a late-joining standby
+  with offset group numbering failed over cleanly; on `ffa5b81b` it still fails over, but the relay's
+  splice floor makes it wait out the standby's numbering lag, so a pair whose members start far
+  apart pays that gap as outage. Enforce one ingest path into both publishers and the pair is
   interchangeable; keep a second ingest path as *source* redundancy upstream of the publishers.
 - "0 CC errors" means the output TS stays structurally valid across the splice, **not** that the
   switch is gap-free: the outage is a PCR/PTS discontinuity (a content hole), sized by detection.
@@ -950,8 +1022,10 @@ contribution record, including the declined failover drill
 
 ## Conclusion
 
-**On the media-aware lane** transport resilience holds; active/active source failover now ships,
-bounded by detection, with a residual graceful-exit gap. The ST 2022-7 determinism precondition is
+**On the media-aware lane** transport resilience holds; active/active source failover ships, bounded
+by detection and, on `ffa5b81b`, by the standby's group lag. A graceful exit is never reliably failed
+over, and on `ffa5b81b` a mesh pair loses the standby relay's own subscribers, at the join with a
+shared hop and at the failover without one. The ST 2022-7 determinism precondition is
 characterised in the Results above; [T12](test-12-dual-path-handoff.md) closes the live dual-pacer
 case with stream-clocked grooming. Every failover number in *this* file is a single-leg recovery
 time, so it is break-before-make by construction; the dual-leg drill it points to has since run as

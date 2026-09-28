@@ -17,8 +17,8 @@
 #   EVENT  pubA's source ends. EVENT=kill SIGKILLs its whole tsp | moq pipeline in one pass, which
 #          sends no CONNECTION_CLOSE, so relayA learns of it only at the idle timeout. EVENT=eof
 #          TERMs only its `tsp -I ip` reader, so the importer reads end of input and finishes the
-#          broadcast cleanly. `moq` handles only SIGINT, so a SIGTERM to it is a hard kill and must
-#          not stand in for a graceful exit.
+#          broadcast cleanly. `moq` 0.12.1 handles only SIGINT, so a SIGTERM to it is a hard kill
+#          there; from 0.12.8 SIGTERM closes the session. Neither stands in for an end of input.
 #   END    EVENT + IDLE + 5 + OBS, so the window runs OBS seconds past CHECK 1's deadline.
 #
 # Graded, and printed as one RESULT line:
