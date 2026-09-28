@@ -986,7 +986,7 @@ the standby's group lag add to the outage, is the group-sequence floor of #2534 
 and the maintainer's position on #2545 covers it; it is drafted for the author as
 `docs/upstream/standby-group-lag.local.md`, not for filing as it stands.
 
-### A multi-programme TS through `import ts` — drafted, not filed
+### A multi-programme TS through `import ts` — reported
 
 The importer scopes itself to single-programme input in a code comment, and a real MPTS shows what
 that costs ([T10](test-10-mpts-multiservice.md)). On both builds the exporter flattens the multiplex
@@ -995,8 +995,9 @@ list the other services. On `ffa5b81b` programmes on independent clocks abort th
 *frame timestamp is below the live edge*. On `main` at `2b689c24` the same input completes with exit
 0 and loses most of two programmes' video, and even on a common clock SCTE-35 and part of programme
 1's audio are lost; programme 1 alone is clean. The ask is framed as "refuse an MPTS loudly, or
-select one programme on purpose", not as MPTS support. Drafted as
-`docs/upstream/ts-import-mpts.local.md`, awaiting the author's decision to file.
+select one programme on purpose", not as MPTS support. Reported as
+[#4353](https://github.com/moq-dev/moq/issues/4353). **Open**; the before/after verification is owed
+when a fix lands, on `mpts3.ts` and `mpts3-cc.ts` with the T10 rig.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
 
@@ -1264,8 +1265,9 @@ threshold, whichever rule fired. The trigger is computed as
 time, saturates to zero and is never true, so the `TimeThreshold` branch is dead. The line is
 identical in `quinn-proto` 0.11.17 and on quinn's `main`, and in the noq fork (`noq-proto` 1.3.0); no
 quinn issue about it was found. It cost the campaign a published attribution that had to be withdrawn
-([T28](test-28-failure-injection-matrix.md) § *Corrections*). The fix is reversing the operands. **Not
-reported; the venue would be quinn, with noq to follow.**
+([T28](test-28-failure-injection-matrix.md) § *Corrections*). The fix is reversing the operands. It is
+still on quinn's `main` as of 2026-09-28, and `noq-proto` 1.2.0 carries it too. **Not reported;
+drafted for quinn, with noq to follow**, as `docs/upstream/quinn-qlog-loss-trigger.local.md`.
 
 ---
 
