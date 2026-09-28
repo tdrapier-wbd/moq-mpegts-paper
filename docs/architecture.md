@@ -500,13 +500,16 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
   publisher's job is to take *one* good input and get it onto the fabric reliably.
   - **The constraint the drills add:** the two publishers must be fed the *same* source, or they are
     not a failover pair. The practical topology is **two ingest paths, one selected path fanned into
-    both publishers**, with the second path held as source-side failover for both. A standby joining
-    that shared feed mid-stream is fine; what must not differ is the *content*.
+    both publishers**, with the second path held as source-side failover for both. What must not
+    differ is the *content*. A standby that joins that shared feed mid-stream is still a valid pair,
+    but on the build under test its lag in group numbering adds to the failover outage, and its
+    arrival or the failover itself can cost its own relay's subscribers ([Evidence](evidence.md) §3.4).
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout
   tuning, cache and fan-out, announce propagation, and route selection across the fabric.
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless selection.**
   Relay-mesh source failover exists but is bounded by failure detection (one idle timeout,
-  ungraceful loss only) and does not cover a graceful source exit at all, so service continuity is
+  ungraceful loss only, plus any lag in the standby's group numbering) and does not reliably cover
+  a graceful source exit, so service continuity is
   delivered the way broadcasters already trust: **dual publishers → dual fan-out paths → dual
   receivers → dual groomers → ST 2022-7 selection at the receiver.**
 - **On segmented HTTP the same protection is far cheaper** — the serving node holds no state. Two
@@ -522,7 +525,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a shared-hop standby, but only as a bounded reselect — one idle timeout of detection, ungraceful loss only, no seamless merge. Useful, not load-bearing |
+| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a standby, but only as a bounded reselect — at least one idle timeout of detection, ungraceful loss only, no seamless merge — and on the build under test not for every subscriber ([Evidence](evidence.md) §3.4). Not load-bearing |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -750,8 +753,9 @@ as operations tooling, because on the build under test every session loss ends t
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.
 
-**Source failover is bounded by QUIC idle timeout (~30 s default, ~11 s tuned)** and **blind to graceful
-exit** — a clean end of the publisher's input propagates completion instead of reselecting ([Evidence](evidence.md) §3.4). Load-bearing
+**Source failover is bounded below by QUIC idle timeout (~30 s default, ~11 s tuned)**, extended on the
+build under test by the standby's lag in group numbering, and **is not reliable on a graceful exit** — a
+clean end of the publisher's input propagates completion instead of reselecting ([Evidence](evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).
 

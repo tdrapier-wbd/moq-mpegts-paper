@@ -587,7 +587,7 @@ on every refusing arm, and announcement scoped to what a credential licenses. Th
 
 | | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane | SRT — the incumbent |
 |---|---|---|---|---|
-| Multi-programme mux | **normatively excluded** (§6) | one programme, reconstructed | **verbatim MPTS** | verbatim by construction; measured on one programme |
+| Multi-programme mux | **normatively excluded** (§6) | one programme, reconstructed | **verbatim MPTS by construction**; measured on one programme | verbatim by construction; measured on one programme |
 | PIDs, PES, `stream_type`, PAT/PMT | preserved | preserved | preserved | **preserved** — measured over the wire |
 | PMT PID, PCR PID | **preserved, incl. non-default** — measured on three clips | preserved, since the service-layer carriage fix | preserved | **preserved** — measured |
 | TSID / ONID / service name, provider, type | **preserved** — measured | preserved, since the same fix | preserved | **preserved** — measured |
@@ -932,7 +932,8 @@ under what conditions each is preferable.
 
 - **Latency budget** — between ~2.5 s and ~9 s MoQ leads at conformance (2,447 ms vs 9,286 ms; §5.1);
   above that the axis stops discriminating; below ~2 s neither plane is demonstrated conformant.
-- **Programmes per feed** — MPTS favours MoQ; normatively excluded on HLS (§8).
+- **Programmes per feed** — MPTS favours MoQ's opaque lane, by construction and unmeasured on a
+  multiplex; normatively excluded on HLS (§8).
 - **Destination estate** — open on the delivery path (segmented HTTP) against single-implementation
   carriage (MoQ); reversed on a low-latency receive path, where only MoQ's is free (§6.1).
 - **Delivery price** — commodity CDN vs MoQ supplier (§9).

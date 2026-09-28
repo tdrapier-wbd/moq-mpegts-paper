@@ -735,23 +735,33 @@ continuity counters of its own, which the edge stage downstream has to absorb. *
 § *Transport-resilience drills*; [T28](../lab/test-28-failure-injection-matrix.md) § *The build
 bisection*).
 
-**Source failover across a relay mesh works, and is bounded by detection rather than recovery.** A
-relay advertises, per peer, the best route whose hop chain *excludes* the requester, and a shared
-first-hop identifier (`--hop`, formerly `--origin`) lets two publishers declare their feeds interchangeable — explicitly, because the
-relay is content-agnostic and will not infer it. The two-relay drill passes end to end, the standby
-being advertised the instant its publisher joins. But nothing downstream learns of a hard failure
-until the QUIC **idle timeout** expires, so the subscriber resumes one idle timeout later (~30 s at
-the default, ~11 s with it set to 10 s). **The precondition is a common source, not byte-identical
-segmentation**: a standby that joins mid-stream with offset group numbering still fails over cleanly,
-because the subscriber skips to the standby's live edge. What a shared source rules out is a
-divergent track layout or codec across the pair.
+**Source failover across a relay mesh works for a hard kill, and is bounded by detection and by the
+standby's lag rather than by recovery.** A relay advertises, per peer, the best route whose hop chain
+*excludes* the requester, and a shared first-hop identifier (`--hop`, formerly `--origin`) lets two
+publishers declare their feeds interchangeable — explicitly, because the relay is content-agnostic and
+will not infer it. The standby is advertised the instant its publisher joins, and the subscribers on
+the dead publisher's relay fail over. But nothing downstream learns of a hard failure until the QUIC
+**idle timeout** expires, so the resume is at least one idle timeout after the kill (~30 s at the
+default, ~11 s with it set to 10 s). **The precondition is a common source**; what a shared source
+rules out is a divergent track layout or codec across the pair. On earlier builds offset group
+numbering was free, because the subscriber skipped to the standby's live edge. **On `ffa5b81b` it is
+not:** the relay's splice does not deliver below the last group it delivered, so a standby that joined
+mid-stream adds its lag in group numbering to the outage — kill + 10 s at a ~4 s lag and kill + 23 s
+at ~24 s, against a 6 s idle timeout. Aligned numbering across the pair is what keeps the outage at
+the detection bound. *Measured, P1, two meshed relays co-resident on one host over loopback*
+([T6](../lab/test-6-relay-resilience.md) § *Mesh source failover*). **The drill is not clean for the
+standby relay's own subscribers on that build**: they are lost at the standby's arrival or at the
+failover, depending on whether the pair shares a hop. Both are open defects, recorded in T6, so mesh
+failover is not yet something to rely on for every subscriber.
 
-**Continuity-clean is not hitless, and a graceful exit is not failed over at all.** The resumed
+**Continuity-clean is not hitless, and a graceful exit is never reliably failed over.** The resumed
 capture carries 0 continuity errors, because the subscriber's output mux never resets; the outage
 appears instead as a PCR/PTS discontinuity — break-before-make across a content hole. And when the
 active publisher shuts down *cleanly* rather than dying, the relay propagates completion instead of
-reselecting and the subscriber terminates. This reads as intended semantics rather than a defect, but
-the consequence for broadcast is awkward: failover covers the *harder* failure mode (host loss) and
+reselecting and the subscriber terminates. On `ffa5b81b` in the mesh the outcome also varies per
+run, and some runs leave the subscriber frozen without an error rather than terminated
+([T6](../lab/test-6-relay-resilience.md) § *Graceful source departure*). Propagating completion
+reads as intended semantics rather than a defect, but the consequence for broadcast is awkward: failover covers the *harder* failure mode (host loss) and
 not the easier, far more common one — a SIGTERM to an encoder, a container rescheduled, a rolling
 restart.
 
@@ -763,8 +773,8 @@ source failure, and both consequences are measured.
 | Question | Media-aware lane | Segmented lane |
 |---|---|---|
 | Serving node dies and returns | resumes ~4 s after the relay returns, but the outage is a **content hole** — the exporter skips to the live edge | resumes on the first successful poll and **loses no content** — 10.0 s outage, 1.012 of source rate over the window, backlog refetched from the store |
-| 1+1 source failover, hard kill | 30–33 s default, ~10 s tuned; hitless unreachable by relay reselect | **no measurable interruption**, 3/3 runs identical, largest stall equal to baseline and not at the kill instant |
-| Source exits gracefully | **not failed over** — subscriber terminates | hitless, but `EXT-X-ENDLIST` is visible for **1.10 s** before the survivor rewrites the playlist |
+| 1+1 source failover, hard kill | 30–33 s default, ~10 s tuned, plus on `ffa5b81b` the standby's group lag; hitless unreachable by relay reselect | **no measurable interruption**, 3/3 runs identical, largest stall equal to baseline and not at the kill instant |
+| Source exits gracefully | **not reliably failed over** — subscriber terminates, or on `ffa5b81b` sometimes freezes | hitless, but `EXT-X-ENDLIST` is visible for **1.10 s** before the survivor rewrites the playlist |
 | A misconfigured pair | refused outright (`unroutable`), both torn down | **accepted silently**: ±20 s of repeated and skipped time, or every second delivered twice |
 | Two live packagers/groomers of one feed | byte-identical only once keyed to stream position (T12) | **17/17 segments byte-identical**, by default |
 
