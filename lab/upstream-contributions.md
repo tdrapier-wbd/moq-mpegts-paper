@@ -1010,7 +1010,7 @@ broadcast clock) introduced the common-clock loss, each against a directly grade
 bisect is on the issue, and so is a mechanism for #4122, offered as a reading of its diff: a
 section lane stepping back past `MAX_REORDER`. A dose run over fixtures on either side of that
 threshold has since refuted it. #4122 loses SCTE-35 on fixtures where no section lane steps back
-that far (T10 § *On upstream `main`*). That correction is owed on the issue. **Open**; the
+that far (T10 § *On upstream `main`*), and the correction is on the issue. **Open**; the
 before/after verification is owed when a fix lands, on `mpts3.ts` and `mpts3-cc.ts` with the T10
 rig.
 
