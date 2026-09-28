@@ -966,9 +966,10 @@ failover*).
   recency, the front switches to the newcomer before it has created its tracks, and each track's
   `NotFound` from it is recorded as an authoritative refusal. It is the race the mesh drill once
   found as `Unroutable`, back on these builds on one relay and in the mesh: two of two runs on one
-  relay on `ffa5b81b`, two of two on `main` at `2b689c24`, and ten of ten on the standby's relay in
-  the mesh on `ffa5b81b`, with the code path cited in T6. In the one run where the publishers arrived
-  together it did not occur. **Open**; the before/after verification is owed when a fix lands.
+  relay on `ffa5b81b`, two of two on `main` at `2b689c24`, and on the standby's relay in the mesh ten
+  of ten on `ffa5b81b` and twelve of twelve on `main`, with the code path cited in T6. In the one run
+  where the publishers arrived together it did not occur. **Open**; the before/after verification is
+  owed when a fix lands.
 - **A fast switch to a same-hop standby ends `export ts` with `TimestampRewind`.** On `ffa5b81b` a
   SIGINT made the relay move to the standby and the exporter abort. On `main`, where the CLI closes
   the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
@@ -977,8 +978,13 @@ failover*).
   higher sequence numbers than the last one read, carrying media from 0.17–5.6 s before the live
   edge, co-started or not (T6 § *What the exporter is handed at the switch*). **Reported as
   [#4354](https://github.com/moq-dev/moq/issues/4354)**, with the mesh splice floor included as
-  the converse case. Why the two importers' numbering differs and why the relay hands over older
-  media are not established. **Open.**
+  the converse case. On `main` that converse case is fatal too: in the mesh, every splice that
+  waited for the standby's numbering to reach the floor ended relay A's exporters on the same
+  live-edge error, 8 of 8, and only the two runs whose standby was already past the floor resumed
+  (T6 § *Mesh source failover*). That this is the same check is inferred from the message; the
+  diagnostic build was not run in the mesh. Why the two importers' numbering differs and why the
+  relay hands over older media are not established. **Open**; the mesh result on `main` is not yet
+  on the issue.
 
 Two more mesh findings on `ffa5b81b` are not reported separately. Without
 a shared hop, the standby relay's own subscriber freezes silently at the failover; `main` no longer
@@ -998,8 +1004,12 @@ list the other services. On `ffa5b81b` programmes on independent clocks abort th
 0 and loses most of two programmes' video, and even on a common clock SCTE-35 and part of programme
 1's audio are lost; programme 1 alone is clean. The ask is framed as "refuse an MPTS loudly, or
 select one programme on purpose", not as MPTS support. Reported as
-[#4353](https://github.com/moq-dev/moq/issues/4353). **Open**; the before/after verification is owed
-when a fix lands, on `mpts3.ts` and `mpts3-cc.ts` with the T10 rig.
+[#4353](https://github.com/moq-dev/moq/issues/4353). Bisected since: #3997 (every TS elementary
+stream re-anchors below the live edge) removed the refusal, and #4122 (stdin imports publish on the
+broadcast clock) introduced the common-clock loss, each against a directly graded parent; #4122's
+mechanism is reasoned from its diff (T10 § *On upstream `main`*). The bisect is not yet on the
+issue. **Open**; the before/after verification is owed when a fix lands, on `mpts3.ts` and
+`mpts3-cc.ts` with the T10 rig.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
 
@@ -1274,8 +1284,11 @@ still on quinn's `main` as of 2026-09-28, and `noq-proto` 1.2.0 carries it too. 
 the fix is [quinn-rs/quinn#2896](https://github.com/quinn-rs/quinn/pull/2896), with a regression test
 that forces one loss by each rule and reads the trigger back from the qlog. The test fails on `main`
 with both losses labelled `ReorderingThreshold` and passes with the fix. It is gated on the `qlog`
-feature, which quinn's PR CI does not enable. **Approved, not yet merged**, and noq is unchanged. T28's
-attribution does not depend on it, because it rests on the acknowledgement frames.
+feature, which quinn's PR CI does not enable. **Approved, not yet merged.** The same fix, with the
+test adapted to noq's qlog factory and per-path statistics, is offered on noq#825 as a branch on our
+fork. It fails and passes the same way, and noq's CI does run it, since its tests run with all
+features. noq asks for solutions to be agreed on the issue first, so no PR is open there. T28's
+attribution does not depend on either, because it rests on the acknowledgement frames.
 
 ---
 

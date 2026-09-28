@@ -1,7 +1,8 @@
 # Test 10 — MPTS / multiple concurrent services
 
 **State: arms A, B and D run on build `ffa5b81b`, and the MoQ arms re-run on upstream `main`
-`2b689c24` (P1, file domain, all roles co-resident on one host); arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
+`2b689c24` (P1, file domain, all roles co-resident on one host), with the change between the two
+builds bisected to two commits; arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
 and one SDT listing all three — was carried through both data planes and graded per programme.
 
 - **The MoQ lane refuses a multiplex whose programmes run on independent clocks, and not cleanly.**
@@ -24,7 +25,8 @@ and one SDT listing all three — was carried through both data planes and grade
 - **On upstream `main` (`2b689c24`) the refusal is gone and the loss is silent.** Independent clocks
   complete with exit 0 while programmes 1 and 3 lose 96–98 % of their video packets; on a common
   clock SCTE-35 and part of programme 1's audio are lost. The flattening is unchanged. Programme 1
-  alone is clean on `main`.
+  alone is clean on `main`. Bisected, the two changes are two upstream commits: #3997 removed the
+  refusal, and #4122 introduced the common-clock loss.
 
 The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
 media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
@@ -134,6 +136,22 @@ and receiver in one invocation.
 ```
 t10-hls.sh mpts3.ts runs/d-mpts
 t10-grade.py mpts3.ts runs/d-mpts/egress.ts --label d-mpts
+```
+
+**Bisect between the builds.** [`t10-bisect-step.sh`](scripts/t10-bisect-step.sh) is one `git
+bisect run` step: it builds HEAD's `moq` and `moq-relay`, runs `t10-moq.sh` on both fixtures,
+grades them, and judges one property against thresholds fixed from the endpoints' grades before the
+bisect. For the common clock, old means SCTE-35 over PIDs 141–143 of at least 150 packets and
+programme 1's audio of at least 8,000; new means SCTE-35 of at most 30; anything between is
+skipped. With `JUDGE=ic` it judges the independent clock instead, where old is a publisher exit
+other than 0. `BIN_ONLY=<dir>` grades a prebuilt pair, which is how the endpoints and the #4001
+merge were checked first. Both bisects are first-parent, in a worktree of the upstream tree:
+
+```
+git bisect start --first-parent --term-old=old --term-new=new 2b689c24 ffa5b81b
+git bisect run bash t10-bisect-step.sh <root>                # common clock: 8 steps
+git bisect start --first-parent --term-old=old --term-new=new 66440a6c ffa5b81b
+JUDGE=ic git bisect run bash t10-bisect-step.sh <root>       # independent clocks: 6 steps
 ```
 
 **Arm C — several concurrent SPTS broadcasts (MoQ).** Not run; its channel-count question is
@@ -335,14 +353,33 @@ fixtures: one run of `mpts3.ts`, two of `mpts3-cc.ts`, and one programme-1 contr
   SCTE-35 arrives at 1–7 packets of ~60 per PID, programme 1's audio is 21–33 % short, and the EIT
   rate swings between runs. In the second common-clock run programme 1's MPEG-1 audio has eight
   holes of 2.7–4.1 s, each about 0.45 s shorter than the last; its AC-3 has nine, and programme 3's
-  audio three of 0.8–1.8 s. The cause of the holes is not isolated.
+  audio three of 0.8–1.8 s. The commit that introduces them is bisected below; how it produces
+  holes of that shape is not isolated.
 - **The loss is specific to the multiplex.** Programme 1 alone through `main` delivers its
   SCTE-35 (57 of ~60 per PID), its audio and its EIT at +9 %, as on `ffa5b81b`.
-- **Candidate cause, not isolated.** Two upstream changes to the TS importer landed between the
-  builds: every elementary stream now re-anchors a timestamp below the live edge instead of
-  refusing it, and stdin imports publish on the broadcast clock. Either could turn the
-  cross-programme alternation of the importer's one section clock from a refusal into a silent
-  re-timing. The builds were not bisected.
+- **Two commits, bisected first-parent between the builds** (§ *Bisect between the builds*):
+
+  | Property | Last old commit | First new commit | Old | New |
+  |---|---|---|---|---|
+  | Independent clocks refused | `cf0ef442` | `2299622e`, [#3997](https://github.com/moq-dev/moq/pull/3997) *every TS elementary stream re-anchors below the live edge* | publisher exit 1 | exit 0 |
+  | Common clock clean | `2f2ff7d3` | `c87159d8`, [#4122](https://github.com/moq-dev/moq/pull/4122) *publish stdin imports on the broadcast clock* | SCTE-35 168, PID 121 audio 9,416 | SCTE-35 6, audio 5,504 |
+
+  Between the two, at the #4001 merge `66440a6c`, the independent-clock input already completed
+  with exit 0 and the common-clock input was still clean (SCTE-35 168, audio 9,416). #4122 also
+  takes programme 3's video on independent clocks from 12,836 packets to 0. Each commit's parent
+  was graded directly, not inferred, and both endpoints were re-graded before the bisect and
+  reproduced (`ffa5b81b` SCTE-35 165, `2b689c24` 17).
+- **So #3997 turns the refusal into a re-timing, and #4122 turns the re-timing into loss.** #3997
+  is what its title says: a timestamp below a stream's live edge is re-anchored rather than
+  refused, and that refusal is what ended arm A.
+- **#4122's mechanism is *reasoned* from its diff, not isolated.** It maps each input onto the
+  broadcast clock through one anchor shared by every track. Each track keeps its own lane, and a
+  backwards step of more than 500 ms on any lane (`MAX_REORDER`, `rs/moq-mux/src/clock.rs`)
+  re-anchors the whole source forward. The tracks stamped from the importer's one section clock
+  (`last_pts`, which every programme's video advances) step back whenever the programmes
+  alternate, by up to the 0.82 s that separates the common-clock fixture's programmes. The arm that
+  would settle it is a common-clock fixture whose programmes sit within 500 ms of each other,
+  which should then be clean on `main`.
 
 So on `main` the lane's MPTS failure moves from a loud refusal to silent loss, which is the worse
 failure for a broadcaster: a monitoring chain that watches for a publisher exit sees nothing, and
@@ -392,9 +429,10 @@ capture is complete, and it does not bear on any figure above.
 - **A multiplex-aware media-aware lane** — one section clock per programme, and one program record
   per PMT, so the exporter can rebuild the PAT and every PMT. Until then an MPTS on this lane has to be
   split into one broadcast per programme at ingest, and that split is itself untested here.
-- **Which importer change makes `main` lose content silently.** A bisect between `ffa5b81b` and
-  `2b689c24` on `mpts3-cc.ts` would name it; so would the upstream report, which asks for a refusal of
-  any multi-programme input first.
+- **Whether #4122's shared anchor is the whole of the common-clock loss.** The commit is bisected;
+  its mechanism is reasoned. A common-clock fixture with programme offsets under 500 ms would
+  confirm or refute it. The upstream report asks for a refusal of any multi-programme input first,
+  which would make the question moot.
 - **Arm E**, blocked on a CDN account ([B-5](planned-experiments.md#blocked-on-apparatus)), and the
   SI carriage-cost scaling of [T17](test-17-si-snapshot-tracks.md), which needs many more services
   than three.
