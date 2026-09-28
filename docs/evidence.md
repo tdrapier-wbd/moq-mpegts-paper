@@ -141,13 +141,13 @@ QUIC at **9.48 Mbps sustained for four minutes, 0 CC** ([T8](../lab/test-8-srt-v
 third-party relay in Mexico, reached from an EC2 publisher in Ireland by a subscriber in London,
 carried 300 s at 9.47 Mbps with 0 CC, 0 reconnects and all 8 elementary streams reconstituted.
 
-**The service layer survives that path too.** Re-measured on the deployed build
+**The service layer survives that path too, not only localhost.** Re-measured on the deployed build
 (`0.9.11-eab96019`), a subscriber in London pulling the EC2 relay receives TSID, ONID, service name,
 provider and type, SDT, NIT, the **source** PMT and PCR PIDs, AC-3 with its typing, teletext and all
 three SCTE-35 PIDs, with 0 continuity errors. Before the service-layer carriage fix this campaign asked
 for, the same leg delivered two renumbered streams and no service layer at all. **TDT/TOT is the sole
-exception**, and has a merged upstream fix the deployed build predates
-([T4](../lab/test-4-remote-e2e-srt.md)).
+exception**, and has a merged upstream fix the deployed build predates. So the carriage result below is
+a real-path result, not a loopback one ([T4](../lab/test-4-remote-e2e-srt.md)).
 
 **Graded against each other over that path by one instrument, the three data planes fail different
 halves of the question** ([T4](../lab/test-4-remote-e2e-srt.md), three-lane arm: same clip, same
@@ -199,19 +199,23 @@ snapshots in ~1 ms; a segmented client waits out the carousel.
 
 **TDT/TOT is proxied byte-identically but re-emitted on the exporter's own 30 s grid**, so it arrives
 **~14 s** late against a source true to 0.5 s, and occasionally steps backwards
-([T15](../lab/test-15-point-to-point-cadence.md) measurement 4).
+([T15](../lab/test-15-point-to-point-cadence.md) measurement 4); the upstream fix is merged, and not on the
+deployed build.
 
 **Three real-feed import defects closed upstream**, each measured before and after: an open-GOP
 source (recovery-point SEI, not IDR) produced no video; audio frame-sync loss was fatal to the whole
 publisher, and now costs **one 24 ms frame** on one-byte damage; and a splice substituted frames
-silently, where it now leaves a gap because the continuity counter is checked on elementary streams. **The residuals**: ~1/16 splices are invisible to the counter; **256 ms
+silently, where it now leaves a gap because the continuity counter is checked on elementary
+streams. **The residuals**: ~1/16 splices are invisible to the counter; **256 ms
 of good AC-3 audio is lost per splice** (MP2 is unaffected); and recovered gaps are **signalled
 nowhere** (open question §5).
 
 **The opaque lane is byte-transparent, on one run.** TSID, ONID, service name and type, all PSI/SI
 including TDT/TOT and CAT, PMT PID, PCR PID, every elementary stream and every SCTE-35 PID are
 preserved verbatim, with 0 CC and transport errors, and CBR and PCR conformance are preserved when it
-is fed raw ([T3](../lab/test-3-opaque-transparency.md)). Read that with §4's scope limit attached.
+is fed raw ([T3](../lab/test-3-opaque-transparency.md)). **Read that with §4's scope limit attached**: it is
+loopback, file-fed, on a pinned obsolete draft, against a private implementation, and it has never
+been repeated.
 
 **Segmented HTTP is transparent to what a mux contains and not to when it was sent**, which is the
 opposite of what the specification's wording suggests. It was measured two ways. Packet by packet
@@ -245,7 +249,8 @@ than confirmed after the fact.** Registered in advance and then measured, the co
 13 PIDs, TDT/TOT, stuffing, 0 CC, the source PCR grid at 0 % above 40 ms), and criterion 6 failed by
 **+13 PAT and +13 PMT over equal media — exactly 1.00 pair per segment head** — at a cost of
 **302.148 µs** of PCR accuracy against **302.4 µs** predicted from those 376 bytes at the source rate, plus
-0.043 % of added rate. Per-segment TCP fetches across a ~125 ms path change none of the injection accounting. These two
+0.043 % of added rate. Per-segment TCP fetches across a ~125 ms path change none of the injection accounting, which
+could not be assumed of a lane whose delivery model is a sequence of separate HTTP requests. These two
 lanes also make the P2 gate usable over the wire for the first time, because both retain a mux rate for
 it to grade against, and they bracket the range: SRT at the instrument's floor (1 tick, 37 ns),
 segmented HTTP at a fully explained displacement, with **0 violations at 500 µs** bounding that
@@ -554,13 +559,16 @@ deliver" — a sizing table, a comparison arm, an SLA — reads a budget for rec
 steady state. *Measurement point P1, through the namespace rig on a single host at 20 Mb/s and 100 ms
 RTT; both lanes measured, the SRT arm with its `--latency` set to the MoQ lane's measured median rather
 than to the nominal budget. Both grade 0.000 s lost and 0 continuity errors unimpaired. An earlier
-source-side artefact is resolved: its cause was the split publisher a source-side tap forces, because
-separating `regulate --pcr-synchronous` from the SRT sender costs the transmitter its pacing
+source-side artefact is resolved: its cause was the **split publisher** a source-side tap forces rather
+than the tap itself, because separating `regulate --pcr-synchronous` from the SRT sender costs the transmitter its pacing
 ([T28](../lab/test-28-failure-injection-matrix.md)).*
 
 **Matched on measured latency instead, and graded on the content each lane delivers, SRT loses less
 programme than the media-aware lane under every impairment shape run**
-([T28](../lab/test-28-failure-injection-matrix.md)), starting level as above. Under a single 5 s outage, on `53f8aa99d` (noq, BBRv3), both lanes graded on the same picture count:
+([T28](../lab/test-28-failure-injection-matrix.md)).
+With SRT's `--latency` set to the MoQ lane's measured median at each budget, both lanes grade clean
+unimpaired, so the comparison starts level. Under a single 5 s outage, on `53f8aa99d` (noq, BBRv3),
+both lanes graded on the same picture count:
 
 | `--max-age` | MoQ video missing | MoQ late-window latency | SRT video missing | SRT late-window latency |
 |---|---:|---:|---:|---:|
