@@ -4,16 +4,25 @@ Status: working draft.
 Layer: **cross-cutting** — this is the empirical basis for every claim in
 [Comparison](comparison.md), [Architecture](architecture.md) and [Economics](economics.md).
 
-This document is organised by **question**, not by experiment. The per-experiment record — objective,
+This document is organised by **question**, not by experiment, and each question in §3 opens with the
+answer an operator would act on before the evidence for it. The per-experiment record — objective,
 environment, exact commands, full result tables, pass criteria fixed in advance, and the corrections
 each experiment forced — is the laboratory notebook in [`lab/`](../lab/README.md), and each result
 below cites the experiment that produced it.
 
 Three conventions apply throughout. **Every figure names its measurement point** (*P0*
-source, *P1* captured file, *P2* live wire). **Nothing here is a hardware P2 result**; where file and
-wire differ, both are given. **`[unmerged]`** marks evidence against proposed upstream code; **`[dev]`**
-marks merged behaviour not yet on the release line. **Single-run matrices** establish mechanism and
-ordering, not distributions.
+source, *P1* captured file, *P2* live wire), which are not the TR 101 290 priority sets of the same
+names ([Glossary](glossary.md#broadcast-terms-used-without-definition)). **Nothing here is a hardware P2
+result**; where file and wire differ, both are given. **`[unmerged]`** marks evidence against proposed
+upstream code; **`[dev]`** marks merged behaviour not yet on the release line. **Single-run matrices**
+establish mechanism and ordering, not distributions.
+
+**Vocabulary.** The *media-aware lane* is upstream `moq-dev`'s MPEG-TS path: the *importer*
+(`moq import ts`) demultiplexes the transport stream into MoQ tracks, a *relay* forwards them, and the
+*exporter* (`moq export ts`) re-multiplexes them at the subscriber. The *groomer* then rebuilds CBR
+and PCR cadence in front of the receiver. The *segmented lane* is HLS carrying MPEG-TS. MoQ and QUIC
+terms — track, group, object, catalog, announce, QUIC stack, congestion controller, idle timeout,
+GSO — are defined in broadcast terms in the [Glossary](glossary.md#moq).
 
 ---
 
@@ -23,9 +32,9 @@ Four code bases carry the media on the paths under test, and it matters which pr
 
 | Code base | Role here | Reach |
 |---|---|---|
-| **Upstream `moq-dev`, media-aware lane** (`moq import ts` → `moq-relay` → `moq export ts`) | The **preferred path** and the lane almost every result was measured on | Deployed over the public internet via an AWS EC2 relay |
-| **[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)** (public, ours) | The CBR/PCR groomer, deliberately outside the transport | Exercised on the media-aware, segmented and point-to-point arms alike |
-| **Private opaque `m2ts` prototype** (draft-14, MSFTS `m2ts` packaging) | **Reference and benchmark** — it shows what byte-for-byte transparency looks like, so the media-aware lane's residual gaps are measured rather than asserted | **Loopback only. One run. Never deployed** |
+| **Upstream `moq-dev`, media-aware lane** (`moq import ts` → `moq-relay` → `moq export ts`) | The **preferred path** and the lane almost every result was measured on | Deployed over the public internet via an AWS EC2 [relay](glossary.md#transport-and-deployment-terms) |
+| **[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)** (public, ours) | The CBR/PCR [groomer](glossary.md#broadcast-terms-used-without-definition), deliberately outside the transport | Exercised on the media-aware, segmented and point-to-point arms alike |
+| **Private opaque `m2ts` prototype** (IETF draft-14, with the `m2ts` packaging of MSFTS, an MPEG-TS-over-MoQ draft) | **Reference and benchmark** — it shows what byte-for-byte transparency looks like, so the media-aware lane's residual gaps are measured rather than asserted | **Loopback only. One run. Never deployed** |
 | **TSDuck plugins** — `hls` output and input for the segmented lane, `srt` and `rist` for the byte-transparent point-to-point controls | The *alternative data planes*, published and reassembled with the same tool used as the oracle throughout, so their results are directly comparable | Loopback and, for all three, over the public internet from the same EC2 origin |
 
 Two further classes of code appear but are not data planes. **Candidate grooming and sending stages**
@@ -36,14 +45,14 @@ the segmented lane's retrying puller, are listed in §1.1 with what each cannot 
 
 | Property | Media-aware lane + `mpegts-pacer` | Opaque prototype (reference) |
 |---|---|---|
-| Wire version exercised | moq-lite-04/05 | `moq-transport` draft-14 |
+| Wire version exercised | moq-lite-04/05, `moq-dev`'s own protocol | `moq-transport` draft-14, the IETF protocol |
 | Elementary streams, original PIDs, SCTE-35 | preserved | preserved verbatim |
 | Service layer (SDT/NIT, PMT PID, TSID/ONID) | preserved | preserved verbatim |
 | EIT | round-trips section-for-section | preserved verbatim |
 | TDT/TOT | carried, but **re-emitted on the exporter's own 30 s grid, so the clock arrives ~14 s late** | preserved verbatim |
 | CBR and PCR cadence | restored downstream by `mpegts-pacer` — **on file, and on the wire once the groomer reserves the PCR slot rather than waiting for a spare one; buffer depth was never the variable, §3.2** | preserved end to end by the prototype's own pacer |
 | Public-internet operation | yes | **no** |
-| Congestion controller | BBR (explicit) | quinn default (CUBIC) |
+| [Congestion controller](glossary.md#transport-and-deployment-terms) | BBR (explicit) | the quinn [QUIC stack](glossary.md#transport-and-deployment-terms)'s default (CUBIC) |
 
 ### 1.1 Instruments, and what each cannot show
 
@@ -51,15 +60,15 @@ the segmented lane's retrying puller, are listed in §1.1 with what each cannot 
 |---|---|---|
 | TSDuck `analyze`, `continuity`, `pcrextract`, `pcrverify` | Structure, PID census, continuity, PCR interval and accuracy | Wire timing. `pcrverify` on a file checks PCR against byte position, i.e. the arithmetic of the re-stamp |
 | `t13-cadence.py` (64 kB pipe reads, or per-datagram capture) | Burst size, gap distribution, coefficient of variation | Absolute rate on loopback — loopback inflates burst *rate*; burst *size* and inter-burst silence are structural |
-| `t12-merge-oracle.py` + `t12-maskcmp.py` + `t12-seqskew.py` | ST 2022-7 merge behaviour, byte identity, skew | A hardware IRD's merge engine. It is a reference implementation of the selection rules, tested against fourteen adversarial conditions (`t12-oracle-selftest.py`) which label where it matches the standard, where the standard requires nothing, where the rule does not apply and where it is blind — not a conformance claim. It also degrades to noise on a pair that is not byte-identical, which is why the mask and skew tools exist |
+| `t12-merge-oracle.py` + `t12-maskcmp.py` + `t12-seqskew.py` | ST 2022-7 merge behaviour, byte identity, skew | A hardware IRD's merge engine. It is a reference implementation of the selection rules, self-tested against fourteen adversarial conditions (`t12-oracle-selftest.py`; the verdicts are in §4), and not a conformance claim. It degrades to noise on a pair that is not byte-identical, which is why the mask and skew tools exist |
 | `compliance.py` / `t13-grade.py` | Structural and shape checks, packet conservation | Decoder acceptance |
 | `t18-latency.py` | Delivery latency on the PES presentation timestamp, tapped at source and at groomed egress, plus a four-timestamp clock probe for the two-host case | Encoder and decoder delay, so it is not camera-to-display. The PTS is the one identifier that survives a media-aware remux *and* every byte-transparent arm, which is what makes one instrument grade all four planes |
 | Interop client (`interop/`) | Media-level carriage through a third-party relay | Anything about pacing or conformance — deliberately out of scope for a relay test |
 | `t6-hls-pull.py` | Serving-node and source-failover behaviour on the segmented lane, from a client that retries instead of exiting | Not a player: no ABR, no master playlist, no LL-HLS, and it ignores `EXT-X-ENDLIST`. It bounds what the protocol permits, which is the only way to separate that from what TSDuck and FFmpeg happen to implement — both abandon the stream on a failed playlist reload |
-| `tc`/`netem` | Loss, delay, reordering, shaped bottleneck | Real congestion. `netem` loss is Bernoulli where real loss is bursty and RTT-coupled, and `netem` "jitter" reorders. It also does not deliver the loss it is commanded unless segmentation offload is disabled at both the kernel and the application — and the error differs per transport, so it distorts *comparisons*, which is why every impairment figure here is labelled with the fraction the shaper counted |
+| `tc`/`netem`, the Linux traffic shaper | Loss, delay, reordering, shaped bottleneck | Real congestion. `netem` loss is Bernoulli where real loss is bursty and RTT-coupled, and `netem` "jitter" reorders. It also does not deliver the loss it is commanded unless [segmentation offload](glossary.md#transport-and-deployment-terms) is disabled at both the kernel and the application, and the error differs per transport, so it distorts *comparisons*. That is why every impairment figure here is labelled with the fraction the shaper counted, or stated as commanded where §3.3 shows the counters cannot be trusted |
 | Published price lists + `cost-model.py` | The economic model | Negotiated rates, which are not publishable |
 
-**Two rig properties recur and both were found the hard way.** A capture window and a payload window
+**Two rig properties recur, and both were found the hard way.** A capture window and a payload window
 are not the same interval, so any ratio computed across two captures is invalid unless both cover the
 same media — an error that appeared three times in this campaign, in three different rigs. And a
 control with the mechanism removed is worth more than a second run of the same arm: a plain-UDP
@@ -69,7 +78,7 @@ These and the rest are collected in [`lab/method-notes.md`](../lab/method-notes.
 ### 1.2 The validation pyramid and the acceptance gates
 
 The campaign is ordered cheapest-and-most-decisive first, and every experiment maps onto one rung and
-one gate. This is the ordering the laboratory notebook uses.
+one gate, in the ordering the laboratory notebook uses.
 
 | Rung | What it establishes | Cost |
 |---|---|---|
@@ -89,7 +98,7 @@ Three acceptance gates sit on those rungs.
 - **Gate 3 — resilience.** The hitless redundancy drill passes (rung 6). **Met in software against a
   reference receiver**; the on-hardware merge is part of Gate 2.
 
-**Rung 3 is necessary and not sufficient** — the gap to rung 4 is measurable (§3.2). **Rung 7
+**Rung 3 is necessary and not sufficient**, and the gap to rung 4 is measurable (§3.2). **Rung 7
 belongs before a data-plane commitment**: the comparative lab settled grooming burden against the
 intuitive answer.
 
