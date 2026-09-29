@@ -4,7 +4,8 @@
 
 Exercise the upstream `moq-dev` **media-aware** lane (`moq import ts` → `moq-relay` → `moq export ts`)
 end-to-end on localhost: prove the non-opaque transport works against the public reference
-implementation, enumerate exactly which components (per the T1 §5.6 inventory) are carried, and
+implementation, enumerate exactly which components (per the [T1](test-1-baseline-ts.md) component
+inventory) are carried, and
 measure the impairments the lane introduces. The opaque lane (T3) is the byte-for-byte counterpart;
 the direct contrast is in T3.
 
@@ -156,7 +157,12 @@ a service record through the catalog and rebuilds the SI on export:
 | Original Network Id | present | not preserved | **preserved** |
 | PMT PID | 0x0064 | renumbered → 0x1000 | **preserved (0x0064)** |
 | TDT / TOT (time) | present (0x0014) | dropped | **still dropped**, deliberately |
-| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | dropped by #2440; **p/f actual carried by [#2824](https://github.com/moq-dev/moq/pull/2824)**, an open PR |
+| EIT (event / EPG) | absent from every clip held; synthesised (below) | n/a | dropped by #2440; p/f actual carried by [#2824](https://github.com/moq-dev/moq/pull/2824), closed unmerged |
+
+The two tables #2440 left out are both carried on later builds, on per-table snapshot tracks rather
+than in the catalog. EIT, schedule included, is measured in [T17](test-17-si-snapshot-tracks.md).
+TDT/TOT is proxied from the source since #2929, with TOT's descriptors byte-identical
+([`upstream-contributions.md`](upstream-contributions.md) § *TDT/TOT*).
 
 ### EIT: measured on a synthetic fixture, and what carrying it would cost
 
@@ -203,8 +209,9 @@ p/f is bounded at two sections per service, schedule is not.
 
 ### EIT p/f survives the round-trip on #2824's branch, verified on the same fixture
 
-The PR is **open**, so nothing below is in a released build; it is the measurement of a proposed fix,
-not of shipped behaviour. [#2824](https://github.com/moq-dev/moq/pull/2824) acts on that split:
+The PR was **closed unmerged** when SI carriage moved from the catalog to snapshot tracks, so nothing
+below is in a released build; it grades a design step, not shipped behaviour.
+[#2824](https://github.com/moq-dev/moq/pull/2824) acted on that split:
 `SI_PIDS` gains a `table_id`
 filter and 0x0012 enters carrying p/f actual (0x4E) only, at a 2 s interval. Re-running
 `eit-roundtrip.sh` against the PR head, EIT goes **0 → 37 packets** at egress over a 43 s export,
@@ -271,10 +278,11 @@ Two further findings are not about scale at all:
   SI-only change appends a byte-identical group: 120 groups with 4 distinct payloads by SHA-256
   over the 40-service run. That holds on the real single-service feed too.
 
-These are the measurements behind [#2882](https://github.com/moq-dev/moq/issues/2882), which asks
-whether carried SI belongs in the catalog or on its own snapshot track. They support the move — on
-the coherence argument more than the cost one — but they also show that the tables #2440 actually
-shipped would gain nothing from it.
+These are the measurements behind [#2882](https://github.com/moq-dev/moq/issues/2882), which asked
+whether carried SI belongs in the catalog or on its own snapshot track. They supported the move — on
+the coherence argument more than the cost one — while showing that the tables #2440 actually shipped
+would gain nothing from it. It was settled in favour of tracks
+([#2909](https://github.com/moq-dev/moq/pull/2909), measured in [T17](test-17-si-snapshot-tracks.md)).
 
 Paced `CNNiEMEA2` egress (raw-fed → `auto` regenerate): **10.999 Mbps exact CBR**; PCR > 40 ms
 9.08 % → **0 %** (max 320 → 31.9 ms); `pcrverify` > 500 µs → **0/2286**, max |jitter| 6 µs; null
@@ -296,12 +304,11 @@ is the faithful measure.
   0.10 % for the 27.5 Mbps mux whose own 27 ms cadence is already inside the limit. **Quote the range
   as 0–26 % across the four clips T7 measured, not as 13–26 %.**
 - The timing/CBR half is closed downstream of *any* VBR source by `mpegts-pacer`; the service-layer
-  half is closed upstream by #2440. Those left **TDT/TOT and EIT** unpreserved, and the two were
-  never one gap: EIT revises rarely enough to fit #2440's catalog carriage at ~12 updates per ten
-  minutes, and #2824 now carries its present/following half on exactly that argument, while TDT/TOT
-  is new content in every section and belongs at the exporter's clock rather than in the catalog. So
-  what an exporter must **regenerate** rather than relay is now just the clock — which matters more
-  than it did, since a receiver with no TDT has no wall clock to place the surviving EPG against.
+  half was closed upstream by #2440 except for **TDT/TOT and EIT**, and the two were never one gap:
+  EIT revises rarely enough to fit catalog carriage at ~12 updates per ten minutes, while every
+  TDT/TOT section is new content. Both are carried on later builds, on snapshot tracks. TDT/TOT is
+  proxied from the source rather than regenerated at the exporter, because a locally minted clock would misplace the relayed EPG and TOT carries the operator's DST
+  policy ([`upstream-contributions.md`](upstream-contributions.md) § *TDT/TOT*).
 - The open-GOP round-trip requires **both** #2072 and #2066 on the same tree: with #2072 alone an
   IDR-less feed's video never resolves, so the reservation gate stays shut and the catalog never
   publishes.
@@ -315,12 +322,13 @@ is the faithful measure.
 
 The media-aware lane carries all elementary streams and PMT descriptors with 0 CC and rides out the
 CNN open-GOP + triple-SCTE-35 feed deterministically. With `mpegts-pacer` (timing/CBR) and PR #2440
-(service layer) it is broadcast-transparent **except** the time-varying tables and the P2 hardware
-pass (T7). Those tables are no longer one gap: EIT p/f actual round-trips byte-identically on
-[#2824](https://github.com/moq-dev/moq/pull/2824) — measured here, but still an open PR, so no
-released build carries it — while TDT/TOT stays dropped deliberately, leaving the wall clock as the
-one thing an exporter must regenerate rather than relay. The permanent finding is recorded in
-[`docs/evidence.md`](../docs/evidence.md) §3.2 (PCR cadence + pacer) and §4 (open-GOP + service layer).
+(service layer) it was broadcast-transparent **except** the time-varying tables and the P2 hardware
+pass (T7). The tables have since been closed upstream on snapshot tracks — EIT measured in
+[T17](test-17-si-snapshot-tracks.md), TDT/TOT proxied from the source — so of those two exceptions,
+the P2 hardware pass is the one that remains. EIT p/f round-tripped byte-identically on
+[#2824](https://github.com/moq-dev/moq/pull/2824) here, but that PR closed unmerged, so the
+measurement grades a design step. The permanent finding is recorded in
+[`docs/evidence.md`](../docs/evidence.md) §3.2 (PCR cadence + pacer) and §3.1 (open-GOP + service layer).
 
 ## References
 
@@ -328,4 +336,4 @@ one thing an exporter must regenerate rather than relay. The permanent finding i
 - Byte-for-byte counterpart and the decisive contrast: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).
 - Upstream: [#1979](https://github.com/moq-dev/moq/issues/1979), #2072, #2066,
   [#2440](https://github.com/moq-dev/moq/pull/2440).
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.2, §4.
+- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.1, §3.2.

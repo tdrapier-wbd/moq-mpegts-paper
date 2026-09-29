@@ -103,7 +103,9 @@ SCTE-35 0x008D/0x008E/0x008F (**three** Splice Info streams); PSI/SI 0x0000/0x00
   (≤ 100–291 ms) have ample margin.
 - GOP structure was not separately measured. The CNN captures are treated as the open-GOP
   contribution class (recovery-point SEI, roughly one IDR / 15 s); IDR cadence was not quantified
-  in this run.
+  in this run. It matters because the media-aware importer opens a group at each keyframe, so the
+  cadence sets group duration. A per-frame keyframe listing of the video PID (`ffprobe
+  -show_entries frame=key_frame,pts_time`) would settle it.
 
 ## Conclusion
 
@@ -113,6 +115,6 @@ baseline. Reference established.
 
 ## References
 
-- Contribution-feed class (CNN International, open-GOP): [`docs/evidence.md`](../docs/evidence.md) §4.
+- Contribution-feed class (CNN International, open-GOP): [`docs/evidence.md`](../docs/evidence.md) §3.1.
 - File vs wire domain, and what each gate can decide: [`docs/architecture.md`](../docs/architecture.md) §4.2.
 - Pre-groom baseline used downstream: [`docs/evidence.md`](../docs/evidence.md) §3.
