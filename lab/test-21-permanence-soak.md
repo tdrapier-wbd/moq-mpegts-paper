@@ -482,8 +482,10 @@ as completed by [#3987](https://github.com/moq-dev/moq/pull/3987), which added a
 re-measured on the current build, the importer still exits *frame timestamp is below the live edge*
 at the first join. [T41](test-41-import-reanchor-coverage.md) additionally shows why no source mode
 escapes it: non-legacy streams abort on the first backward timestamp and legacy audio on the second,
-so a clip carrying video fails at wrap 1 whatever its length. A 2 h continuous soak needs either the
-upstream fix or a single-pass source long enough not to wrap.
+so a clip carrying video fails at wrap 1 whatever its length. **Upstream `main` at `9d2a4f6e` no
+longer exits:** [T40](test-40-continuous-join-through-srt.md) holds full rate through five content
+joins, and [T41](test-41-import-reanchor-coverage.md)'s three stream kinds survive three wraps. The
+2 h re-soak can therefore run on that build, and has not yet been run.
 
 **Per-PID confirmation, 6 h on the merged build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
 `lab/scripts/t21-role-memory.sh`, graded by `lab/scripts/t21-role-fit.py`), 157 M packets at 0

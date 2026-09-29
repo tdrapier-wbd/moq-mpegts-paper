@@ -1,12 +1,15 @@
 # Test 41 — Which TS stream kinds re-anchor below the live edge, and for how many wraps?
 
-**State: run, conclusive.** `moq import ts` aborts with *frame timestamp is below the live edge* on
-the **first** unflagged backward timestamp for H.264, and on the **second** for legacy audio (MPEG-1
-Layer II and AC-3). Legacy audio therefore has re-anchoring that works exactly once: it absorbs one
-content join or loop wrap and fails at the next. Measured on `ffa5b81b`, which is `main` after
+**State: run on two builds, conclusive on both. The defect is fixed on upstream `main`.** On
+`ffa5b81b`, `moq import ts` aborts with *frame timestamp is below the live edge* on the **first**
+unflagged backward timestamp for H.264, and on the **second** for legacy audio (MPEG-1 Layer II and
+AC-3). Legacy audio therefore has re-anchoring that works exactly once: it absorbs one content join
+or loop wrap and fails at the next. `ffa5b81b` is `main` after
 [#3987](https://github.com/moq-dev/moq/pull/3987) closed
-[#3798](https://github.com/moq-dev/moq/issues/3798) — a closure that added a plan and no code, so the
-defect is live.
+[#3798](https://github.com/moq-dev/moq/issues/3798) — a closure that added a plan and no code. On
+**`9d2a4f6e`**, all three arms survive three unflagged wraps with no error. The importer carries
+[#3997](https://github.com/moq-dev/moq/pull/3997), which makes every TS elementary stream re-anchor
+below the live edge; which commit made the offset survive a second wrap is not bisected.
 
 ## Objective
 
@@ -37,8 +40,8 @@ elapsed time that depends on the fixture's length.
 | | |
 |---|---|
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
-| Build | **`ffa5b81b`** (noq), `moq 0.12.1`, built by [`ec2-build-main.sh`](scripts/ec2-build-main.sh) |
-| Relay | Dedicated, same build, `127.0.0.1:4493`, `--quic-congestion-control loss` |
+| Builds | **`ffa5b81b`** (noq), `moq 0.12.1`, built by [`ec2-build-main.sh`](scripts/ec2-build-main.sh); **`9d2a4f6e`** (noq), `moq 0.12.8`, the same feature set built in a separate worktree |
+| Relay | Dedicated, same build as the client, `127.0.0.1:4493`, `--quic-congestion-control loss` |
 | Source | `clip30.ts`, the leading ~30 s of `CNNiEMEA2.ts` |
 | Fixtures | [`t41-make-fixtures.sh`](scripts/t41-make-fixtures.sh) — one elementary stream each, own PCR |
 | Rig | [`t41-reanchor-coverage.sh`](scripts/t41-reanchor-coverage.sh) |
@@ -100,11 +103,18 @@ All four were met or discharged.
 
 ## Results
 
-| Fixture | Stream kind | Wrap period | Died at | **Wrap index** | Error |
-|---|---|---:|---:|---:|---|
-| `fx-h264` | H.264 video | 30.2 s | 30.3 s | **1.00** | *frame timestamp is below the live edge* |
-| `fx-legacy` | MPEG-1 Layer II | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* |
-| `fx-ac3` | AC-3 | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* |
+| Fixture | Stream kind | Wrap period | `ffa5b81b`: died at | **`ffa5b81b`: wrap index** | `ffa5b81b`: error | **`9d2a4f6e`** |
+|---|---|---:|---:|---:|---|---|
+| `fx-h264` | H.264 video | 30.2 s | 30.3 s | **1.00** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
+| `fx-legacy` | MPEG-1 Layer II | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
+| `fx-ac3` | AC-3 | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
+
+**On `9d2a4f6e` neither part of the defect remains.** Each arm ran for its full budget of three and
+a half wraps plus 10 s, and its log ends with the rig's own shutdown. The rig's oracle is the
+publisher's survival, not what it delivers, so this arm alone does not show that frames keep
+flowing after a wrap. [T40](test-40-continuous-join-through-srt.md) on the same build does: the
+export holds full rate through five content joins. The findings below describe `ffa5b81b`, and they
+stand as the record of what the fix had to cover.
 
 **H.264 does not re-anchor at all.** It aborts 0.1 s after its first wrap, which is the first frame
 carrying a timestamp below the edge. This confirms claim 1 and it is the behaviour the campaign has
@@ -159,6 +169,8 @@ is unaffected and why the defect needs an *unflagged* wrap to appear at all.
    name the type rather than the codec.
 4. **No campaign result changes.** Every #3798 observation in this repository was taken on a
    video-bearing clip, which is the wrap-1 arm, so the recorded symptom and its timing stand.
+5. **Upstream `main` at `9d2a4f6e` survives both parts**, on every stream kind measured here. The
+   permanence re-soak that #3798 blocked can run on that build.
 
 ## What this does not show
 

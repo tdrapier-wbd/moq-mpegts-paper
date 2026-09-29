@@ -684,7 +684,8 @@ importer re-locking a sub-frame below its extrapolated high-water mark, fencing 
 enforcement from the dev merge, separate from #3533's export-side fence. Root cause: `reanchor()` from
 the #3533 fix applies to legacy audio only; H.264 and verbatim PES paths call `Producer::write` without
 it. Filed as [#3798](https://github.com/moq-dev/moq/issues/3798). Continuous-source permanence and any
-long run on `ts-continuous-source.py` are blocked until that is resolved.
+long run on `ts-continuous-source.py` were blocked by it until upstream `main` fixed it (see *#3798's
+plan asks for a reproduction* below).
 
 ### The mux rate the lane could not carry — closed upstream, citing this campaign's groomer
 
@@ -1678,8 +1679,9 @@ changelog is cheapest and least safe:
 | [#3926](https://github.com/moq-dev/moq/issues/3926) | **live** — no `--linger` flag exists; export exits 1 on a clean publisher exit 0; 0 B recovered after restart | [T13](test-13-downstream-grooming.md) § *Liveness* |
 | [#3731](https://github.com/moq-dev/moq/issues/3731) | **not actionable either way** — the quest defers to msfts#33, which is where this record already had it | `quest/m4/msfts-convergence.md` |
 
-The practical consequence is that **nothing the campaign had blocked on these is unblocked**: the
-#3493 permanence re-soak still cannot run a continuous source ([T21](test-21-permanence-soak.md)),
+The practical consequence on `ffa5b81b` was that **nothing the campaign had blocked on these was
+unblocked**; #3798 has since been fixed on `main` (below). On `ffa5b81b` the #3493 permanence
+re-soak still cannot run a continuous source ([T21](test-21-permanence-soak.md)),
 the deterministic-groomer experiment still has no byte schedule to work against
 ([planned-experiments](planned-experiments.md) P1-o), and the real-encoder arm still needs its
 publisher pinned or its importer fixed ([T34](test-34-real-encoder-severity.md)). Method rule in
@@ -1726,6 +1728,13 @@ MPEG-1 Layer II at wrap 1.98 — because `StreamType::DolbyDigitalUpToSixChannel
 dividing line is the type, not the codec, and it already spans three codecs. **Posted to #3798**
 (2026-09-24) as a comment on the closed thread rather than a new issue, with the fixture recipe and
 an offer — not an unasked contribution — to write the in-tree tests the quest already enumerates.
+
+**Verified fixed on upstream `main` at `9d2a4f6e`.** The same fixtures survive three unflagged wraps
+on every stream kind, where `ffa5b81b` aborted at wraps 1.00 and 1.98
+([T41](test-41-import-reanchor-coverage.md)), and the SRT chain holds full export rate through five
+content joins ([T40](test-40-continuous-join-through-srt.md)). The fixing commit is not bisected;
+[#3997](https://github.com/moq-dev/moq/pull/3997), which makes every TS elementary stream re-anchor,
+is the likely one. The permanence re-soak it blocked can now run on `main`.
 
 The exit-code baseline for [#3926](https://github.com/moq-dev/moq/issues/3926) went to its thread the
 same way: the plan there specifies *"0 when the catalog track finished cleanly, 1 when it was

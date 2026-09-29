@@ -7,11 +7,13 @@ local-pipe reproducer. On **`5d0991b9`** (`main` after [#3793](https://github.co
 which carries [#3784](https://github.com/moq-dev/moq/pull/3784) closing
 [#3533](https://github.com/moq-dev/moq/issues/3533), the **0.31 Mb/s export stall is gone** — the
 acceptance oracle reads full rate through the first join — but a **homogeneous** build hits a different
-failure at the join: `moq import ts` exits with *frame timestamp is below the live edge*. **That
-successor failure is still present on `ffa5b81b`**, re-measured through this rig after
+failure at the join: `moq import ts` exits with *frame timestamp is below the live edge*. That
+successor failure is still present on `ffa5b81b`, re-measured through this rig after
 [#3987](https://github.com/moq-dev/moq/pull/3987) closed
 [#3798](https://github.com/moq-dev/moq/issues/3798) without changing any code; the mechanism is
-characterised per stream kind in [T41](test-41-import-reanchor-coverage.md).
+characterised per stream kind in [T41](test-41-import-reanchor-coverage.md). **On homogeneous
+`9d2a4f6e` the chain is healthy:** the import survives every join and the export holds full rate
+through all five joins in the window.
 
 ## Objective
 
@@ -34,7 +36,7 @@ whether it did, against the path we actually run.
 |---|---|
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
 | Relay | The host's own standing relay, `https://localhost:443/anon` |
-| Builds | `0e61e35` (#3375, the regression), `025613d` (its parent) — the pinned T27 bisect pair — and `d518b61b`, current `main` |
+| Builds | `0e61e35` (#3375, the regression), `025613d` (its parent) — the pinned T27 bisect pair — and `d518b61b`; later `5d0991b9`, `ffa5b81b` and `9d2a4f6e`, each in its own section below |
 | Source | `t40_clip.ts`, the leading 200,000 packets of `CNNiEMEA2.ts` (~30 s, 9.95 Mbps CBR, 7 elementary streams) |
 | Generator | [`ts-continuous-source.py`](scripts/ts-continuous-source.py), 40 passes |
 | Rig | [`t40-continuous-join-srt.sh`](scripts/t40-continuous-join-srt.sh) |
@@ -125,6 +127,21 @@ Re-run against **`5d0991b9`** after [#3784](https://github.com/moq-dev/moq/pull/
 Upstream's `export_test::discontinuity_flags_the_break_once_across_tracks` — which embeds the #3533
 content-join fence — **passes** on this build (103/103 `export_test` cases).
 
+### `9d2a4f6e` — healthy through every join
+
+Run homogeneous: client and a dedicated relay both `9d2a4f6e` (noq), the relay on
+`127.0.0.1:4494` with `--quic-congestion-control loss`, and the rig, clip, generator and window
+otherwise as above.
+
+| Arm | Build | Baseline (≤20 s) | Through the window | Verdict |
+|---|---|---:|---|---|
+| `main-9d2a4f6e` | `9d2a4f6e`, client and relay | 9.94 Mb/s | 29 samples, 9.43–10.41 Mb/s, tail median 9.96 Mb/s, five content joins in the importer's log | **HEALTHY** — no sample below a third of baseline |
+
+The importer holds one session for the whole window; its reconnects all follow the rig's own
+teardown. At each join it logs two MPEG-1 audio frame-sync losses (184 and 530 bytes discarded) and
+recovers, where the builds through `d518b61b` logged one per join. The rate oracle cannot see what
+that costs the audio, and the output is not graded for continuity here.
+
 ## Conclusions
 
 1. **The deployed contribution chain is exposed** — the SRT buffer, loopback multicast hop and second
@@ -132,9 +149,10 @@ content-join fence — **passes** on this build (103/103 `export_test` cases).
    load-bearing for a *real* encoder's severity).
 2. **#3533's export stall is fixed on `5d0991b9`.** The 0.31 Mb/s residue signature does not appear;
    the unit test and the mixed-build T40 arm both show full rate through the first join.
-3. **Continuous-source publishing on homogeneous `5d0991b9` still fails at the join** — import exits
-   with *frame timestamp is below the live edge*. That is a separate defect from #3533 and it blocks
-   the permanence re-soak and any long run on `ts-continuous-source.py` until it is resolved upstream.
+3. **Continuous-source publishing on homogeneous `5d0991b9` and `ffa5b81b` fails at the join** —
+   import exits with *frame timestamp is below the live edge*. That is a separate defect from #3533.
+   **It is gone on `9d2a4f6e`**, so the permanence re-soak and long runs on
+   `ts-continuous-source.py` can run on that build.
 4. **The pinned bisect pair remains the control** for the pre-fix stall signature; service builds may
    move independently.
 

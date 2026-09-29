@@ -8,9 +8,10 @@ grades whether a real encoder triggers the dev-line join failure (*below the liv
 `5d0991b9`). The publisher import **dies at the first loop wrap** with the same *below the live edge*
 error ([#3798](https://github.com/moq-dev/moq/issues/3798)) — before any `OLD`/`NEW` export comparison
 could run. An isolated SRT chain with a pre-#3375 publisher import did not yield measurable export
-rates in the window (import pipe did not pass bytes). **Export-side fence comparison remains open** until
-[#3798](https://github.com/moq-dev/moq/issues/3798) is fixed or the publisher is pinned to a build that
-survives the join.
+rates in the window (import pipe did not pass bytes). **Export-side fence comparison remains open**,
+but it is no longer blocked: a publisher on upstream `main` at `9d2a4f6e` survives the join
+([T40](test-40-continuous-join-through-srt.md), [T41](test-41-import-reanchor-coverage.md)). On that
+build the real-encoder arm should be expected to pass the join rather than reproduce the exit.
 
 Specified as [P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion). Rig sketch:
 [`t27-realfeed-severity.sh`](scripts/t27-realfeed-severity.sh).
