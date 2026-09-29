@@ -1114,7 +1114,7 @@ someone else.** *(T13, T18, T19.)*
 > mechanism — ignore PCR at the receiver — would not have worked.
 
 **A mechanism read from the source is a hypothesis; and before reporting a null, work out whether the
-arm could have shown the effect.** *(T12.)*
+arm could have shown the effect.** *(T12, T10.)*
 
 > Reading the exporter, each SI table's snapshot advances as that leg's own subscription delivers
 > groups — so two legs looked able to assert different clocks at the same slot, and that was put to
@@ -1124,6 +1124,11 @@ arm could have shown the effect.** *(T12.)*
 > 0.6 differing emissions in ten, so observing zero is consistent with both answers. Only after the
 > clock was driven at its resolution limit, where the same lag predicts seven in ten, did zero mean
 > anything. Compute the effect the arm should see before running it, or a null is just a quiet arm.
+>
+> T10 repeated the first half. #4122's loss was modelled on the section lanes, which read the
+> section clock, and a dose run refuted it. The re-anchors came from the one lane that *writes*
+> that clock, shared by every programme's video. Two patched builds, one logging and one with that
+> lane split per PID, located it. When state is shared, model what advances it first.
 
 **Compare with the suspect field masked before attributing a conflict.** *(T12.)*
 

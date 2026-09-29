@@ -27,7 +27,10 @@ and one SDT listing all three — was carried through both data planes and grade
   clock SCTE-35 and part of programme 1's audio are lost. The flattening is unchanged. Programme 1
   alone is clean on `main`. Bisected, the two changes are two upstream commits: #3997 removed the
   refusal, and #4122 introduced the common-clock loss. That loss appears even when the programmes'
-  clocks are within 120–130 ms of each other (median), and its mechanism is not isolated.
+  clocks are within 40 ms of each other (median). Its cause is measured: the section clock is
+  advanced through one lane shared by every programme's video, that lane keeps stepping back
+  across programmes, and each step re-anchors the whole source forward. Giving the section clock
+  one lane per video PID removes the loss.
 
 The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
 media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
@@ -166,6 +169,19 @@ and `mpts3-cc.ts` were each run once through `t10-moq.sh` on `2f2ff7d3`,
 `c87159d8` and `2b689c24`, and graded by `t10-grade.py`. The criterion was fixed after modelling and
 before grading: #4122 is clean if and only if no section lane steps back past 500 ms, and its
 parent is clean on every fixture.
+
+**The #4122 discriminator builds.** [`t10-4122-patch.py`](scripts/t10-4122-patch.py) patches a
+`2b689c24` tree two ways, asserting that each edit site matches exactly once. **A** only logs: one
+line per anchor re-anchor (generation, source time, old and new offset), and one more when the
+re-anchor came from the section-clock lane. **B** is A plus one section-clock lane per video PID in
+place of the shared one. [`t10-4122-instr.sh`](scripts/t10-4122-instr.sh) builds both into the
+bisect worktree, restores the tree, and runs b7, b3, b5, `mpts3-cc.ts` and a single-programme cut
+(`tsp -P zap 1 --stuffing --eit`) through `t10-moq.sh` on each, graded by `t10-grade.py`. The
+relay is `2b689c24`'s own. The predictions were fixed after reading the code and before building:
+A's re-anchors all come from the section-clock lane, their count rises b7 < b3 < b5 < `mpts3-cc`,
+and the single programme has none. B has SCTE-35 of at least 150 and PID 121 audio of at least
+8,000 on b3, b5 and `mpts3-cc`; if SCTE-35 recovers and audio does not, the audio has a second
+cause. The anchor's forward movement is summed from A's log lines.
 
 **Arm C — several concurrent SPTS broadcasts (MoQ).** Not run; its channel-count question is
 answered by [T43](test-43-fanout-current-build.md) S2.
@@ -366,8 +382,8 @@ fixtures: one run of `mpts3.ts`, two of `mpts3-cc.ts`, and one programme-1 contr
   SCTE-35 arrives at 1–7 packets of ~60 per PID, programme 1's audio is 21–33 % short, and the EIT
   rate swings between runs. In the second common-clock run programme 1's MPEG-1 audio has eight
   holes of 2.7–4.1 s, each about 0.45 s shorter than the last; its AC-3 has nine, and programme 3's
-  audio three of 0.8–1.8 s. The commit that introduces them is bisected below; how it produces
-  holes of that shape is not isolated.
+  audio three of 0.8–1.8 s. The commit that introduces them is bisected below, and the loss is
+  located in its section clock; the route from there to holes of that shape is not traced.
 - **The loss is specific to the multiplex.** Programme 1 alone through `main` delivers its
   SCTE-35 (57 of ~60 per PID), its audio and its EIT at +9 %, as on `ffa5b81b`.
 - **Two commits, bisected first-parent between the builds** (§ *Bisect between the builds*):
@@ -385,16 +401,38 @@ fixtures: one run of `mpts3.ts`, two of `mpts3-cc.ts`, and one programme-1 contr
 - **So #3997 turns the refusal into a re-timing, and #4122 turns the re-timing into loss.** #3997
   is what its title says: a timestamp below a stream's live edge is re-anchored rather than
   refused, and that refusal is what ended arm A.
-- **The obvious mechanism for #4122 is refuted, and the real one is not isolated.** #4122 maps each
-  input onto the broadcast clock through one anchor shared by every track. Each track keeps its own
-  lane, and a backwards step of more than 500 ms on any lane (`MAX_REORDER`,
-  `rs/moq-mux/src/clock.rs`) re-anchors the whole source. The section tracks are stamped from the
-  importer's one section clock (`last_pts`, which every programme's video advances), so the
-  hypothesis was that those lanes step back past 500 ms when the programmes alternate. Modelled
-  over the fixture's bytes (§ *Section-clock dose*), the SCTE-35 lanes of `mpts3-cc.ts` never do.
-  They start a section about once a second, and each forward interval masks the offset between
-  programmes. Only the EIT lane steps back (9 times, up to 720 ms). The dose run below then graded
-  fixtures on either side of the threshold:
+- **#4122's loss is the section clock re-anchoring the whole source, and it is measured.** #4122
+  maps each input onto the broadcast clock through one anchor shared by every track (`Anchor`,
+  `rs/moq-mux/src/clock.rs`). Each track keeps its own lane, and a backwards step of more than
+  500 ms on a lane that is on the anchor's current generation (`MAX_REORDER`) re-anchors the whole
+  source forward, at least to the end of everything published so far. The importer's section clock,
+  `last_pts`, is advanced at every video PES through one lane (`media_unwrap`,
+  `rs/moq-mux/src/container/ts/import.rs`), whichever programme the PES belongs to. On that lane,
+  consecutive video PES alternate between programmes, in decode order, so the lane steps back past
+  500 ms whenever a programme's offset and its B-frame reordering add up to more than that. It is
+  also always on the current generation, because it adopts each re-anchor it causes, so every such
+  step moves the anchor forward again. SCTE-35 and the SI tables are stamped from that ratcheting
+  clock. Two patched builds of `2b689c24` settle it (§ *The #4122 discriminator builds*):
+
+  | Fixture | A: re-anchors, all from the section-clock lane | A: anchor moved forward | A: SCTE-35 / PID 121 audio | B: re-anchors | B: SCTE-35 / PID 121 audio | Parent `2f2ff7d3`, same fixture |
+  |---|---:|---:|---|---:|---|---|
+  | b7 | 7 | 4.1 s | 153 / 9,348 | 0 | 171 / 9,532 | 170 / 9,532 |
+  | b3 | 33 | 19.8 s | 62 / 7,496 | 0 | 169 / 9,540 | 168 / 9,240 |
+  | b5 | 195 | 113.8 s | 21 / 6,584 | 0 | 171 / 9,532 | 168 / 9,536 |
+  | `mpts3-cc` | 1,044 | 688.2 s | 17 / 7,056 | 0 | 174 / 9,620 | 168 / 9,420 |
+  | programme 1 alone | 0 | — | 171 / 9,688 | 0 | 177 / 9,820 | — |
+
+  Build A only logs, and it reproduces `main`'s loss. Build B gives the section clock one lane per
+  video PID and changes nothing else. It removes every re-anchor, and SCTE-35 and programme 1's
+  audio return to the parent's level on every fixture. The single-programme input never
+  re-anchors on either build. So the loss is the ratchet: over a 60 s fixture the anchor moves
+  4.1–688 s forward, and SCTE-35 loss rises with it. How the ratchet reaches the audio tracks, which
+  have lanes of their own, is not traced. Removing it restores them. One run per cell; each
+  prediction was fixed before the builds were run.
+- **The dose run fixed the relationship before the mechanism was found.** It graded fixtures that
+  differ only in how far apart the programmes' clocks sit. For each it also records the per-section
+  lanes' backwards steps as modelled over the fixture's bytes (§ *Section-clock dose*); they are the
+  quantity the refuted hypothesis turned on (§ *Corrections*):
 
   | Fixture | EIT steps > 500 ms (largest) | SCTE-35 lanes' steps > 500 ms | P2 / P3 median offset | SCTE-35 `2f2ff7d3` / `c87159d8` / `2b689c24` | PID 121 audio, same builds |
   |---|---|---|---|---|---|
@@ -407,15 +445,12 @@ fixtures: one run of `mpts3.ts`, two of `mpts3-cc.ts`, and one programme-1 contr
   | `mpts3-cc` | 9 (720 ms) | 0 | +474 / −146 ms | 168 / 5 / 17 | 9,420 / 5,420 / 6,308 |
   | b6 | 10 (1,760 ms) | 6–8 | −1,520 / +200 ms | 160 / 3 / 3 | 8,864 / 8,200 / 8,124 |
 
-  The prediction fixed before grading was that #4122 is clean if and only if no section lane steps
-  back past 500 ms, with its parent clean throughout. The parent is clean on all eight, so the
-  commit attribution stands. The prediction fails on b3 and b5, which lose 58–92 % of SCTE-35
-  with no lane stepping back past the threshold. SCTE-35 loss grows with the offset between
-  programmes; b7, the tightest, is 10 % short of its parent on one sample and is not distinguishable
-  from run-to-run variation. Audio loss does not follow either measure: b1 is intact, and b4 loses
-  91 %. The importer logs nothing in any of these runs. What in #4122 drops the frames is therefore
-  not known. The model covers only the section lanes; the arm that would settle it is a build of
-  `c87159d8` that logs each re-anchor and each frame it drops, run on b3.
+  The parent is clean on all eight, so the commit attribution stands. b3 and b5 lose 58–92 % of
+  SCTE-35 although no per-section lane steps back past the threshold. SCTE-35 loss grows with the
+  offset between programmes. b7, the tightest, is 10 % short of its parent, and build A reproduces that
+  loss while build B removes it, so it is real rather than run-to-run variation. Audio loss follows
+  neither modelled measure: b1 is intact, and b4 loses 91 %. The importer logs nothing in any of
+  these runs.
 
 So on `main` the lane's MPTS failure moves from a loud refusal to silent loss, which is the worse
 failure for a broadcaster: a monitoring chain that watches for a publisher exit sees nothing, and
@@ -451,9 +486,10 @@ capture is complete, and it does not bear on any figure above.
   defects are structural — one section clock and one program record.
 - **The common clock is approximate.** Merge's start varies by up to ~0.8 s between builds, so A′'s
   clocks agree to 0.82 s, not exactly. The refusal disappearing on that input shows that clocks
-  25,628 s apart trigger it on `ffa5b81b`. On `main`, the dose run finds no safe offset: SCTE-35
-  is lost at median programme offsets of 120–130 ms. Tighter alignment than b7's is not reachable
-  with the fixture builder.
+  25,628 s apart trigger it on `ffa5b81b`. On `main`, no tested offset is safe: SCTE-35 is lost
+  even on b7, whose programmes sit within 40 ms of each other (median). Tighter alignment than
+  b7's is not reachable with the fixture builder, so whether any cross-programme offset is safe is
+  not established.
 - **The media-aware lane only.** The opaque lane of T3 is not in the build under test, so this is not
   a statement about opaque carriage of a multiplex.
 - **Join cost is not measured.** Criterion 5's comparison with T17's cold-join baseline needs its
@@ -467,11 +503,24 @@ capture is complete, and it does not bear on any figure above.
 - **A multiplex-aware media-aware lane** — one section clock per programme, and one program record
   per PMT, so the exporter can rebuild the PAT and every PMT. Until then an MPTS on this lane has to be
   split into one broadcast per programme at ingest, and that split is itself untested here.
-- **What in #4122 produces the common-clock loss.** The commit is bisected. The section-lane
-  step-back past `MAX_REORDER` is refuted as its mechanism, because the loss appears on fixtures
-  where no section lane steps back that far. An instrumented `c87159d8` on b3 would locate it. The
-  upstream report asks for a refusal of any multi-programme input first, which would make the
-  question moot.
+- **How #4122's ratchet reaches the audio tracks.** The mechanism is located and removing it
+  restores the audio, but the path from the section clock's re-anchors to audio lanes that have
+  their own offsets is not traced. It matters only while the anchor exists: upstream plans to
+  refuse a multi-programme input by default and to remove the anchor from the importers.
+- **Whether a single programme can trigger the same ratchet.** On one programme the shared lane
+  sees one video PID, and it steps back only by that stream's B-frame reordering. Programme 1 alone
+  never re-anchored here. A stream whose reordering spans more than 500 ms, or a programme with two
+  video PIDs, would step it back that far; that is *reasoned* from the code and not run.
 - **Arm E**, blocked on a CDN account ([B-5](planned-experiments.md#blocked-on-apparatus)), and the
   SI carriage-cost scaling of [T17](test-17-si-snapshot-tracks.md), which needs many more services
   than three.
+
+## Corrections
+
+- **#4122's re-anchor source.** Believed: the per-section lanes (SCTE-35, EIT) step back past
+  500 ms when the programmes alternate, and each such step re-anchors the source. Modelled over the
+  fixture bytes, they mostly do not, and the loss appeared anyway. True: the re-anchors come from
+  the one lane through which every programme's video advances the section clock, upstream of the
+  section lanes. Method rule: when state is shared, model the call site that writes it before
+  modelling anything derived from it ([method notes](method-notes.md) §4, *A mechanism read from
+  the source is a hypothesis*).

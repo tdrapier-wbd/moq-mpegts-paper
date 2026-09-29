@@ -1007,12 +1007,14 @@ select one programme on purpose", not as MPTS support. Reported as
 [#4353](https://github.com/moq-dev/moq/issues/4353). Bisected since: #3997 (every TS elementary
 stream re-anchors below the live edge) removed the refusal, and #4122 (stdin imports publish on the
 broadcast clock) introduced the common-clock loss, each against a directly graded parent. The
-bisect is on the issue, and so is a mechanism for #4122, offered as a reading of its diff: a
-section lane stepping back past `MAX_REORDER`. A dose run over fixtures on either side of that
-threshold has since refuted it. #4122 loses SCTE-35 on fixtures where no section lane steps back
-that far (T10 § *On upstream `main`*), and the correction is on the issue. **Open**; the
-before/after verification is owed when a fix lands, on `mpts3.ts` and `mpts3-cc.ts` with the T10
-rig.
+bisect is on the issue. The mechanism first offered for #4122, a section lane stepping back past
+`MAX_REORDER`, was refuted by a dose run and corrected on the issue. The measured one is the lane
+through which every programme's video advances the section clock: it steps back across programmes
+and re-anchors the whole source forward on each step. A build that gives that clock one lane per
+video PID removes every re-anchor and restores SCTE-35 and audio to the parent's level (T10 § *On
+upstream `main`*). Upstream's planned default refusal of multi-programme input, and its removal of
+the anchor, would each moot it. **Open**; the before/after verification is owed when a fix lands,
+on `mpts3.ts` and `mpts3-cc.ts` with the T10 rig.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
 
