@@ -466,7 +466,7 @@ The attribution rested on one qualification, now discharged. The soak sampled RS
 because the wrapper's argv contains the whole pipeline text — an argument rather than a measurement,
 and a defect reported upstream should rest on the latter.
 
-### #3493 re-soak on `5d0991b9` (2026-09-20)
+### The #3493 re-soak
 
 **`3493-check-2h` — invalid.** Same lane as the 6 h confirmation but on `moq`/`moq-relay`
 `0.11.2-5d0991b9` / `0.14.18-5d0991b9`, `SOURCE_MODE=continuous`, 2 h target. Import exited at
@@ -485,7 +485,28 @@ escapes it: non-legacy streams abort on the first backward timestamp and legacy 
 so a clip carrying video fails at wrap 1 whatever its length. **Upstream `main` at `9d2a4f6e` no
 longer exits:** [T40](test-40-continuous-join-through-srt.md) holds full rate through five content
 joins, and [T41](test-41-import-reanchor-coverage.md)'s three stream kinds survive three wraps. The
-2 h re-soak can therefore run on that build, and has not yet been run.
+2 h re-soak therefore ran on that build.
+
+**`p0h-2h` on `9d2a4f6e` — valid, and it does not decide.** `moq` 0.12.8 / `moq-relay` 0.15.8,
+`SOURCE_MODE=continuous`, 30 s samples, the same clip and 11 Mb/s pacer as the 6 h confirmation,
+graded by `t21-role-fit.py` with its default 1,200 s settle. It ran the full 7,207 s. All six roles
+stayed alive, 52.7 M packets were exported at 0 continuity errors, and the only errors were logged
+in the teardown second. It is the first re-soak since #3493 closed on which the importer outlived
+the joins.
+
+| role | RSS after settle → end | MB/h | tail MB/h | largest ½ h step | r² line / log | grader |
+|---|---|---:|---:|---:|---|---|
+| `moq import ts` | 116.2 → 126.3 MB | **+4.99** | +6.24 | +3.0 | 0.643 / 0.626 | **ambiguous, run longer** |
+| `moq-relay` | 113.8 → 121.2 MB | +3.72 | +3.64 | +2.9 | 0.250 / 0.239 | step at 1.0 h, slope not meaningful |
+| `moq export ts` | 138.9 → 144.0 MB | +1.11 | +1.02 | +1.0 | 0.029 / 0.024 | ambiguous, run longer |
+| groomer / source / `tsp` | — | ≤ +0.10 | — | +0.1 | — | flat |
+
+So the fix for [#3493](https://github.com/moq-dev/moq/issues/3493) is **not confirmed**. The
+importer's rate over 1.7 h of settled samples is above the +2.83 MB/h the 24 h run measured and the
++2.91 MB/h of the 6 h confirmation, not below it. But 1.7 h separates a line from a logarithm no
+better than 6 h did the relay's (r² 0.643 against 0.626). What would settle it is the 24 h run on the
+same build, graded as the 24 h soak was: slopes on `t > 2 h`, quoted per quarter. A slope that holds
+across the quarters is the leak; one that halves each quarter is a cache filling.
 
 **Per-PID confirmation, 6 h on the merged build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
 `lab/scripts/t21-role-memory.sh`, graded by `lab/scripts/t21-role-fit.py`), 157 M packets at 0
