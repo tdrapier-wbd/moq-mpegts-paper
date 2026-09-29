@@ -6,13 +6,14 @@ S=$HOME/t10-bisect/scripts
 FX=$HOME/t10-bisect/fx
 OUT=$HOME/t10-bisect/instr
 TREE=$HOME/tree-2b689c24
+PATCH=${PATCH:-$(cd "$(dirname "$0")" && pwd)/t10-4122-patch.py}
 export CARGO_TARGET_DIR=$HOME/moq-main/target
 . "$HOME/.cargo/env"
 mkdir -p "$OUT"
 [ -f "$FX/spts1-cc.ts" ] || tsp -I file "$FX/mpts3-cc.ts" -P zap 1 --stuffing --eit -O file "$FX/spts1-cc.ts" >"$OUT/zap.log" 2>&1
 for v in A B; do
 	if [ ! -x "$OUT/bin-$v/moq" ]; then
-		(cd "$TREE" && git checkout -q -- . && python3 "$OUT/patch.py" "$v" "$TREE") >>"$OUT/build.log" 2>&1 || { echo "patch $v failed" >>"$OUT/summary.txt"; exit 1; }
+		(cd "$TREE" && git checkout -q -- . && python3 "$PATCH" "$v" "$TREE") >>"$OUT/build.log" 2>&1 || { echo "patch $v failed" >>"$OUT/summary.txt"; exit 1; }
 		(cd "$TREE" && nice -n 19 cargo build --release -q -p moq-cli --bin moq) >>"$OUT/build.log" 2>&1 || { echo "build $v failed" >>"$OUT/summary.txt"; (cd "$TREE" && git checkout -q -- .); exit 1; }
 		mkdir -p "$OUT/bin-$v"
 		cp "$CARGO_TARGET_DIR/release/moq" "$OUT/bin-$v/"
