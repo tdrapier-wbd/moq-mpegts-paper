@@ -1712,6 +1712,14 @@ than fixed. The byte-identical multi-track pair therefore now waits on
 and no longer on the interleave. Nothing is to be filed: the residue is the byte schedule's
 territory, which already has an issue.
 
+**#4001 costs the subscriber most of its delivery under random loss.** At 10 % uniform loss with no
+rate cap, a subscriber built at #4001 delivers 0.49–0.67 Mb/s where its parent `044ca571` delivers
+10.40 Mb/s, on either congestion controller, against either relay, and on the older protocol version
+too. At 0 % loss the builds are indistinguishable. Bisected with relay and importer held fixed
+([T8b](test-8b-congestion-control.md) § *C7*). The likely mechanism is the new bounded hold spending
+the `max_age` budget that eviction then enforces; that part is reasoned from the source and not
+measured. **Drafted, not filed**, pending the author.
+
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
 
 The quest for #3798 names three triggers and states that none is reproduced in-tree. Its second

@@ -119,8 +119,8 @@ RELAY_P=$(pid_of "[m]oq-relay .*127.0.0.1:$PORT")
 IMPORT_P=$(pid_of "[m]oq .*$BCAST import")
 EXPORT_P=$(pid_of "[m]oq .*$BCAST export")
 PACER_P=$(pid_of "[m]pegts-pacer - $RATE")
-PY_P=$(pid_of "[p]ython3 .*ts-continuous-source")
-TSP_P=$(pid_of "[t]sp -I file")
+PY_P=$(pid_of "^[p]ython3 .*ts-continuous-source")
+TSP_P=$(pid_of "^[t]sp -I file .*-P regulate")
 [ "$SOURCE_MODE" = loop ] && PY_P=${PY_P:-0}
 
 {

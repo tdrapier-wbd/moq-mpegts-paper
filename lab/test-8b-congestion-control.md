@@ -1,6 +1,6 @@
 # T8b — congestion control for a permanent fixed-rate trunk
 
-> **State:** C1–C6 are executed — C1–C5 on the namespace rig (68 cells), C6 as a 14 h soak.
+> **State:** C1–C7 are executed — C1–C5 on the namespace rig (68 cells), C6 as a 14 h soak, C7 as ten 120 s random-loss arms.
 > **The experiment does not name a congestion controller, and that is its result** — C1, C2 and C4
 > rank them in three different orders, and C5 shows why the question was the wrong one: what governs
 > this feed is the **provisioning margin** and the **bottleneck queue discipline**, both of which move
@@ -29,7 +29,10 @@
 > C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
 > prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap
 > remains: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their
-> own RTT says the specified queue never formed). The upstream discussion this test came from is
+> own RTT says the specified queue never formed). **C7 (random loss, no cap)** did not reproduce the
+> BBRv3 abort on either build, and found upstream `main`'s subscriber collapsing to a fifth of the older
+> build's delivery at 10 % loss, on either controller, bisected to the media-time interleave (#4001).
+> The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
@@ -792,6 +795,78 @@ decaying slope cannot be *fully* separated from the kernel reclaiming pages unde
 it is real: `avail_mb` fell 3,010 → 2,606 MB, which closes to within ~46 MB of the summed growth of all
 three roles, and 2.6 GB was still free at the end, so the run never entered a pressure regime. A future
 soak should log `/proc/pressure/memory` beside RSS and settle it outright.
+
+### C7 — random loss with no bottleneck, and a subscriber regression on upstream `main`
+
+C1–C5 impose a rate cap, so the loss they produce is congestive. The condition
+[noq #768](https://github.com/n0-computer/noq/issues/768) was reported under is uniform *random*
+loss, which none of them reproduces. C7 applies it on its own: 10 % `netem` loss on the relay's
+media direction, 25 ms each way, no rate limit, the real clip through relay → `moq export ts
+--max-age 2s` for 120 s (`lab/scripts/t8b-loss-point.sh`, namespace rig). The prediction fixed before
+running was that neither build aborts and that 10 % loss delivers at least 90 % of the 0 % control.
+Two builds were run: the standing `84b34f54` and upstream `main` at `9d2a4f6e`, both on noq. `SUB_BIN`
+crosses the subscriber's build against the relay's.
+
+| Arm (relay / subscriber, controller) | Loss | Mean delivered | Second half | Aborts |
+|---|---:|---:|---:|---|
+| `84b34f54` / `84b34f54`, BBRv3 | 0 % | 9.86 Mb/s | 9.90 | none |
+| `9d2a4f6e` / `9d2a4f6e`, BBRv3 | 0 % | 9.81 Mb/s | 9.82 | none |
+| `84b34f54` / `84b34f54`, BBRv3 | 10 % | 7.21, 8.15 Mb/s | 8.05, 8.99 | none |
+| `9d2a4f6e` / `9d2a4f6e`, BBRv3 | 10 % | **1.71, 1.65 Mb/s** | **0.77, 0.66** | none |
+| `84b34f54` / `84b34f54`, CUBIC | 10 % | 6.87 Mb/s | 8.49 | none |
+| `9d2a4f6e` / `9d2a4f6e`, CUBIC | 10 % | **0.80 Mb/s** | **0.21** | none |
+| `9d2a4f6e` relay / `84b34f54` subscriber, BBRv3 | 10 % | 10.15 Mb/s | 10.22 | none |
+| `84b34f54` relay / `9d2a4f6e` subscriber, BBRv3 | 10 % | **0.73 Mb/s** | **0.26** | none |
+
+*Measured, P1, wire domain, all roles on one 8-vCPU host that was also running a 2 h importer soak;
+one run per cell except the two BBRv3 loss cells, which have two.*
+
+**No arm aborted and no log carries a panic, so #768 did not reproduce at 10 % random loss on either
+build.** That does not clear BBRv3: C1's collapse to 11–13 % was under a rate cap with a 500 ms FIFO, a
+different regime, and 120 s is a short window for a fault that is intermittent by report.
+
+**Upstream `main`'s subscriber collapses under random loss, and the crossed arms place the defect on
+the receiving side.** `main` delivers a fifth of what `84b34f54` does at 10 % loss, and its delivery
+decays through the window instead of settling: the second half runs at a tenth of the older build's.
+It is not the controller, because CUBIC collapses as BBRv3 does. It is not the relay, because a `main`
+relay feeding the older subscriber delivers the full rate. And it is not the negotiated protocol,
+because the older relay limits the session to `moq-lite-05` and `main`'s subscriber still collapses
+on it. At 0 % loss the two builds are indistinguishable. Every subscriber connected over QUIC, since
+the WebSocket fallback was refused in every arm, so this is not TCP's loss response either. Both
+builds log `failed to decode unidirectional stream err=WebTransportError(UnknownSession)` under loss
+and never without it, but the count does not track the collapse (603 on a healthy `84b34f54` run, 267
+on a collapsed `main` run), so it is a symptom of loss rather than the mechanism.
+
+Against the prediction, the no-abort half held on both builds and the delivery half failed on both:
+`84b34f54` delivered 73–83 % of its control on BBRv3 and 70 % on CUBIC, and `main` 17 % and 8 %. The
+older build's shortfall is modest and was not investigated. The `main` relay feeding the older
+subscriber delivered slightly more than either 0 % control, from one run.
+
+**Bisected to one commit: the media-time interleave,
+[#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`).** With relay and importer held at
+`84b34f54` and only the subscriber's build varied, under the same 10 % loss and BBRv3:
+
+| Subscriber build | Position after `84b34f54` | Mean delivered | Second half |
+|---|---:|---:|---:|
+| `ffa5b81b` | 89 commits | 10.69 Mb/s | 11.04 |
+| `044ca571` (parent of #4001) | 140 | 10.40 Mb/s | 10.50 |
+| `66440a6c` (#4001) | 141 | **0.67, 0.49 Mb/s** | **0.35, 0.25** |
+| `2b689c24` | 288 | **0.54 Mb/s** | **0.40** |
+| `9d2a4f6e` | 354 | **0.73 Mb/s** | **0.26** |
+
+*Measured, P1, wire domain, one host, one run per build except #4001, which has two.*
+
+#4001 makes the earliest pending frame wait, bounded by `max_age`, until every other track has shown
+that it cannot precede it. The likely mechanism is that under loss some track is always behind, so
+the exporter spends the same 2 s budget holding output that the consumer then uses to evict late
+groups, and each hold turns into skipped content. That is *reasoned from the source* and not measured.
+What would settle it is an arm that disables the hold without changing the eviction deadline, which
+the CLI does not expose. The commit, by contrast, is measured.
+
+Until it is fixed upstream, this is a trade a deployment has to make. #4001 is the fix that made
+the multi-track export interleave deterministic ([T12](test-12-dual-path-handoff.md)), and pinning
+the subscriber to its parent gives that up. The hardware-window rehearsal build is `main`, so which of
+the two the receiver carries over a lossy path is a decision that is owed before the window.
 
 ## Observations
 

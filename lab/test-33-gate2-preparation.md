@@ -14,7 +14,8 @@ entry point, but it was not one: it assumed a relay was already listening, its f
 repository created any of those** — they were made by hand in the first rehearsal and lived in a
 `/tmp` that no longer exists, so the harness was unrunnable by anybody, including us. It is now
 driven by [`t33-gate2.sh`](scripts/t33-gate2.sh), which builds the fixtures from a clip, starts the
-relay, derives the fingerprint and hands over. See *What the one-command rehearsal found* below.
+relay, derives the fingerprint and hands over. See *What the one-command rehearsal found* below;
+it passes on `d518b61b` and on upstream `main` at `9d2a4f6e`.
 
 **The preparation found its first untested precondition immediately, which is what it was for.** The
 boundary fixtures could not reach the pipeline at all: they carry no PAT or PMT, so `moq import ts`
@@ -527,6 +528,14 @@ reports `pcr_max_ms` of 95,443,492 — the 33-bit PCR wrap period expressed as a
 still scoring `pcr_over40 = 0`, because the signalled-discontinuity discount removes it. That is the
 corrected gate behaving as designed, and it is also a live demonstration of the limitation recorded
 below: it discounts by count, not by pairing each interval to its own flag.
+
+**It passes unchanged on upstream `main` at `9d2a4f6e` (noq),** the build chosen for the hardware
+window, run from a fresh private copy of `lab/scripts/`. All thirteen graded rows are `PASS`. The
+300 s soak arm exported 2,053,739 packets and groomed 2,074,618, with 0 continuity errors and no PCR
+interval above 40 ms in either. As on `d518b61b`, the raw export fails the 481 ns accuracy check on
+every interval (12,415 bad from 12,416 PCRs on the soak) and the groomer clears it to 0. The rig needed
+no change for `main`'s stricter CLI. It ran alongside the 2 h importer re-soak on the same 8-vCPU
+host, and one run was made.
 
 ## Open
 
