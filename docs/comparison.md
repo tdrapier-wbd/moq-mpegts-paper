@@ -453,8 +453,9 @@ restarts it stalled video and primary audio permanently, bisected to its own mer
 ([T27](../lab/test-27-liveness-detector.md)). The stall is fixed from `5d0991b9`, where the importer
 exits at the same restart instead (*frame timestamp is below the live edge*), still present on
 `ffa5b81b` ([T40](../lab/test-40-continuous-join-through-srt.md),
-[T41](../lab/test-41-import-reanchor-coverage.md)). No build measured carries both cases, so a
-deployment must pin or patch the client. The **forward** jump's missing flag, the one residue those
+[T41](../lab/test-41-import-reanchor-coverage.md)). Upstream `main` at `9d2a4f6e` survives the restart,
+but the placed classes have not been re-measured on it, so no build is yet *measured* to carry both
+cases, and a deployment must pin or patch the client until that arm is run. The **forward** jump's missing flag, the one residue those
 six arms left, has since been fixed upstream and verified by re-running the arm
 ([T23](../lab/test-23-pcr-discontinuity-classes.md)).
 

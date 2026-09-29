@@ -356,8 +356,9 @@ groomer's rate estimator ramped when the exporter's PCR degenerated on a looping
 **+2.83 MB/h** linearly with no drawdown over 24 h (~24 GB/year), failing
 [T21](../lab/test-21-permanence-soak.md)'s resource criterion in that role only
 ([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks),
-now closed in `5d0991b9`; 2 h re-soak blocked on
-[the import live-edge exit on content join](../lab/upstream-contributions.md) — §3.6). Every other role
+now closed in `5d0991b9`; the 2 h re-soak was blocked on
+[the import live-edge exit on content join](../lab/upstream-contributions.md), which upstream `main` at
+`9d2a4f6e` no longer shows, and has not yet been run — §3.6, §3.13). Every other role
 passes (groomer flat, exporter converged, relay logarithmic — §3.6). **Continuous-source publishing is
 separately blocked** at the first content join, where import exits with *frame timestamp is below the
 live edge* ([the import live-edge exit on content join](../lab/upstream-contributions.md),
@@ -1530,8 +1531,13 @@ for the six classes at this rig's scale; one run per arm per build.
 [T40](../lab/test-40-continuous-join-through-srt.md) no longer reads the stall through the SRT chain.
 **On homogeneous `5d0991b9`, continuous-source publishing fails differently**: `moq import ts` exits
 at the first content join with *frame timestamp is below the live edge* — not the export-stall signature.
-The defect is closed upstream by a plan rather than a fix and is still live on `ffa5b81b` (§5 row 2a).
-That blocks permanence re-soak and any long run on `ts-continuous-source.py` until resolved. See
+The defect was closed upstream by a plan rather than a fix and is still live on `ffa5b81b` (§5 row 2a).
+**On upstream `main` at `9d2a4f6e` it is gone**: the importer survives three unflagged loop wraps on
+H.264, MPEG-1 Layer II and AC-3 alike, and the SRT chain holds full export rate through five content
+joins. *Measured, P1, wire domain, all roles on one host, one run per arm*
+([T41](../lab/test-41-import-reanchor-coverage.md), [T40](../lab/test-40-continuous-join-through-srt.md)).
+The permanence re-soak and long runs on `ts-continuous-source.py` can therefore run on that build;
+on `ffa5b81b` they cannot. See
 [T27](../lab/test-27-liveness-detector.md) for the pre-fix bisect.
 
 **The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
@@ -1760,8 +1766,9 @@ content-restart [export stall](../lab/upstream-contributions.md) and the importe
 pending on the latter. **Continuous-source publishing on homogeneous `5d0991b9` still fails** at the
 first content join (*frame timestamp is below the live edge*,
 [T40](../lab/test-40-continuous-join-through-srt.md)), and so does `ffa5b81b`, where the defect is
-closed upstream by a plan rather than a fix (§5 row 2a); that blocks long soak with
-`ts-continuous-source.py` until resolved (§3.13).
+closed upstream by a plan rather than a fix (§5 row 2a). Upstream `main` at `9d2a4f6e` survives the
+join, so the long soak with `ts-continuous-source.py` is unblocked on that build and not yet run
+(§3.13).
 
 **Some results rest on upstream code not yet uniformly on the release line.** The exporter
 PCR fixes — exact 25 ms values, stdout pacing and byte-adjacent placement
@@ -1794,7 +1801,7 @@ verdict is the top open question outright**, and the two arms are equally ready 
 |---|---|---|---|
 | 1 | ~~**Would an evenly spaced exporter PCR cadence clear the P1 repetition gate on the MoQ lane?**~~ (§3.2) | **Answered — no, and the gate is now met by another route.** Closed by [T19](../lab/test-19-pcr-grid-verification.md) measurements 10 and 11 | The cadence question is settled negatively: all three exporter domains are fixed upstream ([upstream contributions](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it): exact 25 ms PCR values, stdout release timing, and byte-adjacent placement — adjacency 0 %, p95 release error 1.70 ms) and the wire still carried **12.2 % of intervals above 40 ms**, because a coded frame's bytes belong to its own 40 ms and the CBR mux schedule that used to smooth them is not in the decode timestamps. **What clears the gate is downstream and unrelated to cadence** — the three groomer fixes in §3.2, which hold on every source and at every cushion tested |
 | 2 | **Does groomed output pass TR 101 290 P1/P2 on real hardware IRDs, sustained, including ST 2022-7 under loss?** | A hardware IRD and analyser | Everything. Until it passes, the grooming design is structurally sound and file-validated, not broadcast-acceptable. **Both lanes are now ready for this test**, the media-aware one since [T19](../lab/test-19-pcr-grid-verification.md) measurement 11 |
-| 2a | ~~**Does the upstream rewind-recovery fix ship without the continuous-timeline content-restart regression?**~~ **Answered — export stall fixed in `5d0991b9`** (§3.13) | — | The continuous content-restart [export stall](../lab/upstream-contributions.md) is closed by the export-side fix; **successor**: the importer exits at content join (*below the live edge*, [T40](../lab/test-40-continuous-join-through-srt.md)); **closed upstream by a plan, not a fix, and live on `ffa5b81b`** ([T41](../lab/test-41-import-reanchor-coverage.md)) |
+| 2a | ~~**Does the upstream rewind-recovery fix ship without the continuous-timeline content-restart regression?**~~ **Answered — export stall fixed in `5d0991b9`** (§3.13) | — | The continuous content-restart [export stall](../lab/upstream-contributions.md) is closed by the export-side fix; **successor**: the importer exits at content join (*below the live edge*, [T40](../lab/test-40-continuous-join-through-srt.md)); **closed upstream by a plan, not a fix, and live on `ffa5b81b`; gone on `main` at `9d2a4f6e`** ([T41](../lab/test-41-import-reanchor-coverage.md), [T40](../lab/test-40-continuous-join-through-srt.md); §3.13) |
 | 3 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs, and a path with 80–150 ms of RTT | Both paths measured were healthy, so nothing exercised the recovery the point-to-point tunnels exist for — the case that should favour them. This is the arm that could change the ordering rather than confirm it |
 | 4 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's own edge stage?** | MEG- or TITAN-class hardware | Whether part of the broadcast-grade layer is purchasable on one data plane and not the other. It is also the only route to a low-latency TS-in-HLS receiver, and therefore the condition the segmented lane's route-level case rests on ([Comparison](comparison.md) §6.1) |
 | 5 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | The whole of MoQ's remaining carriage-fidelity advantage |
@@ -1810,7 +1817,7 @@ verdict is the top open question outright**, and the two arms are equally ready 
 | 15 | **Does the relay's year-scale extrapolation plateau?** (§3.6) | Longer soak or `/proc/pressure/memory` logged beside RSS | **Partially answered** — §3.6 records the logarithmic convergence [T21](../lab/test-21-permanence-soak.md) measured, and rules connection scaling out. Open: whether the extrapolated asymptote is observed or continues creeping |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin rather than a single-threaded reference server, and a soak | The cost comparison is currently one lane characterised for resources and one characterised only for bytes. Segmented carriage overhead is measured over TCP on the real path (1.036× source TS, [T9](../lab/test-9-performance.md)), while §3.5's HTTP/3 and HTTP/2 figures are derived; its per-role CPU and memory, its fan-out knee and its stability over days are not. The origin is the role the whole commercial argument for this lane rests on, and the one measured is `python3 -m http.server` |
 | 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
-| 17a | **`moq import ts` linear memory growth (+2.83 MB/h) — leak or cache?** **Fixed upstream in `5d0991b9`; not yet confirmed by re-soak** (§3.6) | 2 h re-soak after the importer's live-edge exit on content join, which is closed upstream but unfixed | [The importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks) closed in `5d0991b9`; both continuous and loop re-soaks invalidated on homogeneous `5d0991b9` ([T21](../lab/test-21-permanence-soak.md)) |
+| 17a | **`moq import ts` linear memory growth (+2.83 MB/h) — leak or cache?** **Fixed upstream in `5d0991b9`; not yet confirmed by re-soak** (§3.6) | A 2 h re-soak on upstream `main` at `9d2a4f6e`, where the importer's live-edge exit on content join no longer occurs (§3.13) | [The importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks) closed in `5d0991b9`; both continuous and loop re-soaks invalidated on homogeneous `5d0991b9` ([T21](../lab/test-21-permanence-soak.md)) |
 | 18 | ~~**Does segmented HTTP keep its reordering advantage over HTTP/3?**~~ **Answered — no, and it never held it for the reason assumed** (§3.3) | — | Answered by [T20](../lab/test-20-segmented-http3.md), and **the advantage proved not to be a substrate effect at all**: re-run with packet sizes equalised it falls to **0.44 even on TCP**, because the original cell gave the segmented lane 34 kB packets against the media-aware lane's 931 B ones and `netem` reorders per packet. §3.3 carries the H3 figures and the loss and outage cells the substrate change wins the segmented lane instead. **The successor question** is not which lane is more robust but which failure mode a primary feed should prefer — lateness with recoverable objects, or bounded latency with discarded programme |
 | 19 | **Why does the media-aware lane lose more programme than SRT, and why does its figure move with the build?** (§3.3) | A bisection of the 5 s outage cost; the quinn reorder cell with the shaper's drop counter sampled | Whether the margin by which SRT leads is a property of the lane or of one QUIC stack's configuration. **Partly answered.** The outage cost belongs to the build: at one later commit both stacks lose the same at either budget, under CUBIC as under their own controllers. On noq, 20 % reorder is the stack's loss detection: reordered packets are declared lost and the sender's window falls about fourteen-fold, which no buffering or headroom moves and relaxing both loss thresholds all but removes. Open: which change raised the outage cost, and what quinn's reorder cost is, since relaxing its thresholds keeps its window and not the programme |
 
