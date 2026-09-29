@@ -293,7 +293,7 @@ bought in, and the range is wide: parity moves from about 19 destinations at clo
 to 95 at the deepest published committed rate and 323 at assumed commodity CDN rates. **A
 cloud-priced model would write off the several-hundred-destination case that the commodity market
 puts back in contention** — which is the finding this table exists to support, and the basis of
-the market-structure argument in [economics](../docs/economics.md) §4.9.
+the market-structure argument in [economics](../docs/economics.md) §4.6.
 
 Two mechanics worth noting. Cloudflare's flat $0.05/GB *loses* to AWS at 22 destinations and above
 (3,457 Mbps, ~1,136 TB/month), where enough volume falls in AWS's $0.05/GiB (= $0.0466/GB) band to

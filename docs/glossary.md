@@ -28,7 +28,7 @@ which is what the prototype runs on.
 | **Publisher / subscriber** (importer / exporter) | The sending and receiving endpoints. In this work they are `moq import ts` and `moq export ts`, which convert between MPEG-TS and MoQ tracks, and the documents call them the *importer* and *exporter* when that conversion is the point. |
 | **Media-aware lane** | Carriage that demultiplexes the transport stream into MoQ tracks and re-muxes at the subscriber. The preferred path, and the one almost every measurement here was taken on. |
 | **moq-lite** | `moq-dev`'s own wire protocol, distinct from the IETF `moq-transport` drafts. The media-aware lane runs on it; which protocol each lane exercised is stated in [Evidence](evidence.md) §1. |
-| **Opaque lane** | Carriage that treats the transport stream as an opaque byte stream and segments it into objects, preserving it verbatim. The fallback. The MPEG-TS-over-MoQ community calls the same property *transparent passthrough*; the two terms are interchangeable. |
+| **Opaque lane** | Carriage that treats the transport stream as an opaque byte stream and segments it into objects, preserving it verbatim. Measured here only as a private loopback prototype, used as the reference for byte-for-byte transparency rather than as a deployable path ([Evidence](evidence.md) §1). The MPEG-TS-over-MoQ community calls the same property *transparent passthrough*; the two terms are interchangeable. |
 
 ## Segmented HTTP (HLS carrying MPEG-TS)
 

@@ -242,7 +242,7 @@ Two consequences. First, **relay cost tracks session count far more closely than
 capacity planning should count sessions, not gigabits. Second, and counter-intuitively for primary
 distribution, **high-bitrate contribution feeds are the cheapest per Mbps to relay** — moving
 up-market in bitrate improves relay compute economics. The expensive part of a high-bitrate always-on
-feed is egress, not compute ([economics](../docs/economics.md) §3.1).
+feed is egress, not compute ([economics](../docs/economics.md) §3).
 
 The 0.090 %/Mbps at 10 Mbps agrees with the fan-out sweep's 0.089 %/Mbps derived at N = 55, from a
 completely different rig and subscriber count, which is a useful cross-check on both.

@@ -109,9 +109,10 @@ which a setting trades against the history the relay can serve.
 Cloud instances sustain well below headline network capacity — **relay sizing is an instance-family
 decision before core count.**
 
-**Carriage multiplier: 0.982 (MoQ media-aware) vs 1.037 (SRT)** on the same WAN path — MoQ declines
-null stuffing the edge regenerates anyway (5.3 % wire saving on the reference clip). **Treat as wash
-with upside**, not 5 % of banked egress: advantage tracks source stuffing ratio (§4.5).
+**The carriage multiplier is 0.982 for MoQ's media-aware lane against 1.037 for SRT** on the same WAN
+path, because MoQ declines to carry the null stuffing the edge regenerates anyway: a 5.3 % wire saving
+on the reference clip. **Treat it as a wash with upside**, not as 5 % of egress banked, because the
+advantage tracks the source's stuffing ratio (§4.5).
 
 ---
 
@@ -175,19 +176,22 @@ self-built fleet cannot buy, so the "build it and keep the service margin" insti
 list prices** — though a commodity CDN still undercuts it two- to threefold, making the inversion
 specific to staying inside one hyperscaler.
 
-**Procurement is the largest lever inside the cloud, and it cannot win the fan-out argument.** Even a 95 %
-discount moves parity only from ~19 to ~385 destinations. **Supplier choice, not buying power, decides
+**Procurement is the largest lever inside the cloud, and it cannot win the fan-out argument.** Even a
+*hypothetical* 95 % discount off first-tier list moves parity only from ~19 to ~385 destinations. **Supplier choice, not buying power, decides
 whether delivery needed to be inside the cloud at all** (§4.6).
 
 ### 4.3 Owning the egress
 
-Not buying metered egress at all is the largest structural lever. Owned/co-located relay fleets pay
-transit, ports and facilities — unmetered per GB. Illustrative all-in PoP: **$0.001–0.004/GB** (~tenfold
-below list egress; **distrust most** — illustrative facilities/hardware assumptions).
+Not buying metered egress at all is the largest structural lever. An owned or co-located relay fleet pays
+for transit, ports and facilities, none of it metered per gigabyte. §4.2's *illustrative* build-up,
+loaded with facilities, hardware and transit diversity, puts that at **$0.001–0.004/GB**, about tenfold
+below list egress. It is the figure here to **distrust most**, because its facilities and hardware
+inputs are assumptions rather than quotes.
 
-Open-source relay + standardised protocol lowers entry vs the SRT era; a relay is a cache (§4.6), so the
-operational shape is familiar. Caveats: capex for opex, utilisation threshold, reach where built, control
-plane still required. **Barrier lower, not absent.**
+An open-source relay and a standardised protocol lower the cost of entry against the SRT era, and
+because a relay is a cache (§4.6) the operational shape is familiar. The caveats are that it trades
+opex for capex, pays only above a utilisation threshold, reaches only where it is built, and still
+needs a control plane. **The barrier is lower, not absent.**
 
 ### 4.4 A transponder's worth of channels: the parity threshold
 
@@ -204,19 +208,22 @@ delivery cost):
 | 1024 | 160.9 Gbps | 12,551,000 | 8,874,100 | 6,342,300 | 3,171,200 |
 | *per destination, at scale* | | *10,500* | *8,700* | *6,200* | *3,100* |
 
-Only MediaConnect is buyable at the price shown; 70 % column is **hypothetical**; CDN columns are
-**assumed** (Cloudflare MoQ relay: $0.050/GB). **Parity** = incumbent space-segment cost ÷ per-destination
-figure — per $1M/year normaliser: **~95** (committed cloud), **115** (70 % cloud), **162** ($0.010 CDN),
-**323** ($0.005 CDN). Self-hosting (~970/destination at illustrative rates, parity ~1,000) omitted for
-reach reasons (§4.3).
+Only MediaConnect is buyable at the price shown. The 70 % column is **hypothetical** and the CDN
+columns are **assumed**; the one announced MoQ relay rate, Cloudflare's, is $0.050/GB. **Parity** is the
+incumbent's space-segment cost divided by the per-destination figure. Per $1M a year of that cost it
+falls at **~95** destinations on committed cloud, **115** at the *hypothetical* 70 % discount, **162** at
+an *assumed* $0.010 CDN rate and **323** at an *assumed* $0.005. Self-hosting, at ~970 per destination on
+*illustrative* rates and parity ~1,000, is omitted for reach reasons (§4.3).
 
-**Reclamation bound:** arguable to ~95 destinations on published cloud rates; to high hundreds if a
-relay can be rented at commodity CDN rates, which is an *assumption* and not a rate anyone has
-announced; 1,000+ out of reach for anything purchasable today. Incumbent free fan-out inside footprint
-vs linear unicast columns — ceiling *moves*, not disappears.
+**The reclamation bound follows.** Displacing the incumbent is arguable to ~95 destinations on published
+cloud rates, and to the high hundreds if a relay can be rented at commodity CDN rates, which is an
+*assumption* and not a rate anyone has announced. A thousand or more is out of reach for anything
+purchasable today. The incumbent's fan-out inside its footprint is free while every column here is
+linear in destinations, so a better rate *moves* the ceiling rather than removing it.
 
-**Transport choice moves the table by single digits; destination count by three orders** (§1). One
-economic question: whether the far end needs the contribution mux back byte-for-byte.
+**Transport choice moves the table by single-digit percentages; destination count moves it by three
+orders of magnitude** (§1). The one economic question transport choice does raise is whether the far end
+needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
@@ -233,23 +240,26 @@ since their egress carries the source's own conformant grid ungroomed. **No conf
 configuration exists on any lane in this repository** ([Evidence](evidence.md) §3.11). These are
 delivery figures, not camera-to-display.*
 
-**No option breaks last-mile linearity** — a relay is a cache (§4.6); upstream collapses to one copy,
-last mile stays N unicast. CDN brings a **price**, not a topology: commodity $0.005–0.010/GB vs $0.09
-cloud egress; MoQ relay from one supplier at 5–10× commodity today.
+**No option breaks last-mile linearity.** A relay is a cache (§4.6): upstream traffic collapses to one
+copy, and the last mile stays N unicast copies. A CDN brings a **price**, not a topology: commodity
+delivery at $0.005–0.010/GB against $0.09 for cloud egress, and a MoQ relay from one supplier at five to
+ten times commodity today.
 
 ### 4.5 Where relay fan-out changes the bill, and where it does not
 
-**Relay fan-out does not reduce last-mile egress** — measured: 150 subscribers get **9.84 Mb/s each, a
-full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state*: 2.62 MB and 1.258 % of a
-core per subscriber on the build under test, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Upstream backhaul economises where receivers cluster (~$11,500/yr flat vs $185,000 for
-sixteen without relay on the eight-service model) — same topology as HTTP cache (§4.6). **Carriage
-overhead is not where the money is** — 5.3 % wire saving is real but dwarfed by supplier choice (§3).
+**Relay fan-out does not reduce last-mile egress.** Measured, 150 subscribers each receive **9.84 Mb/s,
+a full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state*: 2.62 MB and 1.258 % of a
+core per subscriber on the build under test, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where
+receivers cluster, the relay economises upstream backhaul instead, ~$11,500 a year flat against $185,000
+for sixteen destinations without a relay on the eight-service model, which is the same topology an HTTP
+cache exploits (§4.6). **Carriage overhead is not where the money is**: the 5.3 % wire saving is real,
+but supplier choice dwarfs it (§3).
 
 ### 4.6 The market-structure argument
 
-**Hypothesis about market structure, not a measured result** — MoQ could reach commodity pricing in the
-sub-second band segmented HTTP already occupies elsewhere. Question: **who operates the replication point,
-and which market prices it?**
+**This is a hypothesis about market structure, not a measured result**: that MoQ could bring to the
+sub-second band the commodity pricing segmented HTTP already enjoys at longer latencies. It turns on
+**who operates the replication point, and which market prices it**.
 
 | Data plane | Who runs the fan-out | Market it is priced in |
 |---|---|---|
@@ -257,21 +267,23 @@ and which market prices it?**
 | MoQ | one CDN today; otherwise you | $0.050/GB published, or hyperscaler egress if self-run |
 | SRT / Zixi / RIST | **you, or a managed media service** | own transit, or ~$0.09/GB metered egress, or per-flow premium |
 
-Hyperscalers sell elasticity; always-on primary distribution should buy committed/commodity delivery
-instead.
+Hyperscalers sell elasticity, so always-on primary distribution should buy committed or commodity
+delivery instead.
 
-**A CDN can operate a MoQ relay; it cannot commoditise SRT** — a relay is a cache, holding no
-per-destination state a CDN would have to operate; SRT fan-out needs a stateful gateway per stream per
-destination (media-server business). SRT scales via
-re-origination or own transit; CDNs take SRT as contribution ingest only. **Open spec + cache-shaped
-relay primitive** enables multi-vendor competition — openness alone (SRT) did not.
+**A CDN can operate a MoQ relay; it cannot commoditise SRT.** A relay is a cache and holds no
+per-destination state a CDN would have to operate, whereas SRT fan-out needs a stateful gateway per
+stream per destination, which is a media-server business. SRT therefore scales through re-origination
+or owned transit, and CDNs take it only as contribution ingest. **An open specification combined with
+a cache-shaped relay primitive** is what enables multi-vendor competition; openness alone, in SRT's
+case, did not.
 
-**Limits this to sub-second routes.** Seconds-latency primary distribution favours segmented HTTP on
-commodity economics; the broadcast-grade edge layer cost remains on either plane (§7.2).
+**The argument is limited to sub-second routes.** At seconds of latency, primary distribution favours
+segmented HTTP on commodity economics, and the cost of the broadcast-grade edge layer remains on either
+plane (§7.2).
 
-**At its narrowest: MoQ could bring commodity pricing to the sub-second band** — parity ~95 destinations
-on published cloud rates against ~323 at an *assumed* commodity relay rate (§4.4), not a general
-cheapest-feed claim. The whole of that gap is the assumption.
+**At its narrowest, then, the claim is about the sub-second band and is not a general cheapest-feed
+claim**: parity at ~95 destinations on published cloud rates against ~323 at an *assumed* commodity
+relay rate (§4.4). The whole of that gap is the assumption.
 
 **Four things would falsify it, and none is settled.** Only one CDN has announced a MoQ relay, at
 five to ten times commodity delivery. Professional contribution carries SLA, monitoring and support
@@ -391,7 +403,7 @@ fanned out by a CDN.
 
 ### 7.1 Transport choice determines build-or-rent options
 
-Data-plane choice largely sets the option set (§4.6 — relay-as-cache):
+Data-plane choice largely sets the options, for the relay-as-cache reason in §4.6:
 
 | Data plane | Can you rent the fan-out? | From how many suppliers |
 |---|---|---|
@@ -399,16 +411,18 @@ Data-plane choice largely sets the option set (§4.6 — relay-as-cache):
 | MoQ | yes | **one**, at 5–10× commodity |
 | SRT / RIST | not to the destination — CDNs take it at the door as contribution ingest | you, or a managed media service at per-flow premium |
 
-SRT ⇒ own replication. Segmented HTTP ⇒ *can* rent cheaply. MoQ today ⇒ build or single supplier (§4.6).
+So SRT means owning the replication, segmented HTTP means it *can* be rented cheaply, and MoQ today means
+building it or depending on a single supplier (§4.6).
 
 ### 7.2 What renting transfers (§1)
 
-A CDN takes fan-out, PoP operation, peering and capacity risk — **not** the conformance hand-off
-(nothing off-the-shelf on MoQ lane; [Evidence](evidence.md) §3.2), TR 101 290 monitoring inside its
-network, entitlement/control plane (§8), receive estate (§2), or broadcast-standard operations.
+A CDN takes on the fan-out, point-of-presence operation, peering and capacity risk. It does **not** take
+the conformance hand-off, for which nothing off the shelf exists on the MoQ lane
+([Evidence](evidence.md) §3.2); TR 101 290 monitoring inside its network; the entitlement and control
+plane (§8); the receive estate (§2); or operations to the broadcast standard.
 
-**Transferred complexity is bandwidth-shaped; retained is broadcast-shaped** — most of the *bill*, not
-most of the *engineering*.
+**The complexity transferred is bandwidth-shaped and the complexity retained is broadcast-shaped**:
+renting moves most of the *bill*, not most of the *engineering*.
 
 ### 7.3 The on-prem SRT case is stronger than this paper's direction implies
 
@@ -442,9 +456,9 @@ Refining "capability, direction, appetite for engineering" into things a broadca
 | **Can you tolerate a single supplier for the replication tier?** | MoQ on a CDN is available today | segmented HTTP, or self-operate |
 | **Is the receive estate vendor-specific?** | it may decide the question on its own, independent of transport (§2) | the transport decision is actually free |
 
-Capability and appetite are **positions**, not preferences — own transit + NOC + tens of destinations
-⇒ SRT on own infrastructure; rented fan-out obvious for those without that estate or beyond their
-footprint (§6).
+Capability and appetite are **positions**, not preferences. A broadcaster with its own transit, a NOC
+and tens of destinations lands on SRT over its own infrastructure; rented fan-out is the obvious answer
+for one without that estate, or for routes beyond its footprint (§6).
 
 ---
 
@@ -568,9 +582,10 @@ the thesis rather than a detail of it.**
   from more than one supplier; a feed currently traverses only relays from the same implementation as
   the publisher ([Evidence](evidence.md) §3.7).
 - **What does relay memory cost to operate around?** A sizing line rather than a restart cycle, since it
-  plateaus softly rather than climbing indefinitely — but **the ceiling's scaling term is open by a
-  factor of two** and the cost lands on multi-channel relay density, not on audience: growth is flat
-  across 0–4 subscribers ([Evidence](evidence.md) §3.6). Separately, **`moq import ts` grows linearly at
-  +2.83 MB/h with no drawdown**, which is a restart cycle rather than a sizing line until it is fixed.
+  plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot ceiling per
+  publisher** — and the cost lands on multi-channel relay density, not on audience: growth is flat
+  across 0–4 subscribers ([Evidence](evidence.md) §3.6). Separately, **`moq import ts` grew linearly at
+  +2.83 MB/h with no drawdown**. A fix has landed upstream, but until a re-soak confirms it this is a
+  restart cycle rather than a sizing line.
 - **How much of the operational-saving hypothesis survives running an immature platform to a broadcast
   SLA?** One on-call engineer outweighs the entire modelled transport line at single-route scale.
