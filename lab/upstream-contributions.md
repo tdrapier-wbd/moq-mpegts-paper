@@ -1013,7 +1013,7 @@ through which every programme's video advances the section clock: it steps back 
 and re-anchors the whole source forward on each step. A build that gives that clock one lane per
 video PID removes every re-anchor and restores SCTE-35 and audio to the parent's level (T10 § *On
 upstream `main`*). Upstream's planned default refusal of multi-programme input, and its removal of
-the anchor, would each moot it. **Open**; the before/after verification is owed when a fix lands,
+the anchor, would each moot it; the A/B result is on the issue. **Open**; the before/after verification is owed when a fix lands,
 on `mpts3.ts` and `mpts3-cc.ts` with the T10 rig.
 
 ### Three values the exporter mints per process — one closed, one declined, one open
