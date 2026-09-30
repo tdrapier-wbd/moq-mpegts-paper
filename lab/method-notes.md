@@ -2352,10 +2352,13 @@ below the flag.
 agent shell, the relay logged `listening addr=127.0.0.1:…`, its publishers logged `connected`, and
 every subscriber timed out connecting, so each capture was 0 bytes. The same script on a Linux host
 over ssh ran cleanly. Nothing in the output names the sandbox; it reads as a relay that refuses
-subscribers.
+subscribers. From an agent shell that runs outside the sandbox, the same workstation runs loopback
+rigs cleanly: upstream's `test/ts/run.sh` and T10's and T13's `main` checks all ran there. So the
+sandbox fails the rig, not the host.
 
 > **Treat a loopback rig that connects some clients and not others as the environment until shown
-> otherwise**, and run loopback drills on a host reached over ssh rather than from a sandboxed shell.
+> otherwise**, and run loopback drills on a host reached over ssh, or from an unsandboxed shell,
+> rather than from a sandboxed one.
 
 ### What a signal means to `moq` depends on the build
 
@@ -2391,6 +2394,14 @@ settings.
 
 > **Record the idle timeout on both sides of every session a failover figure crosses**, not only
 > the relay's.
+
+The same bound decides how long a crash arm must watch. [T13](test-13-downstream-grooming.md)'s
+first killed-publisher arms on `main` stopped 31 s after the kill, against the default 30 s idle
+timeout. Both read as an exporter that neither exits nor resumes. Rerun with a 95 s window, the
+exporter exited 1 about 30 s after the kill without `--linger`, and resumed with it.
+
+> **After a hard kill, observe for at least the idle timeout plus the behaviour's own window**, or
+> "not yet detected" is recorded as "hung".
 
 ---
 
