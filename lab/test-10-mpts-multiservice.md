@@ -2,7 +2,8 @@
 
 **State: arms A, B and D run on build `ffa5b81b`, and the MoQ arms re-run on upstream `main`
 `2b689c24` (P1, file domain, all roles co-resident on one host), with the change between the two
-builds bisected to two commits; arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
+builds bisected to two commits; upstream's per-programme selection checked functionally on `main`
+`6f1a9e33`; arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
 and one SDT listing all three — was carried through both data planes and graded per programme.
 
 - **The MoQ lane refuses a multiplex whose programmes run on independent clocks, and not cleanly.**
@@ -31,6 +32,12 @@ and one SDT listing all three — was carried through both data planes and grade
   advanced through one lane shared by every programme's video, that lane keeps stepping back
   across programmes, and each step re-anchors the whole source forward. Giving the section clock
   one lane per video PID removes the loss.
+- **On upstream `main` at `6f1a9e33` the multiplex is refused unless a programme is selected, and a
+  selected programme arrives clean.** `moq import ts` without `--program` exits 1 naming the three
+  programmes. With `--program 1` or `--program all`, each broadcast carries only its programme's
+  PIDs, PMT and PCR, with SCTE-35 at the source's rate and 0 continuity events. Each programme's
+  SDT still lists all three services. This is a local functional check, not the T10 rig
+  (§ *On upstream `main` at `6f1a9e33`*).
 
 The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
 media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
@@ -456,6 +463,43 @@ So on `main` the lane's MPTS failure moves from a loud refusal to silent loss, w
 failure for a broadcaster: a monitoring chain that watches for a publisher exit sees nothing, and
 continuity stays at 0.
 
+### On upstream `main` at `6f1a9e33`: refused unless a programme is selected
+
+Upstream answered the silent loss by refusing a multi-programme input unless the operator selects
+a programme: `moq import ts --program <n>` publishes one programme, and `--program all` publishes each
+programme as its own broadcast ([#4505](https://github.com/moq-dev/moq/pull/4505)). This was checked
+with a local functional rig, **not the T10 rig**: the macOS workstation, a loopback relay,
+`mpts3.ts` (independent clocks) released by `tsp -P regulate` for 20 s, two runs. Twenty seconds of a
+60 s fixture gives no absolute packet counts to set against the tables above, so the table below
+compares each PID's packets with the programme's video packets in the same capture. *P1, file
+domain, `moq 0.12.8` built from `6f1a9e33`.*
+
+| | Result, both runs |
+|---|---|
+| No `--program` | publisher exits 1 before publishing: `transport stream carries 3 programs (1, 2, 3)` |
+| `--program 1` | one PMT, programme 1's eight PIDs, PCR on PID 111 only, 0 continuity events |
+| `--program all` | three broadcasts, each carrying only its own programme's PIDs and PCR; 0 continuity events in all six captures |
+| SCTE-35 (141/142/143) per programme-1 video packet | 0.00016 on each PID, both modes; source 0.00016–0.00017 |
+| Programme 1 audio (121/123) per video packet | 0.0263–0.0278 / 0.0207–0.0217; source 0.0224 / 0.0220 |
+| EIT (PID 0x12) per programme-1 video packet | 0.00057–0.00067; source 0.00033 |
+| SDT in each programme's output | lists all three services; the two not carried have no PIDs behind them |
+
+- **The silent loss can no longer be reached from the CLI.** The input that completed with exit 0
+  and lost 96–98 % of two programmes' video on `2b689c24` is now refused loudly at the start, by
+  programme count rather than by clock.
+- **A selected programme shows none of #4122's loss.** SCTE-35 arrives at the source's rate against
+  video on all three PIDs, and audio is not below it, where the flattened multiplex on `2b689c24`
+  delivered 1–7 SCTE-35 packets of ~60. This agrees with the discriminator above: a single programme
+  gives the section clock one video lane. The audio ratio sits above the source's because the
+  capture starts at a keyframe and stops mid-stream, which trims video more than audio; only a
+  ratio below the source's would indicate loss.
+- **Each programme's broadcast still advertises the whole multiplex.** Its SDT lists all three
+  services, and every service's EIT rides along. An IRD scanning programme 1's output finds two
+  services with no components. Upstream plans the fix as per-programme SI
+  (`quest/m2/ts-program-si.md`).
+- **EIT arrives at 1.7–2.0× the source's rate against video.** Programme 1 alone on `2b689c24` was
+  +9 %. Not investigated. The re-emission cadence of SI snapshot tracks is the first place to look.
+
 ### Arm D: carried, with a programme-1-only initialisation pair
 
 The packager published 25 segments of 2.0–2.4 s (`EXT-X-BITRATE:19426`), and the playlist ends
@@ -500,13 +544,18 @@ capture is complete, and it does not bear on any figure above.
 
 - **Opaque carriage of a multiplex on MoQ** — the arm criterion 1 was written for. It needs a build
   with an opaque lane.
-- **A multiplex-aware media-aware lane** — one section clock per programme, and one program record
-  per PMT, so the exporter can rebuild the PAT and every PMT. Until then an MPTS on this lane has to be
-  split into one broadcast per programme at ingest, and that split is itself untested here.
+- **The per-programme split on the T10 rig.** Upstream chose the split over a multiplex-aware lane:
+  one broadcast per programme at ingest. The split passes a local functional check on `6f1a9e33`,
+  but it has not been graded on the T10 rig with absolute per-PID counts over the whole fixture, on
+  both fixtures. That is the next MoQ arm here, and it needs no new apparatus.
+- **Per-programme SI.** Each programme's output still carries the whole multiplex's SDT and EIT. The
+  arm that would close it is the functional check above on a build carrying upstream's
+  `ts-program-si` quest.
 - **How #4122's ratchet reaches the audio tracks.** The mechanism is located and removing it
   restores the audio, but the path from the section clock's re-anchors to audio lanes that have
-  their own offsets is not traced. It matters only while the anchor exists: upstream plans to
-  refuse a multi-programme input by default and to remove the anchor from the importers.
+  their own offsets is not traced. It matters only while the anchor exists. Upstream now refuses a
+  multi-programme input by default (above), and its `dev` branch removes the anchor from the
+  importers.
 - **Whether a single programme can trigger the same ratchet.** On one programme the shared lane
   sees one video PID, and it steps back only by that stream's B-frame reordering. Programme 1 alone
   never re-anchored here. A stream whose reordering spans more than 500 ms, or a programme with two

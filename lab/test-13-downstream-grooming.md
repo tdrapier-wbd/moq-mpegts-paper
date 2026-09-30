@@ -342,6 +342,11 @@ intact so `mpegts.muxRate` is recorded and #3831's padding is active.
 | spread as a share of the median | 0 % | **66,143 %** |
 | intervals within 1 % of nominal | 24,573 of 24,573 (100 %) | **205 of 6,173 (3.3 %)** |
 
+**The residual is unchanged on upstream `main` at `6f1a9e33`.** Upstream's own grader,
+`test/ts/pcr-timing.py`'s `pcr-schedule` check, run through `test/ts/run.sh` on the same clip for 60 s,
+finds 3.27 % of PCR intervals within ±1 % and a median of 1,316 B between PCRs. That run used a local
+loopback relay, file domain.
+
 **The aggregate rate is right and the schedule is absent, and those are different properties.**
 #3831 pads the output to within 0.21 % of the rate it declares, so a census of the whole capture
 finds a constant-rate stream. Within it, the byte count between consecutive PCRs runs from 188 B to
@@ -463,7 +468,7 @@ protection over this exporter; what stands between the campaign and both is the 
 `CNNiEMEA2.ts` at 9,945,951 b/s declared, 150 s per cell, two cells. Nothing here has been graded on
 a hardware IRD, so these are software conformance figures.*
 
-#### Liveness: the exporter does not mint a dead carrier, and it does not survive the source either
+#### Liveness: the exporter does not mint a dead carrier, and on `main` it can outlive the source
 
 A groomer holding a constant rate by stuffing is exactly right while the source is late and exactly
 wrong once it has died — the output becomes a byte-perfect carrier with no programme in it, and
@@ -474,10 +479,11 @@ publisher 30 s into a run, the exporter wrote 1,856,500 B of drained buffer over
 seconds, and then stopped. Carrier liveness and content liveness are the same event, which is what
 lets a downstream input-failover detect anything at all.
 
-**What it does instead is exit, with an error, on the catalog track.** The process ends
-`Error: json: dropped`, and restarting the publisher recovers nothing, because there is no longer a
-subscriber to recover it: measured 0 B over 25 s against a restarted source, reproduced exactly
-across two runs. Two consequences, and they are separate:
+**On the build under test, what it does instead is exit, with an error, on the catalog track.** The
+process ends `Error: json: dropped`, and restarting the publisher recovers nothing, because there is
+no longer a subscriber to recover it: measured 0 B over 25 s against a restarted source, reproduced
+exactly across two runs. Upstream `main` at `6f1a9e33` changes both halves (below the two
+consequences). On `ffa5b81b` the consequences are two, and they are separate:
 
 - **A standing egress cannot outlive a publisher restart without external supervision.** In a
   primary-distribution chain the publisher is restarted for a version bump, a failover or an
@@ -502,6 +508,35 @@ across two runs. Two consequences, and they are separate:
   this arrives at the track level through `poll_next_group`, which #3907's own comment says is
   the level #3907 deliberately left alone: its own comment says "a group whose content is gone is
   never fatal… A track- or session-level failure still arrives through `poll_next_group` above."
+
+**On upstream `main` at `6f1a9e33` the exporter can wait for its broadcast, and its exit code tells a
+clean end from a failure.** `moq export ts --linger <duration>`
+([#4504](https://github.com/moq-dev/moq/pull/4504), which closed #3926) keeps the exporter
+subscribed after the broadcast ends. Output stops while the broadcast is gone and resumes flagged as
+a break. Checked with a local functional rig: the macOS workstation, a loopback relay, `CNNiEMEA2.ts`
+through `tsp -P regulate`. *P1, file domain.*
+
+| Publisher event | `--linger 0s` (default) | `--linger 10s` / `60s` |
+|---|---|---|
+| Clean end (stdin closed), back after 6 s (2 runs) | exporter exits **0** at the end | exporter stays up and resumes on the returning publisher: 28.1 and 29.9 MB, against 15.0 and 15.4 MB without linger |
+| `SIGKILL`, back after 3 s (1 run) | exporter exits **1** (`internal error`) about 30 s after the kill | resumes on the restarted publisher after about 30 s, with 0 continuity events |
+
+- **Both of the `ffa5b81b` consequences above are answered on `main`**, the first only for an
+  exporter run with `--linger`. A standing egress outlives a publisher restart without a supervisor.
+  A supervisor that still wants one can read the exit code, 0 for a clean end and 1 for a failure,
+  which is the distinction #3926's plan specified.
+- **A crash costs the QUIC idle timeout.** A killed publisher sends no close, so the relay holds its
+  broadcast until the 30 s idle timeout expires, and a same-name publisher restarted inside that
+  window is not delivered to the waiting exporter. This is the detection bound
+  [T6](test-6-relay-resilience.md) records for relay failover, now on the publisher side.
+- **The resume flags the break on the PCR PID only.** Every resume set `discontinuity_indicator` on
+  PID 111 and on no other PID. In one of the two clean-end runs, the primary audio PID (121) came back
+  with its continuity counter 4 ahead and no flag of its own, which a TR 101 290 monitor counts as a
+  `Continuity_count_error`. The other run resumed without a jump. Two runs cannot give a rate. The
+  arm that settles it is the same rig repeated, with continuity graded per PID at each resume.
+- **Not tested: the exporter's own session dropping**, as in a relay restart. `--linger` waits for
+  the broadcast to return, and whether it also carries the exporter across its own session loss is
+  the T6 drill repeated with the flag.
 
 #### What retiring the groomer would cost: the capability audit
 
