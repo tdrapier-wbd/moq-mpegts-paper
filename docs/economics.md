@@ -584,8 +584,11 @@ the thesis rather than a detail of it.**
 - **What does relay memory cost to operate around?** A sizing line rather than a restart cycle, since it
   plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot ceiling per
   publisher** — and the cost lands on multi-channel relay density, not on audience: growth is flat
-  across 0–4 subscribers ([Evidence](evidence.md) §3.6). Separately, **`moq import ts` grew linearly at
-  +2.83 MB/h with no drawdown**. A fix has landed upstream, but until a re-soak confirms it this is a
-  restart cycle rather than a sizing line.
+  across 0–4 subscribers ([Evidence](evidence.md) §3.6). That plateau was measured on the quinn build;
+  on the noq build one 24 h re-soak read the relay flat, so whether the budget is a property of the
+  design or of the QUIC stack is open. Separately, **`moq import ts` grew linearly at +2.83 MB/h with no drawdown** on the older
+  build. It is fixed upstream, and a 24 h re-soak confirms the fix at +0.23 MB/h, which makes it a
+  sizing line rather than a restart cycle. That confirmation is on a `main` build rather than the one
+  under test ([Evidence](evidence.md) §3.2).
 - **How much of the operational-saving hypothesis survives running an immature platform to a broadcast
   SLA?** One on-call engineer outweighs the entire modelled transport line at single-route scale.

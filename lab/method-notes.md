@@ -747,6 +747,13 @@ than eyeballing the curve.** *(T21's 24 h soak.)*
 > apart. **Fit at least a line, a logarithm and a square root**, because "still rising" is compatible
 > with all three and only one of them exhausts a host. And **report the largest drawdown from a running
 > peak**: a cache gives memory back, so 9.2 MB of drawdown against 137 MB of growth is itself evidence.
+>
+> **Exclude the warm-up by measuring it, not by default.** The re-soak on `main` graded a 2 h run with
+> the grader's default 20 min settle and read the importer at +4.99 MB/h, above the leak it was meant
+> to confirm fixed. The 24 h run on the same build showed the importer still rising until about 1.5 h
+> and flat after it, at +0.23 MB/h from 2 h. A settle shorter than the warm-up turns a warm-up into a
+> slope. Read the first hours of the series before choosing the settle, and state the settle with the
+> slope.
 
 **Sample resource series per process, not per command-line signature.** *(T21's 24 h soak, and the
 follow-up run it forced.)*

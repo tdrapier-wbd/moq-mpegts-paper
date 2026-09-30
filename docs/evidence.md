@@ -355,12 +355,17 @@ groomer's rate estimator ramped when the exporter's PCR degenerated on a looping
 **Permanence on `d518b61b` was blocked by one resource series**: `moq import ts` resident memory grew
 **+2.83 MB/h** linearly with no drawdown over 24 h (~24 GB/year), failing
 [T21](../lab/test-21-permanence-soak.md)'s resource criterion in that role only
-([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks),
-now closed in `5d0991b9`; the 2 h re-soak was blocked on
-[the import live-edge exit on content join](../lab/upstream-contributions.md), which upstream `main` at
-`9d2a4f6e` no longer shows, and has not yet been run — §3.6, §3.13). Every other role
-passes (groomer flat, exporter converged, relay logarithmic — §3.6). **Continuous-source publishing is
-separately blocked** at the first content join, where import exits with *frame timestamp is below the
+([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)).
+Every other role passes (groomer flat, exporter converged, relay logarithmic — §3.6). **On upstream
+`main` at `9d2a4f6e` the leak is fixed and every role passes**: a 24.0 h re-soak with the same source,
+clip and groomer reads the importer at **+0.23 MB/h** from 2 h, with quarterly slopes of +0.61, +0.41,
++0.60 and −0.15 MB/h against 2.36–2.87 on `d518b61b`. That re-soak graded resources, continuity
+(0 errors over 632 M packets) and the groomer's counters (0 underruns), not PCR accuracy or programme
+gaps, so the wire figures above remain `d518b61b`'s. In both runs the source's AC-3 and teletext
+timestamps stepped back at every content join. Both builds' importers re-anchor that, and upstream's
+development branch now treats it as the end of the stream. *Measured, P1, all roles on one host, one run*
+(§3.6, [T21](../lab/test-21-permanence-soak.md#the-3493-re-soak)). **Neither run is the build under
+test.** On `ffa5b81b`, continuous-source publishing is blocked at the first content join, where import exits with *frame timestamp is below the
 live edge* ([the import live-edge exit on content join](../lab/upstream-contributions.md),
 [T40](../lab/test-40-continuous-join-through-srt.md)). That issue now reads *closed* upstream, but a
 planning document that changed no code closed it, and the defect is **re-measured as live on
@@ -1001,7 +1006,13 @@ that picture**: groomer flat (+0.5 MB total), `moq export ts` converged (+118.9 
 logarithmic (baseline **+242.6 MB** at 24 h), and **`moq import ts` linear at +2.83 MB/h** with no
 drawdown — failing that experiment's resource criterion (§3.2). Per-process confirmation at 6 h:
 **+2.91 MB/h** in `moq import ts` alone on `d518b61b`
-([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks), closed in `5d0991b9`; re-soak pending).
+([the importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)).
+**The 24 h per-process re-soak on upstream `main` at `9d2a4f6e` passes every role**: importer
+**+0.23 MB/h** with a falling last quarter, groomer flat, and the relay flat at 117–139 MB. The relay
+there is on noq rather than quinn, so this does not re-read the quinn relay's logarithm. The exporter
+is flat on either side of one +11.8 MB step at 11.0 h. A step of that kind has now appeared in two of
+three per-process runs, is unexplained, and is not a resource failure at one per 24 h
+([T21](../lab/test-21-permanence-soak.md#the-3493-re-soak), P1, one host, one run).
 
 **The relay retains memory in proportion to content carried, and the cause is a QUIC library rather
 than MoQ.** `quinn-proto` keeps a slot per stream a peer may open and recycles a freed stream's
@@ -1536,8 +1547,8 @@ The defect was closed upstream by a plan rather than a fix and is still live on 
 H.264, MPEG-1 Layer II and AC-3 alike, and the SRT chain holds full export rate through five content
 joins. *Measured, P1, wire domain, all roles on one host, one run per arm*
 ([T41](../lab/test-41-import-reanchor-coverage.md), [T40](../lab/test-40-continuous-join-through-srt.md)).
-The permanence re-soak and long runs on `ts-continuous-source.py` can therefore run on that build;
-on `ffa5b81b` they cannot. See
+The 24 h permanence re-soak on `ts-continuous-source.py` has run on that build (§3.2); on `ffa5b81b`
+it cannot. See
 [T27](../lab/test-27-liveness-detector.md) for the pre-fix bisect.
 
 **The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
@@ -1762,13 +1773,14 @@ for sizing.
 **Two upstream defects that blocked `d518b61b` are closed in `5d0991b9`**: the continuous
 content-restart [export stall](../lab/upstream-contributions.md) and the importer's
 [memory growth](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks), both measured on `d518b61b`
-([T27](../lab/test-27-liveness-detector.md), [T21](../lab/test-21-permanence-soak.md)); re-soak
-pending on the latter. **Continuous-source publishing on homogeneous `5d0991b9` still fails** at the
+([T27](../lab/test-27-liveness-detector.md), [T21](../lab/test-21-permanence-soak.md)). The memory
+fix is confirmed by a 24 h re-soak, but on upstream `main` at `9d2a4f6e` only (§3.2).
+**Continuous-source publishing on homogeneous `5d0991b9` still fails** at the
 first content join (*frame timestamp is below the live edge*,
 [T40](../lab/test-40-continuous-join-through-srt.md)), and so does `ffa5b81b`, where the defect is
-closed upstream by a plan rather than a fix (§5 row 2a). Upstream `main` at `9d2a4f6e` survives the
-join, so the long soak with `ts-continuous-source.py` is unblocked on that build and not yet run
-(§3.13).
+closed upstream by a plan rather than a fix (§5 row 2a). So the build under test has no 24 h
+continuous-source result at all, and the permanence evidence is split across two builds that are not
+it: `d518b61b` for the wire, `9d2a4f6e` for resources (§3.2).
 
 **Some results rest on upstream code not yet uniformly on the release line.** The exporter
 PCR fixes — exact 25 ms values, stdout pacing and byte-adjacent placement
@@ -1814,10 +1826,10 @@ verdict is the top open question outright**, and the two arms are equally ready 
 | 12 | **Does a real CDN edge change the segmented lane's loss curve?** (§3.3) | A tuned edge instead of one plain HTTP/1.1 origin | The completeness half is answered in §3.3: retry preserves *content* inside the availability window and not past it, and rate was never preserved (**0.17 of source at 8 % loss**). What remains is the origin: the one measured is the weakest form of the deployed one, and a CDN could plausibly move the loss curve. The substrate half is settled — row 18 — and it moves the curve substantially in the segmented lane's favour, **at loopback RTT**: at 100 ms the lane collapses under 5 % loss — two segments, then no fetch completes — because the origin's sender is loss-based, so what an edge with a sender that does not yield to random loss delivers there is open |
 | 13 | ~~**Why does the media-aware lane cluster PCRs sub-millisecond?**~~ **Answered** (§3.2) | — | On reordered content the authored decode clock is a saw: each B-frame dipping below it was nudged exactly one 90 kHz tick — 11.1 µs — past the previous DTS, which is the measured median. Named in [the upstream fix for exact 25 ms PCR values](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it) from the code rather than the distribution, and the guess in this row was wrong: it was not group-derived and shares no parameter with PSI density |
 | 14 | **Does RIST actually beat SRT on a real path?** | One long WAN run | On loopback the two are indistinguishable within 6 ms; over the WAN RIST reads 262–333 ms lower but its cells had a rising trend and had not settled, so the gap is not yet a finding. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
-| 15 | **Does the relay's year-scale extrapolation plateau?** (§3.6) | Longer soak or `/proc/pressure/memory` logged beside RSS | **Partially answered** — §3.6 records the logarithmic convergence [T21](../lab/test-21-permanence-soak.md) measured, and rules connection scaling out. Open: whether the extrapolated asymptote is observed or continues creeping |
+| 15 | **Does the relay's year-scale extrapolation plateau?** (§3.6) | Longer soak or `/proc/pressure/memory` logged beside RSS | **Partially answered** — §3.6 records the logarithmic convergence [T21](../lab/test-21-permanence-soak.md) measured, and rules connection scaling out. Open: whether the extrapolated asymptote is observed or continues creeping. One 24 h run on a noq build reads the relay flat at 117–139 MB (§3.6), so the question attaches to the quinn build it was measured on |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin rather than a single-threaded reference server, and a soak | The cost comparison is currently one lane characterised for resources and one characterised only for bytes. Segmented carriage overhead is measured over TCP on the real path (1.036× source TS, [T9](../lab/test-9-performance.md)), while §3.5's HTTP/3 and HTTP/2 figures are derived; its per-role CPU and memory, its fan-out knee and its stability over days are not. The origin is the role the whole commercial argument for this lane rests on, and the one measured is `python3 -m http.server` |
 | 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
-| 17a | **`moq import ts` linear memory growth (+2.83 MB/h) — leak or cache?** **Fixed upstream in `5d0991b9`; not yet confirmed by re-soak** (§3.6) | A 2 h re-soak on upstream `main` at `9d2a4f6e`, where the importer's live-edge exit on content join no longer occurs (§3.13) | [The importer memory-growth report](../lab/upstream-contributions.md#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks) closed in `5d0991b9`; both continuous and loop re-soaks invalidated on homogeneous `5d0991b9` ([T21](../lab/test-21-permanence-soak.md)) |
+| 17a | ~~**`moq import ts` linear memory growth (+2.83 MB/h) — leak or cache?**~~ **Answered — a leak, fixed upstream** (§3.2, §3.6) | — | A 24 h re-soak on upstream `main` at `9d2a4f6e` reads **+0.23 MB/h** with a falling last quarter, against a slope that held in every quarter on `d518b61b` ([T21](../lab/test-21-permanence-soak.md#the-3493-re-soak)). Not re-measurable on the build under test, which cannot run the continuous source. **The successor question** is the exporter's unexplained step, now seen in two of three per-process runs |
 | 18 | ~~**Does segmented HTTP keep its reordering advantage over HTTP/3?**~~ **Answered — no, and it never held it for the reason assumed** (§3.3) | — | Answered by [T20](../lab/test-20-segmented-http3.md), and **the advantage proved not to be a substrate effect at all**: re-run with packet sizes equalised it falls to **0.44 even on TCP**, because the original cell gave the segmented lane 34 kB packets against the media-aware lane's 931 B ones and `netem` reorders per packet. §3.3 carries the H3 figures and the loss and outage cells the substrate change wins the segmented lane instead. **The successor question** is not which lane is more robust but which failure mode a primary feed should prefer — lateness with recoverable objects, or bounded latency with discarded programme |
 | 19 | **Why does the media-aware lane lose more programme than SRT, and why does its figure move with the build?** (§3.3) | A bisection of the 5 s outage cost; the quinn reorder cell with the shaper's drop counter sampled | Whether the margin by which SRT leads is a property of the lane or of one QUIC stack's configuration. **Partly answered.** The outage cost belongs to the build: at one later commit both stacks lose the same at either budget, under CUBIC as under their own controllers. On noq, 20 % reorder is the stack's loss detection: reordered packets are declared lost and the sender's window falls about fourteen-fold, which no buffering or headroom moves and relaxing both loss thresholds all but removes. Open: which change raised the outage cost, and what quinn's reorder cost is, since relaxing its thresholds keeps its window and not the programme |
 

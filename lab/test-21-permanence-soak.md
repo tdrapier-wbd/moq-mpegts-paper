@@ -1,17 +1,29 @@
 # T21 — the permanence soak of the complete media-aware lane
 
 > **State: complete. The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
-> resources, in one role.** 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
+> resources, in one role, on `d518b61b`; the 24 h resource re-soak on upstream `main` at `9d2a4f6e`
+> passes F2 in every role.** On `d518b61b`: 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
 > zero PCR intervals over 40 ms, zero absolute PCR failures at ±500 ns, zero drops, **zero underruns**,
 > zero respawns, and a worst programme gap of **27 ms across the whole day**. The 33-bit rollover was
 > crossed in flight at 19.4 h and cost nothing. The groomer's own resident memory is **flat**, and the
 > buffer walk that [P0-3b](planned-experiments.md) was opened for **did not occur**.
 >
-> The one failure is upstream and it is in the publisher: **`moq import ts` resident memory grows
-> linearly at +2.83 MB/h** and holds that slope across all four quarters of the run, which on this host
-> is exhaustion in about seven and a half months. F2's criterion was fixed in advance and this trips it.
-> The relay, by contrast, is **logarithmic and bounded**, which settles a question T8b left open.
-> Recorded in [§ The 24 h soak](#the-24-h-soak-on-a-continuous-timeline).
+> The one failure on `d518b61b` is upstream and it is in the publisher: **`moq import ts` resident
+> memory grows linearly at +2.83 MB/h** and holds that slope across all four quarters of the run,
+> which on this host is exhaustion in about seven and a half months. F2's criterion was fixed in
+> advance and this trips it. The relay, by contrast, is **logarithmic and bounded**, which settles a
+> question T8b left open. Recorded in [§ The 24 h soak](#the-24-h-soak-on-a-continuous-timeline).
+>
+> **The leak is fixed on upstream `main`.** Re-soaked for 24.0 h on `9d2a4f6e` with the same source,
+> clip and groomer, the importer grows **+0.23 MB/h** over the settled window, with quarterly slopes of
+> +0.61, +0.41, +0.60 and −0.15 MB/h against the original 2.36–2.87. That is about 2 GB a year on a
+> 15.3 GB host, below F2's exhaustion rate, and the last quarter is falling. Relay and groomer are flat.
+> The exporter is flat apart from one +11.8 MB step at 11.0 h, the second such step in two long runs
+> ([§ The #3493 re-soak](#the-3493-re-soak)). This re-soak graded resources, continuity and the
+> groomer's counters, not PCR accuracy. Both 24 h runs used a generator that left the clip's AC-3 and
+> teletext timestamps stepping back 600 s at every join, which both importers re-anchored. It is a
+> `main` result, not one for the build under test
+> `ffa5b81b`, which cannot run a continuous source ([#3798](https://github.com/moq-dev/moq/issues/3798)).
 >
 > **The first run is superseded.** Its source was `tsp --infinite`, which restarts the clip and
 > therefore its clock. [T23](test-23-pcr-discontinuity-classes.md) has since measured what that costs —
@@ -108,8 +120,9 @@ Full tables and resource breakdown: [§ The 24 h soak](#the-24-h-soak-on-a-conti
 
 | | Media plane (F2) | Resources (F2) |
 |---|---|---|
-| Verdict | **pass** — 24.01 h, **632,199,204** packets, **0** continuity errors, **0** underruns, worst programme gap **27 ms**, 33-bit rollover crossed at 19.4 h | **fail** — **`moq import ts` +2.83 MB/h linear**; relay logarithmic and bounded; groomer flat |
-| Detail | [§ The wire, over 24 hours](#the-wire-over-24-hours), [§ The release loop](#the-release-loop-and-p0-3b) | [§ Resources — the one failure](#resources--the-one-failure) |
+| Verdict, `d518b61b` | **pass** — 24.01 h, **632,199,204** packets, **0** continuity errors, **0** underruns, worst programme gap **27 ms**, 33-bit rollover crossed at 19.4 h | **fail** — **`moq import ts` +2.83 MB/h linear**; relay logarithmic and bounded; groomer flat |
+| Verdict, re-soak on `main` `9d2a4f6e` | not fully graded — 24.0 h, 632 M packets, **0** continuity errors, **0** underruns, stalls or drops; PCR accuracy and programme gap not measured by this rig | **pass** — `moq import ts` **+0.23 MB/h**, last quarter −0.15; relay and groomer flat; exporter flat but for one +11.8 MB step |
+| Detail | [§ The wire, over 24 hours](#the-wire-over-24-hours), [§ The release loop](#the-release-loop-and-p0-3b) | [§ Resources — the one failure](#resources--the-one-failure), [§ The #3493 re-soak](#the-3493-re-soak) |
 
 ### First run — discontinuity-mechanism record (superseded for permanence)
 
@@ -200,6 +213,9 @@ an open item in its own right — it is a tokio worker pool that should not be g
   flat and logarithmic respectively — and **`moq import ts`'s is not**, growing linearly at **+2.83 MB/h**
   with the slope intact across four quarters. **F2 fails on resources in one role** (the publisher), not
   on the architecture.
+- **Establishes (24 h re-soak on `main` `9d2a4f6e`):** the publisher's leak is fixed upstream. Every
+  role is below F2's exhaustion rate, so on that build the lane passes F2 on resources as well. It does
+  not establish the same for the build under test, which cannot run the source.
 - **Establishes (first run — discontinuity mechanism, not permanence):** when the exporter does not act
   on a source PCR discontinuity, the groomer's rate estimator amplifies the fault — wire conformant,
   cushion gone, undetectable downstream. [T23](test-23-pcr-discontinuity-classes.md) bounds the class;
@@ -485,28 +501,57 @@ escapes it: non-legacy streams abort on the first backward timestamp and legacy 
 so a clip carrying video fails at wrap 1 whatever its length. **Upstream `main` at `9d2a4f6e` no
 longer exits:** [T40](test-40-continuous-join-through-srt.md) holds full rate through five content
 joins, and [T41](test-41-import-reanchor-coverage.md)'s three stream kinds survive three wraps. The
-2 h re-soak therefore ran on that build.
+re-soaks below therefore ran on that build.
 
-**`p0h-2h` on `9d2a4f6e` — valid, and it does not decide.** `moq` 0.12.8 / `moq-relay` 0.15.8,
-`SOURCE_MODE=continuous`, 30 s samples, the same clip and 11 Mb/s pacer as the 6 h confirmation,
-graded by `t21-role-fit.py` with its default 1,200 s settle. It ran the full 7,207 s. All six roles
-stayed alive, 52.7 M packets were exported at 0 continuity errors, and the only errors were logged
-in the teardown second. It is the first re-soak since #3493 closed on which the importer outlived
-the joins.
+**`p0h-24h` on `9d2a4f6e` — the fix for [#3493](https://github.com/moq-dev/moq/issues/3493) is
+confirmed.** `moq` 0.12.8 / `moq-relay` 0.15.8, `SOURCE_MODE=continuous`, the same clip and
+11 Mb/s pacer as the 6 h confirmation, all roles co-resident on the 8-vCPU, 15.3 GB secondary, 30 s
+samples. It ran 86,423 s (24.0 h). It was graded as the 24 h soak was: `t21-role-fit.py
+--settle 7200`, with slopes on `t > 2 h` quoted per quarter. A slope that holds across the quarters
+is a leak, and one that decays is a cache filling.
 
-| role | RSS after settle → end | MB/h | tail MB/h | largest ½ h step | r² line / log | grader |
-|---|---|---:|---:|---:|---|---|
-| `moq import ts` | 116.2 → 126.3 MB | **+4.99** | +6.24 | +3.0 | 0.643 / 0.626 | **ambiguous, run longer** |
-| `moq-relay` | 113.8 → 121.2 MB | +3.72 | +3.64 | +2.9 | 0.250 / 0.239 | step at 1.0 h, slope not meaningful |
-| `moq export ts` | 138.9 → 144.0 MB | +1.11 | +1.02 | +1.0 | 0.029 / 0.024 | ambiguous, run longer |
-| groomer / source / `tsp` | — | ≤ +0.10 | — | +0.1 | — | flat |
+| role | RSS at 2 h → end | settled range | MB/h | Q1 | Q2 | Q3 | Q4 | largest step | grader |
+|---|---|---|---:|---:|---:|---:|---:|---:|---|
+| `moq import ts` | 122.6 → 131.3 MB | 120.4–135.1 | **+0.23** | +0.61 | +0.41 | +0.60 | **−0.15** | +2.9 | ambiguous (r² 0.407 line / 0.419 log) |
+| `moq-relay` | 126.1 → 132.9 MB | 117.4–139.1 | +0.12 | +0.58 | −0.13 | +0.29 | −0.14 | +2.2 at 22.5 h | step, slope not meaningful |
+| `moq export ts` | 136.2 → 158.8 MB | 124.7–165.2 | +1.32 | +0.68 | +4.49 | +0.14 | −0.22 | **+11.8 at 11.0 h** | step, slope not meaningful |
+| groomer / source / `tsp` | 5.7 → 5.6 MB | — | +0.00 | 0.00 | 0.00 | −0.00 | −0.00 | +0.0 | flat |
 
-So the fix for [#3493](https://github.com/moq-dev/moq/issues/3493) is **not confirmed**. The
-importer's rate over 1.7 h of settled samples is above the +2.83 MB/h the 24 h run measured and the
-+2.91 MB/h of the 6 h confirmation, not below it. But 1.7 h separates a line from a logarithm no
-better than 6 h did the relay's (r² 0.643 against 0.626). What would settle it is the 24 h run on the
-same build, graded as the 24 h soak was: slopes on `t > 2 h`, quoted per quarter. A slope that holds
-across the quarters is the leak; one that halves each quarter is a cache filling.
+- **The importer's leak is gone.** Its slope is a twelfth of the +2.83 MB/h the `d518b61b` soak measured,
+  no quarter exceeds +0.61 MB/h, and the last quarter is negative, where the original held
+  2.36–2.87 MB/h in every quarter at R² 0.9898. The grader cannot separate a line from a logarithm at
+  this amplitude (8.7 MB over 22 h, inside a 15 MB band), so the residual shape is unresolved. The
+  resource verdict does not depend on it: +0.23 MB/h is about 2 GB a year on a 15.3 GB host, below
+  F2's exhaustion rate, and the series is not rising at the end.
+- **The relay is flat on this build.** It holds 117–139 MB throughout, with no quarterly trend. The
+  `d518b61b` soak's relay rose logarithmically from 28 to 271 MB. That build runs on quinn
+  and this one on noq, so this is a different relay rather than a second reading of the same one.
+- **The exporter steps once and is flat on either side.** It swings about ±5 MB between samples
+  throughout, and rises 143.8 → 158.7 MB within 1 min at 11.1 h. Its quarters outside that step are
+  +0.68, +0.14 and −0.22 MB/h. See [§ Open](#open).
+- **The media plane held as far as this rig reads it.** 632,086,920 packets reached the counter, with 0
+  continuity errors in all 2,878 samples and all six roles alive to the end. The groomer counted 0
+  underruns, stalls, drops, late drops or mutes. The longest silence in its input was 310 ms, against
+  a 1,000 ms cushion. The rig does not grade PCR accuracy, PCR intervals or programme gaps, so none of
+  the `d518b61b` soak's wire figures is re-established here. The clip's 33-bit rollover falls at about
+  19.4 h, and no role logged anything there.
+- **One importer warning per content join.** Every 600 s the importer logged `audio stream lost frame
+  sync and resynced` on PID 121 (MPEG-1 audio), discarding 72 bytes, 144 times in all. That is the
+  audio frame the content cut splits, discarded rather than carried. Nothing else was logged before
+  the teardown second.
+- **The source was the uncorrected generator, as in the `d518b61b` soak.** Its copy on the host advanced
+  PTS and DTS only for stream IDs `0xC0`–`0xEF`, so the clip's AC-3 and teletext stepped back 600 s at
+  every one of the 144 joins, while PCR and the other PIDs stayed continuous. `main`'s importer
+  re-anchors each stream on its own and carried both without logging. So the comparison with the
+  `d518b61b` soak is like-for-like, but the resource result is for a source that rewinds two PIDs every
+  10 min. Upstream's `dev` branch ends the import at any such rewind, by design, so this run would not
+  survive its first join there.
+
+A 2 h run on the same build (`p0h-2h`, default 1,200 s settle) read the importer at +4.99 MB/h,
+r² 0.643 line against 0.626 log, and could not decide. The 24 h run shows why. Its importer rises
+117.4 → 124.0 MB between 20 min and 1.5 h and then levels off, so a window that starts at 20 min
+measures the warm-up. The rule this yields is in [`method-notes.md`](method-notes.md), under
+*Distinguish a leak from a cache*.
 
 **Per-PID confirmation, 6 h on the merged build** (`moq` 0.10.0 / `moq-relay` 0.14.15,
 `lab/scripts/t21-role-memory.sh`, graded by `lab/scripts/t21-role-fit.py`), 157 M packets at 0
@@ -523,24 +568,30 @@ continuity errors:
 from the signature, with the largest half-hour increment only 17 % of total growth, so it is a ramp
 rather than a jump. That is what [#3493](https://github.com/moq-dev/moq/issues/3493) reports.
 
-**Two things the shorter run says that the 24 h run does not, both recorded rather than resolved.** The
-exporter here is *not* the smooth convergence the 24 h table shows: it sat between 119 and 122 MB from
+**Two things the shorter run says that the `d518b61b` soak does not.** The
+exporter here is *not* the smooth convergence the `d518b61b` soak's table shows: it sat between 119 and 122 MB from
 0.5 h to 4.5 h and then stepped +14.5 MB inside one half-hour. And 6 h is too short to read the relay's
 shape at all — its tail slope slightly *exceeds* its overall slope and the two fits do not separate
 (r² 0.538 linear against 0.492 log), where 24 h separated them cleanly. Neither disturbs the publisher
-conclusion; both are stated so a re-run is not surprised.
+conclusion. The 24 h per-PID re-soak on `main` reads the exporter's step again, and reads its relay
+as flat.
 
 ## Open
 
-**Whether the relay actually converges.** The 24 h run says logarithmic at R²=0.9895; the 6 h per-PID
-run cannot separate a line from a logarithm and has a tail slope slightly above its overall slope.
-Six hours is the wrong instrument for that question, so this is not a contradiction — but it does mean
-the relay's convergence rests on a single run, and the next long soak should read it per PID.
+**Whether the relay converges on the build under test.** On `d518b61b` the relay is logarithmic at
+R²=0.9895 over 24 h, sampled by signature. On `main` `9d2a4f6e` it is flat at 117–139 MB over 24 h,
+sampled per PID. Those are different relay builds, and neither is `ffa5b81b`, so the relay's 24 h
+shape on the build under test is unmeasured. It can be measured only once that build, or its
+successor, runs a continuous source for 24 h.
 
-**Whether the exporter's +14.5 MB step recurs, and what it is.** One step in one 6 h run, absent from
-24 h of signature-sampled data, is an observation and not a defect. It is worth knowing whether it is
-periodic (a reallocation on some cadence) or a one-off, because the 24 h reading of "converged and
-turned over" would not survive it happening every five hours.
+**What the exporter's step is.** It has now appeared in two of the three valid per-PID runs: +14.5 MB at
+5.0 h in the 6 h run on the merged build, and +11.8 MB at 11.0 h in the 24 h re-soak on `9d2a4f6e`,
+flat on either side both times. It did not appear in the 2 h run. At most one step per 24 h, and not
+at a fixed period, it is not a resource failure under F2. But it is unexplained, and a step that
+repeats without releasing memory would become one over a week. Reading `/proc/<pid>/smaps_rollup` on
+the exporter at 1 min cadence through a 24 h run would show whether the step is heap or mapped
+memory. The 7-day arm of [P0-g](planned-experiments.md#p0--could-change-a-viability-conclusion)
+would show whether it accumulates.
 
 **The groomer's thread count on a 2-vCPU host.** 10 → 74 in the first run, not reproduced on 8 vCPU
 (13 → 15). A small-host question, unexplained.
