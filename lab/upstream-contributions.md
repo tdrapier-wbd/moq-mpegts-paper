@@ -1060,6 +1060,50 @@ upstream `main`*). Upstream's planned default refusal of multi-programme input, 
 the anchor, would each moot it; the A/B result is on the issue. **Open**; the before/after verification is owed when a fix lands,
 on `mpts3.ts` and `mpts3-cc.ts` with the T10 rig.
 
+### A selected programme still carried the whole multiplex's SI — contributed as [#4580](https://github.com/moq-dev/moq/pull/4580), draft
+
+**The defect.** [#4505](https://github.com/moq-dev/moq/pull/4505) answered the selection half of
+[#4353](https://github.com/moq-dev/moq/issues/4353): `moq import ts --program <n>` imports one programme
+of a multiplex, and `--program all` publishes each as its own broadcast. SI capture was left as it was,
+so a selected programme's broadcast still carried the source's SDT actual and every service's EIT.
+Measured on `main` at `6f1a9e33` with a three-service MPTS and `--program 1`, the `export ts` output
+carries only programme 1's PIDs, yet `tsp -P analyze` counts three services, two of them with no PIDs,
+and EIT present/following rides along for all three. A receiver scanning that stream finds two ghost
+services. Taking one service out of a contribution multiplex is the primary-distribution case, so this
+is the defect a distribution user meets first.
+
+**The contribution.** The upstream quest (`quest/m2/ts-program-si.md`, planned in
+[#4507](https://github.com/moq-dev/moq/pull/4507)) settled the shape, and the PR follows it. Under an
+explicit selection, the importer's SI capture drops EIT actual sub-tables for other service_ids and
+rebuilds each SDT actual snapshot as one section holding only the selected service's entry, with its
+header kept and a fresh CRC-32/MPEG-2. A service the SDT does not list gets no SDT actual, a later SDT
+version that drops the service retires the earlier one with its catalog entry, and a table filtered to
+nothing gets no track. NIT, BAT, SDT other, EIT other and TDT/TOT pass through, and an import without a
+selection is unchanged.
+
+**Verification** `[unmerged]`, P0 and P1. At P0, five in-process tests use a synthetic two-service
+multiplex whose SDT spans two sections. They cover each selected import (one SDT section, a valid CRC,
+only its own EIT), the unselected import (verbatim), a selection the SDT does not list, retirement and
+relisting across SDT versions, and a re-export that parses and re-imports to the same tables; four of
+them fail with the selection disabled. At P1, a 30 s build of T10's `mpts3.ts`
+([`make-real-mpts.sh`](scripts/make-real-mpts.sh): CNNi as programme 1, a video-only clip as 2, a
+0.3 Mb/s AV clip as 3) was PCR-paced into `import ts --program <n>` on a local relay and captured from
+`export ts`:
+
+| Build | `--program` | `tsp -P analyze` | SDT actual lists | EIT p/f services |
+|---|---|---|---|---|
+| `main` `6f1a9e33` | 1 | 3 services, 2 and 3 without PIDs | 1, 2, 3 | 1, 2, 3 |
+| #4580 | 1 | 1 service | 1 (one 59-byte section) | 1 |
+| #4580 | 3 | 1 service | 3 (one 38-byte section) | 3 |
+
+TSDuck decodes the rebuilt SDT, so its CRC holds, and its TSID and ONID match the source's. The local
+`just check` passed, as did the `test/ts` default, real-capture and open-GOP arms, and so did upstream CI.
+
+**Open.** The PR is a draft awaiting review. The `test/ts` `--pair` arm fails its NIT
+and SDT/BAT anchor checks on `main` at `6f1a9e33` and on the branch alike: the grader attributes both
+exporters' emission points to a timer started with each exporter rather than to the media. That arm is
+not in CI and has no quest. Nothing has run against a live multi-programme feed or cross-host.
+
 ### Three values the exporter mints per process — one closed, one declined, one open
 
 A 1+1 pair cannot be byte-identical while the exporter renders anything from its own process state
