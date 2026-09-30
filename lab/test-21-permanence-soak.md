@@ -361,6 +361,14 @@ source that only looks continuous would confound the run it is supposed to clean
 | worst interval anywhere | 24.951 ms | below the 40 ms gate |
 | span over two passes | 1,199.974 s | 2 × 599.999 s |
 
+The grade read PCR and continuity counters, not PES timestamps, and it missed a defect in the
+generator. The generator rebased PTS and DTS only for stream IDs `0xC0`–`0xEF`, so the clip's AC-3
+and teletext (private stream 1) stepped back one pass span, 600 s, at every join. PCR and every
+other PID stayed continuous. `d518b61b` re-anchors each stream on its own and carried both. None of this soak's metrics reads those two PIDs' timestamps. It does, however, mean the source
+was not "what a continuous encoder emits" on every PID. The script has since been corrected, and
+[`ts-join-scan.py`](scripts/ts-join-scan.py) now checks each PID's timestamps across the joins
+([method notes](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)).
+
 The join is a hard content cut at an IDR, which is an ordinary scene change and not a timing event.
 What the source does **not** reproduce is stated in the script and bounds the result: TDT/TOT and
 SCTE-35 payloads repeat each pass and nothing depending on them should be graded here, and the

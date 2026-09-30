@@ -13,7 +13,10 @@ successor failure is still present on `ffa5b81b`, re-measured through this rig a
 [#3798](https://github.com/moq-dev/moq/issues/3798) without changing any code; the mechanism is
 characterised per stream kind in [T41](test-41-import-reanchor-coverage.md). **On homogeneous
 `9d2a4f6e` the chain is healthy:** the import survives every join and the export holds full rate
-through all five joins in the window.
+through all five joins in the window. The runs used a generator that left AC-3 and teletext
+timestamps unrebased. Every verdict holds with it corrected. On upstream `dev` after
+[#4543](https://github.com/moq-dev/moq/pull/4543), the join holds only with the corrected generator
+([Corrections](#corrections)).
 
 ## Objective
 
@@ -136,13 +139,13 @@ otherwise as above.
 | Arm | Build | Baseline (≤20 s) | Through the window | Verdict |
 |---|---|---:|---|---|
 | `main-9d2a4f6e` | `9d2a4f6e`, client and relay | 9.94 Mb/s | 29 samples, 9.43–10.41 Mb/s, tail median 9.96 Mb/s, five content joins in the importer's log | **HEALTHY** — no sample below a third of baseline |
-
-The importer holds one session for the whole window; its reconnects all follow the rig's own
-teardown. At each join it logs two MPEG-1 audio frame-sync losses (184 and 530 bytes discarded) and
 | `main-6f1a9e33` | `6f1a9e33`, client and relay | 9.96 Mb/s | 29 samples, 9.46–10.34 Mb/s, tail median 10.00 Mb/s, five content joins | **HEALTHY** — no sample below a third of baseline |
 
 `6f1a9e33`, the later `main` carrying the programme selection and `--linger`, is unchanged from
 `9d2a4f6e` on this rig, down to the importer's audio log.
+
+The importer holds one session for the whole window; its reconnects all follow the rig's own
+teardown. At each join it logs two MPEG-1 audio frame-sync losses (184 and 530 bytes discarded) and
 recovers, where the builds through `d518b61b` logged one per join. The rate oracle cannot see what
 that costs the audio, and the output is not graded for continuity here.
 
@@ -156,9 +159,16 @@ that costs the audio, and the output is not graded for continuity here.
 3. **Continuous-source publishing on homogeneous `5d0991b9` and `ffa5b81b` fails at the join** —
    import exits with *frame timestamp is below the live edge*. That is a separate defect from #3533.
    **It is gone on `9d2a4f6e`**, so the permanence re-soak and long runs on
-   `ts-continuous-source.py` can run on that build.
+   `ts-continuous-source.py` can run on that build. It is not an artefact of the generator's
+   private-stream defect (see [Corrections](#corrections)). With the corrected generator, a local
+   pipe into `moq import ts` on each build still exits at the first join with the same error. Main
+   at `6a016409`, which descends from `9d2a4f6e`, holds through three joins with either generator.
 4. **The pinned bisect pair remains the control** for the pre-fix stall signature; service builds may
    move independently.
+5. **On upstream `dev` from [#4543](https://github.com/moq-dev/moq/pull/4543), the join holds only
+   with the corrected generator** `[dev]`. `dev` at `9a80e875` ends the import at the first join on
+   the uncorrected generator, and holds full rate through three joins, over SRT and a pipe, on the
+   corrected one ([upstream contributions](upstream-contributions.md)).
 
 ## What this does not show
 
@@ -183,3 +193,18 @@ arrangement was never the instrument; it was a coincidence that looked like one.
 **Method rule:** *a control made of two production deployments is a coincidence, not an experiment.
 If the same comparison can be made from pinned artefacts on one host, the deployments are free to
 move.*
+
+**What was believed:** that `ts-continuous-source.py` carried every PID on one continuous timeline.
+
+**What is true:** until it was corrected, it rebased PTS and DTS only for stream IDs
+`0xC0`–`0xEF`. The clip's AC-3 and teletext are carried as private stream 1, so every run in this
+file saw those two PIDs step back one pass span (30.25 s) at each join, unflagged, while PCR and
+the other PIDs advanced. Every verdict above was re-checked with the corrected generator
+(conclusions 3 and 5): the failing builds still fail at the join, and the healthy ones stay
+healthy, so no verdict moves. The 30 s step was a second trigger on the failing builds, not the
+cause. It also shifts the frame the failure lands on: group 24 frame 52 with the uncorrected
+generator, group 25 frame 2 with the corrected one.
+
+**Method rule:** *before a looped soak, scan every timestamp-bearing PID across the joins*
+([`ts-join-scan.py`](scripts/ts-join-scan.py);
+[method notes](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)).

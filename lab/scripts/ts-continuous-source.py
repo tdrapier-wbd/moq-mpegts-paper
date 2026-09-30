@@ -10,7 +10,9 @@ the lane and it is already measured; it is not permanence.
 
 This replays the clip but advances the timeline across the join, so the output is what a
 continuous encoder emits: PCR, PTS and DTS strictly monotone modulo 2^33, continuity
-counters unbroken, and no `discontinuity_indicator` anywhere. The content repeats. **The
+counters unbroken, and no `discontinuity_indicator` anywhere. PTS and DTS are advanced on
+every PES that carries the optional header, private stream 1 included, so AC-3 and teletext
+move with the video; `ts-join-scan.py` checks that per PID. The content repeats. **The
 timeline does not**, and the timeline is what every permanence metric reads — resident
 memory, buffer occupancy, latency drift, rate-estimate drift and continuity are all blind to
 whether a picture has been seen before.
@@ -45,6 +47,8 @@ SYNC = 0x47
 PCR_MODULUS = (1 << 33) * 300
 PTS_MODULUS = 1 << 33
 NULL_PID = 0x1FFF
+# Stream IDs whose PES has no optional header, so no PTS/DTS (ISO 13818-1 2.4.3.7).
+NO_PES_HEADER = {0xBC, 0xBE, 0xBF, 0xF0, 0xF1, 0xF2, 0xF8, 0xFF}
 
 
 def parse_pcr(p):
@@ -96,7 +100,7 @@ def pes_stamp_offsets(p):
         return ()
     if not (p[off] == 0x00 and p[off + 1] == 0x00 and p[off + 2] == 0x01):
         return ()
-    if not (0xC0 <= p[off + 3] <= 0xEF):
+    if p[off + 3] in NO_PES_HEADER:
         return ()
     pts_dts = (p[off + 7] >> 6) & 0x3
     if pts_dts == 0:

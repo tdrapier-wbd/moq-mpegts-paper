@@ -867,8 +867,9 @@ What would settle it is an arm that disables the hold without changing the evict
 the CLI does not expose. The commit, by contrast, is measured.
 
 **It is still present on `main` at `6f1a9e33`**, which delivers 15–18 % of its 0 % control at 10 %
-loss, where `9d2a4f6e` delivered 17 %. Until it is fixed upstream, this is a trade a deployment has
-to make. #4001 is the fix that made
+loss, where `9d2a4f6e` delivered 17 %. Reported as
+[#4613](https://github.com/moq-dev/moq/issues/4613). Until it is fixed upstream, this is a trade a
+deployment has to make. #4001 is the fix that made
 the multi-track export interleave deterministic ([T12](test-12-dual-path-handoff.md)), and pinning
 the subscriber to its parent gives that up. The hardware-window rehearsal build is `main`, so which of
 the two the receiver carries over a lossy path is a decision that is owed before the window.

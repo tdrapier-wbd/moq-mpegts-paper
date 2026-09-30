@@ -218,6 +218,21 @@ sessions** through sustained deep lag, including two episodes where per-subscrib
 anywhere were the kernel's OOM kills on the subscriber host. This is incidental rather than a designed
 regression test, and it is the strongest evidence available here that #3515 holds under load.
 
+**The source generator's one join per arm moves no result.** These runs used the continuous
+generator before its correction, which stepped AC-3 and teletext timestamps back one clip length at
+each join
+([method notes](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)). No
+metric here reads PES timestamps. Each run outlasted the 600 s clip once, and the join falls about
+596 s after the publisher starts. Placed on each arm's schedule:
+
+- **Arm C:** the join falls about 20 s after the N = 150 window closes, so the tested cliff is clear
+  of it.
+- **Arm A:** the join falls in the N = 150 settle. In the window that follows, the relay still sent
+  1,337 Mb/s at 99.6 % of its box. A publisher that had ended or stalled would lower both. The fitted
+  slope, plus the 13 % standing load, puts N = 150 at about two full cores on its own (derived).
+- **Arm B:** the join falls at the start of the N = 200 window, which had already failed on the
+  subscriber host's memory, with 194 of 200 subscribers alive after settle.
+
 ## What this establishes
 
 1. **A scaling model with a named binding resource.** Relay cost is linear in subscribers on all three

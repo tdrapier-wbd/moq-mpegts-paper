@@ -815,6 +815,54 @@ showed itself.
 > the logger computed. An arm that disables one of the candidate causes is the cheap test of a
 > label: if the label were right, the effect would have gone with it.
 
+### A looped source is continuous only if every PID's timestamps are
+
+*From re-running [T40](test-40-continuous-join-through-srt.md) on upstream `dev` after
+[#4543](https://github.com/moq-dev/moq/pull/4543).* From #4543 on, the importer publishes source
+timestamps verbatim and ends the import on any rewind, flagged or not. A `tsp --infinite` loop is an
+unflagged rewind at every wrap, so on `dev` it is a one-pass soak by specification. The campaign's
+answer is [`ts-continuous-source.py`](scripts/ts-continuous-source.py), which rebases each pass onto
+one continuous timeline. On `dev` its T40 stream still ended the import at the first join, with
+*frame timestamp is below the previous group's start*, through SRT and through a pipe alike. That
+looked like #3533's content-join shape becoming fatal. It was the generator. The script rebases
+PTS and DTS only for stream IDs `0xC0`–`0xEF`, which are MPEG audio and video. In `CNNiEMEA2.ts`, AC-3
+(PID `0x7b`) and teletext (PID `0x83`) are carried as private stream 1 (`0xBD`). So every pass
+stepped those two PIDs back by about 30 s, while their PCR and the other PIDs moved forward. The
+script now rebases every stream ID that carries the optional PES header.
+[`ts-join-scan.py`](scripts/ts-join-scan.py) shows every PID moving forward across its joins except
+video DTS, which starts 26.9 ms below the previous DTS. On the corrected stream, `dev` held full
+rate through three joins on both paths. Builds that re-anchor each stream on its own survived the
+uncorrected generator, because the re-anchor absorbed the 30 s step. So the defect was invisible
+until an importer stopped forgiving it. It had also gone unseen in [T21](test-21-permanence-soak.md)'s
+grading of the same script, which read PCR and continuity counters but not PES timestamps.
+
+> **Before a looped soak, scan the generated stream's joins per PID with `ts-join-scan.py` and
+> confirm that every timestamp-bearing PID moves forward**, not only the ones the generator was written for. A
+> generator that is right for the stream types its author had in mind fails silently on the ones
+> they did not, and an importer that re-anchors will hide it. Where the build under test ends the
+> import on a rewind, loop only through a generator that has passed that scan, never through `tsp
+> --infinite`.
+
+### `srt-live-transmit` fed from a pipe pads every short read with zeros
+
+*From the SRT arms of the #4543 measurements ([upstream contributions](upstream-contributions.md)).*
+Fed from `file://con` behind a pacer, the SRT gateway ended ingest sessions on parse errors, such
+as *Unexpected marker bits*, *Expected stuffing byte 0xFF* and *CRC32 mismatch*, on input that other
+runs carried cleanly. Over 4 minutes there were anywhere from none to fifteen. The rate followed host
+load, not the build, and it looked like SRT loss. The sender's counters showed that loss was being
+retransmitted in full. A build of the gateway that copies each received payload to a file showed the
+real mechanism. `srt-live-transmit` 1.5.6 sends a full chunk on a short stdin read, padded with
+zeros. At its default 1456-byte chunk, which is not a multiple of 188, that splices a valid packet
+header onto zeros or foreign bytes. A libsrt listener receives the same zero-filled payloads as the
+gateway, so the sender is the source. A loaded host makes more short pipe reads, which is why
+the failure followed load. `-chunk:1316` keeps the packets aligned but still inserts the zeros. The
+defect is reported upstream as [Haivision/srt#3388](https://github.com/Haivision/srt/issues/3388).
+
+> **Feed an SRT arm from a sender that emits whole packets — `tsp -O srt`, as the deployed chain
+> does — rather than piping into `srt-live-transmit`.** Where a pipe into it cannot be avoided,
+> check the receiver's bytes for zero-filled slots before attributing any parse failure to the
+> system under test. A failure rate that tracks host load and not the build is a rig signal first.
+
 ---
 
 ## 3. Ratios, windows and intervals
