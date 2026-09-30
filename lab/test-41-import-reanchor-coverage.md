@@ -103,13 +103,14 @@ All four were met or discharged.
 
 ## Results
 
-| Fixture | Stream kind | Wrap period | `ffa5b81b`: died at | **`ffa5b81b`: wrap index** | `ffa5b81b`: error | **`9d2a4f6e`** |
+| Fixture | Stream kind | Wrap period | `ffa5b81b`: died at | **`ffa5b81b`: wrap index** | `ffa5b81b`: error | **`9d2a4f6e` and `6f1a9e33`** |
 |---|---|---:|---:|---:|---|---|
 | `fx-h264` | H.264 video | 30.2 s | 30.3 s | **1.00** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
 | `fx-legacy` | MPEG-1 Layer II | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
 | `fx-ac3` | AC-3 | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
 
-**On `9d2a4f6e` neither part of the defect remains.** Each arm ran for its full budget of three and
+**On `9d2a4f6e` neither part of the defect remains, and the later `main` at `6f1a9e33` is
+unchanged.** Each arm ran for its full budget of three and
 a half wraps plus 10 s, and its log ends with the rig's own shutdown. The rig's oracle is the
 publisher's survival, not what it delivers, so this arm alone does not show that frames keep
 flowing after a wrap. [T40](test-40-continuous-join-through-srt.md) on the same build does: the

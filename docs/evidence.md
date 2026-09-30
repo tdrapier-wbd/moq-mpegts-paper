@@ -112,7 +112,7 @@ every "not established" entry recurs in §4 or §5.
 
 | | Established | Not established | Where |
 |---|---|---|---|
-| **Carriage** | All three lanes carry a full single-programme broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, and the media-aware lane by PSI density and PCR spacing. **Its stuffing and mux rate were also missing until [an upstream change](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer) restored both to within 0.36 %**. A multi-programme mux the media-aware lane flattens into one programme | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
+| **Carriage** | All three lanes carry a full single-programme broadcast mux with 0 continuity errors, each departing from verbatim in a different direction: SRT on no criterion, segmented HTTP by one injected PAT/PMT pair per segment, and the media-aware lane by PSI density and PCR spacing. **Its stuffing and mux rate were also missing until [an upstream change](../lab/upstream-contributions.md#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer) restored both to within 0.36 %**. A multi-programme mux the media-aware lane flattens into one programme on the build under test, and on later upstream `main` splits into one intact broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a real CDN; the opaque lane anywhere but loopback, and its PCR arithmetic at any gate | §3.1 |
 | **Timing** | Grooming restores exact CBR and P2-limit PCR accuracy **on file**, and both lanes now reach the same standard **on the wire over minutes**: the MoQ lane passes P1 repetition (0 of 20,193 intervals above 40 ms over 300 s) once the groomer reserves a slot for the PCR instead of waiting for a spare one. It was never a buffer-depth problem. **It also holds over a day** — 24.01 h on a continuous timeline, clean on continuity, repetition, underruns and respawns, crossing the 33-bit rollover in flight ([T21](../lab/test-21-permanence-soak.md)) | Anything at all on hardware; anything beyond a day, or on a real encoder's timeline rather than a synthetic clock over a repeating clip | §3.2 |
 | **Loss** | The [congestion controller](glossary.md#transport-and-deployment-terms) decides the result on both data planes, and **once the lanes are substrate-matched, reordering no longer separates the media-aware lane from segmented HTTP** — the separation that used to do so was a packet-size artefact. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable**: the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget govern the feed. **Matched at equal *measured* delivered latency and graded on the content delivered, SRT loses less programme than the media-aware lane under every impairment shape run** — a 5 s outage, sustained 5–10 % loss and 20 % reorder — by a margin the build and [QUIC stack](glossary.md#transport-and-deployment-terms) set: under sustained loss the quinn builds, whose BBRv1 bandwidth model ignores loss, tie SRT, and the noq builds lose most of the window whichever controller they run. **`--max-age`, the subscriber's budget, is a recovery allowance and not a latency setting**: a twelve-fold change in it moves delivered latency not at all on a healthy path, where SRT's `--latency` sets delivered latency exactly, so the two cannot be matched against each other. On content it buys back none of an outage, and it is spent in a delivery-latency step that is not bounded by the allowance and does not reverse. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline rather than the controller or bufferbloat | Where the latency knee sits, and whether it tracks RTT, [group](glossary.md#moq) duration or relay buffering; the same ladder against a real CDN edge; why 20 % reorder defeats the quinn builds too, where on noq it is spurious loss, and what raised the outage cost after the oldest build, the QUIC stack being excluded; SRT below ≈2 s of buffer under loss, which the matched arm could not reach; what segmented HTTP delivers under loss at a non-loopback RTT, where its origin's loss-based sender stalls; whether the latency step ever reverses beyond the two minutes observed | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** — separate publisher, relay, exporter and host in two availability zones. **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which with the exporter's interleave since fixed now needs its packet placement fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
@@ -221,9 +221,14 @@ been repeated.
 three-programme MPTS, the exporter emits a PAT with one entry and one PMT listing every programme's
 elementary streams under the first programme's PCR PID, while the SDT and EIT, carried through, still
 list all three services — so the service layer contradicts the PSI. That holds on both builds tested,
-`ffa5b81b` and upstream `main` at `2b689c24`. The importer scopes itself to single-programme input, so
-on this lane a multiplex has to be split into one broadcast per programme at ingest, and that split is
-untested here. *Measured, P1, file domain, all roles on one host*
+`ffa5b81b` and upstream `main` at `2b689c24`. **Later upstream `main` splits instead of flattening.**
+At `6f1a9e33` the importer refuses a multiplex unless a programme is selected, and asked for every
+programme it publishes each as its own broadcast. Graded over the whole fixture, each programme then
+arrives with its own PAT entry, PMT and PCR, every elementary stream and 0 continuity events. That
+holds in four of four runs, on independent clocks as on a common one. What the split does not fix is
+the service layer: each programme's SDT still lists all three services. So on that build a multiplex
+travels as N single-programme feeds rather than as one mux, and reassembling it downstream is the
+receiver's job. *Measured, P1, file domain, all roles on one host*
 ([T10](../lab/test-10-mpts-multiservice.md)).
 
 **Segmented HTTP is transparent to what a mux contains and not to when it was sent**, which is the
@@ -853,6 +858,17 @@ later slot (24.7–24.9 % of groomed slots identical, counter masked)
 ([T12](../lab/test-12-dual-path-handoff.md) § *After the media-time interleave*,
 [the interleave and SI closure](../lab/upstream-contributions.md#2829-and-3948-closed-by-4001--real-code-and-verified)).
 Byte-level mergeability is therefore a property of **single-track content**, not of 1+1 in general.
+
+**The same interleave costs the subscriber most of its delivery under random loss.** At 10 % uniform
+loss, 25 ms each way and no rate limit, `moq export ts` on upstream `main` at `9d2a4f6e` and at
+`6f1a9e33` delivers 15–18 % of its own 0 % control, and its rate decays through the window. The
+build before, `84b34f54`, delivers 73–83 %. No arm aborts. Crossing builds puts the collapse in the
+subscriber, and bisecting the subscriber alone puts it at the media-time-interleave commit, with its
+parent delivering the full rate. The mechanism, a bounded hold spending the same budget the consumer
+uses to evict late groups, is *reasoned from the source* and not measured. So on current `main` a
+receiver chooses between interleave determinism and delivery under loss, and the build carried into
+hardware testing has to make that choice. *Measured, P1, wire domain, all roles on one host, one or
+two runs per cell* ([T8b](../lab/test-8b-congestion-control.md) § *C7*).
 
 > **A caveat on P1 that this rig cannot resolve.** On the rig that produced these cells, **1.4–1.6 %
 > of PCR intervals exceed 40 ms in every cell including the clean control**. The experiment attributes

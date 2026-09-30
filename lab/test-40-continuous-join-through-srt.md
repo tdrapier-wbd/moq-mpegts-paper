@@ -139,6 +139,10 @@ otherwise as above.
 
 The importer holds one session for the whole window; its reconnects all follow the rig's own
 teardown. At each join it logs two MPEG-1 audio frame-sync losses (184 and 530 bytes discarded) and
+| `main-6f1a9e33` | `6f1a9e33`, client and relay | 9.96 Mb/s | 29 samples, 9.46–10.34 Mb/s, tail median 10.00 Mb/s, five content joins | **HEALTHY** — no sample below a third of baseline |
+
+`6f1a9e33`, the later `main` carrying the programme selection and `--linger`, is unchanged from
+`9d2a4f6e` on this rig, down to the importer's audio log.
 recovers, where the builds through `d518b61b` logged one per join. The rate oracle cannot see what
 that costs the audio, and the output is not graded for continuity here.
 

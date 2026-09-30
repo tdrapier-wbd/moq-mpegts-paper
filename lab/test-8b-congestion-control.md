@@ -804,8 +804,8 @@ loss, which none of them reproduces. C7 applies it on its own: 10 % `netem` loss
 media direction, 25 ms each way, no rate limit, the real clip through relay → `moq export ts
 --max-age 2s` for 120 s (`lab/scripts/t8b-loss-point.sh`, namespace rig). The prediction fixed before
 running was that neither build aborts and that 10 % loss delivers at least 90 % of the 0 % control.
-Two builds were run: the standing `84b34f54` and upstream `main` at `9d2a4f6e`, both on noq. `SUB_BIN`
-crosses the subscriber's build against the relay's.
+Three builds were run, all on noq: the standing `84b34f54`, and upstream `main` at `9d2a4f6e` and
+at `6f1a9e33`. `SUB_BIN` crosses the subscriber's build against the relay's.
 
 | Arm (relay / subscriber, controller) | Loss | Mean delivered | Second half | Aborts |
 |---|---:|---:|---:|---|
@@ -817,9 +817,12 @@ crosses the subscriber's build against the relay's.
 | `9d2a4f6e` / `9d2a4f6e`, CUBIC | 10 % | **0.80 Mb/s** | **0.21** | none |
 | `9d2a4f6e` relay / `84b34f54` subscriber, BBRv3 | 10 % | 10.15 Mb/s | 10.22 | none |
 | `84b34f54` relay / `9d2a4f6e` subscriber, BBRv3 | 10 % | **0.73 Mb/s** | **0.26** | none |
+| `6f1a9e33` / `6f1a9e33`, BBRv3 | 0 % | 9.84 Mb/s | 9.92 | none |
+| `6f1a9e33` / `6f1a9e33`, BBRv3 | 10 % | **1.77, 1.52 Mb/s** | **0.97, 1.32** | none |
 
-*Measured, P1, wire domain, all roles on one 8-vCPU host that was also running a 2 h importer soak;
-one run per cell except the two BBRv3 loss cells, which have two.*
+*Measured, P1, wire domain, all roles on one 8-vCPU host. The `84b34f54` and `9d2a4f6e` cells ran
+beside a 2 h importer soak and the `6f1a9e33` cells beside the standing units only. One run per cell
+except the BBRv3 loss cells on `main`, which have two.*
 
 **No arm aborted and no log carries a panic, so #768 did not reproduce at 10 % random loss on either
 build.** That does not clear BBRv3: C1's collapse to 11–13 % was under a rate cap with a 500 ms FIFO, a
@@ -863,7 +866,9 @@ groups, and each hold turns into skipped content. That is *reasoned from the sou
 What would settle it is an arm that disables the hold without changing the eviction deadline, which
 the CLI does not expose. The commit, by contrast, is measured.
 
-Until it is fixed upstream, this is a trade a deployment has to make. #4001 is the fix that made
+**It is still present on `main` at `6f1a9e33`**, which delivers 15–18 % of its 0 % control at 10 %
+loss, where `9d2a4f6e` delivered 17 %. Until it is fixed upstream, this is a trade a deployment has
+to make. #4001 is the fix that made
 the multi-track export interleave deterministic ([T12](test-12-dual-path-handoff.md)), and pinning
 the subscriber to its parent gives that up. The hardware-window rehearsal build is `main`, so which of
 the two the receiver carries over a lossy path is a decision that is owed before the window.

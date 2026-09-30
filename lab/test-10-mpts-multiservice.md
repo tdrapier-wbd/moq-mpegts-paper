@@ -2,7 +2,7 @@
 
 **State: arms A, B and D run on build `ffa5b81b`, and the MoQ arms re-run on upstream `main`
 `2b689c24` (P1, file domain, all roles co-resident on one host), with the change between the two
-builds bisected to two commits; upstream's per-programme selection checked functionally on `main`
+builds bisected to two commits; upstream's per-programme split graded on the T10 rig on `main`
 `6f1a9e33`; arms C and E not run.** A real three-programme multiplex — three PMTs, three PCR PIDs, one PAT
 and one SDT listing all three — was carried through both data planes and graded per programme.
 
@@ -35,9 +35,10 @@ and one SDT listing all three — was carried through both data planes and grade
 - **On upstream `main` at `6f1a9e33` the multiplex is refused unless a programme is selected, and a
   selected programme arrives clean.** `moq import ts` without `--program` exits 1 naming the three
   programmes. With `--program 1` or `--program all`, each broadcast carries only its programme's
-  PIDs, PMT and PCR, with SCTE-35 at the source's rate and 0 continuity events. Each programme's
-  SDT still lists all three services. This is a local functional check, not the T10 rig
-  (§ *On upstream `main` at `6f1a9e33`*).
+  PIDs, PMT and PCR, with SCTE-35 at the source's rate and 0 continuity events. On the T10 rig,
+  graded over the whole fixture, all three programmes are CARRIED in four of four runs on both
+  fixtures, independent clocks included. Each programme's SDT still lists all three services
+  (§ *On upstream `main` at `6f1a9e33`*, § *The split on the T10 rig*).
 
 The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
 media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
@@ -500,6 +501,33 @@ domain, `moq 0.12.8` built from `6f1a9e33`.*
 - **EIT arrives at 1.7–2.0× the source's rate against video.** Programme 1 alone on `2b689c24` was
   +9 %. Not investigated. The re-emission cadence of SI snapshot tracks is the first place to look.
 
+### The split on the T10 rig: every programme carried
+
+[`t10-split.sh`](scripts/t10-split.sh) is `t10-moq.sh` with `moq import ts --program all` and one
+`moq export ts` per programme broadcast. The whole 60 s fixture was released by `tsp -P regulate` on
+the secondary, with the relay on loopback, and each capture was graded by `t10-grade.py` against the
+source. It ran twice on each fixture, `mpts3.ts` (independent clocks) and `mpts3-cc.ts` (common
+clock). *P1, file domain, all roles on one host, `moq 0.12.8` / `moq-relay 0.15.8` built from
+`6f1a9e33`.*
+
+| Programme | Verdict, 4 of 4 runs | PCR at egress | Delivered (PCR span of 59.98 s) | Video packets, source → egress | Continuity events |
+|---|---|---|---:|---|---:|
+| 1 — PCR 111, 7 ES | **CARRIED**; own PAT entry and PMT listing its seven ES only | max 25.0 ms, 0 % > 40 ms | 60.3 s | 359,960 → 360,826 | 0 |
+| 2 — PCR 529, 1 ES | **CARRIED**; PMT with its one ES | max 25.0 ms, 0 % > 40 ms | 58.6–58.8 s | 74,441–74,529 → 75,274–75,458 | 0 |
+| 3 — PCR 785, 2 ES | **CARRIED**; PMT with its two ES | max 25.0 ms, 0 % > 40 ms | 58.0–58.5 s | 14,398–14,956 → 15,251–15,377 | 0 |
+
+- **The two fixtures now behave alike.** Independent clocks were refused on `ffa5b81b` and lost
+  96–98 % of two programmes' video on `2b689c24`. On `6f1a9e33` they grade the same as the common
+  clock. Every programme's video arrives with at least the source's packet count.
+- **Each programme matches or beats its single-programme control.** Its audio carries the documented
+  one-frame-per-PES repacketisation (programme 1 MPEG-1 audio 8,055 → 9,820, programme 3 8,000 →
+  9,644–9,724). Programme 1's private-stream PIDs arrive 1.7–2.2 % short, against 3.3–3.7 % short in
+  its control. SCTE-35 is 59 packets on each PID against the source's 59–60. Programme 1's worst PCR interval is 25.0 ms,
+  where its control peaked at 325 ms. The 13-tick `pcrverify` gate still fails on every PCR,
+  because the exporter re-stamps it, as for every MoQ arm here.
+- **The SI is unchanged.** Each programme's SDT lists all three services and its EIT arrives at
+  3.44–3.55 packets/s against the source's 2.001, as the local check found.
+
 ### Arm D: carried, with a programme-1-only initialisation pair
 
 The packager published 25 segments of 2.0–2.4 s (`EXT-X-BITRATE:19426`), and the playlist ends
@@ -544,10 +572,6 @@ capture is complete, and it does not bear on any figure above.
 
 - **Opaque carriage of a multiplex on MoQ** — the arm criterion 1 was written for. It needs a build
   with an opaque lane.
-- **The per-programme split on the T10 rig.** Upstream chose the split over a multiplex-aware lane:
-  one broadcast per programme at ingest. The split passes a local functional check on `6f1a9e33`,
-  but it has not been graded on the T10 rig with absolute per-PID counts over the whole fixture, on
-  both fixtures. That is the next MoQ arm here, and it needs no new apparatus.
 - **Per-programme SI.** Each programme's output still carries the whole multiplex's SDT and EIT. The
   arm that would close it is the functional check above on a build carrying upstream's
   `ts-program-si` quest.

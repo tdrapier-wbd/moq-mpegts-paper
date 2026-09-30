@@ -588,7 +588,7 @@ on every refusing arm, and announcement scoped to what a credential licenses. Th
 
 | | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane | SRT — the incumbent |
 |---|---|---|---|---|
-| Multi-programme mux | **normatively excluded** (§6) | **flattened** — one PAT entry, one PMT carrying every programme's streams, SDT/EIT still listing all services; measured ([Evidence](evidence.md) §3.1) | **verbatim MPTS by construction**; measured on one programme | verbatim by construction; measured on one programme |
+| Multi-programme mux | **normatively excluded** (§6) | **flattened** on the build under test — one PAT entry, one PMT carrying every programme's streams, SDT/EIT still listing all services. **Split** on later `main`: one broadcast per programme, each carried intact, SDT still listing all services; measured ([Evidence](evidence.md) §3.1) | **verbatim MPTS by construction**; measured on one programme | verbatim by construction; measured on one programme |
 | PIDs, PES, `stream_type`, PAT/PMT | preserved | preserved | preserved | **preserved** — measured over the wire |
 | PMT PID, PCR PID | **preserved, incl. non-default** — measured on three clips | preserved, since the service-layer carriage fix | preserved | **preserved** — measured |
 | TSID / ONID / service name, provider, type | **preserved** — measured | preserved, since the same fix | preserved | **preserved** — measured |
@@ -622,8 +622,9 @@ segmented via copy. MoQ hands joining receivers the whole EPG in ~1 ms; segmente
 carousel ([T17](../lab/test-17-si-snapshot-tracks.md)).
 
 **MoQ's remaining mux-content advantage is multi-programme carriage alone, and only on the opaque
-lane** (normative HLS exclusion; the media-aware lane flattens an MPTS, measured; opaque carriage of
-one is open). Against the media-aware lane, segmented HTTP keeps stuffing, CAT, continuity counters
+lane** (normative HLS exclusion; the media-aware lane flattens an MPTS on the build under test and
+splits it into single-programme broadcasts on later `main`, both measured; opaque carriage of one is
+open). Against the media-aware lane, segmented HTTP keeps stuffing, CAT, continuity counters
 and wall clock. **Fidelity costs ~7 % wire volume** (§9) — the same fidelity-vs-bandwidth trade on both
 planes.
 
