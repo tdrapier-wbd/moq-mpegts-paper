@@ -1645,6 +1645,40 @@ needs. The mean is 31,147 B, correct to 0.21 % and the same fact as the aggregat
 1,316 B, **4.2 % of the mean**. Bimodal, not noisy. Only 3.3 % of intervals carry an instantaneous
 rate within 1 % of nominal ([T13](test-13-downstream-grooming.md) § *The residual measured*).
 
+### The byte schedule itself — contributed as [#4579](https://github.com/moq-dev/moq/pull/4579), draft
+
+**The defect** is #3925's: with a mux rate, export padded to the right average but heaped each
+keyframe between two PCRs, so a receiver clocking off arrival could not lock. On upstream `main`
+`6f1a9e33`, a 60 s cut of `CNNiEMEA2.ts` at `--bitrate 11000000` came back with **3.27 %** of PCR
+intervals within ±1 %, median gap 1,316 B against 31,087 B, T-STD TB overflows 384,910 and
+pcr-jitter p95 205,936 µs.
+
+**The contribution** implements `quest/m1/ts-export-byte-schedule.md` and deletes it. With a rate,
+closed spans queue in a backlog and every 25 ms slot goes out as its PCR, media up to the rate, then
+nulls, so a PCR's value follows its byte position. A keyframe is spread over the slots before it
+decodes; the output trails the media by a buffer delay that grows to the largest burst seen, capped
+by `--max-age`. A burst the cap cannot fit goes out above the rate before its decode time, with a
+warning, and later slots repay it from their nulls. Without a rate the output is byte-identical.
+The harness's generated clip was replaced with one whose keyframes (110-140 kB) outgrow a slot, and
+`pcr-schedule` now gates on it at 80 %, which CI's runners pass at 89 %. Measured on the same
+loopback harness, `main` → branch (→ `export ts --max-age 1s`):
+
+| Stream | pcr-schedule | TB overflows | pcr-jitter p95 | added delay |
+|---|---:|---:|---:|---:|
+| CNN, 60 s | 3.27 % → **75.3 %** (→ **99.1 %**) | 384,910 → 90,150 (→ 19,830) | 205,936 → 24,246 µs (→ 92 µs) | 500 ms cap (→ 706 ms) |
+| generated clip, 20 s | 34.5 % → **93.5 %** | 67,960 → 5,450 | 58,454 → 24,389 µs | ~250 ms |
+
+Open-GOP stays 60/60, CC clean, no new PCR discontinuities, and `--pair` agreement is equal or better
+on every table (NIT 71 → 100 %, SDT/BAT 92 → 100 %, TDT/TOT 0 → 20 %).
+
+**Open:** the 500 ms `--max-age` default is too short for CNN, whose bursts want 0.7-0.9 s, so a
+quarter of its intervals still overrun and repay; media goes first in each slot and nulls after,
+which leaves TB overflows that interleaving would cut; the first ~2 s stay VBR until the importer
+publishes `mpegts.muxRate`; and the `--live` release check was flaky on a loaded machine for `main`
+and the branch alike on the new clip (main 6-321 of ~640 releases off, branch 9-356), which the
+nightly job may inherit. It overlaps [#4577](https://github.com/moq-dev/moq/pull/4577) in
+`ts/export.rs`, so whichever lands second rebases.
+
 ### The liveness exit — filed as a question, deliberately
 
 [**#3926**](https://github.com/moq-dev/moq/issues/3926). `export ts` does **not** mint a dead carrier
