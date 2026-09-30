@@ -1,0 +1,105 @@
+T8b C7 / moq-dev/moq#4613 diagnostic instrumentation for moq-mux, against upstream main 5124f8134.
+Logs every interleave hold (target diag4613: start, lagging tracks, expiry, catch-up) and every
+consumer skip with its lag, and reads MOQ_TS_HOLD_MS to override the hold budget (0 = arrival order).
+Apply with: git apply t8b-4613-diag.patch   (git apply ignores this preamble). Not for upstream.
+
+diff --git a/rs/moq-mux/src/container/consumer.rs b/rs/moq-mux/src/container/consumer.rs
+index ee8b7f28d..006a0267e 100644
+--- a/rs/moq-mux/src/container/consumer.rs
++++ b/rs/moq-mux/src/container/consumer.rs
+@@ -351,6 +351,7 @@ impl<F: Container> Consumer<F> {
+ 				&& let Some((_, next_start)) = next_group
+ 				&& (finished || max_timestamp.saturating_sub(next_start) >= self.max_age)
+ 			{
++				tracing::debug!(target: "diag4613", track = self.track.name(), from = self.current, to = front_sequence, finished, lag_ms = max_timestamp.saturating_sub(next_start).as_millis() as u64, "walk missing groups");
+ 				if !pts_contiguous(current_end.or(self.presented_end), next_start) {
+ 					self.bump_playhead();
+ 				}
+@@ -389,7 +390,7 @@ impl<F: Container> Consumer<F> {
+ 				}
+ 				let new_current = self.pending.front().map(|g| g.sequence).unwrap();
+ 
+-				tracing::debug!(old = self.current, new = new_current, "skipping slow groups");
++				tracing::debug!(target: "diag4613", track = self.track.name(), old = self.current, new = new_current, blocked = oldest_timestamp.is_some(), lag_ms = oldest_timestamp.map(|o| max_timestamp.saturating_sub(o)).unwrap_or(max_timestamp.saturating_sub(next_start)).as_millis() as u64, covered = current_end.is_some_and(|end| end >= next_start), "skipping slow groups");
+ 
+ 				self.current = new_current;
+ 				self.note_group_edge();
+diff --git a/rs/moq-mux/src/container/ts/export.rs b/rs/moq-mux/src/container/ts/export.rs
+index e07f1b0d3..adc904b75 100644
+--- a/rs/moq-mux/src/container/ts/export.rs
++++ b/rs/moq-mux/src/container/ts/export.rs
+@@ -179,6 +179,7 @@ pub struct Export<E: catalog::Catalog = ()> {
+ 	stall: Option<web_async::time::Instant>,
+ 	/// Wakes [`Self::pick_next_track`] once the stall has lasted `max_age`.
+ 	hold: Option<Pin<Box<web_async::time::Sleep>>>,
++	diag_expired: bool,
+ 	/// The rate to pad the output to with null packets, in bits per second: the
+ 	/// builder override when set, else the catalog's recorded multiplex rate, else
+ 	/// none and the output is unpadded ([`Self::stuff`]).
+@@ -694,6 +695,7 @@ impl<E: catalog::Catalog> Export<E> {
+ 			watermark: None,
+ 			stall: None,
+ 			hold: None,
++			diag_expired: false,
+ 			video_start: None,
+ 			mux_rate: None,
+ 			mux_rate_override: None,
+@@ -1525,21 +1527,39 @@ impl<E: catalog::Catalog> Export<E> {
+ 			.filter_map(|(n, t)| t.pending.as_ref().map(|p| (p.frame.timestamp, t.pid, n, p.arrived)))
+ 			.min_by_key(|(timestamp, pid, name, _)| (*timestamp, *pid, *name))?;
+ 		let name = name.clone();
+-		if self.max_age.is_zero() {
++		let budget = diag_hold().unwrap_or(self.max_age);
++		if budget.is_zero() {
+ 			return Some(name);
+ 		}
+ 		if self.tracks.values().all(|t| t.shown(timestamp, pid)) {
+-			self.stall = None;
++			if let Some(start) = self.stall.take() {
++				tracing::debug!(target: "diag4613", held_ms = start.elapsed().as_millis() as u64, expired = self.diag_expired, "stall end: caught up");
++			}
++			self.diag_expired = false;
+ 			return Some(name);
+ 		}
+-		let deadline = *self.stall.get_or_insert(arrived) + self.max_age;
++		if self.stall.is_none() {
++			let lagging: Vec<String> = self
++				.tracks
++				.iter()
++				.filter(|(_, t)| !t.shown(timestamp, pid))
++				.map(|(n, t)| format!("{n}@{:?}", t.timeline.map(|tl| tl.as_micros() / 1000)))
++				.collect();
++			tracing::debug!(target: "diag4613", leader = %name, ts_ms = (timestamp.as_micros() / 1000) as u64, waited_ms = arrived.elapsed().as_millis() as u64, ?lagging, "stall start");
++		}
++		let deadline = *self.stall.get_or_insert(arrived) + budget;
+ 		let hold = self
+ 			.hold
+ 			.get_or_insert_with(|| Box::pin(web_async::time::sleep_until(deadline)));
+ 		if hold.deadline() != deadline {
+ 			hold.as_mut().reset(deadline);
+ 		}
+-		waiter.poll_future(hold.as_mut()).is_ready().then_some(name)
++		let ready = waiter.poll_future(hold.as_mut()).is_ready();
++		if ready && !self.diag_expired {
++			self.diag_expired = true;
++			tracing::debug!(target: "diag4613", leader = %name, "stall expired: muxing around");
++		}
++		ready.then_some(name)
+ 	}
+ 
+ 	/// Packetize one media frame into the open span, re-emitting PAT/PMT before
+@@ -2734,3 +2754,14 @@ mod tests {
+ 		assert!(!is_complete_section(&[0xfc, 0x30, 0x1b]));
+ 	}
+ }
++
++/// Diagnostic override of the interleave hold budget (#4613), in milliseconds.
++fn diag_hold() -> Option<Duration> {
++	static HOLD: std::sync::OnceLock<Option<Duration>> = std::sync::OnceLock::new();
++	*HOLD.get_or_init(|| {
++		std::env::var("MOQ_TS_HOLD_MS")
++			.ok()
++			.and_then(|v| v.parse().ok())
++			.map(Duration::from_millis)
++	})
++}

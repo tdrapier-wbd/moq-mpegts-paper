@@ -32,6 +32,9 @@
 > own RTT says the specified queue never formed). **C7 (random loss, no cap)** did not reproduce the
 > BBRv3 abort on either build, and found upstream `main`'s subscriber collapsing to a fifth of the older
 > build's delivery at 10 % loss, on either controller, bisected to the media-time interleave (#4001).
+> The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews
+> the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate on the
+> PR before merge ([#4618](https://github.com/moq-dev/moq/pull/4618)).
 > The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
@@ -859,20 +862,54 @@ subscriber delivered slightly more than either 0 % control, from one run.
 
 *Measured, P1, wire domain, one host, one run per build except #4001, which has two.*
 
-#4001 makes the earliest pending frame wait, bounded by `max_age`, until every other track has shown
-that it cannot precede it. The likely mechanism is that under loss some track is always behind, so
-the exporter spends the same 2 s budget holding output that the consumer then uses to evict late
-groups, and each hold turns into skipped content. That is *reasoned from the source* and not measured.
-What would settle it is an arm that disables the hold without changing the eviction deadline, which
-the CLI does not expose. The commit, by contrast, is measured.
-
 **It is still present on `main` at `6f1a9e33`**, which delivers 15–18 % of its 0 % control at 10 %
 loss, where `9d2a4f6e` delivered 17 %. Reported as
-[#4613](https://github.com/moq-dev/moq/issues/4613). Until it is fixed upstream, this is a trade a
-deployment has to make. #4001 is the fix that made
-the multi-track export interleave deterministic ([T12](test-12-dual-path-handoff.md)), and pinning
-the subscriber to its parent gives that up. The hardware-window rehearsal build is `main`, so which of
-the two the receiver carries over a lossy path is a decision that is owed before the window.
+[#4613](https://github.com/moq-dev/moq/issues/4613).
+
+**The mechanism: a rewind renews the hold, and the renewed hold causes the next rewind.** #4001 makes
+the earliest pending frame wait, bounded by `max_age`, until every other track has shown that it
+cannot precede it. On its own that costs a quiet track one hold. Under loss, though, a source that
+skips over a hole bumps its discontinuity counter, and the exporter answers every such bump with `rewind()`,
+which on `main` resets the stall, restarts the held frame's wait and clears every track's high-water
+timeline. The sparse data PIDs, and video while it waits on a retransmission, then cannot show, so
+the next frame is held for the full 2 s again. That is the same budget the sources skip on. After the
+hold every source sits a budget behind the newest content, its next stall skips at once, and the skip
+is another rewind.
+
+The arms that separate this ran on one instrumented build for every role: upstream `main` at
+`5124f8134` with debug logging on the hold and on the consumer's skip decisions, plus an environment
+override of the hold budget that the CLI does not have (`lab/scripts/t8b-4613-diag.patch`, run as
+`RUST_LOG=info,diag4613=debug [MOQ_TS_HOLD_MS=<ms>] t8b-loss-point.sh`). The fix arms add #4618's
+change to the same patch. Same rig, 10 % loss unless stated:
+
+| Hold behaviour | Mean delivered | Second half | Holds started |
+|---|---:|---:|---:|
+| as on `main` (budget = `max_age`, 2 s) | **1.13 Mb/s** | **0.36** | 56 |
+| disabled (arrival order) | 9.80 Mb/s | 9.95 | 0 |
+| capped at 200 ms | 8.37 Mb/s | 8.54 | 80 |
+| kept across a rewind (#4618, on the PR before merge) | 9.70, 9.87 Mb/s | 10.47, 10.13 | 4, 4 |
+| 0 % loss, as on `main` / kept across a rewind | 9.85 / 9.84 Mb/s | 9.90 / 9.93 | 1 / 1 |
+
+*Measured, P1, wire domain, all roles on one 8-vCPU host beside the standing units only, 120 s per
+run, BBRv3 on noq, one run per cell except the fixed build at 10 % loss, which has two.*
+
+Disabling the hold alone restores the full rate, so the hold is the cause. The unfixed run's log
+shows why it compounds rather than costing a fixed latency. Of 56 holds, 2 ended with the lagging
+track catching up, and a rewind restarted all the rest at the full 2 s. The sources' distance
+behind the newest content grew from 2 s to 25 s within the first 35 s and reached 105 s by the end,
+so the exporter wrote about 14 s of media in two minutes. A 200 ms cap shrinks the loop without
+breaking it, because each rewind still renews whatever budget there is. Keeping the stall and the
+held frame's wait across a rewind leaves a quiet track costing one hold. After that the mux runs
+around the track until it catches up. The fixed build loses its first 15–20 s to the early holds and
+runs at the source rate from then on. Because a rewind still clears every timeline, a sparse track
+cannot show again while the skips continue, so under sustained loss the stall stays expired and the
+mux runs in arrival order, the pre-#4001 behaviour. One interleave order across exporters therefore
+holds only on a clean path.
+
+Until #4618 or an equivalent merges, this is a trade a deployment has to make. #4001 is the fix that
+made the multi-track export interleave deterministic ([T12](test-12-dual-path-handoff.md)), and
+pinning the subscriber to its parent gives that up. The hardware-window rehearsal build is `main`, so
+which of the two the receiver carries over a lossy path is a decision that is owed before the window.
 
 ## Observations
 
@@ -1046,6 +1083,13 @@ client arms (9/15 against 3/15, p ≈ 0.060), on both relay versions, and predat
 was a **counting error** (only `sub.log` read of two or three per cell). **Rules:** **a detector must
 read every instance of the thing it is detecting**; and **a pinned component the proposed mechanism runs
 through must be crossed, not trusted**.
+
+**Believed** (C7, reasoned from #4001's diff and labelled as such): each interleave hold spends the
+consumer's skip budget and so turns into skipped content. **True:** a hold on its own costs a quiet
+track one wait. The collapse needs `rewind()` to renew the hold at every source skip. A reading of
+the diff never reached that, because the renewal sits in another function, reached only through the
+consumer's discontinuity counter. **Rule:** see
+[method notes § a mechanism read from a diff names the component, not the loop](method-notes.md#a-mechanism-read-from-a-diff-names-the-component-not-the-loop).
 
 ## References
 

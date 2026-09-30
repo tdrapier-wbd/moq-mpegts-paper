@@ -864,11 +864,16 @@ loss, 25 ms each way and no rate limit, `moq export ts` on upstream `main` at `9
 `6f1a9e33` delivers 15–18 % of its own 0 % control, and its rate decays through the window. The
 build before, `84b34f54`, delivers 73–83 %. No arm aborts. Crossing builds puts the collapse in the
 subscriber, and bisecting the subscriber alone puts it at the media-time-interleave commit, with its
-parent delivering the full rate. The mechanism, a bounded hold spending the same budget the consumer
-uses to evict late groups, is *reasoned from the source* and not measured. So on current `main` a
-receiver chooses between interleave determinism and delivery under loss, and the build carried into
-hardware testing has to make that choice. *Measured, P1, wire domain, all roles on one host, one or
-two runs per cell* ([T8b](../lab/test-8b-congestion-control.md) § *C7*).
+parent delivering the full rate. The mechanism is measured. Every source skip under loss rewinds
+the exporter, and each rewind renews the interleave's full `max_age` hold. That holds every source a
+whole skip budget behind the newest content, so its next stall skips again. Disabling the hold alone
+restores the full rate on the same build. An upstream fix that keeps the hold across a rewind
+delivers 9.70–9.87 Mb/s at 10 % loss against 1.13 unfixed, and leaves 0 % loss unchanged
+`[unmerged]`. Under sustained loss it falls back to arrival order, so interleave determinism holds
+only on a clean path. Until a fix merges, a receiver on current `main` chooses between interleave
+determinism and delivery under loss, and the build carried into hardware testing has to make that
+choice. *Measured, P1, wire domain, all roles on one host, one or two runs per cell*
+([T8b](../lab/test-8b-congestion-control.md) § *C7*).
 
 > **A caveat on P1 that this rig cannot resolve.** On the rig that produced these cells, **1.4–1.6 %
 > of PCR intervals exceed 40 ms in every cell including the clean control**. The experiment attributes

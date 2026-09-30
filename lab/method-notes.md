@@ -1400,6 +1400,18 @@ complement.** *(T27, on this campaign's own contribution.)*
 > about**, not re-running the arms that motivated it. Where a fix introduces a *detector* — here, of a
 > rewind — the new arm to add is the one where that detector should stay silent.
 
+### A mechanism read from a diff names the component, not the loop
+
+*(T8b C7.)* The bisect put the random-loss collapse on #4001's interleave hold, and reading the
+diff produced a plausible mechanism: the hold spends the consumer's skip budget, so each hold becomes
+skipped content. That was labelled as reasoned and was half right. A hold on its own costs a quiet
+track one wait. The collapse needed a second function, `rewind()`, to renew the hold at every source
+skip, which made the loop self-sustaining. The warnings the logs did carry, `UnknownSession` and group
+evictions, did not track delivery at all. **Settle a suspected mechanism with a same-build switch on
+the one variable** (here an environment override of the hold budget), **and log the decision itself**
+(here each hold's start, the tracks it waited on, and how it ended). The switch proves causation. The
+decision log shows the loop, which neither the bisect nor the diff can show.
+
 ## 5. Rig hygiene
 
 **A `pkill -f` pattern sent over SSH matches the SSH command line that carries it, so the cleanup

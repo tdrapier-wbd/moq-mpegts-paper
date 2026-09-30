@@ -2009,10 +2009,17 @@ territory, which already has an issue.
 rate cap, a subscriber built at #4001 delivers 0.49–0.67 Mb/s where its parent `044ca571` delivers
 10.40 Mb/s, on either congestion controller, against either relay, and on the older protocol version
 too. At 0 % loss the builds are indistinguishable. Bisected with relay and importer held fixed
-([T8b](test-8b-congestion-control.md) § *C7*). The likely mechanism is the new bounded hold spending
-the `max_age` budget that eviction then enforces; that part is reasoned from the source and not
-measured. Still present on `main` at `6f1a9e33`, with every role on that build: 15–18 % of its 0 %
-control. **Reported as [#4613](https://github.com/moq-dev/moq/issues/4613).**
+([T8b](test-8b-congestion-control.md) § *C7*). Still present on `main` at `6f1a9e33`, with every role
+on that build: 15–18 % of its 0 % control. **Reported as
+[#4613](https://github.com/moq-dev/moq/issues/4613), root cause measured and posted there, fix
+contributed as [#4618](https://github.com/moq-dev/moq/pull/4618) (open).** Each source skip under loss
+is a rewind, and `rewind()` renewed the hold's full `max_age` budget, so the hold held the sources a
+budget behind and their next stall skipped again. An instrumented build of `main` at `5124f8134` with
+only the hold varied gives 1.13 Mb/s at 10 % loss as it stands, 9.80 with the hold disabled and 8.37
+with it capped at 200 ms. On the PR before merge, with the hold kept across a rewind, it gives 9.70
+and 9.87, and 9.84 at 0 % loss against 9.85 unfixed. The PR reverses #4001's two tests that asserted
+the renewal and adds one for repeated rewinds. **Open:** review, and a post-merge rerun of C7 on the
+merged build.
 
 ### The video DTS reserve froze at the PMT — contributed as [#4500](https://github.com/moq-dev/moq/pull/4500), merged and verified on `main`
 
