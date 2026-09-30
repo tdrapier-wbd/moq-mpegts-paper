@@ -1104,6 +1104,44 @@ and SDT/BAT anchor checks on `main` at `6f1a9e33` and on the branch alike: the g
 exporters' emission points to a timer started with each exporter rather than to the media. That arm is
 not in CI and has no quest. Nothing has run against a live multi-programme feed or cross-host.
 
+### A PSI table spanning packets, or one bad CRC, ended a TS ingest — contributed as [#4584](https://github.com/moq-dev/moq/pull/4584), draft
+
+**The defect.** The importer read the PAT and PMT through the `mpeg2ts` 0.6.1 reader, which parses a
+table from a single packet, rejects a nonzero `pointer_field`, and ends the import on any error. A
+valid PMT too long for one packet (many audio languages, long descriptors), a PAT listing more than
+about 40 programmes, or one flipped bit in a PAT repetition's CRC therefore ended `moq import ts`.
+`--program all` found the PAT in a single packet too.
+
+**The contribution.** The upstream quest (`quest/m1/ts-psi-reassembly.md`, planned in
+[#4507](https://github.com/moq-dev/moq/pull/4507)) settled the shape, and the PR follows it. The
+importer owns the packet demux: the PAT and every PMT go through the section reassembler already used
+for SCTE-35 and SI, and the PAT, PMT and PES header are parsed in moq-mux. A section whose
+CRC-32/MPEG-2 fails is dropped whole and the last good table stays in force; each drop counts in a
+stream-wide `crc_error` in the importer's stats and is logged with the other counters. `--program all`
+reads the PAT the same way.
+
+**Verification** `[unmerged]`, P0 and P1. At P0, tests cover a PMT spanning two packets, a PAT behind a
+nonzero `pointer_field`, a two-packet PAT of fifty programmes read by `--program` and by
+`--program all`, a corrupt PAT and a corrupt PMT between good repetitions (each dropped and counted
+once while the layout holds, a later PMT revision still applied), and a feed whose only PAT is corrupt
+(nothing published, one drop counted). `decode` throughput on `kyrion_mpeg2av_ac3.ts` doubled: 876–894
+MB/s on `main` at `6f1a9e33`, 1,780–1,815 MB/s on the branch. At P1, the `test/ts` default,
+real-capture and open-GOP arms gave the same hard-check results on both builds, and two crafted
+variants of the harness's ffmpeg clip were PCR-paced through the same rig:
+
+| Clip | `main` `6f1a9e33` | #4584 |
+|---|---|---|
+| One bit flipped in the 20th PAT's CRC | publisher exits after 0.5 s: *CRC32 mismatch* | one section dropped and counted; every check passes |
+| PMT padded to 226 bytes, two packets | publisher exits at the first PMT: *failed to fill whole buffer* | imports to the end; `export ts` then fails (below) |
+
+The local `just check` passed, as did upstream CI.
+
+**Open.** The PR is a draft awaiting review. The exporter still writes the PMT through `mpeg2ts`, which
+cannot emit a section longer than one packet (*failed to write whole buffer*), so a long PMT now
+imports but does not round-trip; it is left for upstream planning. Sections dropped for other reasons
+(a malformed adaptation field, a parse failure) are not counted yet, since the TS import health quest
+owns `PAT_error` and `PMT_error`. Nothing has run against a live feed with long PSI.
+
 ### Three values the exporter mints per process — one closed, one declined, one open
 
 A 1+1 pair cannot be byte-identical while the exporter renders anything from its own process state
