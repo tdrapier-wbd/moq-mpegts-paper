@@ -881,6 +881,49 @@ it crashed 216 times; the same condition now produces a stream that looks health
 warning on a completed resync and a counter to alarm on a *rate* of them, neither of which touches the
 protocol — and that is precisely what shipped.
 
+### Per-stream liveness at the TS exporter — contributed as [#4577](https://github.com/moq-dev/moq/pull/4577), draft
+
+**The defect.** This is the egress half of [#3489](https://github.com/moq-dev/moq/issues/3489). In
+[#3533](https://github.com/moq-dev/moq/issues/3533), video and primary audio stalled at the
+exporter while PSI and the other PIDs kept flowing and the relay kept transmitting, and only
+[T27](test-27-liveness-detector.md)'s per-PID detector on a subscriber found it. `Export` reported
+nothing per PID. The upstream quest (`quest/m2/ts-export-liveness.md`, planned in
+[#4496](https://github.com/moq-dev/moq/pull/4496)) settled the shape: the importer's rows at egress,
+with `quiet` measured on the output's own PCR, no ETSI counters, and no window in-tree. It also listed a
+stale attribution. The exporter's comment and the `test/ts` graders' defaults gave TR 101 290 a 40 ms
+PCR repetition limit, where V1.4.1 sets 100 ms; its Note 2 records that the 40 ms precondition was
+removed from TS 101 154 in 2005.
+
+**The contribution.** `Export::stats` returns `ts::Stats`, one row per elementary stream in the PMT. Each
+row is named by the track suffix an import of the output would give that PID. The exporter runs the
+importer's own liveness meter on the PCR it writes, reset wherever it flags a discontinuity. `units`
+counts the PES or section written for each frame, credited when the span leaves the mux buffer, so a
+rewind does not count what it discards. The frame-sync counters stay zero. `moq export ts` samples the
+stats once a second through the same logger `moq import ts` uses. The PR also moves the `test/ts`
+repetition defaults to 100 ms, and replaces the README's "VBR, no null packets, PCR once per frame" with
+what the exporter does now: it pads to the recorded multiplex rate and writes a PCR every 25 ms of media
+time.
+
+**Verification** `[unmerged]`, P0 and P1. At P0, two in-process tests cover H.264 plus two AAC tracks. A
+healthy export advances every row, each quiet for under 200 ms. With video and one audio track stopped
+halfway through a 6 s run, those two rows freeze and their `quiet` reaches 2.975 s and 3.0 s of the 3 s
+stall, while the surviving audio's row keeps counting and the PAT keeps repeating. At P1, `CNNiEMEA2.ts`
+was PCR-paced into `import ts` on a local relay, with the MP2 PID dropped about 19 s in by
+`tsp -P filter --negate --pid 121 --after-packets 132000`. `export ts` logged `pid=121 track=".mp2"
+units=729 quiet=Some(850ms)` once, about a second after the publisher's own line for that PID. In the
+capture, PID 121 falls to zero PES starts per 5 s after the drop, while the PAT (13–15 per 5 s), video,
+AC-3 and teletext hold their rates. There is no *before* figure, because `main` has no egress rows.
+The local `just check` and the four `test/ts` arms passed, and so did upstream CI.
+
+**Open.** The PR is a draft and asks the maintainer to request a Codex review. Sparse SCTE-35 PIDs flap in
+the shared logger at its 1 s interval, somewhat more at egress than at ingest (21 lines against 16 over
+the same run), where the exporter delivers by group. Picking a window is left to a consumer that names its
+monitoring point. A whole-programme stall is not reported at egress: the output PCR stops with it, so
+every `quiet` freezes, and the CLI samples only when a frame goes out, so no line is logged. That stays
+the job of the wire monitoring downstream. The corrected default loosens `pcr-value-interval`, a hard
+check, from 40 ms to 100 ms, so a regression that spaced PCRs between the two would now pass by
+default. Nothing has run against a live feed cross-host.
+
 ---
 
 ## 3. Resilience and redundancy
