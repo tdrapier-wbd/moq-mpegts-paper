@@ -1902,10 +1902,11 @@ nightly job may inherit.
 **State.** The PR is open and conflicts with `main`. The maintainer's
 [#4645](https://github.com/moq-dev/moq/pull/4645) (draft, below) replaces the span machinery this PR
 reworks with a constant-rate schedule paced against a fixed `--delay`, and makes a burst that does not
-fit the delay fail the export rather than overrun the rate. The measurements here are the before-state
-that PR has to beat on a real broadcast clip; whether to close this PR in its favour is the author's call.
+fit the delay fail the export rather than overrun the rate. This PR was closed by its author in favour
+of #4645, with the measurements above left in the closing comment as the before-state #4645 has to
+beat on a real broadcast clip.
 
-### T-STD conformance of the TS export — taken up upstream as a questline, not yet verified here
+### T-STD conformance of the TS export — taken up upstream as a questline; its implementation stops on a broadcast clip
 
 **What prompted it.** [T44](test-44-tstd-grading.md) graded the lane's P1/P2-conformant wire against
 the 13818-1 T-STD and found it fails on the lane's packet order, and [T45](test-45-live-tstd-remux.md)
@@ -1930,8 +1931,11 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   sizes. On the harness's generated clip it fails current `moq export ts` with video EB underflow and
   audio TB and B overflow, the failure classes T44 measured on a broadcast clip. It reports only, until
   the delay lands.
-- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is a draft; the
-  maintainer's review asks for one blocking fix, a stale generation muxed after a rewind. It deletes
+- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is open and out of
+  draft at head `4b7158d6c00d`. The maintainer's review asks for one blocking fix, a stale generation
+  muxed after a rewind. We posted design feedback on it: clock drift under first-arrival anchoring
+  with strict late drop, the 1+1 anchor, the 500 ms default against broadcast send-ahead, and the
+  start-up settle. Measurements were to follow. It deletes
   the hold, the stall and the span machinery. With a rate, the output is constant-rate and runs up to
   two delays behind the source, reordered DTS is frame-spaced, and a burst that does not fit the delay
   fails the export. On the generated 20 s clip it passes the strict check at 10 and 2 Mb/s on a clean
@@ -1940,13 +1944,32 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   network margin, was planned in [#4649](https://github.com/moq-dev/moq/pull/4649) and closed unmerged.
 
 **Relation to the measurements here.** The upstream check and [`ts-tstd.py`](scripts/ts-tstd.py) are
-independent implementations and have not been run against each other. On `ffa5b81b`, T45 found the
+independent implementations. They agree on the two streams T47 graded with both, the generated
+fixture and #4645's output of it at 2 s, and both are passes. Agreement on a failure, and on the
+T44/T45 corpus, is still to be shown. On `ffa5b81b`, T45 found the
 exporter hands each video frame over at its own decode time, so a conformant output of the CNN clip
 needed about 0.55–0.6 s of send-ahead through the video's transport buffer; that is the quantity the
 closed `burst` quest would have declared.
 
-**Open.** Nothing in this entry is verified here: #4645 has not been graded on a broadcast clip, by
-either check, under loss or cross-host.
+**Graded here** ([T47](test-47-fixed-delay-export.md), #4645 head, loopback, one run per cell):
+
+- **On the broadcast clip the export stops within seconds** with a schedule overrun, at every
+  `--delay` tried up to 3 s. The video alone does it, and upstream's own harness reproduces it at the
+  defaults (`just test ts --source`).
+- **A generated clip with the same 0.7 s send-ahead**, which passes `compliance.py` as a source,
+  cannot start at the 500 ms default. At 2 s it passes both T-STD checks.
+- **Where it runs, nearly every PCR misses ±500 ns, by up to ±75 µs** (1,868 of 1,880 after
+  start-up). PCR values are slot times, and byte
+  positions are whole packets.
+- Delivery latency at 2 s is 6.83 s on loopback.
+
+**Reported.** The four T47 findings were posted on
+[#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5929711256) against
+`4b7158d6c00d`: the broadcast clip stops; a shareable generated fixture fails at the default delay;
+nearly every PCR is outside ±500 ns; and delivery latency is 6.83 s at 2 s.
+
+**Open.** The cause of the broadcast-clip failure is not located. The loss rig and cross-host wait on an export that runs a
+broadcast clip.
 
 ### The liveness exit — filed as a question, deliberately
 
@@ -2056,10 +2079,13 @@ What it leaves is outside both issues. TDT/TOT stays off the shared grid (0.00 %
 still differ by one or two PCR-only packets per 40 s, which with the join-time tables is enough to
 defeat a slot-level merge (24.7–24.9 % of groomed slots identical, masked). And continuity counters
 remain per process, since [#2779](https://github.com/moq-dev/moq/issues/2779) was abandoned rather
-than fixed. The byte-identical multi-track pair therefore now waits on
-[#3925](https://github.com/moq-dev/moq/issues/3925)'s byte schedule and on downstream renumbering,
-and no longer on the interleave. Nothing is to be filed: the residue is the byte schedule's
-territory, which already has an issue.
+than fixed. The byte-identical multi-track pair therefore waits on a byte schedule and on
+downstream renumbering, and no longer on the interleave. The byte schedule that
+[#3925](https://github.com/moq-dev/moq/issues/3925) asked for is now the T-STD questline's
+([#4645](https://github.com/moq-dev/moq/pull/4645), below). That anchors each exporter's release at
+its own first arrival, so by itself it would give two legs the same packet order but not the same
+PCRs. Nothing is to be filed: the residue is that questline's territory, and the anchor point was
+raised on #4645.
 
 **#4001 costs the subscriber most of its delivery under random loss.** At 10 % uniform loss with no
 rate cap, a subscriber built at #4001 delivers 0.49–0.67 Mb/s where its parent `044ca571` delivers

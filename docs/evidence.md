@@ -1727,7 +1727,8 @@ function of how much eviction pressure the deadline creates.
 **For an operator:** a P1/P2 pass on the media-aware lane does not make its output a conformant
 transport stream, and the pacing groomer that produces the pass cannot close the remainder. For TS-out
 to an IRD, treat the lane as a transmux: it needs a stage that re-multiplexes, scheduling every PID
-against the decoder model. No build measured has one. A re-multiplexer graded against the same model
+against the decoder model. No merged build has one; upstream's, in review, does not yet carry a
+broadcast clip (below). A re-multiplexer graded against the same model
 repairs the lane's output offline and, as a laboratory stage, live, so the stage is feasible; live,
 on the build under test, it presents 2.2 s behind the source, and the lane sets most of that.
 Byte-faithful carriage keeps the model, but only behind an edge stage that places each packet on the
@@ -1837,6 +1838,23 @@ between the video's and the audio's arrival is 420 ms. The remaining 0.6 s is th
 lead, set to rebuild that pre-load through the video's 10.56 Mb/s transport buffer; a rate-limited
 bound derived from the measured frames puts its floor near 0.55 s. Only a lane that delivers frames
 ahead of their decode time could shrink it.
+
+**Upstream's own scheduler does not yet carry the broadcast clip.** *Measured*
+([T47](../lab/test-47-fixed-delay-export.md); `[unmerged]`, upstream's fixed-delay export at
+`4b7158d6c00d`; P1 and P2, wire, loopback, the export's own pacing captured with nothing re-clocking
+it; one run per cell). The export releases each frame a fixed delay after its first arrival and
+schedules packets onto a constant-rate output: the re-multiplexing stage this section calls for,
+built into the subscriber. On the clip graded above it exits with a schedule overrun within seconds
+at every delay tried, from 500 ms to 3 s, and with the video alone. Before it does, the PTS it
+carries falls behind its own PCR. The cause is not located. On a generated 1080p25 clip with a
+broadcast-sized CPB (9 Mbit at 9 Mb/s, about 0.7 s of send-ahead), it stops at the 500 ms default.
+At 2 s it passes both upstream's T-STD check and `ts-tstd.py` over the whole capture. On that run
+nearly every PCR is outside TR 101 290's ±500 ns accuracy, by up to ±75 µs (1,868 of 1,880),
+because each PCR carries its 25 ms slot's time while its position is rounded to a whole packet. Its
+delivery latency is 6.83 s median. So a conformant schedule inside the exporter is shown on a
+generated clip, at four times the default delay, with P2 failing. It is not shown on a broadcast
+clip. Its latency does not compare with the laboratory stage's 2.20 s: the build, the clip and the
+metric all differ.
 
 **What it does not establish.**
 

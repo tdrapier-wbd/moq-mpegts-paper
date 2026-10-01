@@ -591,6 +591,14 @@ PCRs against a rate TSDuck derived from those PCRs turns a conservation failure 
 > changed was the yardstick. The tell is an accuracy column that goes from 0 failures to *all* failures
 > across one rung of an unrelated parameter. The rate is a known configured input on any arm this
 > campaign runs, so there is no reason to let the instrument infer it.
+>
+> **The rate to give is the one the stream was padded to, which is not always the rig's.**
+> *(T47.)* [`t18-arm.sh`](scripts/t18-arm.sh) passes its `RATE`, which is the groomer's. An exporter
+> that pads itself pads to the catalog's recorded rate, 9,999,999 b/s on one fixture against the
+> rig's 10,000,000. That 1 b/s alone exceeds 500 ns after about 5 s and reaches 5.5 µs by 55 s, so
+> `--absolute` fails nearly every PCR on it. A real accuracy failure looks the same in that column,
+> and on that fixture one was present as well. Separate the two by fitting PCR value against packet
+> index: the fit returns the padded rate, and its residuals are the error.
 
 **Vary the parameter the mechanism says is irrelevant; that is the test the mechanism can fail.**
 *(T3.)*
@@ -3124,3 +3132,30 @@ which the checkout still spells `[server] listen`. Both failures are loud. A ren
 > passed explicitly. It must never come from whatever branch the checkout is sitting on. The build's
 > own tree is necessary and not sufficient: `ffa5b81b`'s demo config still carries `[iroh]`, which a
 > build compiled without that feature rejects, so strip sections for features the build lacks.
+
+### An exporter that paces itself is graded with nothing re-clocking it, and on more than its CI's clip
+
+*From [T47](test-47-fixed-delay-export.md).* Upstream's fixed-delay export writes each slice of its
+multiplex at the slot boundary its PCR asserts, so when its bytes leave is part of what it claims.
+The campaign's rigs all put a groomer after the receiver, and a groomer there would have graded its
+own schedule. The export also passed its CI on a generated 720p clip whose buffers peak at 1–2 %,
+and stopped within seconds on the campaign's broadcast clip at every delay tried. A generated clip
+built to the broadcast clip's CPB reproduced half of that failure. An FFmpeg-muxed fixture at that
+video rate failed its own audio buffer, whatever the codec, until the audio was dropped.
+
+> **Grade a self-pacing exporter through a forwarder that never re-clocks**
+> ([`ts-rtp-forward.py`](scripts/ts-rtp-forward.py)). **Give it a fixture with a broadcast-sized
+> CPB, and grade that fixture as a source before blaming the export.** A clip that loads the
+> buffers to a few percent tests the code path and not the schedule. Where the T-STD and P2 are
+> both graded, report them separately: the export's output there passed every T-STD buffer and failed
+> PCR accuracy on nearly every PCR, the converse of
+> [*A P1/P2 pass is not a conformant transport stream*](#a-p1p2-pass-is-not-a-conformant-transport-stream).
+
+### `tsp -P until --seconds` counts wall time, not stream time
+
+*From T47.* Cutting a 75 s clip from a 300 s capture with `until --seconds 75` without
+`--realtime` produced the whole 700 MB file: tsp read it in a second or two, and the condition
+never came due.
+
+> **Cut by packets** (`-P until --packets N`, with N = seconds × rate / 1,504), and check the
+> output's size before using it.

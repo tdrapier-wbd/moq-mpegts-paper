@@ -89,10 +89,14 @@ moq_cli_detect() {
 	fi
 	# The export's latency flag was renamed separately: commits inside the `dev` branch that #3793
 	# merged have the new dial flags and still `--latency-max`, so ask the subcommand itself.
+	# The fixed-delay export (quest/m1/tstd/delay) replaces both with `--delay` and refuses them;
+	# its value is the release delay, not a staleness bound, so the two do not compare at equal value.
 	if "$moq" export ts --help 2>&1 | grep -q -- '--latency-max'; then
 		MOQ_LAT=(--latency-max)
 	elif "$moq" export ts --help 2>&1 | grep -q -- '--max-age'; then
 		MOQ_LAT=(--max-age)
+	elif "$moq" export ts --help 2>&1 | grep -q -- '--delay'; then
+		MOQ_LAT=(--delay)
 	fi
 
 	RELAY_CLI_NEW=$MOQ_CLI_NEW
