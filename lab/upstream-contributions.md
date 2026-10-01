@@ -1994,13 +1994,13 @@ AC-3's B overflow and AC-3's TB overflows. Patched, AC-3 still fails both. See
 wrong: it said a unit's packets go out back to back. The layout spreads each PID's packets through
 the slot, and the overflow is the number per slot.
 
-**Built since, not reported.** A second scratch patch admits each PID's packets against its own
+**Built since, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5931658024),
+with the correction above). A second scratch patch admits each PID's packets against its own
 transport and decoder buffers, earliest deadline first across PIDs. It takes AC-3's deadlines frame
 by frame, because the export passes through the source's PES, nine frames that together exceed
 AC-3's buffer. On the full clip it passes every buffer of `ts-tstd.py` and `compliance.py` at 1 s
 and 750 ms. At 500 ms it stops; a replay puts that on the export's authored DTS. PCR accuracy still
-fails, from the unchanged stamping. The correction and this result are drafted in
-`docs/upstream/4645-tstd-feedback.local.md`, unposted.
+fails, from the unchanged stamping.
 
 **Open.** The loss rig and cross-host.
 

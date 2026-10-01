@@ -1851,9 +1851,20 @@ At 2 s it passes both upstream's T-STD check and `ts-tstd.py` over the whole cap
 nearly every PCR is outside TR 101 290's ±500 ns accuracy, by up to ±75 µs (1,868 of 1,880),
 because each PCR carries its 25 ms slot's time while its position is rounded to a whole packet. Its
 delivery latency is 6.83 s median. So a conformant schedule inside the exporter is shown on a
-generated clip, at four times the default delay, with P2 failing. It is not shown on a broadcast
-clip. Its latency does not compare with the laboratory stage's 2.20 s: the build, the clip and the
-metric all differ.
+generated clip, at four times the default delay, with P2 failing. Its latency does not compare
+with the laboratory stage's 2.20 s: the build, the clip and the metric all differ.
+
+On the broadcast clip, a schedule inside the exporter passes the buffer model only in a scratch
+patch to that build. *Measured*
+([T47](../lab/test-47-fixed-delay-export.md#a-buffer-limited-schedule-built); `[unmerged]`, a patch
+to `4b7158d6c00d`'s schedule with every buffer parameter set by hand from the clip; P1 and P2, wire,
+loopback, one run per cell, the first 5 s ungraded.) The patch schedules each slot earliest deadline
+first across PIDs, and admits each PID's packets against its own transport and decoder buffers. It
+takes deadlines frame by frame where a passed-through PES carries several frames: this clip's AC-3
+PES is larger than its decoder buffer, so no schedule of whole PES can conform. It carries the full
+multiplex at 1 s and at 750 ms with every buffer passing both T-STD checks. PCR accuracy still
+fails, from the unchanged stamping. At 500 ms it stops; an offline replay of the same rule puts
+that on the DTS the export re-authors, which it misses where the source's DTS is met.
 
 **What it does not establish.**
 
