@@ -3,7 +3,10 @@
 **State: first pass (P0-m), loopback, on the head of
 [#4645](https://github.com/moq-dev/moq/pull/4645) (`4b7158d6c00d`, unmerged). The cause of the
 broadcast-clip failure is located by an offline replay, which predicted two further runs of the
-real export correctly. A fix is neither built nor run. The loss rig and cross-host runs are open.**
+real export correctly. A scratch patch that sends the video earliest deadline first, limited by its
+decoder buffer, carries the full clip at 1 s with the video conformant. In both that build and
+the unpatched export run at 8 s, the audio buffers fail. The loss rig and cross-host runs are
+open.**
 
 - **On a real broadcast capture the export stops within seconds, at every delay up to 3 s.** On
   CNNiEMEA2 (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
@@ -30,8 +33,17 @@ real export correctly. A fix is neither built nor run. The loss rig and cross-ho
   stretches. An offline replay of the export's rule fails the clip at every delay up to 3 s on the
   source's own DTS, and up to 5 s on the DTS the export authors. It fits at 8 s. The real export
   then did both: at 5 s it stopped with 17.60 s of decode time out, where the replay said 17.57 s,
-  and at 8 s it ran the capture and passed the T-STD (video only). Sending earliest deadline first
-  as soon as the decoder buffer has room fits the same clip from 1 s, in the replay only.
+  and at 8 s it ran the capture and passed the T-STD (video only).
+- **Sending the video earliest deadline first, as soon as its decoder buffer has room, carries
+  the full clip at 1 s.** The patch is a scratch build of the PR head, with the EB size given by
+  environment variable. At `--delay 1s` it runs the whole capture with no overrun and no late
+  drop. The video passes every buffer: EB peak 99.7 %, minimum margin 510 ms, 26 of 26 windows.
+- **Where the export runs the full clip, its audio fails the T-STD, patched or not.** Unpatched at
+  8 s, MP2's B peaks at 10,904 of 3,584 B and AC-3's at 16,896 of 5,696 B, and AC-3's transport
+  buffer overflows on 2,495 packets. Patched at 1 s, MP2 passes, and AC-3 still overflows TB
+  (4,196 packets) and B (6,912 of 5,696 B). Read from the code, and consistent with audio
+  residences of up to 0.68 s: the schedule writes a frame's packets back to back, and fills each
+  slot's minimum in push order, which carries audio out early ahead of heavy video.
 - **The export's authored DTS makes this worse.** Its decode clock holds back a fixed *number* of
   pictures (10), not a fixed time. Each time CNN switches between frame and field coding, the
   authored DTS moves 0.2 s against the source's, and the leading pictures of the first GOP all
@@ -175,6 +187,28 @@ bytes it carries. At start-up the first GOP's leading pictures precede its I-fra
 order, and all seven get DTS one tick apart. With the source's DTS the as-late-as-possible rule
 fits at 5 s; with the authored DTS it needs 8 s.
 
+### A buffer-limited schedule, built
+
+A scratch patch to the PR head's `schedule.rs`, 77 lines. It keeps the export's floor, the
+fewest packets that keep every unit on time. It then fills the rest of each slot's allowance
+from queued units of the PIDs given an EB size (`MOQ_TS_EB=pid=bytes`), in order per PID, while
+that PID's buffer has room. Occupancy counts 184 bytes per packet sent, and a unit's bytes leave
+the buffer once the slot after its due slot is past. Audio and tables stay on the floor. The video
+EB is the 1,115,696 B that `ts-tstd.py` calibrates from the clip's SPS. Graded with
+`ts-tstd.py`, skipping 5 s.
+
+| Build, clip, `--delay` | Runs | Video EB | MP2 B | AC-3 TB / B | P1 on the same bytes |
+|---|---|---|---|---|---|
+| #4645, video only, 8 s | yes, 43 s | pass, peak 48 %, margin min 1.3 ms | — | — | 0 CC errors |
+| #4645, full, 8 s | yes, 42.8 s of DTS | pass, peak 47 % | **peak 10,904 of 3,584 B**, 4 of 19 windows | **2,495 pkts over** / **16,896 of 5,696 B**, 0 of 19 | 0 CC errors, PCR ≤ 25 ms |
+| Patched, video only, 1 s | yes, 57.4 s of DTS | pass, peak 99.7 %, margin min 510 ms, 26 of 26 | — | — | one 975 ms PCR gap at the join |
+| Patched, full, 1 s | yes, 57.3 s of DTS | pass, peak 99.7 %, margin min 512 ms, 26 of 26 | pass, 26 of 26 | **4,196 pkts over** / **6,912 of 5,696 B**, 0 of 26 | 0 CC errors, PCR ≤ 25 ms |
+
+PCR accuracy was not re-graded on these runs; the stamping is unchanged. The 975 ms gap is the
+join's first-group hole, which the export lays as skipped slots, inside the graded skip. A slot's
+bytes are timed up to its end boundary, so a unit due in slot k decodes during slot k + 1; an
+occupancy count that frees it any earlier overfills EB by up to a slot.
+
 ### The generated clip
 
 | `--delay` | Runs the capture | `compliance.py` | `ts-tstd.py` (skip 5 s, 2 s windows) | Latency (delivery, median) |
@@ -204,21 +238,25 @@ hand before the first unit is due.
 1. **#4645 does not yet carry a real broadcast multiplex.** At every delay tried up to 3 s, and in
    each variation tried at one delay (a higher rate, subscribing first, the video alone), the export
    stops within seconds. The maintainer's harness reproduces it at the defaults, so the report does
-   not depend on this rig. On the video alone it runs at 8 s.
+   not depend on this rig. At 8 s it runs, on the video alone and on the full clip.
 2. **The cause is the send policy, with the authored DTS compounding it.** Sending as late as
    possible with one window of lookahead cannot absorb a stretch that outruns the rate for about
    a window. A broadcast encoder spends its CPB on exactly such stretches. The replay locates
-   this and predicted both further runs. That a buffer-limited earliest-deadline policy fixes it is
-   shown only in the replay, and only on the video. That is the policy
-   [T45](test-45-live-tstd-remux.md)'s re-multiplexer runs live.
-3. **Its default is short for a broadcast CPB, independent of that failure.** A generated stream
+   this and predicted both further runs. Sending the video earliest deadline first within its EB
+   fixes it in a built export, at 1 s on the full clip.
+3. **The export's audio does not conform on the broadcast clip in either cell where it runs it**
+   (unpatched at 8 s, patched at 1 s). This is independent of the video fix, which improves MP2 to a pass and leaves AC-3 failing. A
+   conformant schedule needs each PID's packets admitted against its own TB and B, not just a
+   rate floor. That is what [T45](test-45-live-tstd-remux.md)'s re-multiplexer does, per packet,
+   and it passed every buffer of this clip live, on the lane output of `ffa5b81b`.
+4. **Its default is short for a broadcast CPB, independent of that failure.** A generated stream
    with 0.7 s of send-ahead, which passes the T-STD as a source, cannot start at 500 ms and
    conforms at 2 s.
-4. **Where it runs, its output passes both T-STD checks and fails PCR accuracy almost throughout.** The
+5. **On the generated clip, its output passes both T-STD checks and fails PCR accuracy almost throughout.** The
    buffer model and P2 disagree on the same bytes, which is
    [T44](test-44-tstd-grading.md)'s point in the other direction: a T-STD pass is not a TR 101 290
    pass either.
-5. **The latency at 2 s is about twice what the design accounts for.** This is on loopback. The
+6. **The latency at 2 s is about twice what the design accounts for.** This is on loopback. The
    ~2 s unexplained has the same order as the transit T45 left unlocated on `ffa5b81b`, and may be
    the same thing. Nothing here says so yet.
 
@@ -226,11 +264,11 @@ hand before the first unit is due.
 
 - One host, loopback, one run per cell, one broadcast channel (two captures of the same channel are
   on hand, not two channels). Cross-host and the loss rig not run.
-- The diagnosis rests on a replay of the video PID alone: audio, tables and the PCR's own slot
-  budget beyond one packet are not modelled. It predicted the 5 s and 8 s runs, but it has not
-  been checked on the full multiplex. The arm that settles the fix is the export with a
-  buffer-limited earliest-deadline schedule, graded on the full CNN multiplex at 1 s and at the
-  default.
+- The replay models the video PID alone. The patch is a scratch build: it takes the EB size from
+  an environment variable rather than the SPS, buffers only the video, and was run once per cell
+  at 1 s. It was not run at the 500 ms default, under loss or cross-host, and `compliance.py` was
+  not run on its output. The arm that settles the audio is a per-PID, per-packet admission
+  against TB and B in the export, graded on the full clip.
 - The generated clip matches the broadcast one on CPB size and send-ahead only. It has no
   field-coded passages, and x264 cannot make them (it encodes MBAFF, not PAFF), so a shareable
   fixture for this failure would need a load profile that outruns the rate for about a window
