@@ -1986,7 +1986,7 @@ coding. An offline replay ([T47](test-47-fixed-delay-export.md#where-the-broadca
 predicted that the export stops at 5 s and runs at 8 s on the video alone, and the real export did
 both. Earliest deadline first, limited by the decoder buffer, fits from 1 s in the replay.
 
-**Built, not reported.** A scratch patch sends the video earliest deadline first within its EB.
+**Built, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5930759235)). A scratch patch sends the video earliest deadline first within its EB.
 On the full clip at 1 s it runs the capture, and the video and MP2 pass every buffer. Where the
 export runs the full clip, its audio fails the T-STD, patched or not. Unpatched at 8 s, MP2's and
 AC-3's B overflow and AC-3's TB overflows. Patched, AC-3 still fails both. See
