@@ -1,13 +1,17 @@
 # Test 47 — The upstream fixed-delay TS export on a broadcast clip
 
-**State: first pass (P0-m), loopback, on the head of
+**State: first pass (P0-m), on loopback and then under loss and across hosts, on the head of
 [#4645](https://github.com/moq-dev/moq/pull/4645) (`4b7158d6c00d`, unmerged). The cause of the
 broadcast-clip failure is located by an offline replay, which predicted two further runs of the
 real export correctly. A scratch patch that schedules each PID's packets earliest deadline first,
 admitted against that PID's own transport and decoder buffers, carries the full multiplex at 1 s
 and at 750 ms with every buffer conformant; PCR accuracy still fails, from the unchanged stamping.
-At 500 ms it stops, as the replay predicts for the DTS the export authors. The loss rig and
-cross-host runs are open.**
+At 500 ms it stops, as the replay predicts for the DTS the export authors. At 1 s under the
+loss rig the patch carries 1 % loss conformant except at one grid restart, and the lane collapses
+at 10 %. Across hosts the result is decided at the join. When the video track skips a group on
+joining, #4645's release stage gives it a clock of its own, up to a whole delay behind the other
+tracks'. The output then fails the buffer model for whichever side runs late, and in the one run
+on the PR head's schedule the export stopped.**
 
 - **On a real broadcast capture the export stops within seconds, at every delay up to 3 s.** On
   CNNiEMEA2 (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
@@ -62,6 +66,20 @@ cross-host runs are open.**
   every 2 s window, and `compliance.py`, with 0 continuity errors. At 500 ms it stops at 9.3 s of
   output: an offline replay of the same buffer-limited rule misses the DTS the export authors at
   that delay, while it nearly meets the source's.
+- **Under 1 % loss at 1 s the per-PID build stays conformant except where the export restarts its
+  grid.** Under the [T8b](test-8b-congestion-control.md) netem rig (25 ms each way, BBRv3), 0 %
+  passes every buffer in all 56 windows. At 1 % the export lost 0.12 s of video and one 0.288 s
+  AC-3 hole, and restarted its grid once, with a flagged PCR discontinuity. Every window either
+  side of the restart passes, apart from 2 table packets over the system transport buffer. At 10 %
+  the lane delivers almost nothing but nulls, so its buffer grade is moot.
+- **Across hosts, a join where the video skips a group puts the video on its own clock.** The
+  consumer counts the skipped group as a discontinuity. #4645's jitter buffer then opens a new
+  generation for the video alone, anchored no earlier than the deadlines it has already given the
+  other tracks. Over five traced joins, the video's clock ran from 200 ms to 979 ms behind theirs,
+  fixed for the whole run. At 200 ms the output passed every buffer in all 56 windows. Near a
+  whole delay, the video reached the schedule one slot ahead of its deadline instead of 32.
+  Between 1,800 and 2,300 units each of video and MP2 then underflowed, and in the one run with
+  the PR head's own schedule the export stopped on its fatal overrun within seconds.
 - **Nearly every PCR the export writes misses TR 101 290's ±500 ns accuracy, by up to ±75 µs.** The
   export stamps each PCR with its 25 ms slot time, but a slot carries a whole number of packets
   (166 or 167 at 10 Mb/s), so the byte position wanders up to half a packet from where the value
@@ -73,7 +91,8 @@ cross-host runs are open.**
   about 4.7 s; the remaining ~2 s is not located.
 
 Measured at P1 and P2 on captured wire bytes, loopback, one host, the export forwarded without
-re-clocking. T-STD graded on the stream's own PCR. One run per cell. Hardware: not run.
+re-clocking. T-STD graded on the stream's own PCR. One run per cell. The loss and cross-host arms
+are graded on the export's output file, T-STD only. Hardware: not run.
 
 ## Objective
 
@@ -86,7 +105,8 @@ questions of it on a real broadcast multiplex:
 1. **Does the export run, and pass the T-STD, on a broadcast clip at its default delay?**
 2. **If not, at what delay, and what is the failure?**
 3. **What do P1/P2 say of the same bytes, and what is the latency against `--delay`?**
-4. Under the [T8b](test-8b-congestion-control.md) loss rig, and cross-host. *Not run.*
+4. **Does the result hold under the [T8b](test-8b-congestion-control.md) loss rig, and across
+   hosts?** Asked of the per-PID scratch build at 1 s, the one that passes on loopback.
 
 ## Pass criteria
 
@@ -129,6 +149,11 @@ fixture is video only. Its source passes `compliance.py`: EB peak 76 %, worst de
 - Comparator control: upstream harness on its default generated clip with the same build, which
   passes every check including strict T-STD.
 - One host, loopback. All stages at `nice 10`.
+- Loss arms: one host, the T8b network-namespace rig, 25 ms each way, BBRv3 on noq, uniform netem
+  loss on the media direction, 120 s. Cross-host: relay and importer on one host, with the clip paced by
+  `tsp -P regulate`, and the export on a second host in the same region, 120 s. Both on the
+  per-PID build, with lateness logged rather than fatal (`MOQ_TS_LATE=send`) so that a run is
+  graded whole.
 
 ## Results
 
@@ -269,6 +294,65 @@ scheduler.
 EB-limited runs at 1 s gave 1,846 ms (video only) and 3,171 ms (full clip). The spread is not
 located, so these figures do not rank the builds.
 
+### Under loss, and across hosts (per-PID build, 1 s)
+
+Graded with `ts-tstd.py` skipping 5 s, 2 s windows, on the export's output file. "Lost" is decode
+time the source carries and the output does not.
+
+| Arm | Runs the window | Buffers (windows legal) | What the export did |
+|---|---|---|---|
+| Loss rig, 0 % | yes | every buffer, 56 of 56; EB margin min 274.8 ms | lost nothing |
+| Loss rig, 1 % | yes | 54 of 55; MP2 B 11 overflowing arrivals (peak 5,144 B), AC-3 B 20 (peak 9,376 B), system TB 2 packets | lost 0.12 s of video and one 0.288 s AC-3 hole; 3 groups evicted; one grid restart at 73.9 s, the PCR stepping back 1.35 s with `discontinuity_indicator` set |
+| Loss rig, 10 % | yes | moot | 744,318 of 759,806 packets are nulls, 11,415 video; 54 PCR discontinuities; 122 groups evicted |
+
+**The 1 % failures sit at the restart.** Split at the restart, the first part passes in all 34
+windows and the second in all 19, apart from the 2 table packets over the system transport buffer.
+The scratch patch empties its occupancy model when the export clears its schedule on a restart, and
+a receiver's buffers are not emptied by a PCR discontinuity, so the restart window overfills what
+the patch believed was empty. Without `MOQ_TS_LATE=send`, the 1 % arm stopped at 5 s and the 10 %
+arm at 30 s on a deadline miss (at 1 %, a 919-packet video unit 12 slots late). Those arms were
+not traced, so whether that miss was the join skew below is not known.
+
+**Across hosts, the outcome is set at the join.** In every traced cross-host run the video moved
+to a second generation within its first frames and stayed there, while every other track stayed on
+generation 0. The two runs with the consumer's log on show the cause: a video group skipped at the
+join ("skipping slow groups"), which the consumer counts as a discontinuity. #4645's jitter buffer
+moves a track that crosses a discontinuity to a new generation. It joins one another track has
+already opened if its frame lands on that clock, and otherwise opens its own. Video is the only
+track that crosses one, so it opens its own. The new anchor is the frame's arrival, or the latest
+deadline already given out less the delay, whichever is later. Both cases occurred: in runs B and
+the PR-head run the video's first frame had exactly the delay as slack (anchored at its arrival),
+and in A and C it had 1,986 and 2,565 ms (pinned to the earlier deadlines). From then on the video
+is released on one clock and everything else on another. The offset is fixed for the run. It is
+measured from the release stage's own log: each frame's arrival plus its slack, less its decode
+time, is constant within a generation (spread under 75 ms), and the offset is the difference between
+the two generations' values. What sets its size is (reasoned) when each generation's first frame
+arrived relative to its decode time, which a join decides. The export subscribed with tracing on:
+
+| Run | Video clock behind the rest | Video lead into the schedule | Result |
+|---|---|---|---|
+| A, traced | 200 ms | 32 slots | every buffer passes, 56 of 56; EB margin min 413 ms, MP2 64 ms, AC-3 138 ms |
+| B, traced | 979 ms | 1 slot | video 2,257 of 4,098 units underflow, MP2 2,273 of 4,691, AC-3 761 of 2,271; 1 of 56 windows legal |
+| C, traced | 960 ms | 1 slot | video 1,803 of 4,071 units underflow, MP2 2,061 of 4,697, AC-3 942 of 3,526; 4 of 56 windows legal |
+| C, repeated untraced | — | — | the same counts and margins to the unit |
+| D, untraced | — | — | video passes, EB peak 99.7 %, margin min 507 ms; every MP2 unit underflows (margin −188 ms), AC-3 2,403 of 3,591; 0 of 57 windows legal |
+| PR head behaviour, traced | 959 ms | not logged | the export stops within seconds: "needs 1,855 packets in a 25 ms slot" |
+
+"Lead" is the minimum number of slots before its deadline a video unit reached the schedule, from
+runs that logged the schedule. Every other PID reached it at least 40 slots ahead, a whole delay, in
+each of them. In run D the video ran *ahead* of the audio: audio units underflow by a nearly
+constant amount while the video sends early, the converse of B and C. It was not traced, so its
+offset is not measured. The last row ran the same build with no
+`MOQ_TS_*` variable set, which leaves the PR head's schedule unchanged. It shows the skew is the
+release stage's, not the scratch patch's. A sixth traced run is void, a rig fault: its origin
+started while the previous run's relay still held the port. Its first 8 s show the same skip and a
+960 ms offset.
+
+Timestamps are not affected. Matched by payload against the source in the 0 % loss arm and in run
+D, a passing and a failing run, the video and MP2 PES carry the source's PTS: median shift 0 over
+about 4,100 video and 540 MP2 matches in each. The skew is in when the bytes are sent, not in what
+they say.
+
 ### The generated clip
 
 | `--delay` | Runs the capture | `compliance.py` | `ts-tstd.py` (skip 5 s, 2 s windows) | Latency (delivery, median) |
@@ -326,14 +410,33 @@ hand before the first unit is due.
 7. **The latency at 2 s is about twice what the design accounts for.** This is on loopback. The
    ~2 s unexplained has the same order as the transit T45 left unlocated on `ffa5b81b`, and may be
    the same thing. Nothing here says so yet.
+8. **#4645's release stage can put one track on a clock up to a whole delay behind the others'.**
+   A discontinuity crossed by one track alone, here a video group skipped at the join, opens a
+   generation only that track uses. Every traced cross-host join did this, and four of five put
+   the video between 959 and 979 ms behind. From then on no schedule downstream can hold the
+   decoder buffers for both sides, because it receives one side's units almost at their
+   deadlines. In the one PR-head run the export stopped on it; the per-PID build runs and fails
+   the buffer model. The defect is in the release stage, not in either schedule. Whether it also
+   happens co-resident is untested: the loopback and loss-rig runs were not traced, and they
+   passed.
+9. **Under loss, the per-PID build's only failure at 1 % is its own model at a grid restart.** A
+   shipped schedule has to carry the receiver's buffer occupancy across a restart, since a PCR
+   discontinuity does not empty a decoder. At 10 % the lane delivers almost nothing; that is the
+   transport, not the schedule.
 
 ## Limits
 
 - One host, loopback, one run per cell, one broadcast channel (two captures of the same channel are
-  on hand, not two channels). Cross-host and the loss rig not run.
+  on hand, not two channels). The loss rig and cross-host ran on the per-PID build at 1 s only.
+  The loss arms ran once each, untraced. Cross-host is one pair of hosts in one region, seven runs,
+  of which five were traced.
+- How often a join skews the clocks, and by how much, is a property of the join; five traced joins
+  do not give a distribution. The arm that would settle it is a run of joins at varied offsets into
+  the source's group, traced.
 - The replay models the video PID alone; the 500 ms explanation takes the other PIDs as a fixed
   rate share.
-- The patches are scratch builds, run once per cell, on loopback, not under loss or cross-host.
+- The patches are scratch builds, run once per cell. The per-PID patch's occupancy model resets
+  on a grid restart, which the 1 % arm shows a receiver's buffers do not.
   The per-PID patch takes every buffer size, drain rate and AC-3's frame count from environment
   variables set by hand from this clip. It gives AC-3 one frame less than its buffer to cover
   whole-slot frame timing. It models no decoder buffer for teletext or SCTE-35. It does not hold
@@ -382,6 +485,20 @@ MOQ_TS_EB=111=1115696,121=3584,123=4928 MOQ_TS_RX=111=10557082,121=2000000,123=2
   RELAY=<bin>/moq-relay MOQLAT=1s CAP=150 PACER=lab/scripts/ts-rtp-forward.py \
   bash lab/scripts/t18-arm.sh <broadcast>.ts <out> 60 moq 0
 python3 <wt>/test/ts/compliance.py --ts <out>/egress-from-5s.ts
+
+# The same build under the T8b loss rig, lateness logged rather than fatal, egress kept for grading
+export MOQ_TS_LATE=send MOQ_TS_EB=111=1115696,121=3584,123=4928 \
+  MOQ_TS_RX=111=10557082,121=2000000,123=2000000,131=6750000 MOQ_TS_FRAMES=123=9
+sudo --preserve-env=MOQ_TS_LATE,MOQ_TS_EB,MOQ_TS_RX,MOQ_TS_FRAMES LOSS_PCT=1 CC=delay LAT=1s \
+  KEEP_EGRESS=1 OUT=<out> bash lab/scripts/t8b-loss-point.sh l1 <bin> 120
+python3 lab/scripts/ts-tstd.py <out>/l1/egress.ts --skip 5 --window 2
+
+# Across hosts: the origin first, then the export on the other host (same MOQ_TS_* exported there).
+# The slack and lead lines are two debug events the scratch patch adds; the consumer's is upstream's.
+# A new origin refuses to start while an earlier one still holds the port.
+bash lab/scripts/t47-xhost.sh origin x1 <bin> <EC2_IP> 120                 # on the origin host
+RUST_LOG=info,moq_mux::jitter=debug,moq_mux::container::ts::schedule=debug,moq_mux::container::consumer=debug \
+  bash lab/scripts/t47-xhost.sh sub x1 <bin> <EC2_IP> 120                  # on the subscriber host
 
 # The schedule replay: the export's rule and a buffer-limited one, on source and authored DTS.
 # --reserve is the "raising the video DTS reserve ... to=" value the export logs; --eb is the

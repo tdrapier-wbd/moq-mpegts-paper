@@ -9,7 +9,9 @@
 #   sudo t8b-loss-point.sh <label> <bin-dir> [seconds]
 #
 # env: LOSS_PCT (10), DELAY_MS (25, each way), CC (delay = BBRv3 on noq), CLIP, OUT (~/t8b-loss),
-#      SUB_BIN (the subscriber's build; defaults to <bin-dir>, set it to cross builds)
+#      SUB_BIN (the subscriber's build; defaults to <bin-dir>, set it to cross builds),
+#      LAT (2s, the export's --max-age or --delay value), KEEP_EGRESS (0; 1 keeps egress.ts for
+#      grading), and any MOQ_TS_* variables, which reach the export unchanged
 #
 # Oracle: the relay and both clients stay alive for the window (an abort is a result), plus the
 # subscriber's delivered rate and TSDuck continuity on what it wrote. The egress file is deleted
@@ -24,6 +26,8 @@ SECS=${3:-120}
 LOSS_PCT=${LOSS_PCT:-10}
 DELAY_MS=${DELAY_MS:-25}
 CC=${CC:-delay}
+LAT=${LAT:-2s}
+KEEP_EGRESS=${KEEP_EGRESS:-0}
 CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
 OUT=${OUT:-/home/ubuntu/t8b-loss}/$LABEL
 PORT=4443
@@ -41,7 +45,8 @@ mkdir -p "$OUT"
 {
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	[ "$SUB_BIN" = "$BIN" ] || echo "subscriber: $("$SUB_BIN/moq" --version 2>&1 | head -1) from $SUB_BIN"
-	echo "label=$LABEL loss=${LOSS_PCT}% delay=${DELAY_MS}ms each way cc=$CC secs=$SECS"
+	echo "label=$LABEL loss=${LOSS_PCT}% delay=${DELAY_MS}ms each way cc=$CC secs=$SECS lat=$LAT"
+	env | grep '^MOQ_TS_' | sort
 	echo "started=$(date -Is)"
 } | tee "$OUT/meta.txt"
 
@@ -73,7 +78,7 @@ PIDS+=($!)
 sleep 4
 
 ip netns exec t8b-sub "$SUB_BIN/moq" "${SUB_DIAL[@]}" "https://10.99.0.1:$PORT" --broadcast "$BCAST" \
-	export ts "${SUB_LAT[@]}" 2s >"$OUT/egress.ts" 2>"$OUT/export.log" &
+	export ts "${SUB_LAT[@]}" "$LAT" >"$OUT/egress.ts" 2>"$OUT/export.log" &
 SUB_P=$!
 PIDS+=("$SUB_P")
 
@@ -107,4 +112,4 @@ PY
 	tsp -I file "$OUT/egress.ts" -P continuity -P count --total -O drop 2>&1 | tail -3
 	echo "finished=$(date -Is)"
 } | tee -a "$OUT/meta.txt"
-rm -f "$OUT/egress.ts"
+[ "$KEEP_EGRESS" = 1 ] || rm -f "$OUT/egress.ts"

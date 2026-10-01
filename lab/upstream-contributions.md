@@ -2002,7 +2002,20 @@ AC-3's buffer. On the full clip it passes every buffer of `ts-tstd.py` and `comp
 and 750 ms. At 500 ms it stops; a replay puts that on the export's authored DTS. PCR accuracy still
 fails, from the unchanged stamping.
 
-**Open.** The loss rig and cross-host.
+**Found since, not yet reported.** Across hosts, the release stage's generations split audio and
+video at the join. A video group skipped at the join counts as a discontinuity. Video, the only
+track to cross it, opens a generation of its own, anchored no earlier than the deadlines already
+given to the others. On one pair of hosts, four of five traced joins put the video's clock 959–979 ms
+behind the other tracks' for the whole run, and one 200 ms. In the run on the PR head's own
+schedule, the export stopped on its fatal overrun within seconds; on the per-PID patch it runs, and
+the output fails the buffer model for the late side. Timestamps are unaffected. The release stage's
+own per-frame slack measures the offset, so a maintainer can see it with one debug line. A second,
+smaller item: the per-PID patch's occupancy model resets on a grid restart, which under 1 % loss
+overfilled the audio buffers once. That one is the patch's, not the PR's, and goes in only as a
+requirement on any shipped schedule.
+
+**Open.** Whether the split also happens co-resident, which the passing loopback and loss-rig runs
+did not trace.
 
 ### The liveness exit — filed as a question, deliberately
 

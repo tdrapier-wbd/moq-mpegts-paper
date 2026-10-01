@@ -1455,7 +1455,35 @@ either side of one 22-packet transport loss at 139.7 s, it passed both halves.
 > or a single incident predicts a cluster. Placing the events in time costs less than any re-run, and
 > a re-run that changes the suspected cause without locating the events tests nothing.
 
+### Repeat a cell that disagrees with its neighbour before naming what differs between them
+
+*From [T47](test-47-fixed-delay-export.md)'s cross-host arm.* The first cross-host run of the
+per-PID build failed every MP2 unit by a nearly constant 188 ms, where the namespace rig's 0 % arm
+on the same build had passed every buffer. The two differed in topology, so the investigation went
+to what cross-host changes: arrival skew between tracks, the release stage's anchoring. The second
+run at the same settings failed differently: the video, not the audio, ran late. A third passed
+outright. The variable was the join. A video group skipped at the join put the video on its own
+release clock, at an offset the join set, and topology only made such joins common.
+
+> **When one run of a new configuration differs from the old one, run it again before explaining
+> the difference.** A configuration effect predicts the same failure twice. A failure that changes
+> shape between identical runs belongs to a state the run entered, and the useful question becomes
+> which state. Here the trace that answered it was the release stage's per-frame slack, which also
+> made the offset measurable rather than inferred.
+
 ## 5. Rig hygiene
+
+**A server role that cannot bind its port has to stop the run, or the run rides the previous
+run's server and dies with it.** *(T47.)*
+
+> The cross-host origin role starts a relay on a fixed port, waits two seconds and starts the
+> importer. One origin was started while the previous run's relay still held the port. The new relay
+> exited on "address already in use", nobody checked, and the importer and the export both connected
+> to the old relay. When the old run's origin stopped its relay on schedule, it took the new run
+> down 8 s in, with an error ("json: unroutable") that pointed nowhere near the cause. The role now
+> checks that its relay is still alive before it starts the importer, and stops if not. **Check
+> that a server you started is still running before starting its clients.** An exit status from
+> `&` says only that the process was forked.
 
 **A `pkill -f` pattern sent over SSH matches the SSH command line that carries it, so the cleanup
 kills its own session and the process it was aimed at survives.** *(P1-m tap validation.)*
@@ -1468,6 +1496,10 @@ kills its own session and the process it was aimed at survives.** *(P1-m tap val
 > which no longer matches itself. **Verify the kill rather than assuming it** — end the command with
 > `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean` and read the answer, because a failed
 > cleanup is indistinguishable from a successful one in the exit status when SSH dies mid-command.
+>
+> Violated again in T47, in the other direction: a wait loop `while pgrep -f "0.0.0.0:4443"` sent
+> over SSH matched its own command line and never ended. The bracket idiom covers waits as well as
+> kills.
 
 **When arms run back to back against a service that caches an admission decision, the cache carries
 the previous arm's answer into the next one.** *(T37, T38.)*
