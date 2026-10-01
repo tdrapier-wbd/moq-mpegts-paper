@@ -3159,3 +3159,21 @@ never came due.
 
 > **Cut by packets** (`-P until --packets N`, with N = seconds × rate / 1,504), and check the
 > output's size before using it.
+
+### A failing capture's PTS span is not a rate; replay the scheduler before theorising about it
+
+*From T47.* Captures of the export that ended in a schedule overrun carried 13–29 % less PTS than
+PCR, and the campaign reported upstream that the release stage was starving the schedule. It was
+the reverse. The shortfall was a 1.2 s hole after the join plus the window of units still queued
+at the exit, and the schedule was overfull because it sends as late as possible. What located it
+was a frame-by-frame comparison of the export's DTS against the source's, then an offline replay
+of the export's slot rule on the source's units. The replay predicted the next two runs of the
+real binary: where it would stop, to within 0.03 s of decode time, and the delay at which it would
+not.
+
+> **Measure a timeline against the source unit by unit, never by the spans of a truncated
+> capture.** When a scheduler fails, port its rule to a replay
+> ([`ts-schedule-replay.py`](scripts/ts-schedule-replay.py)), check the port against a capture,
+> and make it predict a run you have not yet made before reporting a cause. Replay the source's
+> own timing as a control: if the source's DTS fails too, the fault is the policy, not the
+> timestamps.

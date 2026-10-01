@@ -1845,8 +1845,7 @@ ahead of their decode time could shrink it.
 it; one run per cell). The export releases each frame a fixed delay after its first arrival and
 schedules packets onto a constant-rate output: the re-multiplexing stage this section calls for,
 built into the subscriber. On the clip graded above it exits with a schedule overrun within seconds
-at every delay tried, from 500 ms to 3 s, and with the video alone. Before it does, the PTS it
-carries falls behind its own PCR. The cause is not located. On a generated 1080p25 clip with a
+at every delay tried, from 500 ms to 3 s, and with the video alone. On a generated 1080p25 clip with a
 broadcast-sized CPB (9 Mbit at 9 Mb/s, about 0.7 s of send-ahead), it stops at the 500 ms default.
 At 2 s it passes both upstream's T-STD check and `ts-tstd.py` over the whole capture. On that run
 nearly every PCR is outside TR 101 290's ±500 ns accuracy, by up to ±75 µs (1,868 of 1,880),

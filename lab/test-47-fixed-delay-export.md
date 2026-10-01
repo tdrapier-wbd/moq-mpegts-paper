@@ -1,10 +1,11 @@
 # Test 47 — The upstream fixed-delay TS export on a broadcast clip
 
 **State: first pass (P0-m), loopback, on the head of
-[#4645](https://github.com/moq-dev/moq/pull/4645) (`4b7158d6c00d`, unmerged). The loss rig,
-cross-host runs and the cause of the broadcast-clip failure are open.**
+[#4645](https://github.com/moq-dev/moq/pull/4645) (`4b7158d6c00d`, unmerged). The cause of the
+broadcast-clip failure is located by an offline replay, which predicted two further runs of the
+real export correctly. A fix is neither built nor run. The loss rig and cross-host runs are open.**
 
-- **On a real broadcast capture the export stops within seconds, at every delay tried.** On
+- **On a real broadcast capture the export stops within seconds, at every delay up to 3 s.** On
   CNNiEMEA2 (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
   with a schedule overrun ("needs N packets in a 25 ms slot, more than R b/s allows within the
   delay") at `--delay` 500 ms, 1 s, 2 s and 3 s, at the catalog's recorded rate. At 1 s it does so
@@ -19,8 +20,22 @@ cross-host runs and the cause of the broadcast-clip failure are open.**
   CPB, muxed at 10 Mb/s, about 0.7 s of video send-ahead. The source passes upstream's strict check.
   Round-tripped at `--delay 500ms`, the export stops after 2.2 s of output. At `--delay 2s` it runs
   the whole capture, and upstream `compliance.py` and [`ts-tstd.py`](scripts/ts-tstd.py) both pass
-  the output, every 2 s window included. So the default is too short for a CPB this size, and
-  something further in the broadcast clip, not yet identified, defeats every delay.
+  the output, every 2 s window included. So the default is too short for a CPB this size.
+- **The broadcast clip fails on the schedule's send policy, not on its load.** On the source's
+  own wire the video never exceeds 150.1 packets per 25 ms slot over any 3 s, against the 156 the
+  export allows itself. The source carries it by sending up to 0.97 s ahead, with EB peaking at
+  96 %. The export sends each unit as late as the rate allows, and it knows units only one window
+  ahead. Slots it pads before a heavy stretch cannot be recovered, so a stretch where the decode
+  timeline outruns the rate for about a window cannot be met. CNN's field-coded passages are such
+  stretches. An offline replay of the export's rule fails the clip at every delay up to 3 s on the
+  source's own DTS, and up to 5 s on the DTS the export authors. It fits at 8 s. The real export
+  then did both: at 5 s it stopped with 17.60 s of decode time out, where the replay said 17.57 s,
+  and at 8 s it ran the capture and passed the T-STD (video only). Sending earliest deadline first
+  as soon as the decoder buffer has room fits the same clip from 1 s, in the replay only.
+- **The export's authored DTS makes this worse.** Its decode clock holds back a fixed *number* of
+  pictures (10), not a fixed time. Each time CNN switches between frame and field coding, the
+  authored DTS moves 0.2 s against the source's, and the leading pictures of the first GOP all
+  get DTS one tick apart.
 - **Nearly every PCR the export writes misses TR 101 290's ±500 ns accuracy, by up to ±75 µs.** The
   export stamps each PCR with its 25 ms slot time, but a slot carries a whole number of packets
   (166 or 167 at 10 Mb/s), so the byte position wanders up to half a packet from where the value
@@ -105,18 +120,60 @@ fixture is video only. Its source passes `compliance.py`: EB peak 76 %, worst de
 | CNN video + MP2, upstream harness | 500 ms | catalog 9.70 Mb/s | — | — | 72 (MP2) | 352 |
 | CNN video only, upstream harness | 500 ms | catalog 9.50 Mb/s | — | — | 0 | 165 |
 | CNN video only | 2 s | catalog | mid-stream | ~10 s | 0 | 657 |
+| CNN video only | 5 s | catalog | mid-stream | 17.60 s of DTS | 0 | 366 |
+| CNN video only | 8 s | catalog | mid-stream | runs the capture (43 s graded) | 0 | none |
 
-In the runs that lasted long enough to measure, the export's media fell behind its own clock. The
-PCR advanced at the wall clock's rate in clean 25 ms steps, while the PTS carried advanced more
-slowly: 8.44 s of PTS against 9.75 s of PCR at 11 Mb/s, and 7.70 s against 10.85 s at 3 s. The
-lead of PTS over PCR shrank from 0.44–0.57 s towards 0.27–0.30 s before the overrun. So the release
-stage handed the schedule less than real time's worth of frames, although the source tap shows the
-import fed at real time (60.24 s of PTS in 59.93 s). Where the frames were held is not located: the
-import and relay logs show nothing beyond quiet SCTE-35 PIDs.
+On a mid-stream join, the export writes the first group's keyframe and then nothing until the next
+group's, 1.2 s of PTS later. That hole, and the window of units still queued when the export
+stops, account for the PTS of a short capture covering less than its PCR. It is not a slow release.
 
-The broadcast clip differs from the passing generated one in being interlaced (`field_order=tt`),
-in carrying B-frames with a reorder depth of 3 on a broadcast encoder's GOP, and in the size of
-its I-frames. None of these has been isolated as the cause.
+### Where the broadcast clip fails
+
+The clip is a hierarchical-B pyramid with open GOPs: each I-frame decodes 0.40 s before it is
+presented and is followed in decode order by seven leading pictures. It switches between frame
+and field coding (PAFF) every few seconds. In field-coded passages each field is its own PES, 20 ms
+apart, and for a few hundred milliseconds the fields run 260–500 packets each: about 3,600
+packets in 0.26 s.
+
+**The load fits; the policy does not.** On the source wire the video PID never exceeds 18,008
+packets in any 3 s (150.1 per slot; the stripped clip's rate is 9.50 Mb/s). In the export,
+`schedule.rs` gives each later slot `rate / (188 × 8 × 40) − 1` = 156 packets of room, and sends in
+each slot only what keeps the queued units on time. A unit enters the queue a window ahead of its
+decode slot. The source meets the field burst by having sent the stretch before it early:
+`ts-tstd.py` on the source gives a residence maximum of 0.97 s and EB peak 1,066,777 of 1,115,696 B
+(CpbSize 8,797,568 bits). The export has padded those slots with nulls, so when the burst enters
+its window, the window's queue exceeds the window's room.
+
+**Replayed offline.** [`ts-schedule-replay.py`](scripts/ts-schedule-replay.py) replays the rule on
+the stripped video-only clip at 9,501,512 b/s, the rate the export padded to. It runs on the
+source's DTS, and on the DTS the export authors from PTS: a port of its decode clock, which
+reproduces the PTS − DTS of 229 of 229 frames of the 2 s capture, with the SPS's 40 ms period and
+the catalog's 36,000-tick reserve.
+
+| `--delay` | As late as possible (the export), source DTS | As late as possible, authored DTS | Earliest deadline first, limited by EB, authored DTS |
+|---|---|---|---|
+| 0.5 s | stops | stops at start | late at start |
+| 1 s | stops, 3.28 s out | stops, 3.78 s out | fits, EB peak 100 % |
+| 2 s | stops, 2.33 s out | stops, 8.88 s out | fits |
+| 3 s | stops, 1.35 s out | stops, 7.88 s out | fits |
+| 5 s | fits | stops, 17.57 s out | fits |
+| 8 s | fits | fits | fits |
+
+"Out" is how much of the decode timeline has been sent when the rule fails. Two runs of the real
+export on the same clip then tested the replay's two predictions. At `--delay 5s` it stopped with
+17.60 s of decode time out ("needs 366 packets"). At `--delay 8s` it ran the whole publish (43 s
+graded), with no overrun and no late drop. `ts-tstd.py` passes that output with 0 TB overflow, 0 EB
+underflow, EB peak 531,962 of 1,115,696 B and a minimum EB margin of 1.3 ms. On the source's DTS the
+earliest-deadline policy also fits at 0.5 s.
+
+**The authored DTS.** The export carries no source DTS; it re-authors one from the PTS, handing the
+PTS out in display order `reserve / period` = 10 pictures late. Ten pictures span 400 ms when they
+are frames and 200 ms when they are fields, so against the source's DTS the authored DTS runs
+0.28 s early in frame-coded passages and 0.08 s early in field-coded ones. Across each switch the
+authored clock runs at half or double speed, compressing the decode timeline relative to the
+bytes it carries. At start-up the first GOP's leading pictures precede its I-frame in display
+order, and all seven get DTS one tick apart. With the source's DTS the as-late-as-possible rule
+fits at 5 s; with the authored DTS it needs 8 s.
 
 ### The generated clip
 
@@ -147,15 +204,21 @@ hand before the first unit is due.
 1. **#4645 does not yet carry a real broadcast multiplex.** At every delay tried up to 3 s, and in
    each variation tried at one delay (a higher rate, subscribing first, the video alone), the export
    stops within seconds. The maintainer's harness reproduces it at the defaults, so the report does
-   not depend on this rig.
-2. **Its default is short for a broadcast CPB, independent of that failure.** A generated stream
+   not depend on this rig. On the video alone it runs at 8 s.
+2. **The cause is the send policy, with the authored DTS compounding it.** Sending as late as
+   possible with one window of lookahead cannot absorb a stretch that outruns the rate for about
+   a window. A broadcast encoder spends its CPB on exactly such stretches. The replay locates
+   this and predicted both further runs. That a buffer-limited earliest-deadline policy fixes it is
+   shown only in the replay, and only on the video. That is the policy
+   [T45](test-45-live-tstd-remux.md)'s re-multiplexer runs live.
+3. **Its default is short for a broadcast CPB, independent of that failure.** A generated stream
    with 0.7 s of send-ahead, which passes the T-STD as a source, cannot start at 500 ms and
    conforms at 2 s.
-3. **Where it runs, its output passes both T-STD checks and fails PCR accuracy almost throughout.** The
+4. **Where it runs, its output passes both T-STD checks and fails PCR accuracy almost throughout.** The
    buffer model and P2 disagree on the same bytes, which is
    [T44](test-44-tstd-grading.md)'s point in the other direction: a T-STD pass is not a TR 101 290
    pass either.
-4. **The latency at 2 s is about twice what the design accounts for.** This is on loopback. The
+5. **The latency at 2 s is about twice what the design accounts for.** This is on loopback. The
    ~2 s unexplained has the same order as the transit T45 left unlocated on `ffa5b81b`, and may be
    the same thing. Nothing here says so yet.
 
@@ -163,12 +226,16 @@ hand before the first unit is due.
 
 - One host, loopback, one run per cell, one broadcast channel (two captures of the same channel are
   on hand, not two channels). Cross-host and the loss rig not run.
-- The broadcast-clip failure is characterised, not diagnosed. The arm that would locate it is the
-  export with its release stage's frame arrivals and releases traced against the wall clock, which
-  needs instrumentation in the PR's code or the maintainer's.
-- The generated clip matches the broadcast one on CPB size and send-ahead only. A generated
-  interlaced (PAFF or MBAFF) twin with B-frames is the arm that would test the leading
-  candidate.
+- The diagnosis rests on a replay of the video PID alone: audio, tables and the PCR's own slot
+  budget beyond one packet are not modelled. It predicted the 5 s and 8 s runs, but it has not
+  been checked on the full multiplex. The arm that settles the fix is the export with a
+  buffer-limited earliest-deadline schedule, graded on the full CNN multiplex at 1 s and at the
+  default.
+- The generated clip matches the broadcast one on CPB size and send-ahead only. It has no
+  field-coded passages, and x264 cannot make them (it encodes MBAFF, not PAFF), so a shareable
+  fixture for this failure would need a load profile that outruns the rate for about a window
+  rather than an interlaced encode.
+- The join hole (one keyframe, then the next group) is observed, not diagnosed.
 - The forwarder writes datagrams as the export's slices arrive, so wire arrival timing is the
   export's plus one loopback hop. Arrival-timing PCR jitter was not graded; the PCR accuracy above
   is the values against byte position, the domain `pcrverify` grades.
@@ -196,8 +263,25 @@ VPID=256 RELAY_TOML=<wt>/demo/relay/localhost.toml MOQ=<bin>/moq RELAY=<bin>/moq
   PACER=lab/scripts/ts-rtp-forward.py bash lab/scripts/t18-arm.sh <fixture>.ts <out> 60 moq 0
 python3 lab/scripts/ts-tstd.py <out>/moq-c0-egress.ts --skip 5 --window 2
 tsp -I file <out>/moq-c0-egress.ts -P pcrverify --absolute --jitter-max 13 --bitrate <catalog-rate> -O drop
+
+# The schedule replay: the export's rule and a buffer-limited one, on source and authored DTS.
+# --reserve is the "raising the video DTS reserve ... to=" value the export logs; --eb is the
+# decoder size ts-tstd.py calibrates for the video PID.
+python3 lab/scripts/ts-schedule-replay.py <source-video-only>.ts --rate <catalog-rate> \
+  --window 0.5,1,2,3,5,8 --reserve 36000 --period 3600 --eb 1115696 --check <out>/moq-c0-egress.ts
 ```
 
 A clip cut for the harness must be cut by packets (`tsp -P until --packets N`): `--seconds` is wall
 time and passes the whole file. A different export rate goes in through a wrapper that appends
 `--mux-rate` to `export ts`, since the rig passes only the delay.
+
+## Corrections
+
+- **Believed:** the release stage starved the schedule. In the short captures the PTS covered
+  13–29 % less than the PCR, and the PTS-to-PCR lead shrank before the overrun. That was reported
+  upstream as "starved of frames rather than overfull". **True:** the schedule is overfull. The
+  PTS shortfall is the join hole plus the window still queued at the exit, and the lead changes
+  with the authored DTS's offset between frame- and field-coded passages. **Rule:** a capture
+  that ends in a failure covers less PTS than PCR by construction, so a span ratio from it is not
+  a rate. Compare the decode timeline against the source unit by unit
+  ([method notes](method-notes.md)).
