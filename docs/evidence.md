@@ -1862,9 +1862,24 @@ loopback, one run per cell, the first 5 s ungraded.) The patch schedules each sl
 first across PIDs, and admits each PID's packets against its own transport and decoder buffers. It
 takes deadlines frame by frame where a passed-through PES carries several frames: this clip's AC-3
 PES is larger than its decoder buffer, so no schedule of whole PES can conform. It carries the full
-multiplex at 1 s and at 750 ms with every buffer passing both T-STD checks. PCR accuracy still
+multiplex at 1 s and at 750 ms with every buffer passing both T-STD checks, on the join those runs
+made (below). PCR accuracy still
 fails, from the unchanged stamping. At 500 ms it stops; an offline replay of the same rule puts
 that on the DTS the export re-authors, which it misses where the source's DTS is met.
+
+At the join, that build's release stage can put the video on a clock of its own, and the offset
+decides whether the output conforms. *Measured*
+([T47](../lab/test-47-fixed-delay-export.md#under-loss-and-across-hosts-per-pid-build-1-s);
+`[unmerged]`, `4b7158d6c00d` with the scratch schedule above at 1 s; T-STD only, on the export's
+output file; eleven traced joins, six on one host and five across one pair of hosts in one region.)
+A video group skipped at the join counts as a discontinuity, and the release stage gives a track
+that crosses one alone a generation and an anchor of its own. On one host and across hosts alike,
+the video then ran 200 ms behind the other tracks (three joins), 959–979 ms behind (five) or
+1,200 ms ahead (two), fixed for the run. Only the first passes every buffer, and the 1 s pass above
+has that state's minimum margins to 0.1 ms. A delay behind, the video reaches the schedule with one
+slot to spare; ahead, the audio reaches it late; either way the output fails the buffer model. In
+the one run on the PR's own schedule, the export stopped within seconds. What selects the state
+is not established.
 
 **What it does not establish.**
 
