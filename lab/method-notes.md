@@ -2556,6 +2556,18 @@ exporter exited 1 about 30 s after the kill without `--linger`, and resumed with
 
 ## 6. Claims, and their scope
 
+**A scratch change that fixes the measured case is a fix only once the upstream tests pass with it
+switched on.** *(T47.)*
+
+> A two-part change to #4645's release stage made all eleven traced joins conform, with one set of
+> margins, and was within a sentence of being offered upstream as the fix. With its environment
+> variables set, four of `moq-mux`'s 941 tests failed. Each part broke the handling of a genuine
+> timeline restart, which the rig never exercised, because the release stage cannot tell that case
+> from a skip at the join. Gating a change behind a variable keeps the default build's tests
+> green, which is exactly why they say nothing about it. **Run the suite with the change on.** A
+> failure there turns "the fix" into "the mechanism, and the case a fix has to keep", which is the
+> more useful thing to report.
+
 **Before calling an upstream close accidental, read the body of the pull request that closed it, not
 only the commit diff.** *(T13 / P1-n, the #2779 draft.)*
 

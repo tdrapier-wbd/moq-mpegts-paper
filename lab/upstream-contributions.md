@@ -2014,13 +2014,20 @@ smaller item: the per-PID patch's occupancy model resets on a grid restart, whic
 overfilled the audio buffers once. That one is the patch's, not the PR's, so it was not reported;
 it stands as a requirement on any shipped schedule.
 
-**Found after the report, not yet reported.** The split happens on one host too: six traced
+**Found after the report, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5932968381)). The split happens on one host too: six traced
 co-resident joins (loopback and the T8b namespace rig at 0 %) all skipped a video group. Two left
 the video 200 ms behind and passed. Two put it 1,200 ms *ahead*, and every MP2 unit then reached
 the schedule 8 slots late. One put it 960 ms behind, and in one an evicted MP2 group gave the
 audio generations of its own. The earlier loopback pass at 1 s has the 200 ms state's margins, so
-the per-PID result reported earlier holds for that join state only. The report said the
-co-resident case was untraced, and that it expected the split there; both want a follow-up.
+the per-PID result reported earlier holds for that join state only; the follow-up says so.
+
+**Built since, not yet reported.** A scratch release stage that keeps the tracks on one clock: a
+frame that lands on the latest clock keeps it, and a track on an older generation follows the
+newest at its first frame not late there. All eleven joins, six on one host and five across hosts,
+pass every buffer in every window with one set of margins. It breaks four of the PR's
+discontinuity tests (two per change), because the release stage cannot tell a skip at the join from
+a publisher's timeline restart. What to report is the mechanism and the test conflict, not the
+patch: the distinction belongs in the consumer or in the discontinuity it reports.
 
 ### The liveness exit — filed as a question, deliberately
 

@@ -7,13 +7,16 @@ real export correctly. A scratch patch that schedules each PID's packets earlies
 admitted against that PID's own transport and decoder buffers, carries the full multiplex at 1 s
 and at 750 ms with every buffer conformant; PCR accuracy still fails, from the unchanged stamping.
 At 500 ms it stops, as the replay predicts for the DTS the export authors. Those passes hold
-only for the join the runs made. At every traced join, on one host and across hosts, the video
-track skipped a group, and #4645's release stage then gave it a clock of its own. The offset
+only for the join the runs made. At all eleven joins traced on #4645's release stage, on one host
+and across hosts, the video track skipped a group, and the release stage then gave it a clock of
+its own. The offset
 from the other tracks' clock is set at the join and fixed for the run: 200 ms behind, about a
 whole delay behind, or 1.2 s ahead. Only the 200 ms state passes, and the 1 s loopback pass is
 that state. Under the loss rig at 1 s, 1 % stays conformant except at one grid restart, and 10 %
 collapses the lane. In the one run on the PR head's schedule with the video a delay behind, the
-export stopped.**
+export stopped. A scratch change that keeps every track on one clock makes all eleven joins
+conform, with one set of margins, but it breaks four of upstream's discontinuity tests, so the fix
+proper is a design choice upstream.**
 
 - **On a real broadcast capture the export stops within seconds, at every delay up to 3 s.** On
   CNNiEMEA2 (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
@@ -87,6 +90,11 @@ export stopped.**
   Ahead by 1.2 s, every MP2 unit reached the schedule 8 slots late and underflowed.
   In the one run with the PR head's own schedule, a delay behind, the export stopped on its fatal
   overrun within seconds.
+- **With every track kept on one clock, all eleven joins conform.** A scratch release stage that
+  lets a landing frame keep its clock, and moves lagging tracks to the newest clock, passed every
+  buffer in every window at six joins on one host and five across hosts. The margins were the same
+  in each. As written it breaks four of upstream's discontinuity tests, because the release stage
+  cannot tell a skip at the join from a publisher's timeline restart.
 - **Nearly every PCR the export writes misses TR 101 290's ±500 ns accuracy, by up to ±75 µs.** The
   export stamps each PCR with its 25 ms slot time, but a slot carries a whole number of packets
   (166 or 167 at 10 Mb/s), so the byte position wanders up to half a packet from where the value
@@ -380,6 +388,49 @@ D, a passing and a failing run, the video and MP2 PES carry the source's PTS: me
 about 4,100 video and 540 MP2 matches in each. The skew is in when the bytes are sent, not in what
 they say.
 
+### Keeping the tracks on one clock (scratch)
+
+Two changes to the release stage (`jitter.rs`, about 30 lines), each behind an environment
+variable, on top of the per-PID build:
+
+- **Rejoin** (`MOQ_JITTER_REJOIN`). A frame after a discontinuity that lands on the latest clock
+  stays on it, even when no other track has opened that generation. This removes the split at
+  joins where the video's first frame after the skip lands on the existing clock.
+- **Follow** (`MOQ_JITTER_FOLLOW`). A track on an older generation moves to the newest one at its
+  first frame that is not late there. The test is only "not late", because the SCTE-35 tracks'
+  sparse frames decode far enough ahead of their arrival to fail the upper bound of "lands", and
+  with that bound they stayed behind.
+
+Graded as above, 60 s per join, traced:
+
+| Release stage | Joins | Every buffer, every window | Lead into the schedule |
+|---|---|---|---|
+| Rejoin only | 6 on one host | 3 pass, 3 fail | where a second generation still opened, as before |
+| Rejoin and follow, follow requiring "lands" | 6 on one host, 3 across hosts | 6 of 6 on one host; 1 of 3 across hosts | in the two failures, every PID down to 1 slot, with only the three SCTE-35 tracks (181 frames) left on the old generation |
+| Rejoin and follow, follow requiring "not late" | 6 on one host, 5 across hosts | **11 of 11** | video and MP2 40 slots in every join; EB margin min 509.0–509.1 ms in every join |
+
+Two further cross-host joins are void, a rig fault: the guard refused their origins while a relay
+was still holding the port, and the export captured nothing.
+
+**With one clock, every join conforms and the states collapse to one.** The runs that pass do so
+with the same margins whether the video stayed on generation 0 or every track moved to generation
+1. On this rig, then, the split accounts for all of the join dependence.
+
+**The change is not a fix as written.** Upstream's `moq-mux` tests pass without the variables
+(941 of 941). With each change, two fail:
+
+- *Follow* breaks `a_discontinuity_re_anchors` and `a_backlog_releases_generations_in_turn`. A
+  track still carrying its old timeline after the publisher restarts is not late on the new clock,
+  so it follows it and is held seconds too long.
+- *Rejoin* breaks `discontinuity_flags_the_break_once_across_tracks` and
+  `discontinuity_re_emits_tables_and_resumes_the_clock`. A source discontinuity whose timestamps
+  land on the old clock no longer produces the flagged break and table re-emission they expect.
+
+The release stage cannot tell a group the consumer skipped at the join from a timeline restart,
+because both arrive as the same counter. The distinction belongs where the skip happens (reasoned).
+One option is a consumer that does not count a skip the caller never saw. Another is a
+discontinuity that says whether the timeline continued.
+
 ### The generated clip
 
 | `--delay` | Runs the capture | `compliance.py` | `ts-tstd.py` (skip 5 s, 2 s windows) | Latency (delivery, median) |
@@ -448,7 +499,9 @@ hand before the first unit is due.
    Well ahead, it receives audio after theirs. In the one PR-head run the export stopped on it; the
    per-PID build runs and fails the buffer model. The defect is in the release stage, not in
    either schedule, and (reasoned) no schedule fix makes the output's conformance independent of
-   the join.
+   the join. Keeping the tracks on one clock does: in a scratch release stage, eleven of eleven
+   joins passed with one set of margins. As written it breaks upstream's handling of a genuine
+   timeline restart, which the release stage cannot tell from a skip at the join.
 9. **Under loss, the per-PID build's only failure at 1 % is its own model at a grid restart.** A
    shipped schedule has to carry the receiver's buffer occupancy across a restart, since a PCR
    discontinuity does not empty a decoder. At 10 % the lane delivers almost nothing; that is the
@@ -462,9 +515,12 @@ hand before the first unit is due.
   is one pair of hosts in one region, seven runs, of which five were traced; the co-resident joins
   are six traced runs of 60 s on one of those hosts.
 - Eleven traced joins show three offset states, plus one multi-generation join, and their
-  outcomes; they do not give the states'
-  frequencies, nor what in the join selects one. The arm that would settle it is a run of joins at
-  controlled offsets into the source's group, traced.
+  outcomes. They do not give the states' frequencies, nor what in the join selects one; the arm
+  that would settle it is a run of joins at controlled offsets into the source's group, traced.
+  With the tracks on one clock the question no longer decides conformance on this rig.
+- The one-clock release stage ran at 1 s, 60 s per join, without loss, on one clip. Its latency
+  was not measured, and nor were a publisher restart or a mid-run eviction on it, which are the
+  cases its test failures concern.
 - The replay models the video PID alone; the 500 ms explanation takes the other PIDs as a fixed
   rate share.
 - The patches are scratch builds, run once per cell. The per-PID patch's occupancy model resets
@@ -527,6 +583,7 @@ python3 lab/scripts/ts-tstd.py <out>/l1/egress.ts --skip 5 --window 2
 
 # Across hosts: the origin first, then the export on the other host (same MOQ_TS_* exported there).
 # The slack and lead lines are two debug events the scratch patch adds; the consumer's is upstream's.
+# MOQ_JITTER_REJOIN=1 MOQ_JITTER_FOLLOW=1 on the sub turns on the scratch one-clock release stage.
 # A new origin refuses to start while an earlier one still holds the port.
 bash lab/scripts/t47-xhost.sh origin x1 <bin> <EC2_IP> 120                 # on the origin host
 RUST_LOG=info,moq_mux::jitter=debug,moq_mux::container::ts::schedule=debug,moq_mux::container::consumer=debug \
