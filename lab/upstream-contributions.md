@@ -1932,9 +1932,9 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
     on the derived exposure.
   - The PR also re-points `msfts-convergence.md`'s non-goal at passthrough.
 
-  Its one failing check is `main`'s quest lint, on `admission-bench.md` and `cluster-shims.md`,
-  two files the PR does not touch. [#4666](https://github.com/moq-dev/moq/pull/4666) has since
-  fixed it on `main`.
+  Its one failing check was `main`'s quest lint, on `admission-bench.md` and `cluster-shims.md`,
+  two files the PR does not touch. [#4666](https://github.com/moq-dev/moq/pull/4666) fixed it on
+  `main`, and `main` is merged into the branch, which passes the pinned `quest check`.
 - **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643), into the questline's
   branch `quest/m1/tstd/README`, which #4645 also targets, not into `main`. There `test/ts` still
   carries the approximate TB-only check with fixed leak rates. It is hand-rolled from
@@ -1973,10 +1973,11 @@ check: three defects against H.222.0 (10/2014) and one convention.
 - **A capture's truncated last access unit is graded as an underflow**, a convention rather than a
   defect, which decides an audio condition on five files.
 
-**Found, drafted, not reported.** These are measured against the questline branch's head
-`8df1e438`. Each has a clause, a file that shows it and the first violating unit, so it is
-reportable as it stands. The report would go on
-[#4640](https://github.com/moq-dev/moq/pull/4640), the open questline PR that carries the check.
+**Reported** ([#4640](https://github.com/moq-dev/moq/pull/4640#issuecomment-5938368125), the open
+questline PR that carries the check). These are measured against the questline branch's head
+`8df1e438`, which is still #4640's head. Each was reported with its clause, the arithmetic of its
+first violating unit, and an offer of synthetic controls for the first two, since our captures are
+of a clip we cannot share.
 The first two fail clean streams, which matters once the check gates CI; the third under-reports
 STD delay.
 
