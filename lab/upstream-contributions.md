@@ -1975,7 +1975,8 @@ closed `burst` quest would have declared.
 `4b7158d6c00d`: the broadcast clip stops; a shareable generated fixture fails at the default delay;
 nearly every PCR is outside ±500 ns; and delivery latency is 6.83 s at 2 s.
 
-**Located since, not yet reported.** The posted point 1 said the schedule was "starved of frames
+**Located since, and corrected upstream**
+([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5930108733)). The first report said the schedule was "starved of frames
 rather than overfull". It is overfull. `schedule.rs` sends each unit as late as the rate allows,
 seeing one window ahead, so a stretch whose decode timeline outruns the rate for about a window
 cannot be met. CNN's field-coded passages are such stretches, though its video never exceeds 150
@@ -1983,8 +1984,7 @@ of the export's 156 packets per slot on the source wire. The authored DTS compou
 decode clock holds back a fixed number of pictures, which is a different time in frame and field
 coding. An offline replay ([T47](test-47-fixed-delay-export.md#where-the-broadcast-clip-fails))
 predicted that the export stops at 5 s and runs at 8 s on the video alone, and the real export did
-both. Earliest deadline first, limited by the decoder buffer, fits from 1 s in the replay. The
-correction is drafted in `docs/upstream/4645-tstd-feedback.local.md`, awaiting the author.
+both. Earliest deadline first, limited by the decoder buffer, fits from 1 s in the replay.
 
 **Open.** The loss rig and cross-host wait on an export that runs a broadcast clip.
 
