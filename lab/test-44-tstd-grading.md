@@ -14,13 +14,15 @@
   own groomed egress on three builds, and from frame-granular source data at 25 ms of added decoder
   delay.
 - **Byte-faithful carriage keeps the T-STD through the groomer's stream clock**, over SRT and over
-  UDP: every buffer passes over the whole capture, at exactly the source's legal offsets, with the
-  source's nulls stripped and re-spread. It does not keep it through the default arrival clock, which
+  UDP: every buffer passes over the whole capture, on exactly the source's joint legal interval, with
+  the source's nulls stripped and re-spread. It does not keep it through the default arrival clock, which
   lets the PCR-to-PTS offset drift and fails the decoder buffers over a whole capture.
 
 Measured at P1, wire domain, loopback, one clip, three exporter builds, two groomer builds, both
 groomer clock modes. The exporter's own padded output and the re-multiplexer's outputs are file
-domain. Hardware: not run.
+domain. Hardware: not run. The T-STD figures are from [`ts-tstd.py`](scripts/ts-tstd.py) as corrected
+in [T46](test-46-tstd-check-cross-validation.md); that correction moved no verdict on any capture
+graded here, only the counts and margins below.
 
 TR 101 290 P1/P2 grades the PCR, continuity and tables. It does not model the decoder's buffers, and
 the campaign's conformance results — T19's 0 of 20,193 intervals above 40 ms, T21's day — are P1/P2
@@ -46,22 +48,31 @@ point, and question 5 from the whole-capture scan failing the SRT control.
 
 ## Instrument
 
-[`ts-tstd.py`](scripts/ts-tstd.py), written for this test. It interpolates every byte's arrival time
-from the PCR (13818-1 2.4.2.2) and runs each PID's buffers on that clock:
+[`ts-tstd.py`](scripts/ts-tstd.py), written for this test and corrected in
+[T46](test-46-tstd-check-cross-validation.md). It interpolates every packet's arrival time from the
+PCR (13818-1 2.4.2.2), fills each transport buffer on arrival, and delivers bytes to the decoder
+buffers only when they leave TB at Rx (2.4.2.3). Duplicate packets occupy TB but are not delivered;
+audio PES headers sit in B until the access unit after them is removed. Every TB is graded on
+overflow and on emptying at least once a second (2.4.2.6). AVC runs the leak model of 2.14.3.1:
+PES payload into MB, on to EB at Rbx while EB is not full, an access unit out of EB at its DTS;
+EBS = NAL HRD `CpbSize[0]` (1,099,696 B on this clip), MBS = 2,666,304 B, Rbx = 24 Mb/s, Rx =
+1.2 × NAL HRD `BitRate[0]` = 10,557,082 b/s. Streams it cannot calibrate are refused (exit 2), not
+passed silently. Twenty-nine analytical self-tests cover the fixes ([T46](test-46-tstd-check-cross-validation.md)).
 
 | Buffer | Size | Leak | Source |
 |---|---|---|---|
-| TB, H.264 video | 512 B | 1.2 × NAL HRD `BitRate[0]` = 10,557,082 b/s | 13818-1 2.4.2.4, Cor. 2-2009; HRD read from the SPS |
-| EB, H.264 video | `CpbSize[0]` + MB = 1,115,696 B | at DTS | 13818-1 2.14 |
+| TB, H.264 video | 512 B | Rx above | 13818-1 2.4.2.4, Cor. 2-2009; HRD read from the SPS |
+| MB + EB, H.264 video | 2,666,304 B + 1,099,696 B | Rbx between MB and EB; EB at DTS | 13818-1 2.14.3.1 |
 | TB, MPEG-1 L2 and AC-3 audio | 512 B | 2 Mb/s | 13818-1 2.4.2.4 |
-| B, MPEG-1 L2 audio | 3,584 B | at PTS | 13818-1 |
-| B, AC-3 audio | 5,696 B | at PTS | A/52 Annex A 5.4 |
+| B, MPEG-1 L2 audio | 3,584 B | at PTS (PES headers included) | 13818-1 2.4.2.3 |
+| B, AC-3 audio | 5,696 B | at PTS (PES headers included) | A/52 Annex A 5.4 |
 | TB, DVB teletext | 480 B | 6.75 Mb/s | EN 300 472 |
 | TBsys, PAT/PMT/CAT | 512 B | 1 Mb/s | 13818-1 |
 | SCTE-35 and SI PIDs | 512 B | 1 Mb/s | **assumed** — no normative T-STD; reported separately, not graded |
 
-Residence is bounded at 1 s, and 10 s for AVC (2.4.2.6/2.4.2.7). The source's video HRD rate sits
-between its mux rate (9,945,951 b/s) and the groomer's 11 Mb/s carrier, which matters below.
+Decoder residence is bounded at 1 s for audio and teletext, and 10 s for AVC (2.4.2.7). The
+source's video HRD rate sits between its mux rate (9,945,951 b/s) and the groomer's 11 Mb/s carrier,
+which matters below.
 
 Three tests of whether an offset could repair the decoder buffers:
 
@@ -76,11 +87,13 @@ Three tests of whether an offset could repair the decoder buffers:
 Transport-buffer overflow does not depend on the offset at all: it is set by how many packets of one
 PID arrive back to back at the carrier rate.
 
-**Validation.** Sixteen analytical self-tests pass (`--selftest`), among them the fluid-bucket overflow
-point at a carrier above Rx (67 packets hold 507 B; the 68th overflows) and the exact legal interval
-against a brute-force scan. **On the source multiplex every buffer passes, and the whole-capture scan
-puts the joint legal offset at exactly +0 ms** (EB [−250, +0], MP2 [+0, +100], AC-3 [+0, +150]): the
-model is calibrated to the multiplexer that produced the clip, with no slack in either direction.
+**Validation.** `--selftest` runs 29 checks, among them the fluid-bucket overflow point at a carrier
+above Rx (67 packets hold 507 B; the 68th overflows) and the exact legal interval against a
+brute-force scan. **On the source multiplex every buffer passes, and the whole-capture scan's joint
+legal interval starts at exactly +0 ms** (EB from −250 ms to the +500 ms end of the scan, MP2
+[+0, +100], AC-3 [+0, +150], joint [+0, +100]). The model is calibrated to the multiplexer that
+produced the clip, with no slack below its own PCR: the audio, which the source sends just in time,
+sets the lower bound. Above it there is 100 ms of slack, bounded by MP2's buffer.
 
 It supersedes the harness's `tstd` check for this purpose ([T2](test-2-media-aware-transparency.md)),
 which counted payload bytes against a single default leak rate.
@@ -90,10 +103,13 @@ which counted payload bytes against a single default leak rate.
 [`ts-remux-oracle.py`](scripts/ts-remux-oracle.py), written for question 4. It keeps every PID's
 packets in order, byte for byte, and discards the input's nulls and its PID interleave. Each slot of a
 constant-rate output goes to the available packet with the earliest decode deadline, among those whose
-transport buffer and decoder buffer have room; otherwise the slot is a null. The buffer parameters are
-`ts-tstd.py`'s. PCR is rewritten on the output byte clock, with an adaptation-only PCR packet whenever
-none has gone for 25 ms. `--delay` lowers the output PCR against the input's, so every unit decodes
-that much later. The smallest delay at which the scheduler sends nothing late is the rebuild's cost.
+transport buffer and decoder buffer have room; otherwise the slot is a null. Transport-buffer sizes and
+audio B match `ts-tstd.py`; video is scheduled against the single cpb + BSmux + BSoh buffer the first
+instrument used (1,115,696 B on this clip), which is stricter than 2.14.3.1's MB + EB leak model
+([T46](test-46-tstd-check-cross-validation.md)). PCR is rewritten on the output byte clock, with an
+adaptation-only PCR packet whenever none has gone for 25 ms. `--delay` lowers the output PCR against
+the input's, so every unit decodes that much later. The smallest delay at which the scheduler sends
+nothing late is the rebuild's cost.
 
 Availability is the only thing a rebuild at the subscriber is allowed to know about timing:
 
@@ -106,8 +122,8 @@ Availability is the only thing a rebuild at the subscriber is allowed to know ab
 The oracle is greedy, not optimal: a feasible result proves a schedule exists, and an infeasible one
 proves nothing. **Its own counts are not the verdict.** `ts-tstd.py` grading the output file is,
 together with TSDuck `continuity` and `pcrverify --absolute --jitter-max 13`. **Validation:** fed the
-source in `packet` mode at +0 ms, the output passes every buffer, with the joint legal offset exactly
-+0 ms, 0 continuity errors and 0 PCRs outside ±481 ns.
+source in `packet` mode at +0 ms, the output passes every buffer, with a joint legal offset that
+contains +0 ms, 0 continuity errors and 0 PCRs outside ±481 ns.
 
 ## Environment
 
@@ -192,10 +208,10 @@ spills each overrun into the following slots at the full carrier rate.
 
 | | m11 | t21 | ffa | main | main-sc | srt |
 |---|---|---|---|---|---|---|
-| EB video: underflows · median margin | 10,005 of 10,005 · −548.6 ms | 10,028 of 10,036 · −284.0 ms | 10,021 of 10,021 · −544.5 ms | 10,094 of 10,094 · −1,031.6 ms | 10,074 of 10,074 · −398.4 ms | 0 · +2,604.3 ms, overflowing |
-| B MP2: underflows · overflow arrivals | 9,358 of 11,488 · 555 | 261 of 11,505 · 27,452 | 9,139 of 11,487 · 820 | 11,555 of 11,555 · 0 | 2,980 of 11,531 · 9,057 | 0 · 35,846, residence over 1 s in every unit |
-| B AC-3: underflows · overflow arrivals | 3,403 of 8,613 · 2,425 | 29 of 8,622 · 24,974 | 3,257 of 8,613 · 2,839 | 8,661 of 8,661 · 0 | 557 of 8,642 · 12,970 | 0 · 35,228, residence over 1 s in every unit |
-| Legal offsets, −3 s to +3 s in 50 ms steps | EB [+900, +1,050]; audio none; **joint none** | EB [+600, +750]; audio none; **joint none** | EB [+900, +1,050]; audio none; **joint none** | EB [+1,350, +1,550]; audio none; **joint none** | EB [+800, +1,050]; audio none; **joint none** | **none for any buffer** |
+| EB video: underflows · median margin | 10,005 of 10,005 · −548.8 ms | 10,028 of 10,036 · −284.1 ms | 10,021 of 10,021 · −544.7 ms | 10,094 of 10,094 · −1,031.7 ms | 10,074 of 10,074 · −405.2 ms | 0 · +2,604.2 ms |
+| B MP2: underflows · overflow arrivals | 9,797 of 11,488 · 391 | 296 of 11,505 · 26,029 | 9,603 of 11,487 · 636 | 11,555 of 11,555 · 0 | 3,290 of 11,531 · 6,795 | 0 · 35,846 overflow arrivals, residence over 1 s in every unit |
+| B AC-3: underflows · overflow arrivals | 3,694 of 8,613 · 1,854 | 32 of 8,622 · 24,176 | 3,553 of 8,613 · 2,188 | 8,661 of 8,661 · 0 | 610 of 8,642 · 11,591 | 0 · 35,228 overflow arrivals, residence over 1 s in every unit |
+| Legal offsets, −3 s to +3 s in 50 ms steps | EB [+900, +3,000]; audio none; **joint none** | EB [+600, +3,000]; audio none; **joint none** | EB [+900, +3,000]; audio none; **joint none** | EB [+1,350, +3,000]; audio none; **joint none** | EB [+800, +3,000]; audio none; **joint none** | **none for any buffer** |
 
 On the nominal PCR every arm fails, SRT included. The arrival-clocked groomer's byte-locked PCR
 regeneration sets the PCR-to-PTS offset from its own buffer occupancy, so the offset is wrong on every
@@ -207,9 +223,9 @@ attribute the decoder buffers. The windowed test can, and so can a stream-clocke
 | | Source | m11 | t21 | ffa | main | main-sc | srt |
 |---|---|---|---|---|---|---|---|
 | EB video | 299 of 299 | 137 of 137 | 138 of 138 | 137 of 137 | 139 of 139 | 138 of 138 | 133 of 133 |
-| B MP2 | 299 of 299 | **0 of 137** · deficit median 193.9 ms, max 429.9 | **0 of 138** · 199.1, 409.9 | **0 of 137** · 195.4, 411.9 | **0 of 139** · 199.4, 410.1 | **0 of 138** · 127.5, 372.6 | 133 of 133 |
-| B AC-3 | 299 of 299 | **0 of 137** · 195.1, 578.8 | **0 of 138** · 215.2, 579.9 | **0 of 137** · 190.5, 488.6 | **0 of 139** · 210.3, 580.3 | **0 of 138** · 193.5, 485.8 | 133 of 133 |
-| All at once | 299 of 299 | **0 of 137** · 707.8, 990.1 | **0 of 138** · 710.0, 990.6 | **0 of 137** · 706.3, 951.6 | **0 of 139** · 703.6, 989.0 | **0 of 138** · 686.1, 954.4 | 133 of 133 |
+| B MP2 | 299 of 299 | **0 of 137** · deficit median 175.4 ms, max 408.0 | **0 of 138** · 180.7, 395.0 | **0 of 137** · 176.6, 389.8 | **0 of 139** · 181.0, 397.4 | **0 of 138** · 129.0, 374.3 | 133 of 133 |
+| B AC-3 | 299 of 299 | **0 of 137** · 175.8, 561.5 | **0 of 138** · 183.4, 560.3 | **0 of 137** · 179.7, 469.2 | **0 of 139** · 193.8, 561.9 | **0 of 138** · 173.9, 481.3 | 133 of 133 |
+| All at once | 299 of 299 | **0 of 137** · 686.8, 970.3 | **0 of 138** · 684.6, 969.4 | **0 of 137** · 685.9, 929.9 | **0 of 139** · 679.5, 968.2 | **0 of 138** · 682.0, 946.4 | 133 of 133 |
 
 ### `main`'s own padded export, before the groomer
 
@@ -221,10 +237,10 @@ schedule their PCR describes.
 
 | | main-raw |
 |---|---|
-| Transport buffers overflowing · peak | video **945,320 of 952,090 (99.3 %)** · 626,755 B; MP2 **1,471 of 26,082 (5.6 %)** · 1,082 B; AC-3 **11,003 of 20,621 (53.4 %)** · 7,054 B; PSI and teletext 0 |
-| Decoder buffers, nominal PCR | EB 2,215 of 5,472 units underflow, median margin 3.3 ms; MP2 and AC-3 no underflow, every arrival overflowing |
-| Whole-capture legal offsets | EB [+50, +350]; MP2 [−350, −300]; AC-3 none; **joint none** |
-| 2 s windows legal | EB 78 of 78; MP2 78 of 78; AC-3 **0 of 78** · deficit median 27.2 ms, max 55.2; all at once **0 of 78** · 447.2, 473.8 |
+| Transport buffers overflowing · peak | video **945,320 of 952,090 (99.3 %)** · 626,755 B, **10** TB stretches not emptied within 1 s; MP2 **1,471 of 26,082 (5.6 %)** · 1,082 B; AC-3 **11,003 of 20,621 (53.4 %)** · 7,054 B; PSI and teletext 0 |
+| Decoder buffers, nominal PCR | EB **5,471 of 5,472** units underflow, median margin −161.2 ms; MP2 and AC-3 no underflow, every arrival overflowing |
+| Whole-capture legal offsets | EB [+500, +3,000]; MP2 [−350, −300]; AC-3 none; **joint none** |
+| 2 s windows legal | EB 78 of 78; MP2 78 of 78; AC-3 **0 of 78** · deficit median 21.5 ms, max 40.8; all at once **0 of 78** · 701.1, 918.4 |
 | P1/P2 of the same bytes | 0 continuity errors; 0 of 7,109 PCR intervals above 40 ms, max 25.0 ms; **7,109 of 7,110 PCRs outside ±481 ns**, worst 17.5 ms |
 
 ### Byte-faithful carriage through the groomer's two clock modes
@@ -232,15 +248,16 @@ schedule their PCR describes.
 | | udp, arrival clock | srt, arrival clock (above) | udp-sc, stream clock | srt-sc, stream clock |
 |---|---|---|---|---|
 | Transport buffers overflowing · video peak | 0 · 448 B | 0 · 386 B | 0 · 91 B | 0 · 91 B |
-| EB video median margin (source, 600 s: 734.7 ms) | 2,610.1 ms, peak 3,184,410 of 1,115,696 B | 2,604.3 ms, overflowing | **743.3 ms**, peak 1,100,393 B | **742.1 ms**, peak 1,100,393 B |
+| EB video median margin (source, 600 s: 734.7 ms) | 2,610.1 ms, peak 3,184,324 B (MB 2,086,001 B of 2,666,304 B) | 2,604.2 ms, peak 3,180,342 B (MB 2,081,690 B) | **743.3 ms**, peak 1,100,384 B | **742.1 ms**, peak 1,100,384 B |
 | Audio residence over 1 s | every unit | every unit | none | none |
-| Whole-capture legal offsets | **none for any buffer** | **none for any buffer** | EB [−250, +0], MP2 [+0, +100], AC-3 [+0, +150], **joint [+0, +0]** | the same, **joint [+0, +0]** |
+| Whole-capture legal offsets | **none for any buffer** | **none for any buffer** | EB [−250, +2,400], MP2 [+0, +100], AC-3 [+0, +150], **joint [+0, +100]** | the same, **joint [+0, +100]** |
 | 2 s windows legal, all at once | 137 of 137 | 133 of 133 | 137 of 137 | 133 of 133 |
 | Grader | fails | fails | **passes** | **passes** |
 
-The stream-clocked arms land on the source's own legal intervals to the 50 ms step (source: EB
-[−250, +0], MP2 [+0, +100], AC-3 [+0, +150]). Their inputs lost every null, and with it every null's
-position, and both are graded over the whole capture.
+The stream-clocked arms land on the source's own joint interval, [+0, +100], and on each buffer's
+lower bound, to the 50 ms step. The source's video is legal from −250 ms to the +500 ms end of its
+scan, and the arms' from −250 ms to +2,400 ms; the audio intervals are the same on both. Their inputs
+lost every null, and with it every null's position, and both are graded over the whole capture.
 
 ### Re-multiplexed by the oracle
 
@@ -249,12 +266,12 @@ continuity errors, 0 PCRs outside ±481 ns and a largest PCR interval of 25.2 ms
 
 | Input | Availability | Late packets by delay (scheduler's count) | Written at | Joint legal offset · windows | EB video median margin | Hold before sending, median (max) |
 |---|---|---|---|---|---|---|
-| Source, 320 s | `packet` | 1 at 0 ms, 0.8 ms inside the scheduler's 1 ms guard | 0 ms | [+0, +0] · 159 of 159 | 744.5 ms | 0.2 ms (0.4 ms) |
-| Source, 320 s | `frame` | 20,756 at 0 ms; **0 at 25 ms** | 25 ms | [+0, +0] · 160 of 160 | 703.5 ms | video 53.7 ms (240 ms); audio 0.4 ms (24 ms) |
-| Source, 320 s | `pes` | 9,990 at 200 ms; **0 at 250 ms** | 250 ms | [+0, +0] · 160 of 160 | 905.7 ms | video 77.8 ms (242 ms); MP2 26.7 ms (148 ms) |
-| ffa egress | `packet` | 1,065 at 800 ms; **0 at 900 ms** | 900 ms | [−25, +0] · 137 of 137 | 354.8 ms | video 0.1 ms (118 ms); audio 0.69–0.73 s (1.37 s) |
-| m11 egress | `packet` | 3,291 at 750 ms; **0 at 900 ms** | 900 ms | [−25, +0] · 138 of 138 | 350.7 ms | video 0.3 ms (729 ms); audio 0.69–0.72 s (1.82 s) |
-| main egress, from its PCR discontinuity at 0.71 s | `packet` | 682 at 1,300 ms; **0 at 1,400 ms** | 1,400 ms | [−50, +0] · 138 of 138 | 366.9 ms | video 0.1 ms (155 ms); audio 0.70–0.74 s (1.51 s) |
+| Source, 320 s | `packet` | 1 at 0 ms, 0.8 ms inside the scheduler's 1 ms guard | 0 ms | [+0, +100] · 159 of 159 | 744.5 ms | 0.2 ms (0.4 ms) |
+| Source, 320 s | `frame` | 20,756 at 0 ms; **0 at 25 ms** | 25 ms | [+0, +75] · 160 of 160 | 703.4 ms | video 53.7 ms (240 ms); audio 0.4 ms (24 ms) |
+| Source, 320 s | `pes` | 9,990 at 200 ms; **0 at 250 ms** | 250 ms | [+0, +0] · 160 of 160 | 905.5 ms | video 77.8 ms (242 ms); MP2 26.7 ms (148 ms) |
+| ffa egress | `packet` | 1,065 at 800 ms; **0 at 900 ms** | 900 ms | [−25, +0] · 137 of 137 | 354.6 ms | video 0.1 ms (118 ms); audio 0.69–0.73 s (1.37 s) |
+| m11 egress | `packet` | 3,291 at 750 ms; **0 at 900 ms** | 900 ms | [−25, +0] · 138 of 138 | 350.5 ms | video 0.3 ms (729 ms); audio 0.69–0.72 s (1.82 s) |
+| main egress, from its PCR discontinuity at 0.71 s | `packet` | 682 at 1,300 ms; **0 at 1,400 ms** | 1,400 ms | [−50, +0] · 138 of 138 | 366.8 ms | video 0.1 ms (155 ms); audio 0.70–0.74 s (1.51 s) |
 
 **On the source, the binding stream is the audio, not the video.** The source sends its audio just in
 time, with a minimum MP2 margin of 0.3 ms over 600 s, and packs several frames per PES. Waiting for a whole frame
@@ -262,13 +279,14 @@ costs about one frame, and waiting for a whole PES costs about one PES. The vide
 278 ms ahead, absorbs either wait.
 
 **On the lane's egress, the delay the rebuild needs is the delay the lane's video already owed.** It is
-900 ms on the builds whose video was legal at [+900, +1,050], and 1,400 ms on `main`, whose video was
-legal at [+1,350, +1,550]. What the rebuild removes is the audio constraint that emptied the joint
-set. It spreads the audio's runs, holding them a median 0.69–0.74 s, and sends the video within a
-median 0.3 ms of its arrival. Its video decoder margin, a median 351–367 ms, is under half the
-source's 735 ms. That is consistent with the lane having turned the source's pre-loading into
-delivery delay, which is how [T19](test-19-pcr-grid-verification.md) reads the lane's latency. It is an
-inference: the decode-referenced latency that would show it was not measured.
+900 ms on the builds whose whole-capture scan made video legal from +900 ms upward, and 1,400 ms on
+`main`, whose scan made video legal from +1,350 ms upward. What the rebuild removes is the audio
+constraint that emptied the joint set. It spreads the audio's runs, holding them a median
+0.69–0.74 s, and sends the video within a median 0.3 ms of its arrival. Its video decoder margin, a
+median 351–367 ms, is under half the source's 735 ms. That is consistent with the lane having turned
+the source's pre-loading into delivery delay, which is how [T19](test-19-pcr-grid-verification.md)
+reads the lane's latency. It is an inference: the decode-referenced latency that would show it was
+not measured.
 
 The FFmpeg-muxed `testloop_clean` was rejected as a second source: it overflows its own AAC transport
 buffer on 80 % of packets (8,804 of 10,958 in its first 60 s), so it cannot serve as a control.
@@ -286,12 +304,13 @@ buffer on 80 % of packets (8,804 of 10,958 in its first 60 s), so it cannot serv
   Through the stream clock it passes everything over the whole capture. The groomer does not reorder
   packets, so the transport-buffer overflows are the order in which the exporter wrote the packets.
 - **Neither of the groomer's clock modes can repair it.** No offset touches a transport buffer. In the
-  decoder buffers the video is repairable: legal in every window, and over the whole capture at +600
-  to +1,550 ms of added delay depending on the build. **The audio is not repairable at any offset, in
-  any window.** The audio's own timing spreads a median 0.13–0.22 s wider than its buffer holds, and the offsets
-  legal for video and for audio lie a median 0.69–0.71 s apart. One PCR serves both. Stream clocking
-  places packets by an exporter PCR that does not track its own positions, and it raises video
-  transport-buffer overflow to 95.9 % of packets.
+  decoder buffers the video is repairable: legal in every window, and over the whole capture from
+  +600 ms to +3 s of added delay depending on the build (the scan's upper bound, not a tight ceiling).
+  **The audio is not repairable at any offset, in any window.** The audio's own timing spreads a
+  median 0.13–0.19 s wider than its buffer holds, and the offsets legal for video and for audio lie a
+  median 0.68–0.69 s apart. One PCR serves both. Stream clocking places packets by an exporter PCR
+  that does not track its own positions, and it raises video transport-buffer overflow to 95.9 % of
+  packets, with **five** 1 s stretches where the video TB does not empty.
 - **`main`'s padding to the mux rate does not repair it either** (file domain). The exporter's own
   padded bytes, before any groomer, overflow 99.3 % of video transport-buffer packets. They have no
   joint legal offset in any window, and 7,109 of 7,110 PCRs fall outside ±481 ns: the padding holds
@@ -304,7 +323,7 @@ buffer on 80 % of packets (8,804 of 10,958 in its first 60 s), so it cannot serv
   deliver, the rebuild needs 25 ms; fed PES-granular data, 250 ms.
 - **Byte-faithful carriage keeps the T-STD through the stream clock, without the source's nulls.** The
   test ran over UDP and over SRT. Every null was stripped and each PCR interval's packets re-spread
-  evenly, and every buffer passes over the whole capture at exactly the source's legal offsets.
+  evenly, and every buffer passes over the whole capture on exactly the source's joint legal interval.
   Through the arrival clock the same bytes fail every decoder buffer over the whole capture, because
   the start-up lead sets the PCR-to-PTS offset and the offset then drifts.
 
@@ -361,8 +380,10 @@ how far receivers tolerate the lane's wire and whether they accept its rebuild.
   every transport buffer, so a longer run is not expected to move the result; that is inferred, not
   measured.
 - **The SCTE-35 and SI buffers are assumed**, and pass on every arm.
-- **The decoder stage takes arrival at the packet's arrival**, ignoring the TB-to-EB transfer delay, so
-  underflow margins are optimistic by at most a few milliseconds. That favours the lane.
+- **The offset tools merge MB + EB.** `--offset-scan` and `--window` grade AVC as one buffer of
+  MBS + EBS, where the nominal grade runs the leak model, so a scan or window verdict on video near
+  MB's limit is approximate ([T46](test-46-tstd-check-cross-validation.md)). The highest MB peak here
+  is 2,086,001 of 2,666,304 B, on the arrival-clocked UDP arm.
 - **The segmented-HTTP lane was not graded.** It carries the source's own packet order, so it should
   behave as the SRT arm does. That is reasoned, not measured.
 - **The rebuild is offline and its output is a file.** Availability is the input's PCR-interpolated
@@ -398,7 +419,8 @@ python3 lab/scripts/ts-remux-oracle.py <out>/moq-c1000-egress.ts <rebuilt>.ts --
   --avail packet --delay 0.8,0.9,1.0,1.2,1.4 --duration 320 --json <rebuilt>.json
 python3 lab/scripts/ts-remux-oracle.py <source>.ts <rebuilt-frame>.ts --rate 11000000 \
   --avail frame --delay 0,0.025,0.05 --duration 320
-python3 lab/scripts/ts-tstd.py <rebuilt>.ts --skip 20 --window 2 --offset-scan -500,500,25
+# a rebuilt egress skips its first 20 s, as its input arm did; a rebuilt source is graded whole
+python3 lab/scripts/ts-tstd.py <rebuilt>.ts --skip 20 --window 2 --offset-scan -1000,1000,25
 tsp -I file <rebuilt>.ts -P continuity -P pcrverify -O drop
 ```
 
@@ -409,7 +431,7 @@ A capture with a PCR discontinuity is cut after it first, for example with
 
 - **The approximate `tstd` flag on the media-aware lane was attributed to the source content.**
   [T2](test-2-media-aware-transparency.md) read the harness's fixed-leak flag as "a property of the
-  input content". Calibrated, the source passes every buffer at an offset of exactly +0 ms. The
+  input content". Calibrated, the source passes every buffer on its own PCR. The
   overflows belong to the lane's packet order. Rule ([method notes](method-notes.md#a-p1p2-pass-is-not-a-conformant-transport-stream)):
   a buffer-model flag is attributed only with a calibrated model, the source graded as the control,
   and a transparent transport through the same groomer.

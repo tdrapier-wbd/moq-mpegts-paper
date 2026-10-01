@@ -37,7 +37,7 @@ proper is a design choice upstream.**
 - **The broadcast clip fails on the schedule's send policy, not on its load.** On the source's
   own wire the video never exceeds 150.1 packets per 25 ms slot over any 3 s, against the 156 the
   export allows itself. The source carries it by sending up to 0.97 s ahead, with EB peaking at
-  96 %. The export sends each unit as late as the rate allows, and it knows units only one window
+  97 %. The export sends each unit as late as the rate allows, and it knows units only one window
   ahead. Slots it pads before a heavy stretch cannot be recovered, so a stretch where the decode
   timeline outruns the rate for about a window cannot be met. CNN's field-coded passages are such
   stretches. An offline replay of the export's rule fails the clip at every delay up to 3 s on the
@@ -51,10 +51,10 @@ proper is a design choice upstream.**
   puts the 500 ms default out of reach on this clip.
 - **Sending the video earliest deadline first, as soon as its decoder buffer has room, carries
   the video at 1 s.** A first scratch patch of the PR head did only that. At `--delay 1s` it ran
-  the whole capture with the video passing every buffer (EB peak 99.7 %, minimum margin 510 ms,
-  26 of 26 windows) and AC-3 still failing.
+  the whole capture with the video passing every buffer (EB full at its peak, minimum margin
+  510 ms, 26 of 26 windows) and AC-3 still failing.
 - **The export's audio fails the T-STD for two reasons, and neither is the video's.** Unpatched at
-  8 s, MP2's B peaks at 10,904 of 3,584 B and AC-3's at 16,896 of 5,696 B, and AC-3's transport
+  8 s, MP2's B peaks at 11,170 of 3,584 B and AC-3's at 16,899 of 5,696 B, and AC-3's transport
   buffer overflows on 2,495 packets. First, the schedule fills each slot's minimum in push order,
   which carries audio out in bulk ahead of heavy video: up to 38 AC-3 packets in one 25 ms slot,
   about 2.3 Mb/s into a transport buffer that drains at 2 Mb/s. The layout spreads each PID's
@@ -71,7 +71,9 @@ proper is a design choice upstream.**
   every 2 s window, and `compliance.py`, with 0 continuity errors. At 500 ms it stops at 9.3 s of
   output: an offline replay of the same buffer-limited rule misses the DTS the export authors at
   that delay, while it nearly meets the source's. The 1 s pass is one join state of several (next
-  bullets but one); the 750 ms run's state is not known.
+  bullets but one); the 750 ms run's state is not known. Presentation latency on those conformant
+  bytes is 4.29 s at 1 s and 2.77 s at 750 ms, one run each, with a spread between runs that is not
+  located.
 - **Under 1 % loss at 1 s the per-PID build stays conformant except where the export restarts its
   grid.** Under the [T8b](test-8b-congestion-control.md) netem rig (25 ms each way, BBRv3), 0 %
   passes every buffer in all 56 windows. At 1 % the export lost 0.12 s of video and one 0.288 s
@@ -106,8 +108,10 @@ proper is a design choice upstream.**
   about 4.7 s; the remaining ~2 s is not located.
 
 Measured at P1 and P2 on captured wire bytes, loopback, one host, the export forwarded without
-re-clocking. T-STD graded on the stream's own PCR. One run per cell. The loss and cross-host arms
-are graded on the export's output file, T-STD only. Hardware: not run.
+re-clocking. T-STD graded on the stream's own PCR, with `ts-tstd.py` as corrected in
+[T46](test-46-tstd-check-cross-validation.md); re-grading every kept capture with it moved no
+verdict. One run per cell. The loss and cross-host arms are graded on the export's output file,
+T-STD only. Hardware: not run.
 
 ## Objective
 
@@ -206,7 +210,7 @@ packets in any 3 s (150.1 per slot; the stripped clip's rate is 9.50 Mb/s). In t
 `schedule.rs` gives each later slot `rate / (188 × 8 × 40) − 1` = 156 packets of room, and sends in
 each slot only what keeps the queued units on time. A unit enters the queue a window ahead of its
 decode slot. The source meets the field burst by having sent the stretch before it early:
-`ts-tstd.py` on the source gives a residence maximum of 0.97 s and EB peak 1,066,777 of 1,115,696 B
+`ts-tstd.py` on the source gives a residence maximum of 0.97 s and EB peak 1,066,788 of 1,099,696 B
 (CpbSize 8,797,568 bits). The export has padded those slots with nulls, so when the burst enters
 its window, the window's queue exceeds the window's room.
 
@@ -229,7 +233,7 @@ the catalog's 36,000-tick reserve.
 export on the same clip then tested the replay's two predictions. At `--delay 5s` it stopped with
 17.60 s of decode time out ("needs 366 packets"). At `--delay 8s` it ran the whole publish (43 s
 graded), with no overrun and no late drop. `ts-tstd.py` passes that output with 0 TB overflow, 0 EB
-underflow, EB peak 531,962 of 1,115,696 B and a minimum EB margin of 1.3 ms. On the source's DTS the
+underflow, EB peak 532,069 of 1,099,696 B and a minimum EB margin of 1.3 ms. On the source's DTS the
 earliest-deadline policy also fits at 0.5 s.
 
 **The authored DTS.** The export carries no source DTS; it re-authors one from the PTS, handing the
@@ -265,7 +269,13 @@ that frees it any earlier overfills EB by up to a slot.
   deadline, the export's existing grace window after a rate change, and the first two windows of
   output, where the leading pictures' authored DTS is known to be unmeetable.
 
-Parameters are the ones `ts-tstd.py` calibrates for the clip:
+The parameters are taken from the clip. The video's decoder budget is one buffer of cpb + BSmux + BSoh,
+which is how `ts-tstd.py` sized AVC before [T46](test-46-tstd-check-cross-validation.md) corrected it
+to 2.14.3.1's leak model (MB 2,666,304 B and EB 1,099,696 B here). The budget is larger than EB alone,
+so in the outputs that use it EB fills and up to about 12.5 KB waits in MB, which the leak model
+allows. It is far inside MB + EB, so the patch is conservative against overflow, not wrong. It does
+not model the leak's transfer into EB; underflow is what the grader checks, and every verdict here
+comes from the grader.
 
 | PID | Transport buffer drain | Decoder buffer given | Access units per unit |
 |---|---|---|---|
@@ -277,17 +287,17 @@ Parameters are the ones `ts-tstd.py` calibrates for the clip:
 
 AC-3 is given one frame less than its buffer because the patch places frame deadlines in whole
 slots, and a 32 ms frame does not divide a 25 ms slot. Given the full 5,696 B on a 20 s run, B
-peaked at 6,088 B. Graded with `ts-tstd.py` skipping 5 s, and `compliance.py` on the same file cut
+peaked at 6,088 B; that run was not kept, so this figure is the uncorrected grader's. Graded with `ts-tstd.py` skipping 5 s, and `compliance.py` on the same file cut
 5 s in:
 
 | Build, clip, `--delay` | Runs | Video EB | MP2 B | AC-3 TB / B | P1 on the same bytes |
 |---|---|---|---|---|---|
 | #4645, video only, 8 s | yes, 43 s | pass, peak 48 %, margin min 1.3 ms | — | — | 0 CC errors |
-| #4645, full, 8 s | yes, 42.8 s of DTS | pass, peak 47 % | **peak 10,904 of 3,584 B**, 4 of 19 windows | **2,495 pkts over** / **16,896 of 5,696 B**, 0 of 19 | 0 CC errors, PCR ≤ 25 ms |
-| EB-limited, video only, 1 s | yes, 57.4 s of DTS | pass, peak 99.7 %, margin min 510 ms, 26 of 26 | — | — | one 975 ms PCR gap at the join |
-| EB-limited, full, 1 s | yes, 57.3 s of DTS | pass, peak 99.7 %, margin min 512 ms, 26 of 26 | pass, 26 of 26 | **4,196 pkts over** / **6,912 of 5,696 B**, 0 of 26 | 0 CC errors, PCR ≤ 25 ms |
-| Per-PID, full, 1 s | yes, 56.6 s of PCR | pass, peak 986,564 B (88 %), margin min 413 ms, 25 of 25 | pass, peak 2,840 B, margin min 64 ms, 25 of 25 | 0 over / peak 5,352 B, 25 of 25 | 0 CC errors, PCR ≤ 25 ms, `compliance.py` PASS |
-| Per-PID, full, 750 ms | yes, 57.9 s of PCR | pass, peak 901,333 B (81 %), margin min 339 ms, 26 of 26 | pass, peak 2,840 B, margin min 68 ms, 26 of 26 | 0 over / peak 5,352 B, 26 of 26 | 0 CC errors, PCR ≤ 25 ms, `compliance.py` PASS |
+| #4645, full, 8 s | yes, 42.8 s of DTS | pass, peak 48 % | **peak 11,170 of 3,584 B**, 4 of 19 windows | **2,495 pkts over** / **16,899 of 5,696 B**, 0 of 19 | 0 CC errors, PCR ≤ 25 ms |
+| EB-limited, video only, 1 s | yes, 57.4 s of DTS | pass, EB full at peak with 12,538 B in MB, margin min 510 ms, 26 of 26 | — | — | one 975 ms PCR gap at the join |
+| EB-limited, full, 1 s | yes, 57.3 s of DTS | pass, EB full at peak with 12,538 B in MB, margin min 512 ms, 26 of 26 | pass, 26 of 26 | **4,196 pkts over** / **6,926 of 5,696 B**, 0 of 26 | 0 CC errors, PCR ≤ 25 ms |
+| Per-PID, full, 1 s | yes, 56.6 s of PCR | pass, peak 986,624 B (90 %), margin min 413 ms, 25 of 25 | pass, peak 2,910 B, margin min 63 ms, 25 of 25 | 0 over / peak 5,366 B, 25 of 25 | 0 CC errors, PCR ≤ 25 ms, `compliance.py` PASS |
+| Per-PID, full, 750 ms | yes, 57.9 s of PCR | pass, peak 901,489 B (82 %), margin min 339 ms, 26 of 26 | pass, peak 2,910 B, margin min 68 ms, 26 of 26 | 0 over / peak 5,366 B, 26 of 26 | 0 CC errors, PCR ≤ 25 ms, `compliance.py` PASS |
 | Per-PID, full, 500 ms | no: stops at 9.3 s of PCR, a 356-packet video unit late | — | — | — | — |
 
 Every transport buffer in the per-PID outputs, teletext and SCTE-35 included, has 0 overflows;
@@ -309,6 +319,14 @@ scheduler.
 EB-limited runs at 1 s gave 1,846 ms (video only) and 3,171 ms (full clip). The spread is not
 located, so these figures do not rank the builds.
 
+**Presentation latency** of the two conformant runs, timed where a decoder shows each picture
+([`ts-decode-latency.py`](scripts/ts-decode-latency.py), 10 s settle, about 1,650 pictures each), is
+a median 4,290.9 ms (spread 17.3 ms) at 1 s and 2,771.0 ms (spread 5.0 ms) at 750 ms, flat over each
+run. The PTS key and [T46](test-46-tstd-check-cross-validation.md)'s content key agree to 0.3 ms at
+1 s, since the export carries the source's PTS. These are latencies of conformant bytes, but one run
+each, on loopback. The 1.5 s between them is six times the 250 ms between the delays, the same
+unlocated spread as the delivery figures, so they say what one run cost and not what a delay costs.
+
 ### Under loss, and across hosts (per-PID build, 1 s)
 
 Graded with `ts-tstd.py` skipping 5 s, 2 s windows, on the export's output file. "Lost" is decode
@@ -317,7 +335,7 @@ time the source carries and the output does not.
 | Arm | Runs the window | Buffers (windows legal) | What the export did |
 |---|---|---|---|
 | Loss rig, 0 % | yes | every buffer, 56 of 56; EB margin min 274.8 ms | lost nothing |
-| Loss rig, 1 % | yes | 54 of 55; MP2 B 11 overflowing arrivals (peak 5,144 B), AC-3 B 20 (peak 9,376 B), system TB 2 packets | lost 0.12 s of video and one 0.288 s AC-3 hole; 3 groups evicted; one grid restart at 73.9 s, the PCR stepping back 1.35 s with `discontinuity_indicator` set |
+| Loss rig, 1 % | yes | 54 of 55; MP2 B 11 overflowing arrivals (peak 5,776 B), AC-3 B 21 (peak 13,957 B), system TB 2 packets | lost 0.12 s of video and one 0.288 s AC-3 hole; 3 groups evicted; one grid restart at 73.9 s, the PCR stepping back 1.35 s with `discontinuity_indicator` set |
 | Loss rig, 10 % | yes | moot | 744,318 of 759,806 packets are nulls, 11,415 video; 54 PCR discontinuities; 122 groups evicted |
 
 **The 1 % failures sit at the restart.** Split at the restart, the first part passes in all 34
@@ -346,11 +364,11 @@ arrived relative to its decode time, which a join decides. The export subscribed
 
 | Run | Video clock behind the rest | Video lead into the schedule | Result |
 |---|---|---|---|
-| A, traced | 200 ms | 32 slots | every buffer passes, 56 of 56; EB margin min 413 ms, MP2 64 ms, AC-3 138 ms |
-| B, traced | 979 ms | 1 slot | video 2,257 of 4,098 units underflow, MP2 2,273 of 4,691, AC-3 761 of 2,271; 1 of 56 windows legal |
-| C, traced | 960 ms | 1 slot | video 1,803 of 4,071 units underflow, MP2 2,061 of 4,697, AC-3 942 of 3,526; 4 of 56 windows legal |
-| C, repeated untraced | — | — | the same counts and margins to the unit |
-| D, untraced | — | — | video passes, EB peak 99.7 %, margin min 507 ms; every MP2 unit underflows (margin −188 ms), AC-3 2,403 of 3,591; 0 of 57 windows legal |
+| A, traced | 200 ms | 32 slots | every buffer passes, 56 of 56; EB margin min 413 ms, MP2 63 ms, AC-3 138 ms |
+| B, traced | 979 ms | 1 slot | video 2,257 of 4,098 units underflow, MP2 2,286 of 4,691, AC-3 761 of 2,271; 1 of 56 windows legal |
+| C, traced | 960 ms | 1 slot | video 1,803 of 4,071 units underflow, MP2 2,071 of 4,697, AC-3 943 of 3,526; 5 of 56 windows legal |
+| C, repeated untraced | — | — | the same underflow counts, and minimum margins within 0.1 ms |
+| D, untraced | — | — | video passes, EB full at peak with 12,681 B in MB, margin min 507 ms; every MP2 unit underflows (margin −189 ms), AC-3 2,403 of 3,591; 0 of 57 windows legal |
 | PR head behaviour, traced | 959 ms | not logged | the export stops within seconds: "needs 1,855 packets in a 25 ms slot" |
 
 "Lead" is the minimum number of slots before its deadline a video unit reached the schedule, from
@@ -369,16 +387,16 @@ one host over loopback, and the T8b namespace rig at 0 %, each run for 60 s on t
 
 | Rig | Video clock behind the rest | Video / MP2 lead | Result |
 |---|---|---|---|
-| Loopback, two joins | 200 ms | 32 / 40 slots | every buffer passes, 26 of 26; EB margin min 413.4 ms, MP2 63.6–63.9 ms, AC-3 138.4 ms |
-| Loopback, two joins | −1,200 ms (ahead) | 40 / −8 slots | every MP2 unit underflows, margin min −187.9 ms; AC-3 1,144 of about 1,720; video passes, EB peak 1,112,234 B; 0 of 27 |
-| Namespace rig, 0 % | 960 ms | 1 / 40 slots | video 916 of 1,862 units underflow, MP2 1,068 of 2,165; 2 of 25 |
+| Loopback, two joins | 200 ms | 32 / 40 slots | every buffer passes, 26 of 26; EB margin min 413.4 ms, MP2 63.0–63.3 ms, AC-3 138.4 ms |
+| Loopback, two joins | −1,200 ms (ahead) | 40 / −8 slots | every MP2 unit underflows, margin min −188.5 ms; AC-3 1,144 of about 1,720; video passes, EB full at peak with 12,538 B in MB; 0 of 27 |
+| Namespace rig, 0 % | 960 ms | 1 / 40 slots | video 916 of 1,862 units underflow, MP2 1,075 of 2,165; 2 of 25 |
 | Namespace rig, 0 % | — (five generations) | 1 / −25 slots | an MP2 group evicted at the join opened a generation for the audio as well; every MP2 unit underflows (margin −596 ms), video 687 of 1,838; 0 of 25 |
 
 Each pair of loopback joins reproduces the other's margins within 0.3 ms. Every join skipped one
 video group.
 The earlier loopback pass at 1 s ([above](#a-buffer-limited-schedule-built)) has the 200 ms state's
-minimum margins to 0.1 ms (413.4, 63.6 and 138.4 ms), so it is that state (reasoned from the
-identity; that run was not traced). The 750 ms pass's margins (338.8, 68.4, 150.1 ms) have no
+minimum margins to within 0.3 ms (413.4, 63.0 and 138.4 ms), so it is that state (reasoned from the
+identity; that run was not traced). The 750 ms pass's margins (338.8, 67.8, 150.0 ms) have no
 traced counterpart. So the per-PID build carries the full multiplex at 1 s on a join that leaves
 the video 200 ms behind, which three of eleven traced joins did. The release stage, not the
 schedule or the topology, decides which.
@@ -591,7 +609,7 @@ RUST_LOG=info,moq_mux::jitter=debug,moq_mux::container::ts::schedule=debug,moq_m
 
 # The schedule replay: the export's rule and a buffer-limited one, on source and authored DTS.
 # --reserve is the "raising the video DTS reserve ... to=" value the export logs; --eb is the
-# decoder size ts-tstd.py calibrates for the video PID.
+# video's cpb + BSmux + BSoh, the budget the scratch patches use (smaller than MB + EB).
 python3 lab/scripts/ts-schedule-replay.py <source-video-only>.ts --rate <catalog-rate> \
   --window 0.5,1,2,3,5,8 --reserve 36000 --period 3600 --eb 1115696 --check <out>/moq-c0-egress.ts
 ```

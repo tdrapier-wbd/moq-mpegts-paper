@@ -1745,7 +1745,7 @@ against transmux carriage generally.
 
 **Measured** ([T44](../lab/test-44-tstd-grading.md); P1, wire, loopback, one clip). The grader was
 calibrated per PID to 13818-1 and to the clip's own H.264 HRD, and validated on the source: every
-buffer passes, and the joint legal PCR offset is exactly +0 ms. The arms ran at an 11 Mb/s carrier.
+buffer passes, and the joint legal PCR offset starts at exactly +0 ms. The arms ran at an 11 Mb/s carrier.
 There were four MoQ configurations:
 
 - T19 measurement 11's: `f8236680b`, groomer `64595f6`.
@@ -1765,9 +1765,9 @@ PCR in 20,317 outside ±481 ns.
 | MPEG-1 L2 / AC-3 transport buffer | 0 / 0 | **86 % / 92 %** | 0 / 0 | 0 / 0 |
 | PSI transport buffer | 0 | 3–17 packets | 0 | 0 |
 | 2 s windows with a legal PCR offset: video | all | all | all | all |
-| … audio, either PID | all | **none of 137–139** — deficit median 0.19–0.22 s | all | all |
-| … all buffers at once | all | **none** — video and audio legal offsets a median 0.70–0.71 s apart | all | all |
-| Whole capture, all buffers at once | legal at +0 ms | **no legal offset** | **no legal offset** | **legal at +0 ms** |
+| … audio, either PID | all | **none of 137–139** — deficit median 0.18–0.19 s | all | all |
+| … all buffers at once | all | **none** — video and audio legal offsets a median 0.68–0.69 s apart | all | all |
+| Whole capture, all buffers at once | legal from +0 to +100 ms | **no legal offset** | **no legal offset** | **legal from +0 to +100 ms** |
 
 **What it establishes.** The failure is the lane's. The groomer does not reorder packets, and fed a
 byte-faithful transport it passes every transport buffer, and every decoder buffer in every 2 s window.
@@ -1775,12 +1775,12 @@ Over a whole capture it does not: in its default arrival-clocked mode the groome
 regenerated PCR at start-up and lets the PCR-to-PTS offset drift, and the decoder buffers of SRT, and of
 plain UDP carrying the file's own bytes, then fail at every constant offset. In its stream-clocked mode,
 which places each packet on the slot its source PCR implies, it holds: SRT and UDP pass every buffer
-over the whole capture, at exactly the source's own legal offsets, with every source null stripped and
+over the whole capture, on exactly the source's own joint legal interval, with every source null stripped and
 re-placed. The windowed test is unaffected by the drift, and it is the attribution. The result is
 independent of build: the four MoQ arms, through current upstream `main`, agree to within
 0.5 percentage points on every transport buffer. And it is **beyond the reach of any groomer that only
 paces and re-stamps**. No PCR offset touches a transport buffer. For the decoder buffers the video can
-be repaired with 0.6–1.55 s of added delay, depending on the build, but the audio cannot at any
+be repaired with at least 0.6–1.35 s of added delay, depending on the build, but the audio cannot at any
 offset, in any window.
 
 Neither of the groomer's modes reaches it. The stream-clocked mode places packets on the exporter's
@@ -1876,10 +1876,17 @@ A video group skipped at the join counts as a discontinuity, and the release sta
 that crosses one alone a generation and an anchor of its own. On one host and across hosts alike,
 the video then ran 200 ms behind the other tracks (three joins), 959–979 ms behind (five) or
 1,200 ms ahead (two), fixed for the run. Only the first passes every buffer, and the 1 s pass above
-has that state's minimum margins to 0.1 ms. A delay behind, the video reaches the schedule with one
+has that state's minimum margins to within 0.3 ms. A delay behind, the video reaches the schedule with one
 slot to spare; ahead, the audio reaches it late; either way the output fails the buffer model. In
 the one run on the PR's own schedule, the export stopped within seconds. What selects the state
-is not established.
+is not established. Keeping every track on one clock removes the dependence, but not yet in a form
+upstream can take. *Measured*
+([T47](../lab/test-47-fixed-delay-export.md#keeping-the-tracks-on-one-clock-scratch); `[unmerged]`,
+a scratch change to the same build's release stage, at 1 s, 60 s per join, without loss): eleven
+further traced joins, six on one host and five across hosts, all passed every buffer in every
+window, with one set of margins. As written it breaks four of upstream's discontinuity tests,
+because the release stage cannot tell a group skipped at the join from a publisher's timeline
+restart.
 
 **What it does not establish.**
 

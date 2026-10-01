@@ -867,6 +867,8 @@ header onto zeros or foreign bytes. A libsrt listener receives the same zero-fil
 gateway, so the sender is the source. A loaded host makes more short pipe reads, which is why
 the failure followed load. `-chunk:1316` keeps the packets aligned but still inserts the zeros. The
 defect is reported upstream as [Haivision/srt#3388](https://github.com/Haivision/srt/issues/3388).
+Its fix is on SRT master for v1.5.8, but every release up to and including v1.5.7 still pads, so
+the rule below applies to any released build.
 
 > **Feed an SRT arm from a sender that emits whole packets — `tsp -O srt`, as the deployed chain
 > does — rather than piping into `srt-live-transmit`.** Where a pipe into it cannot be avoided,
@@ -890,6 +892,37 @@ spread on a stage that added none.
 > decode-referenced figure holds only where the DTS is the source's, and a per-header one only where
 > the tap's arrivals are smooth. Check the instrument on a byte-faithful capture first, where
 > presentation, decode and delivery latency must agree.
+
+Two limits on the same measurement came from [T46](test-46-tstd-check-cross-validation.md). A lane
+that rebases the PTS defeats a PTS key, so `ts-decode-latency.py --key content` matches pictures on
+their slice NAL units instead, the bytes that crossed the media-aware lane unchanged where its
+parameter sets did not. And the figure is when the egress's own PCR and PTS say each picture is
+shown. On T44's `main` capture that is 1,775.6 ms, but every access unit there fails the T-STD by
+about a second, so no decoder achieves it.
+
+> **Quote a presentation latency only on bytes that pass the T-STD,** and say which key matched the
+> pictures. On a non-conformant egress the receiver either delays its clock or discards pictures,
+> and the instrument cannot see which.
+
+### A grader written once is one reading of the standard; cross-validate it before its figures decide anything
+
+*From [T46](test-46-tstd-check-cross-validation.md).* `ts-tstd.py` was written for T44 from the
+clauses, and its self-tests passed, because they tested what its author believed the clauses said.
+Graded against upstream's independently written check on 35 files, it had six defects. Two showed up
+as disagreements: it sized the AVC decoder buffer as one buffer rather than 2.14.3.1's MB + EB, and it
+did not grade 2.4.2.6's rule that a transport buffer empties once a second. The other four decided
+no condition on this corpus, only counts and margins, so agreement could not reveal them; they were
+found by reading each clause against the code. Upstream's check had three defects of its own, so neither instrument was the reference; each
+disagreement was decided by clause. One of the six was a silent pass: a stream the grader could not
+grade was reported clean, the failure mode
+[a grader whose pattern does not match](#a-grader-whose-pattern-does-not-match-its-tools-wording-scores-every-input-as-clean)
+describes for log scrapers.
+
+> **Before a home-built instrument's figures decide anything, grade the same bytes with an
+> independent implementation, with the agreement criterion fixed in advance, and settle each
+> disagreement from the clause, not from which answer is more convenient.** Then read every clause
+> against the code, since agreement on one corpus does not exercise every path. A grader that cannot
+> grade a stream must refuse it with its own exit status, never pass it.
 
 ---
 
@@ -3243,3 +3276,22 @@ conformed.
 > scheduling interval on the captured bytes.** Before modelling a stream's decoder buffer per
 > PES, compare the PES size with the buffer: if a PES carries several access units, deadlines and
 > removal are per access unit, in the scheduler and in the grader alike.
+
+### A corrected instrument owes a re-grade of every figure it produced, and a re-read of every argument built on one
+
+*From [T46](test-46-tstd-check-cross-validation.md), applied to T44, T45 and T47.* When `ts-tstd.py`
+was corrected, T46 checked that no T44 or T45 verdict moved. That was true, and on its own it would
+have left three files wrong. Re-grading every kept capture moved counts and margins throughout. It
+also moved arguments that no verdict check could see. T44 had called the source's joint legal offset
+"exactly +0 ms, with no slack in either direction"; under 2.14.3.1's larger video buffer the interval
+is [+0, +100], with the audio setting only the lower bound. The video's legal offsets on every MoQ arm
+lost their upper bound inside the scan, so a sentence that leaned on "[+900, +1,050]" had to lean on
+the lower bound instead. And a figure derived from the old grades, the spread between video and audio
+offsets, had to be recomputed, not copied. One table's original grading flags differed from the
+file's own reproduction line, which only the kept JSON showed.
+
+> **When an instrument changes, re-grade every kept capture with the flags it was first graded with
+> (read them from the saved output, not from the write-up), then re-read each sentence that uses a
+> moved figure, including derived ranges and "exactly" claims.** "No verdict moved" is the start of
+> the check, not the end of it. A capture that was not kept keeps its old figure, labelled as the old
+> instrument's.

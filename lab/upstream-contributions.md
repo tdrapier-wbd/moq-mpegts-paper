@@ -1931,7 +1931,9 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
     up to ±30 ppm, within 13818-1's slew limits. That goes ahead of `delay.md`'s "only if measured",
     on the derived exposure.
   - The PR also re-points `msfts-convergence.md`'s non-goal at passthrough.
-- **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643). It is hand-rolled from
+- **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643), into the questline's
+  branch `quest/m1/tstd/README`, which #4645 also targets, not into `main`. There `test/ts` still
+  carries the approximate TB-only check with fixed leak rates. It is hand-rolled from
   H.222.0 and the codec specifications, since TSDuck has no T-STD analyser, and validated on a real
   broadcast capture and on PCR-restamped controls that must fail. It models TB, MB and EB for AVC and
   HEVC, and TB and B for ADTS, MPEG-1/2 audio, AC-3, E-AC-3 and Opus, the last with borrowed buffer
@@ -1951,12 +1953,29 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   network margin, was planned in [#4649](https://github.com/moq-dev/moq/pull/4649) and closed unmerged.
 
 **Relation to the measurements here.** The upstream check and [`ts-tstd.py`](scripts/ts-tstd.py) are
-independent implementations. They agree on the two streams T47 graded with both, the generated
-fixture and #4645's output of it at 2 s, and both are passes. Agreement on a failure, and on the
-T44/T45 corpus, is still to be shown. On `ffa5b81b`, T45 found the
+independent implementations, cross-validated in [T46](test-46-tstd-check-cross-validation.md) on 35
+files: the source clip, the T44 and T45 captures, and upstream's own Kyrion controls. With
+`ts-tstd.py`'s six defects fixed, they agree on 24, and each of the other 11 traces to upstream's
+check: three defects against H.222.0 (10/2014) and one convention.
+
+- **TB-to-B delivery by whole packet** (2.4.2.3). Five clean files fail on a false audio underflow,
+  by 0.27–0.45 ms.
+- **Floating-point drift in the AVC leak** (2.14.3.1). Its 10⁻⁹ B tolerance is below a double's
+  resolution at 286 MB of accumulated output: one false underflow.
+- **Units decoded after the last packet are not assessed** (2.4.2.6). On the 4× and 15× Kyrion
+  restamps it misses 132 and 142 audio units per PID held over 1 s. It still fails both files on
+  other conditions, so its verdict there is right.
+- **A capture's truncated last access unit is graded as an underflow**, a convention rather than a
+  defect, which decides an audio condition on five files.
+
+**Found, not reported.** These are measured against the questline branch's head `8df1e438`. Each
+has a clause, a file that shows it and the first violating unit, so it is reportable as it stands.
+The first two fail clean streams, which matters once the check gates CI; the third under-reports
+STD delay.
+
+**The send-ahead the closed `burst` quest would have declared.** On `ffa5b81b`, T45 found the
 exporter hands each video frame over at its own decode time, so a conformant output of the CNN clip
-needed about 0.55–0.6 s of send-ahead through the video's transport buffer; that is the quantity the
-closed `burst` quest would have declared.
+needed about 0.55–0.6 s of send-ahead through the video's transport buffer.
 
 **Graded here** ([T47](test-47-fixed-delay-export.md), #4645 head, loopback, one run per cell):
 
@@ -2021,13 +2040,16 @@ the schedule 8 slots late. One put it 960 ms behind, and in one an evicted MP2 g
 audio generations of its own. The earlier loopback pass at 1 s has the 200 ms state's margins, so
 the per-PID result reported earlier holds for that join state only; the follow-up says so.
 
-**Built since, not yet reported.** A scratch release stage that keeps the tracks on one clock: a
+**Built since, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5936219991)). A scratch release stage that keeps the tracks on one clock: a
 frame that lands on the latest clock keeps it, and a track on an older generation follows the
 newest at its first frame not late there. All eleven joins, six on one host and five across hosts,
 pass every buffer in every window with one set of margins. It breaks four of the PR's
 discontinuity tests (two per change), because the release stage cannot tell a skip at the join from
-a publisher's timeline restart. What to report is the mechanism and the test conflict, not the
-patch: the distinction belongs in the consumer or in the discontinuity it reports.
+a publisher's timeline restart. The report argues for the mechanism and the test conflict, not the
+patch: the distinction belongs in the consumer or in the discontinuity it reports. The diff is
+offered as an env-gated scratch branch on the t0ms fork
+([`6f59c78`](https://github.com/t0ms/moq-dev/commit/6f59c785c84fded3328e9ef773f59453129fdf77)),
+marked not for merge.
 
 ### The liveness exit — filed as a question, deliberately
 
@@ -2432,8 +2454,11 @@ returned, where the SRT and UDP sources do shrink it. **Reported as
 to `srt-live-transmit` reproduction: at `-chunk:1316`, 1,020 packets arrived in order with 79
 zero-filled slots, and at the default 1456 only 26 packets were intact. **Fix proposed as
 [Haivision/srt#3389](https://github.com/Haivision/srt/pull/3389)**, which shrinks the payload to the
-bytes read; approved by a maintainer and milestoned for v1.5.8, not yet merged. The same reproduction, with master at 74d7083 as the sender and a stock 1.5.6 receiver,
-shows no zero-filled slots at either chunk size after the fix. At 1456, all 1,040 packets arrive in
+bytes read. It was merged unchanged into master as `4b8813f1`, which closed the issue, and is
+milestoned for v1.5.8. No release carries it yet: v1.5.7 is the latest, and it still pads. The same
+reproduction, with master at 74d7083 as the sender and a stock 1.5.6 receiver, shows no zero-filled
+slots at either chunk size after the fix. 74d7083 is the commit the fix was merged onto, so that
+verification is of what master now holds. At 1456, all 1,040 packets arrive in
 order, against 26 before. The rule it yields is in
 [method notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros).
 The rig produced the damage, but the importer ending on it is the defect, and the pipe arms above

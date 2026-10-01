@@ -203,7 +203,7 @@ Every run is P1: a captured file, graded on its own PCR. Every capture is from o
 
 ## Results
 
-### First pass: `ts-tstd.py` as written
+### Defects found in `ts-tstd.py`
 
 **Run as first written, `ts-tstd.py` agreed with upstream on 19 of 35 files.** Of the 16 others:
 - **Five** disagreed only through `ts-tstd.py` defects.
@@ -235,7 +235,7 @@ skip:
 | `duplicate packet` | passes, duplicate delivered | passes, 1 duplicate detected and not delivered |
 | Source clip | passes | passes |
 
-### Second pass: the agreement table
+### The agreement table, `ts-tstd.py` corrected
 
 `ts-tstd.py` fixed, the whole corpus re-graded. The counts are given as `ts-tstd.py` against upstream.
 For upstream, "fails" means its `tstd` check returned `WARN` with violations; it reports refusals as
@@ -335,7 +335,9 @@ convention reports an underflow the stream may not have.
 ### What the fixes move in T44 and T45
 
 No verdict moves: every T44 and T45 capture, graded uncut at its own skip as those tests did, keeps
-its pass or fail. These figures do move:
+its pass or fail. [T44](test-44-tstd-grading.md), [T45](test-45-live-tstd-remux.md) and
+[T47](test-47-fixed-delay-export.md) now quote the corrected figures; T47's captures, re-graded the
+same way, also keep every verdict. The largest moves:
 
 | Capture | Figure | Before | After |
 |---|---|---|---|

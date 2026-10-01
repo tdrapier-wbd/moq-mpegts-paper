@@ -24,7 +24,9 @@ attempted.**
   with a 5 s warm-up, is overtaken by the lane.
 
 Measured at P1, captured from the wire, wire domain, loopback, one clip, exporter `ffa5b81b`, the
-re-multiplexer in Python. One conformant run of 270 s. Hardware: not run.
+re-multiplexer in Python. One conformant run of 270 s. Hardware: not run. The T-STD figures are from
+[`ts-tstd.py`](scripts/ts-tstd.py) as corrected in [T46](test-46-tstd-check-cross-validation.md); that
+correction moved no verdict on any capture graded here, only the counts and margins below.
 
 ## Objective
 
@@ -76,8 +78,12 @@ line, so [`t18-arm.sh`](scripts/t18-arm.sh) runs it with `PACER=` in the groomer
 - **The scheduler is the oracle's**: each slot goes to the available packet with the earliest decode
   deadline among those whose transport buffer and, where the T-STD sizes one, decoder buffer have
   room. Otherwise the slot is a null, and an adaptation-only PCR packet goes out whenever none has for
-  25 ms. Buffer parameters are `ts-tstd.py`'s, calibrated from the source file before the loop starts,
-  because the video's HRD rate is read from its SPS.
+  25 ms. Transport-buffer sizes and audio B match [`ts-tstd.py`](scripts/ts-tstd.py); video is
+  scheduled against the single cpb + BSmux + BSoh buffer the first instrument used (1,115,696 B on
+  this clip). That bound is smaller than MB alone, so it cannot overflow 2.14.3.1's MB + EB leak
+  model ([T46](test-46-tstd-check-cross-validation.md)). It does not model the leak's 24 Mb/s
+  transfer into EB, so underflow is left to the grader. HRD parameters are read from the source's SPS before
+  the loop starts.
 - **Deadlines come from the stream as it arrives.** Video and teletext take the unit's DTS or PTS.
   Audio is split into frames as its bytes arrive, each frame known from its header, so a packet's
   deadline is the decode time of the frame holding its first byte. Every deadline is causal: nothing
@@ -143,15 +149,16 @@ groomer that runs ahead settles at its cap ([T18](test-18-delivery-latency.md) �
 | Run | Warm-up | Lead | Late packets (the tool's count) | Grader | P1/P2 | Presentation latency |
 |---|---|---|---|---|---|---|
 | smoke: source clip | 3 s | 50 ms | 0 of 230,895 | passes | passes | 75.9 ms |
-| 1 | 5 s | 100 ms | **1,735,115 of 1,829,973**, of them 1,723,693 of 1,733,720 video | **fails**: every one of 10,481 video units underflows, median margin −504.5 ms; 1,639 MP2 and 1,116 AC-3 units; 0 of 142 windows | passes | — |
-| 2 | 60 s | 100 ms | **28,661–33,243 per 10 s**, throughout | **fails**: 6,891 of 8,687 video units, 32 MP2, 25 AC-3; 0 of 116 windows | passes | — |
+| 1 | 5 s | 100 ms | **1,735,115 of 1,829,973**, of them 1,723,693 of 1,733,720 video | **fails**: every one of 10,481 video units underflows, median margin −504.7 ms; 1,663 MP2 and 1,131 AC-3 units; **19** video TB stretches not emptied within 1 s; 0 of 142 windows | passes | — |
+| 2 | 60 s | 100 ms | **28,661–33,243 per 10 s**, throughout | **fails**: 6,901 of 8,687 video units, 32 MP2, 26 AC-3; **15** video TB stretches not emptied within 1 s; 0 of 116 windows | passes | — |
 | **3** | **60 s** | **600 ms** | **0 of 1,676,219**, 0 unsent | **passes** | **passes** | **2,196.7 ms** |
 
 Run 3, the conformant configuration, in full. Every transport buffer passes, the video's peaking at
-511 B of 512. The video decoder buffer has 0 underflows over 9,532 units, a minimum margin of 30.3 ms
-and a median of 430.4 ms, and peaks at 784,228 B of 1,115,696. Both audio buffers pass, with minimum
-margins of 112.4 ms (MP2, peaking at 3,232 B of 3,584) and 175.2 ms (AC-3, 5,416 B of 5,696). The
-joint legal offset is [−25, +0] ms, and 130 of 130 windows are legal. P1/P2: 0 continuity errors,
+511 B of 512. The video decoder buffer has 0 underflows over 9,532 units, a minimum margin of 30.0 ms
+and a median of 430.1 ms, and EB peaks at 784,021 B of 1,099,696.
+Both audio buffers pass, with minimum margins of 111.2 ms (MP2, peaking at 3,345 B of 3,584) and
+175.0 ms (AC-3, 5,459 B of 5,696). The joint legal offset is [−25, +0] ms, and 130 of 130 windows
+are legal. P1/P2: 0 continuity errors,
 0 PCRs outside ±481 ns, 0 of 10,644 PCR intervals over 40 ms, largest 25.2 ms. Output 13.5 % nulls.
 
 Its presentation latency is flat: median 2,196.7 ms, p95 2,197.9 ms, maximum 2,199.3 ms, and a
@@ -237,7 +244,7 @@ at a 100 ms cushion and a 150 ms cap. Graded the same way.
 
 | | UDP | SRT, 120 ms |
 |---|---|---|
-| Grader, after 5 s | **passes**: 0 overflows, 0 underflows, joint [+0, +0] ms, 144 of 144 windows | **fails**: 4 MP2 and 7 AC-3 underflows, joint none; 141 of 141 windows legal |
+| Grader, after 5 s | **passes**: 0 overflows, 0 underflows, joint [+0, +100] ms, 144 of 144 windows | **fails**: 4 MP2 and 7 AC-3 underflows, joint [+100, +100] ms only; 141 of 141 windows legal |
 | P1/P2, whole capture | **fails**: 90 continuity errors, 68 PCR intervals over 40 ms (largest 98.6 ms), 68 PCRs outside ±481 ns | **fails**: 83, 53 (98.6 ms), 53 |
 | P1/P2 after the groomer's first 5.3 s | **passes**: 0, 0, 0 | 5 continuity errors, all at 139.7 s; 0, 0 |
 | Presentation latency · delivery, median | **113.7 ms**, spread 4.4 ms · 113.6 ms | 234.0 ms, spread 4.4 ms · 233.9 ms |
