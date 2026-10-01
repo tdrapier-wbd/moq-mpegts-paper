@@ -2002,7 +2002,7 @@ AC-3's buffer. On the full clip it passes every buffer of `ts-tstd.py` and `comp
 and 750 ms. At 500 ms it stops; a replay puts that on the export's authored DTS. PCR accuracy still
 fails, from the unchanged stamping.
 
-**Found since, not yet reported.** Across hosts, the release stage's generations split audio and
+**Found since, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5932637231)). Across hosts, the release stage's generations split audio and
 video at the join. A video group skipped at the join counts as a discontinuity. Video, the only
 track to cross it, opens a generation of its own, anchored no earlier than the deadlines already
 given to the others. On one pair of hosts, four of five traced joins put the video's clock 959–979 ms
@@ -2011,11 +2011,16 @@ schedule, the export stopped on its fatal overrun within seconds; on the per-PID
 the output fails the buffer model for the late side. Timestamps are unaffected. The release stage's
 own per-frame slack measures the offset, so a maintainer can see it with one debug line. A second,
 smaller item: the per-PID patch's occupancy model resets on a grid restart, which under 1 % loss
-overfilled the audio buffers once. That one is the patch's, not the PR's, and goes in only as a
-requirement on any shipped schedule.
+overfilled the audio buffers once. That one is the patch's, not the PR's, so it was not reported;
+it stands as a requirement on any shipped schedule.
 
-**Open.** Whether the split also happens co-resident, which the passing loopback and loss-rig runs
-did not trace.
+**Found after the report, not yet reported.** The split happens on one host too: six traced
+co-resident joins (loopback and the T8b namespace rig at 0 %) all skipped a video group. Two left
+the video 200 ms behind and passed. Two put it 1,200 ms *ahead*, and every MP2 unit then reached
+the schedule 8 slots late. One put it 960 ms behind, and in one an evicted MP2 group gave the
+audio generations of its own. The earlier loopback pass at 1 s has the 200 ms state's margins, so
+the per-PID result reported earlier holds for that join state only. The report said the
+co-resident case was untraced, and that it expected the split there; both want a follow-up.
 
 ### The liveness exit — filed as a question, deliberately
 

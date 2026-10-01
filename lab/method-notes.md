@@ -1463,13 +1463,20 @@ on the same build had passed every buffer. The two differed in topology, so the 
 to what cross-host changes: arrival skew between tracks, the release stage's anchoring. The second
 run at the same settings failed differently: the video, not the audio, ran late. A third passed
 outright. The variable was the join. A video group skipped at the join put the video on its own
-release clock, at an offset the join set, and topology only made such joins common.
+release clock, at an offset the join set. Topology played no part: traced joins on one host fell
+into the same states. The loopback pass at 1 s that the arm was compared against was one of them.
 
 > **When one run of a new configuration differs from the old one, run it again before explaining
 > the difference.** A configuration effect predicts the same failure twice. A failure that changes
 > shape between identical runs belongs to a state the run entered, and the useful question becomes
 > which state. Here the trace that answered it was the release stage's per-frame slack, which also
 > made the offset measurable rather than inferred.
+>
+> **A result that repeats to the tenth of a millisecond is one state repeating, not robustness.**
+> The 1 s pass's minimum margins (413.4, 63.6, 138.4 ms) recurred exactly in a cross-host run and
+> two loopback runs, and the 200 ms state was what they shared. A run that matches another that
+> closely says the system is deterministic given its state. It does not say how many states there
+> are.
 
 ## 5. Rig hygiene
 

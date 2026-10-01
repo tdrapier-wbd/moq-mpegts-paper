@@ -6,12 +6,14 @@ broadcast-clip failure is located by an offline replay, which predicted two furt
 real export correctly. A scratch patch that schedules each PID's packets earliest deadline first,
 admitted against that PID's own transport and decoder buffers, carries the full multiplex at 1 s
 and at 750 ms with every buffer conformant; PCR accuracy still fails, from the unchanged stamping.
-At 500 ms it stops, as the replay predicts for the DTS the export authors. At 1 s under the
-loss rig the patch carries 1 % loss conformant except at one grid restart, and the lane collapses
-at 10 %. Across hosts the result is decided at the join. When the video track skips a group on
-joining, #4645's release stage gives it a clock of its own, up to a whole delay behind the other
-tracks'. The output then fails the buffer model for whichever side runs late, and in the one run
-on the PR head's schedule the export stopped.**
+At 500 ms it stops, as the replay predicts for the DTS the export authors. Those passes hold
+only for the join the runs made. At every traced join, on one host and across hosts, the video
+track skipped a group, and #4645's release stage then gave it a clock of its own. The offset
+from the other tracks' clock is set at the join and fixed for the run: 200 ms behind, about a
+whole delay behind, or 1.2 s ahead. Only the 200 ms state passes, and the 1 s loopback pass is
+that state. Under the loss rig at 1 s, 1 % stays conformant except at one grid restart, and 10 %
+collapses the lane. In the one run on the PR head's schedule with the video a delay behind, the
+export stopped.**
 
 - **On a real broadcast capture the export stops within seconds, at every delay up to 3 s.** On
   CNNiEMEA2 (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
@@ -65,21 +67,26 @@ on the PR head's schedule the export stopped.**
   frame. At both delays the output passes every transport and decoder buffer of `ts-tstd.py` in
   every 2 s window, and `compliance.py`, with 0 continuity errors. At 500 ms it stops at 9.3 s of
   output: an offline replay of the same buffer-limited rule misses the DTS the export authors at
-  that delay, while it nearly meets the source's.
+  that delay, while it nearly meets the source's. The 1 s pass is one join state of several (next
+  bullets but one); the 750 ms run's state is not known.
 - **Under 1 % loss at 1 s the per-PID build stays conformant except where the export restarts its
   grid.** Under the [T8b](test-8b-congestion-control.md) netem rig (25 ms each way, BBRv3), 0 %
   passes every buffer in all 56 windows. At 1 % the export lost 0.12 s of video and one 0.288 s
   AC-3 hole, and restarted its grid once, with a flagged PCR discontinuity. Every window either
   side of the restart passes, apart from 2 table packets over the system transport buffer. At 10 %
   the lane delivers almost nothing but nulls, so its buffer grade is moot.
-- **Across hosts, a join where the video skips a group puts the video on its own clock.** The
-  consumer counts the skipped group as a discontinuity. #4645's jitter buffer then opens a new
-  generation for the video alone, anchored no earlier than the deadlines it has already given the
-  other tracks. Over five traced joins, the video's clock ran from 200 ms to 979 ms behind theirs,
-  fixed for the whole run. At 200 ms the output passed every buffer in all 56 windows. Near a
-  whole delay, the video reached the schedule one slot ahead of its deadline instead of 32.
-  Between 1,800 and 2,300 units each of video and MP2 then underflowed, and in the one run with
-  the PR head's own schedule the export stopped on its fatal overrun within seconds.
+- **A join where the video skips a group puts the video on its own clock, on one host as across
+  hosts.** The consumer counts the skipped group as a discontinuity. #4645's jitter buffer then
+  opens a new generation for the video alone, anchored no earlier than the deadlines it has
+  already given the other tracks. Every one of eleven traced joins skipped a video group. The
+  video's clock then ran 200 ms behind the others' (three joins), 959–979 ms behind (five), or
+  1,200 ms ahead (two loopback joins), fixed for the whole run. In the eleventh an evicted MP2 group
+  opened further generations. At 200 ms every buffer passes, with the 1 s loopback pass's
+  margins to within 0.3 ms. A whole delay behind, the video reached the schedule one slot ahead of its
+  deadline instead of 32, and 916 to 2,257 video units and 1,068 to 2,273 MP2 units underflowed.
+  Ahead by 1.2 s, every MP2 unit reached the schedule 8 slots late and underflowed.
+  In the one run with the PR head's own schedule, a delay behind, the export stopped on its fatal
+  overrun within seconds.
 - **Nearly every PCR the export writes misses TR 101 290's ±500 ns accuracy, by up to ±75 µs.** The
   export stamps each PCR with its 25 ms slot time, but a slot carries a whole number of packets
   (166 or 167 at 10 Mb/s), so the byte position wanders up to half a packet from where the value
@@ -342,11 +349,31 @@ arrived relative to its decode time, which a join decides. The export subscribed
 runs that logged the schedule. Every other PID reached it at least 40 slots ahead, a whole delay, in
 each of them. In run D the video ran *ahead* of the audio: audio units underflow by a nearly
 constant amount while the video sends early, the converse of B and C. It was not traced, so its
-offset is not measured. The last row ran the same build with no
+offset is not measured, but two traced loopback joins below reproduce its margins to 0.1 ms with
+the video 1,200 ms ahead. The last row ran the same build with no
 `MOQ_TS_*` variable set, which leaves the PR head's schedule unchanged. It shows the skew is the
 release stage's, not the scratch patch's. A sixth traced run is void, a rig fault: its origin
 started while the previous run's relay still held the port. Its first 8 s show the same skip and a
 960 ms offset.
+
+**On one host the same split occurs, with the same states.** Both roles of the cross-host rig on
+one host over loopback, and the T8b namespace rig at 0 %, each run for 60 s on the traced build:
+
+| Rig | Video clock behind the rest | Video / MP2 lead | Result |
+|---|---|---|---|
+| Loopback, two joins | 200 ms | 32 / 40 slots | every buffer passes, 26 of 26; EB margin min 413.4 ms, MP2 63.6–63.9 ms, AC-3 138.4 ms |
+| Loopback, two joins | −1,200 ms (ahead) | 40 / −8 slots | every MP2 unit underflows, margin min −187.9 ms; AC-3 1,144 of about 1,720; video passes, EB peak 1,112,234 B; 0 of 27 |
+| Namespace rig, 0 % | 960 ms | 1 / 40 slots | video 916 of 1,862 units underflow, MP2 1,068 of 2,165; 2 of 25 |
+| Namespace rig, 0 % | — (five generations) | 1 / −25 slots | an MP2 group evicted at the join opened a generation for the audio as well; every MP2 unit underflows (margin −596 ms), video 687 of 1,838; 0 of 25 |
+
+Each pair of loopback joins reproduces the other's margins within 0.3 ms. Every join skipped one
+video group.
+The earlier loopback pass at 1 s ([above](#a-buffer-limited-schedule-built)) has the 200 ms state's
+minimum margins to 0.1 ms (413.4, 63.6 and 138.4 ms), so it is that state (reasoned from the
+identity; that run was not traced). The 750 ms pass's margins (338.8, 68.4, 150.1 ms) have no
+traced counterpart. So the per-PID build carries the full multiplex at 1 s on a join that leaves
+the video 200 ms behind, which three of eleven traced joins did. The release stage, not the
+schedule or the topology, decides which.
 
 Timestamps are not affected. Matched by payload against the source in the 0 % loss arm and in run
 D, a passing and a failing run, the video and MP2 PES carry the source's PTS: median shift 0 over
@@ -389,8 +416,9 @@ hand before the first unit is due.
    this and predicted both further runs. Sending the video earliest deadline first within its EB
    removes the overrun in a built export, at 1 s on the full clip.
 3. **A schedule inside the export can carry the full broadcast multiplex with every buffer
-   conformant, at 1 s and 750 ms, in a scratch build.** PCR accuracy still fails, for the reason
-   in conclusion 6. It needs three things #4645 lacks: each PID's packets admitted
+   conformant, at 1 s and 750 ms, in a scratch build, on a favourable join.** PCR accuracy still
+   fails, for the reason in conclusion 6. The 1 s pass is the join state that leaves the video
+   200 ms behind the other tracks; on the other states the same build fails (conclusion 8). It needs three things #4645 lacks: each PID's packets admitted
    against its own transport and decoder buffers rather than a shared rate floor; deadlines and
    buffer removal per access unit where a passed-through PES carries several; and no coupling of
    one PID's deadlines to another's push order. Unpatched, the audio fails at 8 s. With the video
@@ -410,15 +438,17 @@ hand before the first unit is due.
 7. **The latency at 2 s is about twice what the design accounts for.** This is on loopback. The
    ~2 s unexplained has the same order as the transit T45 left unlocated on `ffa5b81b`, and may be
    the same thing. Nothing here says so yet.
-8. **#4645's release stage can put one track on a clock up to a whole delay behind the others'.**
-   A discontinuity crossed by one track alone, here a video group skipped at the join, opens a
-   generation only that track uses. Every traced cross-host join did this, and four of five put
-   the video between 959 and 979 ms behind. From then on no schedule downstream can hold the
-   decoder buffers for both sides, because it receives one side's units almost at their
-   deadlines. In the one PR-head run the export stopped on it; the per-PID build runs and fails
-   the buffer model. The defect is in the release stage, not in either schedule. Whether it also
-   happens co-resident is untested: the loopback and loss-rig runs were not traced, and they
-   passed.
+8. **#4645's release stage puts the video on a clock of its own at the join, and the offset
+   decides conformance.** A discontinuity crossed by one track alone, here a video group skipped
+   at the join, opens a generation only that track uses. All eleven traced joins did this, on one
+   host and across hosts. The offset fell into three states, fixed per run: 200 ms behind (three
+   joins), 959–979 ms behind (five) and 1,200 ms ahead (two). In the eleventh an MP2 group was
+   also evicted at the join, and the audio got generations of its own. Only the first state leaves
+   both sides with room. A whole delay behind, the schedule receives video units almost at their deadlines.
+   Well ahead, it receives audio after theirs. In the one PR-head run the export stopped on it; the
+   per-PID build runs and fails the buffer model. The defect is in the release stage, not in
+   either schedule, and (reasoned) no schedule fix makes the output's conformance independent of
+   the join.
 9. **Under loss, the per-PID build's only failure at 1 % is its own model at a grid restart.** A
    shipped schedule has to carry the receiver's buffer occupancy across a restart, since a PCR
    discontinuity does not empty a decoder. At 10 % the lane delivers almost nothing; that is the
@@ -428,11 +458,13 @@ hand before the first unit is due.
 
 - One host, loopback, one run per cell, one broadcast channel (two captures of the same channel are
   on hand, not two channels). The loss rig and cross-host ran on the per-PID build at 1 s only.
-  The loss arms ran once each, untraced. Cross-host is one pair of hosts in one region, seven runs,
-  of which five were traced.
-- How often a join skews the clocks, and by how much, is a property of the join; five traced joins
-  do not give a distribution. The arm that would settle it is a run of joins at varied offsets into
-  the source's group, traced.
+  The loss arms ran once each, untraced, so which join state each landed in is not known. Cross-host
+  is one pair of hosts in one region, seven runs, of which five were traced; the co-resident joins
+  are six traced runs of 60 s on one of those hosts.
+- Eleven traced joins show three offset states, plus one multi-generation join, and their
+  outcomes; they do not give the states'
+  frequencies, nor what in the join selects one. The arm that would settle it is a run of joins at
+  controlled offsets into the source's group, traced.
 - The replay models the video PID alone; the 500 ms explanation takes the other PIDs as a fixed
   rate share.
 - The patches are scratch builds, run once per cell. The per-PID patch's occupancy model resets
