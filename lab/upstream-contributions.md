@@ -1906,7 +1906,7 @@ fit the delay fail the export rather than overrun the rate. This PR was closed b
 of #4645, with the measurements above left in the closing comment as the before-state #4645 has to
 beat on a real broadcast clip.
 
-### T-STD conformance of the TS export — taken up upstream as a questline; its implementation stops on a broadcast clip
+### T-STD conformance of the TS export — taken up upstream as a questline; its rework carries a broadcast clip, with its system clock out of tolerance
 
 **What prompted it.** [T44](test-44-tstd-grading.md) graded the lane's P1/P2-conformant wire against
 the 13818-1 T-STD and found it fails on the lane's packet order, and [T45](test-45-live-tstd-remux.md)
@@ -1944,9 +1944,10 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   sizes. On the harness's generated clip it fails current `moq export ts` with video EB underflow and
   audio TB and B overflow, the failure classes T44 measured on a broadcast clip. It reports only, until
   the delay lands.
-- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is open at head
-  `4b7158d6c00d`, back in draft while the maintainer reworks it on the findings below (his plan is
-  at the end of this entry). His first review asked for one blocking fix, a stale generation
+- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is open in draft at
+  head `49efbc9a1`, the maintainer's rework on the findings below; what it changed and how it
+  grades are at the end of this entry. What follows in this bullet describes the first head,
+  `4b7158d6c00d`. His first review asked for one blocking fix, a stale generation
   muxed after a rewind. We posted design feedback on it: clock drift under first-arrival anchoring
   with strict late drop, the 1+1 anchor, the 500 ms default against broadcast send-ahead, and the
   start-up settle. Measurements were to follow. It deletes
@@ -1985,7 +1986,8 @@ STD delay.
 exporter hands each video frame over at its own decode time, so a conformant output of the CNN clip
 needed about 0.55–0.6 s of send-ahead through the video's transport buffer.
 
-**Graded here** ([T47](test-47-fixed-delay-export.md), #4645 head, loopback, one run per cell):
+**Graded here** ([T47](test-47-fixed-delay-export.md), #4645's first head `4b7158d6c00d`,
+loopback, one run per cell):
 
 - **On the broadcast clip the export stops within seconds** with a schedule overrun, at every
   `--delay` tried up to 3 s. The video alone does it, and upstream's own harness reproduces it at the
@@ -2092,6 +2094,58 @@ Writing them found three things the earlier reports did not:
 - **A skip rewinds the slot grid** by 475–800 ms, at a point that differs per receiver.
 - **The skip path is not deterministic on the head.** Identical paused-clock runs give the joiner
   187 or 200 slots after the skip. Its source was not located.
+
+**The rework** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5938450157), head
+`49efbc9a1`, still a draft). Nine commits, one per point, each with a mocked-time test that fails on
+the previous head:
+- **One jitter clock.** A discontinuity before any output keeps the clock; after release it opens a
+  generation that every track's next frame follows, and generations go out in turn. This is the
+  scratch branch's *follow* without its *rejoin*: telling a skip from a restart is left open, as
+  needing the consumer to say which.
+- **DTS authored in time**, a reorder delay early, not a picture count. On the maintainer's PAFF
+  fixture the exported DTS equals the source's.
+- **Per-PID admission**, taken from the scratch patch: earliest deadline first across PIDs, capped
+  per slot at the TB drain (Rbx for video) and in bytes at the decoder buffer. EB comes from the
+  SPS's NAL HRD, else the level's MaxCPB; B is set per 13818-1 stream type. Teletext and SCTE-35 go
+  out uncapped in the slot before they are due.
+- **AC-3 one sync frame per PES**, each due on its own.
+- **PCR from the slot's first byte**, with packets per slot a function of the slot index, so a
+  padded slot is laid alike in every exporter.
+- **Drift**: the jitter buffer steers its clock's rate within 500 ppm, and the export lays slots on
+  that clock; the CLI's own pacer is removed.
+- **CI**: `just test ts --hrd` grades the `hrd9m` recipe at 500 ms under the strict check, and
+  `pcrverify` gates whenever the rate is known. The quest README records the result.
+
+On 1+1 he reports packet identity except the continuity counter, numbered from what each leg sent.
+He suggests a counter derived from the media, and leaves whether ST 2022-7 identity is a goal to
+the maintainer. He asked for the broadcast capture to be re-graded, MP2 and teletext especially.
+
+**Re-graded, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5939420739)).
+On the broadcast clip, with no environment variable, the head passes every buffer in every window
+at 1 s, 750 ms and 500 ms, with every PCR within ±500 ns and presentation latency of 1.4–2.2 s
+([T47](test-47-fixed-delay-export.md#the-rework-49efbc9a1), loopback, one run each). The reply
+reported three further things:
+- **The steered clock takes the output out of 13818-1's tolerance.** The PCR runs on the jitter
+  buffer's clock. A mid-group joiner anchors on a stale frame, and the steering wears the lead away
+  at its 500 ppm limit, against 30 ppm and 0.075 Hz/s. That is 497.8 ppm in mocked time, and a
+  290–370 ppm latency trend on the wire. The reply argues that the lead has to be removed before the
+  first output, and that only slow, slew-limited following fits the tolerance; #4670's
+  `release-clock-recovery.md` sets out the steering half against those limits.
+- **The last AC-3 PES of a capture is a partial sync frame**, which the export passes on, and at
+  1 s exits on.
+- **The tests, rebased** to `49efbc9a1` on the t0ms fork as branch `tests/4645-on-49efbc9`
+  ([`44f3a91`](https://github.com/t0ms/moq-dev/commit/44f3a910e9896a496d5899c6b2c1be772df9bf4c)),
+  nine cases. Seven pass, including both clock cases and every drift case. The earlier drift cases
+  ran the source 0.5 % off, ten times the steering limit, and are now ±400 ppm over five minutes.
+  Two fail and are `#[ignore]`d with the reason: a new case holding a joiner's system clock to
+  2.4.2.1, at +433.5 ppm, and the skip pair, which still diverges. The earlier run-to-run variation
+  on the skip path is gone. Of the three things the first tests found, the fractional padding is
+  fixed (its test passes) and the non-determinism no longer occurs. Whether the grid still
+  rewinds at a skip was not measured separately on this head.
+
+The reply also answered his two questions. Teletext has a buffer model, EN 300 472's 480 B TB at
+6.75 Mb/s. For primary distribution 1+1 identity is a goal, since the installed base's hitless
+selection is ST 2022-7.
 
 ### The liveness exit — filed as a question, deliberately
 
