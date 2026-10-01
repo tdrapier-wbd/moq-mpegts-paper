@@ -3177,3 +3177,18 @@ not.
 > and make it predict a run you have not yet made before reporting a cause. Replay the source's
 > own timing as a control: if the source's DTS fails too, the fault is the policy, not the
 > timestamps.
+
+### Count a PID's packets per interval, and size its PES against its buffer, before naming a cause
+
+*From T47.* An AC-3 transport-buffer overflow in the export was attributed, from a reading of the
+code, to each frame's packets going out back to back, and reported upstream as such. The layout
+stage further down already spread each PID's packets evenly through the slot. Counting AC-3
+packets per 25 ms slot on the captured bytes found up to 38, more than a 2 Mb/s drain clears, and
+a second cause the code reading had missed: the export passes AC-3 through as the source's PES,
+nine frames that together exceed the decoder buffer. No ordering of whole PES could have
+conformed.
+
+> **Before attributing a buffer overflow to packet spacing, count the PID's packets per
+> scheduling interval on the captured bytes.** Before modelling a stream's decoder buffer per
+> PES, compare the PES size with the buffer: if a PES carries several access units, deadlines and
+> removal are per access unit, in the scheduler and in the grader alike.

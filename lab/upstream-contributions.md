@@ -1990,9 +1990,19 @@ both. Earliest deadline first, limited by the decoder buffer, fits from 1 s in t
 On the full clip at 1 s it runs the capture, and the video and MP2 pass every buffer. Where the
 export runs the full clip, its audio fails the T-STD, patched or not. Unpatched at 8 s, MP2's and
 AC-3's B overflow and AC-3's TB overflows. Patched, AC-3 still fails both. See
-[T47](test-47-fixed-delay-export.md#a-buffer-limited-schedule-built).
+[T47](test-47-fixed-delay-export.md#a-buffer-limited-schedule-built). One mechanism in that report is
+wrong: it said a unit's packets go out back to back. The layout spreads each PID's packets through
+the slot, and the overflow is the number per slot.
 
-**Open.** The loss rig and cross-host wait on an export that runs a broadcast clip.
+**Built since, not reported.** A second scratch patch admits each PID's packets against its own
+transport and decoder buffers, earliest deadline first across PIDs. It takes AC-3's deadlines frame
+by frame, because the export passes through the source's PES, nine frames that together exceed
+AC-3's buffer. On the full clip it passes every buffer of `ts-tstd.py` and `compliance.py` at 1 s
+and 750 ms. At 500 ms it stops; a replay puts that on the export's authored DTS. PCR accuracy still
+fails, from the unchanged stamping. The correction and this result are drafted in
+`docs/upstream/4645-tstd-feedback.local.md`, unposted.
+
+**Open.** The loss rig and cross-host.
 
 ### The liveness exit — filed as a question, deliberately
 
