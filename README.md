@@ -30,7 +30,7 @@ receivers. Most of the engineering, and most of the risk, sits *above* the trans
 
 **Segmented HTTP has a mature cache-delivery model, not an out-of-box broadcast receiver path.** Named segments can be served through commodity CDN infrastructure and retried from another edge while they remain within their availability window. But the target IRD estate does not consume HLS directly: it still needs distributor-owned reassembly, grooming and TS-egress stage. This evaluation did not demonstrate an interoperable, low-latency TS-in-HLS receiving path: free receivers fell back to whole segments, while the commercial ABR-to-TS path remains untested. The measured recovery advantage is therefore conditional and does not establish end-to-end receiver interoperability ([Comparison](docs/comparison.md) §3.2, §4, §5.1).
 
-**MoQ beats the other Internet-native plane decisively on latency at the configurations measured conformant in software.** That makes the case for MoQ on routes with a roughly two-to-nine-second delivery budget. But at conformance it does not necessarily beat the point-to-point incumbents it would displace, which carry their source’s own conformant timing and buy their latency with a jitter buffer the operator sets. No conformant sub-second configuration was produced on any lane, so MoQ’s strategic sub-second case is architecturally credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, ([Evidence](docs/evidence.md) §3.11).
+**MoQ beats the other Internet-native plane decisively on latency at the configurations measured TR 101 290-conformant in software.** That makes the case for MoQ on routes with a roughly two-to-nine-second delivery budget. But at conformance it does not necessarily beat the point-to-point incumbents it would displace, which carry their source’s own conformant timing and buy their latency with a jitter buffer the operator sets. No conformant sub-second configuration was produced on any lane, so MoQ’s strategic sub-second case is architecturally credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, ([Evidence](docs/evidence.md) §3.11).
 
 **Two things separate a credible evaluation from a deployable one, and neither is a transport property.**
 The make-or-break conformance gate has never been attempted — nothing here has been fed to a hardware
@@ -46,9 +46,12 @@ commodity delivery, while the entire measured difference between the transports 
 
 ## What decides or constrains that conclusion
 
-- **The conformance gate was met and sustained in software on both planes**, on the media-aware lane
+- **The TR 101 290 P1/P2 gate was met and sustained in software on both planes**, on the media-aware lane
   over a full day. It closed downstream in the edge stage, after three upstream fixes that were each
-  necessary and none sufficient ([Evidence](docs/evidence.md) §3.2).
+  necessary and none sufficient ([Evidence](docs/evidence.md) §3.2). That is not full conformance on the
+  media-aware lane: as a transmux it discards the source's packet schedule, and its wire fails the
+  13818-1 buffer model, which only a re-multiplexer repairs — so far built only offline
+  ([Evidence](docs/evidence.md) §3.16).
 - **Conformance is not free of latency there, though buffer depth is not the price.** Part of the cost is
   an identified upstream regression that could be recovered; the rest is structural, because a demuxed
   lane moves the contribution encoder's buffer budget downstream into the edge gateway

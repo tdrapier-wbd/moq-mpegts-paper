@@ -8,6 +8,11 @@
 > crossed in flight at 19.4 h and cost nothing. The groomer's own resident memory is **flat**, and the
 > buffer walk that [P0-3b](planned-experiments.md) was opened for **did not occur**.
 >
+> **Those are TR 101 290 P1/P2 figures, and this lane's wire is not T-STD-conformant.** Nothing was
+> stored, so the day was not graded against the buffer model. The same lane and groomer re-captured
+> for 300 s overflow the video, audio and PSI transport buffers throughout, with audio decoder buffers
+> illegal at every PCR offset ([T44](test-44-tstd-grading.md)).
+>
 > The one failure on `d518b61b` is upstream and it is in the publisher: **`moq import ts` resident
 > memory grows linearly at +2.83 MB/h** and holds that slope across all four quarters of the run,
 > which on this host is exhaustion in about seven and a half months. F2's criterion was fixed in

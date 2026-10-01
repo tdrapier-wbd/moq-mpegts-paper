@@ -753,7 +753,9 @@ than eyeballing the curve.** *(T21's 24 h soak.)*
 > to confirm fixed. The 24 h run on the same build showed the importer still rising until about 1.5 h
 > and flat after it, at +0.23 MB/h from 2 h. A settle shorter than the warm-up turns a warm-up into a
 > slope. Read the first hours of the series before choosing the settle, and state the settle with the
-> slope.
+> slope. [T45](test-45-live-tstd-remux.md) met the same rule live: a re-multiplexer that fixed its
+> clock after a 5 s warm-up was overtaken by a lane whose delay grows by about 630 ms over its first
+> 50 s, and sent 95 % of its packets late.
 
 **Sample resource series per process, not per command-line signature.** *(T21's 24 h soak, and the
 follow-up run it forced.)*
@@ -862,6 +864,24 @@ defect is reported upstream as [Haivision/srt#3388](https://github.com/Haivision
 > does — rather than piping into `srt-live-transmit`.** Where a pipe into it cannot be avoided,
 > check the receiver's bytes for zero-filled slots before attributing any parse failure to the
 > system under test. A failure rate that tracks host load and not the build is a rig signal first.
+
+### Time a picture where a decoder presents it, on a clock averaged over many packets
+
+*From [T45](test-45-live-tstd-remux.md).* Delivery latency times a PES header from one tap to the
+other. Across a stage that re-schedules packets, that figure moves with the schedule rather than with
+what a viewer sees, so the live re-multiplexer was timed at presentation instead: each tap's arrival
+time for the header, plus the PTS, less the capture's own STC at that packet. The first version
+referenced the DTS. On the media-aware lane it spread over 521 ms where the presentation figure is
+flat, because the lane's exporter authors its own DTS, up to 280 ms earlier than the source's. The
+source tap's per-header clock offsets also scatter by about ±37 ms, because `tsp -P regulate`
+releases its playout in bursts, and differencing single headers reported that as a 74 ms latency
+spread on a stage that added none.
+
+> **Reference latency to the PTS wherever a stage between the taps may author the DTS, and take each
+> end's clock from a median over seconds of headers, as a decoder's clock recovery would.** A
+> decode-referenced figure holds only where the DTS is the source's, and a per-header one only where
+> the tap's arrivals are smooth. Check the instrument on a byte-faithful capture first, where
+> presentation, decode and delivery latency must agree.
 
 ---
 
@@ -1411,6 +1431,21 @@ evictions, did not track delivery at all. **Settle a suspected mechanism with a 
 the one variable** (here an environment override of the hold budget), **and log the decision itself**
 (here each hold's start, the tracks it waited on, and how it ended). The switch proves causation. The
 decision log shows the loop, which neither the bisect nor the diff can show.
+
+### Locate a whole-capture error count in time before naming its cause
+
+*From [T45](test-45-live-tstd-remux.md)'s comparators.* A byte-faithful UDP arm through the
+stream-clocked groomer returned 26 continuity errors at the rig's default cap, with a grader running
+on the host during the capture, and loopback drops under CPU load were the ready explanation. A re-run
+at a 150 ms cap on a quiet host returned 90. Every one of them sat in the groomer's first 5.3 s, where
+it trims its start-up backlog of 4.6 s down to the cap; after that the capture was clean. The SRT arm
+of the same pair failed the audio decoder buffers eleven times, which read as systematic. Graded
+either side of one 22-packet transport loss at 139.7 s, it passed both halves.
+
+> **Before attributing a count, find when each event happened.** A cause spread across a run — host
+> load, a rate mismatch, a scheduling defect — predicts events spread across it; a start-up transient
+> or a single incident predicts a cluster. Placing the events in time costs less than any re-run, and
+> a re-run that changes the suspected cause without locating the events tests nothing.
 
 ## 5. Rig hygiene
 
@@ -3041,3 +3076,51 @@ group it feeds was empty. Only after all three were repaired did a subscriber re
 > true rewind for tracks without `reanchor()`. A #3493 slope confirmation therefore needs either an
 > upstream fix ([#3798](https://github.com/moq-dev/moq/issues/3798)) or a single-pass window under one
 > clip length — which cannot reach 2 h without a reset.
+
+### A P1/P2 pass is not a conformant transport stream
+
+*From [T44](test-44-tstd-grading.md).* Every "conformant wire" in this campaign up to T44 was a
+TR 101 290 P1/P2 result: PCR repetition and accuracy, continuity, tables. P1/P2 does not model the
+decoder's buffers, and ISO/IEC 13818-1 defines a conformant stream as one the T-STD decodes without
+overflow or underflow. The media-aware lane's groomed wire passed P1/P2 for 300 s and for a day while
+its video, audio and PSI transport buffers overflowed throughout, and no PCR offset made its audio
+decoder buffers legal. The harness had flagged the buffer model on that lane from the start, with an
+approximate fixed-leak check, and the flag had been read as a property of the source content. The
+source, graded properly, passes at an offset of exactly zero.
+
+> **Say "P1/P2-conformant" when that is what was graded, and grade the T-STD before saying
+> "conformant".** Attribute a buffer-model failure only with the model calibrated to the stream (each
+> PID's leak from its own HRD or stream type, not a default), the source graded as the control, and a
+> transparent transport through the same groomer. That arm separates the lane's packet order from the
+> groomer's PCR. A whole-capture offset scan cannot separate them where the groomer regenerates PCR,
+> because the offset drifts with the groomer's buffer; ask the question per short window instead
+> (`ts-tstd.py --window`).
+
+### A transparent control through an arrival-clocked groomer attributes the transport buffers, not the decoder buffers
+
+*From [T44](test-44-tstd-grading.md).* The SRT arm was reported as passing every buffer through the
+same groomer. It passes every transport buffer and every 2 s window, and over the whole capture it
+fails every decoder buffer at every offset. So does plain UDP carrying the file's own bytes. The
+groomer's arrival clock anchors its regenerated PCR at start-up and releases content on buffer
+occupancy, so the PCR-to-PTS offset it emits is set by the start-up lead and then drifts. That is
+true of any input. The same bytes through the groomer's stream clock, which places each packet on the
+slot its source PCR implies, pass every buffer with the joint legal offset exactly the source's.
+
+> **A whole-capture decoder-buffer result belongs to the groomer's clock mode as much as to the
+> transport.** Use a stream-clocked groomer, or none, for the transparent control of a whole-capture
+> grade. Quote an arrival-clocked arm for transport buffers and short windows only. Grade a clip before
+> using it as the control: the campaign's FFmpeg-muxed test loop overflows its own AAC transport
+> buffer on 80 % of packets, so it cannot attribute anything.
+
+### A rig that copies its config from a live checkout runs the checkout's schema against a pinned binary
+
+*From T44.* [`t18-arm.sh`](scripts/t18-arm.sh) copies the relay config from `~/moq-dev`'s demo tree
+unless `RELAY_TOML` is set, and that tree sits on whichever branch was last checked out, not on the
+build under test. Against the build under test it failed twice
+before the relay came up: an `[iroh]` section the build rejects, then the build's `[listen] bind`,
+which the checkout still spells `[server] listen`. Both failures are loud. A renamed key that a build *ignores* would not be.
+
+> **A pinned binary takes its config from its own tree** (`git show <build>:demo/relay/localhost.toml`),
+> passed explicitly. It must never come from whatever branch the checkout is sitting on. The build's
+> own tree is necessary and not sufficient: `ffa5b81b`'s demo config still carries `[iroh]`, which a
+> build compiled without that feature rejects, so strip sections for features the build lacks.

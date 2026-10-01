@@ -480,15 +480,26 @@ and already deployed in contribution. For primary distribution, though, the gap 
 The segments MoQ leaves unprotected are the source to the publisher and the subscriber to the IRD;
 both are local, and both are carried in the clear today behind SRT and Zixi on exactly the same
 basis, so within a trusted facility this is the status quo rather than a regression. **Where those
-environments are not trusted, or the operator is not, BISS-CA becomes materially valuable** — and it
-is the only mechanism that reaches the receiver, since transport protection ends at the relay and
-object-level encryption would end at the subscriber.
+environments are not trusted, or the operator is not, BISS-CA is the case in which it earns its
+cost.** It is the only mechanism that reaches the receiver, since transport protection ends at the
+relay and object-level encryption would end at the subscriber.
+
+**Consumer conditional access is a different thing and has no role on this leg.** A pay-TV CA system
+protects content on its way to the viewer's screen, and a downstream operator applies it, if at all,
+after the IRD. Carrying it through primary distribution protects nothing the transport and the operator
+do not already protect.
 
 The cost is that scrambling is applied at transport level, so payloads cannot be demultiplexed and a
 BISS-CA feed must travel through opaque carriage rather than the media-aware lane. Adopting it
 therefore forfeits the media-aware properties the latency argument rests on
 ([Comparison](comparison.md) §5.1), which makes it an architectural choice rather than a feature to
-add. Nothing here is measured: no part of this campaign scrambles anything.
+add. The forfeit is smaller than it looks: the latency figure is a P1/P2 figure from a wire that fails
+the 13818-1 buffer model ([Comparison](comparison.md) §8). The binding constraint is elsewhere, in the
+lane a scrambled feed must move to, which has no open subscriber today ([Comparison](comparison.md)
+§12). **This design weights conditional access as a
+narrow gate on the carriage choice, not an argument for either lane**: a route that must deliver a
+feed still scrambled selects byte-faithful carriage, and no other route is affected. Nothing here is
+measured: no part of this campaign scrambles anything.
 
 **At rest**, logs, audit records and any captures are encrypted, partitioned by tenant and subject to
 retention limits — captures in particular may contain content and must be tightly controlled.

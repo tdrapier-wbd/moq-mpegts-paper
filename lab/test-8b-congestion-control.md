@@ -33,8 +33,9 @@
 > BBRv3 abort on either build, and found upstream `main`'s subscriber collapsing to a fifth of the older
 > build's delivery at 10 % loss, on either controller, bisected to the media-time interleave (#4001).
 > The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews
-> the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate on the
-> PR before merge ([#4618](https://github.com/moq-dev/moq/pull/4618)).
+> the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate, measured
+> on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`);
+> the merged build has not been re-measured.
 > The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
@@ -906,10 +907,15 @@ cannot show again while the skips continue, so under sustained loss the stall st
 mux runs in arrival order, the pre-#4001 behaviour. One interleave order across exporters therefore
 holds only on a clean path.
 
-Until #4618 or an equivalent merges, this is a trade a deployment has to make. #4001 is the fix that
-made the multi-track export interleave deterministic ([T12](test-12-dual-path-handoff.md)), and
-pinning the subscriber to its parent gives that up. The hardware-window rehearsal build is `main`, so
-which of the two the receiver carries over a lossy path is a decision that is owed before the window.
+#4618 merged into `main` as `e488e699`. Its change to `rewind()` is the one the fix arms measured. The
+merged commit adds one change the arms did not carry: `resume()` now clears the stall, so a
+replacement broadcast starts with a fresh budget. Before the merge, a receiver on `main` had to choose
+between #4001's deterministic multi-track interleave ([T12](test-12-dual-path-handoff.md)) and
+delivery under loss, because pinning the subscriber to #4001's parent gave up the interleave. A
+subscriber at or after `e488e699` should keep the interleave on a clean path and the full rate under
+loss, falling back to arrival order while the loss lasts. That rests on the pre-merge arms until C7's 10 %
+loss point is rerun on the merged build, and the rerun is what the hardware-window rehearsal build
+should be checked against.
 
 ## Observations
 

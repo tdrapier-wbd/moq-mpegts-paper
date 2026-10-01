@@ -250,7 +250,10 @@ the groomer inherits a padded stream rather than an unpadded one; (b)
 and PCR re-insertion** so PCR values are byte-accurate against the reconstructed CBR clock rather
 than merely approximately correct.
 
-This is *re-timing*, not re-multiplexing — PIDs, PES, SCTE-35 and service signalling stay untouched.
+This is *re-timing*, not re-multiplexing — PIDs, PES, SCTE-35 and service signalling stay untouched,
+and so does packet order. That is sufficient where the delivered order is the source multiplexer's.
+Behind the media-aware lane it is not: that lane discards the packet schedule the 13818-1 buffer model
+depends on, and a re-timing stage cannot rebuild it (§4.3).
 Behind MoQ all three steps (a)–(c) are required and no off-the-shelf stage preserves the mux; behind
 segmented HTTP the packager has already preserved stuffing and PCR spacing, so only (b) remains and
 TSDuck supplies it — at a cushion at least as deep as the segment period ([Evidence](evidence.md) §3.2).
@@ -273,7 +276,11 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
-| Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors | **wire** |
+| Groomed, MoQ lane, **against the T-STD buffer model** | **fails on the configuration above**, and on every build up to upstream `main`, in either clock mode: video, audio and PSI transport buffers overflow throughout, and no PCR offset makes the audio decoder buffers legal in any 2 s window. The same groomer fed by SRT passes every transport buffer and every 2 s window | **wire**, loopback |
+| The same groomed MoQ wire, **re-multiplexed offline** against the T-STD | **passes every buffer** over the whole capture, on its own PCR, from three builds' egress, at 0.9–1.4 s of decoder delay against that egress's clock | **file** |
+| The MoQ lane's TS-out, **re-multiplexed live** in this gateway's place, a laboratory stage | **passes every buffer and P1/P2** over 270 s with nothing sent late, at **2,196.7 ms of presentation latency** on `ffa5b81b`; one clip, one run | **wire**, loopback |
+| Byte-faithful SRT or UDP, **stream-clocked** groomer, against the T-STD | **passes every buffer** over the whole capture, at the source's own legal offsets, with every source null stripped. Arrival-clocked, the decoder buffers drift out | **wire**, loopback |
+| Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors; buffer model not graded | **wire** |
 | Any lane | — | **hardware IRD: not run** |
 
 **P1 PCR repetition failed as delivered because the edge stage placed PCR opportunistically** — only in
@@ -297,27 +304,73 @@ rest is the buffer bound in §12's second open question, the contribution encode
 downstream into this gateway ([Comparison](comparison.md) §5.1, [Evidence](evidence.md) §3.2, §3.11).
 
 **The architectural consequence is a real advantage over the other Internet-native plane and not a
-sub-second one.** At equal conformance this gateway delivers at 2,447 ms against the segmented plane's
-9,286 ms, and does not beat a transparent tunnel, whose egress carries the source's own conformant grid
-at whatever jitter buffer the operator sets.
+sub-second one.** At equal P1/P2 conformance this gateway delivers at 2,447 ms against the segmented
+plane's 9,286 ms, and does not beat a transparent tunnel, whose egress carries the source's own
+conformant grid at whatever jitter buffer the operator sets. At the buffer model it has no conformant
+configuration behind the media-aware lane at all. A re-multiplexer supplies one: offline, and live as
+a laboratory stage in this gateway's place, which presents 2.2 s behind the source on the build under
+test, most of it the lane's own delivery schedule (§4.3).
 
-> **The gate that decides this architecture.** A clean TR 101 290 P1/P2 pass on real hardware
-> decoders, sustained, including the ST 2022-7 determinism of §5.1 under loss. Until that evidence
-> exists, the grooming design is **structurally sound, file-validated, and P1-conformant on PCR
-> repetition on the wire in software on both lanes — over 300 s and, on the media-aware lane, over
-> 24.01 h** ([T21](../lab/test-21-permanence-soak.md)). That is materially more than this document once
-> claimed and it is still not "proven broadcast-acceptable": nothing in this campaign has been fed to a
+> **The gate that decides this architecture.** A conformant transport stream on real hardware
+> decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model — including the
+> ST 2022-7 determinism of §5.1 under loss. Until that evidence exists, the grooming design is
+> **structurally sound, file-validated, and P1-conformant on PCR repetition on the wire in software on
+> both lanes — over 300 s and, on the media-aware lane, over 24.01 h**
+> ([T21](../lab/test-21-permanence-soak.md)). That is materially more than this document once claimed
+> and it is still not "proven broadcast-acceptable": nothing in this campaign has been fed to a
 > hardware decoder or graded by a hardware analyser. This remains the single most important validation
-> for the whole architecture and it has not been performed.
+> for the whole architecture and it has not been performed. **Behind the media-aware lane the buffer
+> model fails in software already**, and this gateway cannot repair it. A re-multiplexer can, offline
+> and, as a laboratory stage, live on one host (§4.3).
 
 ### 4.3 Correctness boundaries a groomer must handle, and which are untested
 
 Re-stamping PCR while carrying PES timestamps unchanged must preserve the PCR-to-PTS/DTS relationship
-(T-STD validity). Four named cases remain **largely untested** beyond steady-state capture
+(T-STD validity). Three named cases remain **largely untested** beyond steady-state capture
 ([Evidence](evidence.md) §5, [T23](../lab/test-23-pcr-discontinuity-classes.md)): **source-clock drift**;
-**PCR discontinuities and 33-bit wrap** (partially exercised); **mid-stream PID/PCR-PID changes**; and
-**T-STD occupancy** — clustered per-PID delivery from a media-aware exporter that a pacer cannot fix
-because it does not re-order packets. Hardware acceptance must exercise these, not only clean captures.
+**PCR discontinuities and 33-bit wrap** (partially exercised); and **mid-stream PID/PCR-PID changes**.
+Hardware acceptance must exercise these, not only clean captures.
+
+**T-STD occupancy is no longer untested, and behind the media-aware lane it is the boundary this
+gateway cannot cross.** Graded in software against a calibrated model ([Evidence](evidence.md) §3.16),
+the lane's P1/P2-conformant wire overflows the video, audio and PSI transport buffers. The peaks are
+consistent with what the exporter's code at `ffa5b81b` does, which is to write one whole frame at a
+time. No PCR offset makes the audio decoder buffers legal. That holds in both of the gateway's clock
+modes, and with `main`'s own padding of the export to the mux rate. Fed a byte-faithful transport, the same
+gateway passes every transport buffer and every 2 s window. Over a whole capture its arrival-clocked
+mode does not hold the PCR-to-PTS relationship the paragraph above requires. It anchors the
+regenerated PCR at start-up and lets the offset drift, and the decoder buffers of SRT and of plain UDP
+then fail at every constant offset. **Its stream-clocked mode holds it**: the same inputs pass every
+buffer over the whole capture, at the source's own offsets. So a byte-faithful lane keeps the T-STD
+only behind a stream-clocked gateway, the mode §5.1 already requires for 1+1.
+
+Re-timing preserves packet order by design, so behind the media-aware lane the remedy is a stage that
+**re-multiplexes** — schedules every PID against the T-STD from the timestamps and sizes the lane
+carries — at the subscriber, in front of this gateway or in its place. **Offline, that stage works**
+([Evidence](evidence.md) §3.16, file domain). A scheduler that keeps each PID's order rebuilt a
+conformant multiplex from the lane's own groomed egress on three builds. It needed the decoder delay
+the lane's video already needed, 0.9–1.4 s against that egress's clock, and 25 ms from frame-granular
+source timing.
+
+**Live, it works on one host** ([Evidence](evidence.md) §3.16; wire, loopback, one clip, `ffa5b81b`).
+Run in real time in this gateway's place, pacing and stamping PCR itself, the same scheduler passes
+every buffer and P1/P2 over 270 s at 2,196.7 ms of presentation latency. It needs no source PCR. It
+stamps the decode timeline's own clock, so the PCR-to-PTS relationship this section opens with holds
+by construction, and the only choice left is where that timeline sits against the wall clock. **That
+choice has to wait for the lane to settle.** On the build tested the lane's delay grows by about
+630 ms over the first 50 s after a subscriber joins; a stage that anchors inside that transient falls
+behind it and sends late, and at a system clock's ±30 ppm tolerance a clock loop would take almost
+six hours to absorb it (derived). Most of the latency is the lane's, not the stage's. About 1.2 s of
+transit and 0.4 s of the exporter's ordering precede it, and its own 0.6 s lead rebuilds the pre-load
+that the ordering removed.
+
+Two problems remain that one host does not exercise. The first is clock recovery: across hosts the
+stage and the source do not share a clock, and the lane carries no source PCR, so the output clock
+must be locked to the source from the arrivals and timestamps alone. The second is determinism: two
+legs are byte-identical, as ST 2022-7 requires, only if the schedule is computed from the stream
+alone, not from arrival (§5.1). Until the first is built, the media-aware lane feeds a remote TS
+receiver on the receiver's tolerance rather than on sustained conformance; until the second is, its
+rebuilt legs cannot be merged. How much tolerance real IRDs have is unmeasured.
 
 ### 4.4 Placement and scaling
 
@@ -464,6 +517,8 @@ for the hardware gate in §4.2.
 protects the last hop only. Where deterministic grooming cannot be guaranteed, use 1+1 hot-standby rather
 than a claimed-hitless pair. Stream-derived placement also unlocks stripping null stuffing over the WAN
 (regenerated at the edge regardless) — measured at 5.3 % below SRT ([Evidence](evidence.md) §3.5).
+On byte-faithful input it is also the mode that keeps the T-STD over a whole capture, which the
+arrival-clocked mode does not (§4.3).
 
 ### 5.2 One leg cannot always be restarted alone
 
@@ -578,7 +633,8 @@ used, because it determines whether the installed base survives transit.
 ### 6.1 The two lanes
 
 **Media-aware re-muxing** parses the elementary streams and republishes them as discrete MoQ tracks.
-It is the natural fit for the object model, inherits per-track prioritisation and selective
+For a TS-out hand-off it is a **transmux**: the subscriber rebuilds a multiplex from tracks. It is the
+natural fit for the object model, inherits per-track prioritisation and selective
 subscription, produces the individual renditions endpoints such as OTT origins want, and is the
 upstream project's own preference — so it is the approach most likely to attract ongoing investment.
 
@@ -599,6 +655,14 @@ not validated component.** Use it when a receiver needs carried wall clock or un
 assumptions; it forgoes per-track prioritisation and null-stripping savings if truly verbatim. **Rule:
 media-aware unless a specific feed or endpoint forces the fallback.**
 
+**For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS
+hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps
+the opaque lane the fallback is its evidence and its ecosystem. It has one loopback measurement, and no
+open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
+therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose
+receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which
+routes those are.
+
 ### 6.2 What survives the media-aware lane, and what does not
 
 Measured ([Evidence](evidence.md) §3.1): every elementary stream, PID, `stream_type`, PMT descriptor
@@ -610,6 +674,17 @@ TDT/TOT are now proxied from the source (EIT needs absolute UTC; TOT carries DST
 emission timing** — the exporter re-emits on its own grid, **~14 s late** against a source true to half
 a second, and can step a receiver's clock backwards where the source ticks slower ([Evidence](evidence.md) §3.1).
 Audio frame-sync recovery is **signalled nowhere** at egress — an observability gap, not a carriage one.
+
+**What does not survive, structurally, is the multiplex as a schedule**
+([Comparison](comparison.md) §8). The packet layout — each packet's position, and where the PCR and
+nulls sat — is not carried, so the subscriber becomes the multiplexer and must re-solve the T-STD. The
+current exporter does not, and its wire fails the buffer model while passing P1/P2. A re-multiplexer
+does re-solve it from that wire, offline and, as a laboratory stage, live at 2.2 s of presentation
+latency on one host ([Evidence](evidence.md) §3.16). The same loss moves the encoder's VBV budget into the edge gateway's
+buffer (§4.2). And a transmux publisher must read PES headers, so **TS-level scrambling cannot enter
+this lane**. A scrambled feed is descrambled first or carried opaquely. That last gate is narrow in
+primary distribution, where protection is the transport's ([Control plane](control-plane.md) §7.3), but
+it is absolute where it applies.
 
 ### 6.3 What happens to the transport stream, end to end
 
@@ -992,9 +1067,9 @@ slips.
 | Decision | Rationale | Trade-off accepted |
 |---|---|---|
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
-| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | The stage cannot improve PCR spacing by re-ordering content, so it must **reserve** an output slot on the repetition deadline and defer the displaced packet — 0.34 % of the carrier, and the only thing that clears the gate on the MoQ lane, where neither an eightfold cushion sweep nor an exporter-side fix to PCR *values* moved it. On that lane it also requires a buffer bound set by the source's peak coded frame, which is content-dependent and costs latency (§4.2) |
+| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | The stage cannot improve PCR spacing by re-ordering content, so it must **reserve** an output slot on the repetition deadline and defer the displaced packet — 0.34 % of the carrier, and the only thing that clears the gate on the MoQ lane, where neither an eightfold cushion sweep nor an exporter-side fix to PCR *values* moved it. On that lane it also requires a buffer bound set by the source's peak coded frame, which is content-dependent and costs latency (§4.2), and it cannot repair the lane's T-STD-illegal packet order, which needs exactly the re-multiplexing this row declines (§4.3) |
 | Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Single-track byte-identity settled across independent chains (§5.1); **75.56 % on multi-track mux**, upstream reordering not damage |
-| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent |
+| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent. For TS-out the default is a transmux with structural limits — packet layout lost, the subscriber as multiplexer, no scrambled feeds (§6.2) — and for TS-out its standing as default rests on the fallback's immaturity — one measurement, no open subscriber — rather than on fit (§6.1) |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
 | Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the *operator's* to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable *between* implementations |
 | Out-of-band, non-fate-sharing control plane (§1.1, [Control](control-plane.md)) | Data plane survives control-plane outages | Revocation needs a token backstop, not just a live signal |
@@ -1039,9 +1114,9 @@ Ranked by how much a negative answer would change the architecture.
    where the importer exits at the restart instead, still on `ffa5b81b`
    ([T40](../lab/test-40-continuous-join-through-srt.md),
    [T41](../lab/test-41-import-reanchor-coverage.md)), so a deployment must pin or patch the client.
-   What remains untested is
-   source-clock drift, mid-stream PID change and T-STD occupancy; each has a reproducible stimulus and
-   an instrument asserted to grade it, but has met neither stage.
+   **T-STD occupancy is tested in software and fails behind the media-aware lane**, beyond this
+   gateway's reach (§4.3). What remains untested is source-clock drift and mid-stream PID change; each
+   has a reproducible stimulus and an instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled
    (§5.1). On a mux the interleave is now deterministic upstream; what remains is per-leg packet
    placement and per-process continuity counters.

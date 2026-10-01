@@ -335,11 +335,12 @@ data plane.
 PCR conformance with buffer depth, and buffer depth is latency. Measurement disposed of that particular
 trade — on the media-aware lane the repetition figure does not move across an eightfold cushion ladder,
 and what clears the gate is the stage reserving an output slot for the PCR, which is independent of
-depth. But the two requirements are not thereby independent: the only configuration measured conformant
-on that lane delivers at **2,447 ms**, against **109 ms** at a cushion that is not conformant, so a
-latency figure for it is meaningless without the conformance of the same bytes. **R4 at R3 is therefore
-the open commercial question on this lane, not a settled advantage** ([Evidence](evidence.md) §3.2,
-§3.11).
+depth. But the two requirements are not thereby independent: the only configuration measured
+P1/P2-conformant on that lane delivers at **2,447 ms**, against **109 ms** at a cushion that is not
+conformant, so a latency figure for it is meaningless without the conformance of the same bytes. And
+R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same configuration
+fails the 13818-1 buffer model. **R4 at R3 is therefore the open question on this lane, not a settled
+advantage** ([Evidence](evidence.md) §3.2, §3.11, §3.16).
 
 ---
 

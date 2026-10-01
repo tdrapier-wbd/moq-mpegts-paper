@@ -123,7 +123,10 @@ Raw egress → paced egress, same three clips (`regenerate` mode):
 presence/monotonicity, duration-fidelity vs the raw egress) and all shape checks except two that
 are **not** the pacer's to fix: `service-descriptors` (the SI the lane already dropped upstream — a
 pacer is not a muxer) and `tstd` (the harness's fixed 512-byte transport-buffer / default leak-rate
-model flags the clustered elementary streams — a property of the input content).
+model flags the clustered elementary streams). That flag is the lane's, not the input content's: graded
+against a calibrated T-STD, the source passes every buffer and the lane's packet order overflows the
+video, audio and PSI transport buffers, which a pacer that does not reorder packets cannot repair
+([T44](test-44-tstd-grading.md)).
 
 ### What #1979 resolves, and the service-layer gap closed by PR #2440
 

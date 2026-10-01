@@ -6,7 +6,10 @@
 > live wire with groomer fixes at `64595f6`. **Headline wire result (300 s arm):** 0 continuity errors,
 > 0/20,193 PCR intervals above 40 ms (worst 30.1 ms), 10,999,999 b/s CBR — measurement 11 and
 > Conclusion. **Pass criteria 1–3 met; criterion 4 (delivery latency) not met** — median **2,447 ms** on
-> the passing 90 s arm versus T18's **109 ms** gate (Pass criteria). Upstream residue, positional fix,
+> the passing 90 s arm versus T18's **109 ms** gate (Pass criteria). **The criteria are TR 101 290
+> P1/P2's, and the same configuration fails the T-STD buffer model** — transport-buffer overflow on
+> video, audio and PSI, audio decoder buffers illegal at every PCR offset ([T44](test-44-tstd-grading.md)) —
+> so "conformant" below means P1/P2-conformant. Upstream residue, positional fix,
 > groomer defects, standing lag and instrument self-test: measurements 1–11, Conclusion and Corrections.
 
 ## Objective
@@ -881,7 +884,10 @@ carry it was in the source's byte spacing and the demuxed representation does no
 
 ## Conclusion
 
-**The media-aware lane reaches a conformant CBR wire, and the last thing in the way was ours.** Over
+**The media-aware lane reaches a P1/P2-conformant CBR wire, and the last thing in the way was ours.**
+It does not reach a conformant transport stream: the wire fails the 13818-1 buffer model, on the lane's
+packet order rather than the groomer's, and a groomer that paces without reordering cannot repair that
+([T44](test-44-tstd-grading.md)). Over
 300 s on the live chain: 100 % of pictures matched, 0 continuity errors, 0 groomer drops, 0 underruns,
 0 of 20,193 PCR intervals above 40 ms at a worst of 30.1 ms, 0 PCRs outside ±500 ns, 10,999,999 b/s
 against a nominal 11,000,000, PSI intact. Three upstream PCR fixes were necessary and none of them was
@@ -938,7 +944,8 @@ groomer — an opportunistic PCR re-inserter that never found a spare slot insid
 estimator that averaged ratios across intervals carrying 1 to 4,631 packets, and an open release loop
 that integrated the resulting error against uptime. **None of them needed information the media-aware
 representation does not carry**, which is the finding: the demuxed lane is sufficient to reconstruct a
-conformant CBR wire, and what it costs is buffer.
+P1/P2-conformant CBR wire, and what it costs is buffer. A T-STD-conformant one needs a stage that
+reorders packets across PIDs, which no stage in this chain does ([T44](test-44-tstd-grading.md)).
 
 **The buffer is the encoder's VBV, moved downstream.** It is content-dependent and it is not a function
 of bitrate: three sources at 9.5–9.9 Mb/s of programme need bounds differing by more than 3×, tracking

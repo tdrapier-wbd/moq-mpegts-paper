@@ -71,7 +71,10 @@ SEGDUR=${SEGDUR:-2}    # hls segment duration
 # groomer that ever runs ahead settles at whatever depth it is allowed to hold and
 # stays there, so a generous cap becomes the standing latency: measured, a 1000 ms
 # cushion under a 4000 ms cap delivered a flat 4.2 s, which is the cap and tells
-# you nothing about the transport. Keep the headroom small and deliberate.
+# you nothing about the transport. Keep the headroom small and deliberate. A cap
+# below the backlog the groomer holds when it goes live is not free either: the
+# stream-clocked groomer trims the backlog down to the cap, and the trim shows as
+# continuity errors and PCR gaps in the first seconds of the capture.
 CAP=${CAP:-$((CUSHION + 500))}
 STALL=${STALL:-$((CUSHION + 2000))}
 SETTLE=${SETTLE:-10} # seconds of startup discarded before the distribution is quoted
@@ -145,11 +148,14 @@ require_sender() {
 
 # The groomer is the stage the conformance gate applies to, so its depths are the
 # swept variable and everything else about it is fixed.
+# PACER_EXTRA appends groomer flags, for example `--stream-clock`.
 groom=(
 	"$PACER" "127.0.0.1:$EPORT" "$RATE" --rtp --ssrc "$SSRC"
 	--latency-ms "$CUSHION" --max-latency-ms "$CAP"
 	--stall-ms "$STALL" --on-stall mute
 )
+read -r -a pacer_extra <<<"${PACER_EXTRA:-}"
+groom+=(${pacer_extra[@]+"${pacer_extra[@]}"})
 
 case "$ARM" in
 udp)
@@ -180,6 +186,7 @@ moq)
 	MOQ=${MOQ:-$HOME/bin-main/moq}
 	RELAY=${RELAY:-$HOME/bin-main/moq-relay}
 	BCAST=${BCAST:-t18.latency.hang}
+	moq_cli_detect "$MOQ" "$RELAY"
 	# `exec` so the recorded pid is the relay itself: without it teardown kills only
 	# the subshell and the relay survives to hold the port into the next run.
 	cp "${RELAY_TOML:-$HOME/moq-dev/demo/relay/localhost.toml}" "$OUT/relay.toml"
@@ -200,7 +207,7 @@ moq)
 		echo "our relay exited but :4443 answered: another relay holds the port." >&2
 		exit 1
 	}
-	C=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 --quic-gso=false)
+	C=("${MOQ_FP[@]}" "$FP" "${MOQ_DIAL[1]}" https://localhost:4443 "${MOQ_GSO[@]}")
 	# Subscriber first: reservation gating publishes the catalog once tracks resolve.
 	RECEIVE=("$MOQ" "${C[@]}" --broadcast "$BCAST" export ts "${MOQ_LAT[@]}" "$MOQLAT")
 	source_into "$MOQ" "${C[@]}" --broadcast "$BCAST" import ts
@@ -242,8 +249,14 @@ echo "==> $ARM, cushion ${CUSHION} ms, cap ${CAP} ms, ${SECS}s, rate ${RATE} b/s
 # `$!` reaps the groomer and leaves the receiver running — and the script's `wait`
 # then blocks on it for ever.
 set +e
-timeout "$((SECS + 2))" "${RECEIVE[@]}" 2>"$OUT/$TAG-receive.log" |
-	"${groom[@]}" >"$OUT/$TAG-groom.log" 2>&1
+# RECEIVE_SAVE keeps the reassembly stage's own bytes, before the groomer strips their nulls.
+if [ -n "${RECEIVE_SAVE:-}" ]; then
+	timeout "$((SECS + 2))" "${RECEIVE[@]}" 2>"$OUT/$TAG-receive.log" |
+		tee "$RECEIVE_SAVE" | "${groom[@]}" >"$OUT/$TAG-groom.log" 2>&1
+else
+	timeout "$((SECS + 2))" "${RECEIVE[@]}" 2>"$OUT/$TAG-receive.log" |
+		"${groom[@]}" >"$OUT/$TAG-groom.log" 2>&1
+fi
 # The tap owns the egress log, so let it finish before reading it. Without this the
 # report can win the race and grade an unflushed file.
 wait "$TAP" 2>/dev/null
@@ -264,8 +277,9 @@ echo "=== wire conformance of the same bytes ==="
 if [ -s "$OUT/$TAG-egress.ts" ]; then
 	CC=$(tsp -I file "$OUT/$TAG-egress.ts" -P continuity -O drop 2>&1 | grep -cE 'missing .* packets|discontinuity' || true)
 	# pcrverify prints one summary line; take the count out of it rather than counting
-	# lines, which merely matches the word "jitter" in the summary itself.
-	JIT=$(tsp -I file "$OUT/$TAG-egress.ts" -P pcrverify --absolute --jitter-max 13 -O drop 2>&1 |
+	# lines, which merely matches the word "jitter" in the summary itself. The carrier
+	# rate is given, because an estimate taken from a disturbed start-up fails every PCR.
+	JIT=$(tsp -I file "$OUT/$TAG-egress.ts" -P pcrverify --absolute --jitter-max 13 --bitrate "$RATE" -O drop 2>&1 |
 		sed -n 's/.*OK, *\([0-9,]*\) with jitter.*/\1/p' | tr -d ',')
 	# `-o -` writes nothing, so the CSV needs a real file. The PCR value is column 6;
 	# column 7 is the same series expressed as an offset from the first PCR, so

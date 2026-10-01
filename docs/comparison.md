@@ -22,8 +22,8 @@ most of the remaining axes — maturity, delivery economics and the delivery pat
 but those advantages are upstream of the receiver, and this evaluation did not establish a receiver
 path from segmented HTTP back to an IRD-ready transport stream (§4.6, §6.1). Everything that makes
 either plane *broadcast-grade* sits above the transport and is common to both
-([Problem](problem.md) §1). **Below about two seconds no plane here is demonstrated conformant**, so
-MoQ's sub-second case is architecturally credible and not yet evidenced (§5.1).
+([Problem](problem.md) §1). **Below about two seconds no plane here is demonstrated conformant over a
+whole capture**, so MoQ's sub-second case is architecturally credible and not yet evidenced (§5.1).
 
 The demanding comparison is **segmented HTTP carrying MPEG-TS**: specified, interoperable along the
 whole delivery path, commodity-delivered today, with an off-the-shelf path back to a transport stream
@@ -248,7 +248,10 @@ data plane** ([Problem](problem.md) §1.5). Neither HLS nor MoQ specifies PCR, C
 packets; both deliver in bursts that fail TR 101 290 without grooming ([Evidence](evidence.md) §3.2),
 which is the conformance the installed base enforces ([Problem](problem.md) §1.2) — accepted broadcast
 practice rather than something this campaign observed, since no hardware has been fed by this chain.
-The comparison is between distributor-side toolchains, not client estates.
+TR 101 290 does not grade the 13818-1 buffer model, which a conformant stream must also satisfy.
+Grooming re-times packets without reordering them, so it cannot supply that model where the delivered
+packet order breaks it (§8). The comparison is between distributor-side toolchains, not client
+estates.
 
 ### 4.2 Reassembly: off the shelf for segmented HTTP, single-implementation for MoQ
 
@@ -426,7 +429,17 @@ components and neither is the groomer's cushion:
   gateway's buffer.** It is content-dependent, sizeable per feed from a published encoder parameter, and
   not removable by tuning.
 
-**At equal conformance the ordering changes, and it does not favour MoQ against the incumbents.**
+**Both the conformance and the 2,447 ms are P1/P2's.** The same configuration fails the 13818-1 buffer
+model on the lane's packet order, which the groomer cannot reorder (§8, [Evidence](evidence.md) §3.16).
+A re-multiplexer repairs the wire: offline, at 0.9–1.4 s of decoder delay against the groomed egress's
+own clock, and live, as a laboratory stage on the build under test, at **2,196.7 ms of presentation
+latency** (§8, [Evidence](evidence.md) §3.16; loopback, one clip). About 1.2 s of that is the lane's own
+transit and about 0.4 s the exporter's ordering, which writes each video frame at its own decode time
+and so removes the pre-load the rebuild has to restore; the rebuild's own lead is 0.6 s. That figure
+is presentation latency on `ffa5b81b`, and the 2,447 ms is delivery latency on an earlier build through
+the groomer, so the two do not subtract.
+
+**At equal P1/P2 conformance the ordering changes, and it does not favour MoQ against the incumbents.**
 Against the other Internet-native plane MoQ keeps a decisive margin — 2,447 ms against segmented HTTP's
 9,286 ms. Against the point-to-point tunnels it does not: SRT and RIST are *transparent*, so their
 egress carries the source's own PCR grid and needs no grooming stage at all — byte-faithful SRT
@@ -435,10 +448,13 @@ at the 481 ns gate, ungroomed** ([Evidence](evidence.md) §3.1) — and their de
 jitter buffer the operator sets plus the round trip, which read **1,618 ms at a 1 s buffer** and is
 reducible by setting the buffer shallower. **So the sub-second band, which is the one hard technical
 discriminator MoQ has over the incumbents (§5.2, [Economics](economics.md) §7.4), is not demonstrated at
-conformance anywhere in this repository.** Two qualifications bound that statement in MoQ's favour: no
-clean sub-second SRT cell was measured on this rig either, so the tunnels' conformant floor is inferred
-from their transparency rather than measured at depth; and the ~650 ms upstream component above is a
-defect rather than a property.
+conformance on MoQ anywhere in this repository, and no configuration below one second has passed a
+whole capture on any lane.** Byte-faithful carriage comes close, and that weighs against MoQ. Through the
+stream-clocked groomer at a 100 ms cushion, the source's own bytes over UDP pass the buffer model and
+P1/P2 at 113.7 ms of presentation latency, but only after the groomer's first 5 s, which its small cap
+damages; over SRT at a 120 ms latency, at 234.0 ms, one burst in 288 s went unrecovered
+([Evidence](evidence.md) §3.11; loopback, one clip). One qualification bounds the statement in MoQ's
+favour: the ~650 ms upstream component above is a defect rather than a property.
 
 Two further caveats apply to every figure here. Both paths measured were healthy, so nothing exercised
 the retransmission and jitter-buffer recovery the tunnels exist for — the case that should favour them
@@ -473,16 +489,22 @@ path is the thing being evaluated, this axis does not decide it** — nothing fr
 TS-in-HLS, and the commercial stage that does is unmeasured here (§4.4, §6.1).
 
 **Between roughly 2.5 and 9 seconds, MoQ is the better choice on this axis and the margin is measured
-at conformance:** 2,447 ms against 9,286 ms, with the broadcast-grade edge stage inside both figures.
-That is a narrower and more defensible claim than the 37× headline, and it is the one the current record
-supports.
+at P1/P2 conformance:** 2,447 ms against 9,286 ms, with the broadcast-grade edge stage inside both
+figures. That is a narrower and more defensible claim than the 37× headline, and it is the one the
+current record supports. At the buffer model the band is not yet measured: MoQ's one conformant
+configuration is on loopback, at 2.2 s of presentation latency through a laboratory re-multiplexer
+(§5.1), and segmented HTTP's wire is ungraded.
 
-**Below about two seconds, no plane in this repository is demonstrated conformant.** MoQ is the only
-Internet-native candidate whose *architecture* reaches that band, and it is the only one with commodity
-delivery in prospect, but the campaign has not produced a conformant sub-second configuration on any
-lane. A route with a sub-second budget is therefore choosing on a projection — that the ~650 ms upstream
-regression is recovered and that the VBV-derived buffer bound is smaller for its own content — rather
-than on a result. **The honest position is that MoQ's distinguishing claim is architecturally credible
+**Below about two seconds, no plane in this repository is demonstrated conformant over a whole
+capture.** MoQ is the only Internet-native candidate whose *architecture* reaches that band, and it is
+the only one with commodity delivery in prospect, but the campaign has not produced a conformant
+sub-second configuration on MoQ, and at the buffer model its one live configuration presents at 2.2 s.
+The point-to-point tunnels come closer: SRT at a 120 ms latency conforms either side of one unrecovered
+loss, at 234 ms (§5.1). A route with a sub-second budget is therefore choosing on a projection — that
+the ~650 ms upstream regression is recovered, that the VBV-derived buffer bound is smaller for its own
+content, and, at the buffer model, that the lane delivers frames ahead of their decode time, where on
+the build tested its own transit and ordering take about 1.6 s before any rebuild — rather than on a
+result. **The honest position is that MoQ's distinguishing claim is architecturally credible
 and not yet evidenced.**
 
 Note what the rule does *not* decide: the grooming and egress layer is built either way (§4).
@@ -603,6 +625,8 @@ on every refusing arm, and announcement scoped to what a credential licenses. Th
 | Packets added to the mux | **one PAT/PMT pair per segment** — measured, and nothing else; **1.00 per segment head over the internet too** | rebuilt, not comparable | **none** | **none** — measured |
 | PCR repetition (P1), file domain | **unchanged from source** — measured | **not inherited from the source but produced by the lane** — clustered 86 % of intervals under 1 ms with gaps to 320 ms, from a source with none above 40 ms in 600 s; restored by the pacer. **On the merged exporter the values are an exact 25 ms grid and the packets sit beside the bytes they label; the delivered figure clears once the groomer reserves the PCR slot rather than waiting for a spare one — 0 of 20,193 intervals above 40 ms over 300 s** (§5.1) | unchanged from source | **unchanged from source** — measured over the wire |
 | PCR accuracy (P2), file domain | **37–74 ns → 109–302 µs**, the injected pair priced; **302.1 µs against 302.4 predicted over the internet**, and **0 violations at 500 µs** bounding it; **0 violations once groomed** | **fails on every PCR** against the declared rate, at ~24 ms of jitter, ungroomed; undefined before the mux-rate change, with no rate to grade against | unmeasured; byte-preserving by construction | **0 violations at 481 ns** — measured over the wire |
+| Packet schedule — PID interleave and decoder-buffer pre-loading (T-STD), wire | source order carried; **not graded** | **discarded and not rebuilt**: groomed, the wire overflows the video, both audio and the PSI transport buffers, and no PCR offset makes the audio decoder buffers legal — measured, while passing P1/P2, on every build up to upstream `main`. A re-multiplexer rebuilds a conformant schedule from the same wire, offline (file domain) and, as a laboratory stage, live at 2,196.7 ms of presentation latency (wire, loopback, one clip); no build does ([Evidence](evidence.md) §3.16) | preserved by construction; not graded. Reasoned from SRT's measurement: kept only behind a stream-clocked egress | **preserved** — every transport buffer, and every decoder buffer in every 2 s window, passes through the same groomer, measured. Over a whole capture the groomer's arrival-clocked PCR drifts and fails the decoder buffers; its stream-clocked mode passes every buffer, at the source's own offsets ([Evidence](evidence.md) §3.16) |
+| TS-level scrambling (conditional access) | carried as bytes; reasoned | **cannot be carried** — the publisher parses PES headers that scrambling hides, so a scrambled feed is descrambled before ingest; specified, not exercised | carried by construction; not exercised | carried by construction; not exercised |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | yes | verbatim by construction; every field, count and cadence measured identical, not diffed byte-for-byte |
 
 **Domains differ:** internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-4-remote-e2e-srt.md));
@@ -616,6 +640,43 @@ segment displaces PCR by 109–302 µs (predicted and measured); grooming closes
 demarcation (§4.1). P2 presupposes a mux rate, which the media-aware lane did not declare until
 [#3831](https://github.com/moq-dev/moq/pull/3831); it now does, and fails the gate on every PCR
 ([Evidence](evidence.md) §3.1).
+
+**The media-aware lane is a transmux lane, and for TS-out it has three structural limits.** The table's
+packet-schedule and scrambling rows record what it discards rather than what it carries.
+
+1. **The packet layout is lost.** The lane demultiplexes into tracks and carries decode timestamps.
+   Neither the position of each packet in the multiplex nor where the PCR and null packets sat
+   survives. That is why the encoder's VBV budget moves downstream into the groomer's buffer (§5.1).
+2. **The subscriber becomes the multiplexer.** It must re-solve the T-STD schedule that the source
+   multiplexer had already solved. No build measured does. The exporter's P1/P2-conformant wire fails
+   the buffer model on the lane's packet order, up to upstream `main`. The pacing groomer behind it
+   cannot reorder packets in either clock mode, and `main`'s padding to the mux rate does not place
+   them ([Evidence](evidence.md) §3.16). **It is not insurmountable.** An offline re-multiplexer
+   repairs the lane's own egress (file domain), at the decoder delay the lane's video already needed:
+   0.9–1.4 s against that egress's clock. From frame-granular source timing it needs 25 ms. A live
+   one, built as a laboratory stage, repairs the lane's TS-out in real time from what a subscriber
+   receives, given buffer parameters calibrated in advance, and presents 2.2 s behind the source on
+   the build under test, about 1.6 s of it the lane's own delivery schedule (loopback, one clip). It
+   needs no source PCR on one host. Across hosts it has to follow a remote source's clock, and it has
+   to schedule from the stream alone if 1+1 legs are to stay identical; neither is built.
+3. **Scrambled streams cannot be carried** (below).
+
+Byte-faithful carriage has none of the three by construction, and it keeps the T-STD as far as the
+edge stage keeps the source's clock. Through a stream-clocked groomer every buffer passes over a whole
+capture, and through an arrival-clocked one the decoder buffers drift out
+([Evidence](evidence.md) §3.16). On MoQ that means the opaque lane, which has one loopback measurement
+and no open subscriber (§12).
+
+**Scrambling is a narrow gate, not a broad one.** TS-level scrambling hides
+the PES headers a transmux publisher must read, so a scrambled feed has to be descrambled before it
+enters the media-aware lane (specified; no part of this campaign scrambles anything). For primary
+distribution that binds less than it sounds. Protection there is the transport's and the operator's
+([Control plane](control-plane.md) §7.3). Consumer conditional access protects content on its way to
+the viewer's screen and is applied, if at all, downstream of the IRD. The case left is a route whose
+contract requires a feed to reach the IRD **still scrambled** — a BISS-class contribution scheme held
+end to end, or a third-party feed the distributor may not descramble. **Where that applies the gate is
+binary**: the media-aware lane is excluded and only byte-faithful carriage serves. Elsewhere it does not
+bear on the choice.
 
 **EPG:** both deliver 69 sections byte-identically; MoQ via reconstruction (must detect completeness),
 segmented via copy. MoQ hands joining receivers the whole EPG in ~1 ms; segmented clients wait the
@@ -830,7 +891,7 @@ commercial one segmented HTTP's. Extending TSDuck's `hls` input for partial segm
 | Lane | media-aware (+ opaque prototype) | **transparent TS** | none — transport only | **transparent TS** + grooming |
 | Scope | publisher, relay, subscriber | **publisher only** | protocol library, **relay**, sample clients | publisher + egress + pacer |
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
-| Format standing | no IETF draft | **adopted WG format** + individual draft | N/A | internal |
+| Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
 | Wire versions | moq-lite 03–06, **MOQT 14–19** | MOQT 16, 18 | MOQT 14, 16 and 18 | inherits `moq-dev` |
 | Source failover | route reselection, a 1+1 pair declared by a shared `--hop` (formerly `--origin`) | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
 | Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
@@ -840,6 +901,15 @@ Transparent carriage is no longer single-vendor (MSF adopted) but **transparent 
 (`moq2ts` strips nulls). Cloudflare's format-blind relay cannot corrupt opaque TS but thins less
 intelligently under pressure. **Publisher disconnect is terminal on Cloudflare's relay** — no source
 takeover; route reselection is `moq-dev`-specific ([Architecture](architecture.md) §5).
+
+**No open implementation subscribes to whole-TS carriage**, as of September 2026. `moq2ts` and
+`moqxr` publish only. `moq-dev`'s "verbatim" tracks carry the PIDs it does not decode *inside* the
+media-aware lane, one track per PID, and its catalog draft describes rebuilding a demultiplexed
+multiplex; neither is a whole-TS track. The MSFTS draft names no implementations, and the opaque
+prototype measured here is private and on an obsolete draft. Byte-faithful carriage over MoQ is
+therefore specified and demonstrated in principle, but not something an operator can run against an
+open receiver today — which is why §8's structural limits do not by themselves move the preference to
+the opaque lane.
 
 ---
 
@@ -881,11 +951,11 @@ here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured.** A pair sharing one feed and one naming scheme fails over with no measurable interruption, 3/3 runs identical, needing no receiver-side merge; the media-aware floor is one detection interval (30–33 s default, ~10 s tuned) and hitless is unreachable by relay reselect. **Conditional** because a *misconfigured* segmented pair is accepted silently and delivers ±20 s time-travel that passes every continuity and PCR-interval check, where the relay refuses the same mistake outright (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | off the shelf in TSDuck and ffmpeg against MoQ's single `moq export ts` (§4.2) — but only for whole segments. Below the segment period the free tooling on this plane does not exist, so the free receiver is the MoQ one and the segmented path requires an ABR-to-TS purchase (§6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | **the same groomer absorbs ~240× coarser bursts and 24 multi-second silences on segmented HTTP; against RIST and SRT the two split, MoQ on burst size and the tunnels on worst-case silence** (§4.3, §10.1) |
-| Grooming *outcome* — a P1-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | **the MoQ lane's long-standing failure here is closed**, and not by the diagnosis the campaign expected: it posted 489–504 intervals above 40 ms at *every* cushion, and what cleared it was the groomer reserving a PCR slot rather than taking only slots the content scheduler declined. The lane returns **0 of 20,193 intervals above 40 ms over 300 s and holds it over 24.01 h** with 0 continuity errors and exact CBR. Segmented HTTP reaches the same standard at the 8 s cushion its segment duration already imposes, on a local groomer run rather than the internet cell that gives its latency (§4.6); MoQ at a buffer set by the peak coded frame (~3.6× its carriage duration, content-dependent) and 2,447 ms of latency against the segmented lane's 9,286 ms. Only MoQ has been soaked, and **neither is verified on hardware** (§5.1) |
-| Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | **the margin depends on the conformance it is held at, and the headline does not survive it.** Where none is P1-conformant, MoQ reads 109 ms against SRT's 1,618 ms and segmented HTTP's 4,067 ms — 15× and 37×. **At conformance MoQ reads 2,447 ms against segmented HTTP's 9,286 ms** (3.8×, still decisive between the Internet-native planes), while the transparent tunnels carry their source's conformant grid ungroomed at a latency the operator sets — 1,618 ms at a 1 s jitter buffer, reducible. Of MoQ's gap, ~650 ms is a named upstream regression and the rest a buffer bound set by the source's peak coded frame. **No plane here is demonstrated conformant below ~2 s.** Caveats: delivery latency rather than camera-to-display; both paths healthy; no clean sub-second tunnel cell either (§5, §5.1) |
+| Grooming *outcome* — a P1-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | **the MoQ lane's long-standing failure here is closed**, and not by the diagnosis the campaign expected: it posted 489–504 intervals above 40 ms at *every* cushion, and what cleared it was the groomer reserving a PCR slot rather than taking only slots the content scheduler declined. The lane returns **0 of 20,193 intervals above 40 ms over 300 s and holds it over 24.01 h** with 0 continuity errors and exact CBR. Segmented HTTP reaches the same standard at the 8 s cushion its segment duration already imposes, on a local groomer run rather than the internet cell that gives its latency (§4.6); MoQ at a buffer set by the peak coded frame (~3.6× its carriage duration, content-dependent) and 2,447 ms of latency against the segmented lane's 9,286 ms. Only MoQ has been soaked, and **neither is verified on hardware** (§5.1). **This is P1/P2 alone: the MoQ lane's wire fails the T-STD buffer model, on its own packet order, and segmented HTTP's has not been graded against it** (§8) |
+| Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | **the margin depends on the conformance it is held at, and the headline does not survive it.** Where none is P1-conformant, MoQ reads 109 ms against SRT's 1,618 ms and segmented HTTP's 4,067 ms — 15× and 37×. **At P1/P2 conformance MoQ reads 2,447 ms against segmented HTTP's 9,286 ms** (3.8×, still decisive between the Internet-native planes, and at the buffer model a failing wire against an ungraded one, §8), while the transparent tunnels carry their source's conformant grid ungroomed at a latency the operator sets — 1,618 ms at a 1 s jitter buffer, reducible. Of MoQ's gap, ~650 ms is a named upstream regression and the rest a buffer bound set by the source's peak coded frame. At the buffer model, through a laboratory re-multiplexer, MoQ presents at 2.2 s on a later build (loopback; §8). **No plane here is demonstrated conformant below ~2 s over a whole capture.** Caveats: delivery latency rather than camera-to-display; both paths healthy; the tunnels' sub-second cell conforms only in steady state, SRT at 234 ms either side of one unrecovered loss on loopback (§5, §5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path; not established on the receive path** | M+S | **decisive on the delivery path, and it stops at the receiver.** Cache, CDN and general-purpose client reception all clear, against MoQ carrying no media through any of eight other relays — conditional on the single-programme envelope. But the two layers that make it a *broadcast* receive path do not clear: no free implementation receives low-latency TS-in-HLS, the commercial ABR-to-TS stage that would is unmeasured, and hardware conformance of the hand-off is unrun on both planes (§6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
-| Carriage fidelity, one programme (R1) | neither, on mux content; **SRT on the clock, and it is the only one measured over a real path** | M | **a wash on content across three clips** — service identity, PMT/PCR PID, CAT, TDT/TOT, splice PIDs and stuffing all survive, so MoQ's content advantage narrows to the untested multi-programme case. Segmented HTTP alone is *additive*: one PAT/PMT pair per segment, costing 109–302 µs of file-domain PCR accuracy that grooming then closes. **On the clock the incumbent wins outright:** byte-faithful SRT reproduces the source mux rate, PSI cadence and PCR grid over the public internet with 0 P2 violations, where the media-aware lane preserves the mux as bytes and destroys it as a timed object (§8) |
+| Carriage fidelity, one programme (R1) | neither, on mux content; **SRT on the clock, and it is the only one measured over a real path** | M | **a wash on content across three clips** — service identity, PMT/PCR PID, CAT, TDT/TOT, splice PIDs and stuffing all survive, so MoQ's content advantage narrows to the untested multi-programme case. Segmented HTTP alone is *additive*: one PAT/PMT pair per segment, costing 109–302 µs of file-domain PCR accuracy that grooming then closes. **On the clock the incumbent wins outright:** byte-faithful SRT reproduces the source mux rate, PSI cadence and PCR grid over the public internet with 0 P2 violations, where the media-aware lane preserves the mux as bytes and destroys it as a timed object (§8). **That lane is a transmux**: it discards the source's packet schedule, so its P1/P2-conformant wire fails the T-STD (M), and it cannot carry a scrambled feed at all (S). The second limit is a narrow gate that binds only routes which must deliver a feed still scrambled (§8) |
 | Wire volume | **MoQ** | M+derived | ~7.0 %, MTU-invariant — 0.982× against 1.056× over HTTP/3; §8's fidelity trade priced (§9) |
 | Delivery economics | segmented HTTP | S(published rates) | decisive, and it swamps the row above — commodity delivery at $0.005–0.010/GB against one MoQ supplier at $0.050 (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and existing staff skills against a pre-1.0 ecosystem |
@@ -903,9 +973,11 @@ under-capacity. **Reordering hurts both and ranks neither**: it is the segmented
 and the media-aware figure beside it is set by the congestion controller rather than by the lane
 ([T20](../lab/test-20-segmented-http3.md), [T28](../lab/test-28-failure-injection-matrix.md)). **MoQ's case is
 route-specific and narrower than the headline latency figure suggests:** smaller bursts for the groomer,
-multi-programme carriage, portable enforcement, ~7 % less wire volume, and — at equal conformance —
-2,447 ms against 9,286 ms, which is decisive for a route in the two-to-nine-second band and is not a
-sub-second result (§5.1).
+multi-programme carriage, portable enforcement, ~7 % less wire volume, and — at equal P1/P2
+conformance — 2,447 ms against 9,286 ms, which is decisive for a route in the two-to-nine-second band
+and is not a sub-second result (§5.1). At the buffer model the media-aware lane's one live conformant
+configuration, through a laboratory re-multiplexer, presents at 2.2 s, and segmented HTTP's wire has
+not been graded against it (§8).
 
 MoQ's ~7 % wire saving is a rounding error against five-to-ten× delivery cost. Cushion depth is not what
 buys PCR conformance on the media-aware lane, but conformance is not free of latency either: the
@@ -922,7 +994,8 @@ under what conditions each is preferable.
 
 | Gate | Cleared when | MoQ today | Segmented HTTP today |
 |---|---|---|---|
-| **Conformant egress** | Groomed output passes TR 101 290 P1/P2 on hardware, sustained | **Cleared in software and sustained for a day; not verified on hardware; and not on one build.** Over 300 s and again over **24.01 h / 632 M packets**: 0 intervals > 40 ms, 0 continuity errors, 0 groomer drops, 0 underruns, exact CBR, 0 PCRs outside ±500 ns, 33-bit rollover crossed in flight ([T19](../lab/test-19-pcr-grid-verification.md), [T21](../lab/test-21-permanence-soak.md)). Needed all three upstream PCR fixes *and* the three groomer fixes in §5.1, and costs a buffer sized by the peak coded frame (~3.6× its carriage duration), content-dependent, plus 2,447 ms of delivery latency. **The build question is the live risk:** since [#3375](https://github.com/moq-dev/moq/pull/3375), which these measurements prompted, all six *placed* timeline classes are carried at the control's content gap ([Evidence](evidence.md) §3.13) — but that same fix stalled video and primary audio permanently on a *continuous* timeline whose content restarts ([T27](../lab/test-27-liveness-detector.md)); from `5d0991b9` the stall is gone and the importer exits at the same restart instead, still on `ffa5b81b` ([T40](../lab/test-40-continuous-join-through-srt.md)); and the 24 h soak ran on the pre-#3375 build. **No build measured carries both cases**, so a deployment must pin or patch. Residue: a **forward** jump reaches the wire with no `discontinuity_indicator` | **Cleared in software** at an 8 s cushion (0 intervals > 40 ms on a local groomer run; the internet cell at that depth posts 2 marginal intervals), at 9,286 ms; never soaked; hardware unverified |
+| **Conformant egress** | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane: P1/P2 is cleared in software, but the same wire fails the T-STD buffer model on the lane's own packet order, which the groomer cannot repair** and a re-multiplexer does, offline and, as a laboratory stage, live at 2.2 s of presentation latency on one host (§8, [Evidence](evidence.md) §3.16). The P1/P2 half is sustained for a day, not verified on hardware, and not on one build. Over 300 s and again over **24.01 h / 632 M packets**: 0 intervals > 40 ms, 0 continuity errors, 0 groomer drops, 0 underruns, exact CBR, 0 PCRs outside ±500 ns, 33-bit rollover crossed in flight ([T19](../lab/test-19-pcr-grid-verification.md), [T21](../lab/test-21-permanence-soak.md)). Needed all three upstream PCR fixes *and* the three groomer fixes in §5.1, and costs a buffer sized by the peak coded frame (~3.6× its carriage duration), content-dependent, plus 2,447 ms of delivery latency. **The build question is the live risk:** since [#3375](https://github.com/moq-dev/moq/pull/3375), which these measurements prompted, all six *placed* timeline classes are carried at the control's content gap ([Evidence](evidence.md) §3.13) — but that same fix stalled video and primary audio permanently on a *continuous* timeline whose content restarts ([T27](../lab/test-27-liveness-detector.md)); from `5d0991b9` the stall is gone and the importer exits at the same restart instead, still on `ffa5b81b` ([T40](../lab/test-40-continuous-join-through-srt.md)); and the 24 h soak ran on the pre-#3375 build. **No build measured carries both cases**, so a deployment must pin or patch. Residue: a **forward** jump reaches the wire with no `discontinuity_indicator` | **P1/P2 cleared in software** at an 8 s cushion (0 intervals > 40 ms on a local groomer run; the internet cell at that depth posts 2 marginal intervals), at 9,286 ms; buffer model not graded, though the lane carries the source's packet order; never soaked; hardware unverified |
+| **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Excluded on the media-aware lane** (specified); by construction on the opaque lane, which has no open subscriber (§12). **A narrow gate**: primary distribution is protected by the transport and the operator rather than by consumer CA, so it binds only routes that must hand a feed over still scrambled (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Partial: a day on two builds, neither the build under test, and never a week.** 24.01 h clean on delivery and conformance on `d518b61b`, where relay memory converges softly at about 2–2.5× the slot ceiling per publisher ([Evidence](evidence.md) §3.6) and `moq import ts` grows linearly at +2.83 MB/h, failing the resource criterion in that one role. **That leak is fixed upstream**: a 24 h re-soak on `main` at `9d2a4f6e` passes the resource criterion in every role, though it did not re-grade PCR accuracy ([Evidence](evidence.md) §3.2, [T21](../lab/test-21-permanence-soak.md)). The build under test cannot run the continuous source at all | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Recovery is fast but lossy — the exporter resumes at the live edge and discards the outage | **Partial.** Refetches losslessly inside the availability window, silently holed past it |
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**, byte-identical across independent hosts; not for a multi-programme mux | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
@@ -933,8 +1006,11 @@ under what conditions each is preferable.
 
 **Preference is conditional on the route:**
 
-- **Latency budget** — between ~2.5 s and ~9 s MoQ leads at conformance (2,447 ms vs 9,286 ms; §5.1);
-  above that the axis stops discriminating; below ~2 s neither plane is demonstrated conformant.
+- **Latency budget** — between ~2.5 s and ~9 s MoQ leads at P1/P2 conformance (2,447 ms vs 9,286 ms;
+  §5.1); above that the axis stops discriminating; below ~2 s neither plane is demonstrated conformant.
+  At the buffer model the media-aware lane's one live conformant configuration presents at 2.2 s (§8).
+- **Conditional access** — a route that must deliver a feed still scrambled excludes the media-aware
+  lane; a route that does not is unaffected (§8).
 - **Programmes per feed** — MPTS favours MoQ's opaque lane, by construction and unmeasured on a
   multiplex; normatively excluded on HLS (§8).
 - **Destination estate** — open on the delivery path (segmented HTTP) against single-implementation
@@ -964,11 +1040,25 @@ beyond the footprint and event topologies. A route that reads "incumbent" on des
 
 Ranked by leverage:
 
-1. **Hardware TR 101 290 on groomed egresses, sustained?** §5.1 — both conformant in software, MoQ over
-   24 h; neither near an IRD. The measurement that would most change this comparison.
-2. **Can a conformant sub-second configuration be produced on any lane?** §5.1 — decides whether MoQ has
-   a technical discriminator over the incumbents at all, and turns on recovering the ~650 ms upstream
-   regression and on how large the peak-coded-frame buffer bound is for real contribution content.
+1. **Hardware TR 101 290 on groomed egresses, sustained?** §5.1 — both P1/P2-conformant in software,
+   MoQ over 24 h; neither near an IRD. The measurement that would most change this comparison. On the
+   media-aware lane it would also show how far real receivers tolerate a wire that fails the buffer
+   model (§8).
+1a. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts, and for 1+1?** §8 —
+   the media-aware lane's second structural limit is a scheduling job that no build does. A
+   laboratory re-multiplexer does it live on one host, at 2.2 s of presentation latency on the build
+   tested, inside a two-to-nine-second budget before any network is added. What is open is
+   following a remote source's clock and scheduling deterministically for 1+1, and that decides
+   whether the lane serves TS-out to an IRD in a deployment or only feeds that re-encode or
+   re-multiplex downstream. The comparator is segmented HTTP's wire graded against the same model,
+   which has not been done either.
+2. **Can a P1/P2-conformant sub-second configuration be produced on any lane?** §5.1 — decides whether MoQ has
+   a technical discriminator over the incumbents at all. Byte-faithful carriage already conforms
+   sub-second in steady state — over UDP at 114 ms, and over SRT at 234 ms either side of one
+   unrecovered loss, both on loopback — so point to point, on one host, the band is reachable at
+   conformance. On MoQ it turns on recovering the ~650 ms upstream regression, on how large the
+   peak-coded-frame buffer bound is for real contribution content, and, at the buffer model, on a
+   lane that delivers frames ahead of their decode time.
 3. **Commercial ABR-to-TS gateway on hardware?** §4.4, §6.1 — the only path to low-latency TS-in-HLS
    at scale, and therefore the condition on which segmented HTTP's route-level case rests.
 4. **Sub-second requirement: routes or preference?** §5.2 — decides MoQ's addressable share, and is now

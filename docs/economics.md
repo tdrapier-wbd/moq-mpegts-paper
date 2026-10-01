@@ -234,11 +234,12 @@ needs the contribution mux back byte-for-byte.
 
 *The latency column is source-to-groomed-egress over the public internet from a common EC2 origin, and
 it carries an important non-economic condition: **a latency figure on this lane is meaningless without
-the conformance of the same bytes.** Held at conformance the ordering is MoQ 2,447 ms, segmented HTTP
-9,286 ms, and the transparent tunnels at whatever jitter buffer the operator sets — 1,618 ms at 1 s —
-since their egress carries the source's own conformant grid ungroomed. **No conformant sub-second
-configuration exists on any lane in this repository** ([Evidence](evidence.md) §3.11). These are
-delivery figures, not camera-to-display.*
+the conformance of the same bytes.** Held at TR 101 290 P1/P2 conformance the ordering is MoQ
+2,447 ms, segmented HTTP 9,286 ms, and the transparent tunnels at whatever jitter buffer the operator
+sets — 1,618 ms at 1 s — since their egress carries the source's own conformant grid ungroomed.
+**No sub-second configuration has passed a whole capture on any lane in this repository, and none has
+been measured conformant on MoQ** ([Evidence](evidence.md) §3.11). These are delivery figures, not
+camera-to-display.*
 
 **No option breaks last-mile linearity.** A relay is a cache (§4.6): upstream traffic collapses to one
 copy, and the last mile stays N unicast copies. A CDN brings a **price**, not a topology: commodity
@@ -290,10 +291,11 @@ five to ten times commodity delivery. Professional contribution carries SLA, mon
 obligations that consumer CDN pricing does not, so some of the gap is real cost rather than margin.
 Relay portability between implementations is currently absent in practice
 ([Evidence](evidence.md) §3.7) — a market cannot commoditise a product buyers cannot switch between.
-**And the band itself is not yet evidenced: no conformant sub-second configuration has been measured on
-any lane** ([Comparison](comparison.md) §5.1), so the segment this argument addresses is at present a
-projection. **The strongest economic case for MoQ therefore rests on an interoperability problem being
-solved and on a conformance-at-latency result that does not yet exist.**
+**And the band itself is not yet evidenced for MoQ: no conformant sub-second configuration has been
+measured on it, and none has passed a whole capture on any lane** ([Comparison](comparison.md) §5.1), so
+the segment this argument addresses is at present a projection. **The strongest economic case for MoQ
+therefore rests on an interoperability problem being solved and on a conformance-at-latency result
+that does not yet exist.**
 
 ---
 
@@ -449,7 +451,7 @@ Refining "capability, direction, appetite for engineering" into things a broadca
 
 | Question | If yes | If no |
 |---|---|---|
-| **Is the latency budget sub-second?** | own tunnels — MoQ's architecture reaches the band but **no conformant sub-second configuration has been measured on any lane** ([Comparison](comparison.md) §5.1), so this discriminator is credible rather than evidenced | segmented HTTP over a CDN leads on commodity price, a dozen suppliers and delivery-path interoperability, with an off-the-shelf path back to TS at classic segment durations — **conditional on the receive path being bought or already in the estate, since nothing free receives the low-latency variant** ([Comparison](comparison.md) §6.1). Between roughly 2.5 s and 9 s, MoQ leads at conformance |
+| **Is the latency budget sub-second?** | own tunnels — MoQ's architecture reaches the band but **no conformant sub-second configuration has been measured on MoQ, and none has passed a whole capture on any lane** ([Comparison](comparison.md) §5.1), so this discriminator is credible rather than evidenced | segmented HTTP over a CDN leads on commodity price, a dozen suppliers and delivery-path interoperability, with an off-the-shelf path back to TS at classic segment durations — **conditional on the receive path being bought or already in the estate, since nothing free receives the low-latency variant** ([Comparison](comparison.md) §6.1). Between roughly 2.5 s and 9 s, MoQ leads at P1/P2 conformance |
 | **Do you already own transit and PoPs where the destinations are?** | on-prem is the cheapest base per byte | the meet-me-point cost and lead time is the hidden line that decides it (§2) |
 | **Are there more than tens of destinations, clustered by region?** | rented fan-out starts to pay, because that is the topology where a relay economises backhaul (§4.5) | it buys little; the linearity is in the last mile either way |
 | **Are you willing to own a conformance stage no vendor sells?** | MoQ is available to you | segmented HTTP or SRT, where the hand-off is bought or unnecessary |
@@ -524,7 +526,8 @@ staffed from the same place.
   the process, encoded across those isolated systems, and needs it honoured rather than replaced.
 - **Data-plane vendor value has moved rather than disappeared.** There is little left in *transport*.
   But the campaign's own negative results are a product specification: nothing off the shelf turns a MoQ
-  egress into a conformant transport stream ([Evidence](evidence.md) §3.2). **The value sits at the
+  egress into a conformant transport stream ([Evidence](evidence.md) §3.2), and the campaign's own
+  groomer does so only as far as P1/P2 (§3.16 of the same document). **The value sits at the
   hand-off, not in the carriage** — the edge appliance, the IRD-facing gateway, the conformance stage —
   which is a smaller market than transport was, and a real one.
 

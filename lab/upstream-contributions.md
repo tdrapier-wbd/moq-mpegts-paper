@@ -976,7 +976,7 @@ counts, but a consumer reading `quiet` alone would miss it. A sparse stream such
 stopped between cues, by design. Neither PR has run against a live feed; the arm that would settle that
 is T24's 60 s video suppression, repeated on the PR build.
 
-### Per-stream liveness at the TS exporter — contributed as [#4577](https://github.com/moq-dev/moq/pull/4577), in review
+### Per-stream liveness at the TS exporter — contributed as [#4577](https://github.com/moq-dev/moq/pull/4577), merged
 
 **The defect.** This is the egress half of [#3489](https://github.com/moq-dev/moq/issues/3489). In
 [#3533](https://github.com/moq-dev/moq/issues/3533), video and primary audio stalled at the
@@ -1010,7 +1010,10 @@ capture, PID 121 falls to zero PES starts per 5 s after the drop, while the PAT 
 AC-3 and teletext hold their rates. There is no *before* figure, because `main` has no egress rows.
 The local `just check` and the four `test/ts` arms passed, and so did upstream CI.
 
-**Open.** The PR is in review. Sparse SCTE-35 PIDs flap in
+**Merged** into `main`, with the maintainer deleting the quest it implemented. The verification above
+ran on the PR before the merge of `main` into it and has not been repeated on the merged build.
+
+**Open.** Sparse SCTE-35 PIDs flap in
 the shared logger at its 1 s interval, somewhat more at egress than at ingest (21 lines against 16 over
 the same run), where the exporter delivers by group. Picking a window is left to a consumer that names its
 monitoring point. A whole-programme stall is not reported at egress: the output PCR stops with it, so
@@ -1199,7 +1202,7 @@ and SDT/BAT anchor checks on `main` at `6f1a9e33` and on the branch alike: the g
 exporters' emission points to a timer started with each exporter rather than to the media. That arm is
 not in CI and has no quest. Nothing has run against a live multi-programme feed or cross-host.
 
-### A PSI table spanning packets, or one bad CRC, ended a TS ingest — contributed as [#4584](https://github.com/moq-dev/moq/pull/4584), in review
+### A PSI table spanning packets, or one bad CRC, ended a TS ingest — contributed as [#4584](https://github.com/moq-dev/moq/pull/4584), merged
 
 **The defect.** The importer read the PAT and PMT through the `mpeg2ts` 0.6.1 reader, which parses a
 table from a single packet, rejects a nonzero `pointer_field`, and ends the import on any error. A
@@ -1231,7 +1234,12 @@ variants of the harness's ffmpeg clip were PCR-paced through the same rig:
 
 The local `just check` passed, as did upstream CI.
 
-**Open.** The PR is in review. The exporter still writes the PMT through `mpeg2ts`, which
+**Merged** into `main`. Before merging, the maintainer changed how `--program all` hands the PAT to
+each programme's importer: the scanner now seeds each importer with the assembled table instead of
+replaying the bytes it held, which closes three review findings. The verification above predates that
+change and has not been repeated on the merged build.
+
+**Open.** The exporter still writes the PMT through `mpeg2ts`, which
 cannot emit a section longer than one packet (*failed to write whole buffer*), so a long PMT now
 imports but does not round-trip; it is left for upstream planning. Sections dropped for other reasons
 (a malformed adaptation field, a parse failure) are not counted yet, since the TS import health quest
@@ -1858,7 +1866,7 @@ unchanged on `main` at `6f1a9e33`: 3.27 %, [T13](test-13-downstream-grooming.md)
 made a gate; the unpadded start; and `pcr-value-interval`, which pools PCRs across PIDs. All four are
 listed as follow-ups on the PR.
 
-### The byte schedule itself — contributed as [#4579](https://github.com/moq-dev/moq/pull/4579), in review
+### The byte schedule itself — contributed as [#4579](https://github.com/moq-dev/moq/pull/4579), overtaken by the maintainer's fixed-delay export
 
 **The defect** is #3925's: with a mux rate, export padded to the right average but heaped each
 keyframe between two PCRs, so a receiver clocking off arrival could not lock. On upstream `main`
@@ -1889,8 +1897,56 @@ quarter of its intervals still overrun and repay; media goes first in each slot 
 which leaves TB overflows that interleaving would cut; the first ~2 s stay VBR until the importer
 publishes `mpegts.muxRate`; and the `--live` release check was flaky on a loaded machine for `main`
 and the branch alike on the new clip (main 6-321 of ~640 releases off, branch 9-356), which the
-nightly job may inherit. It overlaps [#4577](https://github.com/moq-dev/moq/pull/4577) in
-`ts/export.rs`, so whichever lands second rebases.
+nightly job may inherit.
+
+**State.** The PR is open and conflicts with `main`. The maintainer's
+[#4645](https://github.com/moq-dev/moq/pull/4645) (draft, below) replaces the span machinery this PR
+reworks with a constant-rate schedule paced against a fixed `--delay`, and makes a burst that does not
+fit the delay fail the export rather than overrun the rate. The measurements here are the before-state
+that PR has to beat on a real broadcast clip; whether to close this PR in its favour is the author's call.
+
+### T-STD conformance of the TS export — taken up upstream as a questline, not yet verified here
+
+**What prompted it.** [T44](test-44-tstd-grading.md) graded the lane's P1/P2-conformant wire against
+the 13818-1 T-STD and found it fails on the lane's packet order, and [T45](test-45-live-tstd-remux.md)
+showed a live re-multiplexer repairs it on one host. Together with the MSFTS co-author's review of
+transmux carriage, that moved the maintainer to treat a TS export as a remux with a fixed delay.
+
+**Upstream state.**
+
+- **The plan**, `quest/m1/tstd/`, merged in [#4637](https://github.com/moq-dev/moq/pull/4637). It has
+  three children: a fixed-delay release stage, a full T-STD check in `test/ts/compliance.py`, and
+  PCRs on the mux-rate byte grid. The release stage works like an SRT receiver's TSBPD: each frame
+  leaves at its first-arrival anchor plus its DTS plus `--delay`, in `(DTS, PID)` order, and a late
+  frame is dropped and counted. The questline's proof is the loss rig of
+  [#4613](https://github.com/moq-dev/moq/issues/4613) (10 % loss, a real ~10 Mb/s broadcast TS)
+  passing the strict check, nightly. Its README says that without it only a passthrough lane can carry
+  primary distribution. No passthrough quest exists, and `quest/m2/msfts-convergence.md` lists
+  transporting TS verbatim as a non-goal.
+- **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643). It is hand-rolled from
+  H.222.0 and the codec specifications, since TSDuck has no T-STD analyser, and validated on a real
+  broadcast capture and on PCR-restamped controls that must fail. It models TB, MB and EB for AVC and
+  HEVC, and TB and B for ADTS, MPEG-1/2 audio, AC-3, E-AC-3 and Opus, the last with borrowed buffer
+  sizes. On the harness's generated clip it fails current `moq export ts` with video EB underflow and
+  audio TB and B overflow, the failure classes T44 measured on a broadcast clip. It reports only, until
+  the delay lands.
+- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is a draft; the
+  maintainer's review asks for one blocking fix, a stale generation muxed after a rewind. It deletes
+  the hold, the stall and the span machinery. With a rate, the output is constant-rate and runs up to
+  two delays behind the source, reordered DTS is frame-spaced, and a burst that does not fit the delay
+  fails the export. On the generated 20 s clip it passes the strict check at 10 and 2 Mb/s on a clean
+  path. The loss rig and a real broadcast clip were not run.
+- **A catalog `burst` field**, the encoder's VBV bound sizing the send-ahead so that `--delay` is only
+  network margin, was planned in [#4649](https://github.com/moq-dev/moq/pull/4649) and closed unmerged.
+
+**Relation to the measurements here.** The upstream check and [`ts-tstd.py`](scripts/ts-tstd.py) are
+independent implementations and have not been run against each other. On `ffa5b81b`, T45 found the
+exporter hands each video frame over at its own decode time, so a conformant output of the CNN clip
+needed about 0.55–0.6 s of send-ahead through the video's transport buffer; that is the quantity the
+closed `burst` quest would have declared.
+
+**Open.** Nothing in this entry is verified here: #4645 has not been graded on a broadcast clip, by
+either check, under loss or cross-host.
 
 ### The liveness exit — filed as a question, deliberately
 
@@ -2012,14 +2068,15 @@ too. At 0 % loss the builds are indistinguishable. Bisected with relay and impor
 ([T8b](test-8b-congestion-control.md) § *C7*). Still present on `main` at `6f1a9e33`, with every role
 on that build: 15–18 % of its 0 % control. **Reported as
 [#4613](https://github.com/moq-dev/moq/issues/4613), root cause measured and posted there, fix
-contributed as [#4618](https://github.com/moq-dev/moq/pull/4618) (open).** Each source skip under loss
+contributed as [#4618](https://github.com/moq-dev/moq/pull/4618), merged as `e488e699`.** Each source skip under loss
 is a rewind, and `rewind()` renewed the hold's full `max_age` budget, so the hold held the sources a
 budget behind and their next stall skipped again. An instrumented build of `main` at `5124f8134` with
 only the hold varied gives 1.13 Mb/s at 10 % loss as it stands, 9.80 with the hold disabled and 8.37
 with it capped at 200 ms. On the PR before merge, with the hold kept across a rewind, it gives 9.70
 and 9.87, and 9.84 at 0 % loss against 9.85 unfixed. The PR reverses #4001's two tests that asserted
-the renewal and adds one for repeated rewinds. **Open:** review, and a post-merge rerun of C7 on the
-merged build.
+the renewal and adds one for repeated rewinds. The merged commit also clears the stall in `resume()`,
+so a replacement broadcast starts with a fresh budget; the measured arms predate that change.
+**Open:** a rerun of C7 on the merged build.
 
 ### The video DTS reserve froze at the PMT — contributed as [#4500](https://github.com/moq-dev/moq/pull/4500), merged and verified on `main`
 
@@ -2291,7 +2348,7 @@ returned, where the SRT and UDP sources do shrink it. **Reported as
 to `srt-live-transmit` reproduction: at `-chunk:1316`, 1,020 packets arrived in order with 79
 zero-filled slots, and at the default 1456 only 26 packets were intact. **Fix proposed as
 [Haivision/srt#3389](https://github.com/Haivision/srt/pull/3389)**, which shrinks the payload to the
-bytes read. The same reproduction, with master at 74d7083 as the sender and a stock 1.5.6 receiver,
+bytes read; approved by a maintainer and milestoned for v1.5.8, not yet merged. The same reproduction, with master at 74d7083 as the sender and a stock 1.5.6 receiver,
 shows no zero-filled slots at either chunk size after the fix. At 1456, all 1,040 packets arrive in
 order, against 26 before. The rule it yields is in
 [method notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros).
@@ -2948,7 +3005,7 @@ is logged with what was filed, what we did about it and the measurement that for
 | [#1799](https://github.com/moq-dev/moq/issues/1799) | a direction decision between media-aware and byte-opaque carriage | **closed by us** once its children resolved | the direction was settled by its children, not withdrawn |
 | [#1861](https://github.com/moq-dev/moq/issues/1861) | a second, byte-verbatim opaque lane | **retracted by us** | #2440 shrank the gap to EIT alone; the wire measurement reversed the economics; byte-identical 1+1 legs were reached another way |
 | [#1839](https://github.com/moq-dev/moq/issues/1839) | a generic TS egress sink with PCR-aware pacing | **partly landed, remainder retracted by us** | the pacing primitive shipped as [#1845](https://github.com/moq-dev/moq/pull/1845); the maintainer declined a module per transport, and the grooming stage does not belong in a transport library |
-| [#1838](https://github.com/moq-dev/moq/issues/1838) | TR 101 290 monitoring | **open, corrected in place rather than retracted** | half the checks were aimed at a stream no IRD sees; the requirement itself survives, restated |
+| [#1838](https://github.com/moq-dev/moq/issues/1838) | TR 101 290 monitoring | **corrected in place rather than retracted**; since closed by the maintainer when a planning PR ([#4496](https://github.com/moq-dev/moq/pull/4496)) moved it into upstream's quest backlog — planned, not implemented | half the checks were aimed at a stream no IRD sees; the requirement itself survives, restated |
 
 Only #1839's remainder turned on maintainer push-back, and even there the replacement was built
 outside the tree on its own merits. The rest were retracted because a measurement in this repository
@@ -2996,8 +3053,10 @@ to re-file.
   or QUIC dependency, for which a MoQ subscriber is merely one possible source
   ([T13](test-13-downstream-grooming.md)).
 - **TR 101 290 monitoring requirements** ([#1838](https://github.com/moq-dev/moq/issues/1838)) —
-  **still open, and corrected rather than closed**, because the requirement is real while the issue as
-  filed aims half of it at the wrong stream. Three changes, and the third is the one worth having:
+  **corrected rather than withdrawn**, because the requirement is real while the issue as filed aims
+  half of it at the wrong stream. The maintainer has since closed it by moving it into upstream's
+  quest backlog ([#4496](https://github.com/moq-dev/moq/pull/4496)), so it is planned there and not
+  implemented. Three changes, and the third is the one worth having:
   - **The PCR and mux-rate checks measure a stream no IRD ever sees**, and on a healthy chain they would
     sit permanently in alarm: 0–26 % of PCR intervals at moq's egress exceed 40 ms depending on the clip,
     and 1,523 of 1,524 PCRs fall outside ±500 ns ungroomed, against 0 % and 0 of 2,598 after grooming
