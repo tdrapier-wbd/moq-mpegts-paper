@@ -1922,8 +1922,15 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   frame is dropped and counted. The questline's proof is the loss rig of
   [#4613](https://github.com/moq-dev/moq/issues/4613) (10 % loss, a real ~10 Mb/s broadcast TS)
   passing the strict check, nightly. Its README says that without it only a passthrough lane can carry
-  primary distribution. No passthrough quest exists, and `quest/m2/msfts-convergence.md` lists
-  transporting TS verbatim as a non-goal.
+  primary distribution. No quest owned that lane, and `quest/m2/msfts-convergence.md` listed
+  transporting TS verbatim as a non-goal. We proposed both in the draft
+  [#4670](https://github.com/moq-dev/moq/pull/4670), planned in upstream's quest interview format:
+  - `quest/m1/ts-passthrough.md` is MSFTS `mpeg2ts` whole-packet carriage, paced on the source PCR at
+    a fixed delay.
+  - `quest/m1/release-clock-recovery.md` steers the release stage against a publisher clock off by
+    up to ±30 ppm, within 13818-1's slew limits. That goes ahead of `delay.md`'s "only if measured",
+    on the derived exposure.
+  - The PR also re-points `msfts-convergence.md`'s non-goal at passthrough.
 - **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643). It is hand-rolled from
   H.222.0 and the codec specifications, since TSDuck has no T-STD analyser, and validated on a real
   broadcast capture and on PCR-restamped controls that must fail. It models TB, MB and EB for AVC and
