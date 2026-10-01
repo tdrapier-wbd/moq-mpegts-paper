@@ -2253,6 +2253,13 @@ pass finished. **Queue a chain as one sequential command**, `a; b; c`, or wait o
 markers only; a name pattern matches every command line that mentions the name, including the
 queue's own.
 
+**Check that a multi-cell runner is still alive after its first cell.** *From
+[T47](test-47-fixed-delay-export.md).* A five-cell runner on the T18 rig, started as `(nohup bash
+runner.sh > log &)` from a short-lived shell, ran its first 540 s cell and then stopped, with no line
+after the cell's header. The same runner started as a background job of a persistent shell ran
+every cell. The cause is not located; the rig's cleanup kills only its own stages' groups. Look
+for the second cell's header in the log, not only for the first cell's output.
+
 ### A replicate loop inside one script invocation re-uses the fixed port the last replicate held
 
 *From [T31](test-31-congestion-capacity-ladders.md), the QUIC-backend arms.* A wrapper asked for
@@ -3187,6 +3194,34 @@ source, graded properly, passes at an offset of exactly zero.
 > groomer's PCR. A whole-capture offset scan cannot separate them where the groomer regenerates PCR,
 > because the offset drifts with the groomer's buffer; ask the question per short window instead
 > (`ts-tstd.py --window`).
+
+### A buffer-model pass says nothing about what is missing: count each PID's units against the source
+
+*From [T47](test-47-fixed-delay-export.md), on `2dc542b4a`.* An export across hosts at 500 ms
+dropped every MP2, AC-3 and teletext unit for its whole run, and its output passed `ts-tstd.py` in 57
+of 57 windows, `compliance.py` and `pcrverify`. A loss arm at 1 s carried no AC-3 at all and passed
+the same three. Both T-STD checks grade the units that are present, and `compliance.py` checks the PIDs
+that carry packets; an absent PID has no buffer to overflow. The export's log named every drop, and
+the pass criteria never read it.
+
+> **Grade completeness alongside conformance: every PID the source carries is in the output, with
+> its unit count against the source's over the same span.** Read the export's own drop log as well.
+> A conformance verdict on a cell that has not been checked for completeness is a verdict on the
+> part that arrived.
+
+### Grade a clock's rate by fitting PCR against the receiver's clock, not from a latency trend
+
+*From [T47](test-47-fixed-delay-export.md), on `49efbc9a1`.* A steered output clock was reported
+upstream as running 290–370 ppm off, from the change in presentation latency between the first and
+last thirds of each 46 s run. Fitting each tap's wall-minus-STC offset against the tap's clock on the
+same captures gave about 500 ppm, the steering limit, as in mocked time. Medians of thirds dilute a
+steady rate over the gap between them. The fit has its own floor: on one host a 30 s window reads
+±45–60 ppm on its own, and both taps once moved together by 160 ppm, which was the host's clock.
+
+> **Fit the PCR against the receiving clock (`ts-decode-latency.py`'s "PCR clock vs tap") over the
+> longest span available, and compare egress with the source tap of the same run.** Grade 30 ppm on
+> the whole-run fit, not on one window. The slew limit, 2.8 ppb a second, is out of this
+> instrument's reach; say so rather than quoting a per-window change.
 
 ### A transparent control through an arrival-clocked groomer attributes the transport buffers, not the decoder buffers
 

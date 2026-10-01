@@ -10,7 +10,9 @@
 #
 # env: PORT (4443, UDP, must be reachable between the hosts), CC (delay = BBRv3 on noq),
 #      CLIP (~/CNNiEMEA2.ts), LAT (1s, the export's --delay or --max-age value),
-#      OUT (~/t47/xhost), and any MOQ_TS_* variables, which reach the export unchanged.
+#      OUT (~/t47/xhost), TAP (0; 1 stamps each egress picture's arrival into egress.csv
+#      through t18-latency.py's tap, VPID 111 by default), and any MOQ_TS_* variables, which
+#      reach the export unchanged.
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -57,9 +59,18 @@ origin)
 	kill "$RELAY_P" 2>/dev/null
 	;;
 sub)
-	timeout "$SECS" "$BIN/moq" "${MOQ_DIAL[@]}" "https://$IP:$PORT" --broadcast "$BCAST" \
-		export ts "${MOQ_LAT[@]}" "$LAT" >"$OUT/egress.ts" 2>"$OUT/export.log"
-	echo "export_rc=$? (124 = ran the window)" >>"$OUT/$ROLE-meta.txt"
+	if [ "${TAP:-0}" = 1 ]; then
+		# Stamp each picture's arrival on this host's clock, for the PCR clock-rate fit.
+		timeout "$SECS" "$BIN/moq" "${MOQ_DIAL[@]}" "https://$IP:$PORT" --broadcast "$BCAST" \
+			export ts "${MOQ_LAT[@]}" "$LAT" 2>"$OUT/export.log" |
+			python3 "$HERE/t18-latency.py" tap "${VPID:-111}" "$OUT/egress.csv" --pipe --seconds "$SECS" \
+				>"$OUT/egress.ts"
+		echo "export_rc=${PIPESTATUS[0]} (124 = ran the window)" >>"$OUT/$ROLE-meta.txt"
+	else
+		timeout "$SECS" "$BIN/moq" "${MOQ_DIAL[@]}" "https://$IP:$PORT" --broadcast "$BCAST" \
+			export ts "${MOQ_LAT[@]}" "$LAT" >"$OUT/egress.ts" 2>"$OUT/export.log"
+		echo "export_rc=$? (124 = ran the window)" >>"$OUT/$ROLE-meta.txt"
+	fi
 	moq_require_bytes "$OUT/egress.ts" 1000000 "$LABEL" || true
 	;;
 *)

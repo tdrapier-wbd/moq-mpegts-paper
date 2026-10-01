@@ -1,15 +1,32 @@
 # Test 47 — The upstream fixed-delay TS export on a broadcast clip
 
-**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `49efbc9a1`
-(unmerged, draft), carries the broadcast clip at 500 ms, 750 ms and 1 s. Every transport and decoder
-buffer is legal in every graded window, and every PCR is within ±500 ns, on one run per delay, on
-loopback; the only flag is the capture's truncated last AC-3 frame, which the export passes on. It
-reworks the release stage onto one clock, authors DTS in time, admits each PID against
-its own buffers and stamps each PCR from its slot's first byte. Two findings remain against it.
-First, the jitter buffer's clock steering is the output's system clock: after a mid-group join, it
-runs about 500 ppm off for tens of minutes, against 13818-1's 30 ppm. That is measured in mocked
-time and seen in the wire's latency trend. Second, two legs joined alike still diverge after a
-skip. Neither the loss rig nor cross-host was run on this head.**
+**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `2dc542b4a`
+(unmerged, draft), holds the output's system clock inside 13818-1's 30 ppm and carries the
+broadcast clip conformantly at 1 s: over 540 s on loopback, across hosts, and under 1 % loss.
+At 500 ms the join sets both its presentation latency, from 480 to 1,089 ms, and how much audio
+it drops for the whole run: the lower the latency, the more audio lost, up to all of it. Every
+grader passes those outputs. At 500 ms it also stops on a schedule overrun within minutes. The
+audio loss happened at 1 s too, in one of five 1 s runs. The likely cause is the clock's anchor on
+the join's first frame, which a 30 ppm clock cannot correct afterwards; that is reasoned from the
+code and consistent with the join-phase runs, not traced.**
+
+- **The clock is fixed.** The output's PCR clock fits within about 8 ppm of the receiving host on
+  every long run, and within about 1 ppm of the source over 540 s at 1 s. On `49efbc9a1` it ran
+  about 500 ppm off.
+- **At 1 s it conforms wherever it carried every track:** 540 s on loopback, 120 s across hosts and
+  120 s at 1 % loss. Every buffer was legal in every window, `compliance.py` passed, and every PCR
+  was within ±500 ns. One 1 s run, the loss rig at 0 %, lost every AC-3 unit.
+- **At 500 ms it loses audio on most joins.** Across hosts it dropped every MP2, AC-3 and teletext
+  unit for the whole run. On loopback, seven of nine joins lost from a tenth of the AC-3 up to all
+  of the MP2 and AC-3. Shifting the join alone moved the presentation latency from 480 ms with no
+  audio to 1,089 ms with all of it. Both 540 s runs stopped on a schedule overrun, at 157 s and
+  202 s. Under 1 % loss at 500 ms, and at 10 % at 1 s, the export stops within seconds.
+- **The graders pass a programme without its audio.** Both T-STD checks and `pcrverify` grade
+  only what is present, so completeness is now counted per PID against the source.
+- **In mocked time every case passes,** including the system-clock and 1+1-after-a-skip cases
+  that failed on `49efbc9a1`. The harness does not reproduce the wire's audio loss.
+
+**The rework before it, `49efbc9a1`, on loopback:**
 
 - **The broadcast clip conforms at every delay tried, including the 500 ms default.** At 1 s,
   750 ms and 500 ms the export runs the whole capture. `ts-tstd.py` passes every buffer in 26 of
@@ -24,15 +41,15 @@ skip. Neither the loss rig nor cross-host was run on this head.**
   jitter buffer's clock, which steers by up to 500 ppm to hold the least slack at the delay. A
   receiver joined mid-group anchors on a frame already old, and the steering wears the lead away at
   the full rate. In mocked time that is 497.8 ppm over 12 minutes, against 1.4 ppm for a receiver
-  there from the start. On the wire the three runs' presentation latency trends by 290–370 ppm.
-  ISO 13818-1 2.4.2.1 allows 30 ppm, slewing at most 0.075 Hz/s. `pcrverify` and both T-STD checks
-  pass it, because each holds the PCR to the stream's own bytes.
-- **Two legs still diverge after a skip, and their continuity counters always differ.** In mocked
+  there from the start. On the wire the output's PCR clock fits about 500 ppm off the source in
+  each of the three runs. ISO 13818-1 2.4.2.1 allows 30 ppm, slewing at most 0.075 Hz/s.
+  `pcrverify` and both T-STD checks pass it, because each holds the PCR to the stream's own bytes.
+- **Two legs diverged after a skip, and their continuity counters always differ.** In mocked
   time, two exports of one broadcast lay the same bytes once both are out of the join, apart from
-  the counter. After a skip the new generation anchors on each leg's own read, and the pair
-  diverges.
+  the counter. After a skip the new generation anchored on each leg's own read, and the pair
+  diverged; on `2dc542b4a` a skip opens no generation and the pair stays identical.
 
-**The previous head: first pass (P0-m), on loopback and then under loss and across hosts, on
+**The first head: first pass (P0-m), on loopback and then under loss and across hosts, on
 `4b7158d6c00d`. Every bullet below this paragraph, and every results section after
 [the rework's](#the-rework-49efbc9a1), is on that head or on scratch builds of it. The cause of the
 broadcast-clip failure is located by an offline replay, which predicted two further runs of the
@@ -161,6 +178,8 @@ questions of it on a real broadcast multiplex:
    hosts?** Asked of the per-PID scratch build at 1 s, the one that passes on loopback.
 5. **Does the rework carry the clip, at what delays, and what does its clock do to the output?**
    Asked of `49efbc9a1`, which took up the per-PID admission and the one-clock release stage.
+6. **Does holding the clock to 30 ppm, with a live-edge join, keep the output conformant, at what
+   latency, under loss and across hosts?** Asked of `2dc542b4a`.
 
 ## Pass criteria
 
@@ -173,6 +192,9 @@ Fixed before the runs, the same as T45's for the T-STD:
 3. **The export runs the whole capture.**
 
 A cell that fails criterion 3 has its latency and buffers quoted only for the part it delivered.
+From `2dc542b4a` on, each cell is also checked for completeness: every PID the source carries is in
+the output, with its unit count against the source's. This was added after a cell passed criteria 1
+and 2 with its audio missing, so it was not fixed in advance.
 
 ## Instruments
 
@@ -198,9 +220,9 @@ fixture is video only. Its source passes `compliance.py`: EB peak 76 %, worst de
 
 ## Environment
 
-- Export, import and relay: #4645 at `49efbc9a1` for the rework's section, with no `MOQ_TS_*` or
-  `MOQ_JITTER_*` variable (the head reads every buffer parameter from the stream). Everything else
-  is on the previous head, `4b7158d6c00d`. Release builds, relay on its own tree's config. The
+- Export, import and relay: #4645 at `2dc542b4a` and at `49efbc9a1` for their sections, with no
+  `MOQ_TS_*` or `MOQ_JITTER_*` variable (both read every buffer parameter from the stream).
+  Everything else is on the first head, `4b7158d6c00d`. Release builds, relay on its own tree's config. The
   two scratch schedules are patches to `4b7158d6c00d`'s `schedule.rs` only.
 - Mocked time: the export's own crate on the paused Tokio clock, a live H.264 + AAC broadcast
   written frame by frame at the instant a source sends it, receivers reading on their own cadence
@@ -210,11 +232,139 @@ fixture is video only. Its source passes `compliance.py`: EB peak 76 %, worst de
 - One host, loopback. All stages at `nice 10`.
 - Loss arms: one host, the T8b network-namespace rig, 25 ms each way, BBRv3 on noq, uniform netem
   loss on the media direction, 120 s. Cross-host: relay and importer on one host, with the clip paced by
-  `tsp -P regulate`, and the export on a second host in the same region, 120 s. Both on the
-  per-PID build, with lateness logged rather than fatal (`MOQ_TS_LATE=send`) so that a run is
-  graded whole.
+  `tsp -P regulate`, and the export on a second host in the same region, 120 s. On the per-PID
+  build, with lateness logged rather than fatal (`MOQ_TS_LATE=send`) so that a run is graded whole;
+  on `2dc542b4a`, as pushed: a frame that arrives late is dropped, and a schedule overrun stops
+  the export.
 
 ## Results
+
+### The live-edge join and the 30 ppm clock, `2dc542b4a`
+
+Three commits on top of `49efbc9a1`. The jitter buffer's clock follows the source no more than
+30 ppm off the receiver's clock, slewing at most 0.075 Hz/s (13818-1 2.4.2.1), and the export fails
+when a source runs further off than that. Video and audio subscribe at the newest group, the live
+edge, rather than at the delay's reach; verbatim tracks (here AC-3 and teletext) keep the reach. A
+skipped group no longer opens a generation; only a declared restart does. No `MOQ_TS_*` variable is
+set. The rigs are the rework's, plus the loss rig and cross-host on the head as pushed, with every
+egress tapped so that its PCR clock can be fitted.
+
+**Measuring the clock.** [`ts-decode-latency.py`](scripts/ts-decode-latency.py) fits each tap's
+wall-minus-STC offset against the tap's own clock. The slope is the PCR clock's rate against the
+tap's, which is the quantity 2.4.2.1's frequency tolerance bounds. It reports the rate over the
+whole run and per 30 s window. On the loopback taps a 30 s window reads ±45–60 ppm from noise alone,
+and in one run both taps read −160 and −176 ppm together, which is the host's clock, not the stream.
+So the figures that grade against 30 ppm are the whole-run fit and the egress against the source
+tap of the same run. The slew limit, 2.8 ppb per second, is far below what 30 s windows resolve, and
+it is not graded.
+
+**Loopback**, one host, the T18 rig as for the rework, catalog rate, mid-stream join. Cells of 60 s
+have their T-STD graded after a 5 s skip; `compliance.py` flags each one's last AC-3 PES, the
+capture's truncated frame ([below](#the-rework-49efbc9a1)), and nothing else.
+
+| Cell | Runs | `ts-tstd.py`, 2 s windows | `compliance.py` | PCRs outside ±500 ns | Late drops | AC-3 units | Presentation, median | PCR clock: egress / source tap |
+|---|---|---|---|---|---|---|---|---|
+| 1 s, 540 s | the whole run; exits at the end on the capture's tail | 265 of 265 | PASS | 0 of 21,462 | 0 | 16,611, complete | 1,766.1 ms, +0.5 ms over the run | −7.6 / −6.4 ppm |
+| 1 s, 60 s | the whole run | 26 of 26 | last PES only | 0 of 2,310 | 0 | 1,612 | 1,791.3 ms | −2.1 / −6.0 ppm |
+| 750 ms, 60 s | the whole run | 26 of 26 | last PES only | 0 of 2,300 | 0 | 1,605 | 1,292.6 ms | +20.6 / −2.5 ppm |
+| 500 ms, 60 s, four runs | the whole run | 26 of 26 each | last PES only | 0 of 2,290 each | 20–55 AC-3 PES each; up to 3 MP2, 1 teletext | 1,147–1,426 | 783.7–787.9 ms | within 25 ppm of the source tap in each |
+| 500 ms, 540 s | exits at 157 s: "missed a decode deadline on PID 111" | 75 of 75 before the exit | PASS | 0 of 6,262 | 0 | 4,733, complete | 798.5 ms | −4.1 / −6.1 ppm |
+| 500 ms, 540 s, repeated | exits at 202 s, the same | 98 of 98 before the exit | PASS | 0 of 8,042 | 427 AC-3 PES, 14 MP2, 1 teletext | 2,376, about 39 % of the track | 776.5 ms | −9.9 / −12.4 ppm |
+
+**The join phase, on loopback**: three more 60 s runs at 500 ms, with the source started 0.3, 0.6
+and 0.9 s later than in the cells above, so that the export joins at a different point in the
+source's GOP. Every buffer passes in 26 of 26 windows and every PCR is within ±500 ns in each.
+
+| Source started later by | Presentation, median | MP2 units | AC-3 units | Late drops |
+|---|---|---|---|---|
+| 0.3 s | 480.1 ms | 0 | 0 | 193 AC-3 PES, 2,306 MP2, 1,385 teletext |
+| 0.6 s | 576.7 ms | 542 | 0 | 196 AC-3 PES, 1,754 MP2, 7 teletext |
+| 0 (the four runs above) | 783.7–787.9 ms | about 2,130, complete | 1,147–1,426 | 20–55 AC-3 PES |
+| 0.9 s | 1,089.0 ms | 2,181, complete | 1,634, complete | 0 |
+
+**The presentation latency and the audio loss are one quantity.** At one delay, the join alone moves
+the presentation latency over 609 ms, and the less of it a join gets, the more audio it loses. That
+is what an anchor set by the join's first frame predicts. It gives the slower-sent tracks less
+than the delay by as much as it shortens the latency.
+
+**Across hosts**, relay and importer on one host, export on another in the same region, 120 s (the
+origin stops at 119 s). No shared clock, so no latency.
+
+| `--delay` | Runs | `ts-tstd.py` | `compliance.py` | PCRs outside ±500 ns | Late drops | Carried | PCR clock against the receiving host |
+|---|---|---|---|---|---|---|---|
+| 1 s | the whole run | 56 of 56 | PASS | 0 of 4,732 | 0 | every PID; AC-3 3,541 units | −3.4 ppm over 108 s; 30 s windows +1.8, −7.9, +9.7 |
+| 500 ms | the whole run | 57 of 57 | PASS | 0 of 4,769 | 8,410: every MP2, AC-3 and teletext unit, about 70 a second from the first second | video, SCTE-35 and SI only: 0 packets of MP2, AC-3 or teletext | −1.2 ppm; +47.4, −5.2, +37.2 |
+
+**Under loss**, the [T8b](test-8b-congestion-control.md) namespace rig, 25 ms each way, BBRv3, 120 s.
+
+| Arm | Runs | `ts-tstd.py` | `compliance.py` | PCRs outside ±500 ns | Late drops | Carried |
+|---|---|---|---|---|---|---|
+| 0 %, 1 s | the whole run | 56 of 56 | PASS | 0 of 4,742 | 415 AC-3 PES, 205 MP2, 1 video, about 5 a second throughout | no AC-3 at all; MP2 4,568 units, against 4,757 in the 1 % arm |
+| 1 %, 1 s | the whole run | 57 of 57 | PASS | 0 of 4,768 | 0 | every PID; AC-3 3,568 units |
+| 10 %, 1 s | exits at 10 s: "missed a decode deadline on PID 111" | — | — | — | — | — |
+| 1 %, 500 ms | exits at 5 s, the same | — | — | — | — | — |
+
+**The clock is inside 2.4.2.1's frequency tolerance.** Over 540 s at 1 s the output's PCR clock fits
+−7.6 ppm against the host, with the source's at −6.4 ppm: the output follows the source to about
+1 ppm. Across hosts it fits −3.4 and −1.2 ppm against the receiving host. On `49efbc9a1` the same fit
+reads about 500 ppm ([below](#the-rework-49efbc9a1)).
+
+**Where a run loses a track, it loses it whole and for the whole run.** The drops are whole units at
+the track's own rate: each AC-3 PES is nine sync frames, 288 ms, and across hosts at 500 ms the
+export dropped every MP2, AC-3 and teletext unit from the first second to the last. The same
+cell passes on one join and loses a track on the next: at 500 ms on loopback, all four 60 s runs
+and one of the two 540 s runs lost AC-3, and the other 540 s run did not; at 1 s, the 0 % loss
+arm lost AC-3 and the 1 % arm did not. The join-phase runs tie the loss to the presentation latency
+the join gives. The mechanism behind both is reasoned from the code, not traced. The clock is anchored on the first frame pushed,
+and every track's newest group arrives within milliseconds of subscribing. A TS source sends video
+up to 0.97 s ahead of its decode time and audio just in time. When the first frame is a fresh
+keyframe, audio of the same decode time therefore arrives that much later, and where the difference
+exceeds the delay every audio frame misses its deadline. The steering would close the gap, but at
+0.075 Hz/s a 100 ms deficit takes over three hours. A frame that would be late before anything has
+been released is dropped rather than moving the anchor, though nothing yet constrains the anchor
+there. A join that anchors on a stale keyframe errs the other way: every track gets extra slack,
+which shows as latency.
+
+**The graders pass a programme with its audio missing.** The 500 ms cross-host egress passes
+`ts-tstd.py` in every window, `compliance.py` and `pcrverify` with no MP2, AC-3 or teletext in it.
+The T-STD grades the units present, and `compliance.py` checks the PIDs that carry packets. The unit
+counts per PID against the source are what catch it, and every cell above is checked that way
+([method notes](method-notes.md)).
+
+**The export stops on a schedule overrun at 500 ms, and under loss.** Both 540 s runs at 500 ms
+stopped on the video, 157 s and 202 s after subscribing, so at different points in the clip. Their
+minimum video EB margins had fallen to 56.4 and 27.0 ms, against 213.9 ms over the first 60 s. The
+overrun recurs at this delay on this clip, and is not one passage of it; what sets the time is not
+located. At 1 s the same 540 s ran through. Under loss the stop comes within seconds at 10 % and at 1 % with a
+500 ms delay. On the first head both loss arms stopped within 5 s unless lateness was made non-fatal;
+this head runs 1 % at 1 s through with nothing dropped.
+
+**Presentation latency fell, but at 500 ms the join sets it.** It is 1,766–1,791 ms at 1 s and
+1,293 ms at 750 ms, against 2,125 and 2,201 ms on `49efbc9a1`, one join phase each. At 500 ms it
+ranges from 480.1 to 1,089.0 ms over four join phases, against 1,409 ms on `49efbc9a1`. The only
+500 ms runs with every track complete are at 798.5 ms, in the first 540 s run (which stopped at
+157 s), and at 1,089.0 ms; every faster run lost audio. So the sub-second figures are not yet a
+latency the lane delivers with its programme intact.
+
+#### In mocked time, on `2dc542b4a`
+
+The tests branch rebased onto this head. The drift cases now run the source 25 ppm off, inside
+what the clock may follow, instead of 400 ppm, which the head now refuses by design. A new case
+sends one track 700 ms after the other at a 500 ms delay, which is the wire's audio-loss
+condition.
+
+| Test | Result |
+|---|---|
+| A skip at the join, and one while running, keep every track on one clock | pass (both) |
+| A source 25 ppm slow, and one 25 ppm fast, keep the delay over five minutes of media | pass (both) |
+| Two legs render the same packets: clean, at a fractional rate, and on a source 25 ppm off | pass (all three) |
+| The same with a group skipped as slow by both | **pass**; failed on `49efbc9a1` |
+| A mid-group joiner's system clock stays within 30 ppm and 0.075 Hz/s, over 30 s windows | **pass**; failed at +433.5 ppm on `49efbc9a1` |
+| A track sent 700 ms after the other, at a 500 ms delay, joined at a group boundary and mid-group, loses nothing | pass: the harness does not reproduce the wire's loss |
+
+The jitter buffer's own 12 tests pass as well. The likeliest reading of the new case passing is that
+the harness hands a joiner its first frames in an order the wire does not (reasoned, not located);
+it is not evidence against the loss above.
 
 ### The rework, `49efbc9a1`
 
@@ -254,19 +404,21 @@ lays each slot and stamps each PCR on that clock. A receiver locks its decoder's
 so the steering is passed to it. 2.4.2.1 allows 27 MHz ±810 Hz (30 ppm), changing by at most
 0.075 Hz/s, about 2.8 ppb a second. A receiver that joins mid-group anchors its clock on the first
 frame of its first group, already up to a delay old, and the steering then wears that lead away
-at the full 500 ppm. On the wire, the three runs' presentation latency moves +13.5, −15.9 and
-−17.4 ms across the 46 s graded, first window against last: about 290 ppm slow at 1 s, and 340 and
-370 ppm fast at 750 and 500 ms. That is a trend, not a fitted rate, but its size agrees with the
-mocked figure below. `pcrverify` and both T-STD checks pass these bytes, because they hold each PCR
-to its own byte position and the buffers to the stream's own clock; TR 101 290's PCR_FO and PCR_DR
-are the measures that would see it, and were not run.
+at the full 500 ppm. On the wire, the output's PCR clock fits −503.7, +520.9 and +515.1 ppm against
+the receiving tap at 1 s, 750 ms and 500 ms over the 46 s graded, with the source tap at −10.4,
++44.8 and −6.1 ppm: about 500 ppm off the source in every run, as in mocked time below.
+`pcrverify` and both T-STD checks pass these bytes, because they hold each PCR to its own byte
+position and the buffers to the stream's own clock; TR 101 290's PCR_FO and PCR_DR are the measures
+that would see it, and were not run.
 
 Steering does two jobs, and the tolerance leaves room for one (reasoned). Following a source within
 ±30 ppm fits, if the loop is slow and slew-limited. A join's lead does not: 300 ms at 30 ppm takes
 nearly three hours. So the lead has to go before the first output, either by subscribing at the
-live edge, which the maintainer lists as open, or by measuring the least slack over the first
-group or two and anchoring there before releasing anything, as an IRD acquires its STC before it
-locks.
+live edge or by measuring the least slack over the first group or two and anchoring there before
+releasing anything, as an IRD acquires its STC before it locks. `2dc542b4a` took the first
+([above](#the-live-edge-join-and-the-30-ppm-clock-2dc542b4a)). It cut the presentation latency, but
+the anchor then depends on how old the join's first frame is, in both directions; the second option
+is the one that would remove that.
 
 #### In mocked time
 
@@ -598,7 +750,8 @@ hand before the first unit is due.
 
 ## Conclusions
 
-Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `49efbc9a1`.
+Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `49efbc9a1`, and 13–16
+on `2dc542b4a`.
 
 1. **On `4b7158d6c00d`, #4645 did not carry a real broadcast multiplex.** At every delay tried up
    to 3 s, and in each variation tried at one delay (a higher rate, subscribing first, the video
@@ -660,19 +813,48 @@ Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `
 11. **Its output's system clock is out of 13818-1's tolerance for tens of minutes after a
     mid-group join.** The clock steering that keeps the delay is also the PCR's clock, and it runs
     at its 500 ppm limit to remove the join's lead. This is a conformance failure that neither
-    T-STD check nor `pcrverify` detects. Removing the lead before the first output, and keeping
-    the steering inside ±30 ppm and slew-limited, would fit the tolerance (reasoned, not built).
-12. **1+1 identity holds in mocked time except after a skip and in the continuity counter.**
-    Neither is a primary-distribution pair yet: ST 2022-7 needs identical packets.
+    T-STD check nor `pcrverify` detects. Holding the steering inside ±30 ppm, slew-limited, with
+    the lead removed at the join, was the proposed fix; `2dc542b4a` built it (conclusion 13).
+12. **On `49efbc9a1`, 1+1 identity held in mocked time except after a skip and in the continuity
+    counter.** On `2dc542b4a` the skip case passes too, which leaves the counter. Until it is
+    derived from the media, two legs are not an ST 2022-7 pair, which needs identical packets.
+13. **`2dc542b4a` holds the output's system clock inside 2.4.2.1's frequency tolerance.** Over
+    540 s the output follows the source to about 1 ppm, and across hosts it is within 3.4 ppm of
+    the receiving host. Its slew limit is not graded: the instrument resolves tens of ppm per 30 s
+    window, not 2.8 ppb a second.
+14. **At 1 s it carries the broadcast clip conformantly, on loopback, across hosts and under 1 %
+    loss, where it carries every track.** One 1 s run of five lost every AC-3 unit
+    (conclusion 15). On the first head the 1 % arm stopped within 5 s unless lateness was made
+    non-fatal.
+15. **The clock's anchor now depends on the join, and a 30 ppm clock cannot undo it.** Which
+    frame anchors the clock, and how far ahead of its decode time the source sent it, decides
+    whether the slower-sent tracks have their delay. Where they do not, they are dropped whole for
+    the whole run: every MP2, AC-3 and teletext unit across hosts at 500 ms. At 500 ms this was the
+    usual outcome (eight of ten runs) and at 1 s it happened once in five. At one delay the join
+    alone moved the presentation latency over 609 ms, and the faster the join, the more audio it
+    lost. The cause is reasoned from the code and consistent with that, not traced. The remedy is the other half of the proposal in conclusion 11:
+    measure the least slack across the tracks before releasing anything, and anchor there.
+16. **500 ms is not yet a working delay on this clip.** Its presentation latency is under a
+    second on most joins, but those joins lose audio, both long runs stopped on a schedule overrun,
+    at 157 s and 202 s, and under 1 % loss it stops within seconds. At 1 s the same 540 s ran through. A working 500 ms on this
+    clip has not been shown.
 
 ## Limits
 
+- **On `2dc542b4a`:** twelve loopback runs (two of 540 s, three at shifted join phases), two
+  cross-host and four loss arms, one clip, untraced. Four join phases were sampled at 500 ms and
+  one at the other delays, so the audio-loss count per delay is a count of runs, not a frequency.
+  The anchor mechanism is reasoned from the code, and the join-phase runs are consistent with it.
+  The arm that would settle it is a run with the anchoring frame and each track's first slack
+  logged, at joins spread across a GOP. The clock is fitted
+  against each host's own clock, not a reference: across hosts, the figure is the output against
+  the receiving host, which includes that host's own offset. The slew limit is not graded, and
+  TR 101 290 PCR_FO and PCR_DR were not run. Not run on it: a publisher restart, a source more
+  than 30 ppm off, and the generated clip.
 - **On `49efbc9a1`:** three runs, one per delay, 60 s each, one host over loopback, one join each,
   untraced. Not run on it: the loss rig, cross-host, a publisher restart, the generated clip, and
-  anything over a minute on the wire. The clock finding's wire evidence is a latency trend over
-  46 s; the arm that would settle its rate is TR 101 290 PCR_FO and PCR_DR on a capture of tens of
-  minutes, or a fit of PCR against a reference clock at the receiver. The mocked-time tests model
-  one H.264 + AAC broadcast, not this clip.
+  anything over a minute on the wire. Its clock was fitted on 46 s per run. The mocked-time tests
+  model one H.264 + AAC broadcast, not this clip.
 - One host, loopback, one run per cell, one broadcast channel (two captures of the same channel are
   on hand, not two channels). The loss rig and cross-host ran on the per-PID build at 1 s only.
   The loss arms ran once each, untraced, so which join state each landed in is not known. Cross-host
@@ -723,8 +905,19 @@ python3 lab/scripts/ts-tstd.py <out>/moq-c0-egress.ts --skip 5 --window 2
 tsp -I file <out>/moq-c0-egress.ts -P pcrverify --absolute --jitter-max 13 --bitrate <catalog-rate> -O drop
 python3 lab/scripts/ts-decode-latency.py <broadcast>.ts <out>/moq-c0-source.csv <out>/moq-c0-egress.ts \
   <out>/moq-c0-egress.csv --pid 111 --settle 10 --key content
-# The mocked-time tests, on the tests branch (two are #[ignore]d with the reason on 49efbc9a1)
+# The mocked-time tests, on the tests branch (none is #[ignore]d on 2dc542b4a)
 cd <wt> && cargo nextest run -p moq-mux --run-ignored all -E 'test(/export_timing/)'
+
+# 2dc542b4a: the same cells, 540 s as well; then the PCR clock rate and the per-PID completeness
+VPID=111 RELAY_TOML=<wt>/demo/relay/localhost.toml MOQ=<bin>/moq RELAY=<bin>/moq-relay MOQLAT=1s CAP=150 \
+  PACER=lab/scripts/ts-rtp-forward.py bash lab/scripts/t18-arm.sh <broadcast>.ts <out> 540 moq 0
+python3 lab/scripts/ts-decode-latency.py <broadcast>.ts <out>/moq-c0-source.csv <out>/moq-c0-egress.ts \
+  <out>/moq-c0-egress.csv --pid 111 --settle 10 --rate-window 30     # "PCR clock vs tap" lines
+python3 lab/scripts/ts-tstd.py <out>/moq-c0-egress.ts --skip 5 --window 2   # "units" per buffer: run on the source too, compare per PID
+# The loss rig and cross-host as pushed: no MOQ_TS_* variable; TAP=1 stamps the egress for the clock fit
+sudo LOSS_PCT=0 CC=delay LAT=1s KEEP_EGRESS=1 OUT=<out> bash lab/scripts/t8b-loss-point.sh l0 <bin> 120
+bash lab/scripts/t47-xhost.sh origin c1 <bin> <EC2_IP> 120                 # on the origin host
+TAP=1 LAT=500ms bash lab/scripts/t47-xhost.sh sub c1 <bin> <EC2_IP> 120     # on the subscriber host
 
 # Upstream harness, as the maintainer would run it
 cd <wt>/test/ts && TSC_PROFILE=release ./run.sh --source <broadcast>.ts --duration 60
@@ -793,3 +986,9 @@ time and passes the whole file. A different export rate goes in through a wrappe
   buffer. **Rule:** before attributing a transport-buffer overflow to packet adjacency, count the
   PID's packets per scheduling interval on the captured bytes, and compare its PES size with its
   decoder buffer.
+- **Believed:** on `49efbc9a1` the output's clock ran 290–370 ppm off, from the change in
+  presentation latency between the first and last thirds of each run. This was reported upstream.
+  **True:** a fit of the PCR clock against the receiving tap reads −503.7, +520.9 and +515.1 ppm,
+  about 500 ppm off the source in each run, as in mocked time. Comparing the thirds' medians
+  dilutes a steady rate over the span between them. **Rule:** grade a clock's rate by fitting the
+  PCR against the receiver's clock, not from a latency trend.

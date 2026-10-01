@@ -1927,10 +1927,13 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   [#4670](https://github.com/moq-dev/moq/pull/4670), planned in upstream's quest interview format:
   - `quest/m1/ts-passthrough.md` is MSFTS `mpeg2ts` whole-packet carriage, paced on the source PCR at
     a fixed delay.
-  - `quest/m1/release-clock-recovery.md` steers the release stage against a publisher clock off by
-    up to ±30 ppm, within 13818-1's slew limits. That goes ahead of `delay.md`'s "only if measured",
-    on the derived exposure.
   - The PR also re-points `msfts-convergence.md`'s non-goal at passthrough.
+
+  It also proposed `quest/m1/release-clock-recovery.md`: the release stage steered against a
+  publisher clock off by up to ±30 ppm, within 13818-1's slew limits, ahead of `delay.md`'s "only if
+  measured" on the derived exposure. The maintainer took that spec into #4645 to implement directly,
+  with one change: a source beyond tolerance fails the export as well as being counted. At his
+  request the quest was dropped from #4670, which now plans passthrough only.
 
   Its one failing check was `main`'s quest lint, on `admission-bench.md` and `cluster-shims.md`,
   two files the PR does not touch. [#4666](https://github.com/moq-dev/moq/pull/4666) fixed it on
@@ -1945,8 +1948,8 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   audio TB and B overflow, the failure classes T44 measured on a broadcast clip. It reports only, until
   the delay lands.
 - **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is open in draft at
-  head `49efbc9a1`, the maintainer's rework on the findings below; what it changed and how it
-  grades are at the end of this entry. What follows in this bullet describes the first head,
+  head `2dc542b4a`, the maintainer's two rounds of rework on the findings below; what they changed
+  and how they grade are at the end of this entry. What follows in this bullet describes the first head,
   `4b7158d6c00d`. His first review asked for one blocking fix, a stale generation
   muxed after a rewind. We posted design feedback on it: clock drift under first-arrival anchoring
   with strict late drop, the 1+1 anchor, the 500 ms default against broadcast send-ahead, and the
@@ -2127,10 +2130,11 @@ at 1 s, 750 ms and 500 ms, with every PCR within ±500 ns and presentation laten
 reported three further things:
 - **The steered clock takes the output out of 13818-1's tolerance.** The PCR runs on the jitter
   buffer's clock. A mid-group joiner anchors on a stale frame, and the steering wears the lead away
-  at its 500 ppm limit, against 30 ppm and 0.075 Hz/s. That is 497.8 ppm in mocked time, and a
-  290–370 ppm latency trend on the wire. The reply argues that the lead has to be removed before the
-  first output, and that only slow, slew-limited following fits the tolerance; #4670's
-  `release-clock-recovery.md` sets out the steering half against those limits.
+  at its 500 ppm limit, against 30 ppm and 0.075 Hz/s. That is 497.8 ppm in mocked time, and about
+  500 ppm on the wire by a PCR clock fit (the reply gave a 290–370 ppm latency trend, corrected in
+  the next round). The reply argues that the lead has to be removed before the
+  first output, and that only slow, slew-limited following fits the tolerance; the clock-recovery
+  quest proposed in #4670 sets out the steering half against those limits.
 - **The last AC-3 PES of a capture is a partial sync frame**, which the export passes on, and at
   1 s exits on.
 - **The tests, rebased** to `49efbc9a1` on the t0ms fork as branch `tests/4645-on-49efbc9`
@@ -2146,6 +2150,42 @@ reported three further things:
 The reply also answered his two questions. Teletext has a buffer model, EN 300 472's 480 B TB at
 6.75 Mb/s. For primary distribution 1+1 identity is a goal, since the installed base's hitless
 selection is ST 2022-7.
+
+**The second rework** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5940803068),
+head `2dc542b4a`, still a draft). Three commits:
+- **The clock keeps to 2.4.2.1.** It estimates the source's rate as the least-squares slope of the
+  least slack over 10 min, runs at it, and pulls the slack back within 30 ppm and 0.075 Hz/s. A
+  source beyond 30 ppm fails the export.
+- **The export joins at the live edge.** Video and audio subscribe to the newest group only, then
+  widen to the delay. Verbatim tracks keep the delay's reach.
+- **A skip keeps the clock and a declared restart breaks it.** The consumer counts declared restart
+  markers apart from other playhead jumps.
+
+He then took the clock-recovery spec into #4645, our tests into it under our authorship, and the
+re-grade's partial-sync-frame, closed-track and teletext points. He left 1+1 counter identity to an
+m2 follow-up, and put the acquire-before-release anchor under discussion.
+
+**Re-graded, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5941919874)).
+The clock is fixed: the output's PCR clock fits within about 1 ppm of the source's over 540 s on
+loopback, and within 3.4 ppm of the receiving host across hosts. At 1 s the export conforms on
+loopback over 540 s, across hosts, and under 1 % loss, the first run through loss on this clip as
+pushed ([T47](test-47-fixed-delay-export.md#the-live-edge-join-and-the-30-ppm-clock-2dc542b4a)). The
+reply reported three further things:
+- **The join decides whether audio survives.** On some joins a whole audio track misses every
+  deadline for the whole run. Across hosts at 500 ms, every MP2, AC-3 and teletext unit was dropped;
+  shifting the join point on one host at 500 ms moved presentation latency from 480 to 1,089 ms with
+  the audio loss. The reasoned cause is an anchor taken from whichever frame arrives first, and the
+  reply proposes choosing it from the least slack across tracks before the first release.
+- **The buffer-model graders pass these outputs**, because they grade only the units present.
+- **At 500 ms the export exits** on a missed video deadline, 157 s and 202 s into two 540 s runs.
+  Under loss it exits at 10 % at 1 s and at 1 % at 500 ms. The reply asks whether the exit is
+  intended, since a flagged drop would suit a primary-distribution receiver better.
+
+The tests were updated as branch `tests/4645-on-2dc542b`
+([`0920d80`](https://github.com/t0ms/moq-dev/commit/0920d8079990667e31245ceff2d2d7e3666db68a)). All ten
+pass on the head, including the two ignored on `49efbc9a1`. The drift cases now run at ±25 ppm,
+since the head refuses ±400 ppm by design. A new case sends one track 700 ms after the other at a
+500 ms delay and passes, so it does not reproduce the wire's join loss.
 
 ### The liveness exit — filed as a question, deliberately
 

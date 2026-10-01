@@ -1859,8 +1859,9 @@ The output is still not conformant, for a reason neither T-STD check nor `pcrver
 runs on the release stage's clock, which steers by up to 500 ppm to hold the delay. A receiver that
 joins mid-group anchors on a stale frame, and the steering wears that lead away at the full rate,
 against 13818-1's 30 ppm and 0.075 Hz/s. *Measured* in mocked time on the export's own crate: 497.8 ppm
-over 12 minutes, against 1.4 ppm for a receiver there from the start. The wire runs' latency trends
-are consistent with it, at 290–370 ppm over 46 s; TR 101 290's PCR_FO and PCR_DR were not run. In the
+over 12 minutes, against 1.4 ppm for a receiver there from the start. *Measured* on the wire, a fit of
+each run's output PCR clock against the receiving tap reads about 500 ppm off the source's, over 46 s
+(loopback); TR 101 290's PCR_FO and PCR_DR were not run. In the
 same mocked time, two such exports render the same packets except the continuity counter, which
 each numbers from what it has sent, and they diverge after a skip, so they are not yet a 1+1 pair
 (§3.4). Removing the lead before the first output and steering only within ±30 ppm, slew-limited,

@@ -220,6 +220,36 @@ def smooth(rows, width):
     return out
 
 
+def slope(points):
+    """Least-squares slope of (x, y) points, or None if they span no x."""
+    n = len(points)
+    if n < 3:
+        return None
+    mx = sum(x for x, _ in points) / n
+    my = sum(y for _, y in points) / n
+    var = sum((x - mx) ** 2 for x, _ in points)
+    return sum((x - mx) * (y - my) for x, y in points) / var if var > 0 else None
+
+
+def clock_rate(rows, start, window):
+    """A tap's PCR clock against its own wall clock, in ppm: overall, and per `window` seconds.
+
+    The STC is wall time less the offset, so the clock runs (1 - d offset / d wall) times the
+    tap's; the 2.4.2.1 frequency tolerance (30 ppm) applies to that, and its slew limit
+    (0.075 Hz/s, 2.8 ppb/s) to how fast it changes from window to window."""
+    pts = [(t, o) for t, _, o in rows if t >= start]
+    whole = slope(pts)
+    windows = []
+    if pts:
+        lo = pts[0][0]
+        while lo + window <= pts[-1][0]:
+            s = slope([(t, o) for t, o in pts if lo <= t < lo + window])
+            if s is not None:
+                windows.append(-s * 1e6)
+            lo += window
+    return (None if whole is None else -whole * 1e6), windows
+
+
 def summary(xs):
     xs = sorted(xs)
     return {"min": xs[0], "median": stats.median(xs), "p95": xs[int(0.95 * (len(xs) - 1))],
@@ -297,6 +327,10 @@ def selftest():
         if nxt is not None:
             greedy[pts], last = src[nxt][0], nxt
     check("first-copy matching would mis-pair the same input", greedy != want)
+    fast = [(t * 0.04, None, 5.0 - t * 0.04 * 400e-6) for t in range(3000)]
+    whole, windows = clock_rate(fast, 0.0, 30.0)
+    check("a PCR clock 400 ppm fast of the tap reads +400 ppm, overall and per window",
+          abs(whole - 400) < 1e-6 and len(windows) == 3 and all(abs(w - 400) < 1e-6 for w in windows))
     return 0 if ok else 1
 
 
@@ -313,6 +347,8 @@ def main():
     ap.add_argument("--settle", type=float, default=10.0, help="seconds of egress to skip")
     ap.add_argument("--smooth", type=float, default=5.0,
                     help="seconds over which each end's clock offset is medianed")
+    ap.add_argument("--rate-window", type=float, default=30.0,
+                    help="seconds per window of the PCR clock-rate fit")
     ap.add_argument("--label", default="arm")
     ap.add_argument("--kv", metavar="PATH")
     a = ap.parse_args()
@@ -357,6 +393,16 @@ def main():
     line("egress tap jitter ms", je)
     print(f"   presentation trend: first third {head:.1f} ms -> last third {tail:.1f} ms "
           f"({tail - head:+.1f})")
+    start = kept[0][0] / 1e9
+    rates = {}
+    for name, times, ix in (("src", src_t, src_ix), ("eg", eg_t, eg_ix)):
+        whole, windows = clock_rate(clock_offsets(times, ix), start, a.rate_window)
+        slew = max((abs(b - c) * 27.0 / a.rate_window for b, c in zip(windows, windows[1:])), default=None)
+        rates[name] = (whole, windows, slew)
+        if whole is not None:
+            print(f"   {name} PCR clock vs tap      {whole:+8.2f} ppm overall; {len(windows)} windows of "
+                  f"{a.rate_window:g} s, worst {max(windows, key=abs, default=float('nan')):+.2f} ppm"
+                  + (f", worst change {slew:.4f} Hz/s" if slew is not None else ""))
     if a.kv:
         with open(a.kv, "w") as fh:
             for k, s in (("pres", dd), ("dec", dx), ("dl", dl), ("preload_src", ps),
@@ -365,6 +411,13 @@ def main():
                     fh.write(f"{k}_{m}={v:.1f}\n")
             fh.write(f"pres_trend_head={head:.1f}\npres_trend_tail={tail:.1f}\npictures={len(kept)}\n"
                      f"window={span:.1f}\n{kv_key}")
+            for name, (whole, windows, slew) in rates.items():
+                if whole is not None:
+                    fh.write(f"rate_{name}_ppm={whole:.2f}\n")
+                if windows:
+                    fh.write(f"rate_{name}_worst_ppm={max(windows, key=abs):.2f}\n")
+                if slew is not None:
+                    fh.write(f"rate_{name}_slew_hz_s={slew:.4f}\n")
     return 0
 
 
