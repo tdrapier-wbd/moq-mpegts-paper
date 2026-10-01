@@ -62,7 +62,7 @@ the segmented lane's retrying puller, are listed in §1.1 with what each cannot 
 | `t13-cadence.py` (64 kB pipe reads, or per-datagram capture) | Burst size, gap distribution, coefficient of variation | Absolute rate on loopback — loopback inflates burst *rate*; burst *size* and inter-burst silence are structural |
 | `t12-merge-oracle.py` + `t12-maskcmp.py` + `t12-seqskew.py` | ST 2022-7 merge behaviour, byte identity, skew | A hardware IRD's merge engine. It is a reference implementation of the selection rules, self-tested against fourteen adversarial conditions (`t12-oracle-selftest.py`; the verdicts are in §4), and not a conformance claim. It degrades to noise on a pair that is not byte-identical, which is why the mask and skew tools exist |
 | `compliance.py` / `t13-grade.py` | Structural and shape checks, packet conservation | Decoder acceptance |
-| `ts-tstd.py` | The 13818-1 T-STD, per PID, calibrated to each stream type and to the video's own HRD. Validated on a source multiplex, where it finds the legal PCR offset at exactly zero. It also tests whether any constant PCR offset, per capture or per 2 s window, would repair the decoder buffers | A real decoder's tolerance. It grades the minimum buffers the standard guarantees, and receivers commonly provision more. SCTE-35 and SI have no normative T-STD and are graded against an assumed systems buffer |
+| `ts-tstd.py` | The 13818-1 T-STD, per PID, calibrated to each stream type and to the video's own HRD. Validated on a source multiplex, which passes on its own PCR: its joint legal offset starts at exactly +0 ms. Cross-validated against upstream's independently written check (*measured*, [T46](../lab/test-46-tstd-check-cross-validation.md); offline, file domain, 35 files: one clip, its derived captures and upstream's own controls; upstream's check `[unmerged]`, on its questline branch). With six defects in this grader fixed, the two agree on 24, and each of the other 11 traces to upstream's check: three defects against H.222.0, two of which fail clean streams, and one convention about a capture's last access unit. The fixes moved no published verdict, only counts and margins. It also tests whether any constant PCR offset, per capture or per 2 s window, would repair the decoder buffers | A real decoder's tolerance. It grades the minimum buffers the standard guarantees, and receivers commonly provision more. SCTE-35 and SI have no normative T-STD and are graded against an assumed systems buffer |
 | `t18-latency.py` | Delivery latency on the PES presentation timestamp, tapped at source and at groomed egress, plus a four-timestamp clock probe for the two-host case | Encoder and decoder delay, so it is not camera-to-display. The PTS is the one identifier that survives a media-aware remux *and* every byte-transparent arm, which is what makes one instrument grade all four planes |
 | Interop client (`interop/`) | Media-level carriage through a third-party relay | Anything about pacing or conformance — deliberately out of scope for a relay test |
 | `t6-hls-pull.py` | Serving-node and source-failover behaviour on the segmented lane, from a client that retries instead of exiting | Not a player: no ABR, no master playlist, no LL-HLS, and it ignores `EXT-X-ENDLIST`. It bounds what the protocol permits, which is the only way to separate that from what TSDuck and FFmpeg happen to implement — both abandon the stream on a failed playlist reload |
@@ -1865,7 +1865,13 @@ PES is larger than its decoder buffer, so no schedule of whole PES can conform. 
 multiplex at 1 s and at 750 ms with every buffer passing both T-STD checks, on the join those runs
 made (below). PCR accuracy still
 fails, from the unchanged stamping. At 500 ms it stops; an offline replay of the same rule puts
-that on the DTS the export re-authors, which it misses where the source's DTS is met.
+that on the DTS the export re-authors, which it misses where the source's DTS is met. On those two
+conformant runs a decoder would show each picture a median 4,290.9 ms after the source at 1 s and
+2,771.0 ms at 750 ms. *Measured* (same build, runs and captures; presentation latency, one run
+each, the PTS and content keys agreeing to 0.3 ms at 1 s.) The 1.5 s between them is six times the
+250 ms between the delays, so they say what one run cost, not what a delay costs. Against the
+laboratory re-multiplexer's 2,196.7 ms on the same source clip the builds and stages differ, and
+single runs with a spread not yet located do not rank them.
 
 At the join, that build's release stage can put the video on a clock of its own, and the offset
 decides whether the output conforms. *Measured*

@@ -1931,6 +1931,10 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
     up to ±30 ppm, within 13818-1's slew limits. That goes ahead of `delay.md`'s "only if measured",
     on the derived exposure.
   - The PR also re-points `msfts-convergence.md`'s non-goal at passthrough.
+
+  Its one failing check is `main`'s quest lint, on `admission-bench.md` and `cluster-shims.md`,
+  two files the PR does not touch. [#4666](https://github.com/moq-dev/moq/pull/4666) has since
+  fixed it on `main`.
 - **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643), into the questline's
   branch `quest/m1/tstd/README`, which #4645 also targets, not into `main`. There `test/ts` still
   carries the approximate TB-only check with fixed leak rates. It is hand-rolled from
@@ -1940,8 +1944,9 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
   sizes. On the harness's generated clip it fails current `moq export ts` with video EB underflow and
   audio TB and B overflow, the failure classes T44 measured on a broadcast clip. It reports only, until
   the delay lands.
-- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is open and out of
-  draft at head `4b7158d6c00d`. The maintainer's review asks for one blocking fix, a stale generation
+- **The implementation**, [#4645](https://github.com/moq-dev/moq/pull/4645), is open at head
+  `4b7158d6c00d`, back in draft while the maintainer reworks it on the findings below (his plan is
+  at the end of this entry). His first review asked for one blocking fix, a stale generation
   muxed after a rewind. We posted design feedback on it: clock drift under first-arrival anchoring
   with strict late drop, the 1+1 anchor, the 500 ms default against broadcast send-ahead, and the
   start-up settle. Measurements were to follow. It deletes
@@ -1968,8 +1973,10 @@ check: three defects against H.222.0 (10/2014) and one convention.
 - **A capture's truncated last access unit is graded as an underflow**, a convention rather than a
   defect, which decides an audio condition on five files.
 
-**Found, not reported.** These are measured against the questline branch's head `8df1e438`. Each
-has a clause, a file that shows it and the first violating unit, so it is reportable as it stands.
+**Found, drafted, not reported.** These are measured against the questline branch's head
+`8df1e438`. Each has a clause, a file that shows it and the first violating unit, so it is
+reportable as it stands. The report would go on
+[#4640](https://github.com/moq-dev/moq/pull/4640), the open questline PR that carries the check.
 The first two fail clean streams, which matters once the check gates CI; the third under-reports
 STD delay.
 
@@ -2050,6 +2057,40 @@ patch: the distinction belongs in the consumer or in the discontinuity it report
 offered as an env-gated scratch branch on the t0ms fork
 ([`6f59c78`](https://github.com/t0ms/moq-dev/commit/6f59c785c84fded3328e9ef773f59453129fdf77)),
 marked not for merge.
+
+**The maintainer's plan** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5936022692)).
+He took the findings as the rework's scope:
+- fix the join-time generation split;
+- admit each PID earliest deadline first against buffers derived from the stream, with AC-3
+  deadlines per frame;
+- carry the importer's DTS rather than authoring one;
+- stamp PCR from byte position;
+- track drift, and derive the 1+1 anchor and PCR from the stream;
+- add the generated `hrd9m.ts` as a CI fixture and fix the 6.83 s start-up overshoot.
+
+`--delay` stays 500 ms by default. He asked for the per-PID patch as a branch, which the one-clock
+comment had already offered, and for mocked-time tests against `ts::Export`.
+
+**Built, and reported** ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5938316576)).
+Eight such tests, one new module on `4b7158d6c`, are on the t0ms fork as branch
+`tests/4645-export-timing`
+([`d763fd6`](https://github.com/t0ms/moq-dev/commit/d763fd6b043a9f67157b91c9a28313ab0004f8cb)). They run a live H.264 + AAC broadcast on tokio's paused clock,
+with receivers that read on their own cadences. They cover a skip at the join and mid-stream, a
+source clock at ±0.5 %, and 1+1 identity: clean, at a fractional packet rate, across a skip, and on
+a drifting source. Seven fail on the PR head and are `#[ignore]`d with the reason, so they can be
+switched on as the fixes land. On the head, the clock cases reproduce the field's split from a
+skip alone (video released 296 ms ahead of audio, or 264 ms behind). They need the tracks sent out
+of step, as a TS source sends them; sent together, the anchor clamp hides the split. On the
+one-clock scratch branch the clock cases pass, and the skip pair still fails with the audio late,
+where the joiner rewinds.
+
+Writing them found three things the earlier reports did not:
+- **The fractional packet per slot is carried from each receiver's own start.** At any rate that is
+  not a whole number of packets per 25 ms, a 1+1 pair pads different slots (at 2 Mb/s one slot
+  rendered 6,204 B on one leg and 6,392 B on the other).
+- **A skip rewinds the slot grid** by 475–800 ms, at a point that differs per receiver.
+- **The skip path is not deterministic on the head.** Identical paused-clock runs give the joiner
+  187 or 200 slots after the skip. Its source was not located.
 
 ### The liveness exit — filed as a question, deliberately
 
