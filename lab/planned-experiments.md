@@ -201,7 +201,8 @@ deleted the quinn backend, so every future build is noq — and
 precisely what an outage ladder creates. The cheapest useful form is the T8b congestion rig on both
 binaries at one impairment point.
 
-**Neither half is a register item now, and neither cleared BBRv3.** On capacity, T31's three
+**Both halves have since been measured, so neither is a register item, and neither clears noq's
+BBRv3.** On capacity, T31's three
 backend arms were selected by a grader since found invalid and cannot answer the backend comparison,
 and with both stacks of one commit pinned to CUBIC the 0.9× rung sheds differently by stack, so the
 stack is a ladder variable at that rung ([T31](test-31-congestion-capacity-ladders.md) § *The chronic
