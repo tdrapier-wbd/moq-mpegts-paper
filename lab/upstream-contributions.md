@@ -2214,6 +2214,48 @@ pass on the head, including the two ignored on `49efbc9a1`. The drift cases now 
 since the head refuses ±400 ppm by design. A new case sends one track 700 ms after the other at a
 500 ms delay and passes, so it does not reproduce the wire's join loss.
 
+**The third rework** ([#4645](https://github.com/moq-dev/moq/pull/4645), head `559a35244`, still a
+draft), answering that re-grade:
+- **Acquire before release.** Nothing is released until a track starts its next group, or until a
+  held frame falls due. The clock then anchors on the freshest frame held.
+- **Clock recovery as we specified it.** A floor every 2 s, the upper envelope over 10 min, ±30 ppm
+  and 0.075 Hz/s. The drift and out-of-tolerance counts are now in `ts::export::Stats`.
+- **The re-grade's fixes.** Cut AC-3 sync frames are dropped, a missed deadline after every source
+  has ended no longer fails, and `compliance.py` models teletext's buffer.
+
+He planned the remaining latency, two delays, separately in
+[#4681](https://github.com/moq-dev/moq/pull/4681): one budget, with send-ahead capped at the decoder
+buffer's reach. The tests on the head come from our earlier commit, not `0920d80`, so the late-track
+case was not among them.
+
+**Re-graded, and reported, with a test and a scratch fix**
+([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5950012848)). The clock holds and the
+end of stream is fixed. On most joins, though, every audio and teletext frame is dropped as late: at
+1 s and 750 ms on every loopback run, and at 500 ms across hosts
+([T47](test-47-fixed-delay-export.md#acquiring-before-release-and-the-anchor-on-the-most-slack-559a35244)).
+The reply located the cause in the code. The acquisition's anchor and the steering floor both take
+the most slack across all tracks, which on a TS source is the video, sent up to 0.97 s ahead. It also
+reported:
+- **At 500 ms the export stops within 30 s.** At 10 % loss it now runs through, but carries almost
+  no media.
+- **`moq export ts` prints none of `ts::export::Stats`.** The reply asks for it at exit, as
+  `import ts` does.
+
+Two commits on the t0ms fork as branch `tests/4645-on-559a352`:
+- **The late-track case**, joined at the live edge
+  ([`d1b8a08`](https://github.com/t0ms/moq-dev/commit/d1b8a089551c454aa05125772b18cecb4d655eb6)). It fails on the head, dropping
+  543–556 frames with the audio sent later and 285–293 with the video sent later.
+- **A scratch fix** ([`5e2425f`](https://github.com/t0ms/moq-dev/commit/5e2425fd3f4f034be498afc5f49fad45e28ba664)).
+  It anchors on each track's freshest frame and takes the least slack of those, steers on the least
+  of the per-track floors, and waits up to two delays to hear from every track. With it, the case and
+  every other `moq-mux` test pass. On the wire, every track is carried conformantly at 500 ms, 750 ms
+  and 1 s, on loopback and across hosts. The reply gives its cost: presentation latency of twice the
+  delay plus about 275 ms, which makes #4681's send-ahead cap matter more.
+
+**Open:** whether upstream takes the least-slack anchor, and how its two reasoned costs are handled:
+a sparse PID holding the join for two delays, and one queued track pulling the clock. Also open are
+the export's behaviour under heavy loss and the latency #4681 recovers.
+
 ### The liveness exit — filed as a question, deliberately
 
 [**#3926**](https://github.com/moq-dev/moq/issues/3926). `export ts` does **not** mint a dead carrier

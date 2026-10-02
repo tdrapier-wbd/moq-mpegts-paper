@@ -1,14 +1,32 @@
 # Test 47 — The upstream fixed-delay TS export on a broadcast clip
 
-**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `2dc542b4a`
-(unmerged, draft), holds the output's system clock inside 13818-1's 30 ppm and carries the
-broadcast clip conformantly at 1 s: over 540 s on loopback, across hosts, and under 1 % loss.
-At 500 ms the join sets both its presentation latency, from 480 to 1,089 ms, and how much audio
-it drops for the whole run: the lower the latency, the more audio lost, up to all of it. Every
-grader passes those outputs. At 500 ms it also stops on a schedule overrun within minutes. The
-audio loss happened at 1 s too, in one of five 1 s runs. The likely cause is the clock's anchor on
-the join's first frame, which a 30 ppm clock cannot correct afterwards; that is reasoned from the
-code and consistent with the join-phase runs, not traced.**
+**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `559a35244`
+(unmerged, draft), keeps the clock inside 13818-1's 30 ppm and runs to the end of the source, but on
+most joins it drops every audio and teletext frame as late. On loopback that was every run at 750 ms
+and 1 s; at 500 ms it also stops within 30 s. Its acquisition anchors the clock on the frame with the
+most slack across all tracks, and its steering floor takes the most slack across all tracks. On this
+clip that is the video, sent up to 0.97 s ahead, which leaves the audio the delay less that. This is
+located in the code and reproduced in mocked time. A scratch build that anchors and steers on the
+track with the least slack, and waits for every track before anchoring, carries every track
+conformantly at 500 ms, 750 ms and 1 s, on loopback and across hosts. Its presentation latency is
+twice the delay plus about 275 ms.**
+
+- **The clock holds.** Over 540 s at 1 s on loopback the output's PCR fits −9.8 ppm against the
+  host, with the source at −9.4 ppm.
+- **The audio goes on most joins.** On loopback at 1 s (two 60 s runs and one 540 s run) and at
+  750 ms, the output carried no MP2, AC-3 or teletext. Across hosts at 500 ms it carried a fifth of
+  the MP2 and no AC-3. The runs that kept every track were across hosts at 1 s and the loss rig at
+  0 % and 1 %, all at 1 s.
+- **At 500 ms it stops.** Three loopback runs and the 1 % loss arm stopped within 30 s on a missed
+  decode deadline on the video. Two of three shifted joins did not stop, but lost the AC-3 or nearly
+  all the audio.
+- **Under 10 % loss it no longer stops, but carries almost nothing.** It ran the full 120 s with
+  32 video units, no audio and 7,311 frames dropped as late.
+- **The fix costs latency.** With the scratch build, presentation is twice the delay plus about
+  275 ms: 1,276 ms at 500 ms, 1,776 ms at 750 ms and 2,274 ms at 1 s. The head's is twice the delay
+  less about 1,030 ms, but that figure belongs to the video alone, because the head drops the audio.
+
+**The head before it, `2dc542b4a`:**
 
 - **The clock is fixed.** The output's PCR clock fits within about 8 ppm of the receiving host on
   every long run, and within about 1 ppm of the source over 540 s at 1 s. On `49efbc9a1` it ran
@@ -239,6 +257,97 @@ fixture is video only. Its source passes `compliance.py`: EB peak 76 %, worst de
 
 ## Results
 
+### Acquiring before release, and the anchor on the most slack, `559a35244`
+
+Three commits on top of `2dc542b4a`. The jitter buffer releases nothing until a track starts its
+next group, or until a held frame falls due, and then anchors the clock on the freshest frame
+held. Clock recovery takes a floor every 2 s of decode time, the most slack a frame arrived with,
+and fits the upper envelope of those floors over 10 minutes, within ±30 ppm and 0.075 Hz/s.
+Cut AC-3 sync frames are dropped. A missed deadline after every source has ended sends the tail
+late instead of failing. `compliance.py`, run from the head's own tree, models teletext's
+EN 300 472 buffer. The rigs are those of [`2dc542b4a`](#the-live-edge-join-and-the-30-ppm-clock-2dc542b4a),
+and each run joins a running source, about 4 s in. Units are counted per PID over the graded
+window, 5 s onward. A complete MP2 track is about 2,140 units in a 60 s cell and about 4,750 in a
+120 s one; a complete AC-3 track is about 1,600 and 3,560.
+
+**Loopback.**
+
+| Cell | Runs | MP2 units | AC-3 units | Late drops | Presentation, median | Output |
+|---|---|---|---|---|---|---|
+| 1 s, 540 s | the whole run | 0 | 0 | 37,550: every MP2, AC-3 and teletext frame | 969.9 ms | `ts-tstd.py` 266 of 266, `compliance.py` PASS, 0 of 21,498 PCRs outside ±500 ns; PCR clock −9.8 ppm against the host, source −9.4 ppm |
+| 1 s, 60 s, and source 0.3 s later | the whole run, both | 0 | 0 | 3,884 each, the same | 969.9 / 971.7 ms | video only, conformant |
+| 750 ms, 60 s | the whole run | 0 | 0 | 3,884, the same | 472.6 ms | video only, conformant |
+| 500 ms, 60 s, repeated, and 540 s | exits at about 28 s: "missed a decode deadline on PID 111" | 0 | 0 | about 2,035 each | about −27 ms | — |
+| 500 ms, source 0.3 s later | the whole run | 2,143, complete | 0 | 196 AC-3 PES | 749.9 ms | — |
+| 500 ms, source 0.6 s later | exits within seconds, the same | 0 | 0 | 311 | — | — |
+| 500 ms, source 0.9 s later | the whole run | 3 | 0 | 3,957 | 514.3 ms | — |
+
+The 1 s and 750 ms outputs pass both T-STD checks, `compliance.py` and `pcrverify`, because each
+grades the units present: they are video, SCTE-35 and SI.
+
+**Across hosts**, as for `2dc542b4a`, 120 s.
+
+| `--delay` | MP2 units | AC-3 units | Late drops | `compliance.py` | PCRs outside ±500 ns |
+|---|---|---|---|---|---|
+| 1 s | 4,739, complete | 3,556, complete | 0 | PASS | 0 of 4,785 |
+| 500 ms | 1,012 | 0 | 4,372 | not graded | 0 of 4,794 |
+
+**Under loss**, the [T8b](test-8b-congestion-control.md) namespace rig, 25 ms each way, BBRv3, 120 s.
+
+| Arm | Runs | MP2 units | AC-3 units | Late drops | `compliance.py` |
+|---|---|---|---|---|---|
+| 0 %, 1 s | the whole run | 4,771, complete | 3,579, complete | 0 | PASS |
+| 1 %, 1 s | the whole run | 4,764 | 3,574 | 19 | PASS |
+| 10 %, 1 s | the whole run | 0 | 0 | 7,311; 32 video units carried in all | — |
+| 1 %, 500 ms | exits at 5 s: "missed a decode deadline on PID 111" | 0 | 0 | 64 | — |
+
+At 10 % the export now runs to the end of the window, where `2dc542b4a` stopped at 10 s, but its
+output is PCR and tables with almost no media. Four of its 4,719 PCRs carry jitter of up to 325 ms.
+
+**Why the audio goes.** Both selections that set the clock take the most slack across all tracks.
+The acquisition anchors on the frame read least behind its decode time over every frame held, and
+each steering step's floor is the most slack any frame in the step arrived with. CNN's mux sends
+video up to 0.97 s ahead of its decode time and audio about just in time, so both choose the
+video. The audio is then left the delay less 0.97 s, which at 1 s or below is no time at all, and
+the steering holds it there. A third condition makes the join matter. The acquisition ends when any
+track starts its next group, which can be before the track sent latest has delivered anything; the
+anchor then cannot see it. The one 1 s cross-host run that kept its audio has video buffer margins
+equal, to 0.1 ms, to the scratch build's below, so that join anchored on the audio. That is
+inferred from the margins, not traced. The presentation latency fits the same reading: twice the
+delay less about 1,030 ms at every delay, which is the video's send-ahead taken out of the delay.
+
+**In mocked time.** The tests, carried onto this head, pass, with the 1+1 identity case still
+ignored for the ST 2022-7 follow-up. A case joined at the live edge, with one track sent 700 ms
+after the other at a 500 ms delay, at a group boundary and mid-group, fails. With the audio sent
+later it drops 556 and 543 frames, and with the video sent later, 285 and 293. The same case passed
+on `2dc542b4a`, for a reason not located. The head's tests were taken from an earlier commit that
+does not carry it.
+
+**A scratch build that anchors and steers on the least slack.** Three changes to the jitter buffer.
+The acquisition anchors on each track's freshest frame, and of those, the one with the least
+slack. Each steering step's floor is the least of the per-track floors. The acquisition waits until
+every track in the catalog has delivered a frame, for at most two delays. The mocked case passes,
+with every other `moq-mux` test. The relay and importer are the head's; only the export differs.
+
+| Run | `--delay` | MP2 units | AC-3 units | Late drops | `ts-tstd.py` | `compliance.py` | Presentation, median |
+|---|---|---|---|---|---|---|---|
+| Loopback, 60 s | 500 ms | 2,131 | 1,597 | 0 | 26 of 26 | PASS | 1,276.6 ms |
+| Loopback, source 0.3 s later | 500 ms | 2,181 | 1,634 | 0 | 26 of 26 | PASS | 1,272.9 ms |
+| Loopback, 60 s | 750 ms | 2,142 | 1,605 | 0 | 26 of 26 | PASS | 1,775.8 ms |
+| Loopback, 60 s | 1 s | 2,152 | 1,612 | 0 | 26 of 26 | PASS | 2,274.3 ms |
+| Loopback, source 0.3 s later | 1 s | 2,151 | 1,612 | 0 | 26 of 26 | PASS | 2,272.5 ms |
+| Across hosts, 120 s | 500 ms | 4,751 | 3,564 | 0 | 57 of 57 | PASS | — |
+| Across hosts, 120 s | 1 s | 4,737 | 3,554 | 0 | 56 of 56 | PASS | — |
+
+Every PCR is within ±500 ns in every run. The 500 ms runs no longer stop. Presentation latency is
+twice the delay plus about 275 ms at each delay, with a spread of under 10 ms per run. With the
+anchor on the audio, the video's 0.97 s send-ahead is no longer taken out of the delay, so it
+becomes latency. [#4681](https://github.com/moq-dev/moq/pull/4681)'s planned cap on send-ahead is
+what would bring it down (reasoned). Two costs of the change are reasoned, not measured. A sparse
+PID that sends nothing at the join, such as SCTE-35, holds the acquisition the full two delays. A
+track that queues for a whole steering step pulls the clock with it. Neither the loss rig nor a
+540 s run has been repeated on this build.
+
 ### The live-edge join and the 30 ppm clock, `2dc542b4a`
 
 Three commits on top of `49efbc9a1`. The jitter buffer's clock follows the source no more than
@@ -362,9 +471,10 @@ condition.
 | A mid-group joiner's system clock stays within 30 ppm and 0.075 Hz/s, over 30 s windows | **pass**; failed at +433.5 ppm on `49efbc9a1` |
 | A track sent 700 ms after the other, at a 500 ms delay, joined at a group boundary and mid-group, loses nothing | pass: the harness does not reproduce the wire's loss |
 
-The jitter buffer's own 12 tests pass as well. The likeliest reading of the new case passing is that
-the harness hands a joiner its first frames in an order the wire does not (reasoned, not located);
-it is not evidence against the loss above.
+The jitter buffer's own 12 tests pass as well. The same late-track case fails on `559a35244`
+([above](#acquiring-before-release-and-the-anchor-on-the-most-slack-559a35244)), so the harness can
+reproduce a join that starves the later track; why it passes on this head is not located. It is not
+evidence against the loss above.
 
 ### The rework, `49efbc9a1`
 
@@ -750,8 +860,8 @@ hand before the first unit is due.
 
 ## Conclusions
 
-Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `49efbc9a1`, and 13–16
-on `2dc542b4a`.
+Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `49efbc9a1`, 13–16
+on `2dc542b4a`, and 17–19 on `559a35244` and its scratch build.
 
 1. **On `4b7158d6c00d`, #4645 did not carry a real broadcast multiplex.** At every delay tried up
    to 3 s, and in each variation tried at one delay (a higher rate, subscribing first, the video
@@ -838,8 +948,33 @@ on `2dc542b4a`.
     second on most joins, but those joins lose audio, both long runs stopped on a schedule overrun,
     at 157 s and 202 s, and under 1 % loss it stops within seconds. At 1 s the same 540 s ran through. A working 500 ms on this
     clip has not been shown.
+17. **`559a35244` acquires before releasing, as conclusion 15 proposed, but anchors on the most
+    slack, not the least.** Its acquisition and its steering floor both choose across all tracks the
+    frame that arrived with the most slack. On a TS source that is the video. The audio is then left
+    the delay less the video's send-ahead, and at 1 s or below it loses every frame on most joins.
+    That is located in the code and reproduced in mocked time, and it is a regression on
+    `2dc542b4a` at 1 s. The clock stays inside 2.4.2.1's tolerance, as on `2dc542b4a`.
+18. **Anchoring and steering on the track with the least slack, after hearing from every track,
+    carries the clip conformantly at 500 ms, 750 ms and 1 s, on loopback and across hosts.** That is
+    a scratch build, single runs of 60 s and 120 s, on one join phase each plus one shifted phase at
+    500 ms and 1 s. It is the first build on which 500 ms carries every track and does not stop on
+    this clip.
+19. **Carried whole, the clip's presentation latency is twice the delay plus about 275 ms.** The
+    video's send-ahead now shows up as latency rather than being taken out of the audio's delay. At
+    1 s that is about 2.27 s, beside the re-multiplexer's 2,196.7 ms on this clip
+    ([T45](test-45-live-tstd-remux.md)), so no latency advantage is shown here for the in-export
+    schedule. Different builds and single runs do not rank them. #4681's send-ahead cap, which
+    would also redefine what the delay covers, is the change that would move it (reasoned).
 
 ## Limits
+
+- **On `559a35244` and its scratch build:** nine loopback cells on the head and five on the scratch
+  build, 60 s except one 540 s cell on the head; two cross-host runs on each; four loss arms on the
+  head only. One clip, untraced. Which frame anchored each join is inferred from the drops and the
+  margins, not logged. The arm that would settle it is a run with the anchoring track and each
+  track's first slack logged, at joins spread across a GOP. Not run on the scratch build: the loss
+  rig, a run over 120 s, a publisher restart, a sparse track's effect on the hold, and the
+  generated clip.
 
 - **On `2dc542b4a`:** twelve loopback runs (two of 540 s, three at shifted join phases), two
   cross-host and four loss arms, one clip, untraced. Four join phases were sampled at 500 ms and
@@ -918,6 +1053,16 @@ python3 lab/scripts/ts-tstd.py <out>/moq-c0-egress.ts --skip 5 --window 2   # "u
 sudo LOSS_PCT=0 CC=delay LAT=1s KEEP_EGRESS=1 OUT=<out> bash lab/scripts/t8b-loss-point.sh l0 <bin> 120
 bash lab/scripts/t47-xhost.sh origin c1 <bin> <EC2_IP> 120                 # on the origin host
 TAP=1 LAT=500ms bash lab/scripts/t47-xhost.sh sub c1 <bin> <EC2_IP> 120     # on the subscriber host
+
+# 559a35244: the same cells; PUBLISH_DELAY starts the source later to shift the join
+PUBLISH_DELAY=0.3 VPID=111 RELAY_TOML=<wt>/demo/relay/localhost.toml MOQ=<bin>/moq RELAY=<bin>/moq-relay \
+  MOQLAT=500ms CAP=150 PACER=lab/scripts/ts-rtp-forward.py bash lab/scripts/t18-arm.sh <broadcast>.ts <out> 60 moq 0
+rg "missed its deadline" <out>/moq-c0-receive.log | rg -o "track=[^ ]+" | sort | uniq -c   # drops per track
+# compliance.py from the head's tree; run.sh resolves a relative path against test/ts, so pass an absolute one
+(cd <wt>/test/ts && ./run.sh --analyze-only "$(cd <out> && pwd)/egress-skip5.ts")
+# The scratch build: the tests branch on the t0ms fork, its last commit the fix (see upstream-contributions)
+git -C <moq-dev> fetch https://github.com/t0ms/moq-dev tests/4645-on-559a352
+cd <wt> && cargo test -p moq-mux --lib -- a_track_sent_later_than_the_delay_loses_nothing   # fails on the head
 
 # Upstream harness, as the maintainer would run it
 cd <wt>/test/ts && TSC_PROFILE=release ./run.sh --source <broadcast>.ts --duration 60
