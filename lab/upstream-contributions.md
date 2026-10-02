@@ -1631,7 +1631,10 @@ upstream issue describes publisher RSS growth over long runs** — #2745 and #31
 [**#3493**](https://github.com/moq-dev/moq/issues/3493) — **closed** via [#3793](https://github.com/moq-dev/moq/pull/3793)
 (`5d0991b9`). Re-soaks **`3493-check-2h`** (continuous) and **`3493-loop-2h`** (loop) both **invalidated**
 when import hit [#3798](https://github.com/moq-dev/moq/issues/3798) at ~600 s / ~631 s respectively.
-A 2 h slope confirmation on homogeneous `5d0991b9` remains blocked. The report was
+A slope confirmation on homogeneous `5d0991b9` or `ffa5b81b` remains blocked. Upstream `main` at
+`9d2a4f6e` no longer exits at the join, and the 24 h re-soak `p0h-24h` on it confirms the fix: the
+importer's slope is +0.23 MB/h against the original +2.83, with the last quarter negative
+([T21 § *The #3493 re-soak*](test-21-permanence-soak.md#the-3493-re-soak)). The report was
 **deliberately held** until it could be attributed per process: the soak sampled RSS by command-line
 signature, which for the publisher also matched its wrapper shell, and a shell not growing 137 MB is an
 argument rather than a measurement. A 6 h re-run of the same lane on the same build, sampling each PID
