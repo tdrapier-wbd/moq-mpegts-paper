@@ -2784,7 +2784,7 @@ turned into a self-contained draft change by the author. What the draft said, an
 | **Filtering an MPTS implies rewriting the SI, and that was unstated** ([#13](https://github.com/mondain/msfts/issues/13)) — a retained SDT or EIT carried verbatim out of a multiplex still advertises every programme in it, which is non-conformant for a derived single-programme track | [#19](https://github.com/mondain/msfts/pull/19) adds the rewrite requirement, closing the gap #11 left |
 | **A native SPTS had no first-class mode** ([#14](https://github.com/mondain/msfts/issues/14)) saying "this is already one programme; carry it unchanged". Applying the filter rules to it is unnecessary and harmful: no PAT rewrite is needed, and the rules guide a publisher to strip SI that was already correctly scoped | [#18](https://github.com/mondain/msfts/pull/18) adds verbatim single-programme carriage |
 
-### Three open, one of them answered in substance
+### Three more against the first revision, all since closed
 
 - **The 192-octet arrival-time prefix has no specified clock, units, bit layout or wrap behaviour**
   ([#15](https://github.com/mondain/msfts/issues/15)). Two implementations therefore cannot
@@ -2802,7 +2802,14 @@ turned into a self-contained draft change by the author. What the draft said, an
   [#21](https://github.com/mondain/msfts/pull/21) tells a subscriber the publisher changed the stream,
   with null-packet removal one of four things that sets it — so an egress deciding whether to re-stuff
   to CBR no longer has to inspect, which is what the issue was filed for. It still cannot tell removal
-  apart from programme selection or a PAT rewrite. Open.
+  apart from programme selection or a PAT rewrite.
+
+#16 and #17 closed on 2026-09-22 with the revision merged as
+[#35](https://github.com/mondain/msfts/pull/35). #16 was fixed: the rate is a stuffing target, the
+clock is recovered from the carried PCR, and the figure is counted over 188-octet packets. #17 was
+declined on field reduction. #15 closed later, once [#40](https://github.com/mondain/msfts/pull/40)
+reconciled Egress Timing with the arrival-time definition. The #17 and #15 outcomes are recorded under
+*The 2026-09-17 round* below.
 
 **None of this is measurement, and the distinction matters.** The only `m2ts` carriage this campaign has
 run is a private loopback prototype ([T3](test-3-opaque-transparency.md)), and the public implementation
@@ -2819,7 +2826,9 @@ change, because it is the lane this campaign has spent most of its measurements 
 previously been in `m2ts` scope at all.
 
 **The requirement none of the three modes carries is that the egress be able to *time* its MPEG-TS
-output, and that is the contribution to make** — held here rather than filed.
+output, and that is the contribution to make.** It went as #32, with #25 and #26 beside it, in the
+2026-09-17 round below, and the draft gained an Egress Timing section carrying #32's conditional
+MUST. The case as it was made follows.
 
 The case is measured rather than argued. A media-aware lane reconstructs a multiplex from tracks and
 therefore has no mux rate at all: raw `moq export ts` egress carries no stuffing, thins PSI from 8.04
@@ -2976,16 +2985,15 @@ field without anyone being argued into it.
 frankly just always pad I guess"*. Always padding is exactly the bare-MUST error #32 was written to
 avoid: re-pacing costs latency equal to its buffer, and for a file, a software decoder or a
 downstream multiplexer it buys nothing — which is why #32's ask is a conditional MUST paired with a
-SHOULD NOT and a request that the behaviour be configurable. The reply should carry that shape rather
-than let "always pad" become the implementation.
+SHOULD NOT and a request that the behaviour be configurable. How the reply carried it is item 2
+below.
 
 **The PCR dismissal needs clarifying rather than contesting, and it is the one answer that could
 cost us.** He is right that transmitting PCR across the network is not what recovers a decoder's
 clock, and our architecture agrees — the egress *re-synthesises* PCR on its own grid, which is what
 T19 grades. The risk is that *"kind of dumb"* hardens into a reason not to regenerate PCR correctly
-either, and the entire IRD-facing case depends on that regeneration. Worth a short reply saying
-plainly which of the two we need, because on the current text it reads as though we disagree when we
-do not.
+either, and the entire IRD-facing case depends on that regeneration. On the thread as it stood it
+read as though we disagree when we do not; how the reply handled it is item 3 below.
 
 **On group alignment the optional formulation is enough for us**, and it is worth saying so: msfts#31
 argues the MUST has no literal solution because audio and video access units do not share a grid, and
@@ -3163,7 +3171,12 @@ and the draft should say so.
 
 ### Three further defects in the new sections, and one unimplementable MUST
 
-Found reading the published §5.5 against the implementation; none filed.
+Found reading the published §5.5 against the implementation, and filed in the 2026-09-17 round as
+#28–#31. All four closed with #35: #28 by a §5.4 table mapping the three fields to the permitted
+carriages, with a track matching no row invalid and an absent `mpeg2tsMpts` stated to be false; #29
+by a Security Considerations note and a publisher-side verification duty, the inventory declined for
+the reason given above; #30 by deleting the object-count SHOULD; and #31 by relaxing alignment to a
+SHOULD with a note on differing frame durations. The findings as filed:
 
 - **The mode is not a field.** There is no `m2tsMode`. A receiver derives the mode from
   `m2tsModified` plus the presence of `m2tsEsPid` plus `m2tsMpts`, a decision table stated once in
@@ -3199,9 +3212,11 @@ Found reading the published §5.5 against the implementation; none filed.
 
 The draft's ES-level carriage and `moq-dev`'s media-aware lane are routinely spoken of as the same
 mode. They are not, and the difference is structural rather than cosmetic. Read from `origin/main`
-(`rs/moq-mux/src/container/ts/{import,export,catalog}.rs`):
+(`rs/moq-mux/src/container/ts/{import,export,catalog}.rs`) as it stood when #33 was filed, before the
+`dev` merge ([#3793](https://github.com/moq-dev/moq/pull/3793)); what has moved on both sides since
+follows the table:
 
-| | MSFTS mode 3 (§5.5.3) | `moq-dev` on `origin/main` |
+| | MSFTS mode 3 (§5.5.3), as first published | `moq-dev` on `origin/main`, when #33 was filed |
 |---|---|---|
 | Track payload | **188-octet TS packets**, filtered to one PID | **Decoded access units** — `N.avc3` length-prefixed NALUs, `N.aac` ADTS frames; reassembled PES payloads (`N.ts`) for undecoded ES; complete sections for SCTE-35 |
 | Continuity counters | Preserved inside the carried packets | Observed for resync, then **discarded**; regenerated at export |
@@ -3212,6 +3227,15 @@ mode. They are not, and the difference is structural rather than cosmetic. Read 
 | Mux rate | `m2tsMuxRate`, though MUST be absent in this mode | No `mux_rate` concept anywhere in the TS code |
 | Catalog | MSF, `packaging: "m2ts"` | **Hang** catalog with a typed `mpegts` extension; `moq-msf`'s `Packaging` enum has no `m2ts` |
 | MPTS | Mode 1 with `m2tsMpts: true` | **First non-zero programme in the PAT only**; export rebuilds a single-programme PSI |
+
+**Both columns have since moved, and the argument below is the one #33 made.** On the draft side,
+[#36](https://github.com/mondain/msfts/pull/36) replaced the three fields with one `mpeg2tsMode` and
+added `media-frames`, access-unit carriage in LOC tracks, which is the second route below; #33 closed
+against it. On `moq-dev` `main`, SI rides per-table snapshot tracks
+([#2909](https://github.com/moq-dev/moq/pull/2909)) and EIT and TDT/TOT are carried
+(§1), the mux rate is recorded and the export pads to it
+([#3831](https://github.com/moq-dev/moq/pull/3831)), and `import ts --program` selects one programme
+of a multiplex or each as its own broadcast ([#4505](https://github.com/moq-dev/moq/pull/4505)).
 
 **So the reference implementation is not mode 3. It is a fourth mode the draft does not have:
 access-unit carriage with transport-stream re-synthesis at egress.** Both are defensible, and the
@@ -3243,9 +3267,10 @@ specific things where the implementation holds information the draft lacks:
 3. **Why SI travels in the catalog rather than as tracks** — a joining subscriber gets SDT and NIT
    immediately instead of waiting a repetition cycle, and `mpegts.si`'s `interval` is the same idea as
    `m2tsPsiInterval`. The draft should permit both and say when to choose each. Against that, the
-   implementation's coverage is short: EIT and TDT/TOT are dropped on `origin/main`, and broadcast time
-   is something an IRD wants ([T2](test-2-media-aware-transparency.md),
-   [T17](test-17-si-snapshot-tracks.md)).
+   implementation's coverage was short when this was written: EIT and TDT/TOT were dropped on
+   `origin/main`, and broadcast time is something an IRD wants ([T2](test-2-media-aware-transparency.md),
+   [T17](test-17-si-snapshot-tracks.md)). Both have since moved to snapshot tracks, which also ended
+   SI's travel in the catalog.
 4. **What the exporter must reconstruct and what it cannot** — the synthetic PCR grid, regenerated
    continuity counters and PSI, and the absent mux rate. This is the output-timing gap arriving from
    the implementation rather than from us, and the two arguments should be coordinated: measurement
@@ -3257,7 +3282,9 @@ genuine bandwidth gain — the reference clip is 4.57% stuffing and the lane run
 ([`evidence.md`](../docs/evidence.md) §3.5) — and it is exactly the case §5.5.2 anticipates. Recording
 the observed rate in the `mpegts` catalog section would make the egress re-pacable by a generic groomer
 without any catalog convergence at all. Null-stripping is the win; the declared rate is what makes it
-safe.
+safe. This one landed: #3831 records `mpegts.muxRate` and pads the export to it, and the draft
+recommends `mpeg2tsMuxRate` on ES-level tracks (#25), with the two agreeing on its semantics (§
+*moq-dev#3731 answered* above).
 
 ---
 
