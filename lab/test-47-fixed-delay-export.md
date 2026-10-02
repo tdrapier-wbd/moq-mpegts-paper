@@ -8,7 +8,8 @@ most slack across all tracks, and its steering floor takes the most slack across
 clip that is the video, sent up to 0.97 s ahead, which leaves the audio the delay less that. This is
 located in the code and reproduced in mocked time. A scratch build that anchors and steers on the
 track with the least slack, and waits for every track before anchoring, carries every track
-conformantly at 500 ms, 750 ms and 1 s, on loopback and across hosts. Its presentation latency is
+conformantly at 500 ms, 750 ms and 1 s, on loopback, across hosts and under 1 % loss, and over
+540 s at 1 s. At 500 ms it still stops at about 157 s of a 540 s run. Its presentation latency is
 twice the delay plus about 275 ms.**
 
 - **The clock holds.** Over 540 s at 1 s on loopback the output's PCR fits −9.8 ppm against the
@@ -338,15 +339,32 @@ with every other `moq-mux` test. The relay and importer are the head's; only the
 | Loopback, source 0.3 s later | 1 s | 2,151 | 1,612 | 0 | 26 of 26 | PASS | 2,272.5 ms |
 | Across hosts, 120 s | 500 ms | 4,751 | 3,564 | 0 | 57 of 57 | PASS | — |
 | Across hosts, 120 s | 1 s | 4,737 | 3,554 | 0 | 56 of 56 | PASS | — |
+| Loopback, 540 s | 1 s | 22,060 | 16,546 | 0 | 264 of 264 | PASS | 2,273.4 ms, +0.2 ms over the run |
+| Loopback, 540 s | 500 ms | 6,312 | 4,733 | 0 | 75 of 75 before the exit | PASS | 1,274.1 ms; exits at about 157 s: "missed a decode deadline on PID 111" |
 
-Every PCR is within ±500 ns in every run. The 500 ms runs no longer stop. Presentation latency is
+Under loss, on the [T8b](test-8b-congestion-control.md) rig as above, 120 s, loss as configured:
+
+| Arm | Runs | MP2 units | AC-3 units | Late drops | `ts-tstd.py` | `compliance.py` |
+|---|---|---|---|---|---|---|
+| 0 %, 1 s | the whole run | 4,731 | 3,549 | 0 | every window | PASS |
+| 1 %, 1 s | the whole run | 4,730 | 3,548 | 0 | every window | PASS |
+| 0 %, 500 ms | the whole run | 4,742 | 3,558 | 0 | every window | PASS |
+| 1 %, 500 ms | the whole run | 4,742 | 3,558 | 0 | every window | PASS |
+| 10 %, 1 s | exits at 25 s: "missed a decode deadline on PID 131" | 461 | 198 | 6 | every window before the exit | — |
+
+Every PCR is within ±500 ns in every run. Over 540 s at 1 s the output's PCR clock follows the
+source tap's to 0.6 ppm. The 500 ms runs of 60 s and 120 s no longer stop, but the 540 s one stops
+at about 157 s, as the first 540 s run on `2dc542b4a` did, with the same minimum video EB margin of
+56.4 ms. So that overrun belongs to the schedule at 500 ms on this passage of the clip, not to the
+anchor. The 1 % arm at 500 ms carried exactly the 0 % arm's units; the rig sets the loss but does
+not count what netem dropped. At 10 % the export now stops on teletext (PID 131), where the head
+ran on with almost no media. Presentation latency is
 twice the delay plus about 275 ms at each delay, with a spread of under 10 ms per run. With the
 anchor on the audio, the video's 0.97 s send-ahead is no longer taken out of the delay, so it
 becomes latency. [#4681](https://github.com/moq-dev/moq/pull/4681)'s planned cap on send-ahead is
 what would bring it down (reasoned). Two costs of the change are reasoned, not measured. A sparse
 PID that sends nothing at the join, such as SCTE-35, holds the acquisition the full two delays. A
-track that queues for a whole steering step pulls the clock with it. Neither the loss rig nor a
-540 s run has been repeated on this build.
+track that queues for a whole steering step pulls the clock with it.
 
 ### The live-edge join and the 30 ppm clock, `2dc542b4a`
 
@@ -955,10 +973,11 @@ on `2dc542b4a`, and 17–19 on `559a35244` and its scratch build.
     That is located in the code and reproduced in mocked time, and it is a regression on
     `2dc542b4a` at 1 s. The clock stays inside 2.4.2.1's tolerance, as on `2dc542b4a`.
 18. **Anchoring and steering on the track with the least slack, after hearing from every track,
-    carries the clip conformantly at 500 ms, 750 ms and 1 s, on loopback and across hosts.** That is
-    a scratch build, single runs of 60 s and 120 s, on one join phase each plus one shifted phase at
-    500 ms and 1 s. It is the first build on which 500 ms carries every track and does not stop on
-    this clip.
+    carries the clip conformantly at 500 ms, 750 ms and 1 s, on loopback, across hosts and under
+    1 % loss.** That is a scratch build, single runs, on one join phase each plus one shifted phase
+    at 500 ms and 1 s. Over 540 s at 1 s it carries every track with every buffer passing. At 500 ms
+    it carries every track until the schedule overrun at about 157 s that `2dc542b4a` also hit, so
+    500 ms is still not a working delay over a whole capture.
 19. **Carried whole, the clip's presentation latency is twice the delay plus about 275 ms.** The
     video's send-ahead now shows up as latency rather than being taken out of the audio's delay. At
     1 s that is about 2.27 s, beside the re-multiplexer's 2,196.7 ms on this clip
@@ -968,12 +987,13 @@ on `2dc542b4a`, and 17–19 on `559a35244` and its scratch build.
 
 ## Limits
 
-- **On `559a35244` and its scratch build:** nine loopback cells on the head and five on the scratch
-  build, 60 s except one 540 s cell on the head; two cross-host runs on each; four loss arms on the
-  head only. One clip, untraced. Which frame anchored each join is inferred from the drops and the
+- **On `559a35244` and its scratch build:** nine loopback cells on the head and seven on the scratch
+  build, 60 s except one 540 s cell on the head and two on the scratch build; two cross-host runs on
+  each; four loss arms on the head and five on the scratch build. One clip, untraced. The loss rig
+  does not count netem's drops, so the 1 % arms rest on the configured rate. Which frame anchored each join is inferred from the drops and the
   margins, not logged. The arm that would settle it is a run with the anchoring track and each
-  track's first slack logged, at joins spread across a GOP. Not run on the scratch build: the loss
-  rig, a run over 120 s, a publisher restart, a sparse track's effect on the hold, and the
+  track's first slack logged, at joins spread across a GOP. Not run on the scratch build: a
+  publisher restart, a sparse track's effect on the hold, the cross-host loss path, and the
   generated clip.
 
 - **On `2dc542b4a`:** twelve loopback runs (two of 540 s, three at shifted join phases), two

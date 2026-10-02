@@ -2252,6 +2252,12 @@ Two commits on the t0ms fork as branch `tests/4645-on-559a352`:
   and 1 s, on loopback and across hosts. The reply gives its cost: presentation latency of twice the
   delay plus about 275 ms, which makes #4681's send-ahead cap matter more.
 
+A follow-up ([#4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-5950648937)) gave the
+branch as a cherry-pick and added the arms the first report lacked. Over 540 s at 1 s, and under
+0 % and 1 % loss at 500 ms and 1 s, the fixed build carries every track with nothing late. At 500 ms a
+540 s run still stops at about 157 s, where `2dc542b4a` did, and at 10 % loss it stops at 25 s
+([T47](test-47-fixed-delay-export.md#acquiring-before-release-and-the-anchor-on-the-most-slack-559a35244)).
+
 **Open:** whether upstream takes the least-slack anchor, and how its two reasoned costs are handled:
 a sparse PID holding the join for two delays, and one queued track pulling the clock. Also open are
 the export's behaviour under heavy loss and the latency #4681 recovers.

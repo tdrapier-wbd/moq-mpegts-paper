@@ -50,9 +50,9 @@ commodity delivery, while the entire measured difference between the transports 
   over a full day. It closed downstream in the edge stage, after three upstream fixes that were each
   necessary and none sufficient ([Evidence](docs/evidence.md) §3.2). That is not full conformance on the
   media-aware lane: as a transmux it discards the source's packet schedule, and its wire fails the
-  13818-1 buffer model, which only a re-multiplexer repairs. One now runs live, and upstream's draft
-  exporter conforms at a 1 s delay but loses audio tracks on some joins
-  ([Evidence](docs/evidence.md) §3.16).
+  13818-1 buffer model, which only a re-multiplexer repairs. One now runs live. Upstream's draft
+  exporter conforms at a 1 s delay but so far drops audio on some joins; a proposed fix keeps every
+  track, without a latency advantage over the re-multiplexer ([Evidence](docs/evidence.md) §3.16).
 - **Conformance is not free of latency there, though buffer depth is not the price.** Part of the cost is
   an identified upstream regression that could be recovered; the rest is structural, because a demuxed
   lane moves the contribution encoder's buffer budget downstream into the edge gateway
