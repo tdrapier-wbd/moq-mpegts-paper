@@ -85,8 +85,8 @@ The oracle is the importer's own exit: the arm is watched until the publishing p
 and the elapsed time is divided by the fixture's wrap period to give the wrap index it died on. The
 rig waits for the process to *appear* before it starts watching for it to disappear, because absence
 is also what "has not started yet" looks like and polling for it first scores every arm as an instant
-failure — see [method-notes](method-notes.md) § *A `pgrep` wait loop matches the command that
-contains it* for the neighbouring trap.
+failure — see [method-notes](method-notes.md) § *A `pgrep` or `pkill` pattern matches every command
+line that carries it* for the neighbouring trap.
 
 ## Pass criteria, fixed before running
 

@@ -400,16 +400,8 @@ platform utilisation field whose averaging window is longer than the interval.**
 > between arms, not a longer settle.**
 
 **A counter that wraps detects an event and cannot size it. Never report its magnitude as the damage.**
-*(T5.)*
-
-> Past its availability window a segmented-HTTP client re-anchors to the live edge, skipping whole
-> minutes of programme. The continuity counter fires — correctly, once per PID carrying the splice, so
-> a single skip reads as 6–11 "events" — and then reports 33 missing packets for a hole of 34 segments,
-> which is over 200,000. A continuity counter is four bits; it reports the remainder modulo 16 and has
-> no way to say how many times it wrapped. The event count is the detector, the PCR interval is the
-> measure, and the packet total is neither. The general form: whenever a counter's range is smaller than
-> the fault it is watching for, it degrades from a measurement to an alarm, and the write-up has to
-> demote it in the same breath as it reports it.
+*(T5, T19.)* The incidents, the measured aliasing table and the remedy are in § *A continuity count
+detects loss and cannot measure it* (§5).
 
 **Errors logged by a server are not an instrument for a client falling behind.** *(T5.)*
 
@@ -1525,21 +1517,9 @@ run's server and dies with it.** *(T47.)*
 > that a server you started is still running before starting its clients.** An exit status from
 > `&` says only that the process was forked.
 
-**A `pkill -f` pattern sent over SSH matches the SSH command line that carries it, so the cleanup
-kills its own session and the process it was aimed at survives.** *(P1-m tap validation.)*
-
-> `ssh host 'pkill -9 -f t18-tap-perturbation.sh; …'` returns 255 with no output, the stale run keeps
-> going, and the relaunch silently lands beside it rather than replacing it — so the next result
-> comes from the *old* build of the rig. The pattern is present twice on that host: once in the
-> target's command line and once in the `bash -c` string the SSH daemon forked. The remedy is the
-> bracket idiom the local scripts already use for the same reason, `pkill -9 -f "[t]18-tap-perturb"`,
-> which no longer matches itself. **Verify the kill rather than assuming it** — end the command with
-> `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean` and read the answer, because a failed
-> cleanup is indistinguishable from a successful one in the exit status when SSH dies mid-command.
->
-> Violated again in T47, in the other direction: a wait loop `while pgrep -f "0.0.0.0:4443"` sent
-> over SSH matched its own command line and never ended. The bracket idiom covers waits as well as
-> kills.
+**A `pkill -f` or `pgrep -f` pattern sent over SSH matches the command line that carries it.** The
+incidents and the remedy are in § *A `pgrep` or `pkill` pattern matches every command line that
+carries it* below.
 
 **When arms run back to back against a service that caches an admission decision, the cache carries
 the previous arm's answer into the next one.** *(T37, T38.)*
@@ -1810,24 +1790,6 @@ still up. And do not trust a process census taken from a sandboxed shell.** *(T1
 > Without that check, "unchanged under loss" reads as a finding when it is an artefact of tap
 > placement.
 
-**Kill patterns belong in a script file, never in an ssh command line — and a reset that does not
-verify is not a reset.** *(T26.)*
-
-> `pkill -f "broadcast f5.fanout.hang"` sent over ssh matches the remote shell's *own* command line,
-> because the pattern is an argument of the command being run. It killed itself before reaching the
-> next statement, so the previous run's publisher survived, a second publisher announced the same
-> broadcast, and the relay terminated one of the two about a minute in. In the results that read as
-> the source spontaneously failing at N = 1, and two runs were spent on it.
->
-> The bracket trick (`"[b]roadcast …"`) does not help here: it stops pkill matching *itself*, not a
-> parent whose argv contains the literal string. The fix is `f5-reset.sh` — patterns in a file, and a
-> verification pass that counts survivors and refuses to let a run start. Its own first version
-> repeated the mistake with an unbracketed `export ts --latency-max` and killed the ssh session that
-> called it. The file protects only a session that does nothing else: in
-> [T43](test-43-fanout-current-build.md) one ssh command ran the reset and then launched
-> `f5-relay-side.sh`, the launch text put that name in the session's argv, and the reset killed the
-> session before the launch. Run the reset in an ssh call of its own.
-
 **A workaround flag must record which platform it works around, and be re-tested when the platform
 changes.** *(T26.)*
 
@@ -1882,8 +1844,8 @@ changes.** *(T26.)*
 
 **A cleanup pattern must name the run, not the tool.** *(T27.)*
 
-> §5 already carries "kill patterns belong in a script file", from a `pkill` that killed its own ssh
-> session. The same class recurred one level out: an in-lane rig's cleanup ran
+> §5 already carries *A `pgrep` or `pkill` pattern matches every command line that carries it*, from
+> `pkill`s that killed their own ssh session. The same class recurred one level out: an in-lane rig's cleanup ran
 > `pkill -f ts-liveness.py`, which killed a detector belonging to a *different* experiment on the same
 > host, broke that experiment's subscriber pipe and ended its run — and the garbage the broken pipe
 > then fed the detector produced a phantom 94,847 s outage that had to be diagnosed as well.
@@ -2222,26 +2184,53 @@ investigation looking for a corrupted transfer that had not happened.
 > lines that do not contain the reported text, near the end of a long run. Edit a copy and deploy it
 > for the *next* run; never `scp` or `sed -i` over a script with a live pass in it.
 
-### A `pgrep` wait loop matches the command that contains it
+### A `pgrep` or `pkill` pattern matches every command line that carries it, including the one sending it
 
-*From [T8b](test-8b-congestion-control.md) P0-i.* A chain script waited for the previous pass with
-`while pgrep -f "t8b-export-death.sh p0i "; do sleep 20; done`. The pass ended and the loop did not,
-because a *monitoring* shell invoked over SSH carried the same pattern in its own command line, so
-`pgrep` matched the watcher instead of the watched and the chain waited on itself indefinitely. The
-matching mistake with `pkill -f` is worse: the same self-match terminated the SSH session issuing it.
+*From [T26](test-26-cross-host-fanout.md), the P1-m tap validation, [T8b](test-8b-congestion-control.md)
+P0-i and [T25](test-25-isolation-under-abuse.md); recurred in [T43](test-43-fanout-current-build.md)
+and [T47](test-47-fixed-delay-export.md).* `pgrep -f` and `pkill -f` match against the whole command
+line of every process, and a pattern typed into an SSH command is also in the command line of the
+remote shell that runs it. So a cleanup can kill its own session, and a wait can wait on itself or on
+a sibling that quotes it.
 
-> **Bracket one character of any `pgrep`/`pkill` pattern** — `t8b[-]export-death` — so the pattern
-> cannot match a command line that quotes it. Better still for sequencing, wait on a marker the run
-> writes at the end rather than on the absence of a process, since absence is also what a crash on
-> the first cell looks like.
+- **Cleanups that killed their own session.** In T26, `pkill -f "broadcast f5.fanout.hang"` sent over
+  ssh matched the remote shell's own command line, because the pattern is an argument of the command
+  being run, and killed that shell before the next statement. The previous run's publisher survived, a second
+  publisher announced the same broadcast, and the relay terminated one of the two about a minute in.
+  In the results that read as the source spontaneously failing at N = 1, and two runs were spent on
+  it. In the P1-m tap validation, `ssh host 'pkill -9 -f t18-tap-perturbation.sh; …'` returned 255
+  with no output: the pattern was present twice on that host, once in the target's command line and
+  once in the `bash -c` string the SSH daemon forked. The stale run kept going and the relaunch
+  landed silently beside it, so the next result came from the *old* build of the rig. T25 lost a
+  session to `pkill -9 -f "t25seg"` issued inside an `ssh` command line that itself contained
+  `t25seg`.
+- **Waits that waited on themselves.** In T8b P0-i a chain script waited for the previous pass with
+  `while pgrep -f "t8b-export-death.sh p0i "; do sleep 20; done`. The pass ended and the loop did
+  not, because a *monitoring* shell invoked over SSH carried the same pattern in its own command line,
+  so `pgrep` matched the watcher instead of the watched and the chain waited on itself indefinitely;
+  the matching `pkill -f` was worse, and terminated the SSH session issuing it. In T47 a wait loop
+  `while pgrep -f "0.0.0.0:4443"` sent over SSH matched its own command line and never ended.
 
-**Bracketing is not sufficient when the pattern is a bare substring.** [T25](test-25-isolation-under-abuse.md)
-lost a session to `pkill -9 -f "t25seg"` issued inside an `ssh` command line that itself contained
-`t25seg` — there was no bracket, but adding one would not have helped either, because the literal
-appears in the remote shell's own argv whatever its spelling. The reliable fix is to **put the
-cleanup in a script file on the host and invoke the file**, so the pattern never enters the caller's
-command line. Both this campaign's self-kills have come from patterns typed into the command that
-issues them.
+> **Bracket one character of any `pgrep`/`pkill` pattern** — `pkill -9 -f "[t]18-tap-perturb"`,
+> `t8b[-]export-death` — so the pattern cannot match a command line that quotes it. That covers waits
+> as well as kills. **Bracketing is not sufficient when the literal reaches the remote shell's argv
+> some other way**: it stops the pattern matching itself, not a parent whose argv contains the literal
+> string (T26), and T25's command line carried `t25seg` whatever the pattern's spelling. **The
+> reliable fix is to put the patterns in a script file on the host and invoke the file**
+> ([`f5-reset.sh`](scripts/f5-reset.sh)), so the pattern never enters the caller's command line.
+>
+> **The file protects only a session that does nothing else.** `f5-reset.sh`'s own first version
+> repeated the mistake with an unbracketed `export ts --latency-max` and killed the ssh session that
+> called it. In T43 one ssh command ran the reset and then launched `f5-relay-side.sh`; the launch
+> text put that name in the session's argv, and the reset killed the session before the launch. Run
+> the reset in an ssh call of its own.
+>
+> **A reset that does not verify is not a reset.** End the command with
+> `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean` and read the answer, or have the reset
+> count survivors and refuse to let a run start, because a failed cleanup is indistinguishable from a
+> successful one in the exit status when SSH dies mid-command. For sequencing, wait on a marker the
+> run writes at the end rather than on the absence of a process, since absence is also what a crash
+> on the first cell looks like.
 
 **A bracketed pattern still matches the next waiter in the queue.** *From
 [T28](test-28-failure-injection-matrix.md)'s attribution runs.* Three runs were queued behind one
@@ -2426,6 +2415,14 @@ not a second grader defect. `continuity_counter` is a four-bit field, so the lar
 can distinguish on one PID is fifteen packets, and sixteen consecutive losses restore exactly the
 value it expected.
 
+The same arithmetic first showed in [T5](test-5-network-impairment.md). Past its availability window
+a segmented-HTTP client re-anchors to the live edge, skipping whole minutes of programme. The
+continuity counter fires — correctly, once per PID carrying the splice, so a single skip reads as
+6–11 "events" — and then reports 33 missing packets for a hole of 34 segments, which is over
+200,000. The counter reports the remainder modulo 16 and has no way to say how many times it
+wrapped, so the event count is the detector, the PCR interval is the measure, and the packet total is
+neither.
+
 Measured rather than derived, excising a known run from the busiest PID of a real capture
 ([`cc-aliasing-probe.py`](scripts/cc-aliasing-probe.py)):
 
@@ -2449,7 +2446,9 @@ carries counters that the loss could have disturbed.
 > stand on that pairing. A zero, or a small number, on an arm that shed content says nothing.
 >
 > **Never quote a continuity count as a loss magnitude**, and where a table carries both, put the
-> conservation or delivered-ratio column next to it so the pairing is visible in one row.
+> conservation or delivered-ratio column next to it so the pairing is visible in one row. The general
+> form: whenever a counter's range is smaller than the fault it is watching for, it degrades from a
+> measurement to an alarm, and the write-up has to demote it in the same breath as it reports it.
 
 ### An idle-memory baseline drifts by more than a null result's whole excursion
 
@@ -3037,7 +3036,11 @@ arm most likely to fail, and it is selected by saying nothing.
 > **Pin the controller on every relay, through `RELAY_CC_FLAG` rather than a literal**, and state it
 > with the result. The same applies to the backend itself: #3811 deleted quinn, so every figure from
 > `615d166d` onward is a noq figure whatever the rig asked for, and a comparison spanning it is
-> comparing two stacks. One related trap: **the iroh backend cannot turn GSO off and rejects an
+> comparing two stacks. #3811 removed the quinn and quiche implementations and their Cargo features
+> outright, so `--no-default-features --features quinn` now fails with *the package 'moq-cli' does not
+> contain this feature*, which is how `ec2-build-main.sh` first hit it *(T13 `3831-a`)*. The campaign
+> measured on quinn up to `5d0991b9`: say which backend a figure is on whenever it crosses #3811, and
+> prefer file-domain evidence for any claim taken across it. One related trap: **the iroh backend cannot turn GSO off and rejects an
 > explicit `false`**, so `--quic-gso=false` only works on a build that dropped the iroh feature —
 > which `ec2-build-main.sh` does, and a default-feature build does not.
 >
@@ -3155,18 +3158,9 @@ group it feeds was empty. Only after all three were repaired did a subscriber re
 > publisher's inner connection loop had exited inside a shell that stayed alive. Health checks on this
 > chain must count bytes, which is what `live-feed-status.sh` is for.
 
-**#3811 deleted the quinn backend, so every post-2026-09-21 build is a noq build.** *(T13 `3831-a`.)*
-
-> [#3811](https://github.com/moq-dev/moq/pull/3811) removed the quinn and quiche implementations and
-> their Cargo features outright; `--no-default-features --features quinn` now fails with *the package
-> 'moq-cli' does not contain this feature*, which is how `ec2-build-main.sh` first hit it. The campaign
-> measured on quinn up to `5d0991b9`, and [T8](test-8-srt-vs-moq.md) records noq's BBRv3 aborting under
-> high loss, so a comparison spanning that commit carries a transport change as well as a code change.
-> Say which backend a figure is on whenever it crosses #3811, and prefer file-domain evidence for any
-> claim taken across it.
-
-**On homogeneous `5d0991b9`, any `#3493` re-soak that crosses a timestamp reset is blocked by
-[#3798](https://github.com/moq-dev/moq/issues/3798).** *(T21 `3493-check-2h`, `3493-loop-2h`.)*
+**A `#3493` re-soak that crosses a timestamp reset needs a build carrying the
+[#3798](https://github.com/moq-dev/moq/issues/3798) fix: `main` from `9d2a4f6e`, where the 24 h re-soak
+ran, and not homogeneous `5d0991b9` or `ffa5b81b`.** *(T21 `3493-check-2h`, `3493-loop-2h`.)*
 
 > Import aborts with *frame timestamp is below the live edge* at the first **content join** on
 > `ts-continuous-source.py` (~600 s on `CNNiEMEA2.ts`) and at the first **loop wrap** on
@@ -3174,7 +3168,9 @@ group it feeds was empty. Only after all three were repaired did a subscriber re
 > `container::Producer::write`; the monotonic-timeline rule does not distinguish continuous join from
 > true rewind for tracks without `reanchor()`. A #3493 slope confirmation therefore needs either an
 > upstream fix ([#3798](https://github.com/moq-dev/moq/issues/3798)) or a single-pass window under one
-> clip length — which cannot reach 2 h without a reset.
+> clip length — which cannot reach 2 h without a reset. The closure of #3798 by a plan-only PR did not
+> clear `ffa5b81b`; the build that no longer exits is `main` at `9d2a4f6e`
+> ([T21 § *The #3493 re-soak*](test-21-permanence-soak.md#the-3493-re-soak)).
 
 ### A P1/P2 pass is not a conformant transport stream
 
