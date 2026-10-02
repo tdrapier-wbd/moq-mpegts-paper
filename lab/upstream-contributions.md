@@ -1136,7 +1136,7 @@ the standby's group lag add to the outage, is the group-sequence floor of #2534 
 and the maintainer's position on #2545 covers it; rather than a separate report it went into #4354
 as the converse of the rewind, since both compare group sequence across two publishers.
 
-### A multi-programme TS through `import ts` — reported
+### A multi-programme TS through `import ts` — reported, and answered by programme selection
 
 The importer scopes itself to single-programme input in a code comment, and a real MPTS shows what
 that costs ([T10](test-10-mpts-multiservice.md)). On both builds the exporter flattens the multiplex
@@ -1155,10 +1155,15 @@ through which every programme's video advances the section clock: it steps back 
 and re-anchors the whole source forward on each step. A build that gives that clock one lane per
 video PID removes every re-anchor and restores SCTE-35 and audio to the parent's level (T10 § *On
 upstream `main`*). Upstream's planned default refusal of multi-programme input, and its removal of
-the anchor, would each moot it; the A/B result is on the issue. **Open**; the before/after verification is owed when a fix lands,
-on `mpts3.ts` and `mpts3-cc.ts` with the T10 rig.
+the anchor, would each moot it; the A/B result is on the issue.
 
-### A selected programme still carried the whole multiplex's SI — contributed as [#4580](https://github.com/moq-dev/moq/pull/4580), in review
+**The refusal has since landed, with selection**, in [#4505](https://github.com/moq-dev/moq/pull/4505)
+(next entry). On `main` at `6f1a9e33` an unselected multiplex is refused with exit 1, and on the T10
+rig every programme is carried on `mpts3.ts` and `mpts3-cc.ts` alike, independent clocks included,
+in four of four runs (T10 § *The split on the T10 rig*). The issue itself is still open on the
+tracker. What a selected programme still carried of the other services is the next entry.
+
+### A selected programme still carried the whole multiplex's SI — contributed as [#4580](https://github.com/moq-dev/moq/pull/4580), merged
 
 **The defect.** [#4505](https://github.com/moq-dev/moq/pull/4505) answered the selection half of
 [#4353](https://github.com/moq-dev/moq/issues/4353): `moq import ts --program <n>` imports one programme
@@ -1197,7 +1202,14 @@ them fail with the selection disabled. At P1, a 30 s build of T10's `mpts3.ts`
 TSDuck decodes the rebuilt SDT, so its CRC holds, and its TSID and ONID match the source's. The local
 `just check` passed, as did the `test/ts` default, real-capture and open-GOP arms, and so did upstream CI.
 
-**Open.** The PR is in review. The `test/ts` `--pair` arm fails its NIT
+**Merged** into `main`. Review added two changes first. A corrupt SDT section is rejected on its CRC
+rather than rebuilt into a checksum-valid table. And, from the maintainer before merging, a selected
+SDT revision is committed only once every section has arrived, so a missing or corrupt section keeps
+the last good snapshot instead of reading as the service leaving. He also documented that the
+selection matches SI by DVB `service_id`, assumed equal to the PAT `program_number`. The verification
+above predates the maintainer's change and has not been repeated on the merged build.
+
+**Open.** The `test/ts` `--pair` arm fails its NIT
 and SDT/BAT anchor checks on `main` at `6f1a9e33` and on the branch alike: the grader attributes both
 exporters' emission points to a timer started with each exporter rather than to the media. That arm is
 not in CI and has no quest. Nothing has run against a live multi-programme feed or cross-host.
@@ -1245,7 +1257,7 @@ imports but does not round-trip; it is left for upstream planning. Sections drop
 (a malformed adaptation field, a parse failure) are not counted yet, since the TS import health quest
 owns `PAT_error` and `PMT_error`. Nothing has run against a live feed with long PSI.
 
-### Three values the exporter mints per process — one closed, one declined, one open
+### Three values the exporter mints per process — two closed, one declined and since planned as an opt-in
 
 A 1+1 pair cannot be byte-identical while the exporter renders anything from its own process state
 rather than from the broadcast. Three such values were isolated ([T12](test-12-dual-path-handoff.md)):
@@ -1276,10 +1288,14 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   packet count of every earlier group, so per-process counters stay"*. GitHub shows the issue as closed
   *completed*, which is the mechanical state and not the decision. No code changed: `Export::counters`
   on `615d166d` is still `HashMap<u16, ContinuityCounter>` filled by `entry(pid).or_default()`, so the
-  measurements above stand against current `main` and are not at risk of going stale. **The consequence
-  for this campaign is that byte-identical 1+1 from two independent exporters is not obtainable from
-  upstream and will not become so**; it needs the padding filter above, or a receiver that merges on
-  something other than the whole packet.
+  measurements above stand against current `main`. **The consequence for this campaign is that
+  byte-identical 1+1 from two independent exporters is not obtainable from upstream today**; it needs
+  the padding filter above, or a receiver that merges on something other than the whole packet.
+  **Upstream has since planned the opt-in form.** `quest/m2/ts-hitless.md`, merged in
+  [#4680](https://github.com/moq-dev/moq/pull/4680) from this campaign's review of #4645, has
+  `export ts --sync` legs anchor on the catalog clock and restart each media PID's counter at every
+  group with `discontinuity_indicator` set, moving the PCR to its own PID. It waits until the T-STD
+  line settles, and nothing of it is implemented.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the
   earliest frame, so legs whose bytes arrive at different moments order the same media differently.
   Multi-track content therefore stops at 94–96 % even when co-started, and at 75.56 % once the two
@@ -1395,9 +1411,13 @@ them apart is most of the work.
 The loss collapse this campaign measured under QUIC's default CUBIC was reported into the discussion
 on [#2432](https://github.com/moq-dev/moq/pull/2432), which exposes
 `--server/client-quic-congestion-control {loss|delay}`. Upstream has since made **BBRv1 the default on
-quinn** ([#2468](https://github.com/moq-dev/moq/pull/2468)), with the defaults now backend-specific —
-quiche to BBRv2, and noq back to CUBIC because BBRv3 carries a subtract-overflow panic under high loss
-([noq #768](https://github.com/n0-computer/noq/issues/768)).
+quinn** ([#2468](https://github.com/moq-dev/moq/pull/2468)), with the defaults described as
+backend-specific — quiche to BBRv2, and noq back to CUBIC because BBRv3 carries a subtract-overflow
+panic under high loss ([noq #768](https://github.com/n0-computer/noq/issues/768)). The noq half is not
+what the code does: from `fd4f5d82e` to `ffa5b81b` every backend resolves an unset controller to
+`delay`, which on noq is BBRv3 ([method-notes](method-notes.md) § *The default congestion controller
+changed to the one known to abort*). noq #768 was closed on 2026-09-20 with no fix linked to it, so
+whether the noq a current build links still panics is not established here.
 
 **Upstream methodology guidance, adopted here:** the one meaningful congestion-control test is
 bufferbloat under a shaped bottleneck, not random loss — *"the best congestion control in the face of
@@ -1503,7 +1523,7 @@ the failure without explaining it, and the frame-expiry hypothesis is not suppor
 **A second exit on the same track, when the publisher goes away, was filed as a question rather than
 a defect**, and is tracked in § *The liveness exit* and § *Four of these were closed as completed*.
 
-### The qlog loss trigger is computed backwards — fixed in quinn, PR open on noq
+### The qlog loss trigger is computed backwards — fixed in quinn and in noq, released in neither
 
 Both QUIC stacks the lane has run on label every declared loss in their qlog by the reordering
 threshold, whichever rule fired. The trigger is computed as
@@ -1522,11 +1542,11 @@ It is gated on the `qlog` feature, which quinn's PR CI does not enable. No quinn
 fix yet: `main` is the unreleased 0.12 line, and `quinn-proto` 0.11.19, released after the fix
 merged, still carries the reversed operands. So 0.11.17 through 0.11.19 labels are still unreliable.
 
-**noq: PR open** as [n0-computer/noq#827](https://github.com/n0-computer/noq/pull/827). It has the
-same fix, with the test adapted to noq's qlog factory and per-path statistics, and it fails and
-passes the same way. noq's CI runs it, since its tests run with all features. The maintainers also
-merge quinn's `main` into noq periodically, so the fix would arrive by that route too. Until one of
-the two lands, `noq-proto` 1.2.0 and 1.3.0 labels are unreliable.
+**noq: fixed on `main`** by [n0-computer/noq#827](https://github.com/n0-computer/noq/pull/827). It has
+the same fix, with the test adapted to noq's qlog factory and per-path statistics, and it fails and
+passes the same way. noq's CI runs it, since its tests run with all features. No noq release carries
+it yet: `noq-proto` 1.3.0, the latest, predates the merge, so `noq-proto` 1.2.0 and 1.3.0 labels are
+unreliable.
 
 T28's attribution depends on neither, because it rests on the acknowledgement frames.
 
@@ -1915,29 +1935,33 @@ transmux carriage, that moved the maintainer to treat a TS export as a remux wit
 
 **Upstream state.**
 
-- **The plan**, `quest/m1/tstd/`, merged in [#4637](https://github.com/moq-dev/moq/pull/4637). It has
+- **The plan**, `quest/m1/tstd/`, merged in [#4637](https://github.com/moq-dev/moq/pull/4637). It had
   three children: a fixed-delay release stage, a full T-STD check in `test/ts/compliance.py`, and
-  PCRs on the mux-rate byte grid. The release stage works like an SRT receiver's TSBPD: each frame
+  PCRs on the mux-rate byte grid. [#4681](https://github.com/moq-dev/moq/pull/4681), merged into the
+  questline's branch, added two found in #4645: send-ahead within the delay, so total lag is
+  `--delay` with the send-ahead included and the default rises to 1 s, and a mux-rate hold, so the
+  importer publishes its catalog only once the mux rate is measured and the export is constant-rate
+  from its first packet. The release stage works like an SRT receiver's TSBPD: each frame
   leaves at its first-arrival anchor plus its DTS plus `--delay`, in `(DTS, PID)` order, and a late
   frame is dropped and counted. The questline's proof is the loss rig of
   [#4613](https://github.com/moq-dev/moq/issues/4613) (10 % loss, a real ~10 Mb/s broadcast TS)
   passing the strict check, nightly. Its README says that without it only a passthrough lane can carry
   primary distribution. No quest owned that lane, and `quest/m2/msfts-convergence.md` listed
-  transporting TS verbatim as a non-goal. We proposed both in the draft
-  [#4670](https://github.com/moq-dev/moq/pull/4670), planned in upstream's quest interview format:
-  - `quest/m1/ts-passthrough.md` is MSFTS `mpeg2ts` whole-packet carriage, paced on the source PCR at
-    a fixed delay.
-  - The PR also re-points `msfts-convergence.md`'s non-goal at passthrough.
+  transporting TS verbatim as a non-goal. We proposed both in
+  [#4670](https://github.com/moq-dev/moq/pull/4670), planned in upstream's quest interview format,
+  and the maintainer took the PR over and merged it:
+  - `quest/m1/ts-passthrough.md` is whole-packet carriage of the multiplex, paced on the source PCR
+    in the release stage at a fixed delay. As merged it is listed in a new `m2ts` section of the hang
+    catalog rather than in MSFTS's track fields, its groups start at the video PID's random access
+    points, and it is the 1+1 lane at TS-packet identity, with leg alignment deferred to
+    `quest/m2/ts-hitless.md`.
+  - `msfts-convergence.md` now points at passthrough instead of listing it as a non-goal.
 
   It also proposed `quest/m1/release-clock-recovery.md`: the release stage steered against a
   publisher clock off by up to ±30 ppm, within 13818-1's slew limits, ahead of `delay.md`'s "only if
   measured" on the derived exposure. The maintainer took that spec into #4645 to implement directly,
   with one change: a source beyond tolerance fails the export as well as being counted. At his
-  request the quest was dropped from #4670, which now plans passthrough only.
-
-  Its one failing check was `main`'s quest lint, on `admission-bench.md` and `cluster-shims.md`,
-  two files the PR does not touch. [#4666](https://github.com/moq-dev/moq/pull/4666) fixed it on
-  `main`, and `main` is merged into the branch, which passes the pinned `quest check`.
+  request the quest was dropped from #4670 before it merged.
 - **The check** merged in [#4643](https://github.com/moq-dev/moq/pull/4643), into the questline's
   branch `quest/m1/tstd/README`, which #4645 also targets, not into `main`. There `test/ts` still
   carries the approximate TB-only check with fixed leak rates. It is hand-rolled from
@@ -2268,7 +2292,8 @@ changelog is cheapest and least safe:
 | [#3731](https://github.com/moq-dev/moq/issues/3731) | **not actionable either way** — the quest defers to msfts#33, which the MSFTS revision has since answered and which is now closed, with the two remaining convergence differences in its closing comment | `quest/m4/msfts-convergence.md` |
 
 The practical consequence on `ffa5b81b` was that **nothing the campaign had blocked on these was
-unblocked**; #3798 has since been fixed on `main` (below). On `ffa5b81b` the #3493 permanence
+unblocked**; #3798 has since been fixed on `main` and #3926 closed by #4504 (both below), and the
+maintainer reopened #3925 and #3731 on 2026-09-28. On `ffa5b81b` the #3493 permanence
 re-soak still cannot run a continuous source ([T21](test-21-permanence-soak.md)),
 the deterministic-groomer experiment still has no byte schedule to work against
 ([planned-experiments](planned-experiments.md) P1-o), and the real-encoder arm still needs its
