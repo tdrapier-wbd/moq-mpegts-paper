@@ -223,7 +223,7 @@ question is settled in favour of tracks and implemented in
 ([T17](test-17-si-snapshot-tracks.md)) — including the sparse-schedule case that cannot be validated
 by counting sections.
 
-### TDT/TOT — carriage closed, emission timing open
+### TDT/TOT — carriage closed, then emission timing
 
 Reported as [#2914](https://github.com/moq-dev/moq/issues/2914), where the exclusion was deliberate and
 defended on the ground that a clock is not state and an upstream multiplexer's time carries unknown
@@ -2239,7 +2239,7 @@ the exporter cannot tell a session loss from a publisher that has gone.
 The linger and the exit-code split are now contributed and merged, in § *The liveness exit, implemented*
 below.
 
-### A UDP sink for `export ts` — asked once, declined, withdrawn, and re-asked narrowly
+### A UDP sink for `export ts` — asked once, declined, withdrawn, re-asked narrowly, and deferred
 
 [**#1839**](https://github.com/moq-dev/moq/issues/1839), *"feat(egress): generic TS output sink
 (UDP/RTP/FEC/ST 2022-7) + PCR-aware pacing"*, was closed **not planned** by this campaign in July
@@ -2264,6 +2264,12 @@ would therefore emit a stream an IRD still cannot clock off, that the schedule i
 sink, and that the sink should wait behind it. Filing the weaker ask alongside the evidence against
 prioritising it is the honest form when the campaign is not a customer and cannot supply the customer
 ask that was requested.
+
+**Deferred on the thread, and closed not planned on 2026-09-24.** The maintainer suggested a second
+process; we agreed that `tsp` already does the socket work on both sides and deferred the ask; he
+closed it, noting that an export sink adds little until the byte schedule lands. Why the campaign
+agrees, and the form in which the ask would return, are in
+[planned-experiments](planned-experiments.md) § *The UDP sink*.
 
 ### Four of these were closed as completed, by a planning document that changed no code
 
