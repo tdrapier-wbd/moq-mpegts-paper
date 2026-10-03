@@ -2287,6 +2287,18 @@ silently inverted (§5), a whole arm could have scored as a clean survival.
 > capture is below a floor as *void* rather than as a survivor, and print it. A null result needs
 > positive evidence that the rig was working, and "nothing crashed" is not that evidence.
 
+### An unattended workstation sleeps through a paced run, and every process survives it
+
+*From the #4733 re-run.* A batch of 60 s damage arms, started on this workstation while nobody was at
+it, ran for 80 minutes. The power log showed the machine in maintenance sleep with brief dark wakes, so
+each arm's 60 s source took 780–1,060 s of wall clock. Every process exited 0, but the egress files
+ranged from 12 MB to 74 MB where a full run writes 74 MB. One arm happened to run between sleeps and
+was the only valid cell. The same arms under `caffeinate` all ran 61.7 s and wrote identical egress.
+
+> **Wrap every unattended local run in `caffeinate -dims`, and check each cell's wall-clock duration
+> against its nominal window before reading its result.** A cell whose duration overshoots is void,
+> however cleanly it exited.
+
 ### A grader whose pattern does not match its tool's wording scores every input as clean
 
 *From [T42](test-42-h3-receiver-fidelity.md) P0-e.* The laundering rig counted `tsp -P continuity`
