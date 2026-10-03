@@ -1022,7 +1022,7 @@ the job of the wire monitoring downstream. The corrected default loosens `pcr-va
 check, from 40 ms to 100 ms, so a regression that spaced PCRs between the two would now pass by
 default. Nothing has run against a live feed cross-host.
 
-### TR 101 290 counters at ingest — contributed as [#4750](https://github.com/moq-dev/moq/pull/4750), draft
+### TR 101 290 counters at ingest — contributed as [#4750](https://github.com/moq-dev/moq/pull/4750), merged
 
 **The defect.** This is the ingest half of [#1838](https://github.com/moq-dev/moq/issues/1838).
 `moq import ts` and the SRT gateway graded nothing of the feed they received beyond PSI CRCs and the
@@ -1063,20 +1063,21 @@ before any drop, to 900. That is the sender's zero-padding of short reads, recor
 counter now shows it directly. Decode throughput, best of 20, is
 1,091 MB/s before and 1,054–1,086 MB/s after on the excerpt. The local `just check` passed.
 
-**Review.** The maintainer approved the merge and set it to merge automatically once CI passes. First
-he fixed the one defect review found: a PMT revision that dropped a stream left its PTS timer running,
+**Review, and merge.** Merged into `main` as `19563812f`, and not yet in a release. Before merging, the
+maintainer fixed the one defect review found: a PMT revision that dropped a stream left its PTS timer running,
 so `PTS_error` grew on a PID the programme no longer listed. A regression test now covers it. Review
 also raised a resource point that holds. Every importer now keeps continuity state, including the last
 payload packet, for every non-null PID it sees, where before only routed PIDs had any. That is at most
 about 1.5 MB per importer, and `Programs` does not cap how many importers the first PAT creates. Two
 follow-ups were offered: keep the packet only for PIDs the PMT lists, or grade the all-PID checks once
-in `Programs`.
+in `Programs`. The verification above ran on the PR before that fix and has not been repeated on the
+merged build.
 
 **Open.** An unsignalled forward PCR jump below the importer's 1 s step bound stretches the program clock,
 so the PCR checks count the jump and any table or PTS the stretch makes late counts as well. The tests
 assert this rather than hide it. Interval resolution is the PCR spacing. The counters stop at ingest:
 export reports none, which leaves the egress grading to the wire monitor downstream. Nothing has run
-cross-host. The PR touches the same import loop as #4733, and whichever lands second has a small conflict.
+cross-host. #4733 is to rebase on top of it.
 
 ---
 

@@ -877,8 +877,8 @@ platform does not require adopting a new operational vocabulary.
 
 **Ingest grading.** The same checks belong at the ingest edge, against the feed as received. A fault
 in the contribution path is then attributed to the source rather than to the fabric, and an alarm at
-egress can be read against what actually arrived. Upstream's importer has such counters in a proposed
-change `[unmerged]`. They cover the P1 set apart from `PID_error`, which the importer's per-stream
+egress can be read against what actually arrived. Upstream's importer has such counters on `main`,
+not yet in a release. They cover the P1 set apart from `PID_error`, which the importer's per-stream
 liveness rows already answer, together with the transport, PCR repetition, PCR discontinuity and PTS
 checks of P2. Their measured agreement with an independent analyser is in [Evidence](evidence.md) §5
 row 17. Two things stay outside them. PCR accuracy needs an arrival clock the importer does not have.
