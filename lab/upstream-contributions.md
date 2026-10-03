@@ -1063,6 +1063,15 @@ before any drop, to 900. That is the sender's zero-padding of short reads, recor
 counter now shows it directly. Decode throughput, best of 20, is
 1,091 MB/s before and 1,054–1,086 MB/s after on the excerpt. The local `just check` passed.
 
+**Review.** The maintainer approved the merge and set it to merge automatically once CI passes. First
+he fixed the one defect review found: a PMT revision that dropped a stream left its PTS timer running,
+so `PTS_error` grew on a PID the programme no longer listed. A regression test now covers it. Review
+also raised a resource point that holds. Every importer now keeps continuity state, including the last
+payload packet, for every non-null PID it sees, where before only routed PIDs had any. That is at most
+about 1.5 MB per importer, and `Programs` does not cap how many importers the first PAT creates. Two
+follow-ups were offered: keep the packet only for PIDs the PMT lists, or grade the all-PID checks once
+in `Programs`.
+
 **Open.** An unsignalled forward PCR jump below the importer's 1 s step bound stretches the program clock,
 so the PCR checks count the jump and any table or PTS the stretch makes late counts as well. The tests
 assert this rather than hide it. Interval resolution is the PCR spacing. The counters stop at ingest:
