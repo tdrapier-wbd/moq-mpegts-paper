@@ -1022,6 +1022,53 @@ the job of the wire monitoring downstream. The corrected default loosens `pcr-va
 check, from 40 ms to 100 ms, so a regression that spaced PCRs between the two would now pass by
 default. Nothing has run against a live feed cross-host.
 
+### TR 101 290 counters at ingest — contributed as [#4750](https://github.com/moq-dev/moq/pull/4750), draft
+
+**The defect.** This is the ingest half of [#1838](https://github.com/moq-dev/moq/issues/1838).
+`moq import ts` and the SRT gateway graded nothing of the feed they received beyond PSI CRCs and the
+per-stream liveness rows above. A feed that lost sync, dropped packets, ran its PAT late or gapped its
+PCR was invisible at ingest until something downstream failed. The upstream quest
+(`quest/m2/ts-import-health.md`) fixed the scope: the TR 101 290 V1.4.1 checks a contribution feed is
+graded on, at ETSI's fixed limits, as counters only.
+
+**The contribution.** A private `ts::health` module counts `TS_sync_loss`, `Sync_byte_error`,
+`PAT_error_2`, `Continuity_count_error`, `PMT_error_2`, `Transport_error`, `PCR_repetition_error`,
+`PCR_discontinuity_indicator_error` and `PTS_error`, beside the existing `CRC_error`. Nothing published
+changes. The importer's continuity classifier moves into the module, so routing and the counter read one
+verdict per packet. Sync is graded on a separate 188-byte grid with ISO 13818-1 Annex G.1 hysteresis,
+lost after two corrupt sync bytes and acquired after five. The framer re-scans at the first bad byte, so
+its own grid does not follow that hysteresis, and it is left unchanged. Table and PTS intervals run on the PCR-stepped
+program clock the liveness rows already use, and an outage counts once per elapsed limit. The PCR checks
+grade consecutive values and skip an interval the discontinuity indicator declares. A packet with TEI set
+counts `Transport_error` and nothing else. The shared stats logger writes one line with every total
+whenever any of them moves, so the CLI and the SRT gateway both report them. `PID_error` is left to the
+liveness rows, and `PCR_accuracy_error` is not measured: the importer has no arrival clock of the
+precision it needs.
+
+**Verification** `[unmerged]`, P0 and P1, file domain at P0 and live at P1, co-resident. At P0 there are
+13 tests, one stimulus per check with a control each way, each imported both in whole packets and in
+100-byte pieces, which must count the same. Six mutants of the checks were run: five were killed, and one
+is equivalent. Every `test_data` capture reads zero except `kyrion_mpeg2av_ac3.ts`, which reads two
+`PAT_error_2` and two `PMT_error_2`. TSDuck measures its PAT repetition at 811 ms, with intervals of
+806–818 ms. The capture sends its PMT before its PAT, so the program clock starts after the first interval
+and two of the three are counted. On the 72 s `t23_F` excerpt of `CNNiEMEA2.ts`, the clean file reads
+zero. Twenty packet-aligned 7-packet drops read 28 continuity errors, split 20, 3, 4 and 1 over four PIDs,
+which is exactly TSDuck's `continuity` plugin on the same file. One TEI packet reads one transport error.
+Twenty unaligned 1,456-byte cuts read 20 sync losses and 40 sync-byte errors. At P1, the same excerpt was
+PCR-paced by `tsp` into `moq import ts` on a local relay, with `export ts` subscribed. The clean feed logs
+no line, the drops log `continuity_count_error=28`, and the TEI packet logs `transport_error=1`. Through
+`moq-srt`, fed by `srt-live-transmit` 1.5.6 from a pipe, `ts_sync_loss` climbs from the first second,
+before any drop, to 900. That is the sender's zero-padding of short reads, recorded below under
+[#4581](https://github.com/moq-dev/moq/issues/4581), where it took a payload-dump build to locate; the
+counter now shows it directly. Decode throughput, best of 20, is
+1,091 MB/s before and 1,054–1,086 MB/s after on the excerpt. The local `just check` passed.
+
+**Open.** An unsignalled forward PCR jump below the importer's 1 s step bound stretches the program clock,
+so the PCR checks count the jump and any table or PTS the stretch makes late counts as well. The tests
+assert this rather than hide it. Interval resolution is the PCR spacing. The counters stop at ingest:
+export reports none, which leaves the egress grading to the wire monitor downstream. Nothing has run
+cross-host. The PR touches the same import loop as #4733, and whichever lands second has a small conflict.
+
 ---
 
 ## 3. Resilience and redundancy
@@ -1126,7 +1173,11 @@ failover*).
   (T6 § *Mesh source failover*). That this is the same check is inferred from the message; the
   diagnostic build was not run in the mesh. Why the two importers' numbering differs and why the
   relay hands over older media are not established. **Open**; the mesh result on `main` is on the
-  issue, and so is the twelve-of-twelve on #4352.
+  issue, and so is the twelve-of-twelve on #4352. Current `main` has since replaced the consumer's
+  live-edge floor with a rule that group starts must not fall. It cuts the
+  [#4733](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fix-in-draft-as-4733) failure
+  but should still refuse this one, since the standby's groups start before the last group read.
+  That is reasoned and untested: the same-hop switch arm of T6 on a current `main` build would settle it.
 
 Two more mesh findings on `ffa5b81b` are not reported separately. Without
 a shared hop, the standby relay's own subscriber freezes silently at the failover; `main` no longer
@@ -2636,10 +2687,10 @@ remains the arm for a real encoder's. With the uncorrected generator, `dev` ende
 first join on both paths, because AC-3 and teletext stepped back about 30 s. `main`, which
 re-anchors each stream, survived the same stream.
 
-### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581)
+### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fix in draft as [#4733](https://github.com/moq-dev/moq/pull/4733)
 
-Upstream has planned it as a quest, together with #4582, in
-[#4587](https://github.com/moq-dev/moq/pull/4587).
+Upstream planned it as a quest, together with #4582, in
+[#4587](https://github.com/moq-dev/moq/pull/4587). The maintainer's draft #4733 implements it.
 
 **The defect.** `moq import ts` and the SRT gateway through it end the whole ingest on the first
 packet they cannot parse. `decode` propagates a PES-header or adaptation-field error from the TS
@@ -2682,7 +2733,34 @@ order, against 26 before. The rule it yields is in
 The rig produced the damage, but the importer ending on it is the defect, and the pipe arms above
 reproduce that without SRT.
 
-**Open.** The SRT loss rate on loopback is itself unexplained. Reported loss reached 6 % at
+**The fix, measured** `[unmerged]`. #4733 refuses a damaged PES, adaptation field or access unit whole,
+clears only its PID, and resumes video at the next keyframe. On the same pipe rig at P1, with #4733's
+merge base as the control, the PES-header and NAL arms now run the full 60 s with one `dropped a damaged
+TS unit` line each, where the base exits 1 on both. A TEI packet on video or on audio does the same. The
+aligned-drop arm, which the base completes in both of two runs, ends `export ts` in both of two runs on
+#4733 with *frame timestamp is below the live edge* at 37.9 s. The cause is in the base, and #4733 makes it
+likely. A drop landing just after a keyframe leaves that group holding only its keyframe, since the rest
+of the GOP is skipped. Unreordered, the group closes with a duration marker at the next keyframe's PTS,
+and the next GOP is open, so its leading pictures present below that marker, which the base's consumer
+takes as its edge. An in-process test with no damage at all reproduces it: a closed GOP followed by an
+open one fails on the base and passes on current `main`, after the group-start rework, so a rebase should
+clear it. Closing the group at the break, by a cut in `desync()`, also clears it on the base. The price of
+the skip, at P0 in-process on the same capture, counted as video frames read back:
+
+| Input | #4733's merge base | #4733 |
+|---|---|---|
+| Clean | 2,492 | 2,492 |
+| One TEI packet on video | 2,491 | 2,479 |
+| Twenty aligned 7-packet drops | 2,471 | 2,114, with the cut in `desync()` |
+
+A drop costs one frame on the base and the rest of its GOP on #4733, 1.2 s on this feed. That is the
+fix's intent, since no published picture then references a lost one, but it trades artefacts a
+downstream decoder would conceal for a freeze of up to a GOP per break, so this feed loses 15 % of its
+video against 1 %. Both points were posted to the PR. Fed through `tsp`, the misaligned-drop arm stops
+at 6.6 s on every build, at the packet where `tsp`'s file input loses sync, so it grades none of them.
+
+**Open.** The aligned-drop arm has to be re-run on #4733 once it is rebased. The SRT loss rate on
+loopback is itself unexplained. Reported loss reached 6 % at
 10 Mb/s. A libsrt-to-libsrt comparison on the same host would say whether the gateway's receiver is
 the bottleneck, and this rig's attempt at it did not produce a usable capture.
 
