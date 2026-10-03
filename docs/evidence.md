@@ -14,7 +14,7 @@ Three conventions apply throughout. **Every figure names its measurement point**
 source, *P1* captured file, *P2* live wire), which are not the TR 101 290 priority sets of the same
 names ([Glossary](glossary.md#broadcast-terms-used-without-definition)). **Nothing here is a hardware P2
 result**; where file and wire differ, both are given. **`[unmerged]`** marks evidence against proposed
-upstream code; **`[dev]`** marks merged behaviour not yet on the release line. **Single-run matrices**
+upstream code. **Single-run matrices**
 establish mechanism and ordering, not distributions.
 
 **Vocabulary.** The *media-aware lane* is upstream `moq-dev`'s MPEG-TS path: the *importer*
@@ -186,7 +186,7 @@ three SCTE-35 splice PIDs** with program-level CUEI registration — at 0 contin
 transport errors. The DVB service layer — SDT service name, provider and type, NIT, PMT PID, TSID,
 ONID — is carried in the catalog and preserved.
 
-**EIT round-trips, including the hard case** `[dev]` ([T17](../lab/test-17-si-snapshot-tracks.md)).
+**EIT round-trips, including the hard case** ([T17](../lab/test-17-si-snapshot-tracks.md)).
 Measured against the upstream change carrying SI on per-table snapshot tracks (each holding only its
 latest version), since merged, across four sub-tables of an 8-day EPG, the set of distinct sections on
 the egress equals the source's exactly — none missing, none added, sizes and `last_section_number`
@@ -2120,11 +2120,11 @@ closed upstream by a plan rather than a fix (§5 row 2a). So the build under tes
 continuous-source result at all, and the permanence evidence is split across two builds that are not
 it: `d518b61b` for the wire, `9d2a4f6e` for resources (§3.2).
 
-**Some results rest on upstream code not yet uniformly on the release line.** The exporter
+**Several results rest on upstream fixes, all now on the release line.** The exporter
 PCR fixes — exact 25 ms values, stdout pacing and byte-adjacent placement
 ([upstream contributions](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it)) — are merged; the [rewind-recovery fix](../lab/upstream-contributions.md#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section) is merged, and the
-continuous content-restart regression it introduced is fixed in `5d0991b9` (§3.13). SI carriage — EIT and the
-clock — is `[dev]` until the branch converges with `main`.
+continuous content-restart regression it introduced is fixed in `5d0991b9` (§3.13). SI carriage, EIT and the
+clock alike, is now on upstream's release line.
 
 **No production relay cluster, and no federated mesh.** The resilience work is a two-relay lab.
 
@@ -2169,7 +2169,7 @@ wire conforms.
 | 14 | **Does RIST actually beat SRT on a real path?** | One long WAN run | On loopback the two are indistinguishable within 6 ms; over the WAN RIST reads 262–333 ms lower but its cells had a rising trend and had not settled, so the gap is not yet a finding. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 15 | **Does the relay's year-scale extrapolation plateau?** (§3.6) | Longer soak or `/proc/pressure/memory` logged beside RSS | **Partially answered** — §3.6 records the logarithmic convergence [T21](../lab/test-21-permanence-soak.md) measured, and rules connection scaling out. Open: whether the extrapolated asymptote is observed or continues creeping. One 24 h run on a noq build reads the relay flat at 117–139 MB (§3.6), so the question attaches to the quinn build it was measured on |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin rather than a single-threaded reference server, and a soak | The cost comparison is currently one lane characterised for resources and one characterised only for bytes. Segmented carriage overhead is measured over TCP on the real path (1.036× source TS, [T9](../lab/test-9-performance.md)), while §3.5's HTTP/3 and HTTP/2 figures are derived; its per-role CPU and memory, its fan-out knee and its stability over days are not. The origin is the role the whole commercial argument for this lane rests on, and the one measured is `python3 -m http.server` |
-| 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design | Whether the ingest edge's absorption is observable |
+| 17 | **Should a recovered audio gap be signalled downstream, and should the continuity guard be the only check?** (§3.1) | Upstream design; for the second half, the merge of a proposed ingest counter | Whether the ingest edge's absorption is observable. **The second half is partly answered `[unmerged]`.** A proposed upstream change counts the TR 101 290 errors of the feed as received at `moq import ts` and the SRT gateway: sync loss, continuity, transport errors, PAT, PMT and PTS intervals, and PCR repetition and discontinuity, as counters that change nothing published. On the 72 s broadcast excerpt, at P0 (file, in-process) and at P1 (live, co-resident through a local relay), twenty packet-aligned 7-packet drops read 28 continuity errors, equal per PID to TSDuck's count, one TEI packet reads one transport error, and the clean feed reads zero ([upstream contributions](../lab/upstream-contributions.md#tr-101-290-counters-at-ingest--contributed-as-4750-draft)). It counts a gap where the feed entered even when the importer later recovers from it, but signals nothing downstream, so the first half stays open. PCR accuracy is not graded, since the importer has no arrival clock precise enough, and nothing has run cross-host |
 | 17a | ~~**`moq import ts` linear memory growth (+2.83 MB/h) — leak or cache?**~~ **Answered — a leak, fixed upstream** (§3.2, §3.6) | — | A 24 h re-soak on upstream `main` at `9d2a4f6e` reads **+0.23 MB/h** with a falling last quarter, against a slope that held in every quarter on `d518b61b` ([T21](../lab/test-21-permanence-soak.md#the-3493-re-soak)). Not re-measurable on the build under test, which cannot run the continuous source. **The successor question** is the exporter's unexplained step, now seen in two of three per-process runs |
 | 18 | ~~**Does segmented HTTP keep its reordering advantage over HTTP/3?**~~ **Answered — no, and it never held it for the reason assumed** (§3.3) | — | Answered by [T20](../lab/test-20-segmented-http3.md), and **the advantage proved not to be a substrate effect at all**: re-run with packet sizes equalised it falls to **0.44 even on TCP**, because the original cell gave the segmented lane 34 kB packets against the media-aware lane's 931 B ones and `netem` reorders per packet. §3.3 carries the H3 figures and the loss and outage cells the substrate change wins the segmented lane instead. **The successor question** is not which lane is more robust but which failure mode a primary feed should prefer — lateness with recoverable objects, or bounded latency with discarded programme |
 | 19 | **Why does the media-aware lane lose more programme than SRT, and why does its figure move with the build?** (§3.3) | A bisection of the 5 s outage cost; the quinn reorder cell with the shaper's drop counter sampled | Whether the margin by which SRT leads is a property of the lane or of one QUIC stack's configuration. **Partly answered.** The outage cost belongs to the build: at one later commit both stacks lose the same at either budget, under CUBIC as under their own controllers. On noq, 20 % reorder is the stack's loss detection: reordered packets are declared lost and the sender's window falls about fourteen-fold, which no buffering or headroom moves and relaxing both loss thresholds all but removes. Open: which change raised the outage cost, and what quinn's reorder cost is, since relaxing its thresholds keeps its window and not the programme |
