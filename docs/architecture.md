@@ -823,12 +823,16 @@ Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill
 upstream's `dev` merge; on the build under test it exits at the session drop and needs a supervisor
 to restart it, which brings a 30 s outage back to about what the older build lost
 ([Evidence](evidence.md) §3.4). The edge stage should treat that supervisor as part of the egress, not
-as operations tooling, because on the build under test every session loss ends the exporter.
+as operations tooling, because on the build under test every session loss ends the exporter. On
+upstream `main` from #4504, `export ts --linger` carries the exporter across a relay restart and a
+publisher restart in the same process, flagging each resume on the PCR PID, up to four times per
+resume ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather than the recovery
+path.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.
 
-**Source failover is bounded below by QUIC idle timeout (~30 s default, ~11 s tuned)**, extended on the
+**Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at 10 s, upstream `main`'s default from #4606)**, extended on the
 build under test by the standby's lag in group numbering, and **is not reliable on a graceful exit** — a
 clean end of the publisher's input propagates completion instead of reselecting ([Evidence](evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
@@ -976,7 +980,7 @@ the groomer*, and they are worth naming because they are unfamiliar to a broadca
 | Concern | On MoQ | On segmented HTTP |
 |---|---|---|
 | Liveness signal | subscription state; relay memory against its per-ingested-channel ceiling | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
-| Silent failure mode | **a stalled source behind a healthy session, indefinitely.** The idle timeout catches an *idle* peer — a publisher with no subscriber dies to it at ~30 s, and a frozen relay at 34.3 s — but a publisher whose input has stopped is not idle from QUIC's point of view, and [T22](../lab/test-22-silent-media-plane-failure.md) froze one for 120 s without provoking a single error, timeout or reconnect anywhere. Detection has to come from the media plane, where it takes ~1.7 s. An edge stage configured `--on-stall continue` then re-hides it, emitting valid empty CBR | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
+| Silent failure mode | **a stalled source behind a healthy session, indefinitely.** The idle timeout catches an *idle* peer — a publisher with no subscriber dies to it at ~30 s and a frozen relay at 34.3 s, both at the 30 s default of the builds measured — but a publisher whose input has stopped is not idle from QUIC's point of view, and [T22](../lab/test-22-silent-media-plane-failure.md) froze one for 120 s without provoking a single error, timeout or reconnect anywhere. Detection has to come from the media plane, where it takes ~1.7 s. An edge stage configured `--on-stall continue` then re-hides it, emitting valid empty CBR | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
 | Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal*, so an alarm below the segment duration chatters and one above it is slow. Measured, the groomer derives ~9 s against the MoQ lane's ~1 s |
 | Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
 | Recovery | reconnect and resubscribe | re-fetch; the segment is still addressable, which is genuinely easier |
@@ -1123,7 +1127,9 @@ Ranked by how much a negative answer would change the architecture.
    on it permanently ([T27](../lab/test-27-liveness-detector.md)); that is fixed from `5d0991b9`,
    where the importer exits at the restart instead, still on `ffa5b81b`
    ([T40](../lab/test-40-continuous-join-through-srt.md),
-   [T41](../lab/test-41-import-reanchor-coverage.md)), so a deployment must pin or patch the client.
+   [T41](../lab/test-41-import-reanchor-coverage.md)). Upstream `main` at `9d2a4f6e` survives it;
+   later `main`, from #4543, ends the import at any backward step by design, flagged or not, so a
+   deployment must pin or patch the client.
    **T-STD occupancy is tested in software and fails behind the media-aware lane**, beyond this
    gateway's reach (§4.3). What remains untested is source-clock drift and mid-stream PID change; each
    has a reproducible stimulus and an instrument asserted to grade it, but has met neither stage.

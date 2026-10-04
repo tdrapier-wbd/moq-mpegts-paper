@@ -119,7 +119,7 @@ every "not established" entry recurs in §4 or §5.
 | **Loss** | The [congestion controller](glossary.md#transport-and-deployment-terms) decides the result on both data planes, and **once the lanes are substrate-matched, reordering no longer separates the media-aware lane from segmented HTTP** — the separation that used to do so was a packet-size artefact. Six congestion conditions rank the controllers three ways, so **no controller recommendation is supportable**: the provisioning margin (≥ 1.2× / ≥ 1.5×), the bottleneck queue discipline and the receiver's latency budget govern the feed. **Matched at equal *measured* delivered latency and graded on the content delivered, SRT loses less programme than the media-aware lane under every impairment shape run** — a 5 s outage, sustained 5–10 % loss and 20 % reorder — by a margin the build and [QUIC stack](glossary.md#transport-and-deployment-terms) set: under sustained loss the quinn builds, whose BBRv1 bandwidth model ignores loss, tie SRT, and the noq builds lose most of the window whichever controller they run. **`--max-age`, the subscriber's budget, is a recovery allowance and not a latency setting**: a twelve-fold change in it moves delivered latency not at all on a healthy path, where SRT's `--latency` sets delivered latency exactly, so the two cannot be matched against each other. On content it buys back none of an outage, and it is spent in a delivery-latency step that is not bounded by the allowance and does not reverse. Trunking N contended media-aware feeds costs aggregate throughput, and the cost is the subscriber's release deadline rather than the controller or bufferbloat | Where the latency knee sits, and whether it tracks RTT, [group](glossary.md#moq) duration or relay buffering; the same ladder against a real CDN edge; why 20 % reorder defeats the quinn builds too, where on noq it is spurious loss, and what raised the outage cost after the oldest build, the QUIC stack being excluded; SRT below ≈2 s of buffer under loss, which the matched arm could not reach; what segmented HTTP delivers under loss at a non-loopback RTT, where its origin's loss-based sender stalls; whether the latency step ever reverses beyond the two minutes observed | §3.3 |
 | **Redundancy** | Two stream-clocked groomers are byte-identical and hitless through every upstream failure, **on single-track content, with no shared component at all** — separate publisher, relay, exporter and host in two availability zones. **A multi-track mux over independent chains reaches only 75.56 %**, the same packets in a different order. On the segmented lane a pair sharing one feed and one naming scheme is hitless with no receiver-side merge at all | A hardware merge; multi-track identity, which with the exporter's interleave since fixed now needs its packet placement fixed rather than a measurement. On the segmented lane: a distributed segment store, and a standby joining mid-stream | §3.4 |
 | **Cost** | Wire multipliers on a real path; relay CPU and memory envelope. **The fan-out scaling model is now the relay's rather than the test box's**: measured cross-host on `moq-relay` 0.14.15 on quinn, each additional subscriber costs 0.806 % of a core, 1.39 MB and one full stream copy, all linear, giving 124–139 subscribers per core, confirmed against a predicted cliff. **On the build under test (noq) the same measurement gives 1.258 % of a core and 2.62 MB per subscriber with GSO on**, GSO not being the difference. Each carried channel adds about 2 % of a core and memory set by the relay's retention window, 60–69 MB at the default 30 s. Saturation collapses rather than degrades | The opaque lane's wire cost; a second source profile; any wide-area path — this is two availability zones in one region at 0.72 ms RTT, so it bounds relay capacity and says nothing about internet-scale fan-out; the build under test's ceiling with GSO on, which is extrapolated; high fan-out held for longer than 45 s | §3.5, §3.6 |
-| **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention** rather than cached payload or concurrency, each of which §3.14 rules out with its own control. Tunable: 30 s → 10 s [idle timeout](glossary.md#transport-and-deployment-terms) takes it to 489 MB. The segmented lane's static origin has no retained-state term at all under the same abuse | Anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
+| **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention** rather than cached payload or concurrency, each of which §3.14 rules out with its own control. Tunable: 30 s → 10 s [idle timeout](glossary.md#transport-and-deployment-terms) takes it to 489 MB, and 10 s is upstream `main`'s default from #4606, not measured on that build. The segmented lane's static origin has no retained-state term at all under the same abuse | Anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
 | **Availability** | Shedding a late [group](glossary.md#moq) is the lane's designed response to congestion, and **the subscriber process did not reliably survive doing it**: `moq export ts` exited on an evicted group, silently, leaving a syntactically perfect capture behind. [An upstream fix](../lab/upstream-contributions.md#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) covered the container consumer and not the catalog one, and a second closed the residual; the re-run records 0 of 10 against a control's 1 of 10 on the same rig — consistent with the fix, though the event rate is too low for the count alone to establish it | Whether any other consumer carries the same unguarded path; the exit is not a function of budget, so what does determine its rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure** — a source frozen for 120 s produced no log line anywhere, and a dead video path behind a live mux passes the *whole* of TR 101 290 P1 with a worst PCR interval identical to the control's. What does detect every case is **per-PID access-unit liveness**, and that is now a running detector rather than a recommendation: live at the groomed output of a cross-host lane it measures a 60 s video suppression as **57.212 s** against an offline grader's 57.22 s, catches a dead *audio* stream — which has no other wire-observable signature at all — in **0.7–1.4 s**, localises it to the PID, and fires nothing on a healthy lane | Whether commercial monitoring exposes per-PID liveness rather than only per-PID bitrate, which inherits the proportional-sensitivity problem; a **frozen picture** in valid advancing access units, which defeats every transport-layer detector here and over SDI equally; detection-to-response, since only signal availability is measured | §3.12 |
 | **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
@@ -758,6 +758,17 @@ continuity counters of its own, which the edge stage downstream has to absorb. *
 § *Transport-resilience drills*; [T28](../lab/test-28-failure-injection-matrix.md) § *The build
 bisection*).
 
+**On upstream `main` from [#4504](https://github.com/moq-dev/moq/pull/4504) the exporter can wait
+instead of exiting.** With `--linger`, `moq export ts` reconnected after its relay was killed and
+restarted and resumed in the same process, with 0 continuity jumps on any PID and PAT and PMT
+re-sent, after a 12.13 s gap for a 3 s relay outage at the 10 s idle timeout; with `--linger 0s` the
+same exporter exited 1. The flag also carries it across a publisher's clean end or crash: across 24
+resumes no PID's continuity counter jumped. Each resume sets the discontinuity indicator on the PCR
+PID one to four times rather than once, and each is a whole-programme rewind, triggered by a single
+track changing generation shortly after the resume; whether an IRD rides that burst is not
+measured. *Measured, P1, file domain, `main` at `83ce47fe`, loopback, one relay, one run per arm of
+the relay restart* ([T13](../lab/test-13-downstream-grooming.md) § *Liveness*).
+
 **Source failover across a relay mesh works for a hard kill, and is bounded by detection and by the
 standby's lag rather than by recovery.** A relay advertises, per peer, the best route whose hop chain
 *excludes* the requester, and a shared first-hop identifier (`--hop`, formerly `--origin`) lets two
@@ -765,7 +776,8 @@ publishers declare their feeds interchangeable — explicitly, because the relay
 will not infer it. The standby is advertised the instant its publisher joins, and the subscribers on
 the dead publisher's relay fail over. But nothing downstream learns of a hard failure until the QUIC
 **idle timeout** expires, so the resume is at least one idle timeout after the kill (~30 s at the
-default, ~11 s with it set to 10 s). **The precondition is a common source**; what a shared source
+30 s default of the builds measured, ~11 s at 10 s, which is the default on upstream `main` from
+[#4606](https://github.com/moq-dev/moq/pull/4606)). **The precondition is a common source**; what a shared source
 rules out is a divergent track layout or codec across the pair. On earlier builds offset group
 numbering was free, because the subscriber skipped to the standby's live edge. **On `ffa5b81b` it is
 not:** the relay's splice does not deliver below the last group it delivered, so a standby that joined
@@ -871,13 +883,16 @@ parent delivering the full rate. The mechanism is measured. Every source skip un
 the exporter, and each rewind renews the interleave's full `max_age` hold. That holds every source a
 whole skip budget behind the newest content, so its next stall skips again. Disabling the hold alone
 restores the full rate on the same build. The upstream fix that keeps the hold across a rewind
-delivers 9.70–9.87 Mb/s at 10 % loss against 1.13 unfixed, and leaves 0 % loss unchanged. It has
-since merged into `main`, but these figures were measured on the change before merge, and the merged
-build, which also gives a resumed broadcast a fresh hold budget, has not been re-measured. Under
-sustained loss the fix falls back to arrival order, so interleave determinism holds only on a clean
-path. A receiver built from `main` before the fix had to choose between interleave determinism and
-delivery under loss. From the fix onwards it should not have to, and a rerun of the loss point on
-the merged build would settle that. *Measured, P1, wire domain, all roles on one host, one or two runs per cell*
+delivers 9.70–9.87 Mb/s at 10 % loss against 1.13 unfixed on the change before merge, and leaves
+0 % loss unchanged. The merged build, which also gives a resumed broadcast a fresh hold budget,
+measures the same: 9.68 and 10.82 Mb/s at 10 % loss against 9.84 Mb/s at 0 % (`main` at
+`83ce47fe`). These rates are egress bytes, which include the exporter's padding to its declared mux
+rate, so a figure above the clip's rate compares builds on one rig rather than measuring content
+delivered. Under sustained loss the fix falls back to arrival order, so interleave determinism holds
+only on a clean path. A receiver built from `main` before the fix had to choose between interleave
+determinism and delivery under loss; from the fix onwards it keeps delivery under loss and the
+interleave on a clean path, the latter being #4001's result, not re-measured on the merged build.
+*Measured, P1, wire domain, all roles on one host, one or two runs per cell*
 ([T8b](../lab/test-8b-congestion-control.md) § *C7*).
 
 > **A caveat on P1 that this rig cannot resolve.** On the rig that produced these cells, **1.4–1.6 %
@@ -1541,12 +1556,16 @@ materialise). **`moq import ts` logs audio frame-sync loss but not video silence
 The recurring asymmetry (also T21, T22): wire conformance and transport health are not sufficient;
 per-stream liveness plus groomer counters are.
 
-### 3.13 Which PCR timeline events does the lane survive? — All six placed classes, since the upstream rewind-recovery fix; the continuous content-restart export stall is fixed in `5d0991b9`
+### 3.13 Which PCR timeline events does the lane survive? — All six placed classes, from the upstream rewind-recovery fix until #4543, which ends the import at a rewind by design; the continuous content-restart export stall is fixed in `5d0991b9`
 
 **For an operator:** since the rewind-recovery fix, a PCR base rollover, a forward jump, a rewind and an
 encoder restart each cross the lane with no programme hole and without the deep buffer earlier builds
 needed. What still stops long-running continuous publishing is a separate importer exit at the first
-content join, described below.
+content join, described below. **On upstream `main` from #4543 a rewind ends the import instead, by
+design**: the flagged 1 s rewind and the flagged encoder restart each end a pipe-fed import, while a
+flagged forward jump still publishes (measured on the development line at `9a80e875`, since become
+`main`; [upstream contributions](../lab/upstream-contributions.md), the #4513/#4543 entry). Upstream
+plans an in-process restart for the flagged case; the rollover is not re-measured there.
 
 [T23](../lab/test-23-pcr-discontinuity-classes.md), P0/P2, software. Six arms, each placing exactly one
 deliberate timeline event at 45 s of a 105 s run, graded at the source, after the round trip and after
@@ -1590,7 +1609,10 @@ H.264, MPEG-1 Layer II and AC-3 alike, and the SRT chain holds full export rate 
 joins. *Measured, P1, wire domain, all roles on one host, one run per arm*
 ([T41](../lab/test-41-import-reanchor-coverage.md), [T40](../lab/test-40-continuous-join-through-srt.md)).
 The 24 h permanence re-soak on `ts-continuous-source.py` has run on that build (§3.2); on `ffa5b81b`
-it cannot. See
+it cannot. **Later `main`, from [#4543](https://github.com/moq-dev/moq/pull/4543), ends the import
+at the first unflagged wrap on every stream kind, by design** (`83ce47fe`, same rig as T41), so the
+survival result describes `9d2a4f6e` and not the current trunk, where a looping source cannot be
+published continuously. See
 [T27](../lab/test-27-liveness-detector.md) for the pre-fix bisect.
 
 **The mandatory event is discharged.** The 33-bit PCR base wraps every 26.51 h in every conformant
@@ -1654,8 +1676,9 @@ non-draining reader costs nothing measurable while 42 dead ones cost 1.8 GB.
 1,959 MB: the first storm sets the high-water and the rest reuse it, so the exposure scales with peak
 retained sessions rather than with how many storms arrive. Provision
 `abandoned-session rate × idle timeout × media rate`, and treat `--server-quic-idle-timeout` as the
-control — against the failover detection the 30 s default exists to provide
-([T6](../lab/test-6-relay-resilience.md)).
+control — against the failover detection the default exists to provide
+([T6](../lab/test-6-relay-resilience.md)). The default was 30 s on the builds measured here and is
+10 s on upstream `main` from #4606, the setting the 489 MB row measured on an older build.
 
 **This narrows a claim the paper was making without evidence.** [Comparison](comparison.md) §2 holds
 that a relay carrying per-subscription state is structurally more exposed than a cache serving
@@ -2155,7 +2178,7 @@ wire conforms.
 | 1 | ~~**Would an evenly spaced exporter PCR cadence clear the P1 repetition gate on the MoQ lane?**~~ (§3.2) | **Answered — no, and the gate is now met by another route.** Closed by [T19](../lab/test-19-pcr-grid-verification.md) measurements 10 and 11 | The cadence question is settled negatively: all three exporter domains are fixed upstream ([upstream contributions](../lab/upstream-contributions.md#pcr-clustering--reported-fixed-upstream-in-a-day-and-the-fix-moved-the-defect-rather-than-removing-it): exact 25 ms PCR values, stdout release timing, and byte-adjacent placement — adjacency 0 %, p95 release error 1.70 ms) and the wire still carried **12.2 % of intervals above 40 ms**, because a coded frame's bytes belong to its own 40 ms and the CBR mux schedule that used to smooth them is not in the decode timestamps. **What clears the gate is downstream and unrelated to cadence** — the three groomer fixes in §3.2, which hold on every source and at every cushion tested |
 | 2 | **Does groomed output pass TR 101 290 P1/P2 on real hardware IRDs, sustained, including ST 2022-7 under loss?** | A hardware IRD and analyser | Everything. Until it passes, the grooming design is structurally sound and file-validated, not broadcast-acceptable. **Both lanes pass P1/P2 in software**, the media-aware one since [T19](../lab/test-19-pcr-grid-verification.md) measurement 11. At the T-STD, SRT's bytes through the same groomer pass every transport buffer and every 2 s window, the media-aware lane's fail and segmented HTTP's are ungraded (§3.16). So on the media-aware lane this row measures receiver tolerance, not conformance, unless the IRD is fed a rebuild (row 2b) |
 | 2b | **Can a live re-multiplexer keep the media-aware lane's wire T-STD-conformant across hosts, and for 1+1?** *On one host, answered:* it can, at 2,196.7 ms of presentation latency (§3.16) | Clock recovery from a remote source's timestamps, and a schedule computed from the stream alone for 1+1 | Whether the media-aware lane serves TS-out to an IRD at conformance in a deployment. On one host a laboratory re-multiplexer makes the wire conformant live on the build under test, and about 1.6 s of its latency is the lane's own transit and ordering (§3.16). What is open is following a remote source's clock, and keeping two legs identical |
-| 2a | ~~**Does the upstream rewind-recovery fix ship without the continuous-timeline content-restart regression?**~~ **Answered — export stall fixed in `5d0991b9`** (§3.13) | — | The continuous content-restart [export stall](../lab/upstream-contributions.md) is closed by the export-side fix; **successor**: the importer exits at content join (*below the live edge*, [T40](../lab/test-40-continuous-join-through-srt.md)); **closed upstream by a plan, not a fix, and live on `ffa5b81b`; gone on `main` at `9d2a4f6e`** ([T41](../lab/test-41-import-reanchor-coverage.md), [T40](../lab/test-40-continuous-join-through-srt.md); §3.13) |
+| 2a | ~~**Does the upstream rewind-recovery fix ship without the continuous-timeline content-restart regression?**~~ **Answered — export stall fixed in `5d0991b9`** (§3.13) | — | The continuous content-restart [export stall](../lab/upstream-contributions.md) is closed by the export-side fix; **successor**: the importer exits at content join (*below the live edge*, [T40](../lab/test-40-continuous-join-through-srt.md)); **closed upstream by a plan, not a fix, and live on `ffa5b81b`; gone on `main` at `9d2a4f6e`; on `main` from #4543 any rewind ends the import by design** ([T41](../lab/test-41-import-reanchor-coverage.md), [T40](../lab/test-40-continuous-join-through-srt.md); §3.13) |
 | 3 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs, and a path with 80–150 ms of RTT | Both paths measured were healthy, so nothing exercised the recovery the point-to-point tunnels exist for — the case that should favour them. This is the arm that could change the ordering rather than confirm it |
 | 4 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's own edge stage?** | MEG- or TITAN-class hardware | Whether part of the broadcast-grade layer is purchasable on one data plane and not the other. It is also the only route to a low-latency TS-in-HLS receiver, and therefore the condition the segmented lane's route-level case rests on ([Comparison](comparison.md) §6.1) |
 | 5 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | The whole of MoQ's remaining carriage-fidelity advantage |

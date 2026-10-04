@@ -470,8 +470,13 @@ restarts it stalled video and primary audio permanently, bisected to its own mer
 exits at the same restart instead (*frame timestamp is below the live edge*), still present on
 `ffa5b81b` ([T40](../lab/test-40-continuous-join-through-srt.md),
 [T41](../lab/test-41-import-reanchor-coverage.md)). Upstream `main` at `9d2a4f6e` survives the restart,
-but the placed classes have not been re-measured on it, so no build is yet *measured* to carry both
-cases, and a deployment must pin or patch the client until that arm is run. The **forward** jump's missing flag, the one residue those
+but the placed classes have not been re-measured on it. Later `main`, from
+[#4543](https://github.com/moq-dev/moq/pull/4543), ends the import at any backward timestamp step,
+flagged or not, on every stream kind measured, while a flagged forward jump still publishes
+(`83ce47fe`, [T41](../lab/test-41-import-reanchor-coverage.md); [upstream contributions](../lab/upstream-contributions.md)); upstream plans
+an in-process restart for the flagged case only. So no build is *measured* to carry both cases, and a
+deployment must pin or patch the client, or republish at each backward step as upstream's design
+intends. The **forward** jump's missing flag, the one residue those
 six arms left, has since been fixed upstream and verified by re-running the arm
 ([T23](../lab/test-23-pcr-discontinuity-classes.md)).
 
