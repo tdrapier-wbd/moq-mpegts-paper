@@ -34,8 +34,8 @@
 > build's delivery at 10 % loss, on either controller, bisected to the media-time interleave (#4001).
 > The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews
 > the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate, measured
-> on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`);
-> the merged build has not been re-measured.
+> on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`),
+> and confirmed on the merged build: `main` at `83ce47fe` delivers the full rate at 10 % loss.
 > The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
@@ -890,9 +890,15 @@ change to the same patch. Same rig, 10 % loss unless stated:
 | capped at 200 ms | 8.37 Mb/s | 8.54 | 80 |
 | kept across a rewind (#4618, on the PR before merge) | 9.70, 9.87 Mb/s | 10.47, 10.13 | 4, 4 |
 | 0 % loss, as on `main` / kept across a rewind | 9.85 / 9.84 Mb/s | 9.90 / 9.93 | 1 / 1 |
+| merged, `main` at `83ce47fe`, uninstrumented, 10 % loss | 9.68, 10.82 Mb/s | 10.05, 11.00 | — |
+| merged, `main` at `83ce47fe`, uninstrumented, 0 % loss | 9.84 Mb/s | 9.91 | — |
 
 *Measured, P1, wire domain, all roles on one 8-vCPU host beside the standing units only, 120 s per
-run, BBRv3 on noq, one run per cell except the fixed build at 10 % loss, which has two.*
+run, BBRv3 on noq, one run per cell except the fixed and merged builds at 10 % loss, which have two.
+Delivered rate is egress bytes, as in every C7 cell: the exporter pads to the declared mux rate and
+catches up after its early holds, so a figure above the clip's rate compares builds on this rig and
+is not a measure of content delivered. Neither process died in any merged-build run, and TSDuck
+counted every packet written.*
 
 Disabling the hold alone restores the full rate, so the hold is the cause. The unfixed run's log
 shows why it compounds rather than costing a fixed latency. Of 56 holds, 2 ended with the lagging
@@ -912,10 +918,11 @@ merged commit adds one change the arms did not carry: `resume()` now clears the 
 replacement broadcast starts with a fresh budget. Before the merge, a receiver on `main` had to choose
 between #4001's deterministic multi-track interleave ([T12](test-12-dual-path-handoff.md)) and
 delivery under loss, because pinning the subscriber to #4001's parent gave up the interleave. A
-subscriber at or after `e488e699` should keep the interleave on a clean path and the full rate under
-loss, falling back to arrival order while the loss lasts. That rests on the pre-merge arms until C7's 10 %
-loss point is rerun on the merged build, and the rerun is what the hardware-window rehearsal build
-should be checked against.
+subscriber at or after `e488e699` keeps the full rate under loss, falling back to arrival order while
+the loss lasts: the merged build at `83ce47fe` measures 9.68 and 10.82 Mb/s at 10 % loss against
+9.84 Mb/s at 0 %, matching the pre-merge arms. That it keeps the interleave on a clean path is
+#4001's result and is not re-measured here. These are the figures the hardware-window rehearsal
+build should be checked against.
 
 ## Observations
 
