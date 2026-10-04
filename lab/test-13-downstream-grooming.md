@@ -556,7 +556,8 @@ domain, loopback, `CNNiEMEA2.ts`, one relay.*
   rewind: uncommitted output discarded, the program clock restarted, the tables re-sent. A video DTS
   reserve raise (*reordering deeper than the catalog or SPS declares*), seen after two of the kill
   resumes, sets the flag too. Why those tracks change generation after a resume is not located; the
-  instrumented run with the consumer's skip reason logged is the arm that would.
+  instrumented run with the consumer's skip reason logged is the arm that would. Reported upstream as
+  [#4767](https://github.com/moq-dev/moq/issues/4767).
 - **What a receiver sees is a burst of timebase resets per resume rather than one.** Whether an IRD
   rides two to four flagged discontinuities within 2.5 s without a visible event, and how much
   committed media each rewind discards, is not measured; the first is a hardware question, the second
