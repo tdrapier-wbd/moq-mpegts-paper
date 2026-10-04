@@ -760,10 +760,12 @@ instead of exiting.** With `--linger`, `moq export ts` reconnected after its rel
 restarted and resumed in the same process, with 0 continuity jumps on any PID and PAT and PMT
 re-sent, after a 12.13 s gap for a 3 s relay outage at the 10 s idle timeout; with `--linger 0s` the
 same exporter exited 1. The flag also carries it across a publisher's clean end or crash: across 24
-resumes no PID's continuity counter jumped. Each resume sets the discontinuity indicator on the PCR
-PID one to four times rather than once, and each is a whole-programme rewind, triggered by a single
-track changing generation shortly after the resume; whether an IRD rides that burst is not
-measured. *Measured, P1, file domain, `main` at `83ce47fe`, loopback, one relay, one run per arm of
+resumes no PID's continuity counter jumped. At the default `--max-age 500ms` each resume sets the
+discontinuity indicator on the PCR PID one to four times rather than once. The first is the broadcast
+replacement; each extra one is a whole-programme rewind, triggered when one track's subscriber skips ahead over groups that never arrive while it
+catches up on joining the returned broadcast. At `--max-age 2s` each resume flags once, in two runs
+of three resumes, at a latency cost not measured; whether an IRD rides the burst at the default is
+not measured either. *Measured, P1, file domain, `main` at `83ce47fe`, loopback, one relay, one run per arm of
 the relay restart* ([T13](../lab/test-13-downstream-grooming.md) § *Liveness*).
 
 **Source failover across a relay mesh works for a hard kill, and is bounded by detection and by the

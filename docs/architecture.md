@@ -826,7 +826,7 @@ to restart it, which brings a 30 s outage back to about what the older build los
 as operations tooling, because on the build under test every session loss ends the exporter. On
 upstream `main` from #4504, `export ts --linger` carries the exporter across a relay restart and a
 publisher restart in the same process, flagging each resume on the PCR PID, up to four times per
-resume ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather than the recovery
+resume at the default `--max-age` and once at 2 s ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather than the recovery
 path.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
