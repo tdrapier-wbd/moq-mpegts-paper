@@ -192,7 +192,7 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   egress on the current build therefore needs a supervisor, and with one it resumes a second after the
   relay returns, no later than the old build's own reconnect. What the restarted exporter writes is a
   new process's transport stream appended to the old one, and the values it mints per process start
-  again ([upstream contributions](upstream-contributions.md#three-values-the-exporter-mints-per-process--one-closed-one-declined-one-open)),
+  again ([upstream contributions](upstream-contributions.md#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in)),
   so downstream receives a splice rather than a continuation; this drill counts bytes and does not
   grade the splice.
 

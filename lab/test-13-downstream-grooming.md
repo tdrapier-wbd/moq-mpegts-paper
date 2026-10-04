@@ -526,14 +526,41 @@ through `tsp -P regulate`. *P1, file domain.*
   A supervisor that still wants one can read the exit code, 0 for a clean end and 1 for a failure,
   which is the distinction #3926's plan specified.
 - **A crash costs the QUIC idle timeout.** A killed publisher sends no close, so the relay holds its
-  broadcast until the 30 s idle timeout expires, and a same-name publisher restarted inside that
-  window is not delivered to the waiting exporter. This is the detection bound
+  broadcast until the idle timeout expires, and a same-name publisher restarted inside that window
+  is not delivered to the waiting exporter. On `6f1a9e33` that was the 30 s default; on `main` from
+  [#4606](https://github.com/moq-dev/moq/pull/4606) the default is 10 s, and the measurement below
+  resumes 10.1–13.3 s after each kill. This is the detection bound
   [T6](test-6-relay-resilience.md) records for relay failover, now on the publisher side.
-- **The resume flags the break on the PCR PID only.** Every resume set `discontinuity_indicator` on
-  PID 111 and on no other PID. In one of the two clean-end runs, the primary audio PID (121) came back
-  with its continuity counter 4 ahead and no flag of its own, which a TR 101 290 monitor counts as a
-  `Continuity_count_error`. The other run resumed without a jump. Two runs cannot give a rate. The
-  arm that settles it is the same rig repeated, with continuity graded per PID at each resume.
+
+**Continuity at the resume, graded per PID, on `main` at `83ce47fe`** (which carries #4504, #4606,
+#4733 and #4750). Same functional rig, with the egress graded per PID at every resume by a
+continuity grader validated on a 7-packet cut (one unflagged jump) and on a clean capture. *P1, file
+domain, loopback, `CNNiEMEA2.ts`, one relay.*
+
+| Arm | Runs | Resumes | Unflagged CC jumps, any PID | Output after each resume | Exit |
+|---|---|---|---|---|---|
+| Clean end, back after 5 s, clip from its start (PTS back 15 s), `--linger 20s` | 3 | 9 | **0** | PAT within 2 packets, PMT within 4 | 0 |
+| Clean end, back after 5 s, clip continued (PTS forward), `--linger 20s` | 3 | 9 | **0** | as above | 0 |
+| `SIGKILL` 5 s before the clip ends, back after 3 s, `--linger 60s` | 3 | 6 | **0** | 10.1–13.3 s after the kill | 0 (the last session ends cleanly) |
+
+- **The resume is continuity-clean on every PID.** No PID jumped in 24 resumes, so the audio jump one
+  `6f1a9e33` run showed is not reproduced at that sample size. `discontinuity_indicator` is set on the
+  PCR PID only, as before.
+- **But one resume flags a discontinuity more than once.** Each clean-end resume set the flag 1–4
+  times (4–12 per run of three resumes); the extra flags fall within 2.5 s of the resume, on PCR steps
+  of 0, ±25, +50 or +75 ms, and PAT and PMT are re-sent after every one. An exporter instrumented to
+  log each rewind (two `info!` lines, otherwise `83ce47fe`) accounts for every flag in one clean-end and
+  one kill run: the first is the broadcast replacement, and each extra one is **a single track's
+  consumer bumping its generation shortly after the resume** — the sparse passthrough track `5.ts`
+  twice in one resume, `6.mp2` once in another — which the exporter answers with a whole-programme
+  rewind: uncommitted output discarded, the program clock restarted, the tables re-sent. A video DTS
+  reserve raise (*reordering deeper than the catalog or SPS declares*), seen after two of the kill
+  resumes, sets the flag too. Why those tracks change generation after a resume is not located; the
+  instrumented run with the consumer's skip reason logged is the arm that would.
+- **What a receiver sees is a burst of timebase resets per resume rather than one.** Whether an IRD
+  rides two to four flagged discontinuities within 2.5 s without a visible event, and how much
+  committed media each rewind discards, is not measured; the first is a hardware question, the second
+  a frame count across one resume.
 - **Not tested: the exporter's own session dropping**, as in a relay restart. `--linger` waits for
   the broadcast to return, and whether it also carries the exporter across its own session loss is
   the T6 drill repeated with the flag.
