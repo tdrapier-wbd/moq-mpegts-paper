@@ -1578,13 +1578,12 @@ than 30 s. What the grading did find is that **one resume sets the discontinuity
 four times**. An instrumented exporter shows that each extra flag is a whole-programme rewind
 triggered by a single track's consumer changing generation within 2.5 s of the resume; a sparse
 passthrough track did it twice in one resume. Why those tracks change generation is not located.
-This is not reported upstream; it would go as a comment on the linger quest's follow-up or as a
-small issue, with the instrumented log.
+Reported, with the instrumented log, as [#4767](https://github.com/moq-dev/moq/issues/4767).
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
-**Still open:** the fMP4 and MKV exporters have no linger; the error text does not discriminate a
+**Still open:** #4767's multi-flag resume; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
 crash from a clean end, only the exit code does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
@@ -1694,7 +1693,8 @@ merged unreleased —
 Pipe arms isolate the importer defect.
 
 **The fix, measured on #4733 PR head `aae930a23`** (before the last review fixes on merged
-`9f94d85db`; re-run posted on the PR): refuses damaged PES/adaptation/access unit whole, clears PID,
+`9f94d85db`; re-run posted on the PR, and the same arms on merged `main` at `83ce47fe3` posted as
+unchanged): refuses damaged PES/adaptation/access unit whole, clears PID,
 resumes video at next keyframe. Same pipe rig: PES and NAL arms run full 60 s with one `dropped a
 damaged TS unit` line vs exit 1 on pre-flip base `764b2868b`; TEI and twenty aligned 7-packet drops
 complete. Earlier head on pre-flip base could end `export ts` on drops (*frame timestamp is below
