@@ -1600,8 +1600,10 @@ recipe.
 **Verified fixed on `main` at `9d2a4f6e`:** every stream kind on which `ffa5b81b` aborted survives
 three unflagged wraps ([T41](test-41-import-reanchor-coverage.md)), and the SRT chain holds full
 export rate through five joins ([T40](test-40-continuous-join-through-srt.md)). The likely fix is
-[#3997](https://github.com/moq-dev/moq/pull/3997), and the permanence re-soak is unblocked on
-`main`. The exit-code baseline for #3926 went to that issue the same way: its plan specifies 0 for a
+[#3997](https://github.com/moq-dev/moq/pull/3997), and the permanence re-soak is unblocked on that
+build. On `main` after the branch flip the question is moot rather than reopened: from #4543 every
+unflagged wrap ends the import by design, on every stream kind (`83ce47fe`,
+[T41](test-41-import-reanchor-coverage.md)). The exit-code baseline for #3926 went to that issue the same way: its plan specifies 0 for a
 clean end and 1 for a drop, while the filing had recorded only the error text, and the build of the
 time exited **1 in both cases, including when the publisher itself exited 0**.
 

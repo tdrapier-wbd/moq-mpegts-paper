@@ -369,8 +369,9 @@ clip and groomer reads the importer at **+0.23 MB/h** from 2 h, with quarterly s
 +0.60 and −0.15 MB/h against 2.36–2.87 on `d518b61b`. That re-soak graded resources, continuity
 (0 errors over 632 M packets) and the groomer's counters (0 underruns), not PCR accuracy or programme
 gaps, so the wire figures above remain `d518b61b`'s. In both runs the source's AC-3 and teletext
-timestamps stepped back at every content join. Both builds' importers re-anchor that, and upstream's
-development branch now treats it as the end of the stream. *Measured, P1, all roles on one host, one run*
+timestamps stepped back at every content join. Both builds' importers re-anchor that; upstream's
+`main` from [#4543](https://github.com/moq-dev/moq/pull/4543), which landed on the development line
+that has since become `main`, treats it as the end of the stream. *Measured, P1, all roles on one host, one run*
 (§3.6, [T21](../lab/test-21-permanence-soak.md#the-3493-re-soak)). **Neither run is the build under
 test.** On `ffa5b81b`, continuous-source publishing is blocked at the first content join, where import exits with *frame timestamp is below the
 live edge* ([the import live-edge exit on content join](../lab/upstream-contributions.md),
@@ -2115,10 +2116,10 @@ content-restart [export stall](../lab/upstream-contributions.md) and the importe
 fix is confirmed by a 24 h re-soak, but on upstream `main` at `9d2a4f6e` only (§3.2).
 **Continuous-source publishing on homogeneous `5d0991b9` still fails** at the
 first content join (*frame timestamp is below the live edge*,
-[T40](../lab/test-40-continuous-join-through-srt.md)), and so does `ffa5b81b`, where the defect is
-closed upstream by a plan rather than a fix (§5 row 2a). So the build under test has no 24 h
-continuous-source result at all, and the permanence evidence is split across two builds that are not
-it: `d518b61b` for the wire, `9d2a4f6e` for resources (§3.2).
+[T40](../lab/test-40-continuous-join-through-srt.md)), and so does `ffa5b81b`; the defect is gone on
+upstream `main` at `9d2a4f6e` (§3.13, §5 row 2a). So `ffa5b81b` has no 24 h continuous-source result
+at all, and the permanence evidence is split across two builds that are not it: `d518b61b` for the
+wire, `9d2a4f6e` for resources (§3.2).
 
 **Several results rest on upstream fixes, all now on the release line.** The exporter
 PCR fixes — exact 25 ms values, stdout pacing and byte-adjacent placement

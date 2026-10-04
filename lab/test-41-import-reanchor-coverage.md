@@ -1,6 +1,8 @@
 # Test 41 — Which TS stream kinds re-anchor below the live edge, and for how many wraps?
 
-**State: run on two builds, conclusive on both. The defect is fixed on upstream `main`.** On
+**State: run on three builds, conclusive on each. The defect was fixed on `main` at `9d2a4f6e`, and
+on `main` from [#4543](https://github.com/moq-dev/moq/pull/4543) every unflagged wrap ends the import
+by design.** On
 `ffa5b81b`, `moq import ts` aborts with *frame timestamp is below the live edge* on the **first**
 unflagged backward timestamp for H.264, and on the **second** for legacy audio (MPEG-1 Layer II and
 AC-3). Legacy audio therefore has re-anchoring that works exactly once: it absorbs one content join
@@ -9,7 +11,10 @@ or loop wrap and fails at the next. `ffa5b81b` is `main` after
 [#3798](https://github.com/moq-dev/moq/issues/3798) — a closure that added a plan and no code. On
 **`9d2a4f6e`**, all three arms survive three unflagged wraps with no error. The importer carries
 [#3997](https://github.com/moq-dev/moq/pull/3997), which makes every TS elementary stream re-anchor
-below the live edge; which commit made the offset survive a second wrap is not bisected.
+below the live edge; which commit made the offset survive a second wrap is not bisected. On `main`
+at `83ce47fe`, after the branch flip brought #4543 in, all three arms end at the **first** wrap with
+*frame timestamp is below the previous group's start*: the importer now publishes source timestamps
+verbatim and treats any backward step as the end of the stream, flagged or not.
 
 ## Objective
 
@@ -40,7 +45,7 @@ elapsed time that depends on the fixture's length.
 | | |
 |---|---|
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
-| Builds | **`ffa5b81b`** (noq), `moq 0.12.1`, built by [`ec2-build-main.sh`](scripts/ec2-build-main.sh); **`9d2a4f6e`** (noq), `moq 0.12.8`, the same feature set built in a separate worktree |
+| Builds | **`ffa5b81b`** (noq), `moq 0.12.1`, built by [`ec2-build-main.sh`](scripts/ec2-build-main.sh); **`9d2a4f6e`** (noq), `moq 0.12.8`, the same feature set built in a separate worktree; **`83ce47fe`** (noq), `main` after the branch flip, carrying #4543 |
 | Relay | Dedicated, same build as the client, `127.0.0.1:4493`, `--quic-congestion-control loss` |
 | Source | `clip30.ts`, the leading ~30 s of `CNNiEMEA2.ts` |
 | Fixtures | [`t41-make-fixtures.sh`](scripts/t41-make-fixtures.sh) — one elementary stream each, own PCR |
@@ -103,11 +108,15 @@ All four were met or discharged.
 
 ## Results
 
-| Fixture | Stream kind | Wrap period | `ffa5b81b`: died at | **`ffa5b81b`: wrap index** | `ffa5b81b`: error | **`9d2a4f6e` and `6f1a9e33`** |
-|---|---|---:|---:|---:|---|---|
-| `fx-h264` | H.264 video | 30.2 s | 30.3 s | **1.00** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
-| `fx-legacy` | MPEG-1 Layer II | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
-| `fx-ac3` | AC-3 | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error |
+| Fixture | Stream kind | Wrap period | `ffa5b81b`: died at | **`ffa5b81b`: wrap index** | `ffa5b81b`: error | **`9d2a4f6e` and `6f1a9e33`** | **`83ce47fe`** (after #4543) |
+|---|---|---:|---:|---:|---|---|---|
+| `fx-h264` | H.264 video | 30.2 s | 30.3 s | **1.00** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error | ends at 30.3 s, wrap index **1.00** |
+| `fx-legacy` | MPEG-1 Layer II | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error | ends at 29.3 s, wrap index **0.97** |
+| `fx-ac3` | AC-3 | 30.1 s | 59.6 s | **1.98** | *frame timestamp is below the live edge* | **survived ≥ 3 wraps**, no error | ends at 29.3 s, wrap index **0.97** |
+
+The `83ce47fe` error is *frame timestamp … is below the previous group's start* in every arm. The
+audio arms end just before the wrap index the rig computes from the fixture's duration, as the first
+wrapped frames arrive inside the paced window; the event is the first wrap in each case.
 
 **On `9d2a4f6e` neither part of the defect remains, and the later `main` at `6f1a9e33` is
 unchanged.** Each arm ran for its full budget of three and
@@ -172,6 +181,14 @@ is unaffected and why the defect needs an *unflagged* wrap to appear at all.
    video-bearing clip, which is the wrap-1 arm, so the recorded symptom and its timing stand.
 5. **Upstream `main` at `9d2a4f6e` survives both parts**, on every stream kind measured here. The
    permanence re-soak that #3798 blocked can run on that build.
+6. **On `main` from #4543 an unflagged wrap is the end of the stream, by design**, on every stream
+   kind (`83ce47fe`). A looping playout or any source whose timestamps step back without
+   `discontinuity_indicator` cannot be published continuously on the current trunk. The planned
+   in-process restart (`quest/m0/broadcast-epoch/ts-restart.md`, which closes
+   [#4582](https://github.com/moq-dev/moq/issues/4582)) covers a *flagged* backward step only; an
+   unsignalled one stays fatal. Until it lands a flagged step ends a pipe-fed import too
+   ([upstream contributions](upstream-contributions.md), the #4513/#4543 entry); after it, a source
+   of this kind needs a stage in front of the importer that flags its wraps.
 
 ## What this does not show
 
