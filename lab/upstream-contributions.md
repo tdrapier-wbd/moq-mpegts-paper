@@ -1581,9 +1581,11 @@ passthrough track did it twice in one resume. Why those tracks change generation
 This is not reported upstream; it would go as a comment on the linger quest's follow-up or as a
 small issue, with the instrumented log.
 
-**Still open:** the exporter's own session loss, as in a relay restart, is untested with
-`--linger`; the fMP4 and MKV exporters have no linger; the error text does not discriminate a crash
-from a clean end, only the exit code does.
+`--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
+(one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
+
+**Still open:** the fMP4 and MKV exporters have no linger; the error text does not discriminate a
+crash from a clean end, only the exit code does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
 

@@ -561,9 +561,16 @@ domain, loopback, `CNNiEMEA2.ts`, one relay.*
   rides two to four flagged discontinuities within 2.5 s without a visible event, and how much
   committed media each rewind discards, is not measured; the first is a hardware question, the second
   a frame count across one resume.
-- **Not tested: the exporter's own session dropping**, as in a relay restart. `--linger` waits for
-  the broadcast to return, and whether it also carries the exporter across its own session loss is
-  the T6 drill repeated with the flag.
+- **`--linger` also carries the exporter across its own session loss.** On `83ce47fe` the relay,
+  given a fixed certificate so that its fingerprint survives, was `SIGKILL`ed 15 s into a continuous
+  publish and restarted 3 s later, with publisher and exporter left running. The publisher
+  reconnected at its 10 s idle timeout. The exporter with `--linger 60s` timed out 13.0 s after the
+  kill, reconnected, resumed with 0 continuity jumps on any PID and PAT and PMT re-sent, after a
+  12.13 s gap in its output, and exited 0 when the linger ran out after the publisher's clean end.
+  With `--linger 0s` the same exporter exited 1 (*connection error: closed*) 13.0 s after the kill
+  and wrote nothing more. One run each, same functional rig, *P1, file domain, loopback*. On
+  `ffa5b81b`, which has no `--linger`, the exporter exits on a relay restart
+  ([T6](test-6-relay-resilience.md)).
 
 #### What retiring the groomer would cost: the capability audit
 
