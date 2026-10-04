@@ -1577,8 +1577,11 @@ A crash now costs the 10 s idle timeout of [#4606](https://github.com/moq-dev/mo
 than 30 s. What the grading did find is that **one resume sets the discontinuity indicator one to
 four times**. An instrumented exporter shows that each extra flag is a whole-programme rewind
 triggered by a single track's consumer changing generation within 2.5 s of the resume; a sparse
-passthrough track did it twice in one resume. Why those tracks change generation is not located.
-Reported, with the instrumented log, as [#4767](https://github.com/moq-dev/moq/issues/4767).
+passthrough track did it twice in one resume.
+Reported, with the instrumented log, as [#4767](https://github.com/moq-dev/moq/issues/4767), with a
+follow-up locating the generation change: the consumer's catch-up walk over groups that never arrive
+during the join, at the default `--max-age 500ms`, consistent with the publisher's age gate. At `--max-age 2s` every resume flags once
+([T13](test-13-downstream-grooming.md) § *Liveness*).
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).

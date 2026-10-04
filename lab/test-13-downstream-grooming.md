@@ -555,10 +555,24 @@ domain, loopback, `CNNiEMEA2.ts`, one relay.*
   twice in one resume, `6.mp2` once in another — which the exporter answers with a whole-programme
   rewind: uncommitted output discarded, the program clock restarted, the tables re-sent. A video DTS
   reserve raise (*reordering deeper than the catalog or SPS declares*), seen after two of the kill
-  resumes, sets the flag too. Why those tracks change generation after a resume is not located; the
-  instrumented run with the consumer's skip reason logged is the arm that would. Reported upstream as
-  [#4767](https://github.com/moq-dev/moq/issues/4767).
-- **What a receiver sees is a burst of timebase resets per resume rather than one.** Whether an IRD
+  resumes, sets the flag too. Reported upstream as [#4767](https://github.com/moq-dev/moq/issues/4767).
+- **The generation change is the consumer's catch-up walk at the join, and a wider budget removes
+  it.** With every playhead-bump site in the consumer logged as well, each extra rewind (12 across 11
+  resumes in four runs at the default `--max-age 500ms`) is a walk over a missing group sequence: a
+  newer group has arrived, the next one has not, the newest frame is a budget past the arrived
+  group's start, and the gap is not contiguous. The walks fall 0.6–2.4 s after the exporter subscribes
+  to the returned broadcast's tracks, which it does about 1.3 s into the new publisher's session, so
+  each subscription joins a backlog older than its budget. The walked-over groups never reach the
+  consumer afterwards, which fits the publisher's presentation-time age gate culling them during the
+  catch-up; that is not confirmed at the relay. At `--max-age 2s`, otherwise unchanged, every resume
+  flags once: 3 flags for 3 resumes in each of a replay and a continue run, with the backlog below the
+  cursor arriving and being discarded as old. No first session walked a gap in the six runs logged,
+  though it joins the same way; what differs on the resume path is not located. The cost of the
+  wider budget is that the exporter may sit up to 2 s behind the live edge rather than 0.5 s, which
+  these runs do not measure. *P1, file domain, loopback, `CNNiEMEA2.ts`, `main` at `83ce47fe` with
+  logging added, one run per arm at 2 s.*
+- **What a receiver sees at the default budget is a burst of timebase resets per resume rather than
+  one.** Whether an IRD
   rides two to four flagged discontinuities within 2.5 s without a visible event, and how much
   committed media each rewind discards, is not measured; the first is a hardware question, the second
   a frame count across one resume.
