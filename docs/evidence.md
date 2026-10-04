@@ -438,11 +438,10 @@ head-of-line blocking, a loss-detection item rather than a CC or protocol flaw. 
 reorder far less than the emulator's model, so unbounded reordering is mainly a LEO or
 mobile-handover concern.
 
-**Against segmented HTTP, loss does not separate the two lanes, and the reordering row that appeared to
-is superseded below.** Measured head-to-head on one host under one shaper — same clip, same window,
-both lanes run at both controllers, each cell confirming its controller by reading it back off the
-sockets carrying the run ([T8](../lab/test-8-srt-vs-moq.md); the reordering row from
-[T5](../lab/test-5-network-impairment.md)):
+**Against segmented HTTP, loss does not separate the two lanes, and once the substrate is matched
+neither does reordering (below).** Measured head-to-head on one host under one shaper — same clip, same
+window, both lanes run at both controllers, each cell confirming its controller by reading it back off
+the sockets carrying the run ([T8](../lab/test-8-srt-vs-moq.md)):
 
 | Commanded impairment | Segmented, **CUBIC** | Segmented, **BBR** | Media-aware, **CUBIC** | Media-aware, **BBR** |
 |---|---|---|---|---|
@@ -450,7 +449,6 @@ sockets carrying the run ([T8](../lab/test-8-srt-vs-moq.md); the reordering row 
 | 3 % loss | 0.90 | **0.97** | 0.34 | **0.96** |
 | 5 % loss | 0.59 | **0.97** | 0.17 | **0.96** |
 | 10 % loss | 0.17 | **1.04** | 0.13 | **0.96** |
-| 25 % reordering *(superseded — packet-size artefact, see below)* | *0.98* | — | *0.19* | *0.19* |
 
 **Read down a column and the data planes are indistinguishable; read across a row and the controller
 decides the result.** A loss-based controller reads a dropped packet as congestion and backs off
@@ -463,8 +461,9 @@ entirely.
 **Reordering was a packet-size artefact, not a lane property** ([T20](../lab/test-20-segmented-http3.md),
 P1). Unequal MTU gave the segmented lane **24× fewer** reorder events. With packet sizes equalised, and
 graded through the re-muxing receiver with the media-aware controller unpinned, the HTTP/3 cells
-overlap (segmented 0.18, media-aware 0.13), so the original 0.98/0.19 separation was substrate and
-size, not architecture. Re-measured through the byte-faithful receiver, the segmented figure reads
+overlap (segmented 0.18, media-aware 0.13), so the separation first measured at 25 % reordering —
+0.98 segmented on CUBIC against 0.19 media-aware on either controller
+([T5](../lab/test-5-network-impairment.md)) — was substrate and size, not architecture. Re-measured through the byte-faithful receiver, the segmented figure reads
 0.259–0.263 in three replicates (11 holes each, so void for carriage), and 25.4 % at nginx's default
 HTTP/3 stream buffer once the receiver's timeout no longer truncates a fetch; it does not depend on the
 controller. The media-aware figure does — 0.000 pinned to the shipped BBRv3 default and 0.039 pinned
@@ -726,11 +725,9 @@ loss holds it too (*reasoned*); the arm that would show this lane riding loss ru
 chronic 0.8× and 0.5× rungs, two on the lower 60 s rungs, the 30 s outage and the loss cells, one on
 the rest; P1, content-graded and conserved, one host.*
 
-**The controller and the QUIC stack are part of every MoQ impairment figure here, which is why each
-names its build and backend.** In the loopback rig
-the controller decides whether the session survives a 5 s outage — pinned to the shipped BBRv3 default
-the relay cancels the subscription at the break, and pinned to CUBIC the session survives and loses
-13.64 s of picture — and whether reorder delivers anything at all (nothing in 60 s on BBRv3, 55.2 s of
+**In the loopback rig the controller decides even whether the session survives a 5 s outage**:
+pinned to the shipped BBRv3 default the relay cancels the subscription at the break, and pinned to CUBIC the session survives and loses
+13.64 s of picture. It also decides whether reorder delivers anything at all (nothing in 60 s on BBRv3, 55.2 s of
 media span on CUBIC). In the `netns` rig the stack decides sustained loss, as above, and neither the
 controller nor the stack moves the 20 % reorder cell. A 0.9× capacity step for 60 s costs noq more than
 quinn under either controller: at one commit, `5d0991b9`, quinn lost 15.90–20.88 s and noq
