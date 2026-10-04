@@ -2743,25 +2743,23 @@ order, against 26 before. The rule it yields is in
 The rig produced the damage, but the importer ending on it is the defect, and the pipe arms above
 reproduce that without SRT.
 
-**The fix, measured** `[unmerged]`. #4733 refuses a damaged PES, adaptation field or access unit whole,
-clears only its PID, and resumes video at the next keyframe. On the same pipe rig at P1, with #4733's
-merge base as the control, the PES-header and NAL arms now run the full 60 s with one `dropped a damaged
-TS unit` line each, where the base exits 1 on both. A TEI packet on video or on audio does the same. The
-aligned-drop arm, which the base completes in both of two runs, ends `export ts` in both of two runs on
-#4733 with *frame timestamp is below the live edge* at 37.9 s. The cause is in the base, and #4733 makes it
-likely. A drop landing just after a keyframe leaves that group holding only its keyframe, since the rest
-of the GOP is skipped. Unreordered, the group closes with a duration marker at the next keyframe's PTS,
-and the next GOP is open, so its leading pictures present below that marker, which the base's consumer
-takes as its edge. An in-process test with no damage at all reproduces it: a closed GOP followed by an
-open one fails on the base and passes on current `main`, after the group-start rework, so a rebase should
-clear it. Closing the group at the break, by a cut in `desync()`, also clears it on the base. The price of
+**The fix, measured** `[unmerged]`, on #4733 at `aae930a23`, which carries current `main`. #4733 refuses
+a damaged PES, adaptation field or access unit whole, clears only its PID, and resumes video at the next
+keyframe. On the same pipe rig at P1, the PES-header and NAL arms run the full 60 s with one `dropped a
+damaged TS unit` line each, where its pre-flip merge base `764b2868b` exits 1 on both. A TEI packet on video or on audio
+does the same, and twenty aligned 7-packet drops complete in both of two runs. An earlier head, on a base
+from before the flip, ended `export ts` on those drops with *frame timestamp is below the live edge*.
+The skip had left a group holding only its keyframe. Unreordered, that group closed with a duration
+marker at the next keyframe's PTS, which the old consumer took as its edge, and the next open GOP's
+leading pictures presented below it. A closed GOP followed by an open one reproduces it with no damage
+at all. `main`'s group-start rework removed that check, and the rebased head passes both. The price of
 the skip, at P0 in-process on the same capture, counted as video frames read back:
 
-| Input | #4733's merge base | #4733 |
+| Input | `764b2868b` (pre-flip base) | #4733 at `aae930a23` |
 |---|---|---|
 | Clean | 2,492 | 2,492 |
 | One TEI packet on video | 2,491 | 2,479 |
-| Twenty aligned 7-packet drops | 2,471 | 2,114, with the cut in `desync()` |
+| Twenty aligned 7-packet drops | 2,471 | 2,114 |
 
 A drop costs one frame on the base and the rest of its GOP on #4733, 1.2 s on this feed. That is the
 fix's intent, since no published picture then references a lost one, but it trades artefacts a
@@ -2769,7 +2767,7 @@ downstream decoder would conceal for a freeze of up to a GOP per break, so this 
 video against 1 %. Both points were posted to the PR. Fed through `tsp`, the misaligned-drop arm stops
 at 6.6 s on every build, at the packet where `tsp`'s file input loses sync, so it grades none of them.
 
-**Open.** The aligned-drop arm has to be re-run on #4733 once it is rebased. The SRT loss rate on
+**Open.** The SRT loss rate on
 loopback is itself unexplained. Reported loss reached 6 % at
 10 Mb/s. A libsrt-to-libsrt comparison on the same host would say whether the gateway's receiver is
 the bottleneck, and this rig's attempt at it did not produce a usable capture.
