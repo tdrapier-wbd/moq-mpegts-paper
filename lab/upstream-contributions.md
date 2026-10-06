@@ -1624,6 +1624,19 @@ the before-state ([T13](test-13-downstream-grooming.md) § *Liveness*).
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
+**An export failure read as the broadcast ending — contributed as
+[#4947](https://github.com/moq-dev/moq/pull/4947), at the maintainer's invitation on #4645.** On
+`main` at `edd671fff` every failed end lingers, so an export that fails on its own while the broadcast
+stays up waits out the whole linger for a return that cannot come, then exits 1. The fix lingers on a
+failed end only if the broadcast closes within a 1 s grace, since a killed publisher's tracks can
+error just before its close arrives. A relay-backed CLI test with an AV1 publisher kept up and
+`--linger 20s` exits after 23.3 s on `main` and passes on the fix. On the linger rig (local relay,
+P1), with the publisher SIGKILLed and replaced, the three-session arm resumes in 3 of 4 runs on the
+fix and 2 of 3 on `main`, and the two-session arm in none of 3 on either; a relay restart lingers and
+resumes once on both. The new path fired in no run, and across the nine failed ends that lingered the
+broadcast closed within 13.8 ms of the first track error, on loopback. Every run that does not
+resume is #4945's.
+
 **Still open:** the multi-flag resume on `main` until #4645 merges; the crash-case regression of #4945; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
 crash from a clean end, only the exit code does.
 
