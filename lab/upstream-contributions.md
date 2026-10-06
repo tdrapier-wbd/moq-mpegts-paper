@@ -1431,8 +1431,8 @@ the video is lost to group eviction on every head run.
 
 **Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair; release-clock
 statistics that count neither a skipped group nor an absent track, and an `out_of_tolerance` count
-that climbs through every start; the replacement-publisher exit across a `SIGKILL`, not yet reported
-as its own issue; the join-dependent latency at 500 ms; and the latency
+that climbs through every start; the replacement-publisher exit across a `SIGKILL`, reproduced on
+`main` alone and filed as [#4945](https://github.com/moq-dev/moq/issues/4945); the join-dependent latency at 500 ms; and the latency
 [#4681](https://github.com/moq-dev/moq/pull/4681) recovers. Detail, tables and reproduction live in [T44](test-44-tstd-grading.md),
 [T45](test-45-live-tstd-remux.md), [T46](test-46-tstd-check-cross-validation.md), and
 [T47](test-47-fixed-delay-export.md); summarised measurement points in
@@ -1611,13 +1611,20 @@ during the join, at the default `--max-age 500ms`, consistent with the publisher
 the quest audit [#4845](https://github.com/moq-dev/moq/pull/4845) folds it into `quest/m1/tstd/delay.md`,
 on the reasoning that [#4645](https://github.com/moq-dev/moq/pull/4645)'s jitter generations break the
 PCR clock only on a declared restart. On #4645's head `559a35244` the replay arm flags each resume
-once ([T47](test-47-fixed-delay-export.md) § *A broadcast that restarts under `--linger`*), so the fix
-reaches `main` with #4645.
+once ([T47](test-47-fixed-delay-export.md) § *A broadcast that restarts under `--linger`*), and so
+does `fe7cec106`, so the fix reaches `main` with #4645.
+
+**On `main` at `edd671fff`, after [#4741](https://github.com/moq-dev/moq/pull/4741)'s route resume,
+the crash case regressed.** The relay hands a replacement publisher the killed session's
+subscriptions before it has published, and in two of three runs `moq import ts` exits with
+*rendition is not published*; in the third the export stalls and ends on a catalog protocol
+violation. Filed as [#4945](https://github.com/moq-dev/moq/issues/4945), with the `83ce47fe` runs as
+the before-state ([T13](test-13-downstream-grooming.md) § *Liveness*).
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
-**Still open:** the multi-flag resume on `main` until #4645 merges; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
+**Still open:** the multi-flag resume on `main` until #4645 merges; the crash-case regression of #4945; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
 crash from a clean end, only the exit code does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope

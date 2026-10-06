@@ -338,8 +338,11 @@ buffer in every window, `compliance.py` PASS and every PCR inside ±500 ns.
   publisher's video group 7, its subscriptions failed, and `moq import ts` exited with *rendition is
   not published*. The export resumed onto the next publisher in 3 of 3 runs. On `main` at
   `83ce47fe`, on the same rig, the relay detected the kill after 10.0 s and the export resumed onto
-  the live replacement within a millisecond. This sits in `main`'s publisher and relay, not in the
-  PR.
+  the live replacement within a millisecond. `main` at `edd671fff` alone, which carries #4741's route
+  resume, reproduces it in two of three runs and stalls without resuming in the third, so it sits in
+  `main`'s relay and publisher, not in the PR; filed as
+  [#4945](https://github.com/moq-dev/moq/issues/4945) ([T13](test-13-downstream-grooming.md)
+  § *Liveness*).
 - **The release-clock statistics miss lost programme and count a healthy start.** `dropped` counts
   deadline misses, so a group skipped by the consumer, or a video track absent for 68 s, leaves it at
   0; the once-only INFO line *elementary stream stopped delivering access units* is the only signal.

@@ -671,6 +671,17 @@ domain, loopback, `CNNiEMEA2.ts`, one relay.*
 | Clean end, back after 5 s, clip continued (PTS forward), `--linger 20s` | 3 | 9 | **0** | as above | 0 |
 | `SIGKILL` 5 s before the clip ends, back after 3 s, `--linger 60s` | 3 | 6 | **0** | 10.1–13.3 s after the kill | 0 (the last session ends cleanly) |
 
+**On `main` at `edd671fff`, after the route resume of
+[#4741](https://github.com/moq-dev/moq/pull/4741), the kill arm loses the replacement publisher.**
+The same rig, 3 runs. Within 2 ms of the replacement connecting, the relay sends it the killed
+session's subscriptions and a fetch of its video group 7, before it has published anything. In two
+runs `moq import ts` then exits with *rendition is not published*, the exporter notices the kill 10.7
+and 12.7 s after it, and it resumes only onto the session after. In the third the replacement
+survives, but the export carries nothing after about 13 s of output and ends 30 s later on *subscribe
+end below a received group track=catalog.json*, exiting 1 after its linger. Filed as
+[#4945](https://github.com/moq-dev/moq/issues/4945); the cause is not located. *P1, file domain,
+loopback, `CNNiEMEA2.ts`, one relay.*
+
 - **The resume is continuity-clean on every PID.** No PID jumped in 24 resumes, so the audio jump one
   `6f1a9e33` run showed is not reproduced at that sample size. `discontinuity_indicator` is set on the
   PCR PID only, as before.
