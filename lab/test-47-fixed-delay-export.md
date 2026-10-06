@@ -1,35 +1,41 @@
 # Test 47 — The upstream fixed-delay TS export on a broadcast clip
 
-**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `559a35244`
-(unmerged, draft), keeps the clock inside 13818-1's 30 ppm and runs to the end of the source, but on
-most joins it drops every audio and teletext frame as late. On loopback that was every run at 750 ms
-and 1 s; at 500 ms it also stops within 30 s. Its acquisition anchors the clock on the frame with the
-most slack across all tracks, and its steering floor takes the most slack across all tracks. On this
-clip that is the video, sent up to 0.97 s ahead, which leaves the audio the delay less that. This is
-located in the code and reproduced in mocked time. A scratch build that anchors and steers on the
-track with the least slack, and waits for every track before anchoring, carries every track
-conformantly at 500 ms, 750 ms and 1 s, on loopback, across hosts and under 1 % loss, and over
-540 s at 1 s. At 500 ms it still stops at about 157 s of a 540 s run. Its presentation latency is
-twice the delay plus about 275 ms.**
+**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `fe7cec106`
+(unmerged, draft), anchors and steers on the track sent latest, as our scratch build did, and
+carries every track on every join tried: on loopback at 500 ms, 750 ms and 1 s, over 540 s at 1 s,
+across hosts at 500 ms and 1 s, and under 0 % and 1 % loss, each passing the buffer model, P2 and
+`compliance.py`. At 500 ms it still stops 157 s into a 540 s run, on the video's schedule. Its
+presentation latency is twice the delay plus about 275 ms at 750 ms and 1 s; at 500 ms the join
+moves it, between 993 and 1,383 ms, with the same multiplex.**
 
-- **The clock holds.** Over 540 s at 1 s on loopback the output's PCR fits −9.8 ppm against the
-  host, with the source at −9.4 ppm.
-- **The audio goes on most joins.** On loopback at 1 s (two 60 s runs and one 540 s run) and at
-  750 ms, the output carried no MP2, AC-3 or teletext. Across hosts at 500 ms it carried a fifth of
-  the MP2 and no AC-3. The runs that kept every track were across hosts at 1 s and the loss rig at
-  0 % and 1 %, all at 1 s.
-- **At 500 ms it stops.** Three loopback runs and the 1 % loss arm stopped within 30 s on a missed
-  decode deadline on the video. Two of three shifted joins did not stop, but lost the AC-3 or nearly
-  all the audio.
-- **Under 10 % loss it no longer stops, but carries almost nothing.** It ran the full 120 s with
-  32 video units, no audio and 7,311 frames dropped as late.
-- **Under `--linger` it flags each resume once**, where `main` sets one to four flags per resume
-  (#4767), but in every linger run the export ends within 7 s of joining a broadcast as it starts,
-  on a missed deadline on the video, and the linger then waits for a replacement broadcast
-  (§ *A broadcast that restarts under `--linger`*).
-- **The fix costs latency.** With the scratch build, presentation is twice the delay plus about
-  275 ms: 1,276 ms at 500 ms, 1,776 ms at 750 ms and 2,274 ms at 1 s. The head's is twice the delay
-  less about 1,030 ms, but that figure belongs to the video alone, because the head drops the audio.
+- **The clock holds.** Over 540 s at 1 s on loopback the output's PCR follows the source's to
+  0.3 ppm.
+- **At 500 ms the join picks the latency.** Of nine joins, four presented at 1,273–1,277 ms, four
+  at 993–1,026 ms and one at 1,383 ms, every one passing with every track and identical buffer
+  margins. The source's start offset does not decide it, the cause is not located, and the faster
+  mode has been run only on loopback.
+- **Under 10 % loss the video goes and the export fails loud at 75 s,** on a missed MP2 deadline.
+  Every head run there has lost the video; the teletext stop of the scratch build is not reproduced.
+- **Under `--linger` every clean restart resumes,** with one flag per resume and the first session
+  carried to its end. Across a `SIGKILL` the replacement publisher exits as the relay resumes the
+  route onto it, which is `main`'s behaviour rather than the PR's (§ *Anchored on the track sent
+  latest*).
+- **The release-clock statistics count neither a skipped group nor an absent track,** and
+  `out_of_tolerance` climbs through every start.
+- **1+1:** behind this export a co-started pair is byte-identical through the groomer, and the
+  difference left between two exporters is where each places a TDT
+  ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*).
+
+**The head before it, `559a35244`:**
+
+- **The anchor took the track with the most slack.** On this clip that is the video, sent up to
+  0.97 s ahead, which left the audio the delay less that: on most joins every audio and teletext
+  frame was dropped as late, and at 500 ms the export stopped within 30 s. Located in the code and
+  reproduced in mocked time. Our scratch build, anchoring on the least slack after hearing from
+  every track, carried every track and is the change `fe7cec106` took.
+- **Under 10 % loss it ran on with almost nothing,** 32 video units and no audio.
+- **Under `--linger`** joining as the broadcast started ended the export within 7 s in every run, and
+  across a `SIGKILL` it did not resume.
 
 **The head before it, `2dc542b4a`:**
 
@@ -261,6 +267,98 @@ fixture is video only. Its source passes `compliance.py`: EB peak 76 %, worst de
   the export.
 
 ## Results
+
+### Anchored on the track sent latest, `fe7cec106`
+
+Four commits on top of `559a35244`, one of them a merge of `main`. The anchor and the steering
+floor take the track sent latest against its decode time, after hearing from every audio, video
+and PES track, waiting two delays at most; section tracks are not waited for. This is the
+scratch build's change below, taken into the PR. The jitter buffer releases equal decode times by
+`(generation, decode time, PID)` rather than by nanosecond deadline. From `main` it carries the
+skip of a stalled group at half the delay, the full-buffer T-STD grader of `test/ts`, and the
+route-resume change of [#4741](https://github.com/moq-dev/moq/pull/4741). The export now reports
+`dropped`, the estimated source drift and `out_of_tolerance` as *TS export release clock*. The
+rigs are those of `559a35244`, unchanged, and every run joins a running source. Units are counted
+per PID over the whole capture.
+
+**Loopback**, 60 s unless stated. Every cell carried every PID of the source with 0 late drops and
+passed `ts-tstd.py` in every window, `compliance.py` and `pcrverify` (no PCR outside ±500 ns),
+except where the outcome says otherwise.
+
+| `--delay` | Source started later by | Runs | Presentation, median | Outcome |
+|---|---|---:|---|---|
+| 1 s | 0, 0.3 s | 1 each | 2,272.2 / 2,272.5 ms | pass |
+| 1 s, 540 s | 0 | 1 | 2,272.5 ms, +0.1 ms over the run | pass, 266 of 266 windows; output PCR −14.52 ppm against the tap, source −14.24 ppm |
+| 750 ms | 0, 0.3 s | 1 each | 1,775.3 / 1,774.6 ms | pass |
+| 500 ms | 0, 0.5 s, 0.7 s | 2, 1, 1 | 1,273.0–1,276.5 ms | pass |
+| 500 ms | 0.3 s | 3 | 993.3, 1,002.6, 994.7 ms | pass |
+| 500 ms | 0.1 s | 1 | 1,026.3 ms | pass |
+| 500 ms, 540 s | 0 | 1 | 1,276.0 ms | every PID until *missed a decode deadline on PID 111* at 156.6 s; minimum video margin 56.4 ms |
+| 500 ms, 540 s | 0.3 s | 1 | 1,382.7 ms | the same stop, at the same point in the source, with the same margins |
+
+**Across hosts**, 120 s: at 1 s and at 500 ms, every PID, 0 late drops, 0 groups skipped, every
+buffer in every window, `compliance.py` PASS and every PCR inside ±500 ns.
+
+**Under loss**, the [T8b](test-8b-congestion-control.md) namespace rig, 25 ms each way, 120 s.
+
+| Arm | `--delay` | Outcome |
+|---|---|---|
+| 0 % | 1 s, 500 ms | every PID, 0 late drops, pass |
+| 1 % | 500 ms | every PID, 0 late drops, pass |
+| 1 % | 1 s | pass, 0 late drops; one video group, 26 frames, skipped about 7 s in, with `dropped` at 0 |
+| 10 % | 1 s | video stops about 7 s in and does not return, its groups evicted about once a second; MP2, AC-3 and teletext run on; at 75 s *missed a decode deadline on PID 121*; `dropped` stays 0 throughout |
+
+**Under `--linger`**, the restart rig of [T13](test-13-downstream-grooming.md) § *Liveness*, at 1 s.
+
+| Arm | Runs | Resumes | Flags on the PCR PID | CC jumps | Late drops | Exit |
+|---|---:|---:|---:|---:|---:|---|
+| Clean end, back after 5 s, clip replayed, `--linger 20s` | 3 | 3 each | 3 each | 0 | 0 | 0, after *broadcast did not return* |
+| Clean end, back after 5 s, clip continued | 3 | 3 each | 3 each | 0 | 0 | 0, the same |
+| `SIGKILL` 5 s before the clip ends, back after 3 s, `--linger 60s` | 3 | 1 each | 1 each | 0 | 0 | 0, the same |
+
+- **Every track survives every join tried, at every delay, on every rig except 10 % loss.** The
+  audio loss of `559a35244` and of every head before it is gone. The 540 s run at 500 ms still stops
+  at the same point with the same minimum video margin, so that limit is the schedule's, as the
+  scratch build suggested.
+- **At 500 ms the join moves the latency, and every value passes.** Of nine joins, four presented
+  at 1,273–1,277 ms, matching twice the delay plus about 275 ms; four at 993–1,026 ms, about 280 ms
+  sooner; and one at 1,383 ms. Every output carries the same units on every PID with the same
+  decoder-buffer margins and every PCR in range; only the release instant moves. The source's start
+  offset does not decide it: a 0.3 s offset gave about 1,000 ms on three 60 s runs and 1,383 ms on
+  the 540 s run, which stopped at the same point in the source as the unshifted one, so the faster
+  release does not lift the 500 ms limit either. At 750 ms and 1 s the same shifted join changes
+  nothing. Where the spread comes from is not located, and the faster mode is untested across hosts
+  and under loss, where the hold it gives up may be needed.
+- **The session-start exits are gone.** On `559a35244` and the scratch build, joining as the
+  broadcast starts ended the export within 7 s in 5 of 5 runs. Here the first session runs to its end
+  in 6 of 6, and each replay carries the same 394,324 packets.
+- **Across a `SIGKILL` the export resumes, but the replacement publisher does not survive the
+  relay.** The relay learns of the kill 12.8 s after it. By then the replacement had connected and
+  exited: 0.23 s after connecting, the relay resumed the route onto it and fetched the killed
+  publisher's video group 7, its subscriptions failed, and `moq import ts` exited with *rendition is
+  not published*. The export resumed onto the next publisher in 3 of 3 runs. On `main` at
+  `83ce47fe`, on the same rig, the relay detected the kill after 10.0 s and the export resumed onto
+  the live replacement within a millisecond. This sits in `main`'s publisher and relay, not in the
+  PR.
+- **The release-clock statistics miss lost programme and count a healthy start.** `dropped` counts
+  deadline misses, so a group skipped by the consumer, or a video track absent for 68 s, leaves it at
+  0; the once-only INFO line *elementary stream stopped delivering access units* is the only signal.
+  `out_of_tolerance` counts the steering steps whose estimated source rate is beyond 30 ppm. It
+  climbs through the first minute of every run (14 to 67 by the end of the runs read), with early
+  estimates in the thousands of ppm, and then stops, on sources whose PCR the output follows to 0.3 ppm.
+- **The 10 % arm is the transport losing the video.** Every head run there lost it: `559a35244`
+  carried almost nothing after 10 s while padding to the mux rate, and the scratch build stopped at
+  25 s on teletext. This head carries the rest of the programme for another minute and then fails
+  loud, as upstream intends. The teletext stop is not reproduced.
+
+**1+1 behind this export** is in [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*: a
+co-started pair is byte-identical through the groomer, and once continuity counters are rewritten
+the remaining difference between two exporters is where each places a TDT.
+
+*Domain: P1 and P2; the export's output as it was paced, tapped on loopback and across hosts, and as
+written to file on the loss and linger rigs.
+`[unmerged]`, #4645 at `fe7cec106`, no parameter set by hand, noq; `CNNiEMEA2.ts`; one run per cell
+except as stated. Reported on #4645.*
 
 ### Acquiring before release, and the anchor on the most slack, `559a35244`
 

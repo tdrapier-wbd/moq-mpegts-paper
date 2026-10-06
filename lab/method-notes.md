@@ -581,6 +581,22 @@ the lockstep and slot comparisons then measured the shift.
 > property the fix claims — order, placement, table phase — on a key the processes cannot mint, and
 > census packet kinds over a content-bounded span to see what the slot figure is really counting.
 
+**On a saturated constant-rate multiplex, one inserted packet reads as a burst of transpositions.**
+*([T13](test-13-downstream-grooming.md) § On #4645's PCR grid, `ts-cc-merge.py`.)* With the
+continuity counters rewritten, two exporters of #4645's head still differed in two bursts of about a
+second each, every packet in them present in both legs but at a different position. Counting each
+PID's packets between consecutive PCRs, matched by PCR value, put each burst down to one TDT that one
+leg carried 0.7–0.9 s before the other. Every slot in between has the same counts, but the earlier
+leg's video runs one packet behind, because on a saturated second there is no stuffing to absorb the
+extra packet; the other leg's copy of the TDT closes the gap. Reading the burst as transpositions had
+pointed at the release order, which the head had just fixed.
+
+> **Count packets per PID per PCR interval before naming what a burst of differences is.** The
+> per-slot count names the inserted packet; the packet-level diff names only the damage it does
+> downstream. When rewriting continuity counters for such a comparison, take each PID's offset as the
+> modal one across the overlap, not the first seen, because the first aligned packet can sit inside
+> a burst.
+
 **Pass `pcrverify --bitrate` explicitly whenever the arm might not be carrying full programme. Grading
 PCRs against a rate TSDuck derived from those PCRs turns a conservation failure into a PCR failure.**
 *(T19 measurement 11.)*

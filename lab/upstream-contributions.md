@@ -1287,7 +1287,7 @@ replaces span machinery with a constant-rate schedule paced against fixed `--del
 burst does not fit the delay. The closing comment on #4579 retains the measurements above as the
 before-state #4645 must beat on a real broadcast clip.
 
-### T-STD conformance of the TS export — taken up upstream as a questline; its rework carries a broadcast clip, with its system clock out of tolerance
+### T-STD conformance of the TS export — taken up upstream as a questline; its current head carries every track of a broadcast clip, with its clock in tolerance
 
 **What prompted it.** [T44](test-44-tstd-grading.md) graded the lane's P1/P2-conformant wire against
 13818-1 T-STD and found it fails on the lane's packet order; [T45](test-45-live-tstd-remux.md) showed a
@@ -1321,10 +1321,12 @@ with a measured rate the output is constant-rate, runs up to two delays behind t
 frame-spaced, and fails bursts that do not fit the delay. On the generated 20 s clip it passed the strict
 check at 10 and 2 Mb/s on a clean path; the loss rig and broadcast clip were not run on that head.
 [#4645](https://github.com/moq-dev/moq/pull/4645) remains an open draft through maintainer rework heads
-`49efbc9a1`, `2dc542b4a`, and `559a35244`, and needs a rebase onto `main` before merge. Under the
-`--linger` rig, `559a35244` ends the export within 7 s of joining a broadcast as it starts, on a
-missed video deadline, and `--linger` then waits for a replacement broadcast while the one it was
-reading is still live. Reported (issuecomment-6013366214), with an offer to do the CLI side.
+`49efbc9a1`, `2dc542b4a`, `559a35244` and `fe7cec106`, the last with `main` merged in rather than
+rebased. Under the `--linger` rig, `559a35244` ended the export within 7 s of joining a broadcast as it
+starts, and `--linger` then waited for a replacement broadcast while the one it was reading was still
+live. Reported (issuecomment-6013366214), with an offer to do the CLI side; the maintainer agrees the
+misread is wrong, leaves it as a follow-up and invited us to do `subscribe.rs`. The session-start exit
+itself is gone on `fe7cec106`.
 
 **Cross-validation.** Upstream's check and [`ts-tstd.py`](scripts/ts-tstd.py) were cross-validated in
 [T46](test-46-tstd-check-cross-validation.md) on 35 files (file domain). With six defects in
@@ -1413,10 +1415,25 @@ the 6.83 s overshoot on the first head) is planned separately in
 [#4681](https://github.com/moq-dev/moq/pull/4681) as one budget with send-ahead capped at
 decoder-buffer reach.
 
-**Open:** whether upstream takes the least-slack-per-track anchor, and how its reasoned costs are handled
-(a sparse PID holding the join for two delays, and one queued track pulling the clock). Also open are
-the export's behaviour under heavy loss and the latency [#4681](https://github.com/moq-dev/moq/pull/4681)
-recovers. Detail, tables and reproduction live in [T44](test-44-tstd-grading.md),
+**Taken up on `fe7cec106`.** The maintainer cherry-picked our late-track test and anchor fix with
+authorship, limited the wait to audio, video and PES tracks, released equal decode times by PID (the
+1+1 tie we traced), and merged `main` in. Re-graded
+([T47](test-47-fixed-delay-export.md#anchored-on-the-track-sent-latest-fe7cec106)): every track on
+every join tried, on loopback, across hosts and under 0 % and 1 % loss, at 500 ms to 1 s; the
+session-start exits under `--linger` are gone; at 500 ms the join moves the presentation
+latency between 993 and 1,383 ms with the same multiplex, cause not located. A co-started 1+1 pair stays byte-identical through
+the groomer, and with counters rewritten the only remaining difference between two exporters is where
+each places a TDT revision, on the first frame muxed after the snapshot arrives
+([T13](test-13-downstream-grooming.md#on-4645s-pcr-grid-the-deterministic-mode-runs-and-a-co-started-pair-merges-at-the-byte)).
+Two things are `main`'s rather than the PR's: across a publisher `SIGKILL` the replacement publisher
+exits with *rendition is not published* when the relay resumes the route onto it, and at 10 % loss
+the video is lost to group eviction on every head run.
+
+**Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair; release-clock
+statistics that count neither a skipped group nor an absent track, and an `out_of_tolerance` count
+that climbs through every start; the replacement-publisher exit across a `SIGKILL`, not yet reported
+as its own issue; the join-dependent latency at 500 ms; and the latency
+[#4681](https://github.com/moq-dev/moq/pull/4681) recovers. Detail, tables and reproduction live in [T44](test-44-tstd-grading.md),
 [T45](test-45-live-tstd-remux.md), [T46](test-46-tstd-check-cross-validation.md), and
 [T47](test-47-fixed-delay-export.md); summarised measurement points in
 [`docs/evidence.md`](../docs/evidence.md) §3.16.
@@ -2150,7 +2167,15 @@ answered for conformance testing.
 `version_number` after a switch, `discontinuity_indicator` on non-continuity PIDs. Egress-timing promotion
  ([#32](https://github.com/mondain/msfts/issues/32)) is partially addressed by unmodified output rules and
 #42 T-STD scope for verbatim modes; demuxed timing and ES recombination obligations that lived in -01 are
-out of MSFTS until `draft-lcurley-moq-mpegts`. **No round-two feedback has been sent.**
+out of MSFTS until `draft-lcurley-moq-mpegts`.
+
+**Round-two feedback has been sent to the co-author's group, by email.** It raises six points on
+the -02 text: the 2-second Group bound against the random access rule, a multiplex without a reference
+program having nothing to pace on, where a timing method would go, `es-packets` without arrival times,
+whether a baseline subscriber can take `per-program`, and the two meanings of
+`mpeg2tsProgramNumber`. It offers neither the test vectors the co-author asked for nor a companion
+draft on TS-output health. Their reply is
+awaited.
 
 ---
 

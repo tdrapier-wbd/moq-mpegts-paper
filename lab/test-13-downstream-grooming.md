@@ -475,8 +475,8 @@ a hardware IRD, so these are software conformance figures.*
 This is P1-o: does a corrected byte schedule make the groomer's deterministic mode work? The subject
 is the fixed-delay export of [#4645](https://github.com/moq-dev/moq/pull/4645) `[unmerged]`, which lays
 packets on a PCR grid at the mux rate. It was run on our scratch build of that PR, which keeps every
-track on one release clock, because the PR head drops the audio on most joins
-([T47](test-47-fixed-delay-export.md)). The rig is the head-to-head above, unchanged except for the
+track on one release clock, because the PR head at the time, `559a35244`, dropped the audio on most
+joins ([T47](test-47-fixed-delay-export.md)); the PR's later head is graded at the end of this section. The rig is the head-to-head above, unchanged except for the
 export's `--delay 1s`. Four runs were made: two differing only in the groomer's cushion (200 ms and
 1,500 ms), one with the two exporters co-started rather than 8 s apart, and one on the same build with
 a log of every unit pushed into the export's schedule.
@@ -547,19 +547,54 @@ MD5) across the two cushion runs, and so are the second exporter's and the strea
 Each run used a fresh relay, publisher and set of processes at the same join phase, so this is
 reproducibility at a fixed join, not identity across joins.
 
+**On the PR's head, with the canonical order, what is left is the TDT.** Upstream took the
+one-clock anchor into the PR and released equal decode times by PID (`fe7cec106`). The same rig was
+re-run co-started and staggered, and each pair compared after rewriting every PID's continuity
+counter by its one constant offset
+([`ts-cc-merge.py`](scripts/ts-cc-merge.py), which takes each PID's modal offset over the packets
+that agree with the counter masked):
+
+| Pair | Leg | Identical after the counter rewrite | Where the rest falls |
+|---|---|---:|---|
+| co-started | groomed | **100 %**, MD5-identical | — |
+| co-started | export | 99.532 % | one burst, 34.98–35.72 s (4,549 packets) |
+| second exporter 8 s late | groomed | 98.537 % | the late leg's first 1.87 s; one burst, 104.53–105.55 s (2,545) |
+| second exporter 8 s late | export | 98.520 % | the late leg's first 1.90 s; one burst, 104.56–105.57 s (2,552) |
+
+On `559a35244` with the one-clock patch the staggered exports had 15 bursts after the same rewrite,
+the largest 8,648 packets at about 120 s, and the co-started exports four small ones after the
+35 s burst. Those are gone, so the tie order removed every transposition of tied units. The burst
+that survives is not a tie. Counted slot by slot, from one PCR to the next, the co-started exports
+differ in 2 of 5,873 slots. In the first, one leg carries the TDT (PID 0x14) and one video packet
+fewer; in the second, 0.73 s later, the other leg carries the same TDT and one video packet more.
+In between every slot has the same packet counts and the first leg's video runs one packet behind,
+which on a multiplex with no null packet to absorb it shows as every PCR packet changing places
+with a video packet. The staggered burst is the same, with the TDTs about 0.9 s apart. That is
+why the earlier bursts fell on saturated seconds: saturation lets the shift persist, and the TDT
+starts it.
+
+The placement is arrival-driven, read from the code. The export repeats unchanged SI on a
+media-time grid, so two exporters repeat it at the same instants. A clock table never repeats, so
+each TDT goes out only as a revision, on the first media frame muxed after its snapshot group has
+been read. Which frame that is depends on when the group arrived against the tracks' send-ahead —
+a video frame sent up to 0.97 s ahead on one exporter, an audio frame on the other — so the same
+TDT lands up to about a second apart. Placing a revision at a media time derived from the snapshot
+itself would remove it (reasoned, not built).
+
 **What it decides.** The objection that blocked P1-o, a byte schedule the stream clock cannot follow,
-is gone on this build, and multi-track 1+1 at the byte is reachable here for the first time. Two
-things stand between that and a pair a receiver could merge in deployment: a **canonical order for
-units that share a slot** — by due slot and PID, say, rather than by push order — which is upstream's
-to choose, and the **per-process continuity counters** of #2779, which a co-started pair happens to
-avoid and a late-joining one does not. Neither has been run against the PR head or a merged build.
+is gone, and multi-track 1+1 at the byte is reachable. On the PR's head two things stand between a
+late-joining leg and a pair a receiver could merge: the **clock-table placement** above, which is
+upstream's to change, and the **per-process continuity counters** of #2779, declined upstream, which
+a receiver can rewrite by one constant per PID. Neither has been run on a merged build.
 
 *Domain: file (stdout captures), P1. Scratch build of #4645 at `559a35244` plus the one-clock release
 patch `[unmerged]`, `mpegts-pacer` `5ab84cd`, EC2 secondary, loopback, `CNNiEMEA2.ts` at
 9,945,951 b/s, 150 s per run: two staggered runs at a 200 ms and a 1,500 ms groomer cushion, one
 co-started run, and one staggered run with the push log added. Graded with `pcr-residual.py`,
 `ts-pair-diff.py`, a slip-tolerant re-alignment of the whole overlap, a per-PID and per-access-unit
-comparison, and a packet multiset.*
+comparison, and a packet multiset. The PR's head, `fe7cec106` `[unmerged]`, on the same rig at the
+200 ms cushion: one co-started and one staggered run, graded with `ts-cc-merge.py` and per-slot
+packet counts.*
 
 #### Liveness: the exporter does not mint a dead carrier, and on `main` it can outlive the source
 
