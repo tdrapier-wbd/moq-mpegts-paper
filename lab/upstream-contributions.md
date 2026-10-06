@@ -1309,8 +1309,9 @@ into [#4645](https://github.com/moq-dev/moq/pull/4645) directly, dropping the se
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649) and closed unmerged.
 
-The check merged in [#4643](https://github.com/moq-dev/moq/pull/4643) on the questline branch, not
-`main`; `test/ts` on `main` still carries the approximate TB-only check. The hand-rolled grader models
+The check merged in [#4643](https://github.com/moq-dev/moq/pull/4643) on the questline branch and
+reached `main` with [#4640](https://github.com/moq-dev/moq/pull/4640) (`87141092`), replacing the
+approximate TB-only check there. The hand-rolled grader models
 buffers for AVC, HEVC and common audio codecs; on the harness clip it fails current `moq export ts` with
 the same failure classes T44 saw on a broadcast clip, reporting only until the delay lands. The first
 [#4645](https://github.com/moq-dev/moq/pull/4645) head (`4b7158d6c`) removed mux hold and stall machinery:
@@ -1318,7 +1319,10 @@ with a measured rate the output is constant-rate, runs up to two delays behind t
 frame-spaced, and fails bursts that do not fit the delay. On the generated 20 s clip it passed the strict
 check at 10 and 2 Mb/s on a clean path; the loss rig and broadcast clip were not run on that head.
 [#4645](https://github.com/moq-dev/moq/pull/4645) remains an open draft through maintainer rework heads
-`49efbc9a1`, `2dc542b4a`, and `559a35244`.
+`49efbc9a1`, `2dc542b4a`, and `559a35244`, and needs a rebase onto `main` before merge. Under the
+`--linger` rig, `559a35244` ends the export within 7 s of joining a broadcast as it starts, on a
+missed video deadline, and `--linger` then waits for a replacement broadcast while the one it was
+reading is still live. Reported (issuecomment-6013366214), with an offer to do the CLI side.
 
 **Cross-validation.** Upstream's check and [`ts-tstd.py`](scripts/ts-tstd.py) were cross-validated in
 [T46](test-46-tstd-check-cross-validation.md) on 35 files (file domain). With six defects in
@@ -1330,6 +1334,9 @@ head `8df1e438`, with clause references and violating-unit arithmetic: TB-to-B d
 false underflow at large output); units after the last packet not assessed (132 and 142 audio units missed
 on Kyrion restamps, verdict still correct on other conditions); truncated last access unit graded as
 underflow (convention). The first two fail clean streams, which matters once the check gates CI.
+All four were fixed before [#4640](https://github.com/moq-dev/moq/pull/4640) merged to `main`
+(`87141092`): re-graded on the merged check, the two agree on all 35 files
+([T46](test-46-tstd-check-cross-validation.md#on-upstream-mains-merged-check)).
 
 **Send-ahead.** On `ffa5b81b`, T45 found the exporter hands each video frame at its decode time, so a
 conformant CNN clip needed about 0.55–0.6 s of send-ahead through the video transport buffer.
@@ -1581,12 +1588,17 @@ passthrough track did it twice in one resume.
 Reported, with the instrumented log, as [#4767](https://github.com/moq-dev/moq/issues/4767), with a
 follow-up locating the generation change: the consumer's catch-up walk over groups that never arrive
 during the join, at the default `--max-age 500ms`, consistent with the publisher's age gate. At `--max-age 2s` every resume flags once
-([T13](test-13-downstream-grooming.md) § *Liveness*).
+([T13](test-13-downstream-grooming.md) § *Liveness*). Upstream closed #4767 against a plan, not code:
+the quest audit [#4845](https://github.com/moq-dev/moq/pull/4845) folds it into `quest/m1/tstd/delay.md`,
+on the reasoning that [#4645](https://github.com/moq-dev/moq/pull/4645)'s jitter generations break the
+PCR clock only on a declared restart. On #4645's head `559a35244` the replay arm flags each resume
+once ([T47](test-47-fixed-delay-export.md) § *A broadcast that restarts under `--linger`*), so the fix
+reaches `main` with #4645.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
-**Still open:** #4767's multi-flag resume; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
+**Still open:** the multi-flag resume on `main` until #4645 merges; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
 crash from a clean end, only the exit code does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope

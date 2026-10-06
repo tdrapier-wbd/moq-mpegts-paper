@@ -1,10 +1,18 @@
 # Test 46 — Two T-STD checks cross-validated, and a content key for presentation latency
 
 **State: complete on one clip, its derived captures and upstream's own controls; offline, on saved
-captures, with no live run.**
+captures, with no live run. On upstream `main`'s merged check the two agree on all 35 files.**
 
-- **With `ts-tstd.py` corrected, the two checks agree on 24 of 35 files, and each of the other 11
-  disagreements traces to upstream's check.** In the 24, every condition both checks grade has the same
+- **On upstream `main`, after [#4640](https://github.com/moq-dev/moq/pull/4640) merged at `87141092`,
+  the two checks agree on all 35 files**: every condition both grade has the same pass or fail on
+  every PID, and both refuse the same synthetic. #4640's last fixes take up all four causes below:
+  byte-exact delivery from TB to B for audio, units graded through their decode times after the last
+  packet, a trailing unit cut off by the capture counted but not graded, and a tolerance on the leak's
+  completeness. The Kyrion restamps and synthetics were rebuilt by the merged `tstd-controls.py`'s
+  own builders, whose controls all pass; the captures are the same files.
+  [§ *On upstream `main`'s merged check*](#on-upstream-mains-merged-check).
+- **Against the questline head graded first, `8df1e438`, with `ts-tstd.py` corrected, the two checks
+  agree on 24 of 35 files, and each of the other 11 disagreements traces to upstream's check.** In the 24, every condition both checks grade has the same
   pass or fail on every PID. Where both find a violation, their first violations fall within 0.3 ms of
   each other. One of the 24 is a synthetic file that both refuse to grade. The 11 come from four causes
   in upstream's check: three defects against Rec. ITU-T H.222.0 (10/2014), and one convention about the
@@ -288,7 +296,7 @@ clock. For underflow and STD delay, that means the same access unit. The counts 
 of the 94. On the rest they differ by convention, not by verdict: when fill is checked, upstream's
 0.5 B TB tolerance, and the truncated last unit.
 
-### The eleven disagreements
+### The eleven disagreements, on `8df1e438`
 
 | Cause | Files, PID and first violation (upstream; seconds on the cut file's clock) | `ts-tstd.py` on the same unit | Clause | Verdict |
 |---|---|---|---|---|
@@ -320,6 +328,16 @@ and grades the missing bytes as an underflow. On the `main-raw` export it is 206
 oracle's frame output, 110 B. `ts-tstd.py` drops a trailing incomplete unit. Neither is wrong under the
 standard, which does not speak to bytes a capture never received. For a capture, though, upstream's
 convention reports an underflow the stream may not have.
+
+### On upstream `main`'s merged check
+
+The whole corpus re-graded through `tstd-xval.py` against `test/ts` from `main` at `87141092`
+(#4640's merge), with the current `ts-tstd.py`: **35 of 35 agree.** Every file in the table above now
+agrees on every condition graded: the source clip, `srt-sc-300s`, `udp-sc-300s`, `udp-sc-c100`
+and the oracle's source output on byte-exact delivery; `ffa-L600-w60` on the leak; Kyrion 4× and 15×
+on the 1 s audio delay (132 and 142 units per PID, as `ts-tstd.py` counts); and the truncated
+captures on their last access unit. `srt-sc-b120-c100` agrees on the 5 conditions both grade;
+upstream still refuses its audio after the loss. *File domain, offline, one pass.*
 
 ### Coverage differences
 

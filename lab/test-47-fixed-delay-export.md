@@ -23,6 +23,10 @@ twice the delay plus about 275 ms.**
   all the audio.
 - **Under 10 % loss it no longer stops, but carries almost nothing.** It ran the full 120 s with
   32 video units, no audio and 7,311 frames dropped as late.
+- **Under `--linger` it flags each resume once**, where `main` sets one to four flags per resume
+  (#4767), but in every linger run the export ends within 7 s of joining a broadcast as it starts,
+  on a missed deadline on the video, and the linger then waits for a replacement broadcast
+  (§ *A broadcast that restarts under `--linger`*).
 - **The fix costs latency.** With the scratch build, presentation is twice the delay plus about
   275 ms: 1,276 ms at 500 ms, 1,776 ms at 750 ms and 2,274 ms at 1 s. The head's is twice the delay
   less about 1,030 ms, but that figure belongs to the video alone, because the head drops the audio.
@@ -365,6 +369,38 @@ becomes latency. [#4681](https://github.com/moq-dev/moq/pull/4681)'s planned cap
 what would bring it down (reasoned). Two costs of the change are reasoned, not measured. A sparse
 PID that sends nothing at the join, such as SCTE-35, holds the acquisition the full two delays. A
 track that queues for a whole steering step pulls the clock with it.
+
+
+#### A broadcast that restarts under `--linger`, on `559a35244`
+
+The linger rig of [T13](test-13-downstream-grooming.md) § *Liveness* (`lin.sh`), unchanged, with the
+head's own `moq` and relay: `export ts --linger` starts first, then a same-name `import ts` publisher
+of `CNNiEMEA2.ts` (15 s sessions) ends cleanly or is `SIGKILL`ed and restarts. Default `--delay 1s`,
+loopback, P1, file domain; the scratch build `5e2425f` alongside.
+
+| Arm | Build | Runs | First session | Resumes | Flags on the PCR PID | CC jumps | Exit |
+|---|---|---:|---|---:|---:|---:|---|
+| Clean end, back after 5 s, clip replayed, `--linger 20s` | head | 1 | export ends at 4.5 s | 3 | **3** | 0 | 0 |
+| same | `5e2425f` | 1 | export ends at 6.6 s | 3 | **3** | 0 | 0 |
+| `SIGKILL` 5 s before the clip ends, back after 3 s, `--linger 60s` | head | 2 | export ends at ~4.4 s | 0 | 0 | 0 | 1 (`dropped`) |
+| same | `5e2425f` | 1 | export ends at 6.6 s | 1 | 1 | 0 | 1 (`internal error`) |
+
+- **One flag per resume: the multi-flag resume of [#4767](https://github.com/moq-dev/moq/issues/4767)
+  is gone on this head.** On `main` at `83ce47fe` the same replay arm set 6–8 flags for three resumes.
+  Upstream closed #4767 against this PR's plan (`quest/m1/tstd/delay.md`), not against merged code.
+- **Joining as the broadcast starts ends the export, in 5 of 5 runs on both builds**, with *missed a
+  decode deadline on PID 111*, after 138–139 frames dropped as late on the head and 291 on
+  `5e2425f`. Earlier cells joined about 4 s into the source and did not hit this at 1 s. Sessions
+  reached by a later resume ran to their end, the head's with 2,913 more drops, its audio loss
+  above.
+- **Under `--linger` a local export error reads as the broadcast ending.** The exporter logs
+  *broadcast ended, waiting for it to return* and waits for a replacement while the broadcast it was
+  reading is still live, so the rest of that session (about 10 s here) is lost.
+- **Across a publisher `SIGKILL` neither build carries through the restarts**, where `main` at
+  `83ce47fe` resumes 10–13 s after each kill on the same rig. The PR's base predates `main`'s by
+  about 230 commits, so this is not attributed to the PR; the arm is owed on the rebased head.
+
+Reported on #4645 (issuecomment-6013366214).
 
 ### The live-edge join and the 30 ppm clock, `2dc542b4a`
 
