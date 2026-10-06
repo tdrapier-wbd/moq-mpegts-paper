@@ -2059,6 +2059,20 @@ process existed. The rig had measured its own start-up latency and called it the
 > watch for it to go; treat a failure to appear as its own void outcome rather than as an instant
 > death. An arm whose lifetime comes back equal to the rig's own start-up delay is the signature.
 
+### A watcher that polls for presence must not find the previous run's file
+
+*From [T13](test-13-downstream-grooming.md) § Liveness.* The linger rig ends a run once the exporter
+writes its exit status to a file, and bounds that wait by the linger. A second batch wrote into run
+directories the first had used, so the old, non-empty status file satisfied the wait at once. The rig
+stopped the relay and the exporter 37 ms after the last publisher, and the exporter, stopped by the
+signal, exited 0 with no end logged. For a few minutes that looked like the fix under test exiting
+silently.
+
+> **Presence is what "left over" looks like as well as what "finished" looks like** — the inverse
+> of the rule above. A rig that waits for a file must delete it before the run starts, and a run
+> directory is either fresh or cleared, never inherited. The signature is a run that ends a fixed,
+> tiny interval after its last stimulus, with the process under test logging no reason.
+
 ### A control made of two production deployments is a coincidence, not an experiment
 
 *From [T34](test-34-real-encoder-severity.md) and [T40](test-40-continuous-join-through-srt.md).* Two
