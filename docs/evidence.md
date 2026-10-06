@@ -1921,8 +1921,9 @@ recovers its clock from the slack frames arrive with. Its clock stays in toleran
   loopback, on the bytes graded above), stable to under 10 ms within each run. With the audio given
   its delay, the video's send-ahead becomes latency. The draft's lower figures, such as 970 ms at
   1 s, are the video's alone, because it drops the audio. At 1 s the scratch build is within about 80 ms of
-  the live re-multiplexer's 2,196.7 ms; different builds and single runs do not rank them. Capping the
-  send-ahead is planned upstream and not built.
+  the live re-multiplexer's 2,196.7 ms; different builds and single runs with a spread not yet
+  located do not rank them. Capping the send-ahead separately was considered upstream and abandoned,
+  so `--delay` covers both the hold and the send-ahead window.
 
 **The draft before it, at `2dc542b4a`, kept its clock in tolerance and conformed at 1 s across hosts
 and under 1 % loss, but the join decided whether the audio survived.** *Measured*
@@ -1965,7 +1966,7 @@ the whole capture and passes every transport and decoder buffer in every 2 s win
 continuity errors and 0 PCRs outside ±500 ns. The one flag is the capture's truncated last AC-3
 frame, which the export passes on. A decoder would show each picture a median 2,125 ms after the
 source at 1 s, 2,201 ms at 750 ms and 1,409 ms at 500 ms (presentation latency, one run each). The
-750 ms run reads slower than the 1 s one, and single runs with an unlocated spread do not rank
+750 ms run reads slower than the 1 s one, and single runs with a spread not yet located do not rank
 against the laboratory re-multiplexer's 2,196.7 ms.
 
 The output is still not conformant, for a reason neither T-STD check nor `pcrverify` can see. Its PCR

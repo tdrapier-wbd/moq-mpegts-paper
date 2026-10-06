@@ -1307,7 +1307,9 @@ questline's nightly proof. We proposed TS passthrough and clock-recovery quests 
 (`quest/m1/ts-passthrough.md`, whole-packet carriage paced on source PCR) and took clock recovery
 into [#4645](https://github.com/moq-dev/moq/pull/4645) directly, dropping the separate quest. A
 catalog `burst` field for encoder VBV send-ahead was planned in
-[#4649](https://github.com/moq-dev/moq/pull/4649) and closed unmerged.
+[#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
+unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
+the hold and the send-ahead window. Neither burst quest was added.
 
 The check merged in [#4643](https://github.com/moq-dev/moq/pull/4643) on the questline branch and
 reached `main` with [#4640](https://github.com/moq-dev/moq/pull/4640) (`87141092`), replacing the

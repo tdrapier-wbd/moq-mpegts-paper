@@ -1,6 +1,6 @@
 # Test 45 — A live T-STD re-multiplexer behind the media-aware lane
 
-**State: questions 1–3 answered on one clip, loopback; clock recovery and 1+1 determinism not
+**State: questions 1–3 answered on two clips, loopback; clock recovery and 1+1 determinism not
 attempted.**
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
@@ -26,7 +26,8 @@ attempted.**
   with a 5 s warm-up, is overtaken by the lane.
 
 Measured at P1, captured from the wire, wire domain, loopback, one clip, exporter `ffa5b81b`, the
-re-multiplexer in Python. One conformant run of 270 s, and three shorter leads that fail. Hardware: not run. The T-STD figures are from
+re-multiplexer in Python. Two conformant runs, 270 s and 210 s on a clip each, and three shorter
+leads on the primary clip that fail. Hardware: not run. The T-STD figures are from
 [`ts-tstd.py`](scripts/ts-tstd.py) as corrected in [T46](test-46-tstd-check-cross-validation.md); that
 correction moved no verdict on any capture graded here, only the counts and margins below.
 
@@ -157,10 +158,11 @@ groomer that runs ahead settles at its cap ([T18](test-18-delivery-latency.md) �
 | 4 | 60 s | 550 ms | 2,094 of 1,676,189, 0 unsent | **fails**: 37 of 9,532 video units underflow, margin min −79.5 ms; no joint legal offset; 127 of 130 windows. Both audio buffers and every transport buffer clean | passes | 2,226.0 ms † |
 | 5 | 60 s | 500 ms | 595 of 1,683,713, 0 unsent | **fails**: 5 of 9,550 video units underflow, margin min −41.1 ms; no joint legal offset; 127 of 130 windows. Both audio buffers and every transport buffer clean | passes | 2,362.1 ms † |
 | 6 | 60 s | 400 ms | 7,957 of 1,684,260, 0 unsent | **fails**: 65 of 9,549 video units underflow, margin min −134.2 ms; no joint legal offset; 120 of 130 windows. Both audio buffers and every transport buffer clean | passes | 1,246.6 ms † |
+| **7: second clip** | **60 s** | **600 ms** | **0 of 1,300,115**, 0 unsent | **passes** | **passes** | **2,536.5 ms** † |
 
-† Runs 4–6 do not share a join with each other or with run 3, and the lane's transit differs by about
-a second between them, so their presentation latencies measure their own runs and not the lead. Only
-run 3's figure is quoted elsewhere.
+† Runs 4–7 do not share a join with each other or with run 3, and the lane's transit differs by about
+a second between them, so their presentation latencies measure their own runs and not the lead or the
+clip. Only run 3's figure is quoted elsewhere.
 
 Run 3, the conformant configuration, in full. Every transport buffer passes, the video's peaking at
 511 B of 512. The video decoder buffer has 0 underflows over 9,532 units, a minimum margin of 30.0 ms
@@ -178,6 +180,25 @@ over 1,155.8 ms, because the scheduler sends video as early as the buffers allow
 as its small buffer requires. The egress pre-loads each picture by a median 447.3 ms, against the
 source's 769.0 ms. The tool's scheduling loop fell behind by up to 167.7 ms, and no video packet
 arrived with less than 374.9 ms of its 600 ms lead. Nothing was late.
+
+**The conformant lead holds on a second clip, with more room.** Run 7 repeats run 3's
+configuration on `CNNiEMEA.ts` — a different five-minute capture of the same service, the same
+9,945,951 bps CBR mux and the same PID layout, so the rig and the 11 Mb/s carrier are unchanged. It
+passes all three criteria over 206.3 s: nothing late of 1,300,115 packets and nothing unsent; 0
+continuity errors, 8,255 PCRs all inside ±481 ns and 0 discontinuities; every transport buffer clean;
+0 decoder underflows on all three streams; the joint legal PCR offset [−100, +0] ms, which contains
++0 ms; and 100 of 100 two-second windows legal. Its lane held the steady-state band (a 31 ms spread
+against the warm-up anchor), so this is a clean cell.
+
+Its margins are wider than run 3's throughout. The video decoder's minimum margin is 144.7 ms
+against run 3's 30.0 ms, its first percentile 247.4 ms against 141.1 ms, and the video transport
+buffer's longest non-empty stretch 0.023 s against 0.192 s. So of the two clips the primary one is
+the harder, and the 600 ms lead is not tuned to it. Applying the margin slope measured on the primary
+clip, that slack *implies* a floor some 160–210 ms below the primary clip's, which is not measured —
+the run was made at 600 ms only, to ask whether the published lead generalises rather than to find
+this clip's floor. The run is shorter than run 3 (210 s of graded output after the warm-up,
+not 270 s) because the publisher loops the source with `--infinite` and this clip is 300 s long, so a
+longer run would have crossed the loop point.
 
 ### What the lane delivers
 
@@ -345,8 +366,10 @@ cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on
 
 ## Limits
 
-- **One conformant run**, 270 s after a 60 s warm-up, on one clip. The warm-up length was chosen after
-  seeing the settle, so the settle's length on other clips, hosts and builds is not known.
+- **One conformant run per clip**, 270 s and 210 s after a 60 s warm-up, and the two clips are
+  captures of the same service at the same rate, so they vary the content and not the profile, the
+  rate or the PID layout. The warm-up length was chosen after seeing the settle, so the settle's
+  length on other hosts and builds is not known.
 - **The tool is Python on a shared laptop.** Its loop fell behind by up to 167.7 ms once. The 600 ms
   lead absorbed it. The lead search found that the loop's lag does not order the sub-600 failures, so
   the stalls are not what makes a smaller lead fail, but a tighter instrument might still lower the
