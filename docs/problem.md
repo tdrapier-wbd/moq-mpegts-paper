@@ -145,8 +145,7 @@ All three succeed by *engineering determinism into a dedicated or managed layer 
 determinism*. The buyer is not paying for bandwidth but for the guarantee, which is why a technically
 superior transport does not automatically win.
 
-**The trust argument that blocked the first two has already been settled by the third, and this is the
-most under-appreciated fact in the field.** Moving the guarantee onto a best-effort substrate was
+**The trust argument that blocked the first two has already been settled by the third.** Moving the guarantee onto a best-effort substrate was
 supposed to be the hard part; §2.3 did it, in production, on contracted feeds, and the industry bought
 it. Retransmission, encryption, monitoring and an accountable counterparty turned out to be enough.
 Anyone arguing that broadcast cannot trust the public internet is arguing against deployed practice.
@@ -309,12 +308,12 @@ observation the rest of this repository turns out to be about.
 |---|---|---|---|
 | **R1** | **Faithful carriage of MPEG-2 transport streams.** Service identity (SDT), programme structure (PMT PIDs), SCTE-35 splice signalling, teletext/subtitling and continuity must survive transit intact. A transport that silently discards or reorders these is unusable for the installed base regardless of its performance. | §1.2 | [Comparison](comparison.md) §8, [Evidence](evidence.md) §3.1 |
 | **R2** | **A fan-out model whose marginal cost per destination approaches zero.** One-to-many to hundreds or low thousands of endpoints, without publisher-side replication or a per-endpoint tunnel the operator must run. **This is the requirement the adopted IP architectures fail**, and the reason the problem is still open (§2.3). | §1.4, §2.3 | [Comparison](comparison.md) §2, [Economics](economics.md) |
-| **R3** | **IRD-conformant egress.** A conformant MPEG-2 transport stream over the supported interface (RTP/UDP, frequently multicast), TR 101 290 P1/P2 conformant — above all conformant PCR timing — with stable service signalling and, where the facility uses it, ST 2022-7 dual-path input. **No Internet-native transport delivers this without an edge stage**, and because the distributor does not supply the receiver, that stage sits on the distributor's side of the demarcation. | §1.2, §1.5 | [Architecture](architecture.md) §4, [Evidence](evidence.md) §3.2 |
+| **R3** | **IRD-conformant egress.** A conformant MPEG-2 transport stream over the supported interface (RTP/UDP, frequently multicast), TR 101 290 P1/P2 conformant — above all conformant PCR timing — with stable service signalling and, where the facility uses it, ST 2022-7 dual-path input. **No Internet-native transport delivers this without an edge stage**, and because the distributor does not supply the receiver, that stage sits on the distributor's side of the demarcation. | §1.2, §1.5 | [Architecture](architecture.md) §4, [Evidence](evidence.md) §3.2, §3.16 |
 | **R4** | **Bounded, stable latency.** Sub-second is desirable; for most primary distribution a few seconds is tolerable — but the budget must be bounded and stable, because a drifting buffer is itself a fault for downstream playout and ad insertion. "Tolerable" has to be answered per route, not once: a geostationary path delivers a fraction of a second, and a 2–5 s replacement consumes most of a downstream budget that was previously free, at every destination. | §1.1, §1.2 | [Comparison](comparison.md) §5, [Evidence](evidence.md) §3.11 |
 | **R5** | **Graceful behaviour under loss and congestion.** The transport must degrade predictably rather than stall, and must not convert a single lost packet into a multi-second gap. | §2.4 (best-effort substrate) | [Comparison](comparison.md) §3, [Evidence](evidence.md) §3.3 |
 | **R6** | **Engineered redundancy meeting "no visible failure during contracted content".** In practice 1+1 with hitless selection at the receiver, because that is what the installed base already implements. | §1.1 | [Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4 |
-| **R7** | **Dynamic, revocable entitlement.** A feed reaches an endpoint only while that endpoint holds a valid grant, with a bounded worst-case revocation time — so rights windows, partner onboarding and emergency takedown are control-plane operations rather than manual receiver reconfiguration. | §3.7 | [Control](control-plane.md) |
-| **R8** | **Observability in broadcast terms.** Signal conformance, error seconds and PCR integrity, correlatable with systems-domain telemetry, so a broadcast NOC can operate the platform without adopting a new vocabulary. **Scored at the distributor's own egress**, which is where the contract is written; whether an origin can establish that what a *subscriber* received was intact is a further capability no candidate here provides, and it is not part of R8 ([Architecture](architecture.md) §9.4). | §1.3 | [Architecture](architecture.md) §9 |
+| **R7** | **Dynamic, revocable entitlement.** A feed reaches an endpoint only while that endpoint holds a valid grant, with a bounded worst-case revocation time — so rights windows, partner onboarding and emergency takedown are control-plane operations rather than manual receiver reconfiguration. | §3.7 | [Control](control-plane.md), [Comparison](comparison.md) §7, [Evidence](evidence.md) §3.10 |
+| **R8** | **Observability in broadcast terms.** Signal conformance, error seconds and PCR integrity, correlatable with systems-domain telemetry, so a broadcast NOC can operate the platform without adopting a new vocabulary. **Scored at the distributor's own egress**, which is where the contract is written; whether an origin can establish that what a *subscriber* received was intact is a further capability no candidate here provides, and it is not part of R8 ([Architecture](architecture.md) §9.4). | §1.3 | [Architecture](architecture.md) §9, [Evidence](evidence.md) §3.12 |
 
 Three notes on how this list is used.
 
@@ -339,7 +338,9 @@ depth. But the two requirements are not thereby independent: the only configurat
 P1/P2-conformant on that lane delivers at **2,447 ms**, against **109 ms** at a cushion that is not
 conformant, so a latency figure for it is meaningless without the conformance of the same bytes. And
 R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same configuration
-fails the 13818-1 buffer model. **R4 at R3 is therefore the open question on this lane, not a settled
+fails the 13818-1 buffer model. Stages that rebuild the packet schedule pass it — a laboratory
+re-multiplexer, and `[unmerged]` drafts of upstream's own exporter — each at a latency of its own, and
+no merged build has one. **R4 at R3 is therefore the open question on this lane, not a settled
 advantage** ([Evidence](evidence.md) §3.2, §3.11, §3.16).
 
 ---
