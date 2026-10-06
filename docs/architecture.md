@@ -496,10 +496,11 @@ PCR values are an even grid but whose PCR packets arrive bunched — the fixed M
 pipe ([Evidence](evidence.md) §3.2) — gives the stage no consistent rate and it drops content. Verify
 both domains on any new upstream build before promoting it. **An `[unmerged]` upstream export that lays
 packets on a PCR grid at the mux rate satisfies it**: through it the stream-clocked stage carries the
-programme at 3.4 % stuffing, and two independent legs then differ only in their continuity counters,
-four unexplained clusters of video and the order of sparse packets due at the same instant
-([Evidence](evidence.md) §3.4). That is the first build on which the multi-track row below is a
-counter and ordering problem rather than a scheduling one.
+programme at 3.4 % stuffing, and two legs started together are byte-identical, continuity counters
+included — the first mergeable multi-track pair this campaign has measured. A leg joining later is not,
+and the residue is two things: per-process continuity counters, and transpositions of units whose
+decode timestamps tie, which a canonical within-slot order would remove ([Evidence](evidence.md) §3.4).
+Co-starting the pair is therefore a design constraint on that build, not a convenience.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
@@ -507,7 +508,7 @@ counter and ordering problem rather than a scheduling one.
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
-| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets. On an `[unmerged]` grid export the slots agree and the residue is counters, four video clusters and sparse-packet order ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
+| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets. On an `[unmerged]` grid export a **co-started** pair is byte-identical, and a late-joining leg differs only in counters and in the order of units whose decode timestamps tie ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -527,9 +528,11 @@ arrival-clocked mode does not (§4.3).
 
 ### 5.2 One leg cannot always be restarted alone
 
-Stream clocking removes the constraint that a pair be co-started: a leg that mutes and returns
-rejoins its partner's numbering exactly, and a leg joining late puts the same programme in the same
-slots under the same numbers, a median 10 ms from its partner.
+Stream clocking removes the constraint that a pair be co-started **on single-track content**: a leg
+that mutes and returns rejoins its partner's numbering exactly, and a leg joining late puts the same
+programme in the same slots under the same numbers, a median 10 ms from its partner. On a multi-track
+mux it does not — there the pair has to be co-started, because the exporter orders units that tie on
+decode time by its own release clock (§5.1).
 
 What stops both cases short of *byte*-identity is not the groomer but the exporter, which renders
 continuity counters from its own process state. So **which receiver a deployment uses decides whether

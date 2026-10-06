@@ -559,12 +559,14 @@ unalignable, and two that agree would look identical for a trivial reason.
 > reported "no common media", which reads exactly like a failed comparison. The tool now retries
 > with B's needles in A, after the same trap voided a first grading of P1-o. A comparison of two
 > streams that are 93 % null packets is **void, not a pass**: there is no media to align on, and
-> matching stuffing would be the most confident meaningless result available. And **the window is
-> a sample, not the pair.** On #4645's scratch build, the default 50,000-packet window read as a
-> pair differing only in continuity counter, while the whole 944,023-packet overlap held four
-> clusters of 10,902 video packets that differ in payload and 262 swapped sparse-PID packets
-> ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*). Grade the whole overlap
-> before calling a pair mergeable.
+> matching stuffing would be the most confident meaningless result available. And **a fixed
+> alignment turns one displaced packet into a wall of differing payload.** On #4645's scratch build
+> the two legs carry an identical multiset of packets, but 713 adjacent transpositions put them a
+> packet out of step in places, and comparing packet *i* with packet *i* reported four clusters of
+> 10,902 video packets as payload damage. Re-aligned with a slip allowed, 943,271 of 944,023 packets
+> agree ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*). **Grade the whole overlap,
+> allow the alignment to slip, and compare the elementary stream before calling a difference
+> content loss.**
 
 **A slot-by-slot comparison measures the first inserted packet, not the property after it.**
 *([T12](test-12-dual-path-handoff.md) § After the media-time interleave.)* Upstream's interleave fix

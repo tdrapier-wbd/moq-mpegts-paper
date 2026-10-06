@@ -462,23 +462,24 @@ reporting them as a matched pair would be reporting on the null packets.
 
 **So the 1+1 property is unavailable on this data plane today by either route, and the blocker is
 the same defect in both.** The groomer cannot be retired, and it also cannot yet deliver seamless
-protection over this exporter; what stands between the campaign and both is the byte schedule. An
-unmerged export that corrects the byte schedule lets the deterministic mode run, and leaves a
-narrower set of differences between two exporters (*On #4645's PCR grid*, below).
+protection over this exporter; what stands between the campaign and both is the byte schedule. On an
+unmerged export that corrects the byte schedule the deterministic mode runs, and a co-started pair is
+byte-identical through the groomer (*On #4645's PCR grid*, below).
 
 *Domain: file, all arms. Build `53f8aa99d` (noq), `mpegts-pacer` `5ab84cd`, EC2 primary, loopback,
 `CNNiEMEA2.ts` at 9,945,951 b/s declared, 150 s per cell, two cells. Nothing here has been graded on
 a hardware IRD, so these are software conformance figures.*
 
-#### On #4645's PCR grid: the deterministic mode runs, and two exporters differ in less
+#### On #4645's PCR grid: the deterministic mode runs, and a co-started pair merges at the byte
 
 This is P1-o: does a corrected byte schedule make the groomer's deterministic mode work? The subject
 is the fixed-delay export of [#4645](https://github.com/moq-dev/moq/pull/4645) `[unmerged]`, which lays
 packets on a PCR grid at the mux rate. It was run on our scratch build of that PR, which keeps every
 track on one release clock, because the PR head drops the audio on most joins
 ([T47](test-47-fixed-delay-export.md)). The rig is the head-to-head above, unchanged except for the
-export's `--delay 1s`. Two runs were made, differing only in the groomer's cushion (200 ms and
-1,500 ms).
+export's `--delay 1s`. Four runs were made: two differing only in the groomer's cushion (200 ms and
+1,500 ms), one with the two exporters co-started rather than 8 s apart, and one on the same build with
+a log of every unit pushed into the export's schedule.
 
 **The deterministic mode now runs.** Against the 98.4 % and 93.1 % stuffing above, the stream-clocked
 groomer emits the programme:
@@ -496,38 +497,69 @@ and teletext. The stream-clocked legs lose about 156 video packets and one each 
 The loss is the same at both cushions, so it is not a cushion effect; where in the run it falls was
 not located.
 
-**Two exporters now differ mainly in their continuity counters.** The second exporter joined 8 s after
-the first. Over the whole 944,023-packet overlap, about 142 s:
+**Two exporters carry the same bytes in a slightly different order.** The second exporter joined 8 s
+after the first. Over the whole 944,023-packet overlap, about 142 s, the two legs emit the **same
+multiset of packets** — none only in one leg, and no net drift — and 943,271 of them agree once the
+comparison is allowed to slip by a packet, 912,205 of those differing in the continuity counter
+alone. The video elementary stream is identical: every access unit both legs carry agrees in its
+first 24 payload octets, its byte length and its packet count, and inside the common PTS range
+neither leg holds an access unit the other lacks. Neither leg logged a continuity jump, a
+discontinuity indicator or an out-of-range PCR step.
 
-- **Every PID except the video differs by one constant continuity-counter offset**, which a
-  per-PID rewrite would remove. This is [#2779](https://github.com/moq-dev/moq/issues/2779), closed
-  won't-fix upstream.
-- **The video differs by a constant offset except in four clusters**, about 98.5 s, 99.4 s, 113.6 s
-  and 114.5 s into the overlap, where 10,902 packets (1.2 % of the overlap) carry different payload at
-  the same position. Neither exporter logged anything near them, and their cause is not located.
-- **262 packets are adjacent swaps between sparse PIDs**: teletext and the passthrough data PIDs,
-  where two packets due at the same instant leave in a different order.
+What differs is order and counters:
 
-The two stream-clocked groomer legs show exactly the same differences, because the groomer
-places packets but does not rewrite counters.
+- **Every PID differs by one constant continuity-counter offset.** This is
+  [#2779](https://github.com/moq-dev/moq/issues/2779), closed won't-fix upstream, and a per-PID
+  rewrite would remove it.
+- **713 adjacent transpositions**, 538 of them video against one of the two audio PIDs, the rest
+  involving the teletext and passthrough data PIDs or a null packet. They concentrate in two bursts —
+  165 transpositions over 1.0 s and 533 over 1.7 s — with the remainder scattered. A comparison that
+  comes alongside packet *i* of each leg reports a burst as a long run of differing payload, which is
+  how these were first mis-read as four clusters of damaged video.
 
-**Each exporter is also reproducible run to run.** The first exporter's capture is byte-identical
-(same MD5) across the two runs, and so are the second exporter's and the stream-clocked groomer's.
-Each run used a fresh relay, publisher and set of processes. The join phase was the same in both
-runs, so this shows reproducibility at a fixed join, not identity across joins.
+**The cause is a tie in the release clock, resolved by push order.** An instrumented build logging
+every unit pushed into the export's schedule shows the two legs pushing **53 of 20,274 common units
+in a different order**, and every one of those pairs has *exactly equal* source decode timestamps.
+Their schedule deadlines differ only by the per-PID drain — 80.4 µs, half of one 188-octet slot, for
+video against audio. The jitter buffer releases by `(generation, deadline, track)`, so for equal
+decode times the order is settled by nanosecond differences in each process's own release clock
+rather than by anything in the media. Downstream, `Schedule::next` lays a slot's bytes out in
+`self.units` order, which is push order, and `admit`'s sort by due slot is stable, so the tie
+survives to the wire. A 25 ms slot holds about 165 packets at this rate, so one transposed pair of
+units displaces a block of packets — which is why 53 push-order differences produce several hundred
+packet-level ones.
 
-**What it decides.** The objection that blocked P1-o, a byte schedule the stream clock cannot
-follow, is gone on this build. Seamless protection over two exporters still needs three things:
-a continuity-counter rewrite (our keyframe-restart padding filter in §*Redundancy*, or upstream's
-planned per-group counters in `quest/m2/ts-hitless.md`); the four video clusters explained and
-removed; and a deterministic order for sparse packets due at the same instant. None of this has
-been run against the PR head or on a merged build.
+**The bursts coincide with the multiplex saturating.** In the co-started run the burst falls exactly
+on the three consecutive seconds that carry no null packet at all; outside saturation each unit has
+slots to itself and the legs agree. Saturation is necessary but not sufficient — the staggered run
+has 22 null-free seconds and two bursts — so what selects the rest is not established.
+
+**Co-started, the groomed pair is byte-identical.** With the two exporters started together rather
+than 8 s apart, their own outputs still transpose 271 pairs, but the two stream-clocked groomers
+behind them emit **the same bytes**, continuity counters included (equal MD5 over 182,550,256 B, 0
+slips). That is a mergeable 1+1 pair of a seven-track multiplex, which no earlier build has produced.
+With the 8 s stagger the groomer absorbs part of the difference and 179 transpositions survive it, on
+the same identical multiset; why it absorbs all of them in one case and not the other is not
+established.
+
+**Each leg is also reproducible run to run.** The first exporter's capture is byte-identical (same
+MD5) across the two cushion runs, and so are the second exporter's and the stream-clocked groomer's.
+Each run used a fresh relay, publisher and set of processes at the same join phase, so this is
+reproducibility at a fixed join, not identity across joins.
+
+**What it decides.** The objection that blocked P1-o, a byte schedule the stream clock cannot follow,
+is gone on this build, and multi-track 1+1 at the byte is reachable here for the first time. Two
+things stand between that and a pair a receiver could merge in deployment: a **canonical order for
+units that share a slot** — by due slot and PID, say, rather than by push order — which is upstream's
+to choose, and the **per-process continuity counters** of #2779, which a co-started pair happens to
+avoid and a late-joining one does not. Neither has been run against the PR head or a merged build.
 
 *Domain: file (stdout captures), P1. Scratch build of #4645 at `559a35244` plus the one-clock release
 patch `[unmerged]`, `mpegts-pacer` `5ab84cd`, EC2 secondary, loopback, `CNNiEMEA2.ts` at
-9,945,951 b/s, 150 s per run, two runs. Graded with `pcr-residual.py`, `ts-pair-diff.py` (a
-50,000-packet window from 80,000 packets into the first capture), a packet-by-packet comparison of
-the whole overlap by PID, and a per-PID count.*
+9,945,951 b/s, 150 s per run: two staggered runs at a 200 ms and a 1,500 ms groomer cushion, one
+co-started run, and one staggered run with the push log added. Graded with `pcr-residual.py`,
+`ts-pair-diff.py`, a slip-tolerant re-alignment of the whole overlap, a per-PID and per-access-unit
+comparison, and a packet multiset.*
 
 #### Liveness: the exporter does not mint a dead carrier, and on `main` it can outlive the source
 
@@ -666,7 +698,7 @@ flags — `--max-age` and `--mux-rate` — so most of this table is settled by t
 | Depth sized from the observed arrival pattern | **no** | yes | The exporter's own output needs ~1,500 ms to stop starving a groomer |
 | Segment-aware sizing and start gate | **no** | yes | Matters for a segmented input, not for this lane |
 | **Determinism** | | | |
-| Two processes byte-identical for the same media | **no** — 4.97 %, measured above | yes, by design (`Clocking::Stream`) | Neither is currently usable on a merged build: the pacer's mode cannot run on this source. On #4645's PCR grid `[unmerged]` it runs, and the pair differs in counters, four video clusters and sparse-PID order (*On #4645's PCR grid*) |
+| Two processes byte-identical for the same media | **no** — 4.97 %, measured above | yes, by design (`Clocking::Stream`) | Neither is currently usable on a merged build: the pacer's mode cannot run on this source. On #4645's PCR grid `[unmerged]` it runs, and a co-started pair is byte-identical through the groomer (*On #4645's PCR grid*) |
 | RTP sequence numbering, SSRC, sequence seed | **no** | yes | Prerequisite for ST 2022-7 |
 | **Content liveness** | | | |
 | Stops rather than minting a dead carrier | **yes** | yes (`StallPolicy::Mute`, the default) | The exporter's good result above |
