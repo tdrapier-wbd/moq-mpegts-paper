@@ -554,11 +554,17 @@ unalignable, and two that agree would look identical for a trivial reason.
 > process can have regenerated, then classify each difference by field — continuity counter, PCR,
 > PID, adaptation field, payload — so the result names a mechanism instead of a percentage.
 >
-> Two traps found while using it. The needle must be taken from *after* the later process joined:
-> a stagger of 8 s put the first candidates before B's first byte, and the tool correctly reported
-> "no common media", which reads exactly like a failed comparison. And a comparison of two streams
-> that are 93 % null packets is **void, not a pass** — there is no media to align on, and matching
-> stuffing would be the most confident meaningless result available.
+> Three traps found while using it. The needle must be taken from *after* the later process
+> joined: a stagger of 8 s put the first candidates before B's first byte, and the tool correctly
+> reported "no common media", which reads exactly like a failed comparison. The tool now retries
+> with B's needles in A, after the same trap voided a first grading of P1-o. A comparison of two
+> streams that are 93 % null packets is **void, not a pass**: there is no media to align on, and
+> matching stuffing would be the most confident meaningless result available. And **the window is
+> a sample, not the pair.** On #4645's scratch build, the default 50,000-packet window read as a
+> pair differing only in continuity counter, while the whole 944,023-packet overlap held four
+> clusters of 10,902 video packets that differ in payload and 262 swapped sparse-PID packets
+> ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*). Grade the whole overlap
+> before calling a pair mergeable.
 
 **A slot-by-slot comparison measures the first inserted packet, not the property after it.**
 *([T12](test-12-dual-path-handoff.md) § After the media-time interleave.)* Upstream's interleave fix

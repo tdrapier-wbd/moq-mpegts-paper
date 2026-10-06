@@ -56,6 +56,9 @@ LATENCY_MS=${LATENCY_MS:-200}
 OUT=${OUT:-$HOME/t13-p1n}/$LABEL
 # The second process of each pair joins this many seconds after the first.
 STAGGER=${STAGGER:-8}
+# The export's own latency value. On the fixed-delay export (`--delay`) it is the release delay,
+# which is conformant on a broadcast clip only in a narrow range, so it is set per build.
+EXPORT_LAT=${EXPORT_LAT:-3s}
 
 rm -rf "$OUT"; mkdir -p "$OUT"
 BCAST="t13p1n-$$.hang"
@@ -77,6 +80,7 @@ echo "=== $(date -u) t13-pacer-headtohead $LABEL ==="
 echo "clip=$CLIP rate=$RATE latency=${LATENCY_MS}ms secs=$SECS stagger=${STAGGER}s"
 
 moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
+echo "export ts ${MOQ_LAT[*]} $EXPORT_LAT"
 moq_relay_public "127.0.0.1:$PORT" localhost
 "$BIN/moq-relay" "${RELAY_ARGV[@]}" >"$OUT/relay.log" 2>&1 &
 PIDS+=($!)
@@ -88,7 +92,7 @@ sub() {
 	local sink="> '$OUT/$name.ts'"
 	[ -n "$pacer_args" ] && sink="| '$PACER' - $RATE $pacer_args > '$OUT/$name.ts'"
 	setsid bash -c "'$BIN/moq' ${MOQ_DIAL[*]} 'https://127.0.0.1:$PORT/anon' --quic-gso=false \
-		--broadcast '$BCAST' export ts ${MOQ_LAT[*]} 3s $sink" 2>"$OUT/$name.err" &
+		--broadcast '$BCAST' export ts ${MOQ_LAT[*]} $EXPORT_LAT $sink" 2>"$OUT/$name.err" &
 	PIDS+=($!)
 }
 

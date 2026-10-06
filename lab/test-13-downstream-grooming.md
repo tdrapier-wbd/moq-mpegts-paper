@@ -462,11 +462,72 @@ reporting them as a matched pair would be reporting on the null packets.
 
 **So the 1+1 property is unavailable on this data plane today by either route, and the blocker is
 the same defect in both.** The groomer cannot be retired, and it also cannot yet deliver seamless
-protection over this exporter; what stands between the campaign and both is the byte schedule.
+protection over this exporter; what stands between the campaign and both is the byte schedule. An
+unmerged export that corrects the byte schedule lets the deterministic mode run, and leaves a
+narrower set of differences between two exporters (*On #4645's PCR grid*, below).
 
 *Domain: file, all arms. Build `53f8aa99d` (noq), `mpegts-pacer` `5ab84cd`, EC2 primary, loopback,
 `CNNiEMEA2.ts` at 9,945,951 b/s declared, 150 s per cell, two cells. Nothing here has been graded on
 a hardware IRD, so these are software conformance figures.*
+
+#### On #4645's PCR grid: the deterministic mode runs, and two exporters differ in less
+
+This is P1-o: does a corrected byte schedule make the groomer's deterministic mode work? The subject
+is the fixed-delay export of [#4645](https://github.com/moq-dev/moq/pull/4645) `[unmerged]`, which lays
+packets on a PCR grid at the mux rate. It was run on our scratch build of that PR, which keeps every
+track on one release clock, because the PR head drops the audio on most joins
+([T47](test-47-fixed-delay-export.md)). The rig is the head-to-head above, unchanged except for the
+export's `--delay 1s`. Two runs were made, differing only in the groomer's cushion (200 ms and
+1,500 ms).
+
+**The deterministic mode now runs.** Against the 98.4 % and 93.1 % stuffing above, the stream-clocked
+groomer emits the programme:
+
+| | `53f8aa99d`, 200 ms | `53f8aa99d`, 1,500 ms | #4645 scratch, 200 ms | #4645 scratch, 1,500 ms |
+|---|---:|---:|---:|---:|
+| stuffing | 98.4 % | 93.1 % | **3.4 %** | **3.4 %** |
+| late drops | 962,610 | 908,270 | **158** | **158** |
+| PCR position guard | 5,762 packets displaced (871 ms) | 5,762 packets displaced (871 ms) | **no overrun interval** | **no overrun interval** |
+
+The export alone already holds the rate on this build: every one of 6,193 PCR intervals carries
+31,020–31,208 B against 31,020 B needed, 100 % within 1 % of nominal, no interval above 40 ms and
+none below 1 ms. Every PID of the source is present in both exporters' output, including MP2, AC-3
+and teletext. The stream-clocked legs lose about 156 video packets and one each of PAT, PMT and SI.
+The loss is the same at both cushions, so it is not a cushion effect; where in the run it falls was
+not located.
+
+**Two exporters now differ mainly in their continuity counters.** The second exporter joined 8 s after
+the first. Over the whole 944,023-packet overlap, about 142 s:
+
+- **Every PID except the video differs by one constant continuity-counter offset**, which a
+  per-PID rewrite would remove. This is [#2779](https://github.com/moq-dev/moq/issues/2779), closed
+  won't-fix upstream.
+- **The video differs by a constant offset except in four clusters**, about 98.5 s, 99.4 s, 113.6 s
+  and 114.5 s into the overlap, where 10,902 packets (1.2 % of the overlap) carry different payload at
+  the same position. Neither exporter logged anything near them, and their cause is not located.
+- **262 packets are adjacent swaps between sparse PIDs**: teletext and the passthrough data PIDs,
+  where two packets due at the same instant leave in a different order.
+
+The two stream-clocked groomer legs show exactly the same differences, because the groomer
+places packets but does not rewrite counters.
+
+**Each exporter is also reproducible run to run.** The first exporter's capture is byte-identical
+(same MD5) across the two runs, and so are the second exporter's and the stream-clocked groomer's.
+Each run used a fresh relay, publisher and set of processes. The join phase was the same in both
+runs, so this shows reproducibility at a fixed join, not identity across joins.
+
+**What it decides.** The objection that blocked P1-o, a byte schedule the stream clock cannot
+follow, is gone on this build. Seamless protection over two exporters still needs three things:
+a continuity-counter rewrite (our keyframe-restart padding filter in §*Redundancy*, or upstream's
+planned per-group counters in `quest/m2/ts-hitless.md`); the four video clusters explained and
+removed; and a deterministic order for sparse packets due at the same instant. None of this has
+been run against the PR head or on a merged build.
+
+*Domain: file (stdout captures), P1. Scratch build of #4645 at `559a35244` plus the one-clock release
+patch `[unmerged]`, `mpegts-pacer` `5ab84cd`, EC2 secondary, loopback, `CNNiEMEA2.ts` at
+9,945,951 b/s, 150 s per run, two runs. Graded with `pcr-residual.py`, `ts-pair-diff.py` (a
+50,000-packet window from 80,000 packets into the first capture), a packet-by-packet comparison of
+the whole overlap by PID, and a per-PID count.*
 
 #### Liveness: the exporter does not mint a dead carrier, and on `main` it can outlive the source
 
@@ -605,7 +666,7 @@ flags — `--max-age` and `--mux-rate` — so most of this table is settled by t
 | Depth sized from the observed arrival pattern | **no** | yes | The exporter's own output needs ~1,500 ms to stop starving a groomer |
 | Segment-aware sizing and start gate | **no** | yes | Matters for a segmented input, not for this lane |
 | **Determinism** | | | |
-| Two processes byte-identical for the same media | **no** — 4.97 %, measured above | yes, by design (`Clocking::Stream`) | Neither is currently usable: the pacer's mode cannot run on this source |
+| Two processes byte-identical for the same media | **no** — 4.97 %, measured above | yes, by design (`Clocking::Stream`) | Neither is currently usable on a merged build: the pacer's mode cannot run on this source. On #4645's PCR grid `[unmerged]` it runs, and the pair differs in counters, four video clusters and sparse-PID order (*On #4645's PCR grid*) |
 | RTP sequence numbering, SSRC, sequence seed | **no** | yes | Prerequisite for ST 2022-7 |
 | **Content liveness** | | | |
 | Stops rather than minting a dead carrier | **yes** | yes (`StallPolicy::Mute`, the default) | The exporter's good result above |

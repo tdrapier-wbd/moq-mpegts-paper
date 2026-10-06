@@ -131,6 +131,10 @@ def main():
 
     ia, ib, aligned = find_needle(da, oa, na, db, ob, skip)
     if ia is None:
+        # The needle comes from A's opening packets, which precede a later-joining B; B's
+        # opening packets are inside A whichever of the two joined first.
+        ib, ia, aligned = find_needle(db, ob, nb, da, oa, skip)
+    if ia is None:
         print("\nNO COMMON MEDIA FOUND — the two captures share no unique payload run.")
         print("Either they carry different content, or every candidate needle recurred.")
         return 1
