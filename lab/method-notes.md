@@ -3328,6 +3328,23 @@ conformed.
 > PES, compare the PES size with the buffer: if a PES carries several access units, deadlines and
 > removal are per access unit, in the scheduler and in the grader alike.
 
+### A parameter sweep whose runs do not share a join measures the join as well as the parameter
+
+*From [T45](test-45-live-tstd-remux.md).* Searching the live re-multiplexer's lead downward, the run
+at 550 ms failed worse than the run at 500 ms, which read as a non-monotone response to the
+parameter. It was the lane: one per cent of that run's video arrived at least 199.5 ms later against
+its own decode time than the warm-up anchor, where the neighbouring runs held a 25 ms band. The same
+sweep's end-to-end latency was useless for the same reason — the lane's transit from source tap to
+re-multiplexer input had a median of 1,708.6, 2,542.8 and 2,728.1 ms on three runs 150 ms apart in
+the parameter, about a second of spread that the parameter did not cause.
+
+> **In a sweep over a live lane, measure the lane in each run and report it beside the result.** An
+> arrival trace per run costs nothing and tells a parameter effect from a join effect. Where a result
+> depends on the lane's absolute transit — any end-to-end latency figure — runs that do not share a
+> join are not comparable at all, and the figure belongs to its own run. Where it depends only on the
+> output's internal consistency, as a T-STD grade on the stream's own PCR does, the runs compare, but
+> an excursion in one of them still moves it.
+
 ### A corrected instrument owes a re-grade of every figure it produced, and a re-read of every argument built on one
 
 *From [T46](test-46-tstd-check-cross-validation.md), applied to T44, T45 and T47.* When `ts-tstd.py`

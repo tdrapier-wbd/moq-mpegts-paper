@@ -1882,8 +1882,10 @@ frame's DTS 400 ms earlier, so every frame reaches the re-multiplexer at its own
 of the pre-load the source gave it. That mechanism is read from the code, and the measured offset
 between the video's and the audio's arrival is 420 ms. The remaining 0.6 s is the re-multiplexer's
 lead, set to rebuild that pre-load through the video's 10.56 Mb/s transport buffer; a rate-limited
-bound derived from the measured frames puts its floor near 0.55 s. Only a lane that delivers frames
-ahead of their decode time could shrink it.
+bound derived from the measured frames puts its floor near 0.55 s, and a search downward confirms it
+— 600 ms is the lowest lead measured to pass, and 550, 500 and 400 ms all fail the T-STD
+([T45](../lab/test-45-live-tstd-remux.md#the-runs)). Only a lane that delivers frames ahead of their
+decode time could shrink it.
 
 **Upstream's current draft, at `559a35244`, loses the audio on most joins. A scratch build that
 anchors its clock on the track sent latest carries every track conformantly.** *Measured*
@@ -2043,7 +2045,9 @@ restart.
 - **1+1 determinism.** If two legs are to stay byte-identical (§3.4), the re-multiplexer has to
   schedule from the stream alone rather than from arrival, which differs between legs.
 - **Another clip, a cross-host lane, or `main`**, which rebases the PTS onto its own clock and so
-  defeats the latency instrument's PTS keys. The live lead was not searched below 600 ms.
+  defeats the latency instrument's PTS keys. The floor between 550 and 600 ms was not bisected, and
+  the run at 550 ms met a lane excursion, so the lowest lead this lane holds without one is
+  bracketed rather than measured.
 - **The decoded-picture buffer**, which the grader does not model. The exporter decodes each picture
   0–280 ms earlier than the source does, so each is held that much longer before presentation.
 - **Segmented HTTP's wire.** It carries the source's packet order and is reasoned, not measured, to

@@ -12,8 +12,10 @@ attempted.**
   1.2 s is the lane's own transit, measured on the audio, which the exporter does not hold. About
   0.4 s comes from the exporter's ordering: it writes each video frame once the audio has passed the
   frame's PTS, and authors that frame's DTS 400 ms earlier. The remaining 0.6 s is the lead the
-  re-multiplexer adds to rebuild the decoder pre-load that this ordering removes, against a
-  rate-limited lower bound of about 0.55 s on these frames.
+  re-multiplexer adds to rebuild the decoder pre-load that this ordering removes. Searching the lead
+  downward, 0.6 s is the lowest measured to pass — 550, 500 and 400 ms all fail the T-STD, and the
+  video's margin crosses zero between about 545 and 560 ms, which is where a rate-limited bound
+  derived independently from the frames puts it.
 - **Byte-faithful carriage on the same rig conforms at a twentieth of that.** Through the
   stream-clocked groomer at a 100 ms cushion, UDP passes the grader and P1/P2 at 113.7 ms
   presentation latency, but only after the groomer's first 5 s, which a cap below its start-up
@@ -24,7 +26,7 @@ attempted.**
   with a 5 s warm-up, is overtaken by the lane.
 
 Measured at P1, captured from the wire, wire domain, loopback, one clip, exporter `ffa5b81b`, the
-re-multiplexer in Python. One conformant run of 270 s. Hardware: not run. The T-STD figures are from
+re-multiplexer in Python. One conformant run of 270 s, and three shorter leads that fail. Hardware: not run. The T-STD figures are from
 [`ts-tstd.py`](scripts/ts-tstd.py) as corrected in [T46](test-46-tstd-check-cross-validation.md); that
 correction moved no verdict on any capture graded here, only the counts and margins below.
 
@@ -152,6 +154,13 @@ groomer that runs ahead settles at its cap ([T18](test-18-delivery-latency.md) �
 | 1 | 5 s | 100 ms | **1,735,115 of 1,829,973**, of them 1,723,693 of 1,733,720 video | **fails**: every one of 10,481 video units underflows, median margin −504.7 ms; 1,663 MP2 and 1,131 AC-3 units; **19** video TB stretches not emptied within 1 s; 0 of 142 windows | passes | — |
 | 2 | 60 s | 100 ms | **28,661–33,243 per 10 s**, throughout | **fails**: 6,901 of 8,687 video units, 32 MP2, 26 AC-3; **15** video TB stretches not emptied within 1 s; 0 of 116 windows | passes | — |
 | **3** | **60 s** | **600 ms** | **0 of 1,676,219**, 0 unsent | **passes** | **passes** | **2,196.7 ms** |
+| 4 | 60 s | 550 ms | 2,094 of 1,676,189, 0 unsent | **fails**: 37 of 9,532 video units underflow, margin min −79.5 ms; no joint legal offset; 127 of 130 windows. Both audio buffers and every transport buffer clean | passes | 2,226.0 ms † |
+| 5 | 60 s | 500 ms | 595 of 1,683,713, 0 unsent | **fails**: 5 of 9,550 video units underflow, margin min −41.1 ms; no joint legal offset; 127 of 130 windows. Both audio buffers and every transport buffer clean | passes | 2,362.1 ms † |
+| 6 | 60 s | 400 ms | 7,957 of 1,684,260, 0 unsent | **fails**: 65 of 9,549 video units underflow, margin min −134.2 ms; no joint legal offset; 120 of 130 windows. Both audio buffers and every transport buffer clean | passes | 1,246.6 ms † |
+
+† Runs 4–6 do not share a join with each other or with run 3, and the lane's transit differs by about
+a second between them, so their presentation latencies measure their own runs and not the lead. Only
+run 3's figure is quoted elsewhere.
 
 Run 3, the conformant configuration, in full. Every transport buffer passes, the video's peaking at
 511 B of 512. The video decoder buffer has 0 underflows over 9,532 units, a minimum margin of 30.0 ms
@@ -217,8 +226,39 @@ finish every frame by its DTS:
 | 10.40 Mb/s, about what the carrier leaves the video | 545 ms |
 | 10.00 Mb/s | 627 ms |
 
-Run 3's 600 ms sits just above the middle figure, and sent nothing late. The lowest lead that passes
-live was not searched, so 600 ms is a sufficient lead, not the minimum.
+Run 3's 600 ms sits just above the middle figure, and sent nothing late.
+
+**Searching downward, 600 ms is the lowest lead measured to pass.** Runs 4–6 repeated run 3's configuration at 550, 500 and 400 ms, and all three fail — on the
+same three counts each time: packets sent after their deadline, video decoder underflows, and no
+constant PCR offset legal for all three buffers at once. All three still pass P1/P2 on their own
+bytes (0 continuity errors, 0 PCRs outside ±481 ns, 0 intervals over 40 ms), so what a smaller lead
+costs is the T-STD and nothing else.
+
+The video decoder's margin tracks the lead almost one for one. Across the runs whose lane held its
+steady-state arrival band — 600, 500 and 400 ms — the minimum margin over about 9,500 units falls
+from +30.0 ms to −41.1 ms to −134.2 ms, a slope of 0.7–0.9 ms per ms of lead removed, crossing zero
+between about 545 and 560 ms. That agrees with the rate-limited bound derived above from frame sizes
+and arrival offsets, which put the floor at 545 ms for the drain rate the carrier leaves the video.
+Two independent routes to the same figure.
+
+**Run 4, at 550 ms, is worse than run 5 at 500 ms, and the lane is why.** Its multiplex is not a
+counter-example to that slope: in run 4 one per cent of video PES arrived at least 199.5 ms later
+against their own decode times than the warm-up anchor, the worst 260.9 ms later, where runs 5 and 6
+held the 25 ms band that run 3 established as the steady state. A lead set at the rate-limited floor
+has nothing left for an excursion of that size, so the floor is a bound and not a safe set-point —
+the deployable lead has to cover the lane's worst excursion as well as the drain.
+
+**The instrument's own stalls are not what fails the sub-600 runs.** The scheduling loop's worst lag
+was 6.8 ms in run 5, 26.4 ms in run 4 and 95.9 ms in run 6, against 167.7 ms in the conformant run 3:
+the lag does not order the failures, and the one run that stalled worst is the one that passed. The
+600 ms lead absorbed a 167.7 ms stall; the sub-600 failures are the drain, not the laptop.
+
+**Presentation latency is not comparable across these runs**, because the lane's transit is set by
+the join rather than by the configuration. Source tap to re-multiplexer input on the video, after
+each run's settle, the median is 1,708.6 ms in run 6, 2,542.8 ms in run 4 and 2,728.1 ms in run 5 —
+about a second of spread across three leads spanning 150 ms. Within a run it is as flat as ever (spreads of
+4.1–4.4 ms), so the figures in the table measure their own runs and the 2.20 s of run 3 remains the
+conformant figure. A latency comparison needs the runs it is drawn from to share a join.
 
 ### Where the 2.2 s goes
 
@@ -226,7 +266,7 @@ live was not searched, so 600 ms is a sufficient lead, not the minimum.
 |---|---|---|
 | The lane's transit, source tap to exporter output | about 1,200 | measured, on the audio |
 | The exporter's PTS ordering against its own DTS reserve | about 400 | measured as the video's arrival offset against the audio's (420 ms); mechanism from the code |
-| The re-multiplexer's lead | 600 | set; its rate-limited floor derived from measured frames at about 545 ms |
+| The re-multiplexer's lead | 600 | measured as the lowest lead that passes; its floor derived from measured frames at about 545 ms, and measured to lie between 550 and 600 ms |
 | **Sum** | **about 2,200** | measured presentation latency 2,196.7 ms |
 
 The re-multiplexer's own share is the 600 ms, and only a lane that delivers frames ahead of their
@@ -308,9 +348,11 @@ cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on
 - **One conformant run**, 270 s after a 60 s warm-up, on one clip. The warm-up length was chosen after
   seeing the settle, so the settle's length on other clips, hosts and builds is not known.
 - **The tool is Python on a shared laptop.** Its loop fell behind by up to 167.7 ms once. The 600 ms
-  lead absorbed it, and a smaller lead might not have.
-- **The lead was not searched downward from 600 ms.** The rate-limited bound puts the floor near
-  0.55 s; a run below 600 ms would say how much of the difference the host's stalls need.
+  lead absorbed it. The lead search found that the loop's lag does not order the sub-600 failures, so
+  the stalls are not what makes a smaller lead fail, but a tighter instrument might still lower the
+  floor by the lag.
+- **The floor between 550 and 600 ms was not bisected**, and the run at 550 ms met a lane excursion,
+  so the lowest lead this lane can hold without one is bracketed rather than measured.
 - **One comparator run per transport**, one cushion. SRT's single loss in 288 s is one event, not a
   loss rate.
 
@@ -327,7 +369,7 @@ tsp --realtime -I file <source>.ts -P regulate --pcr-synchronous -P until --seco
 RELAY_TOML=<relay.toml for the build> MOQ=<build>/moq RELAY=<build>/moq-relay MOQLAT=500ms \
   RATE=11000000 PACER=lab/scripts/ts-remux-live.py \
   PACER_EXTRA="--calib-from <source>.ts --warmup-ms 60000 --json <out>/remux.json --trace <out>/trace.csv" \
-  bash lab/scripts/t18-arm.sh <source>.ts <out> 330 moq 600
+  bash lab/scripts/t18-arm.sh <source>.ts <out> 330 moq 600   # the last argument is the lead, in ms
 # the comparators
 CAP=150 PACER_EXTRA=--stream-clock RATE=11000000 PACER=<pacer>/mpegts-pacer \
   bash lab/scripts/t18-arm.sh <source>.ts <out> 300 udp 100
