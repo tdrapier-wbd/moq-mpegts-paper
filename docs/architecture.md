@@ -494,7 +494,12 @@ merge above the transport.
 **Prerequisite:** slot derivation assumes PCR *value* and *position* advance together. A stream whose
 PCR values are an even grid but whose PCR packets arrive bunched — the fixed MoQ exporter over a byte
 pipe ([Evidence](evidence.md) §3.2) — gives the stage no consistent rate and it drops content. Verify
-both domains on any new upstream build before promoting it.
+both domains on any new upstream build before promoting it. **An `[unmerged]` upstream export that lays
+packets on a PCR grid at the mux rate satisfies it**: through it the stream-clocked stage carries the
+programme at 3.4 % stuffing, and two independent legs then differ only in their continuity counters,
+four unexplained clusters of video and the order of sparse packets due at the same instant
+([Evidence](evidence.md) §3.4). That is the first build on which the multi-track row below is a
+counter and ordering problem rather than a scheduling one.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
@@ -502,7 +507,7 @@ both domains on any new upstream build before promoting it.
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
-| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets | as above | nothing mergeable at the byte; merge above the transport instead |
+| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets. On an `[unmerged]` grid export the slots agree and the residue is counters, four video clusters and sparse-packet order ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
