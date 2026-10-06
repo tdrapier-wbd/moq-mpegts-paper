@@ -513,8 +513,8 @@ segmented HTTP's wire is ungraded.
 capture.** MoQ is the only Internet-native candidate whose *architecture* reaches that band, and it is
 the only one with commodity delivery in prospect, but the campaign has not produced a conformant
 sub-second configuration on MoQ. At the buffer model its configurations that last a whole capture
-present at 2.2–2.3 s; upstream's `[unmerged]` exporter presents at about 1.27 s at a 500 ms delay, and
-stops 157 s into a 540 s run (§5.1).
+present at 2.2–2.3 s; a scratch build of upstream's `[unmerged]` exporter presents at about 1.27 s at
+a 500 ms delay, and stops 157 s into a 540 s run (§5.1).
 The point-to-point tunnels come closer: SRT at a 120 ms latency conforms either side of one unrecovered
 loss, at 234 ms (§5.1). A route with a sub-second budget is therefore choosing on a projection — that
 the ~650 ms upstream regression is recovered, that the VBV-derived buffer bound is smaller for its own
