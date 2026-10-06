@@ -441,11 +441,12 @@ its own decode time and so removes the pre-load the rebuild has to restore; the 
 0.6 s, the lowest measured to pass. That figure
 is presentation latency on `ffa5b81b`, and the 2,447 ms is delivery latency on an earlier build through
 the groomer, so the two do not subtract. Upstream's own exporter, in `[unmerged]` drafts, schedules the
-wire itself. On a scratch build of the draft that keeps every track, the programme presents at twice
-the delay plus about 275 ms, on runs that pass the buffer model and P2: 2,273 ms over 540 s at 1 s, and
-1,273–1,277 ms at 500 ms, where the export stops 157 s into a 540 s run, so 500 ms is not a working
-delay over a whole capture (presentation latency, loopback, one clip). Single runs on different builds
-do not rank this against the re-multiplexer ([Evidence](evidence.md) §3.16).
+wire itself. Its current draft keeps every track on every join tried, and on runs that pass the
+buffer model and P2 the programme presents at twice the delay plus about 275 ms at 750 ms and 1 s:
+2,272.5 ms over 540 s at 1 s. At 500 ms the join moves it, between 993 and 1,383 ms over nine joins,
+and the export stops 157 s into a 540 s run, so 500 ms is not a working delay over a whole capture
+(presentation latency, loopback, one clip). Different builds on one clip do not rank this against the
+re-multiplexer ([Evidence](evidence.md) §3.16).
 
 **At equal P1/P2 conformance the ordering changes, and it does not favour MoQ against the incumbents.**
 Against the other Internet-native plane MoQ keeps a decisive margin — 2,447 ms against segmented HTTP's
@@ -513,8 +514,8 @@ segmented HTTP's wire is ungraded.
 capture.** MoQ is the only Internet-native candidate whose *architecture* reaches that band, and it is
 the only one with commodity delivery in prospect, but the campaign has not produced a conformant
 sub-second configuration on MoQ. At the buffer model its configurations that last a whole capture
-present at 2.2–2.3 s; a scratch build of upstream's `[unmerged]` exporter presents at about 1.27 s at
-a 500 ms delay, and stops 157 s into a 540 s run (§5.1).
+present at 2.2–2.3 s; upstream's `[unmerged]` exporter presents at 993–1,383 ms at a 500 ms delay,
+depending on the join, and stops 157 s into a 540 s run (§5.1).
 The point-to-point tunnels come closer: SRT at a 120 ms latency conforms either side of one unrecovered
 loss, at 234 ms (§5.1). A route with a sub-second budget is therefore choosing on a projection — that
 the ~650 ms upstream regression is recovered, that the VBV-derived buffer bound is smaller for its own
@@ -641,7 +642,7 @@ on every refusing arm, and announcement scoped to what a credential licenses. Th
 | Packets added to the mux | **one PAT/PMT pair per segment** — measured, and nothing else; **1.00 per segment head over the internet too** | rebuilt, not comparable | **none** | **none** — measured |
 | PCR repetition (P1), file domain | **unchanged from source** — measured | **not inherited from the source but produced by the lane** — clustered 86 % of intervals under 1 ms with gaps to 320 ms, from a source with none above 40 ms in 600 s; restored by the pacer. **On the merged exporter the values are an exact 25 ms grid and the packets sit beside the bytes they label; the delivered figure clears once the groomer reserves the PCR slot rather than waiting for a spare one — 0 of 20,193 intervals above 40 ms over 300 s** (§5.1) | unchanged from source | **unchanged from source** — measured over the wire |
 | PCR accuracy (P2), file domain | **37–74 ns → 109–302 µs**, the injected pair priced; **302.1 µs against 302.4 predicted over the internet**, and **0 violations at 500 µs** bounding it; **0 violations once groomed** | **fails on every PCR** against the declared rate, at ~24 ms of jitter, ungroomed; undefined before the mux-rate change, with no rate to grade against | unmeasured; byte-preserving by construction | **0 violations at 481 ns** — measured over the wire |
-| Packet schedule — PID interleave and decoder-buffer pre-loading (T-STD), wire | source order carried; **not graded** | **discarded and not rebuilt**: groomed, the wire overflows the video, both audio and the PSI transport buffers, and no PCR offset makes the audio decoder buffers legal — measured, while passing P1/P2, on every build up to upstream `main`. A re-multiplexer rebuilds a conformant schedule from the same wire, offline (file domain) and, as a laboratory stage, live at 2,196.7 ms of presentation latency (wire, loopback, two clips of one service); no merged build does. Upstream's `[unmerged]` draft exporters do at a 1 s delay, across hosts, except on joins where they drop a whole audio track; a scratch change to the current draft keeps every track on every join tried ([Evidence](evidence.md) §3.16) | preserved by construction; not graded. Reasoned from SRT's measurement: kept only behind a stream-clocked egress | **preserved** — every transport buffer, and every decoder buffer in every 2 s window, passes through the same groomer, measured. Over a whole capture the groomer's arrival-clocked PCR drifts and fails the decoder buffers; its stream-clocked mode passes every buffer, at the source's own offsets ([Evidence](evidence.md) §3.16) |
+| Packet schedule — PID interleave and decoder-buffer pre-loading (T-STD), wire | source order carried; **not graded** | **discarded and not rebuilt**: groomed, the wire overflows the video, both audio and the PSI transport buffers, and no PCR offset makes the audio decoder buffers legal — measured, while passing P1/P2, on every build up to upstream `main`. A re-multiplexer rebuilds a conformant schedule from the same wire, offline (file domain) and, as a laboratory stage, live at 2,196.7 ms of presentation latency (wire, loopback, two clips of one service); no merged build does. Upstream's `[unmerged]` draft exporters do at a 1 s delay, across hosts; earlier drafts dropped a whole audio track on some joins, and the current draft keeps every track on every join tried ([Evidence](evidence.md) §3.16) | preserved by construction; not graded. Reasoned from SRT's measurement: kept only behind a stream-clocked egress | **preserved** — every transport buffer, and every decoder buffer in every 2 s window, passes through the same groomer, measured. Over a whole capture the groomer's arrival-clocked PCR drifts and fails the decoder buffers; its stream-clocked mode passes every buffer, at the source's own offsets ([Evidence](evidence.md) §3.16) |
 | TS-level scrambling (conditional access) | carried as bytes; reasoned | **cannot be carried** — the publisher parses PES headers that scrambling hides, so a scrambled feed is descrambled before ingest; specified, not exercised | carried by construction; not exercised | carried by construction; not exercised |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | yes | verbatim by construction; every field, count and cadence measured identical, not diffed byte-for-byte |
 
@@ -1068,12 +1069,12 @@ Ranked by leverage:
    laboratory re-multiplexer does it live on one host, at 2.2 s of presentation latency on the build
    tested, inside a two-to-nine-second budget before any network is added. Upstream's own
    exporter, in `[unmerged]` drafts, has kept the wire conformant across hosts at a 1 s delay with
-   its system clock in tolerance, but each draft so far drops a whole audio track on some joins.
-   A scratch change that anchors the clock on the track sent latest keeps every track on every join
+   its system clock in tolerance. Earlier drafts dropped a whole audio track on some joins; the
+   current draft anchors the clock on the track sent latest and keeps every track on every join
    tried, on loopback, across hosts and at 1 % loss, at about the re-multiplexer's latency at 1 s
-   ([Evidence](evidence.md) §3.16); upstream has since taken that anchor into the draft, still
-   `[unmerged]`. A co-started multi-track pair behind such an export already merges at the byte, and a
-   late-joining leg does not ([Evidence](evidence.md) §3.4). What is open is the laboratory
+   ([Evidence](evidence.md) §3.16). A co-started multi-track pair behind such an export already merges
+   at the byte, and a late-joining leg does not, because each exporter places a TDT revision on
+   arrival ([Evidence](evidence.md) §3.4). What is open is the laboratory
    re-multiplexer following a remote source's clock, upstream merging an export that keeps every
    track, and either scheduling deterministically for a leg that joins late. That decides whether the
    lane serves TS-out to an IRD in a deployment or only feeds that re-encode or re-multiplex

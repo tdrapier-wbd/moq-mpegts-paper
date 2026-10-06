@@ -501,9 +501,10 @@ both domains on any new upstream build before promoting it. **An `[unmerged]` up
 packets on a PCR grid at the mux rate satisfies it**: through it the stream-clocked stage carries the
 programme at 3.4 % stuffing, and two legs started together are byte-identical, continuity counters
 included — the first mergeable multi-track pair this campaign has measured. A leg joining later is not,
-and the residue is two things: per-process continuity counters, and transpositions of units whose
-decode timestamps tie, which a canonical within-slot order would remove ([Evidence](evidence.md) §3.4).
-Co-starting the pair is therefore a design constraint on that build, not a convenience.
+and the residue is two things: per-process continuity counters, and, on the PR's current head, the
+placement of each TDT revision, which follows the snapshot's arrival rather than its media time
+([Evidence](evidence.md) §3.4). Co-starting the pair is therefore a design constraint on that build,
+not a convenience.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
