@@ -433,9 +433,10 @@ components and neither is the groomer's cushion:
 model on the lane's packet order, which the groomer cannot reorder (§8, [Evidence](evidence.md) §3.16).
 A re-multiplexer repairs the wire: offline, at 0.9–1.4 s of decoder delay against the groomed egress's
 own clock, and live, as a laboratory stage on the build under test, at **2,196.7 ms of presentation
-latency** (§8, [Evidence](evidence.md) §3.16; loopback, one clip). About 1.2 s of that is the lane's own
-transit and about 0.4 s the exporter's ordering, which writes each video frame at its own decode time
-and so removes the pre-load the rebuild has to restore; the rebuild's own lead is 0.6 s. That figure
+latency** (§8, [Evidence](evidence.md) §3.16; loopback, two clips of one service). About 1.2 s of that
+is the lane's own transit and about 0.4 s the exporter's ordering, which writes each video frame at
+its own decode time and so removes the pre-load the rebuild has to restore; the rebuild's own lead is
+0.6 s, the lowest measured to pass. That figure
 is presentation latency on `ffa5b81b`, and the 2,447 ms is delivery latency on an earlier build through
 the groomer, so the two do not subtract.
 

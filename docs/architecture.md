@@ -278,7 +278,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | Ungroomed media-aware egress | **0–26 % of PCR intervals exceed 40 ms**, depending on source | file |
 | Groomed, MoQ lane, **against the T-STD buffer model** | **fails on the configuration above**, and on every build up to upstream `main`, in either clock mode: video, audio and PSI transport buffers overflow throughout, and no PCR offset makes the audio decoder buffers legal in any 2 s window. The same groomer fed by SRT passes every transport buffer and every 2 s window | **wire**, loopback |
 | The same groomed MoQ wire, **re-multiplexed offline** against the T-STD | **passes every buffer** over the whole capture, on its own PCR, from three builds' egress, at 0.9–1.4 s of decoder delay against that egress's clock | **file** |
-| The MoQ lane's TS-out, **re-multiplexed live** in this gateway's place, a laboratory stage | **passes every buffer and P1/P2** over 270 s with nothing sent late, at **2,196.7 ms of presentation latency** on `ffa5b81b`; one clip, one run | **wire**, loopback |
+| The MoQ lane's TS-out, **re-multiplexed live** in this gateway's place, a laboratory stage | **passes every buffer and P1/P2** over 270 s with nothing sent late, at **2,196.7 ms of presentation latency** on `ffa5b81b`; two clips of one service, one run each, at the lowest lead that passes | **wire**, loopback |
 | Byte-faithful SRT or UDP, **stream-clocked** groomer, against the T-STD | **passes every buffer** over the whole capture, at the source's own legal offsets, with every source null stripped. Arrival-clocked, the decoder buffers drift out | **wire**, loopback |
 | Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors; buffer model not graded | **wire** |
 | Any lane | — | **hardware IRD: not run** |
@@ -352,9 +352,12 @@ conformant multiplex from the lane's own groomed egress on three builds. It need
 the lane's video already needed, 0.9–1.4 s against that egress's clock, and 25 ms from frame-granular
 source timing.
 
-**Live, it works on one host** ([Evidence](evidence.md) §3.16; wire, loopback, one clip, `ffa5b81b`).
-Run in real time in this gateway's place, pacing and stamping PCR itself, the same scheduler passes
-every buffer and P1/P2 over 270 s at 2,196.7 ms of presentation latency. It needs no source PCR. It
+**Live, it works on one host** ([Evidence](evidence.md) §3.16; wire, loopback, two clips of one
+service, `ffa5b81b`). Run in real time in this gateway's place, pacing and stamping PCR itself, the
+same scheduler passes every buffer and P1/P2 over 270 s at 2,196.7 ms of presentation latency, and
+on the second clip at the same 600 ms lead with wider margins. That lead is the lowest measured to
+pass; below it the output underflows the video decoder while still passing P1/P2. It needs no source
+PCR. It
 stamps the decode timeline's own clock, so the PCR-to-PTS relationship this section opens with holds
 by construction, and the only choice left is where that timeline sits against the wall clock. **That
 choice has to wait for the lane to settle.** On the build tested the lane's delay grows by about
