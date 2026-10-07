@@ -122,7 +122,7 @@ every "not established" entry recurs in §4 or §5.
 | **Isolation** | An abusive receiver cannot reach another subscriber's media: five arms leave the victims within 8 KB of the control across 198 MB at 0 continuity errors, and the relay never refuses or delays a connection. The cost is the relay's memory — 87 MB → 1.9 GB in 60 s from subscription churn — and it is **abandoned-session retention** rather than cached payload or concurrency, each of which §3.14 rules out with its own control. Tunable: 30 s → 10 s [idle timeout](glossary.md#transport-and-deployment-terms) takes it to 489 MB, and 10 s is upstream `main`'s default from #4606, not measured on that build. The segmented lane's static origin has no retained-state term at all under the same abuse | Anything adversarial rather than accidental; whether it scales linearly in abuser count | §3.14 |
 | **Availability** | Shedding a late [group](glossary.md#moq) is the lane's designed response to congestion, and **the subscriber process did not reliably survive doing it**: `moq export ts` exited on an evicted group, silently, leaving a syntactically perfect capture behind. [An upstream fix](../lab/upstream-contributions.md#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) covered the container consumer and not the catalog one, and a second closed the residual; the re-run records 0 of 10 against a control's 1 of 10 on the same rig — consistent with the fix, though the event rate is too low for the count alone to establish it | Whether any other consumer carries the same unguarded path; the exit is not a function of budget, so what does determine its rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure** — a source frozen for 120 s produced no log line anywhere, and a dead video path behind a live mux passes the *whole* of TR 101 290 P1 with a worst PCR interval identical to the control's. What does detect every case is **per-PID access-unit liveness**, and that is now a running detector rather than a recommendation: live at the groomed output of a cross-host lane it measures a 60 s video suppression as **57.212 s** against an offline grader's 57.22 s, catches a dead *audio* stream — which has no other wire-observable signature at all — in **0.7–1.4 s**, localises it to the PID, and fires nothing on a healthy lane | Whether commercial monitoring exposes per-PID liveness rather than only per-PID bitrate, which inherits the proportional-sensitivity problem; a **frozen picture** in valid advancing access units, which defeats every transport-layer detector here and over SDI equally; detection-to-response, since only signal availability is measured | §3.12 |
-| **Interop** | Media flows within one implementation and through none of eight others | Why three of the eight fail | §3.7 |
+| **Interop** | Media flows within one implementation and through none of eight other relays. An outside publisher's opaque TS crosses `moq-dev`'s relay byte-exact on every elementary-stream PID only after a one-line publisher fix, and only on draft 18 over raw QUIC (P1, co-resident, from file); as released it delivers at most one object | Why three of the eight relays fail; the outside publisher on any other draft or transport | §3.7 |
 | **Latency** | Delivery latency on all four planes, loopback and public internet, each graded against the conformance of the same bytes. **Where no plane is conformant, MoQ crosses the internet in 109 ms** against SRT's 1618 ms and segmented HTTP's 4067 ms. **At the configurations measured P1/P2-conformant, MoQ reads 2,447 ms and segmented HTTP 9,286 ms**, while the transparent tunnels carry their source's grid at a buffer the operator sets. MoQ's configuration fails the buffer model, and segmented HTTP's is ungraded against it (§3.16). **At the buffer model, MoQ through a live re-multiplexer presents at 2,196.7 ms** on the build under test, on two clips of one service, and byte-faithful UDP through the stream-clocked groomer at 113.7 ms after a damaged 5 s start on one (presentation latency, loopback). A schedule inside upstream's exporter, in `[unmerged]` drafts, presented at 1,766 ms at a 1 s delay and 1,293 ms at 750 ms with every track present and the clock in tolerance (`2dc542b4a`, loopback, one join each, the same clip), but other joins of that draft lost audio. The current draft (`fe7cec106`), which keeps every track on every join tried, presents at twice the delay plus about 275 ms at 750 ms and 1 s (2,272.5 ms over 540 s at 1 s); at 500 ms the join moves it between 993 and 1,383 ms over nine joins, on runs that pass the buffer model and P2 (loopback, 60 s runs and one of 540 s), and at 500 ms it still stops 157 s into a 540 s run. Single runs do not rank these against the re-multiplexer. At 500 ms on `2dc542b4a` the join set the latency, from 480 to 1,089 ms; the faster joins lost audio, and the one sub-second run that kept every track stopped on a schedule overrun at 157 s | Encoder and decoder latency, so no camera-to-display total; a lossy or long path; whether RIST really beats SRT on a real path; **a sub-second configuration conformant over a whole capture, on any lane**, and on MoQ a conformant configuration near one second that lasts one: its passes there are 60 s runs at a delay that stops 157 s into 540 s | §3.11 |
 
 ---
@@ -1178,6 +1178,30 @@ which is fixable, but the economic substitutability argument is unproven until a
 else's relay. The community interop matrix is control-plane only; this project contributed a
 media-level profile ([`interop/`](../interop/README.md)). The test client falls back to WebSocket after
 200 ms, which confounds distance tests.
+
+**The other direction: an outside publisher through `moq-dev`'s relay.** OpenMOQ has published a
+publisher and no subscriber, so this direction is the only one that can be run. The test sends the
+headless MSFTS example in `moqxr` 0.4.4 into `moq-relay` (`main` at `00e24446f`) and out to a raw
+subscriber ([T11b](../lab/test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay)).
+
+- **As released, the publisher delivers at most one object** on the three combinations tried, because
+  every object closes its own subgroup.
+- **With a one-line publisher fix, a 15 s broadcast clip crosses the relay byte-exact on every
+  elementary-stream PID**, with the null count intact and continuity clean. This was measured at P1,
+  co-resident on loopback, source file against received file, and only on draft 18 over raw QUIC to an
+  IETF subscriber.
+- **Every other combination fails on the publisher side.** On draft 18 the publisher never releases a
+  cancelled subscription, so it refuses every moq-lite subscriber the relay serves. Drafts 14, 16 and
+  17 fail when the relay asks the publisher which namespaces it has.
+- **WebTransport fails on the relay side**, on a transport parameter `moq-relay` does not yet
+  advertise.
+- **The publisher's single, unbounded group meets the relay's per-group cap**, which ends the stream
+  after about 27 s at 10 Mb/s.
+
+The relay contributed no defect to the passing arm. This is evidence that one relay is neutral at the
+byte level toward one outside publisher. It is not evidence that the two interoperate as released.
+The arm that would extend it is the MSFTS -02 publisher in `moq2ts`, once it can run headless, or a
+run through OpenMOQ's own relay.
 
 ### 3.8 How do the data planes compare on delivery cadence? — Three structurally different classes
 

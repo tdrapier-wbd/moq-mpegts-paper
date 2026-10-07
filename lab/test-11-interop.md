@@ -344,7 +344,7 @@ without it.
 | As released | 18, raw QUIC | IETF-18 | **1 object of 1,500.** Its 68 packets match the source; nothing follows (A) |
 | As released | 18, raw QUIC | moq-lite-06 | **0 objects** (B) |
 | Patched | 18, raw QUIC | IETF-18 | **Pass.** 1,500 objects in order, 18,619,896 bytes. Every elementary-stream PID identical to the source packet for packet, nulls 4,525 of 4,525, NIT/SDT/TDT absent, zero TSDuck continuity errors |
-| Patched, 60 s clip | 18, raw QUIC | IETF-18 | **Relay aborts group 0 as too large** at object 2,702, 27.0 s in (C) |
+| Patched, 60 s clip | 18, raw QUIC | IETF-18 | **Relay aborts group 0 as too large** after 2,702 objects, 27.0 s in (C) |
 | Patched | 18, raw QUIC | moq-lite-06 | **0 objects.** The publisher refuses the relay's second SUBSCRIBE as a duplicate (B) |
 | Patched, rejoin after 15 s | 18, raw QUIC | IETF-18, twice | **Second subscriber refused** the same way, 5.07 s after the relay cancelled the first (B) |
 | Patched | 17, raw QUIC | IETF-17 | **Publisher closes the session** on the relay's SUBSCRIBE_NAMESPACE (D) |
@@ -450,7 +450,8 @@ OpenMOQ's own relay.
       the `moq` CLI has no opaque mode
 - [x] T11b: OpenMOQ's MSFTS example publisher through a `moq-dev` relay, across drafts 14, 16, 17
       and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
-- [ ] Report T11b's publisher defects A, B and D, and the single-group incompatibility C, to `moqxr`
+- [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
+      [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 - [ ] T11b against the MSFTS -02 publisher (`moq2ts`) once it can run headless, and through OpenMOQ's
       relay
 - [ ] T11c (the full suite against an OpenMOQ subscriber), blocked on one being published

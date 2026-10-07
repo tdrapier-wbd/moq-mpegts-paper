@@ -930,6 +930,16 @@ therefore specified and demonstrated in principle, but not something an operator
 open receiver today — which is why §8's structural limits do not by themselves move the preference to
 the opaque lane.
 
+**Relay-level interop with `moqxr` is now measured, narrowly.** Its MSFTS example publisher's opaque
+TS crosses `moq-dev`'s relay byte-exact on every elementary-stream PID, but only under several
+conditions at once: draft 18 over raw QUIC, an IETF subscriber, and a one-line fix to the publisher.
+It also lasts under 27 s at 10 Mb/s, because the publisher's single unbounded group then meets the
+relay's per-group cap. As released, the publisher delivers at most one object. These figures are P1,
+co-resident and from file ([Evidence](evidence.md) §3.7). The relay contributed no defect: every
+failure was on the publisher side, except WebTransport, which fails on a transport parameter the relay
+omits. The protocol overlap between the two implementations is real, but it carries a broadcast only
+after changes on the publisher's side.
+
 ---
 
 ## 13. Seven corrections the comparison forced
