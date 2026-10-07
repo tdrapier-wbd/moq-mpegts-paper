@@ -1836,6 +1836,24 @@ resolved it with preannounce opt-in, default-off. The same PR reports idle-timeo
 a publisher with no subscriber dies at ~32 s to the default QUIC idle timeout. Corroboration that idle
 timeout is a first-order operational constraint, not a single-stack artefact.
 
+### OpenMOQ's MSFTS publisher through `moq-relay` — reported as [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
+
+[T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay) put the headless
+MSFTS example in `moqxr` 0.4.4 through a `moq-dev` relay and found four publisher-side problems, filed
+as one issue.
+
+- **A:** every object FINs its subgroup, so only object 0 is sent. The issue carries the one-line
+  fix.
+- **B:** on draft 18 a cancelled subscription is never released, so every moq-lite subscriber through
+  `moq-relay` is refused as a duplicate.
+- **C:** one group for the life of the stream, which the relay's group caps end at about 27 s at
+  10 Mb/s.
+- **D:** drafts 14, 16 and 17 fail on the relay's SUBSCRIBE_NAMESPACE.
+
+With the fix to A, the byte-level result stands on draft 18. The WebTransport failure belongs to
+`moq-dev`, whose `reliable-reset` quest already plans the missing `reset_stream_at` parameter, so it
+went into the issue only as a note. **Open, no reply yet.**
+
 ---
 
 ## 6b. FFmpeg: an HLS client that asks for HTTP/3 and carries the media over HTTP/1.1
