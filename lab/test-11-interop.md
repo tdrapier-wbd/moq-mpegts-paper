@@ -10,7 +10,15 @@ a `SUBSCRIBE_NAMESPACE`**. Its own relay does that; no third-party MOQT relay do
 publisher announces proactively. So `moq import ts` connects and then never sends a single control
 message. The IETF path itself carries media cleanly (MOQT-14 passes on a local relay), so this is a
 client-side convention, not a relay defect. Three relays fail earlier, at the connection or SETUP
-layer, and are not yet diagnosed. T11b and T11c not started.
+layer, and are not yet diagnosed.
+
+**T11b run: an outside opaque-TS publisher through a `moq-dev` relay.** OpenMOQ's MSFTS example
+publisher, as released, delivers at most one object on each of the three combinations tried. With a
+one-line publisher fix it crosses the relay **byte-exact on every elementary-stream PID**, but only on
+draft 18 over raw QUIC to an IETF subscriber, and only for about 27 s at 10 Mb/s before the relay
+aborts its single unbounded group. Every other combination fails on a publisher-side defect, bar
+WebTransport, which fails on a relay transport parameter `moq-dev` already plans to add. No relay
+defect was found in the passing arm. T11c is still blocked on a published OpenMOQ subscriber.
 
 **The same fixture and oracle put through segmented HTTP pass against every third party tried** —
 FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
@@ -303,6 +311,112 @@ The interop matrix today is control-plane only. Against moxygen, `setup-only` wo
 while no media flows at all. **That gap is invisible in the current matrix**, and it is the strongest
 argument for the media-level profile proposed in #32.
 
+## T11b — OpenMOQ's MSFTS publisher through a `moq-dev` relay
+
+The question is whether an outside implementation's opaque TS crosses a `moq-dev` relay intact. It is
+the only direction available: OpenMOQ has published no subscriber, so a `moq-dev` broadcast into an
+OpenMOQ receiver (T11c) cannot be run.
+
+**What was run.**
+
+- **Publisher:** the headless `examples/msfts-publisher` in [`moqxr`](https://github.com/openmoq/moqxr)
+  0.4.4. The plan named `moq2ts`, but that is a Qt GUI with no headless mode; the example is the same
+  project's headless MSFTS publisher, on the MSFTS -01 catalog field names. It keeps the selected
+  programme's PIDs and the nulls and drops NIT, SDT and TDT. It rewrites the PAT and the PAT/PMT
+  continuity counters and inserts PAT and PMT copies periodically. It puts every object in group 0, one
+  every 10 ms, and publishes only while subscribed.
+- **Relay:** `moq-relay` from `moq-dev` main at `00e24446f`, local, GSO off, anonymous grant
+  ([`t11b-relay.toml`](scripts/t11b-relay.toml)).
+- **Subscriber:** [`t11b-rawsub.rs`](scripts/t11b-rawsub.rs), a `moq-net` client that holds one
+  SUBSCRIBE and writes each object's payload in arrival order. `moq fetch` cannot stand in for it,
+  because the relay forwards the FETCH to this publisher, which answers *unsupported*.
+- **Clip:** the first 15 s (99,000 packets) of a CNN International capture. It is a single programme
+  at 9.93 Mb/s: PMT 100, PCR and video on 111, six other elementary streams and 4,525 nulls.
+- **Oracle:** [`t11b-grade.py`](scripts/t11b-grade.py) per PID, plus TSDuck continuity.
+- **Measurement:** P1, co-resident on loopback, source file against received file. Rigs:
+  [`t11b-arm.sh`](scripts/t11b-arm.sh) and [`t11b-rejoin.sh`](scripts/t11b-rejoin.sh).
+
+"Patched" below means one line added to the example (defect A). Rows marked *as released* ran
+without it.
+
+| Arm | Draft and transport | Subscriber | Result |
+|---|---|---|---|
+| As released | 18, raw QUIC | IETF-18 | **1 object of 1,500.** Its 68 packets match the source; nothing follows (A) |
+| As released | 18, raw QUIC | moq-lite-06 | **0 objects** (B) |
+| Patched | 18, raw QUIC | IETF-18 | **Pass.** 1,500 objects in order, 18,619,896 bytes. Every elementary-stream PID identical to the source packet for packet, nulls 4,525 of 4,525, NIT/SDT/TDT absent, zero TSDuck continuity errors |
+| Patched, 60 s clip | 18, raw QUIC | IETF-18 | **Relay aborts group 0 as too large** at object 2,702, 27.0 s in (C) |
+| Patched | 18, raw QUIC | moq-lite-06 | **0 objects.** The publisher refuses the relay's second SUBSCRIBE as a duplicate (B) |
+| Patched, rejoin after 15 s | 18, raw QUIC | IETF-18, twice | **Second subscriber refused** the same way, 5.07 s after the relay cancelled the first (B) |
+| Patched | 17, raw QUIC | IETF-17 | **Publisher closes the session** on the relay's SUBSCRIBE_NAMESPACE (D) |
+| Patched | 16, raw QUIC | IETF-16 | **Publisher fails:** "peer request id is not next in sequence" (D) |
+| Patched, and as released | 14, raw QUIC | IETF-14 on both builds, moq-lite-06 patched only | **Publisher times out** "waiting for stream data" about 2 s in (D, not isolated) |
+| Patched | 18, WebTransport | IETF-18 | **Publisher will not send CONNECT:** the relay omits `reset_stream_at` (E) |
+
+**A. Every object claims to close its subgroup.** The publisher library's object type defaults
+`final_in_subgroup` to true, and the example sets group 0 on every object without overriding it. The
+session therefore FINs subgroup 0 after object 0 and silently skips every later object in the same
+group, because its subgroup is closed. The publisher reports *"Published 1 objects"* and exits 0. The
+relay and subscriber both behave correctly: one stream arrives, carries one object and ends. Setting
+`final_in_subgroup = false` on the media objects is the fix used in every patched arm. This is a
+defect in the example, not the library.
+
+**B. The draft-18 publisher never releases a cancelled subscription.** The set of established
+subscriptions it checks before admitting a SUBSCRIBE is inserted into and never erased, in all three
+of its publish paths. Draft 18 allows a publisher at most one subscription per track and
+DUPLICATE_SUBSCRIPTION only against an existing one. It also lets the publisher destroy subscription
+state as soon as it receives STOP_SENDING (§5.1.1). Draft 18 has no UNSUBSCRIBE: a subscriber cancels
+by terminating the request stream. `moq-relay` triggers the defect on every moq-lite subscriber. It
+answers the subscriber's track-info probe by subscribing upstream, cancelling as soon as SUBSCRIBE_OK
+arrives, and then subscribing again for the real request about 0.5 ms later.
+
+At 0.5 ms the refusal could be a cross-stream race, since QUIC orders nothing across streams. The
+rejoin arm rules that out. The relay cancelled its upstream subscription when the first subscriber's
+session timed out, the second subscriber arrived 5.07 s later, and the publisher refused the relay's
+new SUBSCRIBE twice with the same error.
+
+**C. One group for the life of the stream.** `moq-net` caps a group at 8,192 frames and at 32 MiB
+(`MAX_GROUP_FRAMES`, `MAX_CACHE_BYTES`), and aborts it as too large past either.
+
+- At 66 packets per object and 9.93 Mb/s, the byte cap binds first. It cut the stream at 27.0 s, with
+  33,571,912 bytes published against a cap of 33,554,432.
+- At the example's default of 7 packets per object, the frame cap binds first. A subscriber received
+  exactly 8,192 objects and then lost the track.
+
+MSFTS -02 says *"A Group SHOULD NOT last longer than 2 seconds"*, and the example predates -02. A
+bounded group is `moq-dev`'s model rather than a defect, so this is a publisher-side incompatibility.
+It also sets the join behaviour. A subscriber attaching 7 s into the stream received the group's
+whole cached history, 832 objects in its first second, before reaching the live edge.
+
+**D. Drafts 14 to 17 fail on the relay's SUBSCRIBE_NAMESPACE.** `moq-relay` sends SUBSCRIBE_NAMESPACE
+on the empty prefix to every session, publishers included (see *Root cause* above). Only on draft 18,
+where the message became 0x50, does the publisher handle it.
+
+- **Draft 17:** the publisher's request-stream dispatcher treats 0x11 as unknown while request
+  streams are in use. It answers *"unsupported request stream"* and closes the session as a protocol
+  violation. Draft 17 defines 0x11 as SUBSCRIBE_NAMESPACE on a request stream, and `moq-net` encodes
+  it as such.
+- **Draft 16:** the trace fits a publisher that does not count the relay's request 1 (the
+  SUBSCRIBE_NAMESPACE) in its request-ID sequence, so the SUBSCRIBE that follows as request 3 is out of
+  sequence. This rests on the message trace, not on a reading of the publisher's code.
+- **Draft 14:** the failure follows the same two requests but has not been isolated.
+
+**E. WebTransport.** WebTransport over HTTP/3 (`draft-ietf-webtrans-http3-16` §3.1) requires a server
+to send an empty `reset_stream_at` transport parameter. `moq-relay` does not, and the publisher
+enforces the requirement. This is a `moq-dev` gap, and `moq-dev` already plans the fix in its own
+reliable-reset quest. Browsers connect to `moq-relay` today, so the gap shows only against a client
+that enforces the parameter.
+
+**What this establishes.** When the publisher behaves, an outside implementation's opaque TS crosses
+a `moq-dev` relay unaltered on every elementary-stream PID. That is measured on one combination only:
+draft 18, raw QUIC, an IETF subscriber, a one-line publisher fix and a stream under 27 s at this
+bitrate. As released, the publisher delivered at most one object on the three combinations tried:
+draft 18 to an IETF and to a moq-lite subscriber, and draft 14. All of A to D are on the
+publisher side, and the relay contributed no defect to the passing arm. The result is one relay
+against one outside publisher, co-resident and from file. It is evidence for the neutral-fabric
+assumption at the byte level, not for interoperability as deployed. The arm that would extend it is
+the same matrix against the MSFTS -02 publisher in `moq2ts`, once it can run headless, or against
+OpenMOQ's own relay.
+
 ## Status and next steps
 
 - [x] Fixture generator, oracle, and oracle sensitivity tests
@@ -334,5 +448,9 @@ argument for the media-level profile proposed in #32.
 - [ ] Dockerfile and `implementations.json` wiring, once #32 settles the format-axis question
 - [ ] Transparent-carriage variant (`--require-identical`), which needs a purpose-built client since
       the `moq` CLI has no opaque mode
-- [ ] T11b (`moq2ts` broadcast through a `moq-dev` relay) and T11c (full suite against a `moq2ts`
-      subscriber, blocked on their subscriber landing)
+- [x] T11b: OpenMOQ's MSFTS example publisher through a `moq-dev` relay, across drafts 14, 16, 17
+      and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
+- [ ] Report T11b's publisher defects A, B and D, and the single-group incompatibility C, to `moqxr`
+- [ ] T11b against the MSFTS -02 publisher (`moq2ts`) once it can run headless, and through OpenMOQ's
+      relay
+- [ ] T11c (the full suite against an OpenMOQ subscriber), blocked on one being published

@@ -2027,6 +2027,18 @@ suffix. Arguing about it from the string is unresolvable.
 > identity comes from the `bin-<sha>.sha` sidecar that `ec2-build-main.sh` writes, and every rig
 > that records a build must print that file rather than `--version`.
 
+### Hash both sides of a patched-against-stock pair before running either
+
+*From [T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay).* A one-line
+publisher patch was built on a branch, and the stock binary was then rebuilt by switching back. The
+patch had never been committed, so `git switch` carried the modified file across. The build system
+also saw nothing to recompile. Both copies carried the patch and hashed identically, and an A/B run
+on them would have measured the patch against itself.
+
+> **A variant pair is two different hashes or it is not a pair.** Commit the variant before
+> switching, rebuild each side from a clean `git status`, and compare the binaries' SHA-256 before
+> the first run. Identical hashes mean the comparison is void, whatever the branch names say.
+
 ### A closed issue is a claim about a tracker, not about a binary
 
 *From the [#3987](https://github.com/moq-dev/moq/pull/3987) round.* Four defects the campaign had

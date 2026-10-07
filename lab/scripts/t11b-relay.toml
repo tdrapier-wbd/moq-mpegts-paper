@@ -1,0 +1,12 @@
+[log]
+level = "info"
+
+[listen]
+bind = "127.0.0.1:4481"
+tls.generate = ["localhost"]
+
+[web.http]
+listen = "127.0.0.1:4481"
+
+[auth]
+public = "**"
