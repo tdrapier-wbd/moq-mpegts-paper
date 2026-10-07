@@ -1619,7 +1619,11 @@ the crash case regressed.** The relay hands a replacement publisher the killed s
 subscriptions before it has published, and in two of three runs `moq import ts` exits with
 *rendition is not published*; in the third the export stalls and ends on a catalog protocol
 violation. Filed as [#4945](https://github.com/moq-dev/moq/issues/4945), with the `83ce47fe` runs as
-the before-state ([T13](test-13-downstream-grooming.md) § *Liveness*).
+the before-state ([T13](test-13-downstream-grooming.md) § *Liveness*). The maintainer splits it in
+two: the relay half is attributed to [#4942](https://github.com/moq-dev/moq/pull/4942)'s publisher
+epochs (merged), and the publisher half — demand before the first keyframe makes the stall detector
+edit an unpublished rendition — is folded into `quest/m1/catalog-enabled.md`, which deletes that
+detector. Neither half has been re-measured here.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
