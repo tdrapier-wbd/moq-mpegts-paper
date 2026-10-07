@@ -1305,7 +1305,12 @@ from its first packet. The release stage releases each frame at first-arrival an
 questline's nightly proof. We proposed TS passthrough and clock-recovery quests in
 [#4670](https://github.com/moq-dev/moq/pull/4670); the maintainer merged passthrough
 (`quest/m1/ts-passthrough.md`, whole-packet carriage paced on source PCR) and took clock recovery
-into [#4645](https://github.com/moq-dev/moq/pull/4645) directly, dropping the separate quest. A
+into [#4645](https://github.com/moq-dev/moq/pull/4645) directly, dropping the separate quest. The
+passthrough import, with the hang catalog's `m2ts` section and its mapping onto MSFTS in the draft, is
+contributed as draft [#5003](https://github.com/moq-dev/moq/pull/5003). Its relay test is
+byte-identical from the first group on `moq-lite-06` and `moq-transport-14` through a flagged PCR
+reset a minute back, and fails when the relay judges staleness on the old timeline. The export half,
+on #4645's release stage, is not yet written. A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
