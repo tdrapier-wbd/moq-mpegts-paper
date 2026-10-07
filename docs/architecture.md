@@ -651,8 +651,9 @@ subscription, produces the individual renditions endpoints such as OTT origins w
 upstream project's own preference — so it is the approach most likely to attract ongoing investment.
 
 **Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque payload, packaged per
-MSFTS in one of its unmodified modes (the draft's `mpeg2ts` packaging, `m2ts` in the revision
-`moq2ts` implements), publishing an MSF catalog describing it. It preserves service signalling
+MSFTS in one of its unmodified modes (the draft's `mpeg2ts` packaging, which `moq2ts` writes; the
+private prototype measured here predates the rename and uses `m2ts`), publishing an MSF catalog
+describing it. It preserves service signalling
 and programme structure *by construction* and makes no assumptions about the source encode.
 
 **Media-aware is the default and preferred path; opaque carriage is the fallback.** That ordering is
