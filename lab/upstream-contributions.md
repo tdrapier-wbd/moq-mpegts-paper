@@ -719,7 +719,7 @@ intended semantics — failover covers host loss, not the common clean exit. Rem
 `ffa5b81b` renamed the knob to `--hop <id>` and refuses `--origin`. On one relay two publishers now
 coexist and a hard kill fails over within the idle timeout; in the mesh a hard kill fails over for the
 dead publisher's relay, bounded by the later of detection and the standby's group lag
-([T6](test-6-relay-resilience.md) § *Single-relay standby on the current build*, § *Mesh source
+([T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source
 failover*).
 
 - **A shared-hop standby that arrives after the subscribers ends every one of them with `not found`
@@ -1282,7 +1282,7 @@ Figures in brackets are with `export ts --max-age 1s`.
 TB overflows interleaving would cut; the first ~2 s stay VBR until the importer publishes `mpegts.muxRate`;
 and the `--live` release check was flaky under load on both `main` and the branch. **State:**
 [#4579](https://github.com/moq-dev/moq/pull/4579) was closed by its author in favour of
-[#4645](https://github.com/moq-dev/moq/pull/4645), which **remains open and in draft** (not merged): it
+[#4645](https://github.com/moq-dev/moq/pull/4645), which **has merged to `main`**: it
 replaces span machinery with a constant-rate schedule paced against fixed `--delay` and fails export when a
 burst does not fit the delay. The closing comment on #4579 retains the measurements above as the
 before-state #4645 must beat on a real broadcast clip.
@@ -1307,10 +1307,18 @@ questline's nightly proof. We proposed TS passthrough and clock-recovery quests 
 (`quest/m1/ts-passthrough.md`, whole-packet carriage paced on source PCR) and took clock recovery
 into [#4645](https://github.com/moq-dev/moq/pull/4645) directly, dropping the separate quest. The
 passthrough import, with the hang catalog's `m2ts` section and its mapping onto MSFTS in the draft, is
-contributed as draft [#5003](https://github.com/moq-dev/moq/pull/5003). Its relay test is
-byte-identical from the first group on `moq-lite-06` and `moq-transport-14` through a flagged PCR
-reset a minute back, and fails when the relay judges staleness on the old timeline. The export half,
-on #4645's release stage, is not yet written. A
+contributed as draft [#5003](https://github.com/moq-dev/moq/pull/5003). The maintainer held its first
+head for rework: a flagged *backward* PCR is a restart, which
+[`ts-restart`](https://github.com/moq-dev/moq/blob/main/quest/m0/broadcast-epoch/ts-restart.md) turns
+into a new broadcast under a fresh epoch, so timestamps never go backwards within one broadcast. The
+reworked head writes through moq-mux's standard producer: a flagged forward jump carries into the
+timestamps behind a break marker, and any step back ends the import until `ts-restart` lands. Its
+relay test is byte-identical from the first group on `moq-lite-06` and `moq-transport-14` through a
+flagged 20 s forward jump, with only the break marker's sequence missing, and fails without the
+marker. Both automated-review findings (a packet-size probe that lost the grid behind leading junk,
+and `randomAccess` claimed for a `--pcr-pid` no programme names) are fixed with regressions. As the
+maintainer suggested, the export half is split into its own quest (`ts-passthrough-export`), and
+`ts-passthrough` keeps only the restart path. A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
@@ -1430,14 +1438,13 @@ latency between 993 and 1,383 ms with the same multiplex, cause not located. A c
 the groomer, and with counters rewritten the only remaining difference between two exporters is where
 each places a TDT revision, on the first frame muxed after the snapshot arrives
 ([T13](test-13-downstream-grooming.md#on-4645s-pcr-grid-the-deterministic-mode-runs-and-a-co-started-pair-merges-at-the-byte)).
-Two things are `main`'s rather than the PR's: across a publisher `SIGKILL` the replacement publisher
-exits with *rendition is not published* when the relay resumes the route onto it, and at 10 % loss
+Two things are `main`'s rather than the PR's: across a publisher `SIGKILL` the export does not
+resume onto the replacement (below, § *The liveness exit, implemented*), and at 10 % loss
 the video is lost to group eviction on every head run.
 
 **Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair; release-clock
 statistics that count neither a skipped group nor an absent track, and an `out_of_tolerance` count
-that climbs through every start; the replacement-publisher exit across a `SIGKILL`, reproduced on
-`main` alone and filed as [#4945](https://github.com/moq-dev/moq/issues/4945); the join-dependent latency at 500 ms; and the latency
+that climbs through every start; the export that does not resume across a publisher `SIGKILL`; the join-dependent latency at 500 ms; and the latency
 [#4681](https://github.com/moq-dev/moq/pull/4681) recovers. Detail, tables and reproduction live in [T44](test-44-tstd-grading.md),
 [T45](test-45-live-tstd-remux.md), [T46](test-46-tstd-check-cross-validation.md), and
 [T47](test-47-fixed-delay-export.md); summarised measurement points in
@@ -1617,7 +1624,9 @@ the quest audit [#4845](https://github.com/moq-dev/moq/pull/4845) folds it into 
 on the reasoning that [#4645](https://github.com/moq-dev/moq/pull/4645)'s jitter generations break the
 PCR clock only on a declared restart. On #4645's head `559a35244` the replay arm flags each resume
 once ([T47](test-47-fixed-delay-export.md) § *A broadcast that restarts under `--linger`*), and so
-does `fe7cec106`, so the fix reaches `main` with #4645.
+does `fe7cec106`. With #4645 merged, `main` flags each of three clean-end resumes once in both the
+replay and the continue arm, with no unflagged counter jump (one run each), so the multi-flag
+resume #4767 reported is gone from `main`.
 
 **On `main` at `edd671fff`, after [#4741](https://github.com/moq-dev/moq/pull/4741)'s route resume,
 the crash case regressed.** The relay hands a replacement publisher the killed session's
@@ -1626,15 +1635,41 @@ subscriptions before it has published, and in two of three runs `moq import ts` 
 violation. Filed as [#4945](https://github.com/moq-dev/moq/issues/4945), with the `83ce47fe` runs as
 the before-state ([T13](test-13-downstream-grooming.md) § *Liveness*). The maintainer splits it in
 two: the relay half is attributed to [#4942](https://github.com/moq-dev/moq/pull/4942)'s publisher
-epochs (merged), and the publisher half — demand before the first keyframe makes the stall detector
-edit an unpublished rendition — is folded into `quest/m1/catalog-enabled.md`, which deletes that
-detector. Neither half has been re-measured here.
+epochs, and the publisher half — demand before the first keyframe makes the stall detector edit an
+unpublished rendition — to the detector, which [#4915](https://github.com/moq-dev/moq/pull/4915)
+removed. Both merged, and #4945 is closed, inviting a fresh reproduction if it recurs.
+
+**Re-measured on `main` with both merged, the publisher half is fixed; the export resumes on
+`moq-lite-07` and still does not on the default `moq-lite-06`.** Same rig, four runs (three with the clip replayed from its start, one continued). No
+replacement publisher exits, and the exporter's subscriptions are resumed onto each replacement
+9.9–12.9 s after its kill. But the exporter writes nothing after the first kill (61,667 packets in
+every run, against 142,188–184,460 on `83ce47fe`, which resumed onto every replacement and exited 0),
+drops up to 16 frames on deadline, and ends on *missed a
+decode deadline on PID 111* within 3.3 s of the last resume; `--linger` then waits out 60 s for a
+return that cannot come, since the replacement is already live, and exits 1. The clean-end replay and
+continue arms on the same build resume three times each and exit 0, so the failure is specific to a
+crash and its replacement. Every session in these runs negotiated the default `moq-lite-06`, which
+does not carry the epoch on the wire, so the relay sees two routes without one: the killed route's
+subscriptions end, the exporter re-requests its tracks within milliseconds, lands on the replacement,
+and fetches its in-progress video group, whose frames are already behind the release clock. Late
+audio and teletext frames are dropped; the first late video access unit is fatal. The same sequence
+ends 7 of 9 single-relay 1+1 failovers that reach the exporter as a re-request on this build (T6), so
+it belongs to the exporter's recovery path rather than to epochs. On `moq-lite-07`, opted into on
+every process, the same arm passes: as each replacement announces, its newer epoch ends the old
+broadcast with `unroutable`, the linger resumes within a millisecond, and 4 of 4 runs resume 8 of 8
+crashes continuity-clean and exit 0. So #4945 is fixed on the protocol that carries the epoch. What
+remains is an exporter defect, independent of #4945: a re-request onto a live route dies on the first
+late video unit instead of dropping it, as it drops late audio. *P1, file domain, loopback,
+`CNNiEMEA2.ts`, one relay.* Not yet reported.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
 **An export failure read as the broadcast ending — contributed as
-[#4947](https://github.com/moq-dev/moq/pull/4947), at the maintainer's invitation on #4645.** On
+[#4947](https://github.com/moq-dev/moq/pull/4947), at the maintainer's invitation on #4645; open,
+taken over by the maintainer, who merged `main` into it and added a doc and a test commit, and whose
+automated review found no issue.** It would end the crash-replace runs above at the failure instead
+of a minute later, but not make them resume. On
 `main` at `edd671fff` every failed end lingers, so an export that fails on its own while the broadcast
 stays up waits out the whole linger for a return that cannot come, then exits 1. The fix lingers on a
 failed end only if the broadcast closes within a 1 s grace, since a killed publisher's tracks can
@@ -1646,7 +1681,8 @@ resumes once on both. The new path fired in no run, and across the nine failed e
 broadcast closed within 13.8 ms of the first track error, on loopback. Every run that does not
 resume is #4945's.
 
-**Still open:** the multi-flag resume on `main` until #4645 merges; the crash-case regression of #4945; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
+**Still open:** the export that does not resume across a crash replaced under a fresh epoch; #4947
+until it merges; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
 crash from a clean end, only the exit code does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
