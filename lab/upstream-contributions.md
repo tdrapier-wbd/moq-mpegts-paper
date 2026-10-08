@@ -1681,8 +1681,12 @@ multiplex rate) and no fix. **Open.**
 **An export failure read as the broadcast ending — contributed as
 [#4947](https://github.com/moq-dev/moq/pull/4947), at the maintainer's invitation on #4645; open,
 taken over by the maintainer, who merged `main` into it and added a doc and a test commit, and whose
-automated review found no issue.** It would end the crash-replace runs above at the failure instead
-of a minute later, but not make them resume. On
+automated review recommends merging.** Its two non-blocking suggestions are to scale the 1 s grace
+with the linger, since across a WAN relay the gap between track errors and the close is set by the
+relay's detection rather than the RTT, and to deduct the grace from the linger so the flag is exact.
+It would end the crash-replace runs above at the failure instead of a minute later, but not make
+them resume: on `82c3f2fe4` those are the `moq-lite-06` runs of #5052, where the broadcast stays up
+(reasoned, not run against the fix). On
 `main` at `edd671fff` every failed end lingers, so an export that fails on its own while the broadcast
 stays up waits out the whole linger for a return that cannot come, then exits 1. The fix lingers on a
 failed end only if the broadcast closes within a 1 s grace, since a killed publisher's tracks can
