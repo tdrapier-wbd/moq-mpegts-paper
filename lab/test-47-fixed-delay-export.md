@@ -1,12 +1,44 @@
 # Test 47 — The upstream fixed-delay TS export on a broadcast clip
 
-**State: the current head of [#4645](https://github.com/moq-dev/moq/pull/4645), `fe7cec106`
-(unmerged, draft), anchors and steers on the track sent latest, as our scratch build did, and
-carries every track on every join tried: on loopback at 500 ms, 750 ms and 1 s, over 540 s at 1 s,
-across hosts at 500 ms and 1 s, and under 0 % and 1 % loss, each passing the buffer model, P2 and
-`compliance.py`. At 500 ms it still stops 157 s into a 540 s run, on the video's schedule. Its
-presentation latency is twice the delay plus about 275 ms at 750 ms and 1 s; at 500 ms the join
-moves it, between 993 and 1,383 ms, with the same multiplex.**
+**State: [#4645](https://github.com/moq-dev/moq/pull/4645) has merged, and the export as merged
+(upstream `main`, October 2026: `82c3f2fe4`, reporting moq 0.14.2 / moq-relay 0.17.2, versions whose
+releases do not carry it) reproduces its
+last draft, `fe7cec106`, on every cell that passed there.** It carries every PID of the source with 0 late
+drops on loopback at 500 ms, 750 ms and 1 s, over 540 s at 1 s, across hosts at 500 ms and 1 s, and
+under 0 % and 1 % loss at both delays, each passing the buffer model in every window, P2 and
+`compliance.py`. Presentation latency is twice the delay plus about 275 ms at 750 ms and 1 s; at
+500 ms the join moves it. At 500 ms the 540 s run still stops on the video's schedule, at the same
+point as the draft. A co-started 1+1 pair now exports byte-identical streams before any groomer. At
+10 % loss the export fails loud, sooner than the draft. What it does not survive is being handed
+another route's in-progress group after a re-request (§ *As merged*).
+
+**As merged, on `82c3f2fe4`:**
+
+- **Every passing cell matches the draft.** Presentation is 2,272–2,274 ms at 1 s (also over 540 s,
+  with the output PCR following the source's to about 1.2 ppm), 1,776 ms at 750 ms, and 992 and
+  1,024 ms on two 60 s joins at 500 ms. The 540 s run at 500 ms stops 156.5 s in with a minimum video
+  margin of 56.4 ms, the draft's stop. MP2 and AC-3 units equal those of the scratch build the draft
+  adopted in every matching loopback cell, and TSDuck counts every elementary-stream PID present
+  (video, MP2, AC-3, teletext and three SCTE-35 PIDs).
+- **At 10 % loss, 1 s,** every track is present with gaps for about 20 s, the video included, and
+  the export then exits on *missed a decode deadline on PID 131* (teletext); the draft lost the
+  video about 7 s in and ran to 75 s.
+- **1+1 behind the export:** a co-started pair's two exports are byte-identical as captured, where
+  the draft's differed by one TDT burst. A pair 8 s apart is 97.64 % identical after one counter
+  offset per PID, against the draft's 98.52 %.
+- **Under `--linger`** six clean-restart runs resume three times each with one flag per resume.
+- **A re-request onto another route usually ends it.** After a crash replaced on the same path on
+  the default `moq-lite-06`, or a 1+1 failover on one relay that the relay does not resume, the
+  exporter re-requests its tracks and fetches the new route's in-progress group. The first late
+  video or teletext unit in that backlog ends the export on *missed a decode deadline*. Every
+  `moq-lite-06` crash-replace run ended this way, while on `moq-lite-07` the replacement's newer epoch
+  ends the old broadcast and the export resumes in 8 of 8 ([T13](test-13-downstream-grooming.md)
+  § *Liveness*). 7 of 9 single-relay failover re-requests ended this way or on a timestamp rewind
+  ([T6](test-6-relay-resilience.md) § *Single-relay standby*). One mid-GOP join on the T6 rig also
+  failed this way, before any signal.
+
+**The last draft before merge, `fe7cec106`:** it anchors and steers on the track sent latest, as
+our scratch build did.
 
 - **The clock holds.** Over 540 s at 1 s on loopback the output's PCR follows the source's to
   0.3 ppm.

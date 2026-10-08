@@ -15,8 +15,10 @@
 #   STAGGER         Seconds between the two publishers' starts (default 2). They join the one live
 #                   stream at different keyframes, so their group numbers differ for the same media;
 #                   0 starts both on the same keyframe.
-#   HOP             One hop id for both publishers (`--hop`, or `--origin` on builds that predate
-#                   it), which declares them interchangeable. Unset, each mints its own.
+#   HOP             Set, both publishers share one identity, which declares them interchangeable:
+#                   `--epoch` (a UUIDv7, EPOCH or one minted per run) on builds that have it, else
+#                   this value as `--hop`, or `--origin` on builds that predate it. Unset, each
+#                   mints its own.
 #   LATE_SUBS=1     Start the subscribers only once both publishers are producing. With a shared
 #                   hop the newest announcement wins, so a standby that arrives after the
 #                   subscribers takes over at once, before it has tracks; this isolates the kill.
@@ -61,9 +63,12 @@ else
 fi
 ORIG=()
 if [ -n "$HOP" ]; then
-	if "$MOQ" --help 2>&1 | grep -q -- '--hop <'; then ORIG=(--hop "$HOP")
+	if "$MOQ" --help 2>&1 | grep -q -- '--epoch <'; then
+		EPOCH=${EPOCH:-$(uuidgen -7 2>/dev/null || python3 -c 'import os,time;b=bytearray(int(time.time()*1000).to_bytes(6,"big")+os.urandom(10));b[6]=b[6]&15|112;b[8]=b[8]&63|128;h=b.hex();print(f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}")')}
+		ORIG=(--epoch "$EPOCH")
+	elif "$MOQ" --help 2>&1 | grep -q -- '--hop <'; then ORIG=(--hop "$HOP")
 	elif "$MOQ" --help 2>&1 | grep -q -- '--origin <'; then ORIG=(--origin "$HOP")
-	else echo "this build has neither --hop nor --origin"; exit 1; fi
+	else echo "this build has none of --epoch, --hop and --origin"; exit 1; fi
 fi
 moq_relay_public "127.0.0.1:$PORT" localhost --log-level info
 BC=rec.hang
@@ -102,7 +107,7 @@ sub() { # <i>
 	fi
 }
 moq_record_build "$MOQ" "$RELAY" | tee "$OUT/build.txt"
-echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER hop=${HOP:-fresh} sig=$SIG kill=$KILL restart=$RESTART" | tee -a "$OUT/build.txt"
+echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER shared=${ORIG[*]:-fresh} sig=$SIG kill=$KILL restart=$RESTART" | tee -a "$OUT/build.txt"
 start_relay
 sleep 3
 kill -0 "$RLY" 2>/dev/null || { echo "RELAY DID NOT START: $(tail -3 "$OUT/relay.log")"; exit 1; }

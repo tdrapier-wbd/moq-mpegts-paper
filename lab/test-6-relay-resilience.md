@@ -207,7 +207,7 @@ so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on th
   announced, the relay declared the path `unroutable` and tore down **both** (`Error: moq:
   unroutable`), so a 1+1 pair needed two relays and a shared `--origin`. On `ffa5b81b` two publishers
   on one relay coexist and a hard kill fails over, while a shared hop makes a late standby's arrival
-  end every subscriber (§ *Single-relay standby on the current build*).
+  end every subscriber; on October 2026 `main` a shared `--epoch` does not (§ *Single-relay standby*).
 
 **Why the mesh needed a routing fix, which #2473 supplied.** Before that fix a two-relay mesh
 tolerated the pair but did **not** fail over: with `pubA→relayA` / `pubB→relayB` meshed, both
@@ -278,8 +278,8 @@ Neither exporter on relay A exited in any run.
   lag, not detection, and a standby restarted long after the active would add its whole lag to the
   outage. That extrapolation is *reasoned* from three lag points.
 - **A shared-hop standby ends the subscribers of the relay it joins**, `not found` at the join in
-  10 of 10 shared-hop runs plus two smoke runs: the same race as on one relay (§ *Single-relay standby
-  on the current build*), which the fix that removed `Unroutable` does not cover on this build.
+  10 of 10 shared-hop runs plus two smoke runs: the same race as on one relay (§ *Single-relay standby*),
+  which the fix that removed `Unroutable` does not cover on this build.
 - **Without a shared hop, relay B's subscriber freezes silently at the failover**, 5 of 5. Relay B
   served 1,688 groups on `sub3`'s session before relay A dropped `pubA` and none after; it logs `no
   route can serve the rest of this group group=21 frame=30 err=cancelled` for `sub3` and releases
@@ -323,7 +323,7 @@ and host, unchanged. `main` accepts every flag the rig passes: its CLI only adds
   standby's lag, so its numbering was already past 21 at the switch, both runs resumed with the same
   exporter process. `ffa5b81b` resumed from the same group on the same rig in every run. The
   message is the one the single-relay switches on `main` abort with, the across-groups
-  `TimestampRewind` (§ *Single-relay standby on the current build*); the diagnostic build that
+  `TimestampRewind` (§ *Single-relay standby*); the diagnostic build that
   located that check was not run in the mesh, so that this is the same return is *inferred*.
 - **So the lag that lengthened the outage on `ffa5b81b` is fatal on `main`.** A shared-hop mesh pair
   on `main` fails over only if the standby is ahead in numbering by the time the relay detects the
@@ -379,7 +379,7 @@ subscriber or was treated as lost and re-routed to `pubB`, and the mix differed 
 Four terminated, two froze, one failed over fully and one partly, without video. A grade from capture
 sizes alone calls the last a failover; `cluster-failover-table.sh` prints the per-track outcome that
 exposes it. On one relay on `main` a clean exit is switched at once and the exporter then aborts on
-a timestamp rewind (§ *Single-relay standby on the current build*); in the mesh on `main` it ends on
+a timestamp rewind (§ *Single-relay standby*); in the mesh on `main` it ends on
 the same error with a shared hop and at the event without one (above). So across builds and topologies
 a graceful exit is never reliably failed over; only the mechanism of the failure differs.
 
@@ -419,12 +419,19 @@ not measured, a publisher that restarts after a day of service would stall its s
 a day. The recommended posture, a fully doubled chain with receiver-side ST 2022-7 selection, does
 not depend on this path.
 
-### Single-relay standby on the current build: a hard kill fails over, a standby's arrival can end every subscriber, a clean exit does not fail over
+### Single-relay standby: `--hop` on `ffa5b81b` and `2b689c24`, `--epoch` on October 2026 `main`
+
+On `ffa5b81b` and `2b689c24` a hard kill fails over, a shared-hop standby's arrival ends every
+subscriber, and a clean exit is not failed over. On October 2026 `main` a shared `--epoch` removes
+the arrival teardown, and resumes a subscription without a seam only on the opt-in moq-lite 07,
+where the two importers' unaligned group numbering then decides whether the export survives (the
+last part of this section).
 
 `ffa5b81b` renamed the client's `--origin <id>` to `--hop <id>`, and refuses `--origin` at startup
 with a migration message. The value becomes the first hop of the publisher's route, which is how the
 relay decides two sources carry the same content; unset, each publisher mints its own. So the
 passages that described a 1+1 pair by `--origin` needed re-checking on the build under test.
+October 2026 `main` removed `--hop`; a pair now shares an `--epoch`.
 
 **Rig.** [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=standby`, on one Linux host over
 loopback: one relay, one live source (`tsp … -P regulate --pcr-synchronous`, forked to two UDP ports),
@@ -474,7 +481,7 @@ closes the session on SIGTERM as on SIGINT (the `main` table below).*
   `rs/moq-net/src/model/front.rs:335–338`), re-queries every track on it (`attach`, 387–413), and a
   track the standby has not yet created is recorded as refused and aborted with `NotFound`
   (`redispatch`, 560–564). That is the race the mesh drill found as `Unroutable` and that was fixed
-  there. On one relay it is open on the build under test. Without a shared hop the newcomer's route
+  there. On one relay it was still open on `ffa5b81b` and `2b689c24`. Without a shared hop the newcomer's route
   ranks on a hash of its hop chain, and in these runs it did not displace the serving source on
   arrival. So the flag that declares a 1+1 pair is, on one relay, the one that makes a standby's
   arrival an outage.
@@ -484,7 +491,7 @@ closes the session on SIGTERM as on SIGINT (the `main` table below).*
   *does* reselect, since the other publisher's media subscriptions start at the signal, but the
   exporter then aborts with `TimestampRewind` (`rs/moq-mux/src/container/consumer.rs:472–489`), a
   group whose timestamps sit below the live edge it had reached. What the exporter is handed at
-  that switch is measured on `main` (below).
+  that switch is measured on `2b689c24` (below).
 
 **On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8, after the CLI change that closes
 the session on SIGINT *and* SIGTERM), the same rig with `STAGGER`, the gap between the publishers'
@@ -501,19 +508,18 @@ starts, as a further variable:
 | Hard kill of the serving publisher, no hop | 2 s | 2 | **no failover**: the standby is never subscribed, both exit `internal error` about 6 s after the kill |
 | Any signal to the idle publisher (control) | 0–2 s | 6 | alive, 0 s |
 
-- **The arrival teardown is unchanged on `main`.** The standby is queried for every track within a
+- **The arrival teardown is unchanged on `2b689c24`.** The standby is queried for every track within a
   millisecond of connecting, has none yet, and the refusals end the subscribers. In the one run
   where the publishers arrived together it did not occur, which fits the race described above.
 - **A clean exit is now switched, and the switch is fatal to `export ts`.** `ffa5b81b` passed a
-  stdin EOF on as completion; `main` reselects the standby at the signal for every clean exit. The
+  stdin EOF on as completion; `2b689c24` reselects the standby at the signal for every clean exit. The
   subscriber then exits on `TimestampRewind` in all six clean exits, co-started or not, and in the
   co-started hard kill. Only the two hard kills with a 2 s stagger survived, their switch coming
-  about 11 s after the kill. So on `main` no clean exit on one relay fails over.
-- **Without a shared hop there is no failover on `main`**, where `ffa5b81b` failed over in 5 of 5.
-  This is what the current front rules say, read from `front.rs` rather than isolated (a route whose
+  about 11 s after the kill. So on `2b689c24` no clean exit on one relay fails over.
+- **Without a shared hop there is no failover on `2b689c24`**, where `ffa5b81b` failed over in 5 of 5.
+  This is what that build's front rules say, read from `front.rs` rather than isolated (a route whose
   first hop differs does not qualify, and a front with nothing qualifying ends), so it is design
-  rather than defect: on `main` the shared hop
-  is the only declaration of a 1+1 pair, as the paper describes it.
+  rather than defect: on `2b689c24` the shared hop was the only declaration of a 1+1 pair.
 
 **What the exporter is handed at the switch.** A diagnostic `moq` built from `2b689c24` with three
 log lines in `container/consumer.rs` (one per group arriving, one at each `TimestampRewind` return,
@@ -548,11 +554,87 @@ two publishers whose sequences are not comparable. On `main` the mesh case is fa
 that waits for the standby's numbering ends on the same live-edge error. Reported as
 [#4354](https://github.com/moq-dev/moq/issues/4354), with the `ffa5b81b` mesh case included.
 
+**On upstream `main`, October 2026 (`82c3f2fe4`, reporting moq 0.14.2 / moq-relay 0.17.2, versions
+whose releases still carry `--hop`), where `--epoch` replaces `--hop`.** The rig passes one UUIDv7 to both publishers as `--epoch` where the
+tables above pass `HOP=42`; unset, each mints its own. A second variable is now the protocol: the
+default `moq-lite-06`, whose routes carry no epoch, or `moq-lite-07-wip`, opted into on every process
+(`MOQ_CONNECT_VERSION` and `MOQ_LISTEN_VERSION`), which carries the epoch on the announcement and on
+every request. The relay log confirms the version each session negotiated. Upstream documents the
+pairing as a moq-lite 07 feature that needs *"identical tracks with aligned groups, which no importer
+guarantees yet"*, so these arms grade a configuration upstream has declared but not yet completed.
+
+Which publisher serves is now a race between equal routes (each served in some late-subscriber arms
+on both protocols), so the rig cannot aim the signal at the serving one. Serving is read from the
+publisher logs, and an arm that signalled the idle publisher is a control whatever its label. Stagger
+2 s, hard kill unless stated.
+
+| Protocol | Epochs | Subscribers start | Signal to the serving publisher | Runs | At the subscriber | Outcome |
+|---|---|---|---|---:|---|---|
+| lite-06 | shared | before the standby | its arrival | 2 | nothing | unaffected |
+| lite-06 | shared | before the standby | hard kill | 2 | every track ends (`internal error`); the exporter re-requests | **exits**, *missed a decode deadline on PID 111* |
+| lite-06 | shared | after both | hard kill | 1 | every track ends (`unroutable`); re-request | alive, 6 s stall |
+| lite-06 | shared | after both | SIGINT | 1 | three tracks end `not found`; no re-request reaches the standby | **exits**, `internal error` |
+| lite-06 | own | after both | hard kill | 2 | every track ends (`internal error`); re-request | one alive after a 3 s stall; one **exits** on a timestamp below the previous group's start |
+| lite-07 | shared | after both | hard kill, standby started later | 3 | **nothing**: no error, no new subscription | alive, 3, 6 and 3 s stall |
+| lite-07 | shared | after both | hard kill, standby started earlier | 3 | nothing | two **exit** on a timestamp below the previous group's start; one alive, no stall |
+| lite-07 | shared | before the standby | hard kill | 3 | eight tracks end `not found`; re-request | **exits**, *missed a decode deadline on PID 111* |
+| lite-07 | shared | after both | SIGINT | 1 | five tracks end `not found` at the signal; re-request | **exits**, *missed a decode deadline on PID 131*, 4 s after the switch |
+| lite-07 | shared | after both | SIGTERM | 1 | nothing: resumed at the signal | **exits**, *missed a decode deadline on PID 131*, 3 s after the switch |
+| lite-07 | own | before the standby | its arrival | 1 | the standby's newer epoch replaces the broadcast | **exits**, `unroutable` |
+| lite-07 | own | after both | hard kill of the newer | 1 | — | **exits**, `internal error`; no return to the older epoch |
+| both | shared | after both | any signal to the idle publisher (control; one co-started) | 12 | nothing | alive, 0 s |
+
+One further lite-06 arm is void: both exporters exited 1.4 s after joining mid-GOP, before any
+signal, on *missed a decode deadline on PID 111*. [T47](test-47-fixed-delay-export.md) carries it
+as a limit of the merged export.
+
+- **On the default protocol `--epoch` declares nothing on the wire.** On `moq-lite-06` the relay
+  sees two anonymous routes: a subscription ends with the route that served it, and failover is the
+  exporter's re-request, the same path a crashed publisher replaced by a new process takes on that
+  version ([T13](test-13-downstream-grooming.md) § *Liveness*). That is the documented behaviour, not a
+  defect, but it means a deployment that passes `--epoch` and leaves the version at its default has
+  no 1+1 pair.
+- **A shared epoch removes the arrival teardown on both protocols.** No standby arrival ended a
+  subscriber, where on `ffa5b81b` and `2b689c24` a shared hop's late standby ended every one.
+- **On `moq-lite-07` a shared epoch moves a subscription to the standby without a seam, as
+  documented, and the media then decides.** The subscriber sees no error and opens no subscription;
+  the relay continues it on the other route. Each importer still numbers its groups from its own
+  start, so the continuation lands on different media. With the standby started 2 s later, all
+  three resumed, after a 3–6 s stall. With the standby started earlier, two of three aborted on a
+  timestamp below the previous group's start: the [#4354](https://github.com/moq-dev/moq/issues/4354)
+  mechanism, reached by resume instead of reselection. Why the third survived with no stall is not
+  established. Upstream's plan for the alignment, groups and timestamps derived from the input, is
+  `quest/m1/hop-aligned-import.md`; these arms are its before-measurement.
+- **A subscription made before the standby announced is not resumed on `moq-lite-07`.** It gets
+  `not found` on most of its tracks at the failover (3 of 3). That fits the standby's refusals at
+  its arrival being kept against those subscriptions, the mechanism of
+  [#4352](https://github.com/moq-dev/moq/issues/4352) no longer fatal at arrival. The fit is
+  *reasoned*, not confirmed in code.
+- **A clean exit on `moq-lite-07` is switched at the signal and still ends the export.** The relay
+  moves the subscriptions to the standby at once, not after the idle timeout. In the SIGTERM run it
+  did so with no error; in the SIGINT run five tracks drew `not found` and were re-requested. Both
+  exports ended on a late teletext unit within 4 s of the switch. Why the continuation arrives late
+  after a clean exit, when it does not after a hard kill, is not established.
+- **The exporter rarely survives a re-request.** Every `not found` and every lite-06 failover reaches
+  `export ts` as a re-request. The re-request fetches the in-progress group, which arrives behind
+  the release clock. Late audio and data frames are dropped, but the first late video or teletext
+  unit is fatal. The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on
+  lite-07. Six of the seven that ended did so on a missed decode deadline, and one on a timestamp
+  rewind.
+- **A different epoch on `moq-lite-07` is a replacement by design**: the newer epoch takes the
+  broadcast, and subscriptions on the older one end `unroutable`.
+
+So on this build no configuration of two `moq import ts` publishers survives every case on one
+relay. The closest is moq-lite 07 with a shared epoch, subscribers that joined after both publishers,
+and a hard kill. In that configuration whether the export survives depends on how the two importers'
+group numbering happens to compare.
+
 This drill counts bytes and does not grade the splice for continuity or PCR. It runs on one host
 over loopback, one replicate per graceful arm, and the stall figures are at a 6 s idle timeout; at
 the 30 s default they would be expected to scale as the mesh drill's did, which is *reasoned*. The
-`main` arms ran beside a two-relay mesh drill on other ports of the same 8-vCPU host, with the load
-average under 2. The mesh drill on both builds is § *Mesh source failover*.
+`2b689c24` arms ran beside a two-relay mesh drill on other ports of the same 8-vCPU host, with the
+load average under 2; the October arms ran one at a time on the same host. The mesh drill is
+§ *Mesh source failover*.
 
 ### Single-source 1+1 failover — a common source is required; on `ffa5b81b` offset numbering also costs outage
 
@@ -1024,7 +1106,7 @@ in the case they were reported on: the shared-`--origin` `Unroutable` teardown i
 standby wins dispatch the moment it attaches — before a real publisher has lazily created every
 track — and a per-track refusal was charged as a strike against the whole logical track, now scoped
 per track with fallback to the incumbent (on `ffa5b81b` the same race is open again, on one relay and
-in the mesh, surfacing as `not found`: § *Single-relay standby on the current build*, § *Mesh source
+in the mesh, surfacing as `not found`: § *Single-relay standby*, § *Mesh source
 failover*); and the
 exporter's fatal `json: dropped` on session loss, fixed by #2469. The drill found the first because a
 model-level standby accepts a track request immediately where a real publisher does not. The

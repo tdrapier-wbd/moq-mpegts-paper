@@ -658,7 +658,9 @@ through `tsp -P regulate`. *P1, file domain.*
   is not delivered to the waiting exporter. On `6f1a9e33` that was the 30 s default; on `main` from
   [#4606](https://github.com/moq-dev/moq/pull/4606) the default is 10 s, and the measurement below
   resumes 10.1–13.3 s after each kill. This is the detection bound
-  [T6](test-6-relay-resilience.md) records for relay failover, now on the publisher side.
+  [T6](test-6-relay-resilience.md) records for relay failover, now on the publisher side. On
+  October 2026 `main` with `moq-lite-07`, the replacement's newer epoch ends the old broadcast as it
+  announces, and the wait disappears (below).
 
 **Continuity at the resume, graded per PID, on `main` at `83ce47fe`** (which carries #4504, #4606,
 #4733 and #4750). Same functional rig, with the egress graded per PID at every resume by a
@@ -679,8 +681,36 @@ runs `moq import ts` then exits with *rendition is not published*, the exporter 
 and 12.7 s after it, and it resumes only onto the session after. In the third the replacement
 survives, but the export carries nothing after about 13 s of output and ends 30 s later on *subscribe
 end below a received group track=catalog.json*, exiting 1 after its linger. Filed as
-[#4945](https://github.com/moq-dev/moq/issues/4945); the cause is not located. *P1, file domain,
-loopback, `CNNiEMEA2.ts`, one relay.*
+[#4945](https://github.com/moq-dev/moq/issues/4945). *P1, file domain, loopback, `CNNiEMEA2.ts`,
+one relay.*
+
+**On upstream `main`, October 2026 (moq 0.14.2 / moq-relay 0.17.2 as reported, `82c3f2fe4`; the
+releases of those versions carry neither the fixed-delay export nor publisher epochs), with
+the fixed-delay export merged and both halves of #4945 addressed upstream, the publisher survives
+and the export resumes across a crash only on the opt-in `moq-lite-07`.** The same kill arm, three
+replay runs and one continue run per protocol; no replacement publisher exits in any of them. The
+relay log confirms the version every session negotiated.
+
+| Protocol | Runs | Crash resumes | At each replacement | Exit | Packets written |
+|---|---:|---|---|---|---|
+| `moq-lite-06` (the default) | 4 | **0 of 8** | 9.9–12.9 s after the kill the killed route's subscriptions end (`internal error`) and the exporter re-requests; the first late video access unit ends it (*missed a decode deadline on PID 111*) within 3.3 s | 1, after the 60 s linger | 61,667, the first session only |
+| `moq-lite-07-wip` on every process | 4 | **8 of 8** | as the replacement announces, its newer epoch ends the old broadcast with `unroutable`, about 3.3 s after the kill (the rig waits 3 s before starting it); the linger resumes within a millisecond | 0 | 225,570 (replay), 226,820 (continue) |
+
+- **On `moq-lite-06` the exporter's recovery fails, not the relay.** That version cannot carry the
+  publisher epoch, so the replacement is a new route at the same path and the old subscription ends
+  only when the relay times the dead session out, as upstream documents. The re-request then fetches
+  the replacement's in-progress video group, whose frames are already behind the release clock: up to
+  16 audio and teletext frames are dropped as late, and the first late video unit is fatal. `--linger`
+  then waits out 60 s for a broadcast that is already live. `83ce47fe` wrote 142,188–184,460 packets
+  on the same arm and exited 0. The same recovery sequence ends 7 of 9 single-relay 1+1 failovers that
+  reach the exporter as a re-request on this build ([T6](test-6-relay-resilience.md)
+  § *Single-relay standby*).
+- **On `moq-lite-07` the crash is a broadcast replacement, and the export carries it.** No subscription
+  is re-requested onto a live route, nothing is dropped as late, and the detection wait disappears.
+  Every resume is continuity-clean on every PID, sets `discontinuity_indicator` once, on the PCR PID,
+  and is followed by PAT within 1 packet and PMT within 2 (within 11 and 12 at one continue resume).
+- The clean-end replay and continue arms on the same build, on `moq-lite-06`, resume three times each
+  and exit 0.
 
 - **The resume is continuity-clean on every PID.** No PID jumped in 24 resumes, so the audio jump one
   `6f1a9e33` run showed is not reproduced at that sample size. `discontinuity_indicator` is set on the
