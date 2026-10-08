@@ -285,8 +285,11 @@ publisher epoch is on the wire**, the opt-in moq-lite 07: the replacement's newe
 broadcast as it announces, and the exporter resumed 8 of 8 crashes continuity-clean, one flag each, with
 no detection wait. On the default moq-lite 06 the exporter waits out the dead session, re-requests onto
 the live replacement, and exits on the first late video unit of the group it fetches, in 4 of 4 runs
-(P1, file domain, loopback, one relay; same section). So a standing egress on the default protocol
-still needs its supervisor for a publisher crash.
+(P1, file domain, loopback, one relay; same section). On that build the exit comes only after the
+60 s linger; with upstream's later October 2026 linger fix it comes about 1 s after the failure, so
+the supervisor takes over within about a second, though the export still does not resume (3 of 3
+runs, same conditions). So a standing egress on the default protocol still needs its supervisor for a
+publisher crash.
 
 **Source failover across a relay mesh works for a hard kill, bounded by detection and by the standby's
 lag** ([T6](../lab/test-6-relay-resilience.md); P1, two relays on one host). A shared publisher identity
