@@ -731,9 +731,12 @@ failover*).
   [`quest/m1/hop-aligned-import.md`](https://github.com/moq-dev/moq/blob/main/quest/m1/hop-aligned-import.md)
   — now titled *Same-epoch importers publish identical tracks* and listing Closes #4352 and #4354 —
   diagnoses it as a standby refusing every track until it has parsed its PMT. **Open**; the planned
-  fix is not landed; our counts are the before-measurement on the issue.
+  fix is not landed; our counts are the before-measurement on the issue. With a shared `--epoch` on
+  `main` at `82c3f2fe4` the standby's arrival ends no subscriber, on either protocol; on
+  `moq-lite-07` subscribers present before it arrived instead end `not found` at the failover, 3 of
+  3, which fits those refusals being kept (reasoned, not traced; T6 § *Single-relay standby*).
 - **A fast switch to a same-hop standby ends `export ts` with `TimestampRewind`.** On `ffa5b81b` a
-  SIGINT made the relay move to the standby and the exporter abort. On `main`, where the CLI closes
+  SIGINT made the relay move to the standby and the exporter abort. On `main` at `2b689c24`, where the CLI closes
   the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
   the signal and aborts the exporter: six of six, whether the publishers started 2 s apart or
   together. A diagnostic exporter shows what it is handed at the switch: the standby's groups under
@@ -745,17 +748,22 @@ failover*).
   already past the floor resumed (T6 § *Mesh source failover*). Upstream's same quest diagnoses
   #4354 as each importer numbering groups from its own per-process counter, so after a failover
   `export ts` sees a timestamp rewind. Its plan derives a group's sequence from its keyframe's PTS
-  and announces only once tracks are known; it requires hop removal
-  ([`quest/m0/broadcast-epoch/hop-removal.md`](https://github.com/moq-dev/moq/blob/main/quest/m0/broadcast-epoch/hop-removal.md),
-  gating the next release), where `--epoch` replaces `--hop`, and a redundant pair shares an
-  explicit epoch. Open PR [#4741](https://github.com/moq-dev/moq/pull/4741) makes the path the only
-  broadcast identity — *restarting group numbering requires a new broadcast name*. **Open**; fix
-  planned, not shipped. Current `main` replaced the consumer's live-edge floor with a rule that
+  and announces only once tracks are known. Its prerequisites have landed on `main`, in no release
+  yet: hop removal
+  ([`quest/m0/broadcast-epoch/hop-removal.md`](https://github.com/moq-dev/moq/blob/main/quest/m0/broadcast-epoch/hop-removal.md)),
+  where `--epoch` replaces `--hop` and a redundant pair shares an explicit epoch, and
+  [#4741](https://github.com/moq-dev/moq/pull/4741), which makes the path the only broadcast
+  identity — *restarting group numbering requires a new broadcast name*. **Open**; the aligned
+  numbering is planned, not shipped. `main` replaced the consumer's live-edge floor with a rule that
   group starts must not fall, which cuts the
   [#4733](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) failure
-  class but should still refuse this one, since the standby's groups start before the last group
-  read; the same-hop switch arm of [T6](test-6-relay-resilience.md) on a current `main` build is the
-  before-measurement for that quest.
+  class and still refuses this one. **The before-measurement is posted on the issue**
+  ([comment](https://github.com/moq-dev/moq/issues/4354#issuecomment-6058577700)): on `main` at
+  `82c3f2fe4`, one relay, a shared `--epoch`, every process on `moq-lite-07`, the relay moves a
+  subscription to the standby with no error, and the two importers' counters then decide the
+  outcome — 3 of 3 survive where the standby started later, 2 of 3 exit on the rewind where it
+  started earlier; every clean exit still ends the export, now on a missed teletext deadline (T6
+  § *Single-relay standby*).
 
 Without a shared hop on `ffa5b81b`, the standby relay's own subscriber freezes silently at the
 failover; `main` no longer fails over between publishers that declare no shared hop, which its front
@@ -1660,7 +1668,12 @@ broadcast with `unroutable`, the linger resumes within a millisecond, and 4 of 4
 crashes continuity-clean and exit 0. So #4945 is fixed on the protocol that carries the epoch. What
 remains is an exporter defect, independent of #4945: a re-request onto a live route dies on the first
 late video unit instead of dropping it, as it drops late audio. *P1, file domain, loopback,
-`CNNiEMEA2.ts`, one relay.* Not yet reported.
+`CNNiEMEA2.ts`, one relay.* **Reported as [#5052](https://github.com/moq-dev/moq/issues/5052)**,
+with both rigs and a `--delay 1s` control: at 1 s, which carries the clip over 540 s in steady state
+(T47), 2 of 2 crash-replace runs and 4 of 4 failovers end the same way, so it is not the 500 ms
+default's floor. The cause is not located; the issue offers a hypothesis reasoned from the code (the
+jitter buffer accepts a unit without asking whether its packets still fit before its deadline at the
+multiplex rate) and no fix. **Open.**
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
