@@ -141,7 +141,7 @@ prove the specified queue formed; otherwise record as rig-invalid per T8b's with
 
 **Order.** Cheap namespace cells first (MoQ ladders, then segmented); C2 re-runs can share a session with
 ladder cells that use the same harness. Grading is per-cell aggregate (`t8b-c3-span.py` or equivalent),
-not a timing comparison — safe to interleave with non-timing work in the same window ([P1-d, bundling](planned-experiments.md#what-to-bundle-because-prompt-count-is-the-scarce-resource)).
+not a timing comparison — safe to interleave with non-timing work in the same window ([P1-d, scheduling](planned-experiments.md#scheduling-constraints)).
 
 ## Metrics
 

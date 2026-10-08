@@ -1,0 +1,46 @@
+---
+description: Where each kind of information belongs in this repository, and who may move it between layers
+alwaysApply: true
+---
+
+# Documentation architecture
+
+Every fact has one authoritative home. Anywhere else it is absent, or at most a one-line pointer.
+
+| File | Purpose | Holds | Never holds |
+|---|---|---|---|
+| `README.md` (L1) | Executive summary and map | the decision question, the qualified conclusion, major limits, the document map; 700–1,000 words | measurements, test IDs, mechanisms, history |
+| `docs/*.md` (L2) | The paper: what is established and what it means | current conclusions, each with its evidence and limits | run dates, commit hashes, issue or PR numbers, branch names, "was broken, now fixed" |
+| `lab/test-N-*.md` (L3) | One experiment's record | objective, environment, procedure, commands, measured results, conclusions, at most one `## Corrections` entry per transferable correction | chronology, re-verification diaries, real IPs or paths |
+| `lab/README.md` | Campaign index | objective, the experiment list with one-line state, pass criteria, shared conventions | results beyond one line; what is left (that is `planned-experiments.md`) |
+| `lab/planned-experiments.md` | Forward roadmap | what remains, why it matters, priority, gate, done-when | results, completed work, reasoning already in a test file |
+| `lab/method-notes.md` | Durable method rules | a rule, its source experiments, the check it implies | incident narrative (the test file has it) |
+| `lab/upstream-contributions.md` | Upstream ledger | each defect or contribution: the report, before/after verification, current state | resource or conformance results (test files) |
+| `STATUS.md` *(ignored)* | Current state on one page | build under test, open upstream items, what is waiting on whom, next editorial group; ≤ 600 words | history, results |
+| `INSTRUCTIONS.local.md` *(ignored)* | How to run things here | paths, hosts, ports, start commands, build recipes, environment gotchas | findings, results, status |
+| `lab/notebook.local.md` *(ignored)* | Chronology | dated runs, provenance, hashes, superseded hypotheses | — (the only append-only file) |
+| `docs/upstream/*.local.md` *(ignored)* | Drafts of upstream posts | unposted drafts | — (once posted, the ledger links the post; the draft may be deleted) |
+
+The paper's own map: requirements R1–R8 in `docs/problem.md` §5; the data-plane verdict in
+`docs/comparison.md`; grooming and redundancy design in `docs/architecture.md` §4–§5; control,
+entitlement and security (design only, no evidence) in `docs/control-plane.md`; every measurement in
+`docs/evidence.md`; cost in `docs/economics.md`; terms in `docs/glossary.md`.
+
+## Layers and promotion
+
+- **L3 → L2 needs the author's explicit approval before the edit**, however well the evidence supports
+  it; so does **L2 → L1**. **L3 → L1 is prohibited.** `README.md` is read-only unless the author
+  authorises a specific change, wording and typos included: propose it in the report instead.
+- **Correcting an L2 statement that L3 clearly contradicts is a repair, not a promotion**, and is
+  allowed. If the repair needs new L3 material in `docs/`, stop and ask.
+- Without approval, leave the text and report the proposed promotion: the claim, its evidence in
+  `lab/`, and where it would sit in `docs/`.
+
+## Public and private
+
+`README.md`, `docs/*.md`, `lab/*.md` and `interop/` are public. Use placeholders (`<EC2_IP>`,
+`<subscriber-home-ip>`); never real addresses, paths, credentials or TLS fingerprints. Infrastructure
+detail belongs in the ignored files.
+
+When unsure where something belongs, the experiment's own `lab/test-*.md` is the default, and the
+first question is whether it needs writing at all.

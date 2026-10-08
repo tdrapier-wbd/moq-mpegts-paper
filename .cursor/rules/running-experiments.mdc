@@ -1,0 +1,18 @@
+---
+description: Preconditions for running experiments and for pushing work to upstream repositories
+alwaysApply: true
+---
+
+# Running experiments and contributing upstream
+
+- **Read `INSTRUCTIONS.local.md` before running anything.** It is the single source of truth for
+  hosts, ports, relay start commands and their gotchas, locating freshly built binaries, clips, rig
+  scripts and graders. When an environment fact changes, update it there (facts only, no findings).
+- Consult `lab/method-notes.md` when designing or grading an experiment; fix the pass criteria in the
+  experiment's `lab/test-*.md` before the first run.
+- Never edit a rig script while a run uses it.
+- **Before pushing to an upstream repository, pass that repository's gate, not ours.** For `moq-dev`:
+  `just fix`, then `just check`, from the worktree (`INSTRUCTIONS.local.md` §1). Its conventions
+  differ from ours (its `.editorconfig` indents shell with spaces; `lab/scripts/` uses tabs); re-run
+  any script its formatter rewrote before pushing it.
+- Post nothing upstream (issues, comments, pull requests) without the author's go-ahead.

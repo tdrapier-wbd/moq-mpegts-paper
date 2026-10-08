@@ -1,0 +1,54 @@
+---
+description: Editorial gate every run passes before and after touching documentation, and the anti-bloat order of operations
+alwaysApply: true
+---
+
+# Documentation gate
+
+**Documentation is not a research exhaust pipe.** A run is judged by what it established, not by how
+much prose it produced. A complete, successful run may change no documentation at all, and the set
+should get smaller as the project matures.
+
+## After an experiment, by default
+
+Write the detailed result to that experiment's `lab/test-*.md` and the chronology to
+`lab/notebook.local.md`. **Touch nothing else** unless the result changes a current conclusion, the
+project's state, the plan, a method rule or an upstream item's status. Then **update the existing
+statement in place**; do not append another status paragraph. A re-run that changes nothing is not a
+finding: record only that the current build is the one under test.
+
+## Before adding text
+
+1. What is this document for (see `documentation-architecture`), and does this serve that purpose?
+2. Does the information already exist? Where is its authoritative home?
+3. Which operation is right: update, consolidate, move, delete, add, or no change?
+4. What is the smallest change that leaves the documentation accurate and coherent?
+
+**Order of preference: update an existing statement > consolidate > move > delete > add new
+prose.** A new section needs a reason that editing an existing one cannot satisfy.
+
+## Never
+
+- Append "what we did today" to a living document: dated sections, "re-verified on…", "first pass,
+  then…", superseded readings kept beside current ones. That is the notebook's; git keeps the rest.
+- Keep text because it records history, or copy detailed output upward because it is interesting.
+- Leave completed work or results in `planned-experiments.md`. When nothing of an entry is
+  outstanding, delete the entry and add its ID to the file's retired-ID line, so citations elsewhere
+  still resolve; an entry that names no document it could falsify is deleted too.
+- Fix duplication by adding cross-references. Delete the copies; keep one home.
+- Let a correction become a narrative. Fix the stale claim where it is made, and keep at most one
+  `## Corrections` entry (what was believed, what is true, the method rule) in the experiment file.
+
+## Size budgets (tripwires)
+
+`README.md` 700–1,000 words · `STATUS.md` ≤ 600 · `lab/planned-experiments.md` ≤ 2,500 ·
+`lab/method-notes.md` ≤ 21,000 · `docs/evidence.md` ≈ 10,000 · `docs/comparison.md` ≈ 7,000. A change
+that takes a file over budget cuts the same file elsewhere, or justifies the growth in the report.
+
+## Before finishing a run
+
+Report briefly, per changed document: the **net word change** (`git diff --stat`, `wc -w`); for each
+addition, why it was necessary and why it belongs there; what obsolete or redundant text was removed;
+whether anything now appears in two places; whether a planning document gained completed work. Then
+re-read each changed file as a first-time reader: no heading, summary or table may still assert what a
+later passage disproves. **Documentation changes are not evidence that an engineering run succeeded.**

@@ -794,7 +794,7 @@ not fall seconds behind.
 Relay cost tracks **session count**, not bitrate: a session costs ~0.34 % / 0.87 % / 1.18 % of a core
 at 2 / 10 / 27 Mbps co-resident, so nearly fourteen times the bitrate costs about three and a half times
 the CPU and cost per Mbps *falls* as bitrate rises. One core carries roughly a gigabit. **Size a tier
-from the cross-host figure, not from the co-resident one.** On the build under test that is **1.258 % of
+from the cross-host figure, not from the co-resident one.** On `moq-relay` 0.15.1 (noq) that is **1.258 % of
 a core, 2.62 MB and one full stream copy per remote subscriber** with GSO on, and 1.69 % with it off,
 which on a 2-vCPU relay is about 100 subscribers, measured. The `moq-relay` 0.14.15 build on quinn
 measured 0.806 % and 1.39 MB, or 124–139 subscribers per core at ~10 Mb/s, and remains the evidence
@@ -820,7 +820,7 @@ serving it badly. Three planning consequences:
   ([Evidence](evidence.md) §3.6).
 - **A second per-channel term is immediate, and a setting controls it.** The relay's group cache
   holds each media track for its retention window, 30 s by default, which measured at 60–69 MB for a
-  10 Mb/s channel on the build under test, about 1.5 × bitrate × window. `--cache-duration` shortens it:
+  10 Mb/s channel on `moq-relay` 0.15.1, about 1.5 × bitrate × window. `--cache-duration` shortens it:
   at 5 s, twelve channels held 196 MB instead of 766 MB. The window is the history the relay can serve
   a late joiner, a segmented egress or a subscriber recovering from a stall, so it is set from the
   longest recovery the service must absorb, not minimised. It is a different structure from the slot

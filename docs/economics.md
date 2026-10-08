@@ -97,7 +97,7 @@ at 2 / 10 / 27 Mbps *co-resident* (subscribers on the relay's own host), so cost
 forwards on the order of a gigabit. High-bitrate contribution feeds are the *cheapest per Mbps* to relay,
 which cuts against the intuition that they are the expensive case. They are — but on the egress line.
 **For a sizing decision use the cross-host figure instead**: with the relay alone on its own instance and
-every subscriber elsewhere, a remote subscriber costs **1.258 % of a core** on the build under test,
+every subscriber elsewhere, a remote subscriber costs **1.258 % of a core** on `moq-relay` 0.15.1 (noq),
 measured, which extrapolates to about 80 subscribers per core. An earlier build (`moq-relay` 0.14.15,
 on the quinn QUIC stack) measured 0.806 %, or 124–139 per core ([Evidence](evidence.md) §3.6). Three
 cautions travel with it. A host without GSO, a Linux setting ([Glossary](glossary.md)), overstates relay
@@ -250,7 +250,7 @@ ten times commodity today.
 
 **Relay fan-out does not reduce last-mile egress.** Measured, 150 subscribers each receive **9.84 Mb/s,
 a full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state*: 2.62 MB and 1.258 % of a
-core per subscriber on the build under test, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where
+core per subscriber on `moq-relay` 0.15.1, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where
 receivers cluster, the relay economises upstream backhaul instead, ~$11,500 a year flat against $185,000
 for sixteen destinations without a relay on the eight-service model, which is the same topology an HTTP
 cache exploits (§4.6). **Carriage overhead is not where the money is**: the 5.3 % wire saving is real,

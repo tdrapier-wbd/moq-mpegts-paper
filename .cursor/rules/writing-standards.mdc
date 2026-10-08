@@ -1,0 +1,60 @@
+---
+description: How claims, figures and corrections are written in the paper and the lab record
+globs: docs/**/*.md,lab/**/*.md,README.md,interop/**/*.md
+alwaysApply: false
+---
+
+# Writing standards
+
+## Pair every figure with the condition that makes it true
+
+Most wrong claims here have been correct numbers quoted without the condition they were measured
+under.
+
+- **Latency and conformance travel together.** A latency figure is meaningless without the
+  conformance of the same bytes, and vice versa. The media-aware lane's fastest delivery and its
+  conformant wire come from different builds and groomer configurations: never one sentence, row or
+  verdict.
+- **State the domain** where file and wire differ (`file` / `wire` / `hardware: not run`), the
+  **measurement point** (P0/P1/P2), and the **topology** where co-resident and cross-host differ.
+  Prefer the cross-host figure for deployment or sizing.
+- **Name the build** when a result depends on one. In `docs/` name a release (`moq 0.14.0`) or a dated
+  trunk ("upstream `main`, October 2026"), never a hash; mark evidence against unmerged code
+  `[unmerged]`. Where two defects sit in different builds, say so rather than quoting the better half
+  of each.
+- **Keep kinds of evidence apart**: measured performance, implementation availability, deployment
+  practice, commercial relevance. One does not stand in for another.
+- **A headline that survives one comparator and not another says both.** A supersession carries the
+  new result's own limits.
+
+## Name the evidence, or say there is none
+
+A claim that decides something cites the measurement that established it. A claim resting on
+specification, reasoning or a datasheet says so in the same sentence: *measured, derived, specified,
+reasoned, datasheet* are load-bearing words. Distinguish what is established, likely and uncertain.
+
+## Style
+
+- Write for a technically sophisticated broadcast reader; no basics, marketing or startup language;
+  commercial argument stays out of the technical documents.
+- Justify architectural statements and state the trade-offs.
+- Complete sentences. Shorten by cutting whole passages, never by compressing into fragments, arrow
+  chains or dropped articles.
+- Mermaid for diagrams.
+- A rate appears only if it is on a public price page, derived openly from one, or measured here.
+  Anything else is labelled *hypothetical*, *assumed* or *illustrative* everywhere it appears, table
+  headers included. Third-party reports of what somebody pays are not prices.
+
+## Cutting safely
+
+Before a substantive cut, one of these must hold: the meaning survives elsewhere in the same file; it
+survives in a more authoritative file; it is obsolete, duplicative or prohibited narration; or it adds
+no distinct claim. Otherwise keep it and say why. Editorial passes change no number, unit, direction,
+qualification, P-label or `[unmerged]` marker. **Open questions, limits, negative results and
+self-critical qualifications are load-bearing by default.** Do not shorten past a target.
+
+## `README.md`
+
+Derive its conclusion afresh from the current `docs/` argument each time; never preserve it from a
+previous draft. It links down and carries no measurements, test IDs, lab narrative, mechanisms or long
+qualification chains.

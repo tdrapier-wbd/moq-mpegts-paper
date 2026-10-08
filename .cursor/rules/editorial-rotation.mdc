@@ -1,0 +1,32 @@
+---
+description: Standing end-of-session editorial review, one document group per session in rotation
+alwaysApply: true
+---
+
+# Editorial rotation
+
+The set decays by accretion, not by error. Reserve the tail of every session for a review of
+**exactly one group**, taking the groups in turn; the next group due and any backlog are recorded in
+`STATUS.md`. With no spare budget, say which group was due and carry it; never skip it silently.
+
+| # | Group | Look especially for |
+|---|---|---|
+| 1 | `docs/evidence.md` | a §2 row that no longer matches its §3; a result missing its P-point, domain or build |
+| 2 | `docs/comparison.md`, `docs/problem.md` | restated evidence; a verdict cell whose qualification lives only in `evidence.md`; a requirement scored on since re-measured evidence |
+| 3 | `docs/architecture.md`, `docs/control-plane.md` | design a measurement has overtaken; unimplemented design presented without its weight |
+| 4 | `docs/economics.md`, `docs/glossary.md`, `lab/cost-model.md` | a modelled rate that lost its *hypothetical* label; a term defined twice |
+| 5 | two `lab/test-*.md`, oldest reviewed first | a heading contradicted later in its file; a `Corrections` section grown into narrative; chronology; a rig whose flags the current build rejects |
+| 6 | `lab/method-notes.md`, `lab/planned-experiments.md`, `lab/upstream-contributions.md`, `lab/README.md` | a rule told twice; an entry that has run or will not; an upstream state that moved; a file over its budget |
+
+Apply three lenses, in order, and report what each found, including nothing:
+
+1. **Duplication**: one finding stated in two places where one home should hold it.
+2. **Staleness**: would the campaign still write this today? Grep for "not yet built", "not yet run",
+   "blocked on", "expected shortly", "being lifted", "build under test", and check register entries
+   whose dependency has been discharged. A discharged caveat misleads as much as a missing one.
+3. **Weight**: does it change what a reader concludes or does? A caveat naming no discharging
+   measurement, or a result tied to no decision, goes on the list. Open questions, limits and
+   negative results are kept unless the pass shows they carry nothing; when in doubt, keep and report.
+
+A pass normally leaves its group shorter. Report the net word change. The `writing-standards` cutting
+constraints bind it absolutely.

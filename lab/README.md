@@ -7,11 +7,11 @@ exact procedure, measured results and conclusion, written so that an external en
 it. It is the executable companion to [evidence](../docs/evidence.md) §1.2, which defines the
 validation pyramid and the acceptance gates.
 
-Three other files here are not experiments. [`method-notes.md`](method-notes.md) holds every
-measurement rule the campaign learned by getting something wrong, by theme rather than by experiment.
+Three other files here are not experiments. [`method-notes.md`](method-notes.md) is the rulebook to
+consult before designing or grading an experiment.
 [`upstream-contributions.md`](upstream-contributions.md) records what was found, reported and verified
 in other people's projects, including the review of the MSFTS carriage specification.
-[`planned-experiments.md`](planned-experiments.md) is the register of outstanding work. The paper in
+[`planned-experiments.md`](planned-experiments.md) is the roadmap of what remains. The paper in
 [`docs/`](../docs/) states what has been learned; where an observation here has become a permanent
 finding, this notebook points to [`docs/evidence.md`](../docs/evidence.md) rather than restating it.
 
@@ -65,13 +65,13 @@ no number without the conditions its file states. The rung and gate are from
 | T3 | Transport transparency — opaque `m2ts` lane | 1–3 · **Gate 1 (product lane)** | complete | Byte-transparent at P1 on one run, and the reference the other lanes are read against | [test-3](test-3-opaque-transparency.md) |
 | T4 | Remote relay end-to-end + SRT contribution | 2 · Gates 1 and 3 | complete, all three lanes | Three data planes graded over one internet path by one instrument; the service layer survives it | [test-4](test-4-remote-e2e-srt.md) |
 | T5 | Network impairment | 2 · Gates 1 and 3 | complete | Loss behaviour is the congestion controller's, not the lane's; its reordering cell is superseded by T20 | [test-5](test-5-network-impairment.md) |
-| T6 | Relay resilience and active/active source failover | 6 · Gate 3 | partial | Relay failover is bounded by the QUIC idle timeout and is not hitless; a graceful source exit is not failed over | [test-6](test-6-relay-resilience.md) |
+| T6 | Relay resilience and active/active source failover | 6 · Gate 3 | partial | Relay failover is bounded by the QUIC idle timeout and is not hitless; a graceful source exit still ends the export, a shared epoch included | [test-6](test-6-relay-resilience.md) |
 | T7 | Timing integrity (TR 101 290) | 3 (file), 4 (**hardware**) · **Gate 2** | P1 complete; P2 open | The re-stamp arithmetic is right on file, which is necessary and not sufficient | [test-7](test-7-timing-integrity.md) |
 | T8 | SRT against MoQ | 7 · feeds economics §4, §9 | partial | Graded on throughput and continuity at a matched controller, MoQ and SRT are on par through 10 % loss; graded on content, T28 finds SRT loses less | [test-8](test-8-srt-vs-moq.md) |
 | T8b | Congestion control for a permanent fixed-rate trunk | 7 · extends T8 | complete, C1–C7 | **No controller recommendation is supportable**; provisioning margin, queue discipline and the receiver's budget govern the feed | [test-8b](test-8b-congestion-control.md) |
 | T9 | System performance and resource utilisation | 5 · feeds architecture §9, economics §3 | partial | Publisher and subscriber pass; relay growth is root-caused to `quinn-proto` stream recycling; its N = 55 knee was the test box (T26) | [test-9](test-9-performance.md) |
 | T10 | MPTS / multiple concurrent services | 3 + 5 · Gate 1 | arms A, B, D run on two builds; C, E not run | The segmented lane carries a three-programme multiplex; the MoQ lane's handling varies by build, and on `main` a programme must be selected | [test-10](test-10-mpts-multiservice.md) |
-| T11 | Cross-implementation interop | 7 · transport neutrality | T11a partial; T11b open | Media flows within one implementation and through none of eight others, for at least four distinct causes | [test-11](test-11-interop.md) |
+| T11 | Cross-implementation interop | 7 · transport neutrality | T11a partial; T11b run | Media flows within one implementation and through none of eight others, for at least four distinct causes | [test-11](test-11-interop.md) |
 | T12 | End-to-end 1+1 dual-path delivery and hand-off | 6 · Gate 3 | complete for a co-started pair, arms A–D | Two stream-clocked groomers are byte-identical and hitless **on single-track content**; a multi-track mux over independent chains does not merge at the byte | [test-12](test-12-dual-path-handoff.md) |
 | T13 | Off-the-shelf CBR/PCR grooming of an MPEG-TS egress | 4 · Gate 2 | complete for four tools on both data planes | **It depends on the lane**: `tsp` grooms a segmented egress to all four criteria; behind a MoQ egress nothing off the shelf passes | [test-13](test-13-downstream-grooming.md) |
 | T14 | MoQ against segmented HTTP on one route | 7 · Gates 1 and 2 | partial | Segmented HTTP is verbatim in payload for one programme and much coarser at the hand-off; hardware and MPTS-through-CDN need kit this lab lacks | [test-14](test-14-data-plane-comparison.md) |
@@ -107,7 +107,7 @@ no number without the conditions its file states. The rung and gate are from
 | T44 | The transmux lane against a calibrated T-STD model | 3 · R3 | complete, conclusive | **The lane's P1/P2-conformant wire is not a conformant transport stream**; a T-STD re-multiplexer repairs it offline | [test-44](test-44-tstd-grading.md) |
 | T45 | A live T-STD re-multiplexer behind the lane | 3 · R3, P0-l | questions 1–3 answered; clock recovery and 1+1 not attempted | **A live re-multiplexer makes the wire T-STD-conformant**, at 2.20 s presentation latency on `ffa5b81b` (loopback, one clip, one run) | [test-45](test-45-live-tstd-remux.md) |
 | T46 | Two T-STD checks cross-validated | instrument validation · R3 | complete, offline | The two agree on all 35 files on upstream `main`'s merged check; every earlier disagreement traced to upstream's check, since fixed, and `ts-tstd.py`'s own defects are fixed with no verdict moved | [test-46](test-46-tstd-check-cross-validation.md) |
-| T47 | The upstream fixed-delay TS export (#4645 `[unmerged]`) | 3 · R3, P0-m | current head graded; scratch fix tested | The head holds the clock but drops audio on most joins; a scratch fix keeps every track, without a latency advantage over the re-multiplexer | [test-47](test-47-fixed-delay-export.md) |
+| T47 | The upstream fixed-delay TS export (#4645, merged) | 3 · R3, P0-m | merged build graded on loopback, across hosts and under loss | **Every track and buffer on every join tried at 500 ms–1 s**; 500 ms does not last a whole capture, and a re-request onto a live route ends the export | [test-47](test-47-fixed-delay-export.md) |
 
 ### Pass criteria (agreed in advance)
 
@@ -164,16 +164,9 @@ one-line edit.
 What is and is not established is stated once, in [evidence](../docs/evidence.md) §2, and the limits
 of the evidence in §4. What is outstanding, what blocks it and in what order to run it is stated
 once, in [planned-experiments.md](planned-experiments.md), ranked P0/P1/P2 by what a result could
-change. Neither is restated here. The limits that bear on every row of the table above:
-
-- **No hardware.** Gate 2 has never been attempted: nothing in this campaign has been fed to a
-  hardware IRD or graded by a hardware analyser.
-- **Latency is delivery latency on healthy paths**, not glass to glass, and on the media-aware lane a
-  latency figure means nothing without the conformance of the same bytes.
-- **The opaque lane has one loopback measurement** on a pinned, now-obsolete draft, against a
-  private implementation.
-- **The 1+1 result is a software receiver**, and the impairment matrices are mostly one run per
-  condition on an emulator.
+change. Neither is restated here. Read every row of the table above against the limits in
+evidence §4, above all that **nothing has been fed to a hardware IRD or graded by a hardware
+analyser**: "complete" means complete in software.
 
 The programme has two strands: the original asks which of two data planes can be run permanently, at
 scale, by an operations team; the second scores against [control-plane.md](../docs/control-plane.md).

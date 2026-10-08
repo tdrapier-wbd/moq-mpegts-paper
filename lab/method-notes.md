@@ -1,13 +1,12 @@
 # Method notes
 
-Every rule below was learned by getting something wrong in this campaign. They are collected here,
-organised by theme rather than by experiment, because several of them bit more than once in different
-rigs and that is the most useful thing about them — the per-experiment files record what happened,
-this file records what to do about it.
+The campaign's methodological rulebook: consult it before designing, running, grading or interpreting
+an experiment. Each rule is a bold instruction followed by the experiments it came from; the incident
+behind a rule is recorded in that experiment's lab note, not here.
 
-Each rule names the experiment(s) where it was learned. Where a rule was violated more than once
-after being written down, that is stated, because it is the strongest evidence that the rule is worth
-having.
+A rule belongs here only if it would change how a future experiment is designed, measured or read.
+Before adding one, look for an existing rule of the same principle and extend its provenance instead
+of writing a sibling.
 
 ---
 
@@ -15,321 +14,111 @@ having.
 
 **A looped clip is not a long clip, and the difference is a rewind per lap.** *(T21, T23.)*
 
-> Every soak in this campaign stretched a five-to-ten-minute clip with `tsp -I file --infinite`,
-> because there is no live feed in the lab and it is the obvious thing to reach for. Restarting the
-> file restarts its clock, and T23 later priced that: a backward jump costs its own duration in
-> programme, so T21's source was injecting a 600 s rewind roughly every 665 s. The run could not have
-> measured permanence whatever it found — it was measuring recovery, repeatedly, from an event the rig
-> manufactured.
->
-> The rule is that **the property under test has to survive the way the stimulus was extended**. A
-> soak needs a timeline that advances for the length of the soak; `ts-continuous-source.py` gets one
-> from a finite clip by advancing PCR, PTS, DTS and the continuity counters across the join, which is
-> a defensible alteration precisely because it can be checked — 0 backward steps, 0 discontinuity
-> indicators, 0 continuity errors, and a join interval indistinguishable from the median. Check it
-> before the run: a source that merely looks continuous confounds the experiment it was built to
-> clean up, and does so invisibly.
+`tsp -I file --infinite` restarts the programme clock each lap; T23 priced a backward jump at its duration in programme time, so T21's source injected a ~600 s rewind roughly every 665 s and measured recovery from a manufactured event, not permanence. **The property under test must survive how the stimulus was extended.** Use a timeline that advances for the full soak (`ts-continuous-source.py` advances PCR, PTS, DTS and continuity counters across the join). Before the run, check 0 backward steps, 0 discontinuity indicators, 0 continuity errors, and a join interval indistinguishable from the median.
 
 **A comparison tool that cannot fail is not evidence.** *(#2825 anchor-point port, [upstream](upstream-contributions.md) §3.)*
 
-> `table-anchor.py` grades two exporter captures against each other and reports a percentage. A tool
-> shaped like that will report a plausible percentage whether or not it is reading the right field,
-> and a first run that returns "94 %" looks like a measurement rather than a thing still to be
-> checked. Nothing about the number distinguishes a working comparison from one that agrees with
-> itself by construction.
->
-> **Give a comparison instrument a positive and a negative control before quoting it.** Positive: a
-> capture graded against itself must return 100 %. Negative: a deliberate, known perturbation of one
-> leg must fail, by the amount the perturbation implies, and must leave the untouched parts at 100 %.
-> Here that was nulling every second PAT/PMT emission on one leg, which moved exactly those two rows
-> to 50.60 % and 51.63 % and left SDT and NIT at 100 %. The negative control is the one that matters:
-> it is what separates an instrument that is measuring from one that is merely agreeing.
+`table-anchor.py` returns a plausible percentage whether or not it reads the right field. **Give a comparison instrument a positive and a negative control before quoting it.** Positive: a capture against itself must return 100 %. Negative: a deliberate perturbation on one leg must fail by the amount implied and leave untouched rows at 100 % — here, nulling every second PAT/PMT on one leg moved those rows to ~50–52 % and left SDT and NIT at 100 %. The negative control separates measuring from agreeing.
 
 **A gap in a delivery trace is not evidence of damage until a run with the intervention removed has
 been shown not to have one.** *(T38.)*
 
-> The topology arm withdrew one channel from an affiliate holding two and measured the channel it
-> kept. That channel's delivery trace showed five pauses over half a second, the longest 3.195 s, and
-> the arm was within a sentence of being written up as a near-miss on its own pass criterion. An
-> undisturbed session on the same channel, with nothing done to it at all, showed four such pauses
-> with the longest at 3.013 s. The pauses are the transport's ordinary delivery burstiness.
->
-> The tell was there in the same run: **zero continuity errors** on both. A pause with no continuity
-> error is late delivery, not lost media, and the two must not be reported as one thing. The rule is
-> that a de-provisioning, failover or impairment arm needs its own do-nothing twin on the same
-> channel in the same session, because the burstiness floor is a property of the rig and the day.
+Withdrawal of one affiliate channel left five pauses over 0.5 s (longest 3.195 s) on the kept channel; an undisturbed session on the same channel showed four pauses (longest 3.013 s) — ordinary burstiness. **Zero continuity errors** on both: a pause without a continuity error is late delivery, not lost media. A de-provisioning, failover or impairment arm needs a do-nothing twin on the same channel in the same session, because the burstiness floor is a property of the rig and the day.
 
 **A negative control and a broken rig give the same reading, so an adversarial arm has to prove it
 ran before its result means anything.** *(T25.)*
 
-> F11's rig launches its abuser under `setsid` so the whole tree can be killed by process group —
-> necessary, because the storm arm subscribes to the victims' *own* broadcast and a `pkill -f` on the
-> broadcast name cannot tell an abuser from the instrument. But the connection arguments were built
-> as a bash array in the parent and passed into `bash -c` as `CONN='${CONN[*]}'`, where they arrive
-> as a plain string. The abuser then expanded that string as `"${CONN[@]}"`, which yields **one**
-> argument, and every abuser died on a CLI parse error before opening a connection. Their stderr went
-> to `/dev/null`, so the arms ran to completion and reported victims with `keep_up` 1.001 and zero
-> continuity errors.
->
-> That is the most dangerous failure a rig of this shape can have: **the broken result is
-> indistinguishable from the hoped-for one.** "Perfect isolation under abuse" and "no abuse occurred"
-> are the same row in the CSV. Nothing in the output was false; the run simply measured a control arm
-> wearing the storm arm's name, three times.
->
-> Two rules follow. First, **the stimulus needs its own liveness assertion, checked as a pass
-> criterion rather than eyeballed** — F11 now samples the abuser's process group every second and
-> refuses the cell outright if the peak concurrent count during the abuse phase is below two, which
-> turns a silent false negative into a failed run. Second, **keep one adversary's stderr.** Silencing
-> every child is what made a CLI parse error invisible; one un-redirected child costs nothing and
-> makes the arm falsifiable. The generalisation beyond this rig: whenever the *expected* result of an
-> arm is "nothing happened", that arm needs independent evidence that it happened at all.
+F11's abusers died on a CLI parse error (`CONN` passed as one argument) before opening a connection; stderr went to `/dev/null`, so victims reported `keep_up` 1.001 with zero continuity errors — indistinguishable from perfect isolation under abuse. **The stimulus needs its own liveness assertion as a pass criterion** (F11 samples abuser process-group count and fails if peak concurrent count during abuse is below two). **Keep one adversary's stderr** so silent parse failures are falsifiable. Whenever the expected result is "nothing happened", require independent evidence that the arm ran.
 
 **A before/after across two builds must hold the *instrument* constant, not just the subject — and
 the newest release is usually the wrong "after".** *(T8b, C3's #3271 re-check.)*
 
-> The re-check of C3 against upstream #3271 was first set up from two binaries already on the box,
-> `0.9.11-eab96019` against the `0.9.15` release, because both were to hand and #3271 was in the
-> newer one. That comparison is void. Two weeks of `main` separate the pair, and one of the commits
-> in it is #3006, which paces the TS export on each frame's timestamp instead of draining on
-> arrival. C3's instrument is bytes delivered inside a fixed 90 s window, so #3006 does not merely
-> add a second effect — **it changes what the instrument counts**, and it moves a windowed byte count
-> on its own. The first arm read 6.09 Mb/s against the second's 4.48 and the number meant nothing.
->
-> The rule: identify the commits between the arms, and ask of each not only "could this affect the
-> subject" but "could this affect the *measurement*". Where the answer to the second is yes, the
-> convenient pair has to be abandoned for the merge-base pair — here `bec7c4b59^` against
-> `bec7c4b59`, which differ by one file and carry #3006 identically on both sides. A build takes
-> twenty minutes; a void A/B costs the conclusion.
+Comparing `0.9.11-eab96019` to `0.9.15` is void: #3006 between them paces TS export on frame timestamps instead of drain-on-arrival, changing what a fixed 90 s byte window counts (6.09 vs 4.48 Mb/s meant nothing). For each commit between arms, ask whether it could affect the *measurement*, not only the subject; if yes, use the merge-base pair (`bec7c4b59^` vs `bec7c4b59`, one file, #3006 identical on both sides).
 
 **Fitting the two shapes you expect cannot see a third, and a step masquerades as the leak you were
 looking for.** *(T21, the 6 h per-PID run.)*
 
-> `t21-role-fit.py` was written around the previous lesson — a leak and a warming cache both rise, so
-> fit a line and a logarithm and compare r². It works, and on the 6 h per-PID run it reported
-> `moq export ts` as **"LINEAR — leak"** at +2.73 MB/h with an accelerating +7.50 MB/h tail. The
-> series is nothing of the kind: 119 to 122 MB from 0.5 h to 4.5 h, a **+14.5 MB jump inside one
-> half-hour**, then flat again. A late step fits a line better than it fits a logarithm, so a
-> two-shape discrimination is guaranteed to call it the wrong thing rather than admit it cannot tell.
->
-> The failure is not the fit, it is the **closed hypothesis set**. Both candidate shapes were
-> monotone-smooth, so no residual could ever say "this is neither" — and because the tool was built to
-> be the careful instrument, its verdict carried more authority than an eyeballed curve would have.
-> The half-hour bucket means, plotted for two minutes, made it obvious.
->
-> The rule is to **report a shape-independent statistic beside the fitted one** and let it contradict
-> the fit. Here that is the largest single-interval increment as a share of total growth: the exporter
-> put 68 % of its growth into one half-hour and the publisher 17 %, which separates a step from a ramp
-> without reference to either model. The tool now names `step` first and says the slope is not
-> meaningful, because a one-off reallocation and a leak have entirely different operational
-> consequences and a slope averages them into the same number. **Where a verdict is a choice between
-> models, print the evidence that no model was right.**
+`t21-role-fit.py` called `moq export ts` LINEAR (+2.73 MB/h) on a series that was flat 119–122 MB then **+14.5 MB in one half-hour** — a step fits a line better than a log, so a two-shape test calls the wrong thing. **Report a shape-independent statistic beside the fitted one** (here, largest single-interval increment as a share of total growth: 68 % vs 17 % for publisher). **Where a verdict is a choice between models, print the evidence that no model was right.**
 
 **A per-cell verdict must be derived from every instance of the thing it is about, or the rig will
 quietly report the state of instance one as the state of the cell.** *(T8b, C3's #3271 re-check.)*
 
-> C3's contended cell runs two subscribers, sometimes three, and writes `sub.log`, `sub.2.log` and
-> `sub.3.log`. The detector for "did the subscriber die" read **`sub.log`**. It returned 0 deaths in 14
-> pre-#3271 cells against 6 in 14 post — significant at p ≈ 0.016, clustered at 54–57 s, with a clean
-> mechanism in the logs — and an upstream regression report was drafted on it. Re-reading the archived
-> logs across *all* subscriber files gives 3 of 15 against 9 of 15, p ≈ 0.060: **every pre-arm death sat
-> in `sub.2.log`, and `sub.log` was clean in every one of them.** The same re-read found the exit in
-> C3's original first pass months earlier, in `sub.3.log`, on a client predating the commit under
-> suspicion.
->
-> The failure is silent in the worst way, because a partial read **returns a plausible number instead
-> of an error**. A missing file or a bad path would have been caught; reading one of three logs is
-> indistinguishable from reading the cell, and it produced a *cleaner* result than the truth — which is
-> exactly what made it convincing. Significance, tight clustering and an explicable mechanism are no
-> defence: all three were present and all three were measuring subscriber 1.
->
-> The rule is to make the fan-out explicit in the detector — glob `sub*.log`, count instances found,
-> and record that count next to the verdict so a cell that examined one of two flows is visibly not a
-> cell that examined both. Where a rig scales a component, **every derived quantity has to scale with
-> it**; C3 had already been bitten by the same shape once, when only flow 1 was graded and the
-> aggregate survived merely as a by-product of files that happened not to be deleted.
+C3's death detector read only `sub.log`; that yielded 0 vs 6 deaths (p ≈ 0.016) and a drafted regression, but all pre-arm deaths sat in `sub.2.log`. Re-reading all subscriber files gave 3/15 vs 9/15 (p ≈ 0.060). Partial reads return plausible numbers, not errors. Glob `sub*.log`, count instances found, and record that count next to the verdict; every derived quantity must scale with fan-out.
 
 **Pinning a component for reproducibility scopes the conclusion to that pin — and if the mechanism
 runs through the pinned component, the A/B can attribute the effect to the wrong one entirely.**
 *(T8b, C3's #3271 re-check.)*
 
-> The #3271 re-check was built with proper discipline: an isolating merge-base pair differing by one
-> file, one relay binary across every cell so the client was the only variable, five interleaved
-> replicates. It returned a clean, significant, tightly-clustered result — the post-#3271 subscriber
-> exits with `moq error: old` in 6 of 14 contended cells, the pre-#3271 client in 0 of 14, p ≈ 0.016,
-> death at 54–57 s every time. An upstream issue was drafted against it.
->
-> The single relay held constant was `moq-relay` 0.13.7, a July build pinned months earlier for C2's
-> controller comparison. **The failure mechanism runs through the relay's group eviction**, which is
-> what made the pin a confound rather than merely conservative: crossed against the current 0.14.14
-> relay, deaths appear in all four relay × client combinations and eviction counts on both client arms
-> fall from ~1000 per cell to single digits. The effect is real and current; the pinned relay meant the
-> comparison could only ever describe that relay.
->
-> (The false attribution here had a second and larger cause — the death detector read one of the cell's
-> two subscriber logs, the note above. Crossing the pin was what prompted re-reading the logs at all,
-> which is its own argument for doing it.)
->
-> "Hold everything else constant" is the right instinct and it is not sufficient. The question to ask
-> of each pinned component is **"could the mechanism I am proposing run through this?"** — and where
-> the answer is yes, the pin must be crossed rather than trusted, because a stale environment can
-> manufacture a clean split between two versions of something else. Two extra cells against a current
-> build would have caught it; the draft issue was six paragraphs of confident mechanism by the time
-> they were run. **Cross the pin before writing the report, not after.**
+A merge-base client pair with relay pinned at 0.13.7 showed post-#3271 subscriber exits in 6/14 contended cells vs 0/14 pre (p ≈ 0.016). The mechanism runs through **relay group eviction**; on current 0.14.14 relay, deaths appear in all four relay × client combinations and eviction counts fall from ~1000 per cell to single digits. Ask of each pin: **could the proposed mechanism run through this?** If yes, cross the pin before writing the report, not after. (Crossing the pin also prompted re-reading all subscriber logs — see above.)
 
 **On the media-aware lane, a PCR-derived measure of "how much programme arrived" measures the
 exporter's clock, not the programme.** *(T24, applied in T8b's C3 re-check.)*
 
-> A delivered-programme metric was built for the C3 re-check — media time between the first and last
-> PCR of a capture, over the wall-clock window — on the reasoning that a byte count cannot separate
-> "held the live edge with holes in it" from "clean but falling behind". The metric promptly reported
-> the arm that delivered **40 % fewer bytes** as having *better* programme continuity, which is
-> nonsense until it is read the right way round.
->
-> `moq export ts` regenerates the PCR as a uniform grid rather than passing the source's through
-> (#2967). The exported PCR therefore advances on the exporter's own clock and carries no information
-> about whether media arrived — which is the same property T24 measured head-on, where 57 s of
-> missing video produced 0 continuity errors and a worst PCR interval identical to the control's.
->
-> The rule: **on this lane, PCR is an exporter liveness signal and nothing more.** It answers "did
-> the exporter stop", which is worth having and which nothing else in T8b reported. It cannot answer
-> "did the programme arrive"; only per-PID access-unit counting can, which is why T24's grader
-> exists. The trap is that the PCR-based number is the easy one to compute and reads plausibly.
+Delivered-programme from first-to-last PCR over wall clock ranked the arm with **40 % fewer bytes** as better continuity until read correctly: `moq export ts` regenerates PCR on a uniform grid (#2967), so PCR advances on exporter liveness, not media arrival (as T24 showed for 57 s missing video with 0 continuity errors). **On this lane, PCR is an exporter liveness signal and nothing more**; programme arrival needs per-PID access-unit counting (T24's grader).
 
 **Do not grade a capture while its writer is still running.** *(T8b, C3's #3271 re-check.)*
 
-> The delivered-programme grader was run across the whole run directory while the sweep's last cell
-> was still capturing. It reported that cell as 65.17 s of programme in a 90 s window — a `keep_up`
-> of 0.724, which for a live feed is a serious finding — and the cell was in fact perfect, reading
-> 90.20 s once its writer exited. The partial file is a truthful measurement of a file that is not
-> finished.
->
-> The failure mode is specific to the *shape* of the artefact: a partial capture is not corrupt, it
-> is short, so nothing in the grader can detect it and the result looks exactly like a real stall.
-> Either grade inside the rig, after the cell's writer has exited, or check the run is complete
-> before grading. The replicate rig now grades in-script for this reason.
+Grading while the last cell was still capturing reported 65.17 s programme in 90 s (`keep_up` 0.724); after the writer exited the same cell read 90.20 s. A partial capture is short, not corrupt, and looks like a stall. Grade after the cell writer exits, or confirm the run is complete before grading; the replicate rig grades in-script.
 
 **A control that removes the suspect stage tests the stimulus, not the system, and exonerates
 nothing downstream of what it removed.** *(T21.)*
 
-> T21's rate divergence was triggered by the source clip looping. The loop wrap was ruled out early by
-> feeding the same clip, looped by the same `tsp --infinite`, **straight into the groomer with MoQ
-> removed from the path**: the estimate held across several wraps and the candidate was written down as
-> eliminated. It was the cause. The control had removed the exporter, which is the stage that fails on
-> a wrap, so it could only ever return a null — and that null was then read as evidence about a path
-> that still contained the exporter.
->
-> The check is mechanical: name the stages the control removes, and ask whether the hypothesis was
-> ever that one of *them* misbehaves. If it was, the control cannot test it. A stimulus reproduced
-> against a shortened path establishes only that the stimulus alone is insufficient, which is a much
-> weaker statement than it reads as — and the honest way to write it is "the wrap alone, without the
-> exporter, does not do it", not "not the wrap".
+Ruling out loop wrap by feeding the same looped clip **straight into the groomer with MoQ removed** held across wraps and was read as eliminating the wrap; the exporter — which fails on wrap — was gone, so the control could only return null. Name stages the control removes; if the hypothesis was that one of *them* misbehaves, the control cannot test it. Write "the wrap alone, without the exporter, does not do it", not "not the wrap".
 
 **A control with the mechanism removed is worth more than a second run of the same arm.** A second
 run reproduces the artefact. *(T15, and independently T9.)*
 
-> RIST Main initially measured 92.1 kB bursts every 73 ms with a tight distribution — a plausible
-> jitter-buffer drain figure, and entirely the publisher's own release granularity. A plain-UDP
-> control through the same chain returned the same numbers to within a millisecond. Without that
-> control the rig's floor would have been published as a transport property.
+RIST Main measured 92.1 kB bursts every 73 ms; plain-UDP through the same chain matched to within a millisecond — publisher release granularity, not transport. Without that control the rig floor would have been published as a transport property.
 
 **Where a stage's own throughput could be the limit, the control that removes the subject entirely is
 not optional — a saturated instrument fails in the direction that looks like a finding.** *(T7,
 segmented arm.)*
 
-> One of four clips failed PCR repetition on the segmented lane, reproducibly, and the lane offered
-> two plausible mechanisms for it: the groomer's adaptive cushion ceiling, and the segment arrival
-> gap. Raising the ceiling and halving the segment duration each ruled one out without dislodging the
-> conclusion, because both left the lane in place. Feeding the groomer a local file at the same output
-> rate — no packager, no origin, no HTTP client, largest content gap 51 ms — produced a *worse* result
-> than any run through the lane. The clip was measuring where the pacing stage saturates. Two controls
-> that vary the subject cannot distinguish the subject from the instrument; only the one that deletes
-> it can.
+One clip failed PCR repetition on the segmented lane; raising groomer cushion and halving segment duration each ruled one mechanism without removing the lane. Local file at the same output rate (no packager, origin, or HTTP; largest content gap 51 ms) did *worse* than any lane run — the clip measured pacing saturation. Only a control that deletes the subject distinguishes subject from instrument.
 
 **Pinning a setting on one arm is half a control. The variable you know to be decisive is the one
 most likely to be left defaulted on the arm where its knob has a different name.** *(T5 / T8.)*
 
-> T5 pinned its media-aware arm's congestion controller to BBR precisely because T8 had shown the
-> controller decides a loss result, and left its segmented arm on the system default — which is CUBIC,
-> a fact that appears nowhere in a command line. The experiment then attributed the resulting
-> difference to the data plane and published "the two lanes' weaknesses are disjoint". Completing the
-> lane × controller matrix on the same rig showed the loss axis does not separate the lanes at all: at
-> a matched controller both hold full rate, and under CUBIC both collapse. Only the reordering half of
-> the original conclusion was a lane property. Where a knob exists in both arms under different names
-> and different layers — `--*-quic-congestion-control` against `net.ipv4.tcp_congestion_control` —
-> pin both and record both on the result line.
+T5 pinned media-aware BBR after T8 showed controller decides loss, but left segmented on system CUBIC (nowhere on the command line) and attributed disjoint lane weaknesses. Matched controller: both lanes hold full rate; under CUBIC both collapse — only reordering was lane-specific. Pin both arms when the knob exists under different names/layers (`--*-quic-congestion-control` vs `net.ipv4.tcp_congestion_control`) and record both on the result line.
 
 **A setting is a default for what happens next, not a fact about what is being measured — read it
 back off the thing under test.** *(T8, segmented arm.)*
 
-> A `sysctl` changes the controller for sockets opened after it. Confirming it needs the controller
-> read back from the connections actually carrying the run, which on a segment-fetching lane means
-> sampling repeatedly: each fetch is a short-lived connection, so a single snapshot lands between them
-> and reports nothing — indistinguishable from the setting never having applied.
+`sysctl` affects sockets opened after it; confirm by reading the controller from connections carrying the run. On segment-fetch, sample repeatedly — each fetch is a short-lived connection, so one snapshot lands between them and reports nothing.
 
 **Run the control before believing a striking result, not after.** *(T17.)*
 
-> A round-trip against a proposed upstream fix captured zero bytes, which matched a predicted failure
-> of the export gate closely enough to be believed. It was a renamed command-line flag whose
-> deprecated alias warns and then does not take effect. The merge-base control behaved identically,
-> which is what exposed the rig rather than the change under test.
+A round-trip captured zero bytes, matching a predicted export-gate failure — until merge-base control behaved identically: a renamed flag whose deprecated alias warns and does not take effect.
 
 **Grade beyond one full failure-detection interval, or the drill measures the timeout rather than the
 mechanism.** *(T6.)*
 
-> A failover drill killed the publisher at t+22 s and graded at t+43 s — 21 s into a 30 s QUIC idle
-> timeout. No build could have passed it. The conclusion it produced was withdrawn.
+Failover drill killed publisher at t+22 s and graded at t+43 s — 21 s into a 30 s QUIC idle timeout. No build could pass; the conclusion was withdrawn.
 
 **A positive control that cannot be subjected to the same injections as the arms is a gate on the
 rig, not a comparison.** *(T12.)*
 
-> Arm C grooms once and duplicates, so it has a single publisher, relay and exporter behind it:
-> killing its publisher takes the whole arm down. That is the honest result rather than a rig
-> failure, and it is the architectural finding in miniature — but it means arm C validates the
-> receiver and the instrument, not the topology.
+Arm C grooms once and duplicates (single publisher, relay, exporter): killing its publisher takes the whole arm down — honest architecture, but arm C validates receiver and instrument, not the topology.
 
 **A parameter fixed once in the method section and never varied is an uncontrolled variable, and it is
 the first place to look when a result refuses to explain itself.** *(T8b C3.)*
 
-> C3's headline was that adding a second media-aware feed *reduced* total delivered throughput — a
-> utilisation defect with no mechanism, which survived the elimination of the congestion controller and
-> then of bufferbloat. It was the subscriber's `--latency-max`, pinned at 2 s across every cell of the
-> matrix because 2 s was the campaign's chosen operating point. Sweeping it 500 ms → 30 s moved the
-> `n=2` aggregate 4.29 → 10.35 Mb/s, above the single-flow rate. The number was a fact about a
-> configuration, and the configuration had been held constant so consistently that it had stopped being
-> visible as a choice. *Before hunting a mechanism in the network, list every value the rig was told
-> and vary the ones that were never in the matrix.*
+C3's headline — second feed *reduced* throughput — survived controller and bufferbloat elimination until `--latency-max` at 2 s was swept: `n=2` aggregate 4.29 → 10.35 Mb/s (above single-flow). Before hunting a network mechanism, list every value the rig was told and vary ones never in the matrix.
 
 **A stage that sizes itself adaptively is a free variable, not a constant. Pin it before you attribute
 a downstream count to a build.** *(T23, re-grading against #3529.)*
 
-> Comparing the same six stimuli across two client builds, the forward-jump arm's groomer underruns
-> fell from 3,300 to 0 — a clean-looking result with a competing explanation, because the groomer's
-> *adaptive* cushion had also settled at ~347 ms in the new session against 200 ms in the old, control
-> included. Either the build or the cushion could account for it. Re-running the arm **and its control**
-> on both builds with the cushion pinned at 200 ms separated them, though not in the way the raw counts
-> suggest: the control moved too, 189 to 6, so the absolute figures still carry something the arm does
-> not isolate. What survives is the excess *over the control within one build* — 17× on the old build,
-> below it on the new. *Pinning the adaptation is what makes a comparison possible; carrying the control
-> through the pinned run is what tells you which part of it you may claim.*
+Forward-jump groomer underruns fell 3,300 → 0 across builds while adaptive cushion settled ~347 ms vs 200 ms (control included). Re-running arm **and control** on both builds with cushion pinned at 200 ms separated build from cushion; control moved too (189 → 6), so claim only excess *over control within one build* (17× old, below new). Pin adaptation for comparability; carry control through the pinned run for what you may claim.
 
 **Stop the subject, not the instrument: a control killed before it can report is not a control.**
 *(T37 D7.)*
 
-> The control subscriber was still being served when the harness stopped — exactly the outcome the
-> control exists to demonstrate — and because the harness killed the whole recorder pipeline rather
-> than only the client, the recorder died mid-stream and wrote no record at all. Two runs reported
-> "the control did not hold" when it had held perfectly. A recorder that writes on end-of-input must
-> be given an end of input. *The control is the arm most likely to still be running at teardown, so
-> it is the arm whose teardown path needs the most care.*
+The control subscriber was still being served when the harness killed the whole recorder pipeline; the recorder wrote no record and two runs reported failure when the control had held. Give end-of-input to recorders that write on end-of-input; teardown paths matter most for the arm still running.
 
 **Re-running the control arm re-measures the session, and that is exactly why it earns its place.**
 *(T23, re-grading against #3529.)*
 
-> The same re-grade appeared to show content gaps rising on every arm, 26–27 ms to 70–127 ms. The
-> byte-identical control arm rose further than any of them, 27 ms to 141 ms, which forbids attributing
-> any of it to the build: the session's baseline had moved, and every arm sat at or below its own
-> control. Without that arm the re-grade would have reported a regression in the very build that fixed
-> the defect it was testing. *Carry the null arm into every re-run, not just the first campaign.*
+Re-grade showed content gaps rising on every arm (26–27 ms → 70–127 ms), but the byte-identical control rose further (27 ms → 141 ms), forbidding build attribution — session baseline moved. Carry the null arm into every re-run, not just the first campaign.
 
 ---
 
@@ -338,607 +127,292 @@ a downstream count to a build.** *(T23, re-grading against #3529.)*
 **A harness must assert the fault is present in its own source before asking anything downstream
 about it.** *(T39 Part A.)*
 
-> Three consecutive runs reported that a client-edge detector had not caught a suppressed audio PID.
-> It had not: the source slicing had silently failed and the "faulty" clip still had its audio
-> throughout, so the detector was correctly silent about a fault that was never built. A null from a
-> detector and a null from the apparatus that was supposed to give it something to detect are
-> indistinguishable at the output. *Count the thing you removed, in the file you are about to publish,
-> and abort if it is still there.*
+Three runs reported a client-edge detector had not caught suppressed audio; the source slice had failed silently and the clip still had audio throughout. A null from a detector and a null from apparatus that never built the fault are indistinguishable. Count the thing you removed in the file you will publish and abort if it is still there.
 
 **Time-slicing a transport stream needs `--pcr-based`; wall-clock and media time differ by the ratio
 of disk speed to bitrate.** *(T39 Part A.)*
 
-> `tsp -P until --milli-seconds 20000` reading a file stops twenty seconds after *reading* starts, by
-> which point a 372 MB clip has gone through entirely — so the "twenty second" slice was the whole
-> file. `-P until --seconds` does not exist at all, and that error had been sent to `/dev/null`.
-> *Never suppress a fixture builder's stderr, and state which clock a duration is in.*
+`tsp -P until --milli-seconds 20000` on a file stops twenty seconds after reading starts, by which point a 372 MB clip may be entirely consumed; `-P until --seconds` does not exist. Never suppress a fixture builder's stderr, and state which clock a duration uses.
 
 **A check that has only ever returned "clean" has not been shown to work. Feed it something broken
-before you publish the zeros.** *(T5, T6, T7, T8b, T18, T3 — one defect, six rigs.)*
+before you publish the zeros.** *(T5, T6, T7, T8b, T18, T3, T36.)*
 
-> Six rigs counted continuity errors by grepping `tsp -P continuity` output for the word
-> "discontinuity". The plugin prints
-> `* continuity: packet index: 13,264, PID: 0x0079 (121), missing 14 packets`, and uses that word
-> only in its `--help`. The count was therefore structurally zero on every input, and had been for
-> the life of the campaign. Nothing looked wrong, because a conformance column of zeros on a healthy
-> rig is exactly what a healthy rig should produce — the defect was invisible precisely where it was
-> most load-bearing. It survived into a T7 pass criterion, a T5 headline ("loses time, never bytes"),
-> a T6 observation built on the counter *not* firing, and a T18 sentence reading "zero on all
-> nineteen cells". Re-grading the retained captures with a working matcher left T7 and the MoQ arms
-> genuinely at zero and moved T18's segmented cell to 583 events and T6's dual-source cells to ~95.
-> *The cost of the check is one deliberately corrupted file per instrument, once. The cost of skipping
-> it is that every "0" the campaign published is worth exactly as much as the grep behind it —
-> including the ones that happen to be right, because a correct answer from a broken instrument is
-> still not a measurement.* Two corollaries worth keeping: prefer matching on the tool's **data**
-> (`missing N packets`) over matching on a **word from its prose**, since the prose is not an
-> interface; and where two instruments can be pointed at the same property, report both and treat
-> disagreement as a finding.
->
-> *(T36 hit both halves of this again in one session, from scratch: a fresh continuity matcher went
-> back to the word, and a PCR counter passed `tsp -P pcrverify --max-interval`, which is not an
-> option that plugin has — the plugin errored and the counter reported zero violations. Both were
-> caught only because the rule above says to break something first: excising forty packets from a
-> passing capture turned 0 into 1. Use `t13-grade.py`'s gates and regex rather than writing a third
-> one.)*
+Six rigs counted continuity errors by grepping `tsp -P continuity` for "discontinuity"; the plugin prints
+`* continuity: packet index: 13,264, PID: 0x0079 (121), missing 14 packets` and uses that word only in
+`--help`, so the count was structurally zero on every input. Nothing looked wrong because zeros on a healthy
+rig are expected — the defect was invisible where it was load-bearing. It survived into a T7 pass criterion,
+a T5 headline, a T6 observation built on the counter not firing, and a T18 "zero on all nineteen cells"
+sentence. Re-grading retained captures with a working matcher left T7 and MoQ arms genuinely at zero and
+moved T18's segmented cell to 583 events and T6's dual-source cells to ~95. The cost of the check is one
+deliberately corrupted file per instrument, once; the cost of skipping it is that every published zero is
+worth exactly as much as the grep behind it. Prefer matching tool data (`missing N packets`) over prose
+words; where two instruments measure the same property, report both and treat disagreement as a finding.
+T36 repeated the trap with a word matcher and with `tsp -P pcrverify --max-interval`, which is not an
+option that plugin has — the plugin errored and the counter reported zero violations, caught only by
+excising forty packets from a passing capture. Use `t13-grade.py`'s gates and regex rather than writing a
+third matcher.
 
 **A per-interval CPU figure has to come from a CPU-time delta over that interval, not from a
 platform utilisation field whose averaging window is longer than the interval.** *(T38.)*
 
-> The first cost ladder sampled `ps -o %cpu`, which on Darwin is a decaying average over up to a
-> minute of real time, at each step of a ladder whose steps were twelve seconds long. Every reading
-> therefore carried most of the previous step's load. The signature was unmistakable once looked
-> for — **the zero-subscriber point read higher than the five-subscriber point in two of three
-> arms** — but a ladder that is merely noisy rather than inverted would have been quoted. Reading
-> the process's cumulative CPU time either side of the dwell and dividing by the wall interval
-> averages over exactly the window of interest and needs no settling; it also costs nothing, so
-> there is no reason to use the utilisation field at all.
->
-> The same ladder's RSS was unusable for a different reason and was withheld rather than quoted:
-> the relay holds the previous arm's peak for some seconds after teardown, so the fitted intercepts
-> rose monotonically with **arm order** (14.5, 17.5, 57.5, 71.1 MB) and one arm fitted a negative
-> slope. **A resource whose baseline is contaminated by run history needs the process restarted
-> between arms, not a longer settle.**
+`ps -o %cpu` on Darwin averages up to a minute while ladder steps were twelve seconds, so the zero-subscriber point read higher than five subscribers in two of three arms. Read cumulative CPU time either side of the dwell and divide by wall interval.
+
+**A resource whose baseline is contaminated by run history needs the process restarted
+between arms, not a longer settle.** *(T38.)*
+
+The same ladder's RSS rose monotonically with arm order (14.5, 17.5, 57.5, 71.1 MB) and one arm fitted a negative slope because the relay held the previous arm's peak after teardown; withhold or restart rather than quote contaminated baselines.
 
 **A counter that wraps detects an event and cannot size it. Never report its magnitude as the damage.**
-*(T5, T19.)* The incidents, the measured aliasing table and the remedy are in § *A continuity count
-detects loss and cannot measure it* (§5).
+*(T5, T19.)* Incidents, aliasing table and remedy: § *A continuity count detects loss and cannot measure it* (§5).
 
 **Errors logged by a server are not an instrument for a client falling behind.** *(T5.)*
 
-> The obvious signal for "the client fell out of the availability window" is the origin's 404 rate, and
-> it works only in the narrow band where the client is slow enough to be overtaken but fast enough to
-> still be asking for the segment that was just deleted. Deeper into loss it reloads the playlist first,
-> finds the segment already gone from the list, and skips silently: the worst cell on the ladder lost
-> 82 s of programme with an origin log of nothing but 200s. A failure detected at one end of a path
-> because the other end complains is only detectable while the other end still knows to complain.
+Origin 404 rate works only while the client is slow enough to be overtaken but still requests the segment just deleted; deeper loss reloads the playlist and skips silently — one ladder cell lost 82 s of programme with origin logs of nothing but 200s.
 
 **An instrument that reports its own confidence has to be read.** *(T12.)*
 
-> A merge oracle recovers the sequence offset between two legs by voting on payload identity. With
-> one field differing on every datagram it had 15 votes out of 23,175 — confidence 0.19 — and picked
-> an offset that, restated in time, read as twelve seconds of skew. Two hypotheses, two tool changes
-> and three runs were spent on that artefact. The confidence figure was on the screen throughout.
+A merge oracle voting on payload identity had 15 votes out of 23,175 — confidence 0.19 — and picked an offset that read as twelve seconds of skew; two hypotheses, two tool changes and three runs followed while the figure was on screen throughout.
 
 **A derived quantity must be re-measured independently before it is explained.** *(T12.)*
 
-> The same twelve seconds. Measuring arrival at equal sequence numbers — which needs no correlator —
-> gave a median of 10.4 ms.
+Measuring arrival at equal sequence numbers — which needs no correlator — gave a median of 10.4 ms for the same twelve-second artefact.
 
 **An instrument that reports *completed* objects cannot be used to establish the absence of an object
 designed never to complete.** *(T17.)*
 
-> An EIT schedule sub-table declares a `last_section_number` spanning its whole range and transmits
-> only the sections holding events, so it never completes and a section-completing analyser prints
-> nothing. Reading that as absence produced a false finding about the fixture. Census sparse tables
-> with `--all-sections`.
+EIT schedule sub-tables that never complete look absent to section-completing analysers; census sparse tables with `--all-sections`.
 
 **A negative reachability result is evidence about the network only if the far end would have answered a
 positive one. Read the failure mode, not the failure.** *(T4.)*
 
-> `nc -z` reported nine TCP ports on the origin closed, which was written up as "the security group
-> admits no inbound TCP but SSH" and made a whole data plane look blocked on a firewall change. Nothing
-> was listening on any of those ports, so refusal was the expected answer either way: the probe measured
-> the absence of a server, not the presence of a filter. The two cases are trivially separable and the
-> probe threw the distinction away — **a filtered port drops the packet and times out (8 s here), an
-> admitted port with no listener refuses immediately (17 ms once a listener was bound)**. Test with
-> something listening, or characterise the silence before drawing a conclusion from it.
+`nc -z` on ports with no listener measures absence of a server, not a firewall: filtered ports time out (~8 s here), admitted ports with no listener refuse immediately (~17 ms once a listener is bound). Test with something listening or characterise the silence.
 
 **An option whose units depend on a sibling flag will be misread eventually. Read the tool's echo of
 the threshold, not the flag.** *(T16.)*
 
-> `pcrverify --jitter-max` is microseconds by default and PCR ticks only under `--absolute`. A whole
-> analysis was re-run against both readings before the tool's own printed conversion settled it.
+`pcrverify --jitter-max` is microseconds by default and PCR ticks only under `--absolute`; a whole analysis was re-run against both readings before the tool's printed conversion settled it.
+
+**A harness that omits a row when its instrument returns nothing cannot distinguish zero from
+unmeasured. Make it fail on an empty series.** *(T3 — same TSDuck trap as the `--jitter-max` rule:
+behaviour depends on a sibling flag, not on the value passed.)*
+
+`pcrextract --csv` writes its series to TSDuck's report stream — stderr — unless given `-o`. An analyser
+reading stdout received nothing, interval computation returned nothing, and a truthiness test skipped rows:
+three complete-looking transparency tables lacked PCR interval and >40 ms rows. Detect omission by checking
+output against the columns it was supposed to have, and fail the harness on an empty series.
 
 **Report long intervals and discontinuities separately; a metric that conflates two faults hides
 both.** *(T12.)*
 
-> Counting PCR intervals above 100 ms together with *negative* intervals reported sixteen "jumps" in
-> a clean control, implying switch damage where there was none. Split apart, that arm has zero
-> backward steps anywhere and a different arm has seven.
+Counting PCR intervals above 100 ms together with negative intervals reported sixteen "jumps" in a clean control; split apart, that arm has zero backward steps.
 
 **Grade a pacing stage with a packet-conservation column beside the timing ones.** *(T16, and T13
 independently.)*
 
-> A configuration reachable by flag posts the best PCR record and the flattest wire of any arm
-> measured, over a stream carrying 231 continuity errors. Every measure of *when* bytes leave was
-> satisfied; the failure is visible only in measures of *which* bytes left.
-
-**A harness that omits a row when its instrument returns nothing cannot distinguish zero from
-unmeasured. Make it fail on an empty series.** *(T3, and it is the same TSDuck trap as the
-`--jitter-max` rule above: the behaviour depends on a sibling flag, not on the value passed.)*
-
-> `pcrextract --csv` writes its series to TSDuck's *report* stream — stderr — unless given `-o`. An
-> analyser reading stdout received nothing, the interval computation returned nothing, and a
-> truthiness test skipped the rows: three complete-looking transparency tables were produced with the
-> PCR interval and >40 ms rows simply absent. The omission was detectable only by checking the output
-> against the columns it was supposed to have.
+One configuration posted the best PCR record and flattest wire while carrying 231 continuity errors; every *when* measure passed and only *which* bytes left failed.
 
 **Score what a stage *added*, not only what survived.** *(T3.)*
 
-> A transparency census is shaped as a loss detector: it lists what the source carried and looks for
-> it at egress. Nothing in that shape can see 46 packets that were never in the source — and on the
-> segmented-HTTP lane those 46 packets are the entire deviation, moving PCR accuracy by four orders of
-> magnitude while every survival row reads clean. Any stage that re-heads, re-indexes or re-stamps a
-> mux needs an addition column.
+Transparency census shape cannot see packets never in the source; on segmented HTTP, 46 such packets moved PCR accuracy four orders of magnitude while survival rows read clean. Stages that re-head, re-index or re-stamp need an addition column.
 
 **Two gates that both claim to measure "PCR conformance" can disagree by four orders of magnitude, so
 name which one a result is quoted against.** *(T3.)*
 
-> Inserting packets into a mux does not change PCR *values*, so the P1 repetition interval is
-> untouched — 0 % above 40 ms. It does change the byte positions those values arrive at, which is
-> what P2 accuracy compares them against: 37 ns → 302 µs. A rig running one gate would have reported
-> the same lane as perfect or as broken depending on which.
+Inserting packets does not change PCR values (P1 repetition 0 % above 40 ms) but changes byte positions (P2 accuracy 37 ns → 302 µs).
 
 **A gate that presupposes a property of the stream cannot compare streams that differ in whether they
 have it — and it will return a plausible number rather than refuse.** *(T3.)*
 
-> `pcrverify --absolute` compares PCR values against the byte positions they arrive at, which assumes
-> a byte clock. A media-aware MoQ egress, ungroomed, carries no stuffing and so has no mux rate —
-> `analyze` puts its "bitrate" at 22–32 **Gb/s** on 10–27 Mb/s content. Graded anyway, the gate
-> returned **exactly the maximum PCR interval**: 159.995 against 160.000 ms, 39.9886 against
-> 39.9889 ms, 319.931 against 319.933 ms — three clips, maxima 8× apart, agreeing to 0.003 %. Quoting
-> that beside a lane where the gate *is* defined would have compared a PCR interval with a PCR error,
-> three orders of magnitude apart, under one column heading. Before booking an unfilled cell as a cheap
-> gap, check the instrument is defined on the thing being compared.
+`pcrverify --absolute` assumes a byte clock; ungroomed media-aware egress with no stuffing grades as exactly the maximum interval (159.995 vs 160.000 ms across clips 8× apart in maxima). Before booking an unfilled cell, check the instrument is defined on the thing being compared.
 
 **"Pacing" names two independent quantities, and a lane can be perfect on one and absent on the
 other, so measure them separately.** *(T13, the exporter residual; figures below from the
 `53f8aa99d` reference capture, which is the one [T13](test-13-downstream-grooming.md) carries.)*
 
-> The two are *where the PCR values fall in time* and *how many bytes the stream carries between
-> them*. On the media-aware egress they now have opposite answers: PCR intervals are exactly
-> 25.00 ms at minimum, median and maximum — better than the 24.65 ms source, because the exporter
-> regenerates the values onto a synthetic grid rather than carrying them — while the byte count
-> between the same pairs runs 188 B to 870,628 B against the 31,081 B the declared rate requires.
-> A report that says "pacing is fixed" on the first is true and useless.
->
-> **Read the interval from the carried PCR values and the rate from the packet count over the same
-> pair** (`pcr-residual.py`). Both statistics come from one capture, they cannot disagree about which
-> stream they describe, and the second is the one a groomer exists to supply. It also explains a
-> result that otherwise looks like a precision problem: a P2 gate predicts arrival from byte
-> position, so a stream whose instantaneous rate spans four orders of magnitude fails every PCR by
-> construction, and no tightening of the encoder would have helped.
->
-> **A third quantity hides between them, and it is the one that decides whether a groomer can help:
-> the correct *aggregate* rate is not a schedule.** #3831 pads the export to within 0.21 % of the
-> rate it declares, so a census of the whole capture reports a constant-rate stream while 96.7 % of
-> its individual slots carry the wrong number of bytes. Grade the distribution, never the total.
+They are where PCR values fall in time and how many bytes the stream carries between them. On media-aware
+egress the answers can be opposite: PCR intervals exactly 25.00 ms at minimum, median and maximum — better
+than the 24.65 ms source because the exporter regenerates values onto a synthetic grid — while byte counts
+between the same pairs run 188 B to 870,628 B against the 31,081 B the declared rate requires. A report
+that says pacing is fixed on the first is true and useless.
+
+**Read the interval from the carried PCR values and the rate from the packet count over the same
+pair** (`pcr-residual.py`).
+
+Both statistics come from one capture, they cannot disagree about which stream they describe, and the second
+is what a groomer exists to supply. It also explains a result that looks like a precision problem: a P2
+gate predicts arrival from byte position, so a stream whose instantaneous rate spans four orders of
+magnitude fails every PCR by construction.
+
+**A third quantity hides between them, and it is the one that decides whether a groomer can help:
+the correct *aggregate* rate is not a schedule.** *(T13.)*
+
+Padding can land within 0.21 % of declared rate while 96.7 % of individual slots carry the wrong byte count; grade the distribution, never the total.
 
 ### Read PCR from one PID, and say which
 
-*(T13 P1-n, hardening `pcr-residual.py`.)* The first version of the script pooled PCRs from every
-PID that carried one. Two PIDs each on a correct 25 ms grid, offset from one another, read as a
-12.5 ms grid with half the bytes between samples — a clean stream graded as a badly clustered one,
-with no symptom that anything is wrong, because every number produced is plausible.
-
-> **Name every PCR-bearing PID in the output and grade one of them.** The script now prints the
-> PID census before the verdict, so a pooled reading cannot be taken by accident, and it grades the
-> PID carrying the most PCRs unless told otherwise.
->
-> The same pass added the interval **minimum**, which had been omitted. Clustering is a
-> *short*-interval defect, and a series quoted by median, p95 and maximum hides it completely: a
-> grid with a third of its PCRs bunched into sub-millisecond pairs still reports a correct median
-> and a correct maximum. The reference clip turned out to carry 21 sub-millisecond intervals of its
-> own (0.09 %), so the baseline for that statistic is not zero and a groomed output has to be
-> compared against it rather than against perfection.
+*(T13 P1-n, hardening `pcr-residual.py`.)* The first script version pooled PCRs from every PID that
+carried one; two PIDs each on a correct 25 ms grid, offset from one another, read as a 12.5 ms grid with
+half the bytes between samples — a clean stream graded as badly clustered, with no symptom anything is
+wrong because every number is plausible. Name every PCR-bearing PID in the output and grade one of them;
+the script prints the PID census before the verdict and grades the PID carrying the most PCRs unless told
+otherwise. The same pass added interval minimum, which had been omitted: clustering is a short-interval
+defect and median, p95 and maximum hide it — a grid with a third of PCRs bunched into sub-millisecond
+pairs still reports correct median and maximum. The reference clip carries 21 sub-millisecond intervals
+(0.09 %), so compare groomed output against that baseline rather than against perfection.
 
 ### A determinism comparison must align on the source's own bytes, never on a value either process minted
 
 *(T13 P1-n, `ts-pair-diff.py`.)* The question is whether two egress processes of one broadcast are
-octet-identical for the same media, which is what an ST 2022-7 receiver needs. Aligning the two
-captures on PCR, on packet index or on continuity counter would assume the answer, because those
-are exactly the values under test — two exporters that disagree about all three would look
-unalignable, and two that agree would look identical for a trivial reason.
-
-> **Align on a payload run that occurs once in the other capture**, which is source media neither
-> process can have regenerated, then classify each difference by field — continuity counter, PCR,
-> PID, adaptation field, payload — so the result names a mechanism instead of a percentage.
->
-> Three traps found while using it. The needle must be taken from *after* the later process
-> joined: a stagger of 8 s put the first candidates before B's first byte, and the tool correctly
-> reported "no common media", which reads exactly like a failed comparison. The tool now retries
-> with B's needles in A, after the same trap voided a first grading of P1-o. A comparison of two
-> streams that are 93 % null packets is **void, not a pass**: there is no media to align on, and
-> matching stuffing would be the most confident meaningless result available. And **a fixed
-> alignment turns one displaced packet into a wall of differing payload.** On #4645's scratch build
-> the two legs carry an identical multiset of packets, but 713 adjacent transpositions put them a
-> packet out of step in places, and comparing packet *i* with packet *i* reported four clusters of
-> 10,902 video packets as payload damage. Re-aligned with a slip allowed, 943,271 of 944,023 packets
-> agree ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*). **Grade the whole overlap,
-> allow the alignment to slip, and compare the elementary stream before calling a difference
-> content loss.**
+octet-identical for the same media, as an ST 2022-7 receiver needs. Aligning on PCR, packet index or
+continuity counter assumes the answer, because those are the values under test. Align on a payload run
+that occurs once in the other capture — source media neither process regenerated — then classify each
+difference by field so the result names a mechanism. Take the needle from after the later process joined:
+an 8 s stagger put first candidates before B's first byte and the tool reported "no common media", which
+reads like a failed comparison; it now retries with B's needles in A. A comparison of two streams that are
+93 % null packets is void, not a pass. A fixed alignment turns one displaced packet into a wall of
+differing payload: on #4645's scratch build, 713 adjacent transpositions made packet *i* versus packet *i*
+report four clusters of 10,902 video packets as payload damage; re-aligned with slip allowed, 943,271 of
+944,023 packets agree. Grade the whole overlap, allow the alignment to slip, and compare the elementary
+stream before calling a difference content loss.
 
 **A slot-by-slot comparison measures the first inserted packet, not the property after it.**
-*([T12](test-12-dual-path-handoff.md) § After the media-time interleave.)* Upstream's interleave fix
-was graded first on the groomed RTP pair, and it read 24.7 % identical, against 94 % on an older
-build. Keyed instead by what each access unit is — its PID and PTS — the same pair was **100 %**
-identical in order, and its video packetisation matched packet for packet. The difference was one or
-two PCR-only packets per 40 s and the late leg's join-time tables. Each shifted every later slot, and
-the lockstep and slot comparisons then measured the shift.
-
-> **Before quoting a slot-identity figure, check what it is identical in.** A lockstep or
-> sequence-keyed comparison is valid only while the legs emit the same number of packets. Grade the
-> property the fix claims — order, placement, table phase — on a key the processes cannot mint, and
-> census packet kinds over a content-bounded span to see what the slot figure is really counting.
+*([T12](test-12-dual-path-handoff.md) § After the media-time interleave.)* Keyed by PID and PTS the groomed RTP pair was 100 % identical in order while slot comparison read 24.7 %; one or two PCR-only packets per 40 s shifted every later slot. Before quoting slot-identity, check what is being matched; grade the claimed property on a key processes cannot mint.
 
 **On a saturated constant-rate multiplex, one inserted packet reads as a burst of transpositions.**
-*([T13](test-13-downstream-grooming.md) § On #4645's PCR grid, `ts-cc-merge.py`.)* With the
-continuity counters rewritten, two exporters of #4645's head still differed in two bursts of about a
-second each, every packet in them present in both legs but at a different position. Counting each
-PID's packets between consecutive PCRs, matched by PCR value, put each burst down to one TDT that one
-leg carried 0.7–0.9 s before the other. Every slot in between has the same counts, but the earlier
-leg's video runs one packet behind, because on a saturated second there is no stuffing to absorb the
-extra packet; the other leg's copy of the TDT closes the gap. Reading the burst as transpositions had
-pointed at the release order, which the head had just fixed.
-
-> **Count packets per PID per PCR interval before naming what a burst of differences is.** The
-> per-slot count names the inserted packet; the packet-level diff names only the damage it does
-> downstream. When rewriting continuity counters for such a comparison, take each PID's offset as the
-> modal one across the overlap, not the first seen, because the first aligned packet can sit inside
-> a burst.
+*([T13](test-13-downstream-grooming.md) § On #4645's PCR grid, `ts-cc-merge.py`.)* Count packets per PID per PCR interval before naming a burst; one TDT 0.7–0.9 s early leaves video one packet behind with no stuffing to absorb it. When rewriting continuity counters, take each PID's offset as the modal one across the overlap, not the first seen.
 
 **Pass `pcrverify --bitrate` explicitly whenever the arm might not be carrying full programme. Grading
 PCRs against a rate TSDuck derived from those PCRs turns a conservation failure into a PCR failure.**
-*(T19 measurement 11.)*
+*(T19 measurement 11, T47.)*
 
-> On the shallow rungs of a cushion sweep the groomer was shedding 80 % of its content, so TSDuck's own
-> rate estimate landed tens of kb/s off the nominal 11 Mb/s — and **every** PCR then failed the accuracy
-> gate against it. The output's PCR arithmetic was exactly as correct as on the passing rungs; what had
-> changed was the yardstick. The tell is an accuracy column that goes from 0 failures to *all* failures
-> across one rung of an unrelated parameter. The rate is a known configured input on any arm this
-> campaign runs, so there is no reason to let the instrument infer it.
->
-> **The rate to give is the one the stream was padded to, which is not always the rig's.**
-> *(T47.)* [`t18-arm.sh`](scripts/t18-arm.sh) passes its `RATE`, which is the groomer's. An exporter
-> that pads itself pads to the catalog's recorded rate, 9,999,999 b/s on one fixture against the
-> rig's 10,000,000. That 1 b/s alone exceeds 500 ns after about 5 s and reaches 5.5 µs by 55 s, so
-> `--absolute` fails nearly every PCR on it. A real accuracy failure looks the same in that column,
-> and on that fixture one was present as well. Separate the two by fitting PCR value against packet
-> index: the fit returns the padded rate, and its residuals are the error.
+Shallow cushion rungs shed 80 % of content so TSDuck's rate estimate missed nominal 11 Mb/s and every PCR failed accuracy against it. Pass the padded rate, not always the rig's `RATE`: catalog 9,999,999 b/s vs groomer 10,000,000 b/s exceeds 500 ns after ~5 s. Separate rate from error by fitting PCR value against packet index.
 
 **Vary the parameter the mechanism says is irrelevant; that is the test the mechanism can fail.**
 *(T3.)*
 
-> One PAT/PMT pair per segment displaces later PCRs by the pair's own transmit time, so the error's
-> *size* should not depend on segment duration while its *frequency* should scale as 1/duration.
-> Sweeping 1 s / 2 s / 6 s moved the injection count 5.7× and the maximum error by 1 % (299.6, 301.9,
-> 302.4 µs). A cumulative error would have grown with segment count. Confirming a mechanism by
-> re-measuring what it predicts *changes* is weaker than confirming what it predicts stays still.
+PAT/PMT per segment should scale injection frequency with 1/duration but not error size; sweeping 1 s / 2 s / 6 s moved injection count 5.7× and maximum error by 1 % (299.6, 301.9, 302.4 µs).
 
 **A commanded buffer depth is not the depth in force. A pacer whose output rate exceeds the content rate
 arriving at it burns its cushion off, and its own status line will not say so.** *(T18.)*
 
-> `mpegts-pacer` logs `holding 2000 ms` while underrunning 18,070 times, and the measured standing depth
-> was 90 ms. The surplus is the whole mechanism: a carrier commanded at 10 Mb/s against a null-stripping
-> lane delivering ~9.68 Mb/s of content is a 3.2 % surplus, and the same lane reads 87 ms or 824 ms of
-> latency at the same commanded cushion depending only on the carrier rate. Byte-transparent arms carry
-> their mux's own stuffing and so ran at a 0.55 % surplus, six times less — an asymmetry that looked like
-> a transport difference. Quote a cushion with its surplus, and match a null-stripping lane's carrier to
-> content rate rather than to the original mux rate.
+`mpegts-pacer` logged `holding 2000 ms` through 18,070 underruns with measured standing depth 90 ms. Quote cushion with surplus; match null-stripping carrier to content rate, not mux rate.
 
 **A fix acts in one domain. Test it in that domain, or the instrument will confidently answer a
 different question.** *(T19.)*
 
-> #2967 changed PCR *values* and #3006 changed the *time* the bytes are released. The campaign's rig
-> captured the export to a file and measured where the PCR packets sat among the bytes — the right
-> instrument for #2967's successor question and the wrong one for #3006, because writing to a file
-> flattens precisely the timing the fix creates. Run against #3006 it showed the positional bunching
-> unchanged, which reads as "the fix did nothing" and is in fact "this measurement cannot see the fix".
-> Grading it needed a different instrument altogether: read the export live off a pipe and timestamp
-> each PCR packet as it arrives, at which point the fix is plainly there — the on-grid share doubles and
-> gate failures halve. Three domains were in play at once here (value, byte position, arrival time), all
-> three called "PCR spacing", and a result in one is not a result in another. *Before measuring a fix,
-> say which of those the change acts on and check the rig observes it; a rig inherited from the previous
-> question is the likeliest way to get a confident null.*
+File capture measures byte position, not release timing #3006 creates; live pipe timestamps showed the fix plainly. Before measuring a fix, name which domain (value, byte position, arrival time) it acts on.
 
 **Grade a stream against the values it asserts about itself, not against a nominal you supply.**
 *(T19.)*
 
-> The arrival oracle compared PCR inter-arrival against a nominal 25 ms, which works only because #2967
-> happens to emit a 25 ms grid: it needs the grid's period supplied from outside, it is silent about a
-> clock running at the wrong rate, and it cannot say whether a given PCR arrived when *it* said it would.
-> Rewritten to compare each interval against the difference between the two PCR *values*
-> ([`ts-pcr-timing.py`](scripts/ts-pcr-timing.py)), the same reader needs no reference clock, no source
-> file and no declared mux rate, and it becomes valid for any exporter at any cadence. It also yields a
-> statistic the nominal version could not: the *sign* of the error. *A self-referential test is both
-> more portable and more sensitive than one that needs a reference, whenever the stream carries a
-> statement about its own timing.*
+Compare each PCR interval to the difference between the two PCR values ([`ts-pcr-timing.py`](scripts/ts-pcr-timing.py)) rather than an external 25 ms nominal; the self-referential test yields error sign and needs no reference clock.
 
 **The sign of a timing error tells you whether you are measuring the writer or the reader.** *(T19.)*
 
-> A Python reader on a shared box cannot distinguish its own scheduling delay from a late write, and
-> that was offered as the ceiling on a 7.45 % figure for a whole session. It need not have been: a
-> preempted reader lengthens one interval and shortens the next, so it produces late and early errors in
-> balance, while a writer flushing a backlog produces early ones only. The measured ratio was 626 early
-> to 136 late. *Before attributing jitter to the instrument, check whether the instrument's failure mode
-> is even the right shape; an asymmetry rules it out without needing a better host.*
+A preempted reader produces late and early errors in balance; a writer flushing backlog produces early ones only — measured 626 early to 136 late ruled out reader scheduling as the whole story.
 
 **Two invariants failing at once are one defect until you have checked they fail on different
 things.** *(T19.)*
 
-> Post-#3006 the exporter failed a release-timing check on 42 % of intervals and a byte-position check on
-> 56 % of packets, and these were carried as two findings with two possible causes. Cross-tabulating the
-> two per interval — one extra counter over data already in hand — showed 615 of the 626 early releases
-> were exactly the byte-adjacent packets and that none of the 136 late ones were, which collapses two
-> symptoms into one mechanism and pointed straight at the line of code responsible. *When a run reports
-> two failures over the same population, join them before you report them; the cross-tab is usually
-> free and it is the difference between two hypotheses and one cause.*
+Cross-tabulating release-timing and byte-position checks showed 615 of 626 early releases were byte-adjacent packets and none of 136 late ones were — one mechanism, not two.
 
 **Half the defects in a conformance instrument are it failing conforming input, and only a legal
 fixture finds those. Build the stimulus for every condition the standard permits, not just the ones
 it forbids.** *(T19, `ts-pcr-timing.py` — eight defects, five of them this shape.)*
 
-> Of the defects review and fixture-building found in the PCR analyser, five were the tool rejecting
-> streams ISO 13818-1 explicitly allows: a legal duplicate packet (2.4.3.3), a signalled
-> `discontinuity_indicator` counter jump, the clock jump the same flag licenses (2.4.3.4), a PCR
-> repeating its value in a duplicate, and a capture crossing the 33-bit rollover. Every one would have
-> been reported as a defect *in the stream*, on a hard check, by an instrument whose own tests were all
-> of the form "does it catch a break". The asymmetry is structural: a suite built from defects only ever
-> exercises the reject path, so the accept path is whatever the implementation happens to do. **The
-> pass expectations are the ones worth writing first**, because a false positive costs a soak its
-> credibility while a false negative merely costs it a finding.
+Five PCR analyser defects rejected ISO 13818-1–legal streams (duplicate packet, discontinuity jump, clock jump, duplicate PCR value, 33-bit rollover). Write pass expectations first — false positives cost credibility.
 
 **An instrument's "not measured" and its "passed" must never be the same exit code. A producer that
 died is the case the gate exists for.** *(T19, `check_release` — found by a reviewer, not by us.)*
 
-> `check_release` returned a *hard pass* labelled "not measured (no arrival stamps)" whenever it had
-> fewer than three timestamped PCRs. For a file that is correct: a file carries no arrival times and
-> there is nothing to grade. For a live capture it inverted the instrument, because a producer that
-> emitted two packets and exited produced a green run — and the exporter under test exits early on
-> nearly every run of this rig, so the route was live rather than theoretical. The fix is a floor on
-> both the sample count and the share of the requested window it spans. The general rule is that
-> *absence of evidence has to be its own verdict*, distinct from pass and from fail, and reachable only
-> in the domain where it is true.
+`check_release` hard-passed "not measured (no arrival stamps)" below three timestamped PCRs, greening early-exiting producers on a live rig. Absence of evidence needs its own verdict with floors on sample count and window share.
 
 **A fixture must break exactly one thing, and a generator emitting legal streams gets its own
 bookkeeping wrong silently. Verify the stimulus arrived before trusting the verdict.**
 *(T19, `ts-pcr-fixtures.py`.)*
 
-> The first draft of the PCR spacing and position fixtures both reported continuity errors, because
-> counters were computed per fixture instead of maintained across the packets each emitted. Those
-> fixtures were about intervals and byte positions; the counter noise was the generator's. A self-test
-> asserting on a polluted signal proves nothing, so counters are now maintained by construction and a
-> counter failure means the fixture intended one. Worse, the loss fixture *hid its own stimulus*:
-> excising exactly 15 packets left the counter landing on the value it would have had anyway, so the
-> loss was invisible to the check meant to catch it. **A loss of an exact multiple of 16 packets on a
-> PID is undetectable by continuity counter** — a property of MPEG-TS worth knowing rather than a bug,
-> and the reason holes are sized from the clock instead. Each fixture now asserts a detail field
-> proving its condition was reached, not merely that some check moved.
+Fixtures that computed continuity per fixture polluted interval tests; loss of an exact multiple of 16 packets on a PID is invisible to continuity counter — size holes from the clock. Each fixture asserts a detail field proving its condition, not merely that some check moved.
 
 **Where an instrument's behaviour is a choice rather than a requirement, the test has to say which.
 "It passes its tests" and "it implements the standard" are different claims.** *(T12, the ST 2022-7
 selection oracle.)*
 
-> Every 1+1 result rests on `t12-merge-oracle.py`, which had no unit test, so its documented behaviour
-> and the standard's requirements were indistinguishable in the record. Labelling fourteen adversarial
-> conditions separated them: eight where it does what ST 2022-7 requires, one where the input already
-> violates a precondition of the standard so *nothing* is required and always taking leg A is a
-> reproducibility choice, three where the rule cannot reach a sequence-number selector at all (PCR
-> wrap, source-clock offset, and offset voting which is this implementation's own invention), and one
-> outright blind spot. The blind spot is the return on the exercise: an intra-leg duplicate whose
-> payload *differs* is silently resolved first-wins and moves no figure the oracle reports, so a leg
-> renumbering onto a live sequence number would have looked clean in every published column. **Self-
-> authored tests establish that an implementation is stable and self-consistent, never that it
-> conforms**; conformance is decided by the thing the standard is written for, which here is a
-> receiver, and that gate stays open.
+Label adversarial conditions: eight standard-required, one precondition violation, three unreachable by a sequence selector, one blind spot (intra-leg duplicate with differing payload resolved first-wins). Self-authored tests prove stability, not conformance.
 
 **A monotone series measured inside a start-up transient is not a monotone series.** *(T21, P0-3b.)*
 
-> P0-3b was opened on a nine-minute reading in which the groomer's buffer drifted 9,008 → 18,105
-> packets against a 6,300 set point, monotonically. The servo's authority is ±5 %, so a standing error
-> larger than that would walk the buffer to a rail, and the direction of nine minutes of data said it
-> was happening. Over 24 h it was not: the high-water mark was set in the opening minutes and never
-> beaten again, and the occupancy series is a bounded oscillation whose period turned out to be the
-> clip's own 600 s bitrate profile.
->
-> The rule is not "measure for longer" — that is unbounded. It is that **a trend claim needs a window
-> longer than the longest period in the stimulus**, and the stimulus's periods have to be enumerated
-> before the window is chosen. A looping source has a period by construction; so does a source whose
-> bitrate profile repeats. Neither is visible in a run shorter than the loop.
+Nine minutes of groomer buffer drift looked monotonic; over 24 h the series was bounded oscillation with the clip's 600 s bitrate period. A trend claim needs a window longer than the longest stimulus period — enumerate periods before choosing the window.
 
 **Distinguish a leak from a cache by whether the slope survives, and fit the competing shapes rather
-than eyeballing the curve.** *(T21's 24 h soak.)*
+than eyeballing the curve.** *(T21's 24 h soak, T45.)*
 
-> Two roles in the 24 h soak grew by comparable totals — the relay by 243 MB and the publisher by
-> 137 MB — and end-point growth said the relay was the worse of the two. It is the better one. Fitting
-> a line and a logarithm separately settles it: the relay fits a logarithm at R²=0.9895 against 0.9097
-> for a line, and its quarterly slopes halve (9.85 / 4.56 / 2.42 / 1.75 MB/h), so it converges. The
-> publisher fits a line at R²=0.9898 against 0.8960 for a logarithm and 0.9655 for a square root, and
-> its quarterly slopes hold (2.36 / 2.87 / 2.81 / 2.57), so it does not.
->
-> Three habits come out of it. **Quote slopes per quarter, not per run** — a slope that holds is the
-> signature of a leak and a slope that decays is a cache filling, and the totals cannot tell them
-> apart. **Fit at least a line, a logarithm and a square root**, because "still rising" is compatible
-> with all three and only one of them exhausts a host. And **report the largest drawdown from a running
-> peak**: a cache gives memory back, so 9.2 MB of drawdown against 137 MB of growth is itself evidence.
->
-> **Exclude the warm-up by measuring it, not by default.** The re-soak on `main` graded a 2 h run with
-> the grader's default 20 min settle and read the importer at +4.99 MB/h, above the leak it was meant
-> to confirm fixed. The 24 h run on the same build showed the importer still rising until about 1.5 h
-> and flat after it, at +0.23 MB/h from 2 h. A settle shorter than the warm-up turns a warm-up into a
-> slope. Read the first hours of the series before choosing the settle, and state the settle with the
-> slope. [T45](test-45-live-tstd-remux.md) met the same rule live: a re-multiplexer that fixed its
-> clock after a 5 s warm-up was overtaken by a lane whose delay grows by about 630 ms over its first
-> 50 s, and sent 95 % of its packets late.
+Two roles grew by comparable totals — relay 243 MB and publisher 137 MB — and end-point growth said the
+relay was worse; fitting settles it. The relay fits a logarithm at R²=0.9895 against 0.9097 for a line,
+with quarterly slopes halving (9.85 / 4.56 / 2.42 / 1.75 MB/h). The publisher fits a line at R²=0.9898
+against 0.8960 for a logarithm, with quarterly slopes holding (2.36 / 2.87 / 2.81 / 2.57 MB/h). Quote
+slopes per quarter, not per run; fit at least a line, a logarithm and a square root; report the largest
+drawdown from a running peak — 9.2 MB drawdown against 137 MB growth is itself evidence of a cache.
+Exclude warm-up by measuring it, not by default: a 2 h run with a 20 min settle read the importer at
++4.99 MB/h while the 24 h run showed flat after ~1.5 h at +0.23 MB/h from 2 h. [T45](test-45-live-tstd-remux.md)
+met the same rule live: a re-multiplexer fixed after 5 s warm-up was overtaken by a lane whose delay grows
+~630 ms over its first 50 s and sent 95 % of packets late.
 
 **Sample resource series per process, not per command-line signature.** *(T21's 24 h soak, and the
-follow-up run it forced.)*
+follow-up run it forced, T43.)*
 
-> The soak resolved each role with `pgrep -f` on a signature and summed the matches. For the publisher
-> that signature also matched the wrapper shell, because the wrapper's `argv` contains the whole
-> pipeline text — so the series reported was the sum of a binary and a shell. A shell does not grow
-> 137 MB, and the conclusion survives, but it survives *by argument* rather than by measurement, which
-> is not good enough for a defect report going upstream. The fix is to resolve each role to a single
-> PID once, label it, and record a role that vanishes as gone rather than silently re-resolving the
-> pattern onto whatever now matches.
->
-> Resolving it once by pattern is not enough either: take the PID from `$!` where the rig started the
-> process. [T43](test-43-fanout-current-build.md)'s relay side took the relay's PID from
-> `pgrep -f "[m]oq-relay.*0.0.0.0:$PORT" | head -1`, and a launch command that happened to contain
-> both strings made it the ssh shell's. When that shell exited, the rig declared the relay dead and
-> its cleanup shut down a healthy relay nine seconds into the run.
+`pgrep -f` on a wrapper matched shell plus binary; `[m]oq-relay.*PORT` once matched the ssh shell and cleanup killed a healthy relay. Resolve each role to the PID from `$!` at launch.
 
 **An instrument that blocks on its input cannot observe the absence of input.** *(T27.)*
 
-> The per-PID liveness detector was tested against a total stall — the easiest failure in its set — and
-> reported nothing at all. It was correct in every respect except that it was sitting in `read()`
-> waiting for a packet that was never going to arrive, so its loop never ran and its own timeout check
-> never executed. A detector's "no news" and "no data" are the same silence, and only a timed wait can
-> tell them apart.
->
-> This generalises past detectors. Any observer whose next reading depends on the thing it is watching
-> is blind to that thing stopping, and the check that covers it has to be driven by a clock the subject
-> does not control. Wall clock is that clock; **the dead man's handle is not redundancy with the
-> media-time measurement, it covers the case media time structurally cannot.**
+A per-PID liveness detector in `read()` during total stall never ran its timeout check. Drive stall detection from wall clock the subject does not control — a dead man's handle, not redundancy with media-time measurement.
 
 **Derive elapsed media time by accumulating steps, never as a distance from an origin — and bound the
 step.** *(T27.)*
 
-> The same detector computed media time as the difference between the current PCR and the first one.
-> One corrupted PCR byte therefore moved the whole timeline, and since every stream's gap is measured
-> against that timeline, all four watched PIDs alarmed simultaneously with a fabricated 23,861 s
-> outage. In a real run a broken pipe produced the same failure at 94,847 s.
->
-> Accumulating step by step confines a bad value to one step, and rejecting any step that is backwards
-> or implausibly large converts it from a corrupted measurement into a *reported discontinuity*, which
-> is information. **A monitoring tool that can be made to invent a fault by one bad byte is worse than
-> no monitoring**, because it produces a confident wrong answer; fault-inject the instrument, not only
-> the system.
+Current PCR minus first PCR moved the whole timeline on one bad byte and alarmed all four PIDs with a fabricated 23,861 s outage. Reject backwards or implausibly large steps; fault-inject the instrument, not only the system.
 
 ### A trace's labels are code
 
-*(T28, the reorder qlog.)* noq's relay qlog labelled all 1,619 of the packets it declared lost under
-20 % reorder `reordering_threshold`, and the campaign reported that the packet-reordering rule had
-declared every one and the time rule none. The label cannot say anything else. The qlog code, in noq
-and in the quinn it forks, computes the packet's send time minus the present, which saturates to zero
-and never reaches the loss delay, so every loss is labelled by reordering whichever rule fired.
-Raising the packet threshold to 1000 left 12,749–17,856 losses in place, which is how the time rule
-showed itself.
-
-> **Before quoting a field that attributes a cause, read the code that writes it**, and prefer the
-> evidence that does not depend on it. The spurious-loss result survived because it rested on the
-> acknowledgement frames, which record what happened, not on the trigger field, which records what
-> the logger computed. An arm that disables one of the candidate causes is the cheap test of a
-> label: if the label were right, the effect would have gone with it.
+*(T28, the reorder qlog.)* noq labelled every declared loss `reordering_threshold` because send-time minus present saturates to zero. Before quoting a cause field, read the code that writes it; prefer acknowledgement frames over trigger labels; disable a candidate cause to test the label.
 
 ### A looped source is continuous only if every PID's timestamps are
 
 *From re-running [T40](test-40-continuous-join-through-srt.md) on upstream `dev` after
-[#4543](https://github.com/moq-dev/moq/pull/4543).* From #4543 on, the importer publishes source
-timestamps verbatim and ends the import on any rewind, flagged or not. A `tsp --infinite` loop is an
-unflagged rewind at every wrap, so on `dev` it is a one-pass soak by specification. The campaign's
-answer is [`ts-continuous-source.py`](scripts/ts-continuous-source.py), which rebases each pass onto
-one continuous timeline. On `dev` its T40 stream still ended the import at the first join, with
-*frame timestamp is below the previous group's start*, through SRT and through a pipe alike. That
-looked like #3533's content-join shape becoming fatal. It was the generator. The script rebases
-PTS and DTS only for stream IDs `0xC0`–`0xEF`, which are MPEG audio and video. In `CNNiEMEA2.ts`, AC-3
-(PID `0x7b`) and teletext (PID `0x83`) are carried as private stream 1 (`0xBD`). So every pass
-stepped those two PIDs back by about 30 s, while their PCR and the other PIDs moved forward. The
-script now rebases every stream ID that carries the optional PES header.
-[`ts-join-scan.py`](scripts/ts-join-scan.py) shows every PID moving forward across its joins except
-video DTS, which starts 26.9 ms below the previous DTS. On the corrected stream, `dev` held full
-rate through three joins on both paths. Builds that re-anchor each stream on its own survived the
-uncorrected generator, because the re-anchor absorbed the 30 s step. So the defect was invisible
-until an importer stopped forgiving it. It had also gone unseen in [T21](test-21-permanence-soak.md)'s
-grading of the same script, which read PCR and continuity counters but not PES timestamps.
-
-> **Before a looped soak, scan the generated stream's joins per PID with `ts-join-scan.py` and
-> confirm that every timestamp-bearing PID moves forward**, not only the ones the generator was written for. A
-> generator that is right for the stream types its author had in mind fails silently on the ones
-> they did not, and an importer that re-anchors will hide it. Where the build under test ends the
-> import on a rewind, loop only through a generator that has passed that scan, never through `tsp
-> --infinite`.
+[#4543](https://github.com/moq-dev/moq/pull/4543).* Importers that end on rewind make `tsp --infinite` a one-pass soak. [`ts-continuous-source.py`](scripts/ts-continuous-source.py) must rebase every stream ID with a PES header, not only `0xC0`–`0xEF` — AC-3 and teletext on private stream 1 stepped back ~30 s while PCR moved forward, invisible until importers stopped re-anchoring. Before a looped soak, scan joins per PID with [`ts-join-scan.py`](scripts/ts-join-scan.py) and confirm every timestamp-bearing PID moves forward; never loop through `tsp --infinite` on builds that end import on rewind without a generator that passed that scan.
 
 ### `srt-live-transmit` fed from a pipe pads every short read with zeros
 
 *From the SRT arms of the #4543 measurements ([upstream contributions](upstream-contributions.md)).*
-Fed from `file://con` behind a pacer, the SRT gateway ended ingest sessions on parse errors, such
-as *Unexpected marker bits*, *Expected stuffing byte 0xFF* and *CRC32 mismatch*, on input that other
-runs carried cleanly. Over 4 minutes there were anywhere from none to fifteen. The rate followed host
-load, not the build, and it looked like SRT loss. The sender's counters showed that loss was being
-retransmitted in full. A build of the gateway that copies each received payload to a file showed the
-real mechanism. `srt-live-transmit` 1.5.6 sends a full chunk on a short stdin read, padded with
-zeros. At its default 1456-byte chunk, which is not a multiple of 188, that splices a valid packet
-header onto zeros or foreign bytes. A libsrt listener receives the same zero-filled payloads as the
-gateway, so the sender is the source. A loaded host makes more short pipe reads, which is why
-the failure followed load. `-chunk:1316` keeps the packets aligned but still inserts the zeros. The
-defect is reported upstream as [Haivision/srt#3388](https://github.com/Haivision/srt/issues/3388).
-Its fix is on SRT master for v1.5.8, but every release up to and including v1.5.7 still pads, so
-the rule below applies to any released build.
-
-> **Feed an SRT arm from a sender that emits whole packets — `tsp -O srt`, as the deployed chain
-> does — rather than piping into `srt-live-transmit`.** Where a pipe into it cannot be avoided,
-> check the receiver's bytes for zero-filled slots before attributing any parse failure to the
-> system under test. A failure rate that tracks host load and not the build is a rig signal first.
+`srt-live-transmit` 1.5.6 sends full chunks padded with zeros on short stdin reads; default 1456-byte chunks splice headers onto foreign bytes and parse errors tracked host load, not build ([Haivision/srt#3388](https://github.com/Haivision/srt/issues/3388); fixed on master for v1.5.8, padding through v1.5.7). Feed SRT from a sender that emits whole packets (`tsp -O srt`); if piping in is unavoidable, check receiver bytes for zero-filled slots before attributing parse failures to the system under test.
 
 ### Time a picture where a decoder presents it, on a clock averaged over many packets
 
-*From [T45](test-45-live-tstd-remux.md).* Delivery latency times a PES header from one tap to the
-other. Across a stage that re-schedules packets, that figure moves with the schedule rather than with
-what a viewer sees, so the live re-multiplexer was timed at presentation instead: each tap's arrival
-time for the header, plus the PTS, less the capture's own STC at that packet. The first version
-referenced the DTS. On the media-aware lane it spread over 521 ms where the presentation figure is
-flat, because the lane's exporter authors its own DTS, up to 280 ms earlier than the source's. The
-source tap's per-header clock offsets also scatter by about ±37 ms, because `tsp -P regulate`
-releases its playout in bursts, and differencing single headers reported that as a 74 ms latency
-spread on a stage that added none.
-
-> **Reference latency to the PTS wherever a stage between the taps may author the DTS, and take each
-> end's clock from a median over seconds of headers, as a decoder's clock recovery would.** A
-> decode-referenced figure holds only where the DTS is the source's, and a per-header one only where
-> the tap's arrivals are smooth. Check the instrument on a byte-faithful capture first, where
-> presentation, decode and delivery latency must agree.
-
-Two limits on the same measurement came from [T46](test-46-tstd-check-cross-validation.md). A lane
-that rebases the PTS defeats a PTS key, so `ts-decode-latency.py --key content` matches pictures on
-their slice NAL units instead, the bytes that crossed the media-aware lane unchanged where its
-parameter sets did not. And the figure is when the egress's own PCR and PTS say each picture is
-shown. On T44's `main` capture that is 1,775.6 ms, but every access unit there fails the T-STD by
-about a second, so no decoder achieves it.
-
-> **Quote a presentation latency only on bytes that pass the T-STD,** and say which key matched the
-> pictures. On a non-conformant egress the receiver either delays its clock or discards pictures,
-> and the instrument cannot see which.
+*From [T45](test-45-live-tstd-remux.md), [T46](test-46-tstd-check-cross-validation.md).* Delivery latency
+times a PES header from tap to tap; across re-scheduling stages that moves with the schedule, not what a
+viewer sees. Time at presentation: each tap's arrival for the header, plus PTS, less the capture's STC at
+that packet. The first version used DTS; on the media-aware lane it spread over 521 ms where presentation
+is flat, because the exporter authors DTS up to 280 ms earlier than the source. `tsp -P regulate` releases
+playout in bursts, so per-header clock offsets scatter ±37 ms and differencing single headers reported
+74 ms spread on a stage that added none. Reference latency to the PTS wherever a stage between taps may
+author the DTS, and take each end's clock from a median over seconds of headers as decoder clock recovery
+would. Check the instrument on a byte-faithful capture first, where presentation, decode and delivery
+latency must agree. A lane that rebases PTS defeats a PTS key, so `ts-decode-latency.py --key content`
+matches pictures on slice NAL units. Quote presentation latency only on bytes that pass the T-STD and name
+which key matched the pictures; on T44's `main` capture presentation reads 1,775.6 ms while every access
+unit fails T-STD by about a second, so no decoder achieves the quoted figure.
 
 ### A grader written once is one reading of the standard; cross-validate it before its figures decide anything
 
-*From [T46](test-46-tstd-check-cross-validation.md).* `ts-tstd.py` was written for T44 from the
-clauses, and its self-tests passed, because they tested what its author believed the clauses said.
-Graded against upstream's independently written check on 35 files, it had six defects. Two showed up
-as disagreements: it sized the AVC decoder buffer as one buffer rather than 2.14.3.1's MB + EB, and it
-did not grade 2.4.2.6's rule that a transport buffer empties once a second. The other four decided
-no condition on this corpus, only counts and margins, so agreement could not reveal them; they were
-found by reading each clause against the code. Upstream's check had three defects of its own, so neither instrument was the reference; each
-disagreement was decided by clause. One of the six was a silent pass: a stream the grader could not
-grade was reported clean, the failure mode
-[a grader whose pattern does not match](#a-grader-whose-pattern-does-not-match-its-tools-wording-scores-every-input-as-clean)
-describes for log scrapers.
-
-> **Before a home-built instrument's figures decide anything, grade the same bytes with an
-> independent implementation, with the agreement criterion fixed in advance, and settle each
-> disagreement from the clause, not from which answer is more convenient.** Then read every clause
-> against the code, since agreement on one corpus does not exercise every path. A grader that cannot
-> grade a stream must refuse it with its own exit status, never pass it.
+*From [T46](test-46-tstd-check-cross-validation.md).* `ts-tstd.py` was written for T44 from the clauses;
+self-tests passed what its author believed the clauses said. Graded against upstream's independent check on
+35 files it had six defects — two as disagreements (AVC buffer sized as one buffer rather than MB + EB; no
+grade of 2.4.2.6 transport buffer emptying once per second) and four that decided no condition on the
+corpus so agreement could not reveal them, found by reading each clause against the code. Upstream's check
+had three defects of its own; neither instrument was the reference and each disagreement was decided by
+clause. One defect was silent pass on a stream the grader could not grade. Before a home-built instrument's
+figures decide anything, grade the same bytes with an independent implementation, fix the agreement
+criterion in advance, settle each disagreement from the clause, read every clause against the code, and
+refuse with exit status any stream the grader cannot grade — never pass it clean.
 
 ---
 
@@ -948,216 +422,98 @@ describes for log scrapers.
 is not to measure the interval more carefully but to construct the ratio so that no interval appears
 in it.** *(T9, then T14, then T16 — the same error, three rigs, three times.)*
 
-> A receiver that drains a live window faster than real time before settling carries more media in
-> 58 s of wall clock than a steady arm does in 60 s. Dividing one stage's bytes by another stage's
-> span put a delivered rate 4.7 % above a CBR source and made an overhead figure come out
-> *negative*. The fix that held was to form the ratio from two byte totals over the same media —
-> everything sent, over the payload sent — with no wall clock in it at all.
+Dividing one stage's bytes by another stage's wall-clock span put a delivered rate 4.7 % above a CBR source and made overhead *negative* when a receiver drained a live window faster than real time. Form ratios from byte totals over the same media — everything sent over payload sent — with no wall clock.
 
 **When the thing under test polls on a fixed cadence, randomise where in its cycle you intervene —
 and take the phase from the pollee's own log, not from how long you slept.** *(T37.)*
 
-> The revocation sweep settled each arm for an integer number of seconds before withdrawing a grant,
-> which placed every decision at the same point in the relay's re-check cycle. Six repetitions agreed
-> to within 3 ms and looked like an enviably tight distribution; they were six measurements of one
-> phase. Randomising the offset within a sub-cadence interval recovered the actual spread, which is
-> uniform across the cadence because that is what the mechanism is.
->
-> The analysis then made the converse error: it treated the slept offset *as* the phase, which is only
-> true when the settle time is a whole number of cadences, and produced a −0.722 s residual at one
-> cadence — a negative latency, which at least announces itself. Deriving the phase from the
-> timestamps in the authorization endpoint's own request log collapsed the residual to 0.109–0.110 s
-> with a standard deviation under 2 ms at every cadence, and turned a scatter into
-> `(cadence − phase) + 0.110 s`. **The zero of the measurement has to come from the instrument that
-> observed the event, not from the script that intended it.**
+Integer-second settles aligned every revocation to one point in the relay's re-check cycle (six runs within 3 ms, one phase). Randomise within a sub-cadence interval; derive phase from the authorization endpoint's log, not slept time (−0.722 s residual versus 0.109–0.110 s, σ under 2 ms). **The zero of the measurement has to come from the instrument that observed the event, not from the script that intended it.**
 
 **A client's reconnect budget will masquerade as a server's response time, and it is usually the
 rounder number.** *(T37.)*
 
-> The first revocation pilot returned 10.032 s and it was nearly written down. The relay log put the
-> teardown about 25 ms after the decision; the extra ten seconds were the `moq` client's default
-> `--backoff-timeout`, spent re-dialling a relay that was correctly refusing it. **A suspiciously
-> round figure at the scale of a default is a default.** Set the client's retry budget to something
-> negligible and state it, or the arm measures the client.
+10.032 s on a pilot was nearly written down; the relay log showed teardown ~25 ms after decision, the rest `--backoff-timeout` re-dialling a refusing relay. **A suspiciously round figure at the scale of a default is a default.** Set retry budget negligible and state it.
 
 **A delivered-media span measured as last-PCR-minus-first saturates at one lap of a looping source, so
 a cell longer than the clip reports a shortfall that is arithmetic rather than loss.** *(T25.)*
 
-> The same rig read `keep_up` 1.001 in its 165 s cells and 0.779 in its 765 s ones, against a ~600 s
-> clip on `tsp --infinite`: 596.27 s of span in a 765 s window. Nothing was lost — holes above 100 ms
-> were zero and continuity was clean in both — but 0.779 reads exactly like a receiver falling 22 %
-> behind. *Either keep the cell inside one lap, use
-> [`ts-continuous-source.py`](scripts/ts-continuous-source.py) so the timeline does not rewind, or
-> read the cell on delivered bytes and holes and say why the span figure is void.*
+`keep_up` 1.001 in 165 s cells versus 0.779 in 765 s on a ~600 s `tsp --infinite` clip (596.27 s span in 765 s) with zero holes and clean continuity reads like 22 % loss but is arithmetic. Keep the cell inside one lap, use [`ts-continuous-source.py`](scripts/ts-continuous-source.py), or score bytes and holes and void the span figure.
 
 **Estimate a rate as one ratio of two sums, never as the average of per-interval ratios. The two agree
 only when the intervals carry comparable amounts, and on a media-aware lane they never do.** *(T19,
 `mpegts-pacer`.)*
 
-> The groomer's media-rate estimator smoothed a per-PCR-interval packets-per-second figure. The
-> intervals sat on an exact 25.0 ms grid and carried **1 to 4,631 packets each, median 8**, so the
-> per-interval rates had a median of 320 pps against a true 6,191 and the smoothed average sat 23 %
-> below the truth — the estimator reported 7.14 Mb/s for a 9.31 Mb/s stream and the wire ran a third
-> stuffing. This is not a smoothing-constant problem and no window length fixes it: averaging \(x_i/t_i\)
-> is not \(\sum x_i / \sum t_i\) unless the \(t_i\) are equally weighted by \(x_i\). Sum the packets, sum
-> the media seconds, divide **once**; the same run then reads 9.14 Mb/s. Any heavy-tailed denominator
-> does this, and a lane that delivers a coded frame as one burst is heavy-tailed by construction.
+Intervals on a 25.0 ms grid carried **1 to 4,631 packets each, median 8**; averaged \(x_i/t_i\) reported 7.14 Mb/s for 9.31 Mb/s (23 % low). Sum packets, sum media seconds, divide once; the same run reads 9.14 Mb/s.
 
 **A rate estimate driving an open loop integrates its own error against uptime. Close the loop on an
 observable.** *(T19, `mpegts-pacer`.)*
 
-> Releasing at `rate × elapsed` makes a 2.5 % under-read cost 2.5 % of the *run* in buffer depth, so the
-> defect presents as a latency ramp rather than as a wrong rate: **+1,792.9 ms across a 90 s window**,
-> then 10,279 packets shed at a bound the actual burst never needed. Trimming the release rate by the
-> buffer's distance from its target bounds it, and the loop settles where occupancy equals the target —
-> which is by definition where the stage is releasing at the rate it is being delivered, whatever the
-> estimator thinks. The estimator still matters for the transient; it stops mattering for the steady
-> state. **A latency figure that grows linearly with window length is the signature**, and it is why the
-> trend must be reported beside the median rather than instead of it.
+`rate × elapsed` release with a 2.5 % under-read yielded **+1,792.9 ms across 90 s** and 10,279 packets shed. Trim release by buffer distance from target. **A latency figure that grows linearly with window length is the signature** — report trend beside median.
 
 **The span a capture measures for itself is only the flow's duration if the flow is continuous. On a
 bursty lane, first-to-last-packet is short and every rate divided by it is high.** *(T9 segmented —
 the same family as the rule above, arrived at from the opposite direction.)*
 
-> First-to-last-packet was adopted precisely *because* nominal windows were untrustworthy, and it is
-> right for a lane that sends without pause. A segment fetcher pauses: its first and last packets sit
-> inside the capture window rather than at its edges, so the span came out 4 % under the real flow
-> duration and the carriage figure read 1.081x instead of 1.036x — the difference between "materially
-> worse than SRT" and "tied with it". Two runs whose byte totals agreed to five significant figures
-> disagreed by 2 % on rate, which is the tell: when the numerator repeats and the quotient does not,
-> the denominator is the defect. The span-free ratio, wire bytes over payload bytes, was identical
-> across both runs.
+Segment fetchers pause inside the capture window; span 4 % short made carriage 1.081x versus 1.036x despite byte totals agreeing to five figures. Span-free wire-over-payload ratio matched across runs.
 
 **Equal window length is not equal media. When two captures are compared packet for packet, assert
 the reference's homogeneity in the instrument rather than assuming it.** *(T3 — the content form of
 the artefact above, and the fourth rig to hit that artefact in some form.)*
 
-> Both windows held exactly 398,936 packets and were still not comparable: `testloop_clean` carries
-> 18.43 % stuffing over its first 60 s against 13.1–13.8 % later on, so a head cut against a
-> live-edge egress reported stuffing falling 18.43 → 14.95 % and video rising by 13,858 packets. That
-> reads precisely like a lane stripping padding. Offsetting the reference to the media the receiver
-> joined brought the same comparison to 14.83 → 14.95 %. The assertion belongs in the instrument
-> because the failure produces a plausible number rather than an error — the analyser now reports the
-> reference's stuffing by quarter and declares a non-homogeneous window.
+398,936 packets in both windows still differed: `testloop_clean` stuffing 18.43 % in the first 60 s versus 13.1–13.8 % later produced a head-cut comparison that looked like padding stripped (18.43 → 14.95 % stuffing). Offset the reference to join media (14.83 → 14.95 %); report stuffing by quarter and flag non-homogeneous windows.
 
 **An extremum carries its window. A "max error" over more media can only grow, so two such figures are
 comparable only over equal windows.** *(T3.)*
 
-> `CNNiEMEA`'s source PCR accuracy is 37 ns over the 60 s reference cut and 74 ns over the whole
-> 5-minute clip. Both are right. The equal-window rule is usually invoked for rates and ratios, but it
-> binds at least as tightly on every "tightest clean bound", "max jitter" and "peak" in this
-> repository, because those statistics have no averaging to dilute a single outlier.
+PCR accuracy 37 ns over 60 s versus 74 ns over 5 minutes — both valid. Applies to every max, peak, and tightest bound here.
 
 **A mismatched-window extremum does not only mislead — it can manufacture a false *agreement*, which
 survives review because agreement invites no scrutiny. Prefer a distribution to a maximum, and confirm
 "preserved" against the source in the same window.** *(T4, sharpening the rule above.)*
 
-> A media-aware egress was reported at "max 319.98 ms" beside "the source's own 319.98 ms" and the lane
-> was credited with transporting the encoder's cadence. The source's maximum PCR interval is 24.95 ms in
-> every span of the clip and across all 600 s of it; the egress figure came from the lane. Two extrema
-> taken over different windows had produced a matching pair, and a matching pair reads as proof. The
-> distribution refuted it immediately and unambiguously: 1,123 of 1,307 intervals under 1 ms is not
-> something any conformant mux can produce, so **the 0.01 ms minimum was the tell, not the 320 ms tail**.
-
-**A metric can be preserved in the mean and destroyed in the distribution. For anything whose value is
-its regularity — PCR spacing, PSI cadence, packet interval — a mean is not evidence of preservation.**
-*(T4.)*
-
-> The same egress conserved its mean PCR interval to within 0.7 ms of the source (23.81 against
-> 24.47 ms) while clustering 86 % of its PCRs sub-millisecond and collecting the residual into 320 ms
-> gaps. Mean, monotonicity and total span were all preserved; the only property that mattered — even
-> spacing — was gone.
+Matching 319.98 ms maxima on egress and "source" credited cadence transport; source max PCR interval is 24.95 ms everywhere. Distribution showed 1,123 of 1,307 intervals under 1 ms — **the 0.01 ms minimum was the tell, not the 320 ms tail**. Mean PCR can match within 0.7 ms while 86 % of PCRs cluster sub-millisecond and the rest sit in 320 ms gaps; for spacing, PSI cadence, and packet interval, mean is not preservation evidence.
 
 **Fix a numeric budget before taking the measurement, or there is nothing to read the result
 against.** *(T9.)*
 
-> Per-hop wire overhead was measured with no budget agreed in advance. A rig error inside it went
-> unnoticed for exactly that reason: there was nothing the number could contradict. The budget was
-> derived from the protocol afterwards, which is the wrong way round.
+Per-hop overhead with no pre-agreed budget let a rig error pass; deriving budget post hoc cannot falsify the run.
 
 **A measurement window shorter than the phenomenon's own timescale reads as a different phenomenon.**
 *(T9.)*
 
-> Relay memory grows per ingested group until every stream slot is occupied, which takes about three
-> hours at the rate tested. Every leg was shorter than that, so an hourly slope extrapolated to a
-> daily figure read as unbounded growth and was reported as failing a stability criterion. It
-> plateaus.
+Relay memory knees near ~three hours; shorter legs extrapolated hourly slope to "unbounded" daily growth though the series plateaus.
 
 **A per-something cost has to name the something, and the rig has to hold it at one.** *(T8b C6,
 refining the rule above.)*
 
-> The plateau was registered in advance as "baseline + ~99 MB per publisher connection". A 14 h soak
-> converged on 2.03× that. The fan-out legs could not have caught it: they varied the subscriber count
-> but ran far shorter than the knee, so they measured the ramp and not the ceiling, and nothing had ever
-> run long enough to show that the ceiling was double the derivation. **Varying a quantity over a window
-> shorter than the phenomenon measures the derivative, not the asymptote** — and a pre-registered
-> prediction that omits which quantity it scales in cannot be falsified cleanly by either.
+"~99 MB per publisher" pre-registration hit 2.03× at 14 h while fan-out legs measured the ramp, not the ceiling. **Varying a quantity over a window shorter than the phenomenon measures the derivative, not the asymptote.**
 
 **Before adopting the tidy explanation a new number suggests, test it against the measurements already
 in hand.** *(T8b C6.)*
 
-> The soak carried one publisher and one subscriber, and 2.03× a *per-publisher* ceiling on *two
-> connections* is exactly what a per-connection cost would produce. That reading was written up as the
-> leading hypothesis and it was wrong: the campaign's own earlier fan-out work had already measured the
-> growth rate flat across 0, 1, 2 and 4 subscribers, and a four-subscriber leg — five connections —
-> reaching the same range as two. Nothing new had to be run to rule it out, only re-read. **A coincidence
-> of ratios is not a mechanism**, and the cost of the error would have been an upstream report claiming
-> audience scaling against evidence we had published ourselves.
+2.03× on two connections looked per-connection, but prior fan-out already showed flat growth across 0–4 subscribers. **A coincidence of ratios is not a mechanism.**
 
 **Set a soak's duration from the longest period in the system, not from a round number.** *(Gate 2 rig
 design, applying the rule above before the run rather than after it.)*
 
-> The PCR field's 33-bit base runs at 90 kHz, so it wraps every 2³³/90,000 s = 95,443.7 s = **26.51 h**.
-> The hardware soak has been specified throughout as "≥ 24 h, ideally 72 h" — and 24 h spans 0.91 of a
-> wrap period, so a conforming run of the stated minimum can contain no wrap at all and still be
-> reported as having soaked. The wrap is precisely the slow-clock event the soak exists to find. 72 h is
-> therefore not a preference but the shortest duration that guarantees two. The same reasoning says the
-> wrap should not be waited for at all where it can be *placed*: start the PCR just below the boundary
-> and the event arrives in minutes, which is a fixture rather than a soak.
+PCR wraps every **26.51 h** (2³³/90,000 s); 24 h is 0.91 periods, 72 h guarantees two. Place PCR just below the boundary for a minutes-long fixture instead of waiting.
 
 **Register the shape as well as the number, or a converging curve and a leak grade the same.** *(T8b
 C6.)*
 
-> The criterion asked whether the slope *broke* at a predicted knee. What happened was neither: the
-> slope decayed monotonically by 13× and had not converged at 14 h. Stating only a ceiling made a smooth
-> approach to twice that ceiling unclassifiable, when "asymptotic, still rising, at 2× the prediction"
-> is the informative answer. Add a reclaim or pressure counter beside any long RSS series, too, or a
-> decaying slope cannot be told from the kernel taking pages back.
+Slope decayed 13× by 14 h without a knee or convergence; ceiling-only criteria misclassify smooth approach to 2× prediction. Pair long RSS with reclaim/pressure counters.
 
 **A bound on an accumulating quantity has to come from the thing that is allowed to accumulate it.
 Pick the number and the check grades the number — and before reporting a trend as growth, check the
 window against every buffer in the path that the trend could be filling.**
 *(T19 measurements 9 and 10, grading #3351.)*
 
-> The merged build's first end-to-end arms read 3,582 ms of delivery latency rising +2,153 ms across
-> 90 s, reproduced at +2,193 ms, where every control was flat — which reads as an unbounded leak and was
-> very nearly written up as one. It is the exporter's standing lag ramping toward a budget it had not
-> reached inside the window: the rig runs `moq export ts --latency-max 3s` by default, and holding it at
-> 500 ms settles the same arm at 2,126 ms with a −24.6 ms trend. A rig default two rungs above the
-> setting under test will manufacture a trend out of a transient.
++2,153 ms latency trend over 90 s with flat controls was exporter lag toward default `moq export ts --latency-max 3s`, not a leak (500 ms setting: 2,126 ms, −24.6 ms trend). Grade drift against the owner's allowance (500 ms latency budget), not instrument defaults (250 ms PCR drift check failed at p95 1.7 ms). Separate settling lag from slow pipe via tail *rate* on samples longer than lag build-up.
 
 **A shedding figure is a property of the stream *and* the buffer it met. Sweep the buffer and report
 the recovery point beside the loss.** *(T19 measurement 10.)*
 
-> The byte-locking groomer's 45.9 % and 67.2 % content losses were quoted for three experiments as what
-> the exporter's positional defect costs. They are what it costs *at the one cushion those runs used*.
-> The displacement behind them is bounded and deterministic — 450 ms before the positional fix, 761 ms
-> after — and a cushion past it recovers the programme: 105,959 of 106,382 packets, 0 continuity errors,
-> exact CBR. A bounded displacement is a sizing input, not a verdict.
-
-> A hard bound on accumulated PCR release drift was added with a 250 ms default, chosen because it
-> looked small. A sender that buffers is *entitled* to build a standing lag up to its own latency
-> budget, which defaults to 500 ms, so the check failed a correct pipeline three runs out of three
-> while its per-interval error sat at a p95 of 1.7 ms. *An accumulating quantity almost always has an
-> owner with a declared allowance — a buffer, a budget, a window — and that allowance is the bound;
-> anything else measures the instrument's taste.*
->
-> Two shapes were also being conflated under one name. A lag that settles and a pipe running slow both
-> present as accumulated drift, and only the second is a defect. Separating them needs the *rate* over
-> the tail of the sample rather than the total, and a sample longer than the lag takes to build: the
-> same pipeline reads 290 ms of drift still climbing at 8.7 ms/s over a 20 s window, and 480 ms holding
-> at −0.017 ms/s over 120 s. *A window shorter than the transient cannot distinguish the transient from
-> the steady state, and will report the transient as the steady state with no indication that it has.*
+45.9 % / 67.2 % content loss quotes are at one cushion; bounded displacement (450 ms / 761 ms) recovers 105,959 of 106,382 packets at exact CBR — sizing input, not verdict.
 
 ---
 
@@ -1165,381 +521,174 @@ the recovery point beside the loss.** *(T19 measurement 10.)*
 
 **Before reporting a resource cost, vary the knob the documentation says bounds it.** *(T25.)*
 
-> A subscription storm took relay RSS from 87 MB to 1.9 GB in 60 s, and `moq-relay`'s own config
-> documents the group cache as "unbounded unless `cache.capacity` or `cache.headroom`" — so an
-> unbounded cache was the obvious mechanism, and an upstream report saying so would have been written
-> with a straight face. Setting an explicit 256 MiB cap left the peak *unchanged* at 1,930 MB. The
-> memory was abandoned sessions retained until the QUIC idle timeout, which the cache budget does not
-> cover; cutting that timeout 30 s → 10 s cut growth 4.5×. *The documented bound is the cheapest
-> hypothesis to eliminate and the most embarrassing one to have skipped, because a maintainer will
-> ask whether it was set and the answer has to be a measurement.*
+A subscription storm took relay RSS from 87 MB to 1.9 GB in 60 s while `moq-relay` documents the group cache as unbounded unless `cache.capacity` or `cache.headroom` is set. An explicit 256 MiB cap left the peak unchanged at 1,930 MB; abandoned sessions until the QUIC idle timeout held the memory, and cutting that timeout 30 s → 10 s cut growth 4.5×. The documented bound is the cheapest hypothesis to eliminate first.
 
 **Where a cost could be concurrency or churn, hold peak concurrency fixed and vary only the
 lifetime.** *(T25.)*
 
-> The same 42 concurrent subscribers cost 1,833 MB when killed and relaunched every 5 s and 65 MB when
-> held for the whole phase. Both cells report "42 concurrent abusers", so any metric keyed on
-> concurrency describes them identically while they differ by 28×. *An abuse arm's headline count is
-> the load it applies at an instant, not the load the component is holding — with a 30 s idle timeout
-> and a 5 s churn period the relay holds seven generations, and the arm's own name understates it by
-> nearly an order of magnitude.*
+The same 42 concurrent subscribers cost 1,833 MB when killed and relaunched every 5 s and 65 MB when held for the whole phase — 28× at the same headline concurrency. With a 30 s idle timeout and 5 s churn the relay holds roughly seven generations while the arm still reads "42 concurrent abusers".
 
 **A comparison at fixed positions cannot tell reordering from corruption. Compare the two as
 multisets before concluding the content differs.** *(T12 arm D, independent upstream.)*
 
-> The full-mux cell read 24.28 % residue against a slot-by-slot oracle, which invites the conclusion
-> that a quarter of the stream was wrong. It was not: 99.9528 % of packets were common to both legs as
-> a multiset, every media PID carried an identical packet count, and an edit-script alignment matched
-> 98.414 % once displacement was allowed. One displaced packet de-phases every comparison after it, so
-> a positional metric reports the *consequence* at full size and says nothing about the cause. The
-> three views answer different questions and the cheap ones come first: the multiset says whether the
-> same bytes are present, the alignment says how far they moved, and only then does the positional
-> figure mean anything. Without them the finding would have been filed as damage rather than as
-> ordering, and the upstream report would have been wrong.
+Full-mux residue was 24.28 % slot-by-slot but 99.9528 % of packets were common as a multiset, with alignment at 98.414 % once displacement was allowed. One displaced packet de-phases every later slot comparison. Compare multiset, then alignment, then positional figures.
 
 **On a lane whose transport holds no session state, most of what you are about to measure lives in
 the client — so measure two of them before naming the lane.** *(T8b, T6.)*
 
-> Under a 2:1 shortfall, segmented HTTP either lost the session at 43 s or thinned cleanly at 99 % of
-> the bottleneck, depending only on whether the receiver re-anchored after a 404. Same origin, same
-> shaper, same clip, same window; a factor of three in delivered rate and the difference between a
-> live feed and a dead one. The first client's number, written up alone, would have read as
-> "segment fetching cannot survive congestion" — a claim about HTTP that the second client falsifies
-> in one run. Where MoQ's transport supplies the thinning, this lane requires the receiver to
-> implement it, so a figure attributed to "segmented HTTP" is very often a figure about one client's
-> error handling. T6 reached the same conclusion for failover.
+Under a 2:1 shortfall, segmented HTTP either lost the session at 43 s or thinned at 99 % of the bottleneck depending only on 404 re-anchoring; same origin, shaper, clip, and window. A figure attributed to "segmented HTTP" is often one client's error handling. T6 reached the same conclusion for failover.
 
 **When two runs differ in more than one variable, do not credit the one you have been tuning.**
 *(T13, T18.)*
 
-> T16 reached 0 PCR intervals above 40 ms on the wire while carrying seconds of cushion, where T13's
-> MoQ legs posted 131–159 at about 1 s. Cushion was the variable under active investigation, so it got
-> the credit, and T13 recorded the failure as "a buffer-depth choice rather than a limit". It was not:
-> T18 swept the MoQ cushion eightfold with no movement at all, and T13's segmented pass-through leg
-> posts 0 while holding almost no buffer. So cushion was not the effect — but the replacement
-> attribution, that the *data plane* was (one egress delivering PCRs on a grid and the other clustering
-> them), was miscredited in exactly the same way and survived three more experiments. *The variable you
-> are holding in mind is the one most likely to be miscredited, and that applies to the correction as
-> much as to the original.* See the entry below on invariance.
+T16 reached 0 PCR intervals above 40 ms while carrying seconds of cushion where T13's MoQ legs posted 131–159 at about 1 s, so cushion got the credit until T18's eightfold sweep moved nothing and T13's segmented pass-through posted 0 at almost no buffer. Data-plane attribution miscredited the same way and survived three more experiments. The variable you are holding in mind is the one most likely to be miscredited, including the replacement attribution.
 
 **A quantity that does not move under the variable you control has not thereby been shown to belong to
 someone else.** *(T13, T18, T19.)*
 
-> The MoQ lane's PCR-repetition failure was invariant: unchanged across an eightfold cushion sweep,
-> unchanged when groomer starvation was removed entirely, unchanged across paths and rigs. Cushion was
-> the only downstream knob anyone was turning, so its invariance was read — in T13, then T18, then
-> twice in T19 — as proof the cause lay upstream, and three upstream fixes were specified and merged on
-> that reading. None cleared the wire. The invariance had a mundane explanation: **no cushion shortens a
-> coded frame**, and the groomer would only place a PCR in a slot the content scheduler had declined,
-> which inside a burst is never. Reserving the slot cleared the gate at every depth including the
-> shallowest. The knob was real and irrelevant; the stage was wrong, not the direction of the
-> dependency. *Before concluding "not ours", enumerate what else in your own stage the variable fails
-> to reach* — here, that a burst's length is a property of the input and not of the buffer, so no
-> buffer experiment could ever have distinguished the two hypotheses.
+MoQ PCR-repetition failure was invariant across an eightfold cushion sweep, groomer starvation removal, paths, and rigs, which was read in T13, T18, and twice in T19 as proof the cause lay upstream; three upstream fixes merged on that reading and none cleared the wire. No cushion shortens a coded frame, and the groomer only placed PCR in slots the scheduler had declined inside bursts; reserving the slot cleared the gate at every depth. Before concluding "not ours", enumerate what else in your own stage the knob cannot reach — here, burst length is input property, not buffer depth.
 
 **Name a divergence mechanism from the bytes that differ, not from the most plausible cause.**
 *(T12.)*
 
-> "Two groomers will agree on content and differ only in the PCR bytes each stamped" was plausible,
-> standing, and wrong: of 400 sampled conflicting datagrams, **none** differed only in PCR, 39.5 %
-> disagreed on PID order and 28.2 % carried a different number of nulls. The fix implied by the wrong
-> mechanism — ignore PCR at the receiver — would not have worked.
+Of 400 sampled conflicting datagrams, none differed only in PCR; 39.5 % disagreed on PID order and 28.2 % on null count. Ignoring PCR at the receiver would not have worked.
 
 **A mechanism read from the source is a hypothesis; and before reporting a null, work out whether the
 arm could have shown the effect.** *(T12, T10.)*
 
-> Reading the exporter, each SI table's snapshot advances as that leg's own subscription delivers
-> groups — so two legs looked able to assert different clocks at the same slot, and that was put to
-> upstream as a likely 1+1 divergence source. It is wrong: the code says which *state* the emission
-> consults, not what advances it, and the state turns out to track the media position. The first arm
-> that "confirmed" agreement was worth almost nothing either — a 15 s clock and 870 ms of lag predicts
-> 0.6 differing emissions in ten, so observing zero is consistent with both answers. Only after the
-> clock was driven at its resolution limit, where the same lag predicts seven in ten, did zero mean
-> anything. Compute the effect the arm should see before running it, or a null is just a quiet arm.
->
-> T10 repeated the first half. #4122's loss was modelled on the section lanes, which read the
-> section clock, and a dose run refuted it. The re-anchors came from the one lane that *writes*
-> that clock, shared by every programme's video. Two patched builds, one logging and one with that
-> lane split per PID, located it. When state is shared, model what advances it first.
+Exporter SI snapshots advance per leg in the code you read, but state tracks media position. A 15 s clock with 870 ms lag predicts ~0.6 differing emissions in ten, so zero confirms nothing until the clock is driven at resolution limit (seven in ten). T10: when state is shared, model what advances it before crediting a lane.
 
 **Compare with the suspect field masked before attributing a conflict.** *(T12.)*
 
-> "The payloads differ" is a measurement. "The groomer diverged" is a conclusion. Here they came
-> apart: 97–98 % of conflicting datagrams differed in one field minted upstream of both groomers.
+97–98 % of conflicting datagrams differed in one field minted upstream of both groomers. Payload difference is measurement; groomer divergence is conclusion.
 
 **Before recording that a stage preserves a property, check whether another experiment already found
 that it does not. A contradiction between two files is worth more than a re-measurement, because one of
 them is already wrong and is being cited.** *(T4.)*
 
-> T4 credited the media-aware lane with transporting the encoder's PCR cadence. T2 had already tabulated
-> the same clip's same figures under the heading "impairments introduced by the lane", with a source
-> column at 20–28 ms against the egress's 319.9 ms, and T8's table showed the same split from the SRT
-> side. The evidence was never missing; it was contradicted, and the wrong file was the one the paper
-> drew on. A campaign accumulating results across many files needs cross-file contradiction treated as a
-> first-class defect, because nothing else in the process will surface it.
+T4 credited PCR cadence transport while T2 had tabulated lane impairments with source at 20–28 ms against egress 319.9 ms and T8 showed the same split from SRT. Treat cross-file contradiction as a first-class defect.
 
 **When a processing stage and its source could each explain a placement defect, the stage's own
 insertion counter decides it — not the arithmetic that fits.** *(T18.)*
 
-> The groomer's PCR repetition failures on the media-aware lane were attributed to starvation, and the
-> arithmetic was persuasive: `underruns` equalled the nulls inserted exactly, and the commanded carrier
-> exceeded the lane's content rate by the same 3.2 %. Matching the carrier to content rate cut underruns
-> from 18,070 to 5 and left repetition at 502 violations, unchanged. A defect that survives the removal of
-> its supposed cause belongs to the other stage.
+Starvation was persuasive: `underruns` equalled nulls inserted and the commanded carrier exceeded content rate by 3.2 %. Matching carrier to content cut underruns from 18,070 to 5 while repetition stayed at 502 violations. A defect that survives removal of its supposed cause belongs to the other stage.
 
 **A counter reading zero in the one configuration where the thing it counts is impossible is evidence
 about that configuration and nothing else. Vary the condition that enables the mechanism, and check the
 counter moves, before quoting it.** *(T18.)*
 
-> The attribution above was then published on the strength of `pcr_inserted=0` — read from the cell at
-> **0.0 % stuffing**. That groomer places a PCR only into a slot it was already going to stuff, so at zero
-> stuffing it has no slots and the counter cannot read anything else. A structural zero was quoted as a
-> measured one, in five documents and an upstream issue. Read across the whole ladder the counter varies
-> as designed — 137, 103, 28, 0 insertions at 4.1 %, 3.2 %, 0.8 %, 0.0 % stuffing — while the violation
-> count holds at 491, 489, 503, 502. The conclusion was right and its evidence was the wrong shape: four
-> insertion rates producing one result is a far stronger argument than no insertions at all, and it was
-> already sitting in the run logs.
+`pcr_inserted=0` at **0.0 % stuffing** was quoted across five documents, but that groomer inserts PCR only into slots it was already going to stuff, so the counter cannot read anything else there. Across the ladder it reads 137, 103, 28, 0 insertions at 4.1 %, 3.2 %, 0.8 %, 0.0 % stuffing while violations hold 491, 489, 503, 502 — four insertion rates, one result.
 
 **A threshold-crossing count summarises a distribution and can point at the opposite of its cause. Before
 asking anyone to change a rate, plot the interval distribution and check the mean is actually deficient.**
 *(T18.)*
 
-> "Intervals above 40 ms" was the campaign's only PCR conformance instrument for a long time, and 375–414
-> of them per window read naturally as *too few PCRs*. It became the shorthand "the exporter emits PCRs
-> too rarely" in five documents. The distribution says the opposite: 31–36 PCRs a second against the
-> source's 41 and against the ~25/s the gate needs, with a median interval of **11 µs**, 85 % of intervals
-> under 1 ms, and every violation inside a 100 ms–1.8 s hole between bursts. Density was never the
-> deficiency and a denser cadence would have changed nothing. Loss and clustering are also
-> indistinguishable in the count and obvious in the distribution — a lossy SRT lane posts 538 crossings
-> with its median still at 24.8 ms and 0.0 % under 1 ms.
+375–414 "intervals above 40 ms" per window read as too few PCRs, but the distribution showed 31–36 PCR/s against the source's 41, median interval **11 µs**, 85 % under 1 ms, and every violation in a hole between bursts. Loss and clustering are also indistinguishable in the count and obvious in the distribution — a lossy SRT lane posted 538 crossings with median 24.8 ms and 0.0 % under 1 ms.
 
 **Keep a byte-transparent control in any rig that measures a conversion, carrying the same source in the
 same session.** *(T18, via T8b.)*
 
-> The defect above went eighteen months mis-summarised because the exporter was only ever measured through
-> a groomer and against a source profiled in a different session. What settled it was an unrelated
-> congestion rig that happened to write `moq export ts` straight to a file *and* carry the identical clip
-> on the same PID over SRT and two segmented clients — so "the source is conformant, the count survives,
-> the spacing does not" was readable three ways off one session. The control cost nothing; it was already
-> in the matrix for another reason.
+The defect went eighteen months mis-summarised because the exporter was only measured through a groomer and the source was profiled in a different session. One congestion rig wrote `moq export ts` straight to file and carried the identical clip on the same PID over SRT and two segmented clients, so "source conformant, count survives, spacing does not" was readable three ways off one session.
 
 **A precise upstream report can be undone by an imprecise in-house paraphrase, and the paraphrase is what
 gets cited.** *(T18.)*
 
-> The filed issue said "it is not sparsity", gave the mean conserved to 0.7 ms, and asked for a bounded
-> *interval*. Every one of those is correct. The summaries written from it said "emits PCRs too rarely"
-> and "a denser cadence would clear the gate", and those propagated into four `docs/` files, the top-level
-> README and two other experiments — the versions a reader would actually act on. When restating a
-> finding in shorter form, restate the *mechanism*, not the symptom that made it visible.
+The filed issue said "not sparsity" with mean conserved to 0.7 ms; in-house summaries said "emits PCRs too rarely" and propagated into `docs/` and README. Restate the mechanism, not the symptom that made it visible.
 
 **Pin upstream-report links to a commit on `main`, not to a working branch.** *(T10, moq-dev/moq#4353.)*
 
-> The MPTS reproducer in the filed issue pointed at fixture, rig and grader scripts on branch
-> `exp/t10-mpts`. That branch merged and was deleted, so the issue body's links 404 while the scripts
-> live on `main`. **Use `https://github.com/<repo>/blob/<full-sha>/<path>` from the commit that holds
-> the cited tree**, and re-check after merge before filing.
+Branch links 404 after merge. Use `https://github.com/<repo>/blob/<full-sha>/<path>` from the commit that holds the cited tree and recheck after merge.
 
 **A cleanup job must never run against a live results tree.** *(T8b.)*
 
-> A 68-cell matrix was writing a ~140 MB capture per cell onto a host with 3.3 GB free, so a janitor was
-> armed to delete captures older than three minutes. It protected the disk and destroyed the matrix's
-> most valuable data: C3 sums the outputs of *all* N receivers, and four of its six cells had their
-> second and third captures deleted before anyone summed them, leaving per-flow shares that cannot
-> distinguish "the flows shared unfairly" from "the flows collectively under-used the link". The two
-> cells that survived showed 25 % aggregate utilisation against SRT's 84 % — the single most consequential
-> number in the matrix, saved only by finishing last. **A janitor must be told what the analysis needs,
-> not just what is being written now; and a condition whose result is a sum over several files is the
-> case it will silently ruin.** Deriving the summary before deleting the input would also have caught it.
+A 68-cell matrix wrote ~140 MB per cell onto a host with 3.3 GB free, so a janitor deleted captures older than three minutes. C3 sums all N receivers; four of six cells lost second and third captures before summing, leaving shares that cannot distinguish unfair sharing from collective under-use. The two survivors showed 25 % aggregate utilisation against SRT's 84 %. Tell the janitor what analysis needs, not just what is being written now; derive sums before deleting inputs.
 
 **An unattributed residue is not a finding.** *(T12.)*
 
-> "What remains is a continuity counter" was written over a measurement that already said otherwise —
-> 2.90 % of datagrams still differed after masking the counter. The comparison reported only a
-> percentage. Breaking the residue down by PID named the second defect in one line.
+2.90 % of datagrams still differed after masking the continuity counter; breaking residue down by PID named the second defect.
 
 **Distinguish a stage that *normalises* a difference from one that merely gives two streams a common
 frame of reference.** *(T12.)*
 
-> Only the first bounds what a downstream measurement can see. Grooming by stream position is what
-> makes two legs comparable at all, and it carries a displaced table faithfully rather than absorbing
-> it.
+Only normalisation bounds what downstream measurement can see. Position grooming makes legs comparable and carries displaced tables faithfully rather than absorbing them.
 
 **When a comparison ranks transports by a property of their output, measure the input as well.**
 *(T15.)*
 
-> Otherwise a transport that merely passes its input through is credited with its source's virtues,
-> and a claim about an encoder is filed as a claim about a protocol.
+Otherwise pass-through transport is credited with the source's virtues and encoder properties get filed as protocol claims.
 
 **When an argument says two measurements should converge, check whether the mechanism it proposes
 would cost something elsewhere in the same comparison.** *(T14.)*
 
-> "A TS packager has no reason to retain stuffing either, so the wire figures will converge." The
-> packager does retain it — and one that stripped it would stop producing byte-verbatim segments and
-> forfeit the fidelity advantage that was the other half of the same comparison. A saving reasoned
-> about in isolation is usually a trade seen from one side.
+A TS packager retains stuffing; one that stripped it would forfeit byte-verbatim segments and the fidelity advantage in the same comparison.
 
 **A hypothesis that predicts a *gradient* is cheap to falsify: run the extreme first.** *(T12.)*
 
-> "The carrier has too little slack for a backlog to drain, so a higher mux rate will let a returning
-> leg converge." Doubling the rate changed the cell by nothing measurable. Two runs cost less than
-> the reasoning that preferred them.
+Doubling mux rate changed the convergence cell by nothing measurable.
 
 **Predict the deviation's magnitude from the mechanism before measuring it, and confirm it by spreading
 the variable the mechanism scales with.** *(T3.)*
 
-> A PAT and a PMT are 376 bytes, so injecting them at a segment head should displace every later PCR
-> by the time 376 bytes take to transmit — 300.8, 109.4 and 302.4 µs on three clips spanning 2.75× in
-> bitrate. Measured: 297.7, 109.4 and 301.9. The prediction is what made the number attributable; the
-> bitrate spread is what made the agreement evidence, because a wrong mechanism would not track
-> 1/bitrate. The same maxima arriving unpredicted would have been filed as "sub-millisecond PCR error
-> at segment boundaries" and left there.
+PAT and PMT are 376 bytes, so injecting them at a segment head should displace every later PCR by transmit time for 376 bytes — predicted 300.8, 109.4, and 302.4 µs on three clips spanning 2.75× in bitrate; measured 297.7, 109.4, and 301.9. Prediction makes the number attributable; bitrate spread makes agreement evidence because a wrong mechanism would not track 1/bitrate.
 
 **Run the falsification test even once you have stopped believing the prediction — a caveat retired by
 measurement eliminates a class of cause, and a caveat retired by argument eliminates nothing.**
 *(T8b C3/C4.)*
 
-> C4 predicted an AQM would remove C3's collapse. By the time the cells were run the prediction was
-> already doubted on other grounds, so the six-cell run looked like confirming what was known. It was
-> worth 12 minutes: `cake` cut RTT from ~550 ms to 100 ms, which proves the AQM did its job, and the
-> collapse survived at 48 % of cap. Bufferbloat is now *excluded* rather than *thought unlikely*, and
-> that is what left the latency budget as the only candidate standing. An unrun counterfactual stays in
-> the limits section forever and keeps every downstream conclusion provisional.
+`cake` cut RTT from ~550 ms to 100 ms while C3 collapse survived at 48 % of cap, excluding bufferbloat by measurement rather than argument.
 
 **When a stage reports a bad input, ask whether the stage's own contract was ever written down.**
 *(T19, `mpegts-pacer`.)*
 
-> The groomer shed 45.9 % of the exporter's content and this was filed as a property of the lane. It was
-> also a defect in the groomer: it read one PCR interval as both a duration and a length, which is an
-> assumption about the source that no source is obliged to satisfy. On a fixture with a *perfect* value
-> grid and clustered positions it exited **zero** having discarded 67.2 % of the programme and added 106
-> discontinuities of its own. *An assumption that has always held is indistinguishable from an invariant
-> until the day it does not — and the failure it produces then is a success exit code.* The fix is to
-> make the assumption a measured quantity compared against something the configuration already
-> specifies, not to add a threshold.
+The groomer shed 45.9 % of exporter content and this was filed as lane property, but it read one PCR interval as both duration and length — an assumption no source must satisfy. On a fixture with a perfect value grid and clustered positions it exited zero having discarded 67.2 % and added 106 discontinuities. Make implicit assumptions measured quantities compared against configuration, not silent thresholds; a success exit code is not proof the input was bad.
 
 **Before a throughput ceiling is attributed to software, get the platform's own statement about the
 interface.** *(T26.)*
 
-> A fan-out ramp that collapses is ambiguous between the relay, the relay's host, the network and the
-> rig, and argument does not settle it. On Nitro instances `ethtool -S ens5` publishes the counters AWS
-> increments when it polices the interface — `bw_out_allowance_exceeded`, `pps_allowance_exceeded`,
-> `conntrack_allowance_exceeded`, `linklocal_allowance_exceeded`. Sampling them beside the relay's own
-> CPU turns "the NIC was not the problem" from a plausible claim into a measured one: all four stayed
-> at **zero** through three arms up to 1.47 Gb/s and 154 kpps, so every collapse in the experiment had
-> to be explained by something else.
->
-> The general rule is to instrument each *candidate* explanation rather than only the one under test.
-> Three of the four candidates here were eliminated by direct evidence — the interface by these
-> counters, the harness by the subscriber host's own idle time and its process count, and the relay's
-> host by per-process accounting — which is what left relay CPU as an attribution rather than a guess.
-
----
+On Nitro, `ethtool -S ens5` publishes `bw_out_allowance_exceeded`, `pps_allowance_exceeded`, `conntrack_allowance_exceeded`, and `linklocal_allowance_exceeded`. All four stayed at **zero** through three arms up to 1.47 Gb/s and 154 kpps beside relay CPU, so collapse had to be explained elsewhere. The harness fell to subscriber idle time and process count; the relay host to per-process accounting — instrument each candidate, not only the one under test.
 
 **When the only remaining difference is the build, bisect it — and shrink the reproducer's period
 first so a step costs minutes.** *(T27, the #3375 regression.)*
 
-> A fan-out soak lost every subscriber's video at the source's first content join, 600 s in. Source,
-> relay, publisher, `--latency-max` and fan-out were each eliminated by control, which left the client
-> build: the run that worked was on a binary 53 commits older. Bisecting that directly would have cost
-> 20 minutes a step, because the stimulus only arrives once per pass. **The failure was triggered by
-> the join, not by the pass length**, so truncating the clip from 600 s to 30 s made a join arrive
-> every half minute and a verdict cost two minutes — six steps, about an hour, one commit. The general
-> rule: before bisecting, ask what the reproducer's period actually depends on, and cut everything the
-> failure does not need.
+Fan-out video loss at the first content join made a 600 s clip cost ~20 minutes per bisect step; truncating to 30 s put a join every half minute and six steps in about an hour. Cut period to what the failure actually depends on, not the full pass length.
 
 **Carry a known-good binary as a second subscriber in every bisect step.** *(T27.)*
 
-> Each step of the bisect ran the candidate build *and* the last-known-good build against the same
-> publisher, relay and join, and voided the step if the control also stalled. That converts a whole
-> class of false verdicts — a flaky relay, a host under load, a publisher that died early, a step
-> whose build silently produced an old binary — into a `skip` rather than a `good`/`bad`. It cost one
-> extra process. The control was healthy at 9.1 Mb/s in every step, which is also the evidence that
-> the six verdicts mean what they say.
+Run candidate and last-known-good builds against the same publisher, relay, and join; void the step if the control stalls. That turns flaky relay, load, or wrong binaries into `skip` instead of false verdicts.
 
 **`git bisect run` inherits a non-login shell, and a build that cannot start looks exactly like a
 commit that cannot be tested.** *(T27.)*
 
-> The first bisect returned in 25 seconds and named every commit a "possible first bad commit". The
-> step script exited 125 each time because `cargo` was not on a non-login shell's `PATH`, and 125 means
-> *skip*. A step script must therefore set its own `PATH`, and — more generally — **a bisect that
-> finishes far faster than one build takes has not tested anything**; check the elapsed time against
-> the expected cost per step before reading the verdict.
+Missing `cargo` on PATH made every step exit 125 (`skip`) in 25 seconds. Set `PATH` in the step script; a bisect that finishes faster than one build takes has not tested anything.
 
 **A fix verified against the stimulus it was written for is not verified against that stimulus's
 complement.** *(T27, on this campaign's own contribution.)*
 
-> #3375 was written because of T23's measurements and re-graded against all six of T23's arms, every
-> one of which places a *single* timeline event in a *single* pass. It passed all six. It also stalls
-> video and primary audio permanently on a source whose timeline is continuous and whose *content*
-> restarts — a stimulus no arm used, and the one a real encoder produces. The two builds carry
-> disjoint cases: pre-fix, a true rewind costs everything; post-fix, a non-rewinding content join
-> does. **The rule is that verifying a fix means adding the case the fix's own logic newly decides
-> about**, not re-running the arms that motivated it. Where a fix introduces a *detector* — here, of a
-> rewind — the new arm to add is the one where that detector should stay silent.
+#3375 passed all six T23 arms, each a single timeline event in a single pass, but stalls video and primary audio permanently on a continuous timeline whose content restarts — the stimulus a real encoder produces. Pre-fix, a true rewind costs everything; post-fix, a non-rewinding content join does. Verify fixes by adding the case the fix's logic newly decides about; where a fix introduces a detector, add the arm where that detector should stay silent.
 
 ### A mechanism read from a diff names the component, not the loop
 
-*(T8b C7.)* The bisect put the random-loss collapse on #4001's interleave hold, and reading the
-diff produced a plausible mechanism: the hold spends the consumer's skip budget, so each hold becomes
-skipped content. That was labelled as reasoned and was half right. A hold on its own costs a quiet
-track one wait. The collapse needed a second function, `rewind()`, to renew the hold at every source
-skip, which made the loop self-sustaining. The warnings the logs did carry, `UnknownSession` and group
-evictions, did not track delivery at all. **Settle a suspected mechanism with a same-build switch on
-the one variable** (here an environment override of the hold budget), **and log the decision itself**
-(here each hold's start, the tracks it waited on, and how it ended). The switch proves causation. The
-decision log shows the loop, which neither the bisect nor the diff can show.
+*(T8b C7.)* Bisect put random-loss collapse on #4001's interleave hold: each hold spends skip budget, so holds become skipped content. A hold alone costs a quiet track one wait; collapse needed `rewind()` renewing the hold at every source skip, making the loop self-sustaining. `UnknownSession` and group evictions in logs did not track delivery. Settle suspected mechanisms with a same-build switch on one variable (here an environment override of the hold budget) and log the decision (hold start, tracks waited, end). The switch proves causation; the log shows the loop, which neither bisect nor diff can show.
 
 ### Locate a whole-capture error count in time before naming its cause
 
-*From [T45](test-45-live-tstd-remux.md)'s comparators.* A byte-faithful UDP arm through the
-stream-clocked groomer returned 26 continuity errors at the rig's default cap, with a grader running
-on the host during the capture, and loopback drops under CPU load were the ready explanation. A re-run
-at a 150 ms cap on a quiet host returned 90. Every one of them sat in the groomer's first 5.3 s, where
-it trims its start-up backlog of 4.6 s down to the cap; after that the capture was clean. The SRT arm
-of the same pair failed the audio decoder buffers eleven times, which read as systematic. Graded
-either side of one 22-packet transport loss at 139.7 s, it passed both halves.
-
-> **Before attributing a count, find when each event happened.** A cause spread across a run — host
-> load, a rate mismatch, a scheduling defect — predicts events spread across it; a start-up transient
-> or a single incident predicts a cluster. Placing the events in time costs less than any re-run, and
-> a re-run that changes the suspected cause without locating the events tests nothing.
+*From [T45](test-45-live-tstd-remux.md)'s comparators.* Twenty-six continuity errors at default cap looked like host load; at 150 ms cap on a quiet host there were ninety, all in the groomer's first 5.3 s while trimming a 4.6 s startup backlog. SRT audio decoder failures clustered around one 22-packet loss at 139.7 s and passed graded halves. Before attributing a count, place events in time: spread causes predict spread events; startup transients and single incidents predict clusters.
 
 ### Repeat a cell that disagrees with its neighbour before naming what differs between them
 
-*From [T47](test-47-fixed-delay-export.md)'s cross-host arm.* The first cross-host run of the
-per-PID build failed every MP2 unit by a nearly constant 188 ms, where the namespace rig's 0 % arm
-on the same build had passed every buffer. The two differed in topology, so the investigation went
-to what cross-host changes: arrival skew between tracks, the release stage's anchoring. The second
-run at the same settings failed differently: the video, not the audio, ran late. A third passed
-outright. The variable was the join. A video group skipped at the join put the video on its own
-release clock, at an offset the join set. Topology played no part: traced joins on one host fell
-into the same states. The loopback pass at 1 s that the arm was compared against was one of them.
+*From [T47](test-47-fixed-delay-export.md)'s cross-host arm.* The per-PID build's first cross-host run failed every MP2 unit by a nearly constant 188 ms where the namespace rig's 0 % arm passed every buffer; topology suggested arrival skew or release anchoring. The second run at the same settings failed on video, not audio; a third passed. A video group skipped at join put video on its own release clock at an offset the join set; traced joins on one host fell into the same states, and the 1 s loopback pass being compared against was one of them. **When one run of a new configuration differs from the old one, run it again before explaining the difference.** Configuration effects repeat; shape-changing failures belong to entry state — here answered by release-stage per-frame slack, which also made the offset measurable. **A result that repeats to the tenth of a millisecond is one state repeating, not robustness:** minimum margins 413.4, 63.6, 138.4 ms recurred exactly across cross-host and loopback runs sharing a 200 ms state.
 
-> **When one run of a new configuration differs from the old one, run it again before explaining
-> the difference.** A configuration effect predicts the same failure twice. A failure that changes
-> shape between identical runs belongs to a state the run entered, and the useful question becomes
-> which state. Here the trace that answered it was the release stage's per-frame slack, which also
-> made the offset measurable rather than inferred.
->
-> **A result that repeats to the tenth of a millisecond is one state repeating, not robustness.**
-> The 1 s pass's minimum margins (413.4, 63.6, 138.4 ms) recurred exactly in a cross-host run and
-> two loopback runs, and the 200 ms state was what they shared. A run that matches another that
-> closely says the system is deterministic given its state. It does not say how many states there
-> are.
+---
 
 ## 5. Rig hygiene
 
 **A server role that cannot bind its port has to stop the run, or the run rides the previous
 run's server and dies with it.** *(T47.)*
 
-> The cross-host origin role starts a relay on a fixed port, waits two seconds and starts the
-> importer. One origin was started while the previous run's relay still held the port. The new relay
-> exited on "address already in use", nobody checked, and the importer and the export both connected
-> to the old relay. When the old run's origin stopped its relay on schedule, it took the new run
-> down 8 s in, with an error ("json: unroutable") that pointed nowhere near the cause. The role now
-> checks that its relay is still alive before it starts the importer, and stops if not. **Check
-> that a server you started is still running before starting its clients.** An exit status from
-> `&` says only that the process was forked.
+The cross-host origin starts relay and importer on a fixed port; if the new relay exits on "address
+already in use" unchecked, clients attach to the old relay and fail later with errors that do not
+name the cause. **Check that a server you started is still running before starting its clients.**
+An exit status from `&` says only that the process was forked.
 
 **A `pkill -f` or `pgrep -f` pattern sent over SSH matches the command line that carries it.** The
 incidents and the remedy are in § *A `pgrep` or `pkill` pattern matches every command line that
@@ -1548,1110 +697,502 @@ carries it* below.
 **When arms run back to back against a service that caches an admission decision, the cache carries
 the previous arm's answer into the next one.** *(T37, T38.)*
 
-> Four sweep runs and three provisioning repetitions recorded no media at all, and the first
-> suspicion was the publisher. The relay caches the authorization endpoint's reply for the
-> `max-age` it was given, so a grant withdrawn to end one arm was still cached — as *withdrawn* —
-> when the next arm dialled in. The behaviour is correct, and is itself a result worth reporting
-> (provisioning latency is bounded by the same cache that bounds revocation latency), but as a rig
-> property it silently voids arms. **Either wait out the cache between arms or clear it, and never
-> read "no media" as a publisher fault until the admission cache has been ruled out.**
->
-> The neighbouring hazard in the same rig: with no subscriber attached between arms the relay
-> cancels its upstream subscription as idle (`subscribe canceled (idle)`) and the resumed broadcast
-> does not reliably deliver, which cost two arms their media. **Hold one keepalive subscriber on
-> every channel for the life of the matrix**, and give it an unlimited reconnect budget so it is not
-> itself torn down by an arm.
+The relay caches the authorization endpoint's reply for its `max-age`, so a grant withdrawn to end
+one arm can still read as *withdrawn* when the next arm dials in — correct behaviour that silently
+voids arms. Either wait out the cache between arms or clear it, and never read "no media" as a
+publisher fault until the admission cache has been ruled out. With no subscriber between arms the
+relay cancels upstream as idle and the resumed broadcast may not deliver; **hold one keepalive
+subscriber on every channel for the life of the matrix**, with an unlimited reconnect budget.
 
 **A stimulus built to defeat a detector must be graded as *healthy* by that detector before it is
 used.** *(T24.)*
 
-> T24 asks whether the lane can see a dead video stream behind a live clock. The whole experiment turns
-> on the stimulus being indistinguishable from a healthy stream by every check an operator already has
-> — so that was measured first, against the unmodified clip: identical packet count, identical PCR
-> count (24,574), identical worst PCR interval to three decimal places, zero continuity errors by both
-> our own grader and TSDuck, and `pcrverify --absolute` passing. Only then is a hole in the video
-> interesting.
->
-> The trap it avoids is specific and easy to fall into. Suppressing packets naively breaks the
-> continuity counters, and a broken counter is caught by any TR 101 290 P1 check — so the experiment
-> would have "detected" the failure, the detector would have looked adequate, and the finding would
-> have been an artefact of the tool rather than a property of the lane. **When the hypothesis is "X
-> cannot see this", the stimulus has to be proved invisible to X before the run, not after it.**
+Naive packet suppression breaks continuity counters and any TR 101 290 P1 check catches that — the
+experiment would "detect" failure as an artefact of the tool. **When the hypothesis is "X cannot see
+this", the stimulus has to be proved invisible to X before the run, not after it.** T24 measured the
+unmodified clip first: matching packet and PCR counts, zero continuity errors, `pcrverify --absolute`
+passing.
 
 **A detector that watches an aggregate has a sensitivity floor set by the share of the aggregate it is
 watching, and that floor has to be reported with it.** *(T24.)*
 
-> The stuffing ratio detects a dead video stream unmissably: 13.7 % to 95.2 %, inside one second, with
-> a control that never moves more than 13 points. Against a dead *audio* stream the same detector peaks
-> at 27.0 % where the control peaks at 27.1 %. Nothing about the detector changed; the audio and
-> subtitles are 4 % of the mux and the video is 82 %.
->
-> So a positive detection result on a large component says nothing about a small one, and the honest
-> output is not "the stuffing ratio works" but the share below which it does not. The generalisation
-> beyond this experiment: **any detector reading a ratio, a total or a rate over a composite has this
-> property**, and the useful figure is the smallest contributor whose loss exceeds the aggregate's own
-> variance. Per-component instrumentation is the only thing that escapes it.
+The stuffing ratio detects dead video unmissably (13.7 % to 95.2 % in one second) but dead audio peaks
+at 27.0 % where control peaks at 27.1 %, because audio is 4 % of the mux and video is 82 %. **Any
+detector reading a ratio, total or rate over a composite has this property**; report the smallest
+contributor whose loss exceeds the aggregate's variance, or use per-component instrumentation.
 
 **Before grading two pipelines for determinism, hash every artefact they are supposed to share.**
 *(T12 arm D, independent upstream.)*
 
-> The independent-upstream arm gives each host its own copy of the source, its own `moq`, its own
-> relay and its own groomer. Every one of those is a way for the arm to grade the artefacts instead of
-> the pipeline: a source file that differs by a byte, or a groomer copied before the last rebuild,
-> produces a divergence indistinguishable from the one the experiment exists to look for. Four
-> checksums taken up front cost seconds and convert a negative result from arguable to conclusive.
-> The secondary's groomer is a *copy* and nothing on that host reports it stale, which is exactly the
-> case the check catches.
+Each host's own source copy, binary, relay and groomer can diverge by a byte or a stale copy and
+produce a false negative. Four checksums up front convert arguable divergence into conclusive agreement;
+the secondary groomer is a copy nothing on that host marks stale.
 
 **An instrument that reads zero has not measured zero until it has been shown reading non-zero.**
 *(T12 arm D.)*
 
-> `t12-dual-host.sh` reported 0.0 % leg CPU through a whole live run, because `ps -o %cpu -p` reads
-> the wrapper shell. The repair, reading the process group with `-g`, was written, reviewed and
-> deployed, and it *also* returned 0.0 %: neither `-g` nor `--pgid` selects by process group id on
-> procps-ng 4.0.4. Two sampler generations reported the same plausible-looking figure and neither had
-> measured anything. A rig that reports a resource figure should be run once against a known load
-> before its nulls are believed.
+`t12-dual-host.sh` reported 0.0 % leg CPU for a whole run because `ps -o %cpu -p` reads the wrapper;
+`-g`/`--pgid` on procps-ng 4.0.4 also returned 0.0 %. Run the rig once against a known load before
+believing nulls.
 
 **Every statistic the experiment intends to report must be an output the cell prints. A number
 recovered afterwards from files that happened to survive is not a measurement, it is a salvage.**
 *(T8b C3.)*
 
-> C3's whole point was the *aggregate* over N concurrent flows — the per-flow share falling below the
-> fair 1/N is expected under contention, and only the sum says whether the link was used. The cell
-> subscribed the extra flows correctly and wrote each to `out.$i.ts`, but graded and printed only flow
-> one; the aggregate was obtained afterwards by stat-ing whatever captures were still on disk. When a
-> janitor armed mid-matrix deleted captures to protect the disk, it destroyed four of the six
-> aggregates, and the most valuable data in a 68-cell run was lost to a cleanup job. The repair is two
-> lines — sum the sizes at grade time and print `agg_bytes`/`agg_mbps` — after which no capture needs to
-> survive the cell at all and the cell can delete them itself. *Ask of each intended finding: which
-> printed field is it? If the answer is "we can work it out from the artefacts", it is not yet measured.*
+C3 needed the aggregate over N concurrent flows; the cell graded only flow one and stat-ed surviving
+captures until a mid-matrix janitor deleted four of six. Sum at grade time and print `agg_bytes`/`agg_mbps`
+so captures need not survive the cell. *Ask of each intended finding: which printed field is it? If the
+answer is "we can work it out from the artefacts", it is not yet measured.*
 
 **Retire a caveat about the instrument by moving the instrument, not by arguing about it.** *(T19.)*
 
-> "This is a Python reader on two vCPU, so the absolute figure is an upper bound" was written into an
-> experiment's limits and quoted for a session. Settling it cost one host, one file copy and four
-> minutes: same binaries, same clip, same window, four times the cores — 7.45 % against 7.45 %, at zero
-> CPU pressure. *A host-bound caveat is usually cheaper to remove than to keep restating, and keeping it
-> quietly weakens every number it is attached to.*
+A Python reader on two vCPU was labelled an upper bound until the same clip on eight cores read 7.45 %
+against 7.45 % at zero CPU pressure — one host, one file copy, four minutes. *A host-bound caveat is
+usually cheaper to remove than to keep restating.*
 
 **Derive a rate target from a capture of the stage's own input, never from another stage's output —
 and treat an unexpectedly smooth result as a suspect one.** *(T13.)*
 
-> A pass-through pacing target was taken twice from the wrong place. Below the true rate the leg
-> throttles and wanders; above it, the leg spends the whole window draining a join backlog at the cap
-> and looks *flatter* than a correct run. Both produced a plausible table.
+A pass-through pacing target taken from the wrong place throttles below the true rate or drains a join
+backlog above it and looks *flatter* than a correct run; both produced plausible tables.
 
 **Grade a downstream stage against captures taken from the pipeline it will sit in, never against a
 synthesised approximation of that pipeline's output.** *(T13.)*
 
-> A CBR input built by stripping nulls from the source clip retains the source's own byte schedule,
-> so content arrives ahead of the slots the groomer has for it. On that input the groomer dropped
-> 6,360 packets and produced 100 continuity errors — a result that would have been reported as a
-> defect. On a real capture of the same shape it drops nothing.
+A CBR input built by stripping nulls from the source retains the source byte schedule, arrives ahead
+of groomer slots, and produced thousands of drops and continuity errors that a real capture of the same
+shape did not.
 
 **A daemon started in a subshell outlives its own teardown, and answering on the port does not make it
 yours.** *(T12.)*
 
-> `( cd dir && relay config ) &` records the *subshell* in `$!`, so teardown kills the wrapper and
-> leaves the relay bound. The next run's relay then failed with `Address already in use`, its
-> fingerprint poll succeeded against the survivor, and the run silently graded a relay of unknown build
-> and unknown remaining lifetime — reading as a clean mid-run collapse at the moment the stranger
-> exited, complete with a plausible step change in the pair's agreement. Two lines fix it: `exec` the
-> daemon inside the subshell so the recorded pid is the daemon, and after the fingerprint poll succeeds
-> check the daemon is still alive, refusing the run if something else holds the port.
->
-> T6's segmented arm hit the same defect with an HTTP origin, and showed that a liveness check is not
-> enough even so. That cell's origin died on `Address already in use`; its client spent the drill
-> talking to the previous cell's server over the previous cell's document root — where nothing was
-> being killed — and the cell reported a clean *hitless failover* it had not earned, with every
-> delivered number plausible. The general fix is an identity check, not a liveness check: write a
-> token unique to the cell into the served tree and refuse to proceed until a fetch returns **that**
-> value, so "a server is up" can never be read as "my server is up".
->
-> T7's segmented arm then re-encountered it on a rig written after that fix, from the other direction:
-> not a leftover server but two sweeps of the same script overlapping on its one port, each cell
-> grading whichever publisher happened to be serving. It produced a complete set of conformant,
-> plausible, wrong results — a clip's numbers can only be caught by noticing they carry another clip's
-> bitrate. **So the identity token belongs in every rig that binds a fixed port, and it needs a
-> companion: refuse to start on a port already in use, and hold a lock for the length of a sweep.**
-> A rule recorded as one experiment's correction gets read as that experiment's problem.
+`( cd dir && relay config ) &` records the subshell in `$!`, so teardown leaves the relay bound; the
+next run's fingerprint poll can succeed against a stranger. `exec` the daemon inside the subshell and
+after a successful fingerprint poll verify the daemon is still alive. T6's HTTP origin showed liveness
+is not enough: use an identity token unique to the cell in the served tree and refuse until fetch
+returns **that** value. T7 had overlapping sweeps on one port grading whichever publisher served.
+**So the identity token belongs in every rig that binds a fixed port, and it needs a companion: refuse
+to start on a port already in use, and hold a lock for the length of a sweep.**
 
 **On a lane that two sources can serve at once, the failure is repeated time, not lost time — and
 neither a continuity check nor a PCR-interval check can see it.** *(T6.)*
 
-> Every corrupt cell in T6's segmented arm reported **zero** continuity-counter discontinuities while
-> the delivered stream jumped backwards and forwards by twenty seconds. Both standard gates ask only
-> whether the clock *moved*: CC is a property of each segment's own mux and every segment was
-> internally valid, and a PCR-interval test measures spacing, which is correct on both sides of a
-> rewind. The tell is in the rate ratio — a receiver taking 1.17× or 1.39× of source rate is being
-> handed the same media twice — and the direct metric is an explicit count of PCR decreases. Add one
-> to any rig where two publishers, packagers or origins can be live simultaneously.
+T6's segmented arm reported zero CC discontinuities while the stream jumped ±20 s; both gates ask only
+whether the clock moved. The tell is rate ratio above 1× or an explicit PCR decrease count — add one
+where two publishers, packagers or origins can be live simultaneously.
 
 **A metric that only fires on an anomaly is only ever exercised by one, so prove its arithmetic on a
 case where it fires.** *(T6.)*
 
-> The rewind counter above was first written against `pcrextract`'s "Value offset in PID" column,
-> which is unsigned, and it wrapped on precisely the event it existed to detect — reporting a
-> 6.8 × 10¹¹ second rewind. It read a perfectly sensible zero on every clean run, and the interval
-> statistics that share the parser were genuinely unaffected, because for a monotonic clock that
-> column differences identically to the PCR value column. A baseline in which the metric reads zero
-> is not evidence that the metric works.
+The rewind counter first used `pcrextract`'s unsigned offset column and wrapped on the event it
+existed to detect. A baseline where the metric reads zero is not evidence that it works.
 
 **Cancel a safety watchdog at teardown, or it fires into somebody else's cell.** *(T5.)*
 
-> Each impairment cell armed a `sleep 1800; tc qdisc del` so a killed run could not leave the box
-> shaped. Nothing cancelled them, so they accumulated and began firing half an hour later — *during
-> later cells* — deleting the shaper partway through a run that then reported a clean, plausible
-> result for a condition it never experienced. Every media-aware loss cell in that pass looked immune
-> to loss, and it was the watchdogs. Nothing in the delivered numbers shows this; only the shaper's own
-> counters do, as a missing qdisc where the impairment should be. So the watchdog is cancelled at
-> teardown, and a cell that finds no shaper at the end is **failed rather than reported**.
+Uncancelled `sleep 1800; tc qdisc del` jobs deleted shapers mid-run in later cells; loss cells looked
+immune when the impairment was gone. Cancel at teardown; fail a cell that finds no shaper where one
+was armed.
 
 **Segmentation offload decouples commanded loss from applied loss, and by a different factor for each
 transport — so it breaks comparisons, not just constants.** *(T5.)*
 
-> `netem` makes its drop decision on the buffer it is handed, which under TSO/GSO is a super-packet the
-> stack splits into many wire packets afterwards. The commanded percentage then lands on
-> super-packets while the wire carries many times more. Because TCP and QUIC offload differently, one
-> `loss 10%` command delivered **7.8 % to the segmented lane and 2.5 % to the media-aware lane** — the
-> two arms were never given the same impairment, and the media-aware lane's apparent robustness was
-> partly a smaller dose. Turning off the kernel offloads is only half of it: quinn coalesces datagrams
-> in its own `sendmsg`, so the application's GSO has to go too (`--server-quic-gso=false`), after which
-> the media-aware arm measured 5.08 % against a commanded 5 %.
->
-> Where a residual gap survives, **label the row with the loss the shaper measured, not the loss it was
-> asked for.** The segmented arm still under-loses by about a third, and reporting actual against
-> commanded is what keeps the row honest — here it also strengthens the finding, since that lane
-> degrades further while receiving less.
+`netem` drops on TSO/GSO super-packets; one `loss 10%` delivered **7.8 % to the segmented lane and 2.5 %
+to the media-aware lane**. Disable kernel offloads and application GSO (`--server-quic-gso=false`) on
+QUIC. **Label the row with the loss the shaper measured, not the loss it was asked for** when a gap
+survives.
 
 **Loopback is not a small version of a network path: its MTU makes a percentage loss model
 meaningless.** *(T5.)*
 
-> `lo` defaults to a 65536-byte MTU, so `loss 1%` discards 1 % of ~37 kB super-packets rather than of
-> wire-sized ones — each drop event tens of times larger and far burstier than any real path produces.
-> Pin the MTU to 1500 for the run. The tell is the packet count: 1,366 packets for a window that should
-> carry 36,000.
+`lo` at 65536-byte MTU makes each drop event far larger and burstier than a real path. Pin MTU to 1500;
+the tell is packet count far below expectation for the window.
 
 **`netem slot MIN MAX` with no allowances is a rate cap, not a jitter model.** *(T5.)*
 
-> Bare `slot` releases **one packet per slot**, which at 30–90 ms intervals is a ~200 kb/s ceiling. The
-> segmented lane read 0.77 Mb/s and the cell was written down as a collapse under jitter; the collapse
-> was entirely the instrument. Set `packets` and `bytes` allowances so the slot varies timing without
-> also metering throughput.
+Bare `slot` releases one packet per slot (~200 kb/s ceiling). Set `packets` and `bytes` allowances so
+timing varies without metering throughput.
 
 **In a timing rig, assert the process census between legs rather than trusting a kill, and check that
 a file's size and its packet count agree.** *(T13.)*
 
-> Killing a backgrounded `subscriber | groomer` pipeline by its last PID reaps only the groomer.
-> Three orphaned subscribers competed for two cores by the last leg, inflating exactly what was being
-> measured. The tell was arithmetic, not suspicion: a 17 MB capture that censused as 2.4 M packets.
+Killing a backgrounded pipeline by its last PID reaps only the groomer; orphaned subscribers inflated
+CPU. A 17 MB file that censused as 2.4 M packets was the tell.
 
 **The carrier rate must exceed the arriving content rate, or the groomer drops content.** *(T12.)*
 
-> A 2.0 Mb/s egress target for a 1.9 Mb/s feed leaves no stuffing headroom: 4,011 packets dropped, 11
-> continuity errors.
+A 2.0 Mb/s egress target for a 1.9 Mb/s feed produced 4,011 drops and 11 continuity errors.
 
 **A two-host latency figure must bracket its clock, and a cell whose clocks moved by more than the
 probe's uncertainty is spurious no matter how clean it looks.** *(T18.)*
 
-> The origin's clock drifted ~1 ms per minute against this one, so every WAN cell probes the offset
-> before and after and reports the difference. One cell straddled a clock step — 13.94 ms of drift
-> against a 6.47 ms probe uncertainty — and returned the most attractive result in the experiment: a
-> median of exactly 1000.3 ms, a 37 ms spread, and the only zero PCR-violation count on any arm. Re-run,
-> it reads 2072 ms with 36 violations. The check is what stopped it being published, and the tell was the
-> drift, not the implausibility — the figure was entirely plausible.
+One cell straddled a clock step (13.94 ms drift against 6.47 ms probe uncertainty) and returned an
+attractive median of 1000.3 ms with zero PCR violations; re-run read 2072 ms with 36 violations. Probe
+offset before and after each WAN cell.
 
 **Launch a long-lived remote fixture once, from a locally backgrounded SSH, and have the measurement
 probe it rather than start it.** *(T18.)*
 
-> `setsid nohup … &` over SSH does not detach the way it appears to: the SSH invocation blocks until the
-> remote process exits, so a cell that starts its own hour-long clock server hangs for the hour. Earlier
-> short-lived variants had masked this by "working" — they returned in exactly the server's lifetime.
-> Backgrounding the SSH locally makes the wait harmless; making the fixture a separate step means a cell
-> that finds no reference fails loudly instead of reporting no latency.
+`setsid nohup … &` over SSH blocks until the remote process exits, so a cell starting its own hour-long
+clock server hangs for the hour. Background SSH locally; a cell that finds no reference should fail loudly.
 
 **Bind the port before opening the output file, and refuse the run when a previous cell's listener is
 still up. And do not trust a process census taken from a sandboxed shell.** *(T18.)*
 
-> A tap that opened its CSV first and bound its socket second truncated the file it was about to fail to
-> write, so a port collision presented as *the transport delivered nothing* — the one symptom that looks
-> like a real finding. Meanwhile a sweep believed dead was still running: the `ps` used to check it was
-> sandboxed and could not see it, its taps held the egress ports, and the cells that did run were
-> competing with it for the CPU whose scheduling was being measured. Two sweeps' worth of MoQ and
-> segmented figures had to be discarded. The pre-flight check that would have caught it is one `pgrep`,
-> and the census that finally showed the truth had to be run from an unsandboxed shell.
+Opening CSV before binding truncated the file on port collision so failure looked like "transport
+delivered nothing". Sandbox `ps` missed a sweep still holding taps and CPU; pre-flight with `pgrep`
+from an unsandboxed shell.
 
 **Sort on the key, not the record.** *(T12.)*
 
-> An arrival-ordered selector sorted whole `(time, leg, payload)` tuples, so microsecond-tied
-> datagrams were ordered by payload bytes and one leg's own packets were scrambled into 207 phantom
-> continuity errors.
+Sorting whole `(time, leg, payload)` tuples ordered microsecond-tied datagrams by payload and scrambled
+one leg into 207 phantom continuity errors.
 
 **Any redundancy test whose sources are started independently measures its own clock skew.** *(T6.)*
 
-> Two publishers replaying independent copies of the same clip from its start leave the standby's
-> media timeline lagging by exactly the join delay, so on splice the exporter is handed timestamps in
-> the past and emits nothing until the new source overtakes. The reported "8–9 s stall at standby
-> join" tracked the join delay with slope 1.
->
-> The segmented arm of the same experiment repeated the mistake in a new costume, which is why the
-> rule is worth stating as *"same file" is not "same stream"*: two packagers each opening the clip
-> for themselves, twelve seconds apart, produced a receiver stream oscillating ±20 s, and none of
-> that was a property of the lane. Fan one regulated source into both legs — `gtee` into two FIFOs,
-> or a live multicast for a mid-stream joiner — and the forward leaps vanish entirely.
+Independent replays from clip start lag by the join delay; *"same file" is not "same stream"* when two
+packagers open the clip apart in time. Fan one regulated source into both legs and forward leaps vanish.
 
 **The merge window is the union of the legs' activity.** *(T12.)*
 
-> Grading only the window where both legs are live truncates the analysis at the blackout it is meant
-> to measure, and scores a covered outage as no outage. The survivor defines the end of the window,
-> which is the entire point of 1+1.
+Grading only where both legs are live truncates at the blackout being measured and scores covered
+outage as none; the survivor defines the end of the window.
 
 **Verify where the capture tap sits relative to the impairment.** *(T9.)*
 
-> A tap downstream of the shaper measures what reached the path, not what the sender pushed. Over one
-> window the capture recorded 22,381 datagrams against the shaper's 22,396 passed and 2,441 dropped.
-> Without that check, "unchanged under loss" reads as a finding when it is an artefact of tap
-> placement.
+A tap downstream of the shaper measures what reached the path, not what the sender pushed — without
+that check, "unchanged under loss" can be tap placement.
 
 **A workaround flag must record which platform it works around, and be re-tested when the platform
 changes.** *(T26.)*
 
-> `--server-quic-gso=false` entered this campaign for a stated reason — GSO stalls on *macOS
-> loopback* — and was then carried unexamined onto Linux EC2 hosts, where GSO works. It cost 29 % of
-> per-subscriber relay CPU and half the usable fan-out ceiling, and the first arm of a scaling
-> experiment measured a deliberately handicapped relay before anyone re-read the reason for the flag.
->
-> The general form: an inherited flag is a claim about an environment. When the environment changes,
-> the claim needs re-testing, and a scaling result is exactly where an unexamined one does the most
-> damage — because it does not look like an error, it looks like a capacity number.
+`--server-quic-gso=false` was for macOS loopback GSO stalls but ran unexamined on Linux EC2, costing
+29 % relay CPU and half the fan-out ceiling before a scaling arm measured a handicapped relay. Re-test
+inherited flags when the environment changes.
 
 **Fit the model over the régime that holds, then move a resource to test its prediction.** *(T26.)*
 
-> A fan-out curve invites a fit across every point measured, which averages the linear region with the
-> collapse and describes neither. Fitting only the points that held delivery gives relay CPU as
-> 0.806 % of a core per subscriber, which *predicts* a single-core ceiling near 124.
->
-> That prediction was then tested rather than reported: pinning the relay to one core with `taskset`
-> halved the predicted ceiling and brought the cliff inside the range the rig could reach, and the
-> collapse duly arrived between 125 and 150 with the relay at 99.9 % of that core. **Constraining a
-> resource to move a predicted knee is cheaper than scaling the rig until the knee appears**, and it
-> converts a fitted slope into a falsifiable one — the rig could not drive enough subscribers to reach
-> the two-core ceiling at all.
+Fitting every fan-out point averages linear region with collapse. Fitting only delivering points gave
+0.806 % core per subscriber and predicted ~124 on one core; `taskset` halved that and the cliff arrived
+between 125 and 150. **Constraining a resource to move a predicted knee is cheaper than scaling until
+the knee appears.**
 
 **A ramp cannot measure anything that develops. Hold the variable you are not asking about still.**
 *(T26, T27.)*
 
-> T26 recorded `moq export ts` at "95.6 MB at N = 1 and 103.3 MB at N = 150 — essentially fixed per
-> process, not a buffer that grows". Both numbers were right and the conclusion was wrong, because in a
-> ramp N and elapsed time move together: every point was 45 s old, so what looked like a flat
-> per-process cost was the first 45 s of a cache filling. Holding N = 10 constant and letting time be
-> the only variable gave 50.2 → 121.9 MB over 703 s, decelerating, **with drawdowns** — memory handed
-> back, which distinguishes a cache from a leak — settling where T21 independently found the same
-> process sitting for four hours.
->
-> The corollary is that the same instrument cannot answer both questions. A capacity rig and a
-> permanence rig differ in which variable they pin, and reusing one for the other is how a nine-minute
-> host memory exhaustion gets recorded as a fan-out limit at a fixed N.
+At N=1 versus N=150, export memory looked flat because every point was 45 s old in a ramp where N and
+time move together. Holding N=10 and varying time showed cache fill with drawdowns. A capacity rig and
+a permanence rig differ in which variable they pin.
 
 **A stop condition must fire on the cause, not on a symptom the failure also produces.** *(T27.)*
 
-> A high-fan-out soak was configured to stop when per-subscriber delivery fell below 85 % of the N = 1
-> rate, and it duly reported "delivery fell to 78.5 % at n=100". It had not. `rx_bytes` was constant at
-> ~12.86 GB per cell across every cell *including* that one, and relay egress held 990 Mb/s throughout:
-> the bytes never stopped arriving. The host had OOM-killed a subscriber and spent 38 M direct-reclaim
-> scans, and the figure recorded was the harness failing to account for traffic it was still receiving.
->
-> A delivery threshold is downstream of memory, CPU and scheduling, so it fires last and blames the
-> wrong thing. Watching `MemAvailable` stops the run while the readings still mean something and names
-> the harness. **Where a resource can be measured directly, do not infer it from throughput.**
+Delivery below 85 % of N=1 reported failure while `rx_bytes` and relay egress stayed flat — OOM had
+killed a subscriber. **Where a resource can be measured directly, do not infer it from throughput**;
+watch `MemAvailable` when memory can stop the run.
 
 **A cleanup pattern must name the run, not the tool.** *(T27.)*
 
-> §5 already carries *A `pgrep` or `pkill` pattern matches every command line that carries it*, from
-> `pkill`s that killed their own ssh session. The same class recurred one level out: an in-lane rig's cleanup ran
-> `pkill -f ts-liveness.py`, which killed a detector belonging to a *different* experiment on the same
-> host, broke that experiment's subscriber pipe and ended its run — and the garbage the broken pipe
-> then fed the detector produced a phantom 94,847 s outage that had to be diagnosed as well.
->
-> Two hosts running two experiments is now the normal case in this campaign, so scoping is not
-> optional: every pattern includes the run's own label, broadcast name or output path.
+§5 already carries *A `pgrep` or `pkill` pattern matches every command line that carries it*. `pkill -f
+ts-liveness.py` killed another experiment's detector on the same host. Scope every pattern to the run's
+label, broadcast name or output path.
 
 **A broadcast name may not be reused by back-to-back arms.** *(T27.)*
 
-> Consecutive arms of an in-lane experiment shared one broadcast name. T25 established that the relay
-> retains an abandoned session until the QUIC idle timeout, so the second arm's subscriber attached to
-> the *first* arm's broadcast and died with `json: dropped` the moment the new publisher replaced it —
-> costing a three-minute run and looking initially like a defect in the lane. One name per arm, or a
-> wait longer than the idle timeout between them; the first is free.
+The relay retains an abandoned session until QUIC idle timeout; a reused name lets the second subscriber
+attach to the first broadcast and die on publisher replace. One name per arm, or wait longer than idle
+timeout.
 
 **"Blocked" needs three words, not one: name the apparatus, and name the host you checked.**
 *(T28 and T31.)*
 
-> Both were carried in the register as runnable, both were picked up on that basis, and neither would
-> run: T28's transport axis needs `netem`/`tc` and T31's rig is two Linux network namespaces joined by
-> a veth, none of which exists on this campaign's macOS workstation. That much was a real gap in the
-> register, which recorded what was *owed* to third parties and said nothing about what the apparatus
-> required. But the conclusion drawn from it — "blocked on a Linux host" — was **wrong**, and written
-> into five places before anyone noticed. Two EC2 Linux hosts were already provisioned, already had
-> `netem` and namespaces, and had already used them for T5, T8b and T20. The ladders ran on the
-> secondary the following session with no new apparatus at all.
->
-> The error was not missing capability, it was **unverified absence**. "It does not run here" had been
-> allowed to stand in for "it does not run anywhere", and the distance between those is one `ssh` and
-> one `modinfo`. So distinguish them explicitly and never let the first imply the second:
->
-> | What is true | What may be written |
-> |---|---|
-> | No host in the estate has the apparatus | **blocked** — and say what would supply it |
-> | A host has it, reachable over SSH, not yet checked | **not blocked; unverified** — go and check, it is one command |
-> | A host has it and the rig needs porting | **not blocked; not yet run**, with the porting cost |
->
-> **Record the substrate requirement in the register entry beside the third-party dependency**, so an
-> entry cannot read "runnable now" on a host that cannot run it — and before writing "blocked" on a
-> substrate, enumerate the hosts and check one. A campaign with remote hosts has no business
-> concluding anything about capability from the machine it happens to be typing on.
+T28 and T31 were marked runnable on macOS where `netem` and network namespaces do not exist, and
+"blocked on a Linux host" was written widely — yet Linux EC2 hosts already had the apparatus. Distinguish
+unverified absence from estate-wide block:
+
+| What is true | What may be written |
+|---|---|
+| No host in the estate has the apparatus | **blocked** — and say what would supply it |
+| A host has it, reachable over SSH, not yet checked | **not blocked; unverified** — go and check, it is one command |
+| A host has it and the rig needs porting | **not blocked; not yet run**, with the porting cost |
+
+**Record the substrate requirement in the register entry beside the third-party dependency**, and before
+writing "blocked" on a substrate, enumerate hosts and check one.
 
 **A grader is validated in the domain it was exercised in, and "file" and "wire" are different
 domains.** *(T28.)*
 
-> `t28-media-lost.py` measures programme loss by comparing elapsed PCR time against the bytes between
-> two PCR samples, and it reproduced four injected holes and one injected repeat to the microsecond.
-> It was then pointed at a live `moq export ts` capture and reported **1,254 s of duplication in a
-> 55 s capture**. The arithmetic assumes a constant byte rate; the exporter emits PCR-bearing packets
-> in clusters (T19's positional finding), so the median packet gap between adjacent PCR samples was
-> **6 packets** where a CBR stream gives ~150, and the rate reference collapsed to 0.361 Mb/s against
-> a true 8.595 Mb/s. **The hole column survived and the duplication column did not**, because a hole
-> is dominated by its time term — which is the dangerous shape, since the figure being quoted looked
-> right. Grade a raw exporter capture against the stream's own PCR cadence with byte positions
-> ignored, or put the groomer in the path and restore CBR first. Either way, **run the known-answer
-> self-test in the domain you are about to use**: a self-test that passes in one domain says nothing
-> about the other.
+`t28-media-lost.py` matched injected holes on file captures but reported **1,254 s of duplication in a
+55 s** live exporter capture because clustered PCR emission broke the constant byte-rate assumption.
+**Run the known-answer self-test in the domain you are about to use**; grade raw exporter output on PCR
+cadence with byte positions ignored, or restore CBR through the groomer first.
 
 **Delete an output file before the capture that is supposed to write it, or an outage measures the
 run before it.** *(T4, live ingest.)*
 
-> A recovery test sampled a local multicast group into a fixed path before and after killing the
-> sender, and reported the *same* byte count during the outage as before it — because the capture
-> wrote nothing and `stat` read the previous sample still sitting there. The failure is silent, it
-> always errs towards "healthy", and it is indistinguishable from the result the test hopes for. Two
-> measurements in one session were wrong this way before the repeated figure gave it away.
-> **`rm -f` the target inside the measurement function, never once at the top of the script**, and
-> treat an unchanged byte count across a state change as a rig fault until proven otherwise.
+`stat` on an undeleted path read the previous sample during outage and read healthy. **`rm -f` the target
+inside the measurement function, never once at the top of the script**, and treat unchanged byte count
+across a state change as a rig fault until proven otherwise.
 
 **A file source feeding a live transport must be paced, and the reader must be attached first.**
 *(T4, live ingest.)*
 
-> Three candidate local hand-off transports — unicast UDP, multicast on loopback, multicast on the
-> NIC — were all recorded as FAILED, and the conclusion drawn was that loopback multicast does not
-> work on these hosts. It does. `tsp -I file` reads at disk speed, so a 60,000-packet slice was
-> delivered into a datagram socket in milliseconds while the reader was still starting a second
-> later, and UDP buffers nothing for an absent reader. With `-P regulate --pcr-synchronous` and the
-> reader started first, two of the three worked. **A negative result about a transport is only about
-> the transport if the sender ran at the stream's own rate and someone was listening** — the same
-> class of error as grading a lane through an unpaced publisher.
+Unpaced `tsp -I file` floods UDP before the reader starts and false-fails transports. With `-P regulate
+--pcr-synchronous` and reader first, loopback multicast worked. **A negative result about a transport
+is only about the transport if the sender ran at the stream's own rate and someone was listening.**
 
 **Never put `ffmpeg` in front of MoQ in a carriage path.** *(T3, T4.)*
 
-> `ffmpeg -c copy -f mpegts` is not a passthrough. Measured on the retired live-ingest unit's own
-> command, a 13-PID slice arrives as **5 PIDs**: default stream selection keeps one video and one
-> audio, renumbers them to 256/257, and discards the NIT, TDT/TOT, the second audio, teletext and all
-> three SCTE-35 PIDs. `tsp` on the same slice is byte-identical to the source. The damage is upstream
-> of the transport and unrecoverable — no lane can carry a PID that never arrived — and it has now
-> cost this campaign two publishers and one round of misattributed carriage rows. **Use `tsp -I srt`
-> / `tsp -O srt` for SRT and `tsp` for replay; if ffmpeg must appear, it is a transcode and must be
-> declared as one.**
+`ffmpeg -c copy -f mpegts` is not passthrough: a 13-PID slice becomes **5 PIDs** with renumbered
+video/audio; `tsp` is byte-identical. **Use `tsp -I srt` / `tsp -O srt` for SRT and `tsp` for replay;
+if ffmpeg must appear, it is a transcode and must be declared as one.**
 
 **Separate the contribution session from the thing under test.** *(T4, live ingest.)*
 
-> A fused `srt-listener | moq import` pipeline makes every restart of the experiment a restart of the
-> third party's feed. Split at a local multicast group and the contribution session survives the MoQ
-> side being killed — measured: publisher killed, caller unaffected, unit back in 8 s, group never
-> stops. The same split makes the input UDP rather than SRT, so a later move to a real multicast
-> source changes one unit instead of the design, and gives an analyser a tap that costs the publisher
-> nothing. **Where a feed comes from outside the lab, the boundary between it and the rig is part of
-> the rig's design, not an implementation detail.**
+A fused `srt-listener | moq import` restarts the third-party feed on every experiment restart. Split at
+local multicast so contribution survives MoQ kills and gives the rig a tap on the publisher input.
+**Where a feed comes from outside the lab, the boundary between it and the rig is part of the rig's
+design, not an implementation detail.**
 
 **The reference arm for a carriage measurement is the input to the carriage, not a second copy of the
 source.** *(T4, live ingest.)*
 
-> Asked for a third encoder output to compare MoQ egress against, the answer is that the better
-> reference already exists and costs nothing: the local group the publisher reads from. Three readers
-> joined it simultaneously alongside the publisher and captured **byte-identical** 6 s windows, full
-> 13-PID mux, publisher undisturbed at `NRestarts=0`. A separate encoder output is a *different
-> encode*, so a comparison against it measures encoder variance plus carriage; a tap on the publisher's
-> own input measures carriage alone, on one host and one clock. **Take the reference from the last
-> point the two paths shared, and the difference is attributable; take it from a parallel source and
-> it is not.**
+Three readers on the publisher's local group captured **byte-identical** windows alongside the publisher;
+a separate encoder output is a different encode. **Take the reference from the last point the two paths
+shared, and the difference is attributable.**
 
 **Do not re-base a ladder on a different emulator to make it runnable.** *(T31.)*
 
-> The macOS workstation has `dnctl`/`pfctl` dummynet, so T31's ladders are buildable here in the sense
-> that impairment can be applied. They would not be comparable: T5, T8b and T20 all used `netem`, and
-> T31 exists to *extend* T8b. A ladder measured on a different emulator cannot sit in the same table as
-> the one it extends, so the substrate is part of the experiment's definition rather than a detail of
-> its execution. Wait for the host.
+macOS `dnctl`/`pfctl` would not be comparable to T5, T8b and T20 on `netem`; T31 extends T8b. Wait for
+the Linux host.
 
 ### A rehearsal that starts from a directory somebody already set up has rehearsed the measurement, not the day
 
-*From [T33](test-33-gate2-preparation.md).* The Gate 2 acceptance harness fixes the measurement set,
-the run order and the pass table in a script, and its own docstring says that is the point. It was
-still unrunnable. It assumed a relay was listening, its fingerprint was at `/tmp/t33/fp.txt`, and
-three fixtures existed under `/tmp/t33/fixtures/` — and **nothing in the repository created any of
-them.** They had been built by hand during the first rehearsal, in a `/tmp` that no longer existed.
-The harness aborted on its own precondition check, correctly, and could not have been run on
-hardware day by anyone.
-
-> **Rehearse from nothing, on a host that has never run it.** Anything the rig needs and does not
-> build is a precondition you have not tested, and a rehearsal conducted inside a warm working
-> directory cannot see it. The same pass then found two undeclared transitive script imports and a
-> relay that comes up healthy while serving no fingerprint endpoint at all.
+*From [T33](test-33-gate2-preparation.md).* Gate 2's harness assumed relay, fingerprint path and fixtures
+that nothing in the repository created — built by hand in `/tmp` that no longer existed. **Rehearse from
+nothing, on a host that has never run it.** Anything the rig needs and does not build is an untested
+precondition; the same pass found undeclared script imports and a relay with no fingerprint endpoint.
 
 ### A regression with a sharp signature is a better build-identity test than a version string
 
-*From [T40](test-40-continuous-join-through-srt.md).* Rebuilt from one commit on two hosts, the
-binaries self-reported different version numbers — `0.9.11-d518b61b` against `0.11.2-d518b61b` — from
-the same tree, because the version *number* in this tree goes stale independently of the `-<sha>`
-suffix. Arguing about it from the string is unresolvable.
-
-> **Ask the binary what it is.** Where a known defect has a sharp, build-specific signature, run it:
-> pre-#3375 is healthy under the continuous-join rig and #3375 onward stalls permanently, so three
-> minutes of measurement settles what a version string cannot. Prefer a functional discriminator over
-> any self-report.
-
-> **The self-report has since got worse, and the rule now binds absolutely.**
-> [#3912](https://github.com/moq-dev/moq/pull/3912) dropped the git-describe build scripts so that
-> the binaries report the crate version alone: `53f8aa99d` says `moq 0.11.2`, with **no `-<sha>`
-> suffix at all**. The inconsistency the rule was written about is fixed — two hosts building one
-> commit now agree — at the cost of the only part of the string that identified the commit. Build
-> identity comes from the `bin-<sha>.sha` sidecar that `ec2-build-main.sh` writes, and every rig
-> that records a build must print that file rather than `--version`.
+*From [T40](test-40-continuous-join-through-srt.md).* Same commit on two hosts self-reported different
+version numbers while the git suffix went stale independently. **Ask the binary what it is:** where a
+defect has a sharp signature (pre-#3375 healthy under continuous-join, #3375 onward stalls), measurement
+settles what strings cannot. [#3912](https://github.com/moq-dev/moq/pull/3912) dropped git-describe so
+binaries report crate version alone with **no `-<sha>` suffix**; print the `bin-<sha>.sha` sidecar from
+`ec2-build-main.sh` rather than `--version`.
 
 ### Hash both sides of a patched-against-stock pair before running either
 
-*From [T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay).* A one-line
-publisher patch was built on a branch, and the stock binary was then rebuilt by switching back. The
-patch had never been committed, so `git switch` carried the modified file across. The build system
-also saw nothing to recompile. Both copies carried the patch and hashed identically, and an A/B run
-on them would have measured the patch against itself.
-
-> **A variant pair is two different hashes or it is not a pair.** Commit the variant before
-> switching, rebuild each side from a clean `git status`, and compare the binaries' SHA-256 before
-> the first run. Identical hashes mean the comparison is void, whatever the branch names say.
+*From [T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay).* An uncommitted
+patch survived `git switch` and both binaries hashed identically. **A variant pair is two different hashes
+or it is not a pair.** Commit the variant, rebuild each side from clean `git status`, compare SHA-256
+before the first run.
 
 ### A closed issue is a claim about a tracker, not about a binary
 
-*From the [#3987](https://github.com/moq-dev/moq/pull/3987) round.* Four defects the campaign had
-blocked work on — [#3798](https://github.com/moq-dev/moq/issues/3798),
-[#3925](https://github.com/moq-dev/moq/issues/3925),
-[#3926](https://github.com/moq-dev/moq/issues/3926),
-[#3731](https://github.com/moq-dev/moq/issues/3731) — were closed *as completed* on one day, by a
-pull request that added eight Markdown files under `quest/` and changed no code. Every document in it
-ends *"close this issue when the quest finishes"*, and every defect re-measured as live. Treating the
-closures as the usual unblock signal would have restarted a permanence soak that cannot run, and
-would have put "fixed upstream" into the record on the strength of a state transition in a tracker.
-
-> **Re-test on the closure; never read it as the fix.** Before acting on a closed upstream issue,
-> establish what actually changed: read the closing commit's diff, check the code path the defect
-> lives in, and only then run the rig. A closure can mean fixed, re-planned, de-duplicated,
-> won't-fix or triaged, and only the first of those unblocks anything. The cheapest reliable
-> discriminator is `git log <closing-ref>` plus a diffstat — a PR that touches no source file cannot
-> have fixed a runtime defect, whatever its title says.
+*From the [#3987](https://github.com/moq-dev/moq/pull/3987) round.* Issues closed *as completed* by a PR
+that added Markdown under `quest/` and changed no code, while defects re-measured live. **Re-test on the
+closure; never read it as the fix.** Read the closing diff and the code path; `git log` plus diffstat —
+a PR touching no source cannot fix a runtime defect.
 
 ### A watcher that polls for absence must wait for presence first
 
-*From [T41](test-41-import-reanchor-coverage.md).* An arm was scored by waiting for the process under
-test to disappear. All three arms reported dying at t=1.0 s, identically and implausibly, because the
-pipeline feeding them takes a few seconds to start and the watcher's first poll ran before the
-process existed. The rig had measured its own start-up latency and called it the defect.
-
-> **Absence is what "not started yet" looks like as well as what "died" looks like** — the same
-> ambiguity as *A subscriber that ran for the whole window and did not die may still have measured
-> nothing*, inverted. Wait for the process to appear, record *that* moment as t=0, and only then
-> watch for it to go; treat a failure to appear as its own void outcome rather than as an instant
-> death. An arm whose lifetime comes back equal to the rig's own start-up delay is the signature.
+*From [T41](test-41-import-reanchor-coverage.md).* All arms reported death at t=1.0 s because the watcher
+polled before the process existed. **Absence is what "not started yet" looks like as well as what "died"
+looks like.** Wait for appearance, record that as t=0, then watch for exit; equal lifetime to start-up
+delay is the signature.
 
 ### A watcher that polls for presence must not find the previous run's file
 
-*From [T13](test-13-downstream-grooming.md) § Liveness.* The linger rig ends a run once the exporter
-writes its exit status to a file, and bounds that wait by the linger. A second batch wrote into run
-directories the first had used, so the old, non-empty status file satisfied the wait at once. The rig
-stopped the relay and the exporter 37 ms after the last publisher, and the exporter, stopped by the
-signal, exited 0 with no end logged. For a few minutes that looked like the fix under test exiting
-silently.
-
-> **Presence is what "left over" looks like as well as what "finished" looks like** — the inverse
-> of the rule above. A rig that waits for a file must delete it before the run starts, and a run
-> directory is either fresh or cleared, never inherited. The signature is a run that ends a fixed,
-> tiny interval after its last stimulus, with the process under test logging no reason.
+*From [T13](test-13-downstream-grooming.md) § Liveness.* A reused status file ended the run 37 ms after
+the last publisher. **Presence is what "left over" looks like as well as what "finished" looks like.**
+Delete status files before the run; run directories are fresh or cleared, never inherited.
 
 ### A control made of two production deployments is a coincidence, not an experiment
 
 *From [T34](test-34-real-encoder-severity.md) and [T40](test-40-continuous-join-through-srt.md).* Two
-hosts happened to run builds either side of a regression, which looked like a free `OLD`/`NEW` pair
-and produced a standing instruction not to unify them. It was never an instrument: the pair varied
-host, kernel, core count and contribution path alongside the build, and it held two deployments
-hostage to an experiment that had not been scheduled.
-
-> **If the same comparison can be made from pinned artefacts on one host, make it there and let the
-> deployments move.** Pinned binaries survive every rebuild; a deployment's build does not, and a
-> control that depends on not upgrading anything will eventually be destroyed by someone with a good
-> reason.
+hosts on builds either side of a regression varied host, kernel and path alongside the binary. **If the
+same comparison can be made from pinned artefacts on one host, make it there and let the deployments
+move.** Pinned binaries survive rebuilds; a control that forbids upgrades is eventually destroyed.
 
 ### An inline instrument damaged one lane and was invisible on the other
 
-*From [T28](test-28-failure-injection-matrix.md) P1-m.* To measure delivery latency the rig put a
-PES-timestamp tap inline on both sides of both lanes — deliberately identical on each, so that
-whatever it cost, it cost both arms. It did not. The tapped SRT lane graded **4.2–5.4 s of programme
-lost and 5,704–8,930 continuity errors with no impairment at all**; the same lane with the tap removed
-graded **0.000 s lost and 0 continuity errors**. The tap was corrupting the transport stream, and the
-MoQ lane never showed it because `moq export ts` re-synthesises the stream at egress — regenerating
-continuity counters and PCR — and launders any damage done upstream of it.
+*(From [T28](test-28-failure-injection-matrix.md) P1-m.)* A PES-timestamp tap inline on both lanes was meant to cost both equally; on SRT it graded **4.2–5.4 s** lost and **5,704–8,930** continuity errors with no impairment, and **0.000 s / 0 errors** with the tap removed. `moq export ts` re-synthesises at egress and launders upstream damage.
 
-> **"The instrument is on both arms" is not the same as "the instrument cancels."** It cancels only if
-> both arms would *report* its effect. Where one lane passes bytes through and the other regenerates
-> them, an instrument that damages the stream is visible on the first and erased by the second, and
-> the comparison silently becomes a measurement of the instrument. Had this run been graded without
-> its controls, SRT would have looked catastrophically worse than MoQ on entirely fabricated evidence.
+**"The instrument is on both arms" is not the same as "the instrument cancels."** *(T28.)* It cancels only if both arms would report its effect. Where one lane passes bytes through and the other regenerates them, a damaging instrument is visible on the first and erased on the second, and the comparison measures the instrument.
 
-> **Prefer a mirroring tap to a pass-through one.** `tsp -P fork --nowait --ignore-abort` hands the
-> instrument a copy while the graded stream continues to its output, so the capture never passes
-> through the instrument's process. And keep an unimpaired control for **every** lane at **every**
-> setting: this was caught only because the SRT controls refused to grade clean.
+**Prefer a mirroring tap to a pass-through one.** *(T28.)* `tsp -P fork --nowait --ignore-abort` feeds the instrument a copy while the graded stream continues. Keep an unimpaired control for every lane at every setting.
 
-> **"The tap" was two taps, and only one of them did it — so attribute the position, not the
-> technique.** The rig tapped both the source and the egress, and removing both together fixed it,
-> which made "inline taps corrupt streams" look like the lesson. Arming the two separately says
-> otherwise: the **egress** tap grades 0.000 s and 0 continuity errors inline, identically to no tap
-> at all, while the **source** arm alone reproduces the full 4.563–4.693 s and 6,001–6,493 errors.
-> *A pass-through instrument is dangerous where it feeds something real-time, not everywhere — and a
-> fix that removes two suspects at once has not identified either.*
+**"The tap" was two taps, and only one of them did it — so attribute the position, not the technique.** *(T28.)* The egress tap graded **0.000 s / 0 errors** inline; the source arm alone reproduced **4.563–4.693 s** and **6,001–6,493** errors. A pass-through instrument is dangerous where it feeds something real-time, not everywhere.
 
-> **The second attribution was confounded too, in exactly the way the sentence above warns about —
-> the cause is a process boundary, not an instrument.** Putting a Python reader in the source path
-> requires splitting the publisher into `tsp … -O file - | python3 … | tsp -I file - -O srt`, which
-> also moves `regulate --pcr-synchronous` out of the process that owns the SRT sender. The source arm
-> therefore changed two things at once. Separating them: a publisher that kept the two-`tsp` split
-> but mirrored its tap, so that **no Python sat in the path**, still graded **4.601–4.602 s lost with
-> 6,104–6,133 continuity errors**, and delivered **65.0 s of programme in a 60 s run** where the same
-> rig's MoQ lane delivered 57.1 s. Collapsing it to a single `tsp` holding both stages returned
-> **0.000 s, 0 errors and a 57.6 s span**. `regulate` paces against the stream's own PCRs; a pipe to
-> a second `tsp` inserts an unpaced buffer between that clock and the transmitter, and a live SRT
-> sender drops rather than waits. *Keep a real-time pacing stage and the transmitter it feeds in one
-> process. Where an instrument seems to be the cause, check first whether accommodating it moved a
-> process boundary — and treat "delivers more programme time than the run lasted" as the signature of
-> a lost clock, because loss and continuity counts alone do not distinguish it from a bad link.*
+**The second attribution was confounded too, in exactly the way the sentence above warns about — the cause is a process boundary, not an instrument.** *(T28.)* Splitting the publisher to put Python in the path also moved `regulate --pcr-synchronous` out of the SRT sender's process; mirroring without Python still graded **4.601–4.602 s** lost, **6,104–6,133** errors, and **65.0 s** programme in a 60 s run. A single `tsp` holding both stages returned **0.000 s, 0 errors, 57.6 s**. Keep pacing and the transmitter it feeds in one process; treat "delivers more programme time than the run lasted" as a lost clock.
 
 ### A capture that stops early grades as a flawless cell
 
-*From [T28](test-28-failure-injection-matrix.md) P1-m and the idle-timeout bracket.* A grader that
-measures media lost by comparing programme time against bytes delivered can only see a hole if
-something arrives *after* it. When the session dies mid-cell the capture simply ends, and the grader
-reports **0.000 s lost, 0 holes, 0 continuity errors** — the best possible score, for the worst
-possible outcome. This has now happened twice in one experiment: an SRT cell that captured 19.8 s
-against its siblings' 57.6 s, and both cells where a transport outage reached the QUIC idle timeout
-and the exporter exited with `dropped`, each capturing about a third of the bytes of a surviving
-cell and scoring perfectly.
+*(From [T28](test-28-failure-injection-matrix.md) P1-m and the idle-timeout bracket.)* When the session dies mid-cell the capture ends and a media-lost grader reports **0.000 s lost, 0 holes, 0 continuity errors** — best score, worst outcome (e.g. **19.8 s** captured vs siblings' **57.6 s**, or ~⅓ bytes after QUIC idle `dropped`).
 
-> **Grade the span and the byte count before reading any quality metric**, and treat a cell whose
-> span falls materially short of its siblings as void rather than as clean. An off-air session and a
-> perfect one are indistinguishable in the headline figure, and the headline figure is the one that
-> reaches the summary table. *The corollary is that a control alone is not enough — the controls here
-> were clean; it was the impaired cells that lied.*
+**Grade the span and the byte count before reading any quality metric**, and treat a cell whose span falls materially short of its siblings as void rather than as clean. *(T28.)* Controls can be clean while impaired cells lie in the summary table.
 
 ### Matching on a measured quantity can collapse the sweep you thought you were running
 
-*From [T28](test-28-failure-injection-matrix.md) P1-m, the sustained-loss ladder.* Matching the SRT
-arm to the MoQ lane's *measured* latency rather than its nominal budget is the correction that made
-the outage comparison valid, and it is still right. But MoQ's measured latency is ~2 s at every
-nominal budget, so matching three budgets — 0.5 s, 2 s and 6 s, a twelve-fold range — produced three
-SRT settings of 2,165, 2,016 and 2,012 ms. The SRT row looked like a budget sweep, was laid out as
-one, and is one buffer setting run three times. Its near-identical cells read as suspicious
-repetition until the matched values were examined, at which point they read as the expected result.
+*(From [T28](test-28-failure-injection-matrix.md) P1-m, the sustained-loss ladder.)* Matching SRT to MoQ's *measured* latency is correct, but MoQ's measured latency was ~2 s at every nominal budget, so budgets **0.5 s, 2 s and 6 s** became SRT settings **2,165, 2,016 and 2,012 ms** — one buffer run three times.
 
-> **After matching, print the matched values and check they still differ before reading the arm as a
-> sweep.** A matching function maps the independent variable through a measurement, and a
-> measurement that is flat in that variable maps the whole range onto one point. The arm remains
-> valid at the value it did run — it simply establishes one condition rather than a ladder, and the
-> write-up has to say which.
+**After matching, print the matched values and check they still differ before reading the arm as a sweep.** *(T28.)* A flat measurement maps the whole range onto one point; the arm establishes one condition, not a ladder.
 
 ### An impairment rung has to be expressed in the units the result depends on
 
-*From [T31](test-31-congestion-capacity-ladders.md).* The capacity ladder specified its rungs as
-absolute shaped rates — 12 Mb/s for the "sustained moderate shortfall", 8 Mb/s for the deep one.
-Against a ~9.95 Mb/s fixture, 12 Mb/s is 20 % of *headroom*, so the cell that was supposed to measure
-a mild sustained shortfall measured an unimpaired link and returned zero. The zero was correct and
-meant nothing, and because it was sitting in a ladder next to two cells that did mean something, it
-read as a result. Re-based on multiples of stream rate, the same rung at 0.9× measures the thing it
-was specified for, and the ladder's most useful cell — the mildest sustained shortfall, where the MoQ
-lane already loses picture and the segmented lane loses none — was inside the gap the absolute rungs
-had left.
+*(From [T31](test-31-congestion-capacity-ladders.md).)* Absolute shaped rates (**12 Mb/s** "moderate shortfall" vs ~**9.95 Mb/s** fixture) made a mild cell unimpaired and zero; re-based on multiples of stream rate (**0.9×**) hit the intended shortfall.
 
-> **Write a rung in the quantity the outcome is a function of, and derive the absolute value from
-> the fixture at run time.** Programme loss depends on the shaped rate *relative to* the stream, so a
-> rate in Mb/s is a rung whose meaning changes whenever the fixture does. The failure is quiet: the
-> cell runs, grades clean and reports a plausible number, and nothing in the output says the
-> impairment was never applied.
+**Write a rung in the quantity the outcome is a function of, and derive the absolute value from the fixture at run time.** *(T31.)* Programme loss depends on rate *relative to* the stream; a quiet failure runs, grades clean, and never says the impairment was absent.
 
 ### A median across a window containing a step measures where the step fell
 
-*From [T28](test-28-failure-injection-matrix.md) P1-m.* Two replicates of the same MoQ outage cell
-reported median delivery latencies of **7,936 ms and 2,184 ms** — a 3.6× disagreement that looked
-like the lane behaving non-deterministically. It was not. Delivery latency in these cells does not
-vary about a mean; it *steps* when the outage lands and stays up. A median over the whole window
-therefore reports the pre-outage value whenever fewer than half the samples are post-outage, so it
-encodes the outage's position in the window rather than its effect. The two cells agreed closely on
-p95 (9,868 ms) and on the first-third-to-last-third trend (1,896 → 9,721 ms).
+*(From [T28](test-28-failure-injection-matrix.md) P1-m.)* Two MoQ outage replicates reported medians **7,936 ms** and **2,184 ms** while p95 agreed (~**9,868 ms**); latency *steps* at outage, so median encodes outage position, not effect.
 
-> **Choose the statistic to match the shape of the change.** For a step, report the late-window value
-> and the trend across the window; keep the median only for quantities that are stationary within a
-> cell. *And where a metric is still moving when the window ends, say the figure is a lower bound
-> rather than a value* — several of these cells had not settled at 60 s.
+**Choose the statistic to match the shape of the change.** *(T28.)* For a step, report late-window value and trend; keep median only for stationary quantities. Where a metric is still moving at window end, call the figure a lower bound.
 
 ### A declared CSV column that is never written shifts every field after it
 
-*From [T28](test-28-failure-injection-matrix.md) P1-m.* The ladder's header declared sixteen columns
-and its writer emitted fifteen: a Python slice `sys.argv[2:8]` stopped one short and dropped
-`capture_bytes`, which sat in the middle of the row. Nothing failed. Every name-based read from
-`media_lost_s` onward silently returned its neighbour's value, so a first pass at the results table
-reported the *duplication* figure as media lost and the *p95* as the median, and the numbers were
-plausible enough to have been written up.
+*(From [T28](test-28-failure-injection-matrix.md) P1-m.)* Header declared sixteen columns, writer emitted fifteen (`sys.argv[2:8]` dropped `capture_bytes`); name-based reads from `media_lost_s` onward returned neighbours' values.
 
-> **Assert the field count when parsing a self-generated CSV**, and reconcile at least one row
-> against the human-readable log before building a table from it. A shifted column produces wrong
-> numbers of the right magnitude, which is the hardest kind to catch by eye.
+**Assert the field count when parsing a self-generated CSV**, and reconcile at least one row against the human-readable log before building a table from it. *(T28.)* Shifted columns yield wrong numbers of the right magnitude.
 
 ### Never edit a shell script while it is running
 
-*From [T8b](test-8b-congestion-control.md) P0-i.* A 20-minute pass finished all ten cells, then
-emitted `line 172: re: command not found` and `line 173: d: unbound variable` and skipped its own
-summary block. Both the local and the deployed copy passed `bash -n` afterwards, which sent the
-investigation looking for a corrupted transfer that had not happened.
+*(From [T8b](test-8b-congestion-control.md) P0-i.)* A 20-minute pass finished ten cells then hit nonsense errors on lines that did not contain the reported text; `bash -n` passed on both copies afterward.
 
-> **`bash` reads a script incrementally, by byte offset, not into memory.** Rewrite the file
-> mid-run and the interpreter resumes at its old offset in the new bytes, executing fragments of
-> whatever now sits there. The symptom is a syntactically valid script producing nonsense errors on
-> lines that do not contain the reported text, near the end of a long run. Edit a copy and deploy it
-> for the *next* run; never `scp` or `sed -i` over a script with a live pass in it.
+**`bash` reads a script incrementally, by byte offset, not into memory.** *(T8b.)* Rewriting mid-run resumes at the old offset in new bytes. Edit a copy for the next run; never overwrite a script with a live pass in it.
 
 ### A `pgrep` or `pkill` pattern matches every command line that carries it, including the one sending it
 
-*From [T26](test-26-cross-host-fanout.md), the P1-m tap validation, [T8b](test-8b-congestion-control.md)
-P0-i and [T25](test-25-isolation-under-abuse.md); recurred in [T43](test-43-fanout-current-build.md)
-and [T47](test-47-fixed-delay-export.md).* `pgrep -f` and `pkill -f` match against the whole command
-line of every process, and a pattern typed into an SSH command is also in the command line of the
-remote shell that runs it. So a cleanup can kill its own session, and a wait can wait on itself or on
-a sibling that quotes it.
+*(From [T26](test-26-cross-host-fanout.md), [T8b](test-8b-congestion-control.md) P0-i, [T25](test-25-isolation-under-abuse.md), [T43](test-43-fanout-current-build.md), [T47](test-47-fixed-delay-export.md).)* `pgrep -f` / `pkill -f` match the whole command line, including the SSH shell running the pattern. T26's `pkill -f "broadcast f5.fanout.hang"` killed the remote shell and left a stale publisher competing on the relay; T26 tap validation returned SSH **255** with the pattern present twice; T25 lost a session when `t25seg` appeared in the cleanup command line itself. T8b's `while pgrep -f "t8b-export-death.sh p0i "` matched the monitoring shell; T47's wait on **0.0.0.0:4443** never ended for the same reason.
 
-- **Cleanups that killed their own session.** In T26, `pkill -f "broadcast f5.fanout.hang"` sent over
-  ssh matched the remote shell's own command line, because the pattern is an argument of the command
-  being run, and killed that shell before the next statement. The previous run's publisher survived, a second
-  publisher announced the same broadcast, and the relay terminated one of the two about a minute in.
-  In the results that read as the source spontaneously failing at N = 1, and two runs were spent on
-  it. In the P1-m tap validation, `ssh host 'pkill -9 -f t18-tap-perturbation.sh; …'` returned 255
-  with no output: the pattern was present twice on that host, once in the target's command line and
-  once in the `bash -c` string the SSH daemon forked. The stale run kept going and the relaunch
-  landed silently beside it, so the next result came from the *old* build of the rig. T25 lost a
-  session to `pkill -9 -f "t25seg"` issued inside an `ssh` command line that itself contained
-  `t25seg`.
-- **Waits that waited on themselves.** In T8b P0-i a chain script waited for the previous pass with
-  `while pgrep -f "t8b-export-death.sh p0i "; do sleep 20; done`. The pass ended and the loop did
-  not, because a *monitoring* shell invoked over SSH carried the same pattern in its own command line,
-  so `pgrep` matched the watcher instead of the watched and the chain waited on itself indefinitely;
-  the matching `pkill -f` was worse, and terminated the SSH session issuing it. In T47 a wait loop
-  `while pgrep -f "0.0.0.0:4443"` sent over SSH matched its own command line and never ended.
+**Bracket one character of any `pgrep`/`pkill` pattern** — `pkill -9 -f "[t]18-tap-perturb"`, `t8b[-]export-death` — so the pattern cannot match a command line that quotes it. *(T26, T8b, T25, T43, T47.)* Bracketing does not stop a parent argv that still carries the literal (T26, T25). **The reliable fix is to put the patterns in a script file on the host and invoke the file** ([`f5-reset.sh`](scripts/f5-reset.sh)), so the pattern never enters the caller's command line.
 
-> **Bracket one character of any `pgrep`/`pkill` pattern** — `pkill -9 -f "[t]18-tap-perturb"`,
-> `t8b[-]export-death` — so the pattern cannot match a command line that quotes it. That covers waits
-> as well as kills. **Bracketing is not sufficient when the literal reaches the remote shell's argv
-> some other way**: it stops the pattern matching itself, not a parent whose argv contains the literal
-> string (T26), and T25's command line carried `t25seg` whatever the pattern's spelling. **The
-> reliable fix is to put the patterns in a script file on the host and invoke the file**
-> ([`f5-reset.sh`](scripts/f5-reset.sh)), so the pattern never enters the caller's command line.
->
-> **The file protects only a session that does nothing else.** `f5-reset.sh`'s own first version
-> repeated the mistake with an unbracketed `export ts --latency-max` and killed the ssh session that
-> called it. In T43 one ssh command ran the reset and then launched `f5-relay-side.sh`; the launch
-> text put that name in the session's argv, and the reset killed the session before the launch. Run
-> the reset in an ssh call of its own.
->
-> **A reset that does not verify is not a reset.** End the command with
-> `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean` and read the answer, or have the reset
-> count survivors and refuse to let a run start, because a failed cleanup is indistinguishable from a
-> successful one in the exit status when SSH dies mid-command. For sequencing, wait on a marker the
-> run writes at the end rather than on the absence of a process, since absence is also what a crash
-> on the first cell looks like.
+**The file protects only a session that does nothing else.** *(T43.)* An unbracketed pattern inside `f5-reset.sh` killed the caller; combining reset and launch in one ssh put the launch name in argv and the reset killed the session. Run the reset in its own ssh call.
 
-**A bracketed pattern still matches the next waiter in the queue.** *From
-[T28](test-28-failure-injection-matrix.md)'s attribution runs.* Three runs were queued behind one
-another: the first waited on `pgrep -f "[t]2831-attrib\.sh"`, the second on the first's PID, and the
-third on the second's PID before running `t2831-attrib.sh … qlog`. The bracket kept the first waiter
-from matching itself, but the third waiter's command line named the script, so the first waited on
-the third, which waited on the second, which waited on the first. Nothing ran after the attribution
-pass finished. **Queue a chain as one sequential command**, `a; b; c`, or wait on PIDs and end
-markers only; a name pattern matches every command line that mentions the name, including the
-queue's own.
+**A reset that does not verify is not a reset.** *(T26, T43, T47.)* End with `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean`, or refuse to start when survivors remain; wait on end markers, not only on process absence.
 
-**Check that a multi-cell runner is still alive after its first cell.** *From
-[T47](test-47-fixed-delay-export.md).* A five-cell runner on the T18 rig, started as `(nohup bash
-runner.sh > log &)` from a short-lived shell, ran its first 540 s cell and then stopped, with no line
-after the cell's header. The same runner started as a background job of a persistent shell ran
-every cell. The cause is not located; the rig's cleanup kills only its own stages' groups. Look
-for the second cell's header in the log, not only for the first cell's output.
+**A bracketed pattern still matches the next waiter in the queue.** *(T28 attribution runs.)* Three queued waits chained on script names deadlocked: the first waiter matched the third's command line. **Queue a chain as one sequential command**, `a; b; c`, or wait on PIDs and end markers only.
+
+**Check that a multi-cell runner is still alive after its first cell.** *(T47.)* A `(nohup bash runner.sh &)` from a short-lived shell ran one **540 s** cell then stopped; the same runner as a job of a persistent shell ran all cells. Look for the second cell's header in the log.
 
 ### A replicate loop inside one script invocation re-uses the fixed port the last replicate held
 
-*From [T31](test-31-congestion-capacity-ladders.md), the QUIC-backend arms.* A wrapper asked for
-three replicates of one cell by naming that cell three times in a single invocation of the ladder
-script. Two of the three came back VOID. The relay log said `Address already in use (os error 98)`
-and the subscriber log said `received goaway` / `peer redirected immediately`: the script binds a
-fixed port per cell, the previous replicate's relay had not released it, so the new relay died at
-bind while the **old one stayed up and answered the new subscriber**, then issued a GOAWAY when its
-own teardown arrived. The cell had a publisher, a subscriber and a relay, and was measuring the
-wrong relay.
+*(From [T31](test-31-congestion-capacity-ladders.md), QUIC-backend arms.)* Three replicates in one invocation: two VOID, `Address already in use`, subscriber got `goaway` — old relay answered the new subscriber.
 
-> **This is the identity-not-liveness trap of *A process that is still there is not the process you
-> started* (§ above), reappearing in our own replicate harness rather than in the system under
-> test.** Where a rig binds fixed ports, one replicate is one invocation, so the full teardown that
-> releases them runs between replicates; leave a gap for the socket to clear and write each
-> replicate to its own output directory. A cheaper standing guard is to have the rig fail loudly if
-> its port is already bound *before* it starts anything, rather than let a survivor serve the run.
+**This is the identity-not-liveness trap of *A process that is still there is not the process you started* (§ above), reappearing in our own replicate harness rather than in the system under test.** *(T31.)* With fixed ports, one replicate is one invocation with full teardown between; fail loudly if the port is bound before start.
 
-**The same trap returned between cells, and by a build rather than a harness.** The MoQ ladder tore
-a cell down with `kill` and a one-second sleep, which every earlier build tolerated. `5d0991b9`'s
-relay drains its sessions on SIGTERM for longer than that, so in the build bisection the cell after
-every successful one found the port still held and captured nothing: on both of that commit's
-backends, in every replicate, the 5 s outage and the 0.9× rung were void while the cells either side
-were sound. The ladder now waits for the relay to exit, forces it after 10 s, and says so in the log
-if the relay it started is not running three seconds later. **A teardown timed against one build is
-an assumption about that build**; wait for the process, not for a clock.
+**The same trap returned between cells, and by a build rather than a harness.** *(T31, build `5d0991b9`.)* `kill` plus one-second sleep was insufficient when the relay drained longer on SIGTERM; void cells until the ladder waits for relay exit (force after **10 s**) and logs if the started relay is not running **3 s** later. **A teardown timed against one build is an assumption about that build**; wait for the process, not for a clock.
 
 ### A subscriber that ran for the whole window and did not die may still have measured nothing
 
-*From [T8b](test-8b-congestion-control.md) P0-i.* The rig's outcome is "did the process exit", so a
-lane delivering zero bytes presents as N processes that ran the full 90 s and survived — which is
-exactly the null the experiment was trying to distinguish from a real one. With `--auth-public`
-silently inverted (§5), a whole arm could have scored as a clean survival.
+*(From [T8b](test-8b-congestion-control.md) P0-i.)* Outcome was process survival, so zero bytes still scored as full-window survivors; with `--auth-public` silently inverted (§5), a whole arm could look clean.
 
-> **Where the measurement is an absence, add an independent liveness column.** Classify a cell whose
-> capture is below a floor as *void* rather than as a survivor, and print it. A null result needs
-> positive evidence that the rig was working, and "nothing crashed" is not that evidence.
+**Where the measurement is an absence, add an independent liveness column.** *(T8b.)* Classify capture below a floor as *void*; "nothing crashed" is not positive evidence the rig worked.
 
 ### An unattended workstation sleeps through a paced run, and every process survives it
 
-*From the #4733 re-run.* A batch of 60 s damage arms, started on this workstation while nobody was at
-it, ran for 80 minutes. The power log showed the machine in maintenance sleep with brief dark wakes, so
-each arm's 60 s source took 780–1,060 s of wall clock. Every process exited 0, but the egress files
-ranged from 12 MB to 74 MB where a full run writes 74 MB. One arm happened to run between sleeps and
-was the only valid cell. The same arms under `caffeinate` all ran 61.7 s and wrote identical egress.
+*(From the #4733 re-run.)* Maintenance sleep stretched **60 s** arms to **780–1,060 s** wall clock; egress **12 MB–74 MB** vs **74 MB** full; only one arm valid. Under `caffeinate`, all ran **~61.7 s** with identical egress.
 
-> **Wrap every unattended local run in `caffeinate -dims`, and check each cell's wall-clock duration
-> against its nominal window before reading its result.** A cell whose duration overshoots is void,
-> however cleanly it exited.
+**Wrap every unattended local run in `caffeinate -dims`, and check each cell's wall-clock duration against its nominal window before reading its result.** *(#4733 re-run.)* Duration overshoot voids the cell however clean the exit.
 
 ### A grader whose pattern does not match its tool's wording scores every input as clean
 
-*From [T42](test-42-h3-receiver-fidelity.md) P0-e.* The laundering rig counted `tsp -P continuity`
-output lines matching `discontinuity`. The plugin writes `* continuity: packet index: 87,252, PID:
-0x006F (111), missing 9 packets` — the word never appears. The grader therefore returned zero for
-every arm, including an origin from which ten packets had just been excised on purpose. The
-conclusion it was about to support was that a re-muxing receiver and a byte-faithful one agree on
-continuity, which is the opposite of the truth and would have retired the instrument that the
-segmented lane needed.
+*(From [T42](test-42-h3-receiver-fidelity.md) P0-e.)* `tsp -P continuity` emits `* continuity: packet index: …, missing N packets`, not `discontinuity`; the grader returned zero on a ten-packet excision until a built-in positive control aborted at zero.
 
-What caught it was not review. The rig computes the damaged origin's error count first and aborts if
-it is zero, on the stated grounds that a fixture whose damage is invisible cannot discriminate
-between receivers. That guard fired, and the silent-pattern bug surfaced as a `FATAL` instead of a
-published finding.
-
-> **A grader must demonstrate, in the same run that uses it, that it detects known damage.** Build
-> the positive control into the rig rather than into a separate validation exercise: damage the
-> input by a known amount, require the grader to report it, and abort the run if it does not. This
-> costs one arm and is the only thing standing between a mis-typed pattern and a confident inverted
-> result. It generalises past text matching — any grader reading a tool's output is one upstream
-> rewording away from reporting universal success.
-
-An audit of every rig after this found the same bug in four of them: three counted `TS:` and one
-counted `discontinuity` alone, and all four return zero on a stream with ten known-missing packets.
-Two of the four fed published tables — T20's `cc_errors` column and T19's cushion sweep. The check
-is now in [`check-rigs.sh`](scripts/check-rigs.sh), which rejects any continuity count whose pattern
-`tsp` does not emit. **When a class of bug is found once, grep the whole rig directory for it before
-assuming it was one rig's mistake.**
+**A grader must demonstrate, in the same run that uses it, that it detects known damage.** *(T42, T19, T20.)* Damage the input by a known amount, require the grader to report it, and abort if it does not — one arm buys protection against a mis-typed pattern and an inverted conclusion. **When a class of bug is found once, grep the whole rig directory for it before assuming it was one rig's mistake.** Four rigs shared the defect (three counted `TS:`, one `discontinuity` alone); two fed published tables; [`check-rigs.sh`](scripts/check-rigs.sh) now rejects patterns `tsp` does not emit.
 
 ### A metric that spans the rig's startup transient puts a floor under the control
 
-*From [T22](test-22-silent-media-plane-failure.md) P0-f.* The segmented stall arm scored "longest
-interval with no playlist advance". The first measurement gave 8.1 s for the control against 30.5 s
-for a 30 s stall — a real effect, but a weak-looking one. The 8.1 s was entirely the live window
-filling: until a segment rolls off, the media sequence legitimately sits at 0 and nothing has gone
-wrong. Excluding everything before the first advance put the control at **3.1 s**, and the same
-stall then read 31.5 s.
+*(From [T22](test-22-silent-media-plane-failure.md) P0-f.)* "Longest interval with no playlist advance" gave **8.1 s** on control vs **30.5 s** on a **30 s** stall; excluding pre-first-advance put control at **3.1 s** and stall at **31.5 s**.
 
-Nothing about the stall changed. What changed was whether the baseline measured the steady state the
-arm is about, or the startup the arm is not about.
-
-> **Define a metric over the regime the experiment is about, and discard the transient explicitly.**
-> A startup plateau folded into a null makes the control look like a weak positive, which costs the
-> result its discrimination in the direction that is hardest to notice — the finding still holds, so
-> nothing prompts a re-examination.
+**Define a metric over the regime the experiment is about, and discard the transient explicitly.** *(T22.)* A startup plateau in the null weakens discrimination without triggering re-examination.
 
 ### A bare `wait` returns only when the rig's infinite producers do, which is never
 
-*From [T25](test-25-isolation-under-abuse.md) P2-b.* The segmented abuse rig backgrounds a packager
-running `--infinite`, three victim receivers with a fixed window, and up to twelve abuse loops
-written as `while :`. It then called `wait` with no arguments to collect the victims. `wait` waits
-for *every* background job, so it waited on the packager and the abuse loops, and the pass hung —
-for sixteen minutes before it was noticed, because the output was pipe-buffered and showed nothing.
+*(From [T25](test-25-isolation-under-abuse.md) P2-b.)* The rig backgrounds an `--infinite` packager, victim receivers, and abuse `while :` loops, then called `wait` with no arguments. That waits for every background job, hung **16 minutes** with pipe-buffered silence, and when restarted competed with the first pass for the same output directory — three arms lost to apparent packager flakiness.
 
-The second cost was worse than the delay. The hung run was never killed, so when the pass was
-restarted the two competed for the same output directory and the same origin path, and the first arm
-of every subsequent attempt died with its packager killed underneath it. Three arms were lost to
-what looked like an intermittent packager fault.
-
-> **Wait on the specific PIDs the measurement depends on, never on all of them.** Collect the
-> measured children into their own array and wait on that.
->
-> **A backgrounded run that has not returned is still a running experiment.** Before re-running
-> anything, confirm the previous attempt is dead — not merely that its terminal is quiet. Two
-> concurrent passes over one rig directory produce failures that read as flaky apparatus and are
-> not.
+**Wait on the specific PIDs the measurement depends on, never on all of them.** *(T25.)* **A backgrounded run that has not returned is still a running experiment.** Confirm the previous attempt is dead before re-running.
 
 ### The exporter manufactures bytes and clock, so neither measures what the media-aware lane delivered
 
-*From [T20](test-20-segmented-http3.md) measurement 4a, and the T28/T31 re-grade.* Two metrics the
-campaign graded the MoQ lane with measure something the exporter writes rather than something the
-network delivered.
+*(From [T20](test-20-segmented-http3.md) 4a, T28/T31 re-grade.)* From moq-dev #3831 onward `--mux-rate` defaults to catalog `mpegts.muxRate`, padding to constant rate so `delivered_ratio` can exceed **1.0** with **47.7–94.1 %** null packets (`--mux-rate 0` turns padding off). `t28-media-lost.py` reads PCR; the exporter keeps **25 ms** adaptation-only PCR on the video PID across evicted groups (**0.775 s** lost vs **36.4 s** picture holes and **22** evictions on unpadded chronic congestion; **2.375 s** on transient **0.8×** with no picture missing). What survives is content-PID packet rate and presentation timestamps ([`t28-content-lost.py`](scripts/t28-content-lost.py)), graded per elementary stream.
 
-- **Bytes.** From moq-dev #3831 onward `moq export ts --mux-rate` defaults to the `mpegts.muxRate`
-  the catalog recorded, so the exporter pads to a constant rate. `delivered_ratio` — output bytes
-  against source rate — rose *above 1.0* on cells that lost most of the programme; the captures ran
-  to 47.7 %, 55.3 % and **94.1 %** null packets. `--mux-rate 0` turns the padding off.
-- **Clock.** `t28-media-lost.py` reads the PCR timeline, and **the exporter keeps writing PCR across
-  a hole in the picture, padded or not.** MoQ carries each elementary stream as its own track; under
-  congestion the video track's groups are evicted while audio carries on, and the exporter keeps
-  emitting adaptation-only PCR packets on the video PID at its 25 ms cadence straight across the gap.
-  On an *unpadded* chronic-congestion capture the PCR grader scored **0.775 s** lost; the video
-  timeline has **36.4 s** of holes, the picture count implies about 35 s, the video bytes about the
-  same, and the subscriber logged 22 group evictions. The error runs the other way too: a transient
-  0.8× cell scored 2.375 s on the clock with **no** picture missing.
+**Before trusting a delivery metric, ask what the sender is allowed to manufacture.** *(T20, T28, T31.)* On re-synthesising egress, bytes, clock and continuity are egress work; access units are not. Report null-packet share; grade picture and sound separately.
 
-What survives is what the exporter cannot manufacture: packets on a content PID against that PID's
-source rate, and the content's own presentation timestamps (`t28-content-lost.py`), graded per
-elementary stream because the streams do not fail together.
-
-> **Before trusting a delivery metric, ask what the sender is allowed to manufacture.** On a lane
-> whose egress re-synthesises the stream, bytes, clock and continuity counters are all the egress's
-> own work; access units are not. Report the null-packet share beside any byte-denominated figure,
-> and grade picture and sound separately.
->
-> **Validate a grader against the lane's failure, not against an excision.** The PCR grader passed its
-> self-test exactly, and the self-test was never evidence for an impaired MoQ cell: cutting bytes out
-> of a capture removes clock and content together, which is precisely the case a clock grader gets
-> right. The failure it missed only exists in the lane's own output. A grader for a re-synthesising
-> egress is validated when it agrees with an independent count — pictures, content-PID packets, the
-> subscriber's own eviction log — on an impaired capture of that egress.
+**Validate a grader against the lane's failure, not against an excision.** *(T20, T28.)* Byte excision removes clock and content together; MoQ failures need agreement with pictures, content-PID packets, or eviction logs on impaired egress captures.
 
 ### A hole count sees only gaps between what arrived, so conserve against the window
 
-*From the T28 matched ladder, content-graded.* At a 0.5 s budget under 5 % random loss the content
-grader scored the MoQ lane **2.76 s** lost. The capture was half the control's size, and its video
-timeline advanced 20.5 s where the control's advanced 48.1 s: the egress tap's last picture was
-29.6 s into a 60 s window, and the subscriber logged a video group eviction every second or two
-from then until the window closed. The picture had stopped. A grader that measures gaps between
-adjacent pictures has no gap to measure after the last one, so a capture whose picture stops early
-— a dead session, a subscriber evicting every group — grades as nearly clean. Two earlier
-instances of the same shape had been caught only because their captures were visibly short.
+*(From T28 matched ladder, content-graded.)* At **0.5 s** budget under **5 %** loss, content grader **2.76 s** lost while video stopped at **29.6 s** in a **60 s** window; hole sum has no gap after the last picture.
 
-> **Grade programme lost as expected content minus content present, not as the sum of the holes.**
-> The expected content comes from the window and a clean cell of the same run
-> ([`t2831-conservation.py`](scripts/t2831-conservation.py)); the hole count is a lower bound and
-> the difference is content not delivered by window close. Report the two separately where the
-> lane's latency budget is long enough that "not yet delivered" may mean late rather than lost.
+**Grade programme lost as expected content minus content present, not as the sum of the holes.** *(T28.)* Expected from window and clean cell ([`t2831-conservation.py`](scripts/t2831-conservation.py)); hole count is a lower bound. Report both where latency budget may mean late vs lost.
 
 ### A continuity count detects loss and cannot measure it: the counter is four bits
 
-*From [T19](test-19-pcr-grid-verification.md), re-grading the cushion sweep.* The sweep's shallow
-rungs shed 82,104 packets of 106,382 offered. Re-graded with a working pattern, the continuity check
-reported 15 events accounting for **110 missing packets** — three orders of magnitude under. That is
-not a second grader defect. `continuity_counter` is a four-bit field, so the largest gap a receiver
-can distinguish on one PID is fifteen packets, and sixteen consecutive losses restore exactly the
-value it expected.
+*(From [T19](test-19-pcr-grid-verification.md) cushion re-grade, [T5](test-5-network-impairment.md), [T31](test-31-congestion-capacity-ladders.md).)* **82,104** of **106,382** offered packets shed; working pattern found **15** events and **110** missing — three orders of magnitude under. The field is four bits, so gaps above **15** packets alias ([`cc-aliasing-probe.py`](scripts/cc-aliasing-probe.py)). On segmented HTTP, live-edge re-anchor after the availability window fires correctly but reports **33** missing for **200,000+** packet holes ([T5](test-5-network-impairment.md)).
 
-The same arithmetic first showed in [T5](test-5-network-impairment.md). Past its availability window
-a segmented-HTTP client re-anchors to the live edge, skipping whole minutes of programme. The
-continuity counter fires — correctly, once per PID carrying the splice, so a single skip reads as
-6–11 "events" — and then reports 33 missing packets for a hole of 34 segments, which is over
-200,000. The counter reports the remainder modulo 16 and has no way to say how many times it
-wrapped, so the event count is the detector, the PCR interval is the measure, and the packet total is
-neither.
-
-Measured rather than derived, excising a known run from the busiest PID of a real capture
-([`cc-aliasing-probe.py`](scripts/cc-aliasing-probe.py)):
+**On the media-aware lane's egress the count cannot even detect loss.** *(T31.)* `moq export ts` re-muxes and writes its own continuity counters; group evictions upstream leave no gap. **0** errors on **75.64 s** picture lost is by construction and evidence of nothing about delivery; only byte-faithful paths carry counters the loss could disturb.
 
 | excised | 1 | 5 | 10 | 15 | **16** | 17 | **32** | **160** |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | reported missing | 1 | 5 | 10 | 15 | **0** | 1 | **0** | **0** |
 
-The practical consequence is that a *low* continuity count on an arm that lost a lot of content is
-not evidence the loss was orderly — it is the expected reading, and the two are indistinguishable
-from the count alone.
+**Read continuity for whether a wire is clean, and conservation for how much survived.** *(T19, T5, T31.)* Pair zero continuity with delivered ratio; a small count on a shedding arm says nothing.
 
-**On the media-aware lane's egress the count cannot even detect loss.** `moq export ts` re-muxes
-the stream and writes its own continuity counters over what it emits, so a group evicted upstream
-leaves no gap in them. The [T31](test-31-congestion-capacity-ladders.md) ladder reads 0 continuity
-errors on a cell that lost 75.64 s of picture. A zero there is by construction, and it is evidence of
-nothing about delivery; only a byte-faithful path — the segmented receiver, SRT, a relay tap —
-carries counters that the loss could have disturbed.
-
-> **Read continuity for whether a wire is clean, and conservation for how much survived.** A zero on
-> an arm whose delivered ratio is also ~1.0 is a real result and the campaign's clean-wire findings
-> stand on that pairing. A zero, or a small number, on an arm that shed content says nothing.
->
-> **Never quote a continuity count as a loss magnitude**, and where a table carries both, put the
-> conservation or delivered-ratio column next to it so the pairing is visible in one row. The general
-> form: whenever a counter's range is smaller than the fault it is watching for, it degrades from a
-> measurement to an alarm, and the write-up has to demote it in the same breath as it reports it.
+**Never quote a continuity count as a loss magnitude**, and where a table carries both, put the conservation or delivered-ratio column next to it so the pairing is visible in one row. *(T19, T5.)* When the counter range is smaller than the fault, it is an alarm, not a measure.
 
 ### An idle-memory baseline drifts by more than a null result's whole excursion
 
-*From [T25](test-25-isolation-under-abuse.md) P2-b.* The abuse arms moved the origin's resident set
-from 103.6 MB to a 104.2 MB peak, and it was tempting to publish 0.6 MB as the measured cost of
-abuse. A contaminated pass discarded for unrelated reasons had recorded the same idle origin at
-102.8 MB twenty minutes earlier — an 0.8 MB spread between two baselines with no load difference
-between them, larger than the excursion itself.
+*(From [T25](test-25-isolation-under-abuse.md) P2-b.)* Abuse moved origin RSS **103.6→104.2 MB** (**0.6 MB** peak); idle baseline **102.8 MB** twenty minutes earlier — **0.8 MB** spread, larger than the excursion.
 
-The conclusion was unaffected, because it rests on the absence of the relay's 22× excursion rather
-than on the size of this one. But 0.6 MB would have been quoted as a figure, and it is not one.
-
-> **Where a resource result is a null, report the bound, not the number.** A small excursion is
-> evidence of no excursion only if the instrument's own variation is smaller, and an idle RSS
-> baseline taken once does not establish that. Either take the baseline per pass and quote the
-> spread, or state the excursion as an upper bound and say what the conclusion actually rests on.
->
-> **A discarded run's control arm is still data about the instrument**, even when its treatment arms
-> are void. Read it before throwing the pass away.
+**Where a resource result is a null, report the bound, not the number.** *(T25.)* Quote per-pass baseline spread or an upper bound. **A discarded run's control arm is still data about the instrument**, even when treatment arms are void.
 
 ### Delay in front of the shaper costs an ack-clocked sender, and not a paced one
 
-*From [T42](test-42-h3-receiver-fidelity.md)'s TCP anomaly and
-[`rig-capacity.sh`](scripts/rig-capacity.sh).* TCP through the namespace rig's 20 Mb/s `cake` at
-100 ms ran at 4–6 Mb/s. Calibrated with no media in it, the rig as every ladder runs it — `cake` the
-child of the data path's `netem` delay — passed paced UDP losslessly to 19 Mb/s and saturated at
-19.32 Mb/s of payload, which is the full 20 Mb/s once headers are counted. A 3 MB TCP transfer ran at
-5.92 Mb/s in three of three runs, and 30 MB at 11.37 Mb/s: CUBIC took a drop early, at about 45 % of
-the path's 172-segment BDP, and left slow start with a threshold of 39 segments. With `cake` the data
-path's root and the whole RTT on the acknowledgement path, the 3 MB transfer ran at 15.3 Mb/s with a
-threshold of 245, and UDP was unchanged. Keeping `cake` under a data-path `netem` set to 0 ms, which
-the ladders need in order to impair the path, gave the same TCP figures. Any lane whose sender is ack-clocked — TCP, and QUIC under
-any controller — could therefore be slowed by the rig in a way a paced SRT sender is not. The
-topology arm re-ran both media lanes with the delay on the acknowledgement path, and neither moved
-outside its scatter ([T28](test-28-failure-injection-matrix.md) § *The rig's delay placement moves
-neither lane*). The bias is real for a bulk transfer and not visible in these lanes — reasoned: the
-placement slows the climb to the bottleneck's rate, which a bulk transfer must make from slow start
-and a live stream at the source's rate mostly need not — and only the calibration and the re-run
-together could say which.
+*(From [T42](test-42-h3-receiver-fidelity.md), [`rig-capacity.sh`](scripts/rig-capacity.sh).)* TCP through **20 Mb/s** `cake` with **100 ms** delay ahead of the shaper ran **4–6 Mb/s** while paced UDP passed **19.32 Mb/s** payload. CUBIC on a **3 MB** transfer left slow start early at ~**45 %** of BDP with threshold **39** segments; with `cake` as data-path root the same transfer reached **15.3 Mb/s** and threshold **245**. UDP was unchanged; `cake` under **0 ms** `netem` (as ladders use) gave the same TCP bias. Ack-clocked senders can be slowed in a way paced SRT is not; the topology re-run moved neither media lane outside scatter ([T28](test-28-failure-injection-matrix.md)).
 
-> **Calibrate a new or changed rig with bulk and paced traffic before the first lane runs**, and say
-> where the delay sits relative to the bottleneck. A comparison between an ack-clocked and a paced
-> lane on a rig that penalises one of them measures the rig as well; the topology arm
-> ([`t2831-topology.sh`](scripts/t2831-topology.sh)) is how the campaign separates the two.
+**Calibrate a new or changed rig with bulk and paced traffic before the first lane runs**, and say where the delay sits relative to the bottleneck. *(T42, T28.)* Use [`t2831-topology.sh`](scripts/t2831-topology.sh) to separate rig bias from lane behaviour.
 
 ### A bisect across a long-lived branch meets CLI states that neither endpoint has
 
-*From [T28](test-28-failure-injection-matrix.md)'s idle bisection.* The first-parent bisection landed
-on the merge of upstream's `dev` branch, so the second ran inside `dev`. Every step was skipped. The
-rig's flag library inferred the export's latency flag from the dial flags, which is right at both
-endpoints, but the commits inside `dev` had the new dial flags and still the old `--latency-max`, so
-`moq export ts` rejected its arguments and every cell captured 0 bytes. The step logged "no
-teardown", because a cell that never ran has no session to close, and git's bisect then failed on a
-full disk that the branch's builds had filled. With that flag fixed, the next cell was void for a
-second, independent reason: inside `dev` the relay already takes `--listen` and `--auth-public` is
-still a prefix, so the rig's `**` glob matched nothing and the lane delivered nothing, with no error —
-the silent failure described under "`--auth-public` inverted its meaning" below.
+*(From [T28](test-28-failure-injection-matrix.md) idle bisection.)* First-parent bisection landed on upstream `dev` merge; inside `dev`, new dial flags still paired with old `--latency-max`, so `moq export ts` rejected arguments and every cell captured **0 bytes**. Steps logged "no teardown" because nothing ran; cargo targets filled the disk. After the export flag was fixed, relay already took `--listen` while `--auth-public` remained a prefix, so the rig's `**` glob matched nothing and the lane delivered nothing with no error (see §5 `--auth-public` inversion).
 
-> **Detect each flag from the subcommand that takes it**, not from a sibling flag's spelling, and
-> make a bisection step report a void cell as void, with the error it printed. A skip whose reason
-> is only an absence reads the same whether the build is ambiguous or the rig never ran. Before a
-> long bisection, check the build host's free disk against a few full builds; a cargo target
-> directory grows by gigabytes per distant commit.
+**Detect each flag from the subcommand that takes it**, not from a sibling flag's spelling, and make a bisection step report a void cell as void, with the error it printed. *(T28.)* Check build-host disk before a long bisection.
 
-The merge itself was also a weaker result than it looked. The branch had forked two months earlier
-and absorbed `main` in batches, so its commits failing the cell at the end of August carried `main`
-only to ten days before the oldest good build. "Every `main` commit survives and the merge does not"
-therefore allowed two readings: a change made on the branch, or a fix on `main` that a later merge
-into the branch lost. A pair settled it — a `main` commit the branch absorbed, and the branch's merge
-of it.
-
-> **When a first-parent bisection lands on a merge, test a `main` commit the branch absorbed, and
-> the branch's merge of it, before bisecting the branch.** The branch's commits are not a range
-> above the good end: they need not contain it.
+**When a first-parent bisection lands on a merge, test a `main` commit the branch absorbed, and the branch's merge of it, before bisecting the branch.** *(T28.)* Branch commits need not contain the good end.
 
 ### A diagnostic flag can exist in `--help` and not in the build
 
-*From [T28](test-28-failure-injection-matrix.md)'s reorder attribution.* The relay advertises
-`--quic-qlog` in every build, and a release build refuses it at init because the `qlog` feature is
-compiled out, so the qlog arm produced NA in every cell and no trace. The help text says so, two lines
-below the flag.
+*(From [T28](test-28-failure-injection-matrix.md) reorder attribution.)* `--quic-qlog` in help but compiled out in release → NA in every qlog cell.
 
-> **Run a diagnostic arm's flag once against the exact binary before queueing it**, and make the
-> arm check for the capability rather than discover its absence in the results.
+**Run a diagnostic arm's flag once against the exact binary before queueing it**, and make the arm check for the capability rather than discover its absence in the results. *(T28.)*
 
 ### A sandboxed shell can bind loopback and not connect to it
 
-*From [T6](test-6-relay-resilience.md)'s single-relay standby drill.* Run locally from a sandboxed
-agent shell, the relay logged `listening addr=127.0.0.1:…`, its publishers logged `connected`, and
-every subscriber timed out connecting, so each capture was 0 bytes. The same script on a Linux host
-over ssh ran cleanly. Nothing in the output names the sandbox; it reads as a relay that refuses
-subscribers. From an agent shell that runs outside the sandbox, the same workstation runs loopback
-rigs cleanly: upstream's `test/ts/run.sh` and T10's and T13's `main` checks all ran there. So the
-sandbox fails the rig, not the host.
+*(From [T6](test-6-relay-resilience.md) single-relay standby drill.)* Sandbox: relay listened, publishers connected, subscribers timed out (**0 bytes**); same script over ssh on Linux was clean.
 
-> **Treat a loopback rig that connects some clients and not others as the environment until shown
-> otherwise**, and run loopback drills on a host reached over ssh, or from an unsandboxed shell,
-> rather than from a sandboxed one.
+**Treat a loopback rig that connects some clients and not others as the environment until shown otherwise**, and run loopback drills on a host reached over ssh, or from an unsandboxed shell, rather than from a sandboxed one. *(T6.)*
 
 ### What a signal means to `moq` depends on the build
 
-*From the same drill.* `moq` 0.12.1 (`ffa5b81b`) waits only on Ctrl-C
-(`rs/moq-cli/src/main.rs:737–741`); SIGTERM gets the default action and ends the process without a
-clean close, so a "graceful" arm driven by SIGTERM measured a hard kill. It failed over like one.
-From 0.12.8 the CLI closes the session on SIGINT and SIGTERM alike, and the same arm is a clean exit
-that the relay switches at once.
+*(From the same drill, [T6](test-6-relay-resilience.md).)* `moq` **0.12.1** (`ffa5b81b`): SIGTERM hard-killed; **0.12.8+**: SIGINT and SIGTERM both clean-close; relay reselect behaviour differs by build and signal.
 
-> **Record which signal drove a graceful arm and which CLI version received it, and prefer ending
-> the importer's input as the build-independent clean exit.** Even the clean exits differ between
-> builds: on `ffa5b81b` the relay reselects on SIGINT and not on end of input, and on `main` it
-> reselects on both.
+**Record which signal drove a graceful arm and which CLI version received it, and prefer ending the importer's input as the build-independent clean exit.** *(T6.)*
 
 ### With a shared hop the newest publisher serves, so a standby drill must know which one it killed
 
-*From the same drill.* Identical routes are ranked by recency. Started the obvious way, subscribers
-first and the standby second, the drill measured the standby's *arrival*, which on that build ended
-every subscriber, and never reached the kill. With separate identities the tie falls to a hash, so
-either publisher can be serving. Six of the `main` arms signalled the idle publisher for this reason,
-and only the publisher logs showed it.
+*(From the same drill, [T6](test-6-relay-resilience.md).)* Recency ranking and hash ties mean subscribers may not be on the publisher you signalled; idle-publisher kill is the control and should show no stall.
 
-> **Start subscribers after both publishers are producing, log each publisher separately, and read
-> which one received the media subscriptions before and after the signal.** A kill of the idle
-> publisher is the control, and it should show no stall.
+**Start subscribers after both publishers are producing, log each publisher separately, and read which one received the media subscriptions before and after the signal.** *(T6.)*
 
 ### The client's idle timeout sets the relay's detection
 
-*From the same drill.* QUIC uses the smaller of the two endpoints' idle timeouts, so the 6 s the
-drill's clients advertised became the relay's detection budget as well: `connection error: timed out`
-7–9 s after the kill, without any relay flag. A stall figure is therefore a figure about both sides'
-settings.
+*(From the same drill, [T6](test-6-relay-resilience.md), [T13](test-13-downstream-grooming.md).)* QUIC uses the smaller idle timeout; client **6 s** → relay `timed out` **7–9 s** after kill. [T13](test-13-downstream-grooming.md) kill arms stopped **~31 s** (default **30 s** idle); **95 s** window showed exit vs `--linger` resume.
 
-> **Record the idle timeout on both sides of every session a failover figure crosses**, not only
-> the relay's.
+**Record the idle timeout on both sides of every session a failover figure crosses**, not only the relay's. *(T6, T13.)*
 
-The same bound decides how long a crash arm must watch. [T13](test-13-downstream-grooming.md)'s
-first killed-publisher arms on `main` stopped 31 s after the kill, against the default 30 s idle
-timeout. Both read as an exporter that neither exits nor resumes. Rerun with a 95 s window, the
-exporter exited 1 about 30 s after the kill without `--linger`, and resumed with it.
-
-> **After a hard kill, observe for at least the idle timeout plus the behaviour's own window**, or
-> "not yet detected" is recorded as "hung".
+**After a hard kill, observe for at least the idle timeout plus the behaviour's own window**, or "not yet detected" is recorded as "hung". *(T6, T13.)*
 
 ---
 
@@ -2660,748 +1201,296 @@ exporter exited 1 about 30 s after the kill without `--linger`, and resumed with
 **A scratch change that fixes the measured case is a fix only once the upstream tests pass with it
 switched on.** *(T47.)*
 
-> A two-part change to #4645's release stage made all eleven traced joins conform, with one set of
-> margins, and was within a sentence of being offered upstream as the fix. With its environment
-> variables set, four of `moq-mux`'s 941 tests failed. Each part broke the handling of a genuine
-> timeline restart, which the rig never exercised, because the release stage cannot tell that case
-> from a skip at the join. Gating a change behind a variable keeps the default build's tests
-> green, which is exactly why they say nothing about it. **Run the suite with the change on.** A
-> failure there turns "the fix" into "the mechanism, and the case a fix has to keep", which is the
-> more useful thing to report.
+A release-stage change made eleven traced joins conform with one margin set, but with its environment variables set four of `moq-mux`'s 941 tests failed — each part broke genuine timeline restart handling the rig never exercised. Gating behind a variable keeps default tests green and says nothing about the change. **Run the suite with the change on**; a failure there defines the mechanism and the cases a fix must preserve.
 
 **Before calling an upstream close accidental, read the body of the pull request that closed it, not
 only the commit diff.** *(T13 / P1-n, the #2779 draft.)*
 
-> The determinism measurement found the continuity-counter defect fully present on a build where
-> [#2779](https://github.com/moq-dev/moq/issues/2779) showed closed-completed, closed the same day as
-> [#3868](https://github.com/moq-dev/moq/pull/3868) — a large `quest/next` grooming pull request — and
-> with no commit anywhere touching the numbering. Every signal available from the timeline and the
-> diff said *swept up by accident*, and a draft comment was written inviting a reopen. #3868's body
-> says the opposite in one line: "`2779` is abandoned (close #2779 as won't-fix on merge and remove
-> its `quest` label)". A deliberate decision, with a rationale already on record.
->
-> Posting it would have asked a maintainer to reverse a considered call on the premise that he had
-> not made one — the single most expensive kind of error available in someone else's tracker, because
-> it spends standing that took months to accumulate and is not recoverable by being right afterwards.
-> **A grooming pull request states its dispositions in prose, and the disposition is not in the
-> diff.** More generally: when the inference is about *intent* rather than about behaviour, the
-> evidence is what somebody wrote, not what the code does.
->
-> The recovery is also the better comment. "Your sibling is wrongly closed" is a complaint that
-> invites a defence; "your sibling is rightly closed, and that makes this issue the whole of what is
-> left" is the same measurement carrying an argument the maintainer has reason to want.
+Continuity-counter defect was fully present while [#2779](https://github.com/moq-dev/moq/issues/2779) showed closed-completed the same day as [#3868](https://github.com/moq-dev/moq/pull/3868), with no commit touching numbering — every timeline signal said *swept up by accident*. #3868's body says "`2779` is abandoned (close #2779 as won't-fix on merge and remove its `quest` label)". **A grooming pull request states its dispositions in prose, and the disposition is not in the diff.** When the inference is about *intent*, the evidence is what somebody wrote, not what the code does. Posting a reopen would have asked a maintainer to reverse a considered call; framing the sibling as rightly closed carries the same measurement as an argument the maintainer has reason to want.
 
 **Reading a specification from inside finds what it says; asking a deployment question from outside
 finds what it omits. Do both.** *(MSFTS review, 2026-09.)*
 
-> Three passes over the published MSFTS §5.5 produced four defects, all of them things the text got
-> wrong about what it did say. None of them found the CAT omission: §5.5.2's per-program retain list
-> follows the PAT/PMT reference graph, the Conditional Access Table sits outside that graph, and the
-> Entitlement Management Message PID is referenced from the CAT and from nowhere the list can reach —
-> so a conforming publisher produces a scrambled track nothing can descramble, silently. What found it
-> was an unrelated question from the commercial side about whether BISS-CA over MoQ was worth
-> pursuing, which forced the entitlement path to be traced end to end. *A reading pass checks the
-> document against itself; a deployment question checks it against a use it has to support. The second
-> is where omissions live.*
+Three passes over MSFTS §5.5 found four defects in what the text said; none found the CAT omission — §5.5.2's retain list follows the PAT/PMT graph, the Conditional Access Table sits outside it, and the EMM PID is unreachable from the list, so a conforming publisher can scramble a track nothing can descramble, silently. A commercial question about BISS-CA over MoQ forced an end-to-end entitlement trace. *A reading pass checks the document against itself; a deployment question checks it against a use it has to support.*
 
 **Cite the clause that carries the obligation, not the clause with the famous name.** *(MSFTS
 contribution round, caught in review before filing.)*
 
-> A draft issue argued that MPEG-2 output timing matters because ISO/IEC 13818-1 §2.4.2 defines a
-> model "in which the system clock is recovered from PCR arrival". It does not. The T-STD is an
-> *idealised* decoder: the PCR values define a delivery schedule, and §2.4.2 constrains buffer
-> occupancy against that schedule on the assumption it is met. The obligation that *real* delivery
-> match it within a tolerance is ISO/IEC 13818-9's real-time interface and, operationally for DVB,
-> TR 101 290's PCR repetition and accuracy limits. The wrong citation would have been caught on sight
-> by an MPEG Systems editor and would have cost a twelve-issue round its credibility on the first
-> reply. *The two-step citation is also the stronger argument — schedule, then tolerance — so getting
-> it right cost nothing.*
+A draft cited ISO/IEC 13818-1 §2.4.2 for PCR-driven system-clock recovery; the T-STD is idealised — PCR defines a delivery schedule and §2.4.2 constrains buffer occupancy against it. Real delivery within tolerance is 13818-9 and, for DVB, TR 101 290 PCR limits. *The stronger argument is schedule, then tolerance.*
 
 **When a measured quantity depends on contention for a shared resource, one user of that resource
 measures the uncontended case — and must be labelled as such.** *(T37 D2 against D7.)*
 
-> T37's revocation sweep ran one subscriber per arm and reported worst case "one re-check cadence plus
-> 0.110 s" as the mechanism's bound. That figure went into three documents. It is the mechanism's
-> *floor*: the relay serves re-checks from a cache shared across sessions, so the effect that widens
-> the window only exists once a second session is present, and no amount of repetition at n=1 could
-> have found it. Six staggered sessions put the worst case at 1.54 cadences, and the implementation's
-> own source names two. *Before quoting a per-session figure as a bound, ask what the sessions share.*
+T37's revocation sweep at one subscriber per arm reported worst case "one re-check cadence plus 0.110 s" as the mechanism's bound; that figure is the *floor*, because re-checks come from a cache shared across sessions and widening only appears with a second session. Six staggered sessions put worst case at 1.54 cadences (the implementation names two). *Before quoting a per-session figure as a bound, ask what the sessions share.*
 
 **A verified hypothesis is not a working mechanism.** *(T39 Parts B and C.)*
 
-> The hypothesis was that one credential could carry both a media `--subscribe` scope and a telemetry
-> `--publish` scope, routed independently. It can — six cells, with a readback oracle. The instinct
-> was then to record the telemetry return path as available. It is not: there is no way to publish
-> non-media data with the shipped tooling at all, so the mechanism is blocked on carriage having been
-> verified on permission. *Name what the hypothesis tested and what it did not, especially when it
-> passes — a pass is where the distinction is easiest to lose.*
+One credential can carry both media `--subscribe` and telemetry `--publish` scopes, routed independently — six cells with a readback oracle. That does not make the telemetry return path available: shipped tooling cannot publish non-media data at all. *Name what the hypothesis tested and what it did not, especially when it passes.*
 
 **A defect found through an incidental stimulus is described at the level of that stimulus, not of the
 class it belongs to. Characterise the class before reporting it.** *(T23.)*
 
-> T21 found the exporter's PCR degenerating into a counter after the source clip looped, and the report
-> drafted from it said "the exporter's PCR does not survive a source discontinuity". Grading the event
-> as a controlled variable instead — direction, magnitude and class each varied with everything else
-> held — returned a different picture in three ways. The 33-bit rollover, the one event a permanent
-> feed cannot avoid, is carried **correctly**; forward jumps recover; and a rewind produces a clean
-> withhold-and-burst costing exactly its own duration, with none of the six arms reproducing the
-> counter at all.
->
-> Every one of those would have made the report wrong in a way the maintainer would have found before
-> we did: an unreproducible symptom, an overstated scope, and a claimed exposure to a rollover that
-> does not exist. What the class-level version buys is the opposite — a linear law, a bounded blast
-> radius, and a negative result that tells the maintainer what the fix does **not** need to handle.
-> *One stimulus establishes that a defect exists. It does not establish what it is.*
+T21's exporter PCR degenerating into a counter after a loop was drafted as "PCR does not survive source discontinuity". Grading direction, magnitude and class separately showed 33-bit rollover carried **correctly**, forward jumps recover, and rewind yields withhold-and-burst without the counter — any of which would have overstated scope upstream. *One stimulus establishes that a defect exists; it does not establish what it is.*
 
 **Verify that a fixture asserts what it claims before spending a run on it.** *(T23.)*
 
-> Arm B was meant to be a 600 s backward jump, built by subtracting 600 s from a clip starting at zero.
-> That does not produce a backward jump; it produces a value 600 s below the modulus — legal
-> arithmetic, and a *rollover*. The arm for the discontinuity would have measured the arm for the wrap,
-> and both would have agreed, which is exactly the kind of agreement that reads as corroboration.
-> Reading the generated stimuli back through the analyser caught it in two minutes, against roughly
-> two hours of lane time per full sweep. *Generating a fixture and grading a fixture are two claims;
-> the second is cheap and the first is not self-evidencing.*
+Arm B was meant to be a 600 s backward jump by subtracting 600 s from zero; that is legal rollover arithmetic, not a backward jump, so the discontinuity arm would have measured the wrap arm and agreement would read as corroboration. Reading stimuli back through the analyser caught it in minutes. *Generating a fixture and grading a fixture are two claims.*
 
 **A stage that integrates must be graded over a window longer than its own integration time, or the
 run has qualified the transient.** *(T21.)*
 
-> `mpegts-pacer`'s open-loop release was replaced by a loop that trims the release rate by the buffer's
-> distance from its cushion, because the open loop integrated rate-estimate error without bound. The
-> replacement was qualified on a 300 s live arm: stable latency, no underruns, no drops, and a
-> conformant wire. That validation was real and it was not sufficient — the new loop's own failure mode
-> takes about **nine minutes** to appear, so the test that qualified it could not have seen it, and the
-> first soak to include the groomer found the media-rate estimate ramping linearly to 2.58 Gb/s with
-> the cushion collapsed to zero.
->
-> The rule is not "test for longer", which is unbounded. It is that where a change introduces or
-> replaces an accumulator — a control loop, a decayed window, a running estimate — the qualifying run
-> has to outlast that accumulator's time constants, and somebody has to have asked what they are. Nobody
-> had. The specific thing the 300 s window could not contain was the **source looping**, at 600 s: an
-> event a permanent feed meets constantly and a short test never does.
+A closed-loop pacer replacement was qualified on a 300 s live arm (stable latency, conformant wire), but its failure mode takes about **nine minutes**, and the first soak found media-rate estimate ramping to 2.58 Gb/s with cushion at zero. Where a change introduces an accumulator, the qualifying run must outlast its time constants — here **source looping** at 600 s, which a short test never hits.
 
 **Where a stage derives a quantity from its input, the input's own version of that quantity is a
 control, and capturing both ends of one run is cheaper than arguing about which end is wrong.**
 *(T21.)*
 
-> T21's groomer was accused of a broken rate estimator for two runs. Capturing the publisher's input
-> and the exporter's output *in the same run* and reading PCR against packet count on each settled it
-> in one pass: the source carried a clean 25 ms grid and one signalled discontinuity, the exported copy
-> carried no discontinuity and a clock that had stopped. The estimator was arithmetically faithful to
-> an input that had stopped telling the truth.
->
-> The general form is that a derived quantity going wrong has two candidate owners, the deriver and the
-> source, and no amount of instrumenting the deriver distinguishes them. One `tee` on each side does.
+The groomer was accused of a broken rate estimator for two runs; publisher input and exporter output in the same run showed a clean 25 ms grid and one signalled discontinuity on input, no discontinuity and a stopped clock on export — the estimator was faithful to input that had stopped telling the truth. One `tee` on each side settles deriver-versus-source disputes.
 
 **An estimator must not integrate a sample it has no reason to believe, and a physical ceiling is the
 cheapest reason available.** *(T21.)*
 
-> The pacer computed a content rate of 431 Mb/s inside a carrier running at 11 Mb/s, released on it,
-> and drained its own de-jitter cushion to nothing. Both numbers were in the same counter line for
-> twenty minutes. Content is carried *inside* the carrier, so over a window of seconds it cannot arrive
-> faster than the carrier holds — over a single interval it certainly can, which is what the buffer is
-> for, and the distinction between those two is where the ceiling belongs. Any recovered quantity that
-> has a conservation law available should be checked against it before it is acted on, and the check
-> should raise a counter rather than clamp silently, because the excursion is the diagnosis.
+The pacer computed 431 Mb/s inside an 11 Mb/s carrier, drained its cushion, and both numbers sat in one counter line for twenty minutes. Over seconds, content cannot arrive faster than the carrier; single-interval spikes are what the buffer is for — check recovered quantities against conservation laws and raise a counter rather than clamp silently.
 
 **A quantity that is supposed to be stationary needs a time series, and a high-water mark is not one.**
 *(T21.)*
 
-> The groomer reported `buffer_high_water` and no standing depth, so the only buffer figure available
-> after a run was a peak. A peak only ever rises: an hour after one transient it still reports the
-> transient, and it cannot answer the question that matters for a permanent feed, which is whether the
-> stage is *still* holding its set point. The collapse from ~1.4 s to zero was invisible in every
-> counter the pacer had until an instantaneous occupancy was added and sampled on a timer. Any counter
-> whose expected behaviour is "stays where it is" has to be emitted repeatedly; cumulative counters
-> answer "what went wrong", standing levels answer "is it still going wrong", and a soak needs both.
+`buffer_high_water` without standing depth left only a peak that never falls; collapse from ~1.4 s to zero was invisible until instantaneous occupancy was sampled on a timer. Cumulative counters answer "what went wrong"; standing levels answer "is it still going wrong".
 
 **Conformance of the output is not health of the stage producing it.** *(T21, T22.)*
 
-> A groomer defect severe enough to destroy the entire de-jitter cushion left **every** check on the
-> wire passing: 0 continuity errors, 0 PCR intervals above 40 ms, exact CBR, programme conserved, no
-> drops. The same asymmetry ran the other way in T22, where a source frozen for 120 s left every check
-> on the *transport* passing. Both directions have the same consequence for how a result is worded: a
-> conformance measurement is evidence about the bytes in the window it covers and is not evidence that
-> the pipeline is in a state that will keep producing them. Where a claim needs the second thing, it
-> has to be supported by the stage's own counters, and the scope of what was actually measured —
-> minutes, not hours — belongs in the sentence.
+A groomer defect that destroyed the de-jitter cushion left **every** wire check passing: 0 continuity errors, 0 PCR intervals above 40 ms, exact CBR, programme conserved. T22's frozen source left every *transport* check passing. Conformance is evidence about bytes in the measured window, not that the pipeline will keep producing them; lasting health needs stage counters and stated scope (minutes, not hours).
 
 **Citing another component as the working reference for a contract is a behavioural claim about that
 component, and reading its source is not evidence for it.** *(T19.)*
 
-> The report that became #2984 rested on an asymmetry: #2967 documents a caller-side pacing contract,
-> `moq-srt` implements it, `moq-cli`'s `run_ts` discards it. The `moq-srt` half came from reading
-> `send_at = anchor + (ts - base)` and seeing it wait, which is the contract exactly. It was wrong.
-> Its subtraction was scale-strict, the exporter stamps PCR in microseconds and media at the source's
-> 90 kHz, and a cross-scale pair fell through to an error arm that assumed reordering and collapsed onto
-> the anchor — so media frames on that lane were never paced. The fix to *our* issue had to repair the
-> exemplar first. The report survived because its load-bearing half was a negative claim about
-> `run_ts`, which reading does establish: *code that never mentions `frame.timestamp` cannot be pacing
-> on it.* **Reading source is sound evidence that something is absent and weak evidence that something
-> present works.** When the argument leans on a second implementation being correct, either measure it
-> or say plainly that its correctness is assumed.
+#2984 rested on `moq-srt` implementing #2967's pacing contract; reading `send_at = anchor + (ts - base)` looked exact but cross-scale PCR versus 90 kHz media fell through to an unpaced error arm. **Reading source is sound evidence that something is absent and weak evidence that something present works.** Measure the exemplar or state that its correctness is assumed.
 
 **Split a capability claim by pipeline stage before publishing it.** *(T14.)*
 
-> "No maintained toolchain does Low-Latency HLS with MPEG-TS" was assembled from documentation and
-> was true as far as it went. Run rather than read, it splits: **publishing** is a single free command
-> that works first time, and **receiving** has no free implementation at all. Stating it as one
-> undifferentiated gap made it look like an ecosystem that had not got round to TS, when it is really
-> a market — the missing half is the half that is sold as hardware. *"No tool does X" is usually "no
-> tool does one particular stage of X", and which stage decides who pays.*
+"No maintained toolchain does Low-Latency HLS with MPEG-TS" split on execution: **publishing** is one free command; **receiving** has no free implementation. *"No tool does X" is usually "no tool does one particular stage of X".*
 
 **A claim that a class of tool cannot do something is a claim about the input as much as the tools —
 name the input property that defeats them, then find an input without it.** *(T13.)*
 
-> "No off-the-shelf stage grooms a broadcast mux" stood for most of T13's life, backed by nine chains
-> against four criteria fixed in advance. Every measurement was sound and the generalisation was not.
-> The property doing the work was in the *egress*: `moq export ts` carries no stuffing, so a groomer
-> must inflate a stream and no tool that preserves a mux can. Run the identical nine chains against a
-> segmented egress, which passes the source's nulls through, and `tsp -P pcradjust` alone passes all
-> four criteria with the mux byte-for-byte intact. *If no input without the property exists, the
-> conclusion is about the tools; if one does, the conclusion was about the input all along — and the
-> useful version names the property, because that is the thing someone upstream can change.*
+"No off-the-shelf stage grooms a broadcast mux" held for nine chains until the binding property was egress: `moq export ts` carries no stuffing, so groomers must inflate. Identical chains against segmented egress pass nulls through and `tsp -P pcradjust` alone passes all four criteria byte-for-byte. *Name the property someone upstream can change.*
 
 **A claim about what a tool cannot be configured to do is a claim about its whole parameter space.**
 *(T16.)*
 
-> "No configuration of the documented flags passes" was drafted from two correct facts about three
-> parameters. Two more arms were run instead of asserting it, and one passed. The corrected finding
-> was narrower and more useful than the one it replaced.
+"No configuration of the documented flags passes" came from two facts about three parameters; two more arms found one pass — narrower and more useful.
 
 **A "structurally impossible" claim derived from a specification is a hypothesis about an
 implementation, and costs one afternoon to test.** *(T14.)*
 
-> "A sequence of TS segments is a re-muxed stream, so byte-verbatim carriage is structurally
-> unavailable." Measured, a segment differs from the source in byte 3 on one PAT and one PMT and in
-> nothing else. Inserting two packets is not re-muxing. *And when such a claim falls, check whether the
-> mechanism it named survives without the impossibility attached to it:* here it did — the pair is
-> *inserted*, so the mux is verbatim in payload but not as a mux, and those two packets still cost
-> file-domain PCR accuracy.
+"TS segments imply re-mux, so byte-verbatim carriage is unavailable" — measured, a segment differs from source in byte 3 on one PAT and one PMT only. *When the claim falls, check whether the named mechanism survives:* here packets are *inserted*, verbatim in payload but not as a mux, and those two packets still cost file-domain PCR accuracy.
 
 **When recording what a blocked measurement needs, name the constraint that actually binds.**
 *(T14.)*
 
-> A cell was recorded as blocked on "a caching HTTP/3 origin, not installed". Two were then installed
-> and the cell was still blocked, for two unrelated reasons. *A guess about the blocker sends the
-> next session shopping instead of measuring.*
-
-**A claim that decides a comparison must cite the measurement that established it.** *(This
-campaign's own largest error, found in editorial review rather than in a rig.)*
-
-> "MoQ carries the same feed sub-second, measured" appeared in two published documents for several
-> revisions at a time when **no latency measurement existed anywhere in this campaign** — the property was
-> a structural consequence of the protocol plus an inference from delivery granularity, and it decided the
-> paper's central comparison. It has since been measured and the claim turned out to be true and
-> conservative ([T18](test-18-delivery-latency.md): 109 ms across the internet). That does not retire the
-> rule, it sharpens it: the claim was unfalsifiable when made, and *the absence of a citation on a
-> load-bearing claim is a finding about the argument, not a gap in its prose* — being right by luck is not
-> a defence.
-
-**Name the measurement domain when file and wire can differ, because here they did.** *(T7/T13/T16,
-found in editorial review.)*
-
-> Grooming takes PCR intervals above 40 ms to 0 % **on file** and to 131–159 in 25 s **on the wire**
-> at the same configuration. Five documents carried the file figure without its domain. Any
-> conformance number that a hardware receiver would grade differently from an offline analyser has to
-> say which one produced it — and where both exist, the delivered figure leads and the file figure is
-> reported as the precondition it is, because a reader who stops after one paragraph must stop on the
-> right number.
+A cell blocked on "caching HTTP/3 origin, not installed" stayed blocked after two origins were installed, for unrelated reasons. *A guess about the blocker sends the next session shopping instead of measuring.*
 
 **Liveness must key on programme content, not carrier presence — and the enforcement point is the
 sender.** *(T12.)*
 
-> A groomer asked only to hold a rate holds it against a dead source: a byte-perfect CBR carrier with
-> zero programme in it, minting the PCR that makes it look conformant. Both selection policies read
-> that as health. *A receiver cannot recover information the sender declined to omit.* The content
-> check must also exclude the groomer's own adaptation-only PCR packets, which the first version of
-> that metric got wrong.
+A rate-holding groomer mints conformant CBR with zero programme; both selection policies read that as health. *A receiver cannot recover information the sender declined to omit.* Exclude the groomer's adaptation-only PCR from the content check.
 
 **Every stream-position quantity must be a function of position in the stream, not of what this
 instance happened to emit.** *(T12.)*
 
-> A resumed leg came back 8,756 datagrams behind its partner because its RTP sequence counted
-> datagrams *sent*, so a silence cost it numbers rather than consuming them. Sequence number,
-> timestamp and PCR all have to be derived from the stream for a redundant pair to work.
+A resumed leg returned 8,756 datagrams behind its partner because RTP sequence counted datagrams *sent*; sequence, timestamp and PCR must be stream-derived for redundancy.
 
 **Pin every parameter the property depends on, then measure; a prediction of divergence is not a
 substitute for one run.** *(T12.)*
 
-> Two independently packetised ungroomed legs were predicted to fail alignment on phase, making that
-> arm a negative control. With RTP framing pinned and both legs co-started it aligns exactly in all
-> twelve cells. It fails on *conformance* instead — which is a more useful result and was found only
-> by running it.
+Ungroomed legs were predicted to fail alignment on phase; with RTP framing pinned and co-start they align in all twelve cells and fail on *conformance* instead — found only by running.
 
 **When comparing two designs, draw the demarcation before comparing, and count only work that falls on
 the same side of it.** *(T14, found in editorial review.)*
 
-> "Segmented HTTP's receive-side hand-off already ships, so that layer is solved for it" counted the
-> client's own equipment as if it discharged the distributor's obligation. An advantage that lives in a
-> third party's capex is optionality, not architecture — and the same slip flatters whichever side of a
-> comparison happens to have the larger installed base.
+"Segmented HTTP's receive-side hand-off already ships" counted client equipment as discharging the distributor's obligation. Advantage in a third party's capex is optionality, not architecture.
 
 **When a defect is attributed to a component, name the boundary the measurement was taken at — a fix
 verified inside that boundary can be invisible outside it.** *(T19.)*
 
-> The PCR clustering was attributed to the exporter, and the exporter's fix is exact: an exact 25 ms
-> grid where 85 % of intervals had been sub-millisecond. But the spacing lives in per-frame timestamps
-> and the exporter's only public interface is stdout, which carries bytes. So the defect survived at
-> full strength one boundary further out, as clustered packet *positions* instead of clustered *values*,
-> and the lane's wire conformance regressed. "The exporter" and "the exporter's output interface" are
-> separate stages and a report should say which one it measured.
+PCR clustering was fixed at the exporter (exact 25 ms grid versus 85 % sub-millisecond intervals), but spacing lives in per-frame timestamps while stdout carries bytes — the defect survived as clustered packet *positions* on the wire. "The exporter" and "the exporter's output interface" are separate stages.
 
 **Grade an upstream fix on the deployed chain, not only on the claim it makes.** *(T19.)*
 
-> #2967's claim was true and independently confirmed at the exporter. Adopting it on that basis would
-> have shipped a build that takes continuity from 0 to 824 errors and delivery latency from 118 to
-> 769 ms. Only the end-to-end arm showed it, and it cost one 90 s run.
+#2967 was true at the exporter; adopting it alone would have shipped continuity from 0 to 824 errors and delivery latency from 118 to 769 ms — visible only end-to-end in one 90 s run.
 
 **A measurement that is undefined as a verdict can still be sound as a diagnostic, if what is read is
 the distribution rather than the pass/fail.** *(T19.)*
 
-> `pcrverify --absolute` on a rate-less media-aware egress cannot yield a conformance verdict, and this
-> campaign has said so since T13. It still distinguished the two builds usefully: the pre-fix stream
-> missed by *varying* amounts, the post-fix stream by a *constant* 24,842 µs. Constant error is
-> arithmetically repairable downstream and varying error is not, which is a real difference that the
-> verdict column discards.
+`pcrverify --absolute` on rate-less media-aware egress cannot yield a conformance verdict (stated since T13). It still separated builds: pre-fix missed by *varying* amounts, post-fix by constant 24,842 µs — arithmetically repairable versus not.
 
 **A head-to-head is only a lane result if the lanes were on the same substrate; otherwise it is a
 substrate result wearing a lane's name.** *(Editorial audit of T5/T8 against the §14 verdict, settled
 by [T20](test-20-segmented-http3.md).)*
 
-> Reordering was the one impairment on which the two data planes separated, 0.98 against 0.19, and the
-> paper carried it as a property of the lane. It was measured with TCP under the segmented arm and QUIC
-> under the media-aware one, while the configuration the verdict recommends is segmented HTTP *over
-> HTTP/3* — which puts QUIC under both and removes half the stated explanation. The audit's ask was
-> only to re-run the cell on a shared substrate. Doing so found the other half of the explanation was
-> also unsound: the arms differed in packet size as well as in transport, and that, not the transport,
-> was carrying the result. **Before a comparative row is generalised, list what differed between the
-> arms besides the thing under test, and check that the recommendation does not change one of them** —
-> and note that the audit found one such difference where there were two.
-
-**"Later evidence supersedes earlier conclusions" is only half a rule; the other half is that it
-supersedes them only as far as it actually reaches.** *(Editorial audit, relay memory.)*
-
-> The early reading was "linear, 650 MB/day, unbounded". The later evidence retired it properly:
-> growth is flat in subscriber count, tracks ingested groups, and plateaus. But the plateau itself was
-> observed once, at 14 h, still creeping at +1.82 MB/h when the run ended — so "bounded" is the
-> direction the evidence points and not a thing the evidence establishes. The correction had to replace
-> the stale claim in several places while *keeping* the qualification in all of them, and the temptation
-> at each one was to write the cleaner sentence. **A supersession that drops the new result's own limits
-> has traded one overstatement for another.**
-
-**A file that records what is outstanding decays faster than one that records what happened, because
-it is only correct until the next run.** *(Editorial audit, `planned-experiments.md`.)*
-
-> Four entries described the arm to run next when that arm had already run, one of them contradicted
-> twenty lines above by the file's own ranking. Nothing was wrong when written. The rule that keeps a
-> to-do list honest is not "update it when things change" but **"an entry must name the document it
-> could falsify"** — an entry that cannot name one has either been answered already or was never
-> load-bearing, and both are reasons to delete it.
+Reordering 0.98 versus 0.19 was measured with TCP under segmented HTTP and QUIC under MoQ while the recommended configuration is HTTP/3 on both. Re-run on shared substrate found packet size differed too — **1,209 packets averaging 34,380 B on the segmented lane against 29,062 averaging 931 B on the media-aware one** for the same media, so `reorder 25 %` met ~24× fewer events on the winner. **Before a comparative row is generalised, list what differed besides the thing under test** — the audit found one asymmetry where there were two.
 
 **An impairment specified per packet is only comparable across lanes that carry the same media in
 comparable packets. Normalise MTU and offloads on every arm, and report the measured packet-size
 distribution beside any per-packet result.** *(T20, re-running T5's reordering cell.)*
 
-> T5's reordering cell was the paper's single strongest lane result: segmented HTTP 0.98 against MoQ's
-> 0.19. It ran on loopback at the default 65536-byte MTU, with segmentation offload disabled on the MoQ
-> arm — correctly, because `netem` mishandles super-packets, and *on that arm only, because that was
-> the arm that needed it*. The captures show what the shaper then saw: **1,209 packets averaging
-> 34,380 B on the segmented lane against 29,062 averaging 931 B on the media-aware one, for the same
-> media**. `reorder 25 %` is a per-packet probability, so the lane that won met ~24× fewer events.
-> Equalise MTU and offloads and the segmented lane falls to 0.44 on TCP and 0.18 on HTTP/3, against
-> 0.13 — the separation was the rig's. **A correction applied to one arm because only that arm needed
-> it is itself an asymmetry**, and the way to catch it is to measure the packet-size distribution on
-> every arm rather than to reason about which arm the fix was for. The residual matters too and does not
-> go away: even normalised, the QUIC arms send ~1.5× the packets for the same media, so "same shaper
-> setting" is still not "same impairment" and the figure has to say which it is.
+T5's reordering cell disabled segmentation offload on the MoQ arm only (correct for `netem`, but asymmetric). Equalise MTU and offloads and segmented falls to 0.44 on TCP and 0.18 on HTTP/3 against 0.13 — separation was largely the rig's. Even normalised, QUIC arms send ~1.5× the packets for the same media, so "same shaper setting" is still not "same impairment"; say which.
 
 **A client option naming a transport is a request, not a measurement; prove the substrate from the
 server and the wire.** *(T20, HLS over HTTP/3.)*
 
-> FFmpeg propagates only a fixed whitelist of I/O options to a demuxer's child connections, and
-> `http_version` is not on it. `-http_version 3only` therefore fetches the *playlist* over HTTP/3 and
-> every *media segment* over HTTP/1.1, with no warning anywhere: the client believes it asked, and
-> 100 % of the media bytes go over TCP. It was visible only because the origin logs ALPN per request.
-> **The rule the rig now follows is that the transport is established by the origin, not requested by
-> the client** — the H3 arm's vhost has no TCP listener at all, so a fallback fails loudly instead of
-> succeeding quietly — and is corroborated by two further instruments that cannot collude with the
-> client's configuration: the origin's per-request ALPN log and a packet capture counting UDP against
-> TCP.
+FFmpeg does not propagate `http_version` to demuxer child connections — `-http_version 3only` fetches the playlist over HTTP/3 and segments over HTTP/1.1 with no warning. **The transport is established by the origin, not requested by the client** (H3 vhost with no TCP listener, ALPN log, capture counting UDP versus TCP).
 
 **After #3793, dial-side and relay flags were renamed — detect, do not assume.** *(Post-#3793 rebuild,
 T21/T27/T40.)*
 
-> [#3793](https://github.com/moq-dev/moq/pull/3793) rejects the old names outright:
-> `--client-connect` → `--connect`, `--client-tls-disable-verify` → `--connect-tls-insecure`,
-> `--latency-max` → `--max-age`; relay `--server-bind` / `--tls-generate` → `--listen` /
-> `--listen-tls-generate`; `--server-quic-gso` → `--quic-gso`. Campaign rigs that compare two builds
-> must detect **each binary separately** — a pre-#3793 subscriber against a post-#3793 relay still needs
-> `--client-*` on the old side and `--connect-*` on the new one, and mixing them is a silent
-> non-start. The shared helper is [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh); `ec2-swap-build.sh`
-> migrates standing unit files when the deployed binary exposes `--connect`.
+[#3793](https://github.com/moq-dev/moq/pull/3793) rejects old names: `--client-connect` → `--connect`, `--client-tls-disable-verify` → `--connect-tls-insecure`, `--latency-max` → `--max-age`; relay `--server-bind` / `--tls-generate` → `--listen` / `--listen-tls-generate`; `--server-quic-gso` → `--quic-gso`. Compare builds with **each binary detected separately** — pre-#3793 subscriber against post-#3793 relay needs `--client-*` on one side and `--connect-*` on the other. Use [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh); `ec2-swap-build.sh` migrates unit files when the binary exposes `--connect`.
 
 **`--auth-public` inverted its meaning at the CLI migration, and the wrong value delivers nothing
 without erroring anywhere.** *(T13 `3831-a`, P0-i, and both standing relays.)*
 
-> It takes a path glob, not a boolean, and which glob grants the connection root changed. Measured on
-> one host, loopback, client dialling `https://…/anon`, everything else held:
->
-> | relay build | `--auth-public ""` | `--auth-public "**"` | `--auth-public "anon/**"` |
-> |---|---|---|---|
-> | `moq 0.9.15` (pre-migration surface) | **15.4 MB** | 0 | 0 |
-> | `moq 0.11.2-5d0991b9` | 0 | **13.3 MB** | 0 |
-> | `moq 0.11.2-615d166d` | 0 | **14.5 MB** | 0 |
->
-> The pre-migration surface reads `""` as *everything is public*; the post-migration one reads it as
-> *nothing is*. `anon/**` serves nothing on any build, because the `/anon` in the URL is the
-> connection root and the path the relay matches is relative to it — so the documented form is for a
-> client dialling the bare origin, not one dialling `/anon`.
->
-> **The failure is silent in all three directions.** The relay binds and serves its fingerprint, the
-> publisher's session is accepted, the subscriber's session is accepted, the announcement is
-> registered — and no byte is ever delivered, with no error logged by any of the three. A rig on the
-> wrong value is indistinguishable from a working one until something counts the capture.
->
-> Two consequences. **Both standing `:443` relays carried the wrong value** — repointed from a
-> pre-migration build to `5d0991b9` with `--auth-public ""` carried across, so from the repoint
-> onward they accepted every session and would have served nothing. And a rig that hard-codes either
-> value cannot carry a build comparison across the migration: P0-i's positive control is a
-> pre-migration binary, and a literal `"**"` voided it on the first attempt. The meaning did not
-> change with the rest of the surface: commits inside the `dev` branch that the migration merged have
-> the new `--listen` and still the prefix meaning, where `""` grants everything. `moq-cli-flags.sh`
-> therefore reads `RELAY_AUTH` from the relay's own help text; use it rather than a literal.
->
-> The general rule is the cheap one and would have caught all of it: **check the capture is non-empty
-> before grading it.** Hours went into bisecting a feature that was working, because a zero-byte file
-> and a broken feature look identical at the census.
->
-> **This is now enforced rather than remembered.** `moq-cli-flags.sh` exports `moq_relay_public`,
-> which assembles the whole invariant argv so that omitting the grant is not expressible, and
-> `moq_require_bytes`, which voids a cell whose capture is under a floor. `check-rigs.sh` fails the
-> tree if any script hard-codes a migrated flag, writes `--auth-public` literally, or starts a relay
-> without a grant. Run it before a session.
+It takes a path glob, not a boolean; which glob grants the connection root changed. Measured loopback dialling `https://…/anon`:
+
+| relay build | `--auth-public ""` | `--auth-public "**"` | `--auth-public "anon/**"` |
+|---|---|---|---|
+| `moq 0.9.15` (pre-migration surface) | **15.4 MB** | 0 | 0 |
+| `moq 0.11.2-5d0991b9` | 0 | **13.3 MB** | 0 |
+| `moq 0.11.2-615d166d` | 0 | **14.5 MB** | 0 |
+
+Pre-migration `""` means everything public; post-migration `""` means nothing. `anon/**` serves nothing on any build because `/anon` is the connection root and the relay matches paths relative to it. **Failure is silent:** sessions accept, no bytes deliver, no error logged. Repointing standing relays with `""` carried across would serve nothing; hard-coded literals break build comparisons across the migration — `moq-cli-flags.sh` reads `RELAY_AUTH` from relay help. **Check the capture is non-empty before grading it.** Enforced via `moq_relay_public`, `moq_require_bytes`, and `check-rigs.sh` before a session.
 
 ### The default congestion controller changed to the one known to abort, and a rig that does not pin it cannot attribute anything
 
-*(From the `84b34f54` build survey.)* `--quic-congestion-control` takes `loss` (CUBIC) or `delay`
-(BBRv3) and **defaults to `delay`**. [T8](test-8-srt-vs-moq.md) records noq's BBRv3 aborting the
-process under high loss — precisely the condition the outage ladders create — so the default is the
-arm most likely to fail, and it is selected by saying nothing.
+*(From the `84b34f54` build survey; [T8](test-8-srt-vs-moq.md), T13 `3831-a`, [T20](test-20-segmented-http3.md), [T28](test-28-failure-injection-matrix.md), [T31](test-31-congestion-capacity-ladders.md).)*
 
-> The flag was `--server-quic-congestion-control` before the #3793 CLI migration and
-> `--quic-congestion-control` after, so a rig that did pin it on an older build stops pinning it on
-> a newer one: the flag name errors, or the line is quietly dropped in a shell that tolerates it,
-> and the controller reverts to the default. A build comparison across the migration then carries a
-> **controller change as well as a code change**, attributed to neither.
->
-> **Pin the controller on every relay, through `RELAY_CC_FLAG` rather than a literal**, and state it
-> with the result. The same applies to the backend itself: #3811 deleted quinn, so every figure from
-> `615d166d` onward is a noq figure whatever the rig asked for, and a comparison spanning it is
-> comparing two stacks. #3811 removed the quinn and quiche implementations and their Cargo features
-> outright, so `--no-default-features --features quinn` now fails with *the package 'moq-cli' does not
-> contain this feature*, which is how `ec2-build-main.sh` first hit it *(T13 `3831-a`)*. The campaign
-> measured on quinn up to `5d0991b9`: say which backend a figure is on whenever it crosses #3811, and
-> prefer file-domain evidence for any claim taken across it. One related trap: **the iroh backend cannot turn GSO off and rejects an
-> explicit `false`**, so `--quic-gso=false` only works on a build that dropped the iroh feature —
-> which `ec2-build-main.sh` does, and a default-feature build does not.
->
-> **The size of the effect has since been measured, and it depends on the rig as much as the
-> shape.** On loopback with a `netem` token bucket it decides the headline: under reorder BBRv3
-> delivers **zero bytes in 60 s** where CUBIC delivers 55.2 s of media span
-> ([T20](test-20-segmented-http3.md)), and under a 5 s total outage BBRv3 reads 0.227 delivered with
-> the relay logging `subscribe canceled (idle)` at the break, where CUBIC reads **0.961**
-> ([T28](test-28-failure-injection-matrix.md)). In the `netns`/`cake` rig, graded on content, it
-> moves neither the capacity rungs nor the 5 s outage beyond single-sample scatter
-> ([T31](test-31-congestion-capacity-ladders.md)). So the rule is not only "pin it": **a MoQ
-> impairment figure quoted without its controller is not a lane result**, and a figure taken before
-> the rig pinned the controller cannot be assumed to have used the one its file implies. Re-check
-> rather than infer.
->
-> **Re-checked, for every unpinned cell the campaign published.** From `fd4f5d82e` to `ffa5b81b`
-> every backend resolves an unset controller through one `unwrap_or(Delay)`; a doc comment at
-> `5d0991b9` claiming noq defaulted to `loss` is contradicted by that code. So an unpinned cell ran
-> **BBR, whose generation is the backend's**: BBRv1 on the quinn builds (`fd4f5d82e`, `5d0991b9`) and
-> BBRv3 on every noq build. Two consequences: any comparison across #3811 changed the BBR generation
-> as well as the stack, and a rig file that promised BBRv1 on a noq build delivered BBRv3.
->
-> **Read the backend from the binary, not from the CLI generation.** The rig helper used to infer
-> "noq" from the post-migration flag names, and `5d0991b9` has those names on either stack, so a
-> quinn build's run log said noq. `moq_record_build` now takes the backend from the binary's own
-> `--*-backend` values where the CLI lists them, and from the one QUIC protocol crate linked into it
-> where it does not.
+**Pin the controller on every relay, through `RELAY_CC_FLAG` rather than a literal**, and state it with the result. `--quic-congestion-control` takes `loss` (CUBIC) or `delay` (BBRv3) and **defaults to `delay`**, which [T8](test-8-srt-vs-moq.md) records aborting under high loss — the condition outage ladders create. The flag was `--server-quic-congestion-control` before the #3793 CLI migration; a rig that pinned the old name on a newer build stops pinning silently and reverts to the default, so a build comparison across the migration carries a **controller change as well as a code change**, attributed to neither.
+
+From `fd4f5d82e` to `ffa5b81b` every backend resolves an unset controller through one `unwrap_or(Delay)`; unpinned cells ran **BBR** (v1 on quinn builds, v3 on noq). **Read the backend from the binary, not from the CLI generation** — post-migration flag names on `5d0991b9` still appear on a quinn build, so infer backend from `--*-backend` or the linked QUIC crate. #3811 deleted quinn: every figure from `615d166d` onward is noq regardless of the rig, and `--no-default-features --features quinn` now fails; say which backend a figure is on whenever it crosses #3811, and prefer file-domain evidence across that boundary. The iroh backend cannot turn GSO off and rejects explicit `false`, so `--quic-gso=false` only works when the build dropped iroh (as `ec2-build-main.sh` does).
+
+**a MoQ impairment figure quoted without its controller is not a lane result**, and a figure taken before the rig pinned the controller cannot be assumed to have used the one its file implies. Re-check rather than infer. On loopback with a `netem` token bucket the controller can decide the headline (under reorder BBRv3 delivers **zero bytes in 60 s** where CUBIC delivers 55.2 s of media span; under a 5 s total outage BBRv3 reads 0.227 where CUBIC reads **0.961**). In the `netns`/`cake` rig, graded on content, it moves neither capacity rungs nor the 5 s outage beyond single-sample scatter.
 
 ### A receiver's per-fetch timeout is a measurement parameter, and on an impaired lane it can be the whole result
 
-*(From the T28/T31 segmented lane; timing characterised in [T42](test-42-h3-receiver-fidelity.md).)*
-`hls-verbatim-recv.py` refuses any segment that is not a whole number of 188-byte packets, which is
-right — concatenating a truncated fetch produces a corrupt stream that grades as a wire fault, so the
-receiver would be manufacturing the defect it is there to detect. But the refusal is triggered by the
-per-fetch timeout, and the timeout is a knob with a default.
+*(T28/T31 segmented lane; [T42](test-42-h3-receiver-fidelity.md).)*
 
-> At 25 % reorder the same cell reads **4.0 % of control at a 15 s budget and 25.4 % at 60 s** — a
-> six-fold move from a receiver setting, with the lower reading looking exactly like a lane that
-> collapsed. The T20 loss-20 arm read *nothing at all* at 15 s and 0.131 at 60 s.
->
-> **Quote the timeout beside any impaired segmented cell, and use it as a test rather than a
-> setting**: re-run the cell at a longer budget, and if the byte count moves the cell was measuring
-> the instrument. When it does not move the result is the lane's — the 0.5× capacity rung returned
-> a byte-identical 96,203,924 at both budgets, which is what licensed reading its 404 as the origin
-> evicting a segment rather than the receiver giving up.
+`hls-verbatim-recv.py` refuses any segment that is not a whole number of 188-byte packets, which is right — a truncated fetch would grade as a wire fault. The refusal is triggered by the per-fetch timeout (`curl --max-time`, **per transfer**), which binds only where one segment's goodput falls below `segment bytes / timeout` (~2 Mb/s for ~3–3.7 MB segments at 15 s).
 
-The timeout is curl's `--max-time`, applied **per transfer**: batches of six segments ran 19.4 s at a
-15 s timeout with curl exiting 0. So it binds only where one segment's goodput falls below
-`segment bytes / timeout` — about 2 Mb/s for this campaign's ~3–3.7 MB segments at 15 s — and the
-cells above are exactly those. Where goodput stays above it the timeout is inert: a permanent 0.8×
-shortfall and 10 % loss read identically at 15 and 60 s, and with truncation recorded as a hole. The
-arithmetic tells you in advance which cells need the sweep.
-
-The reorder cell's six-fold move was not the timeout alone. It ran against nginx's default 64k
-per-stream buffer (next rule), which slowed each segment enough that the first one crossed 15 s; with
-the buffer at 16m the same cell at the default 15 s read 19.34–19.60 MB with 11 holes in each of three
-replicates, which is the 60 s reading. The timeout decides whether a slow segment is truncated; what
-makes it slow can be the origin.
+**Quote the timeout beside any impaired segmented cell, and use it as a test rather than a setting**: re-run the cell at a longer budget, and if the byte count moves the cell was measuring the instrument. At 25 % reorder the same cell read **4.0 % of control at 15 s and 25.4 % at 60 s**; the T20 loss-20 arm read nothing at 15 s and 0.131 at 60 s. Where goodput stays above the threshold the timeout is inert (0.8× shortfall and 10 % loss read identically at 15 and 60 s). The reorder cell also needed nginx's default 64k stream buffer (next rule): with buffer at 16m the 15 s budget matched the 60 s reading.
 
 ### An origin or a receiver can be the bottleneck at the rig's RTT, and loopback will never show it
 
-*(From T31's segmented ladder in the namespace rig; [T42](test-42-h3-receiver-fidelity.md).)* The
-segmented lane was moved from loopback, where its RTT is near zero, into the T8b namespace rig at
-100 ms. Its unimpaired control fell behind the live window and took a 404 — a result that would have
-graded every cell of the ladder, and that had nothing to do with the lane.
+*(T31 segmented ladder in the namespace rig; [T42](test-42-h3-receiver-fidelity.md).)*
 
-> **Two defects, both invisible at zero RTT.** nginx's `http3_stream_buffer_size` defaults to 64k,
-> which caps one stream at ~64 KB per round trip: 4.57–4.89 Mb/s at 100 ms whatever the bottleneck,
-> under a ~10 Mb/s stream. And the receiver spawned `curl` per cycle, so each playlist and each batch
-> opened a new connection from slow start; behind 20 Mb/s at 100 ms that costs more than a segment's
-> period. Raising the buffer fixed the first and not the second — the control still 404'd — and
-> holding one connection for the run, as a player does, fixed the second: 70 requests, one
-> connection, 0 holes.
->
-> **Before a lane's first impaired cell on a new rig, run its unimpaired control and check that the
-> delivery machinery keeps up with margin**: fetch time against segment period, and a bulk transfer
-> through the path at each origin setting that could bind. A per-stream window and a per-request
-> connection both scale their cost with RTT, so a rig that changes the RTT has to re-establish that
-> the instrument and the origin are still not the thing being measured.
-> [`t31-origin-window.sh`](scripts/t31-origin-window.sh) is the check for the origin.
+At 100 ms RTT the unimpaired control fell behind the live window and 404'd — unrelated to the lane. nginx's `http3_stream_buffer_size` defaults to 64k (~4.6 Mb/s per stream at 100 ms), and the receiver spawned `curl` per cycle (new connection from slow start each batch). Raising the buffer fixed the first but not the second; one connection for the run fixed both.
+
+**Before a lane's first impaired cell on a new rig, run its unimpaired control and check that the delivery machinery keeps up with margin**: fetch time against segment period, and bulk transfer through the path at each origin setting that could bind. A rig that changes RTT must re-establish that instrument and origin are not what is being measured. [`t31-origin-window.sh`](scripts/t31-origin-window.sh) checks the origin.
 
 ### A cleanup pattern keyed on a flag name stops matching when the flag is renamed
 
-*(From the repo-wide rig audit.)* Twenty `pkill -f "[m]oq-relay --server-bind $PORT"` patterns
-across the rigs matched nothing once the relay started with `--listen`. Nothing errored: `pkill`
-exits non-zero when it matches nothing, and every one of these was `|| true` or end-of-pipeline, so
-the stale relay survived the cell and held the port. The next cell then failed to bind, in a
-different script, with no reference to the cause.
+*(From the repo-wide rig audit.)*
 
-> **Match a process on what will not be renamed** — the binary name and the address it was given —
-> rather than on a flag between them: `[m]oq-relay.*127.0.0.1:$PORT`. A pattern that silently stops
-> matching is worse than one that errors, because a cleanup that does nothing looks exactly like a
-> cleanup that had nothing to do.
+Twenty `pkill -f "[m]oq-relay --server-bind $PORT"` patterns matched nothing once the relay used `--listen`; `pkill` exits non-zero when it matches nothing, and each pattern was `|| true`, so a stale relay held the port and the next cell failed to bind elsewhere with no link to the cause.
+
+**Match a process on what will not be renamed** — the binary name and the address it was given — e.g. `[m]oq-relay.*127.0.0.1:$PORT`. A pattern that silently stops matching is worse than one that errors.
 
 ### One measured defect is not a diagnosis of a different symptom
 
-*From the standing live-ingest chain.* The auth inversion above was measured, real, and present on
-both standing relays, and it was then written up — in the status file, the notebook and the
-reproduction instructions — as the reason the standing chain was serving 0 bytes, with
-`--auth-public "**"` called "the whole fix". Applying it changed nothing. The chain had **three**
-independent faults: the auth value; a publisher dialling `https://localhost:443` against a relay whose
-generated certificate and advertised origin are its Elastic IP, which the relay answered with an
-immediate redirect until the client logged `connection loop exited: reconnect timed out after 10s`;
-and no source at all, the SRT listener having had no caller since two days earlier, so the multicast
-group it feeds was empty. Only after all three were repaired did a subscriber recover 14.4 MB.
+*(Standing live-ingest chain.)*
 
-> **A confirmed defect on the path is a candidate, not a cause, until the stages between it and the
-> symptom are each observed.** The failure here was quoting a good loopback measurement as the
-> explanation of a different observation on a different host. Walk the chain stage by stage and count
-> bytes at each boundary — source, ingest, group, publisher session, relay grant, subscriber — and fix
-> what each stage shows rather than what the most recently understood defect suggests.
+A measured auth inversion was written up as why the chain served 0 bytes; applying the fix changed nothing. Three independent faults remained (auth value, publisher dialling localhost against the relay's Elastic IP certificate, empty multicast source). Only after all three were repaired did a subscriber recover 14.4 MB.
 
-> **`systemctl is-active` is not evidence that a pipeline is running.** All three units reported
-> `active` with `NRestarts=0` throughout: the SRT listener was idle rather than receiving, and the
-> publisher's inner connection loop had exited inside a shell that stayed alive. Health checks on this
-> chain must count bytes, which is what `live-feed-status.sh` is for.
+**A confirmed defect on the path is a candidate, not a cause, until the stages between it and the symptom are each observed.** Walk the chain stage by stage and count bytes at each boundary — source, ingest, group, publisher session, relay grant, subscriber.
 
-**A `#3493` re-soak that crosses a timestamp reset needs a build carrying the
-[#3798](https://github.com/moq-dev/moq/issues/3798) fix: `main` from `9d2a4f6e`, where the 24 h re-soak
-ran, and not homogeneous `5d0991b9` or `ffa5b81b`.** *(T21 `3493-check-2h`, `3493-loop-2h`.)*
+**`systemctl is-active` is not evidence that a pipeline is running.** Units reported `active` while the SRT listener was idle and the publisher's connection loop had exited inside a surviving shell. Health checks on this chain must count bytes (`live-feed-status.sh`).
 
-> Import aborts with *frame timestamp is below the live edge* at the first **content join** on
-> `ts-continuous-source.py` (~600 s on `CNNiEMEA2.ts`) and at the first **loop wrap** on
-> `tsp --infinite` (~665 s on the same clip). Both are the same `TimestampRewind` in
-> `container::Producer::write`; the monotonic-timeline rule does not distinguish continuous join from
-> true rewind for tracks without `reanchor()`. A #3493 slope confirmation therefore needs either an
-> upstream fix ([#3798](https://github.com/moq-dev/moq/issues/3798)) or a single-pass window under one
-> clip length — which cannot reach 2 h without a reset. The closure of #3798 by a plan-only PR did not
-> clear `ffa5b81b`; the build that no longer exits is `main` at `9d2a4f6e`
-> ([T21 § *The #3493 re-soak*](test-21-permanence-soak.md#the-3493-re-soak)).
+**A `#3493` re-soak that crosses a timestamp reset needs a build carrying the [#3798](https://github.com/moq-dev/moq/issues/3798) fix: `main` from `9d2a4f6e`, where the 24 h re-soak ran, and not homogeneous `5d0991b9` or `ffa5b81b`.** *(T21 `3493-check-2h`, `3493-loop-2h`.)*
+
+Import aborts with *frame timestamp is below the live edge* at content join on `ts-continuous-source.py` (~600 s) and loop wrap on `tsp --infinite` (~665 s) — the same `TimestampRewind` without `reanchor()`. A #3493 slope confirmation needs [#3798](https://github.com/moq-dev/moq/issues/3798) or a single-pass window under one clip length; closure of #3798 by a plan-only PR did not clear `ffa5b81b` ([T21 § *The #3493 re-soak*](test-21-permanence-soak.md#the-3493-re-soak)).
 
 ### A P1/P2 pass is not a conformant transport stream
 
-*From [T44](test-44-tstd-grading.md).* Every "conformant wire" in this campaign up to T44 was a
-TR 101 290 P1/P2 result: PCR repetition and accuracy, continuity, tables. P1/P2 does not model the
-decoder's buffers, and ISO/IEC 13818-1 defines a conformant stream as one the T-STD decodes without
-overflow or underflow. The media-aware lane's groomed wire passed P1/P2 for 300 s and for a day while
-its video, audio and PSI transport buffers overflowed throughout, and no PCR offset made its audio
-decoder buffers legal. The harness had flagged the buffer model on that lane from the start, with an
-approximate fixed-leak check, and the flag had been read as a property of the source content. The
-source, graded properly, passes at an offset of exactly zero.
+*([T44](test-44-tstd-grading.md).)*
 
-> **Say "P1/P2-conformant" when that is what was graded, and grade the T-STD before saying
-> "conformant".** Attribute a buffer-model failure only with the model calibrated to the stream (each
-> PID's leak from its own HRD or stream type, not a default), the source graded as the control, and a
-> transparent transport through the same groomer. That arm separates the lane's packet order from the
-> groomer's PCR. A whole-capture offset scan cannot separate them where the groomer regenerates PCR,
-> because the offset drifts with the groomer's buffer; ask the question per short window instead
-> (`ts-tstd.py --window`).
+Every "conformant wire" before T44 was TR 101 290 P1/P2. ISO/IEC 13818-1 defines conformant as T-STD decodable without overflow or underflow. The media-aware groomed wire passed P1/P2 for 300 s and a day while transport and decoder buffers overflowed throughout.
+
+**Say "P1/P2-conformant" when that is what was graded, and grade the T-STD before saying "conformant".** Calibrate the model per PID; grade the source as control through a transparent transport on the same groomer. Where the groomer regenerates PCR, ask per short window (`ts-tstd.py --window`) rather than a whole-capture offset scan.
 
 ### A buffer-model pass says nothing about what is missing: count each PID's units against the source
 
-*From [T47](test-47-fixed-delay-export.md), on `2dc542b4a`.* An export across hosts at 500 ms
-dropped every MP2, AC-3 and teletext unit for its whole run, and its output passed `ts-tstd.py` in 57
-of 57 windows, `compliance.py` and `pcrverify`. A loss arm at 1 s carried no AC-3 at all and passed
-the same three. Both T-STD checks grade the units that are present, and `compliance.py` checks the PIDs
-that carry packets; an absent PID has no buffer to overflow. The export's log named every drop, and
-the pass criteria never read it.
+*([T47](test-47-fixed-delay-export.md), `2dc542b4a`.)*
 
-> **Grade completeness alongside conformance: every PID the source carries is in the output, with
-> its unit count against the source's over the same span.** Read the export's own drop log as well.
-> A conformance verdict on a cell that has not been checked for completeness is a verdict on the
-> part that arrived.
+An export at 500 ms dropped every MP2, AC-3 and teletext unit yet passed `ts-tstd.py`, `compliance.py` and `pcrverify`; absent PIDs have no buffer to overflow. Pass criteria never read the export's drop log.
+
+**Grade completeness alongside conformance: every PID the source carries is in the output, with its unit count against the source's over the same span.** Read the export's drop log. A conformance verdict without a completeness check is a verdict on the part that arrived.
 
 ### Grade a clock's rate by fitting PCR against the receiver's clock, not from a latency trend
 
-*From [T47](test-47-fixed-delay-export.md), on `49efbc9a1`.* A steered output clock was reported
-upstream as running 290–370 ppm off, from the change in presentation latency between the first and
-last thirds of each 46 s run. Fitting each tap's wall-minus-STC offset against the tap's clock on the
-same captures gave about 500 ppm, the steering limit, as in mocked time. Medians of thirds dilute a
-steady rate over the gap between them. The fit has its own floor: on one host a 30 s window reads
-±45–60 ppm on its own, and both taps once moved together by 160 ppm, which was the host's clock.
+*([T47](test-47-fixed-delay-export.md), `49efbc9a1`.)*
 
-> **Fit the PCR against the receiving clock (`ts-decode-latency.py`'s "PCR clock vs tap") over the
-> longest span available, and compare egress with the source tap of the same run.** Grade 30 ppm on
-> the whole-run fit, not on one window. The slew limit, 2.8 ppb a second, is out of this
-> instrument's reach; say so rather than quoting a per-window change.
+Presentation-latency trends between run thirds reported 290–370 ppm off; fitting wall-minus-STC against tap clock gave ~500 ppm (the steering limit). Medians of thirds dilute a steady rate; a 30 s window alone reads ±45–60 ppm on one host.
+
+**Fit the PCR against the receiving clock (`ts-decode-latency.py`'s "PCR clock vs tap") over the longest span available, and compare egress with the source tap of the same run.** Grade 30 ppm on the whole-run fit. The slew limit (2.8 ppb/s) is below this instrument's reach; say so rather than quoting per-window change.
 
 ### A transparent control through an arrival-clocked groomer attributes the transport buffers, not the decoder buffers
 
-*From [T44](test-44-tstd-grading.md).* The SRT arm was reported as passing every buffer through the
-same groomer. It passes every transport buffer and every 2 s window, and over the whole capture it
-fails every decoder buffer at every offset. So does plain UDP carrying the file's own bytes. The
-groomer's arrival clock anchors its regenerated PCR at start-up and releases content on buffer
-occupancy, so the PCR-to-PTS offset it emits is set by the start-up lead and then drifts. That is
-true of any input. The same bytes through the groomer's stream clock, which places each packet on the
-slot its source PCR implies, pass every buffer with the joint legal offset exactly the source's.
+*([T44](test-44-tstd-grading.md).)*
 
-> **A whole-capture decoder-buffer result belongs to the groomer's clock mode as much as to the
-> transport.** Use a stream-clocked groomer, or none, for the transparent control of a whole-capture
-> grade. Quote an arrival-clocked arm for transport buffers and short windows only. Grade a clip before
-> using it as the control: the campaign's FFmpeg-muxed test loop overflows its own AAC transport
-> buffer on 80 % of packets, so it cannot attribute anything.
+SRT and plain UDP through an arrival-clocked groomer pass transport buffers and fail every decoder buffer at every offset; stream-clocked grooming passes with the source's joint legal offset. The campaign FFmpeg-muxed test loop overflows its own AAC transport buffer on 80 % of packets.
+
+**A whole-capture decoder-buffer result belongs to the groomer's clock mode as much as to the transport.** Use stream-clocked grooming or none for a whole-capture transparent control; quote arrival-clocked arms for transport buffers and short windows only. Grade a clip before using it as control.
 
 ### A rig that copies its config from a live checkout runs the checkout's schema against a pinned binary
 
-*From T44.* [`t18-arm.sh`](scripts/t18-arm.sh) copies the relay config from `~/moq-dev`'s demo tree
-unless `RELAY_TOML` is set, and that tree sits on whichever branch was last checked out, not on the
-build under test. Against the build under test it failed twice
-before the relay came up: an `[iroh]` section the build rejects, then the build's `[listen] bind`,
-which the checkout still spells `[server] listen`. Both failures are loud. A renamed key that a build *ignores* would not be.
+*(T44.)*
 
-> **A pinned binary takes its config from its own tree** (`git show <build>:demo/relay/localhost.toml`),
-> passed explicitly. It must never come from whatever branch the checkout is sitting on. The build's
-> own tree is necessary and not sufficient: `ffa5b81b`'s demo config still carries `[iroh]`, which a
-> build compiled without that feature rejects, so strip sections for features the build lacks.
+[`t18-arm.sh`](scripts/t18-arm.sh) copies relay config from `~/moq-dev`'s demo tree unless `RELAY_TOML` is set — whichever branch was checked out, not the build under test. Loud failures included `[iroh]` on a build without iroh and `[listen] bind` vs checkout's `[server] listen`; ignored renamed keys would not be loud.
+
+**A pinned binary takes its config from its own tree** (`git show <build>:demo/relay/localhost.toml`), passed explicitly. Strip sections for features the build lacks (`ffa5b81b`'s demo still carries `[iroh]`).
 
 ### An exporter that paces itself is graded with nothing re-clocking it, and on more than its CI's clip
 
-*From [T47](test-47-fixed-delay-export.md).* Upstream's fixed-delay export writes each slice of its
-multiplex at the slot boundary its PCR asserts, so when its bytes leave is part of what it claims.
-The campaign's rigs all put a groomer after the receiver, and a groomer there would have graded its
-own schedule. The export also passed its CI on a generated 720p clip whose buffers peak at 1–2 %,
-and stopped within seconds on the campaign's broadcast clip at every delay tried. A generated clip
-built to the broadcast clip's CPB reproduced half of that failure. An FFmpeg-muxed fixture at that
-video rate failed its own audio buffer, whatever the codec, until the audio was dropped.
+*([T47](test-47-fixed-delay-export.md).)*
 
-> **Grade a self-pacing exporter through a forwarder that never re-clocks**
-> ([`ts-rtp-forward.py`](scripts/ts-rtp-forward.py)). **Give it a fixture with a broadcast-sized
-> CPB, and grade that fixture as a source before blaming the export.** A clip that loads the
-> buffers to a few percent tests the code path and not the schedule. Where the T-STD and P2 are
-> both graded, report them separately: the export's output there passed every T-STD buffer and failed
-> PCR accuracy on nearly every PCR, the converse of
-> [*A P1/P2 pass is not a conformant transport stream*](#a-p1p2-pass-is-not-a-conformant-transport-stream).
+Fixed-delay export timing is part of what it claims; a groomer after the receiver would grade the groomer. CI's generated 720p clip peaks buffers at 1–2 %; the broadcast clip failed within seconds at every delay; broadcast CPB on generated video reproduced half the failure.
+
+**Grade a self-pacing exporter through a forwarder that never re-clocks** ([`ts-rtp-forward.py`](scripts/ts-rtp-forward.py)). **Give it a fixture with a broadcast-sized CPB, and grade that fixture as a source before blaming the export.** Report T-STD and P2 separately where both are graded (export passed every T-STD buffer and failed PCR accuracy on nearly every PCR — converse of [*A P1/P2 pass is not a conformant transport stream*](#a-p1p2-pass-is-not-a-conformant-transport-stream)).
 
 ### `tsp -P until --seconds` counts wall time, not stream time
 
-*From T47.* Cutting a 75 s clip from a 300 s capture with `until --seconds 75` without
-`--realtime` produced the whole 700 MB file: tsp read it in a second or two, and the condition
-never came due.
+*(T47.)*
 
-> **Cut by packets** (`-P until --packets N`, with N = seconds × rate / 1,504), and check the
-> output's size before using it.
+`until --seconds 75` without `--realtime` read a 700 MB file in seconds and never stopped.
+
+**Cut by packets** (`-P until --packets N`, with N = seconds × rate / 1,504), and check the output's size before using it.
 
 ### A failing capture's PTS span is not a rate; replay the scheduler before theorising about it
 
-*From T47.* Captures of the export that ended in a schedule overrun carried 13–29 % less PTS than
-PCR, and the campaign reported upstream that the release stage was starving the schedule. It was
-the reverse. The shortfall was a 1.2 s hole after the join plus the window of units still queued
-at the exit, and the schedule was overfull because it sends as late as possible. What located it
-was a frame-by-frame comparison of the export's DTS against the source's, then an offline replay
-of the export's slot rule on the source's units. The replay predicted the next two runs of the
-real binary: where it would stop, to within 0.03 s of decode time, and the delay at which it would
-not.
+*(T47.)*
 
-> **Measure a timeline against the source unit by unit, never by the spans of a truncated
-> capture.** When a scheduler fails, port its rule to a replay
-> ([`ts-schedule-replay.py`](scripts/ts-schedule-replay.py)), check the port against a capture,
-> and make it predict a run you have not yet made before reporting a cause. Replay the source's
-> own timing as a control: if the source's DTS fails too, the fault is the policy, not the
-> timestamps.
+Schedule-overrun captures showed 13–29 % less PTS than PCR; the cause was a join hole plus queued exit units, not a starving release stage. Frame-by-frame DTS compare and offline replay of the slot rule predicted the next two binary runs to 0.03 s.
+
+**Measure a timeline against the source unit by unit, never by the spans of a truncated capture.** Port the scheduler to [`ts-schedule-replay.py`](scripts/ts-schedule-replay.py), validate against a capture, and predict an unrun before reporting a cause. Replay source timing as control: if source DTS fails too, the fault is policy, not timestamps.
 
 ### Count a PID's packets per interval, and size its PES against its buffer, before naming a cause
 
-*From T47.* An AC-3 transport-buffer overflow in the export was attributed, from a reading of the
-code, to each frame's packets going out back to back, and reported upstream as such. The layout
-stage further down already spread each PID's packets evenly through the slot. Counting AC-3
-packets per 25 ms slot on the captured bytes found up to 38, more than a 2 Mb/s drain clears, and
-a second cause the code reading had missed: the export passes AC-3 through as the source's PES,
-nine frames that together exceed the decoder buffer. No ordering of whole PES could have
-conformed.
+*(T47.)*
 
-> **Before attributing a buffer overflow to packet spacing, count the PID's packets per
-> scheduling interval on the captured bytes.** Before modelling a stream's decoder buffer per
-> PES, compare the PES size with the buffer: if a PES carries several access units, deadlines and
-> removal are per access unit, in the scheduler and in the grader alike.
+AC-3 overflow was attributed to back-to-back packets; captured bytes showed up to 38 AC-3 packets per 25 ms slot and PES carrying nine frames exceeding the decoder buffer.
+
+**Before attributing a buffer overflow to packet spacing, count the PID's packets per scheduling interval on the captured bytes.** Before modelling decoder buffer per PES, compare PES size with the buffer: several access units mean deadlines and removal are per access unit.
 
 ### A parameter sweep whose runs do not share a join measures the join as well as the parameter
 
-*From [T45](test-45-live-tstd-remux.md).* Searching the live re-multiplexer's lead downward, the run
-at 550 ms failed worse than the run at 500 ms, which read as a non-monotone response to the
-parameter. It was the lane: one per cent of that run's video arrived at least 199.5 ms later against
-its own decode time than the warm-up anchor, where the neighbouring runs held a 25 ms band. The same
-sweep's end-to-end latency was useless for the same reason — the lane's transit from source tap to
-re-multiplexer input had a median of 1,708.6, 2,542.8 and 2,728.1 ms on three runs 150 ms apart in
-the parameter, about a second of spread that the parameter did not cause.
+*([T45](test-45-live-tstd-remux.md).)*
 
-> **In a sweep over a live lane, measure the lane in each run and report it beside the result.** An
-> arrival trace per run costs nothing and tells a parameter effect from a join effect. Where a result
-> depends on the lane's absolute transit — any end-to-end latency figure — runs that do not share a
-> join are not comparable at all, and the figure belongs to its own run. Where it depends only on the
-> output's internal consistency, as a T-STD grade on the stream's own PCR does, the runs compare, but
-> an excursion in one of them still moves it.
+At 550 ms failed worse than 500 ms because 1 % of video arrived ≥199.5 ms late vs a 25 ms band on neighbours — not a non-monotone parameter response. End-to-end latency across the sweep spread ~1 s that the parameter did not cause.
+
+**In a sweep over a live lane, measure the lane in each run and report it beside the result.** Where a figure depends on absolute transit, runs without a shared join are not comparable. T-STD on the stream's own PCR compares across runs, but a lane excursion in one run still moves it.
 
 ### A corrected instrument owes a re-grade of every figure it produced, and a re-read of every argument built on one
 
-*From [T46](test-46-tstd-check-cross-validation.md), applied to T44, T45 and T47.* When `ts-tstd.py`
-was corrected, T46 checked that no T44 or T45 verdict moved. That was true, and on its own it would
-have left three files wrong. Re-grading every kept capture moved counts and margins throughout. It
-also moved arguments that no verdict check could see. T44 had called the source's joint legal offset
-"exactly +0 ms, with no slack in either direction"; under 2.14.3.1's larger video buffer the interval
-is [+0, +100], with the audio setting only the lower bound. The video's legal offsets on every MoQ arm
-lost their upper bound inside the scan, so a sentence that leaned on "[+900, +1,050]" had to lean on
-the lower bound instead. And a figure derived from the old grades, the spread between video and audio
-offsets, had to be recomputed, not copied. One table's original grading flags differed from the
-file's own reproduction line, which only the kept JSON showed.
+*([T46](test-46-tstd-check-cross-validation.md), applied to T44, T45, T47.)*
 
-> **When an instrument changes, re-grade every kept capture with the flags it was first graded with
-> (read them from the saved output, not from the write-up), then re-read each sentence that uses a
-> moved figure, including derived ranges and "exactly" claims.** "No verdict moved" is the start of
-> the check, not the end of it. A capture that was not kept keeps its old figure, labelled as the old
-> instrument's.
+Correcting `ts-tstd.py`: T46 verified no T44/T45 verdict moved, yet re-grading moved counts, margins, legal offset intervals ("exactly +0 ms" became [+0, +100]), and derived spreads. Saved JSON differed from reproduction lines in write-ups.
+
+**When an instrument changes, re-grade every kept capture with the flags it was first graded with (read them from the saved output, not from the write-up), then re-read each sentence that uses a moved figure, including derived ranges and "exactly" claims.** "No verdict moved" is the start of the check, not the end of it. Label uncaptured figures as the old instrument's.
