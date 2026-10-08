@@ -702,7 +702,9 @@ relay log confirms the version every session negotiated.
   the replacement's in-progress video group, whose frames are already behind the release clock: up to
   16 audio and teletext frames are dropped as late, and the first late video unit is fatal. `--linger`
   then waits out 60 s for a broadcast that is already live. `83ce47fe` wrote 142,188–184,460 packets
-  on the same arm and exited 0. The same recovery sequence ends 7 of 9 single-relay 1+1 failovers that
+  on the same arm and exited 0. At `--delay 1s`, which carries this clip over 540 s in steady state
+  ([T47](test-47-fixed-delay-export.md)), the arm fails the same way in 2 of 2 runs, so the failure is
+  not the 500 ms default's. The same recovery sequence ends 7 of 9 single-relay 1+1 failovers that
   reach the exporter as a re-request on this build ([T6](test-6-relay-resilience.md)
   § *Single-relay standby*).
 - **On `moq-lite-07` the crash is a broadcast replacement, and the export carries it.** No subscription

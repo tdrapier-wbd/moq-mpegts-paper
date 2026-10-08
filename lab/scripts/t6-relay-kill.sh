@@ -26,6 +26,7 @@
 #                   pub.log and pub2.log, and the one with media subscriptions was serving.
 #   SUPERVISE=1     Restart each exporter whenever it exits, appending to the same capture: what a
 #                   standing egress under a process supervisor would deliver.
+#   EXPORT_ARGS     Extra `export ts` flags, word-split (e.g. `--delay 1s`).
 #
 # The report at END s says whether each exporter is alive, how much it wrote after the restart, and
 # when its output first grew again. The client idle timeout is 6 s with a 2 s keep-alive, so the
@@ -97,13 +98,15 @@ start_pub() { # [udp-port] [log]
 sub() { # <i>
 	if [ "$SUPERVISE" = 1 ]; then
 		while :; do
-			"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" export ts >>"$OUT/sub$1.ts" 2>>"$OUT/sub$1.log"
+			# shellcheck disable=SC2086
+			"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" export ts ${EXPORT_ARGS:-} >>"$OUT/sub$1.ts" 2>>"$OUT/sub$1.log"
 			rc=$?
 			echo "$(date +%s) exit $rc" >>"$OUT/sub$1.restarts"
 			sleep 1
 		done
 	else
-		"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" export ts >"$OUT/sub$1.ts" 2>"$OUT/sub$1.log"
+		# shellcheck disable=SC2086
+		"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" export ts ${EXPORT_ARGS:-} >"$OUT/sub$1.ts" 2>"$OUT/sub$1.log"
 	fi
 }
 moq_record_build "$MOQ" "$RELAY" | tee "$OUT/build.txt"

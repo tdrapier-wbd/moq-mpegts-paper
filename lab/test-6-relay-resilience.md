@@ -586,7 +586,9 @@ publisher logs, and an arm that signalled the idle publisher is a control whatev
 
 One further lite-06 arm is void: both exporters exited 1.4 s after joining mid-GOP, before any
 signal, on *missed a decode deadline on PID 111*. [T47](test-47-fixed-delay-export.md) carries it
-as a limit of the merged export.
+as a limit of the merged export. The exporters run at the default `--delay 500ms`, which on this clip
+does not last a whole capture even in steady state (T47); at `--delay 1s`, which does, the
+early-subscriber hard kill fails the same way on both protocols, 2 runs each.
 
 - **On the default protocol `--epoch` declares nothing on the wire.** On `moq-lite-06` the relay
   sees two anonymous routes: a subscription ends with the route that served it, and failover is the

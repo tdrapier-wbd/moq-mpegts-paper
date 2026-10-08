@@ -35,7 +35,9 @@ another route's in-progress group after a re-request (§ *As merged*).
   ends the old broadcast and the export resumes in 8 of 8 ([T13](test-13-downstream-grooming.md)
   § *Liveness*). 7 of 9 single-relay failover re-requests ended this way or on a timestamp rewind
   ([T6](test-6-relay-resilience.md) § *Single-relay standby*). One mid-GOP join on the T6 rig also
-  failed this way, before any signal.
+  failed this way, before any signal. Raising the delay to 1 s, which passes the 540 s steady-state
+  run above, does not change it on either rig. Reported as
+  [#5052](https://github.com/moq-dev/moq/issues/5052); cause not located.
 
 **The last draft before merge, `fe7cec106`:** it anchors and steers on the track sent latest, as
 our scratch build did.
