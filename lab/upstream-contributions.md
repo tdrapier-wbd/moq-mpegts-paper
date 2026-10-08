@@ -1692,14 +1692,16 @@ multiplex rate) and no fix. **Open.**
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
 **An export failure read as the broadcast ending — contributed as
-[#4947](https://github.com/moq-dev/moq/pull/4947), at the maintainer's invitation on #4645; open,
-taken over by the maintainer, who merged `main` into it and added a doc and a test commit, and whose
-automated review recommends merging.** Its two non-blocking suggestions are to scale the 1 s grace
-with the linger, since across a WAN relay the gap between track errors and the close is set by the
-relay's detection rather than the RTT, and to deduct the grace from the linger so the flag is exact.
-It would end the crash-replace runs above at the failure instead of a minute later, but not make
-them resume: on `82c3f2fe4` those are the `moq-lite-06` runs of #5052, where the broadcast stays up
-(reasoned, not run against the fix). On
+[#4947](https://github.com/moq-dev/moq/pull/4947) at the maintainer's invitation on #4645, and merged
+on 2026-10-08 as `1ec21ac23`, our change as written plus the maintainer's doc commit and a test
+updated for a changed API; verified on the merge.** The automated review's two non-blocking
+suggestions were not taken up: to scale the 1 s grace with the linger, since across a WAN relay the
+gap between track errors and the close is set by the relay's detection rather than the RTT, and to
+deduct the grace from the linger so the flag is exact. **On the merge, the `moq-lite-06`
+crash-replace runs of #5052 end at the failure instead of a minute later**, and still do not resume:
+3 of 3 exit 1 about 1.04 s after the export fails, against 60.04 s on `82c3f2fe4`, while the
+`moq-lite-07`, clean-end and relay-restart arms are unchanged ([T13](test-13-downstream-grooming.md)
+§ *Liveness*). On
 `main` at `edd671fff` every failed end lingers, so an export that fails on its own while the broadcast
 stays up waits out the whole linger for a return that cannot come, then exits 1. The fix lingers on a
 failed end only if the broadcast closes within a 1 s grace, since a killed publisher's tracks can
@@ -1711,8 +1713,8 @@ resumes once on both. The new path fired in no run, and across the nine failed e
 broadcast closed within 13.8 ms of the first track error, on loopback. Every run that does not
 resume is #4945's.
 
-**Still open:** the export that does not resume across a crash replaced under a fresh epoch; #4947
-until it merges; the fMP4 and MKV exporters have no linger; the error text does not discriminate a
+**Still open:** the export that does not resume across a crash replaced under a fresh epoch; the fMP4
+and MKV exporters have no linger; the error text does not discriminate a
 crash from a clean end, only the exit code does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
