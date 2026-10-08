@@ -339,9 +339,9 @@ P1/P2-conformant on that lane delivers at **2,447 ms**, against **109 ms** at a 
 conformant, so a latency figure for it is meaningless without the conformance of the same bytes. And
 R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same configuration
 fails the 13818-1 buffer model. Stages that rebuild the packet schedule pass it — a laboratory
-re-multiplexer, and `[unmerged]` drafts of upstream's own exporter — each at a latency of its own, and
-no merged build has one. **R4 at R3 is therefore the open question on this lane, not a settled
-advantage** ([Evidence](evidence.md) §3.2, §3.11, §3.16).
+re-multiplexer, and upstream's own exporter as merged in October 2026 — each at a latency of its own,
+and none sub-second over a whole capture. **R4 at R3 is therefore the open question on this lane, not
+a settled advantage** ([Evidence](evidence.md) §3.2, §3.11, §3.16).
 
 ---
 

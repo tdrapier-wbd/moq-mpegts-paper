@@ -134,8 +134,12 @@ playlist media sequence stops advancing, which a poller can alarm on without par
 Broadcast reliability comes from **1+1 with selection at the receiver**, which is transport-independent
 ([Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4). Head-to-head the lanes diverge.
 **Serving-node failover**: media-aware relay reselection takes 30–33 s at the idle-timeout default of the
-builds measured and ~10 s tuned, 10 s being the default from moq 0.14.0, and is never hitless; a segmented
-pair sharing one feed and one set of segment names fails over with no measurable interruption, 3/3 runs.
+builds measured and ~10 s tuned, 10 s being the default from moq 0.14.0, and is never hitless. On
+October 2026 `main` a shared publisher epoch moves a subscription between two publishers without a seam
+at the relay, but only on the opt-in moq-lite 07, and the export then survives only where the two
+importers' unaligned group numbering allows; no configuration on one relay survived every case
+([Evidence](evidence.md) §3.4). A segmented pair sharing one feed and one set of segment names fails
+over with no measurable interruption, 3/3 runs.
 **Misconfiguration**: a segmented pair with mismatched sources delivers ±20 s of time-travel that passes
 continuity and PCR checks, where the media-aware relay refuses. On the media-aware lane a hitless pair is
 built at the receiver; on the segmented lane it falls out of a shared source and a naming convention.
@@ -252,8 +256,8 @@ buffer** — content-dependent, sizeable from a published encoder parameter, and
 
 **Both the conformance and the 2,447 ms are P1/P2's**; the same wire fails the 13818-1 buffer model (§8).
 The stages that repair it present at **2,196.7 ms** (a laboratory re-multiplexer, moq 0.12.1) and
-**2,272.5 ms** over 540 s at a 1 s delay (upstream's fixed-delay export in its last draft before merge
-`[unmerged]`, which at 500 ms stops 157 s into a 540 s run), both on loopback and both presentation
+**2,272–2,274 ms** at a 1 s delay, also over 540 s (upstream's fixed-delay export, merged on October
+2026 `main`, which at 500 ms stops about 157 s into a 540 s run), both on loopback and both presentation
 latency, which does not subtract from delivery latency ([Evidence](evidence.md) §3.16).
 
 **At equal P1/P2 conformance MoQ keeps a decisive margin over segmented HTTP and none over the tunnels.**
@@ -352,7 +356,7 @@ architectural reading.
 | Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | carried if verbatim | **preserved; the source mux rate exactly** |
 | PSI cadence, packets added | source cadence plus **one PAT/PMT pair per segment** | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap | unchanged; nothing added | **identical; nothing added** |
 | PCR repetition (P1) and accuracy (P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | unmeasured; byte-preserving by construction | **0 violations at 481 ns**, ungroomed — measured over the wire |
-| Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's export in its last draft before merge `[unmerged]`; the export as merged is ungraded ([Evidence](evidence.md) §3.16) | preserved by construction; *reasoned* to survive only behind a stream-clocked egress | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
+| Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](evidence.md) §3.16) | preserved by construction; *reasoned* to survive only behind a stream-clocked egress | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
 | TS-level scrambling | carried as bytes; reasoned | **cannot be carried** — the publisher parses PES headers scrambling hides; specified | carried by construction | carried by construction |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | yes | every field, count and cadence measured identical, not diffed byte-for-byte |
 
@@ -367,8 +371,8 @@ opaque MoQ lane** — the only difference in a 1,200-packet window is byte 3 on 
 packet layout, which is why the encoder's VBV budget moves into the groomer's buffer (§5.1). Its
 subscriber becomes the multiplexer, re-solving the T-STD schedule the source had already solved, which a
 pacing groomer cannot do — **not insurmountable**, since a laboratory re-multiplexer does it live, and
-upstream's fixed-delay export, merged in October 2026, does it in the subscriber, its last draft before
-merge having kept every track and buffer on every join tried (§5.1). And it **cannot carry a scrambled
+upstream's fixed-delay export, merged in October 2026, does it in the subscriber, keeping every track
+and buffer on every join tried (§5.1). And it **cannot carry a scrambled
 stream**. Byte-faithful carriage has none of the three by construction; on MoQ that is the opaque lane,
 with one loopback measurement and no open subscriber (§12).
 
@@ -542,7 +546,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme under every shape measured, by a margin its build and QUIC stack set (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
-| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, whose `--epoch` pairing is ungraded; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
+| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, where a shared `--epoch` resumes without a seam only on the opt-in moq-lite 07 and the export then survives only where the two importers' group numbering allows; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
@@ -573,7 +577,7 @@ under what conditions each is preferable.
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Excluded on the media-aware lane** (specified); a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Partial: a day, on two builds, never a week** — delivery and conformance on moq 0.11.2, resources on moq 0.12.8 ([Evidence](evidence.md) §3.6) | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux only for a co-started pair behind the export's last draft `[unmerged]` ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux only for a co-started pair behind the merged fixed-delay export ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU, in one region (§2) | **Indicated.** Cache offload at one node, not a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
@@ -600,9 +604,10 @@ Ranked by leverage:
 1. **Hardware TR 101 290 on groomed egresses, sustained?** Both are P1/P2-conformant in software and
    neither has been near an IRD; on the media-aware lane it would also show how far receivers tolerate a
    wire that fails the buffer model (§5.1, §8).
-2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** Open: the
-   merged export graded per track, a laboratory stage following a remote clock, and deterministic
-   scheduling for a late-joining leg ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane
+2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The merged
+   export keeps every track across hosts at 500 ms and 1 s. Open: its clock over tens of minutes, a
+   laboratory stage following a remote clock, and deterministic scheduling for a late-joining leg
+   ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane
    serves TS-out to an IRD in a deployment; its comparator, segmented HTTP's wire graded against the same
    model, has not been run either.
 3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has a technical

@@ -497,14 +497,15 @@ merge above the transport.
 **Prerequisite:** slot derivation assumes PCR *value* and *position* advance together. A stream whose
 PCR values are an even grid but whose PCR packets arrive bunched — the fixed MoQ exporter over a byte
 pipe ([Evidence](evidence.md) §3.2) — gives the stage no consistent rate and it drops content. Verify
-both domains on any new upstream build before promoting it. **An `[unmerged]` upstream export that lays
-packets on a PCR grid at the mux rate satisfies it**: through it the stream-clocked stage carries the
-programme at 3.4 % stuffing, and two legs started together are byte-identical, continuity counters
-included — the first mergeable multi-track pair this campaign has measured. A leg joining later is not,
-and the residue is two things: per-process continuity counters, and, on the PR's current head, the
-placement of each TDT revision, which follows the snapshot's arrival rather than its media time
-([Evidence](evidence.md) §3.4). Co-starting the pair is therefore a design constraint on that build,
-not a convenience.
+both domains on any new upstream build before promoting it. **Upstream's fixed-delay export, merged in
+October 2026, lays packets on a PCR grid at the mux rate and satisfies it**: on an `[unmerged]` build of
+it the stream-clocked stage carried the programme at 3.4 % stuffing, and behind it two legs started
+together are byte-identical, continuity counters included — the first mergeable multi-track pair this
+campaign has measured, and as merged the two exports are identical before any groomer too. A leg
+joining later is not. Part of the residue is per-process continuity counters; the rest was, behind the
+export's last draft, the placement of each TDT revision by the snapshot's arrival rather than its media
+time, and is not yet attributed on the merged build ([Evidence](evidence.md) §3.4). Co-starting the
+pair is therefore a design constraint, not a convenience.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
@@ -512,7 +513,7 @@ not a convenience.
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
-| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets. On an `[unmerged]` grid export a **co-started** pair is byte-identical, and a late-joining leg differs only in counters and in the order of units whose decode timestamps tie ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
+| One *stream-clocked* groomer per leg, **multi-track** mux | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical; a late-joining leg is not ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -569,8 +570,10 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
     not a failover pair. The practical topology is **two ingest paths, one selected path fanned into
     both publishers**, with the second path held as source-side failover for both. What must not
     differ is the *content*. A standby that joins that shared feed mid-stream is still a valid pair,
-    but on the build under test its lag in group numbering adds to the failover outage, and its
-    arrival or the failover itself can cost its own relay's subscribers ([Evidence](evidence.md) §3.4).
+    but each importer numbers its groups from its own start, so a standby behind in numbering adds
+    to the failover outage and one ahead of it can rewind the export; in the mesh, on the builds before
+    `--epoch`, its arrival or the failover itself could also cost its own relay's subscribers
+    ([Evidence](evidence.md) §3.4).
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout
   tuning, cache and fan-out, announce propagation, and route selection across the fabric.
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless selection.**
@@ -592,7 +595,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a standby, but only as a bounded reselect — at least one idle timeout of detection, ungraceful loss only, no seamless merge — and on the build under test not for every subscriber ([Evidence](evidence.md) §3.4). Not load-bearing |
+| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a standby, but only as a bounded reselect — at least one idle timeout of detection, ungraceful loss only, no seamless merge — and on no build measured for every subscriber. A shared publisher epoch makes the move seamless at the relay only on the opt-in moq-lite 07, and the exporter then survives only where the two publishers' group numbering allows ([Evidence](evidence.md) §3.4). Not load-bearing |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -833,21 +836,24 @@ linear in subscribers and is the line that dominates a real bill** ([Economics](
 
 Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill — recovery
 **automatic and bounded, not hitless**. The subscriber's exporter survived it too on builds before
-upstream's `dev` merge; on the build under test it exits at the session drop and needs a supervisor
-to restart it, which brings a 30 s outage back to about what the older build lost
-([Evidence](evidence.md) §3.4). The edge stage should treat that supervisor as part of the egress, not
-as operations tooling, because on the build under test every session loss ends the exporter. On
-upstream `main` from #4504, `export ts --linger` carries the exporter across a relay restart and a
-publisher restart in the same process, flagging each resume on the PCR PID, up to four times per
-resume at the default `--max-age` and once at 2 s ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather than the recovery
-path.
+moq 0.12.1; from there it exits at the session drop and needs a supervisor to restart it, which brings
+a 30 s outage back to about what the older builds lost ([Evidence](evidence.md) §3.4). The edge stage
+should treat that supervisor as part of the egress, not as operations tooling. From moq 0.14.0,
+`export ts --linger` carries the exporter across a relay restart and a publisher's clean restart in the
+same process, flagging each resume on the PCR PID, up to four times per resume at the default
+`--max-age` and once at 2 s ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather
+than the recovery path. A publisher **crash** is carried only where the publisher epoch is on the
+wire: on October 2026 `main` with the opt-in moq-lite 07 the export resumes onto the replacement, and on
+the default moq-lite 06 it re-requests onto it and exits, so on the default protocol the supervisor is
+still the recovery path for a crash.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.
 
-**Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at 10 s, upstream `main`'s default from #4606)**, extended on the
-build under test by the standby's lag in group numbering, and **is not reliable on a graceful exit** — a
-clean end of the publisher's input propagates completion instead of reselecting ([Evidence](evidence.md) §3.4). Load-bearing
+**Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at
+10 s, the default from moq 0.14.0)**, extended by the standby's lag in group numbering, and **is not
+reliable on a graceful exit** — the relay propagates the clean end, or switches to a standby the
+exporter cannot continue from ([Evidence](evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).
 
