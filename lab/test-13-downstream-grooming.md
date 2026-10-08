@@ -714,6 +714,19 @@ relay log confirms the version every session negotiated.
 - The clean-end replay and continue arms on the same build, on `moq-lite-06`, resume three times each
   and exit 0.
 
+**With [#4947](https://github.com/moq-dev/moq/pull/4947) merged, the failed export no longer
+lingers.** Upstream `main` at `1ec21ac23`, the merge itself, whose only other Rust change since
+`82c3f2fe4` is a test; the same rig and arms. On `moq-lite-06`, 3 of 3 crash-replace runs log *export
+failed with the broadcast still up, so not lingering* 1.00 s after the export fails (the fix's grace
+for a close to arrive) and exit 1 within 40 ms of it: about 1.04 s from failure to exit, against
+60.04 s in all four `82c3f2fe4` runs, with the same 61,667 packets written. Nothing else moved: on
+`moq-lite-07` 2 of 2 runs resume 4 of 4 crashes and exit 0 with 225,570 packets; the clean-end replay
+and continue arms resume three times each and exit 0 (394,324 and 400,462 packets); a relay restart
+lingers, resumes once and exits 0. The new path fired only where the broadcast stayed up. *P1, file
+domain, loopback, `CNNiEMEA2.ts`, one relay; three kill runs, one run per other arm.* A crash on the
+default protocol therefore reaches a supervisor about a second after the export fails, rather than
+after the linger.
+
 - **The resume is continuity-clean on every PID.** No PID jumped in 24 resumes, so the audio jump one
   `6f1a9e33` run showed is not reproduced at that sample size. `discontinuity_indicator` is set on the
   PCR PID only, as before.

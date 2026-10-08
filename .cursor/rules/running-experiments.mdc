@@ -11,6 +11,9 @@ alwaysApply: true
 - Consult `lab/method-notes.md` when designing or grading an experiment; fix the pass criteria in the
   experiment's `lab/test-*.md` before the first run.
 - Never edit a rig script while a run uses it.
+- **Leave the disks as you would want to find them.** At the end of any session that built or
+ captured, `cargo clean` the worktrees whose binaries are already in `~/bin-*`, and delete graded
+ captures, under the safety checks in `INSTRUCTIONS.local.md` §9; report what was freed.
 - **Before pushing to an upstream repository, pass that repository's gate, not ours.** For `moq-dev`:
   `just fix`, then `just check`, from the worktree (`INSTRUCTIONS.local.md` §1). Its conventions
   differ from ours (its `.editorconfig` indents shell with spaces; `lab/scripts/` uses tabs); re-run

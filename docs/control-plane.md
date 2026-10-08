@@ -13,12 +13,12 @@ develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive co
 
 > ## Evidence status: the enforcement mechanism is measured; everything above it is design
 >
-> **Most of this document describes a design, not a system, but the enforcement layer no longer
-> does.** Three experiments have now measured it against the claims below, and two of those claims
-> were wrong ([Evidence](evidence.md) §3.10). What is measured: admission and refusal against a
-> credential, tenant and path isolation, announcement scope, revocation timing and its mechanism,
-> token expiry as a backstop, de-provisioning granularity, key rotation, key handling, and the CPU
-> cost of authorization. Where a section below has been corrected by measurement, it says so inline.
+> **Most of this document describes a design, not a system; the enforcement layer is the
+> exception.** Three experiments measured it, and two of the design's claims did not survive
+> ([Evidence](evidence.md) §3.10). What is measured: admission and refusal against a credential,
+> tenant and path isolation, announcement scope, revocation timing and its mechanism, token expiry as
+> a backstop, de-provisioning granularity, key rotation, key handling, and the CPU cost of
+> authorization. Where measurement bears on a section, the section states the measured behaviour.
 >
 > Everything else — the entity model, the API shape, the fast-path *push* the design assumes and the
 > implementation does not provide, tenancy beyond path isolation, orchestration, federation, the SLO
@@ -221,15 +221,12 @@ Revocation is the hard part of any entitlement system. The platform uses two pat
    the token lifetime even if the fast path is unavailable. Revocation then happens by declining to
    refresh.
 
-> **This description was wrong in two ways, and both are corrected above.**
+> **The fast path is a poll; nothing is pushed.** The relay replays the whole admission request on a
+> schedule derived from the `Cache-Control` the authorization endpoint returned, re-verifies the
+> retained token against the answer, and closes the session if it no longer verifies. That is why
+> the bound is what it is.
 >
-> **It said the fast path was "an explicit revocation signal pushed to relays and gateways". Nothing
-> is pushed.** The relay replays the whole admission request on a schedule derived from the
-> `Cache-Control` the authorization endpoint returned, re-verifies the retained token against the
-> answer, and closes the session if it no longer verifies. Revocation is a **poll**, and that
-> difference is why the bound is what it is.
->
-> **And the consequential finding: three settings disable revocation altogether.** `max-age=0`, a
+> **The consequential finding: three settings disable revocation altogether.** `max-age=0`, a
 > sub-second `max-age`, and omitting `Cache-Control` each produce no revalidation at all: the token is
 > checked once, at admission, and a withdrawn grant never takes effect. One arm kept delivering for
 > the full 50 s it was observed. There is no startup warning and no signal in the session. **Three
@@ -239,9 +236,9 @@ Revocation is the hard part of any entitlement system. The platform uses two pat
 > criterion that binds a primary-broadcast deployment (§8), because it is about revocation *happening*
 > rather than about how quickly it happens.
 >
-> **It also said "sub-second when the control plane is healthy". That is not achievable at any
-> setting — but it does not bind this deployment, where a few seconds is acceptable for a primary
-> feed, so the target is retired rather than restated (§8).** With one session live,
+> **Sub-second revocation is not achievable at any setting, and it does not bind this deployment,
+> where a few seconds is acceptable for a primary feed, so the target is retired (§8).** With one
+> session live,
 > decision-to-last-byte is `(re-check cadence − phase) + 0.110 s` across five cadences, the fixed
 > overhead constant to within two milliseconds. That is the uncontended case: re-checks are served
 > from the same cached HTTP client as admission, so once several sessions are live a re-check can be
@@ -274,9 +271,9 @@ stateDiagram-v2
 absent, malformed or expired* credentials — those are refused immediately, and
 [T36](../lab/test-36-entitlement-enforcement.md) measures that they deliver nothing at all. It does
 **not** mean an already-granted, still-valid token is dropped the instant a revoke is issued: until
-the relay next re-checks, a valid token continues to be honoured. So the two regimes are **one
-re-check period plus ≈ 0.11 s when the re-check path is healthy**, and **worst-case one TTL when it is
-not** — never "deny within the window" for a token that is still valid.
+the relay next re-checks, a valid token continues to be honoured. So the two regimes are **one to two
+re-check periods plus ≈ 0.11 s when the re-check path is healthy**, and **worst-case one TTL when it
+is not** — never "deny within the window" for a token that is still valid.
 
 **There are two consequential parameters, not one, and they do different jobs.** Re-check cadence
 bounds a deliberate revocation and sets the steady-state re-check load, roughly in inverse proportion.
@@ -284,18 +281,16 @@ TTL bounds everything else — and it is the *only* bound that holds in the thre
 revalidation is inoperative. Neither has a universally correct value; for high-value contracted
 content the bias is toward short lifetimes and an explicit, tight cadence.
 
-> **An earlier draft named TTL "the single most consequential parameter", which understated the case
-> and named the wrong half of it.** TTL is not what revokes a live affiliate — cadence is. TTL is what
-> makes a misconfigured deployment survivable, and measurement confirms it does: a session ends
-> 0.110 s after its token expires **even with revalidation switched off entirely**, which is the arm
-> this experiment expected to fail ([T37](../lab/test-37-entitlement-revocation.md)). The backstop
-> claim in the list above is therefore confirmed; the fast-path claim beside it was not.
+> **TTL is not what revokes a live affiliate — cadence is. TTL is what makes a misconfigured
+> deployment survivable**, and it does: a session ends 0.110 s after its token expires **even with
+> revalidation switched off entirely**, the arm the experiment expected to fail
+> ([T37](../lab/test-37-entitlement-revocation.md)). The backstop holds as designed; the fast path
+> holds only at the bound above.
 
-**How this compares with the alternative data plane** is developed in [Comparison](comparison.md) §7,
-and measurement has made the comparison *worse* for MoQ than this section first claimed. The original
-framing was that segmented HTTP "lacks only the fast path". But MoQ's fast path is itself a poll on an
-integer-second period, so the distinction is not push-versus-poll at all — it is a poll every
-`max-age` seconds against a check on every part request. Where the CDN authorizes each request, the
+**How this compares with the alternative data plane** is developed in [Comparison](comparison.md) §7.
+The distinction is not push against poll, because MoQ's fast path is itself a poll on an
+integer-second period: it is a poll every `max-age` seconds against a check on every part request.
+Where the CDN authorizes each request, the
 segmented bound is one part-target interval, measured in this lab at **0.28–0.30 s**
 ([T14](../lab/test-14-data-plane-comparison.md)), against MoQ's **1.7 s measured and 2.11 s
 documented** worst case. **On revocation latency MoQ is the slower of the two, by roughly six to
@@ -315,8 +310,8 @@ from delivery logs.
   by expiry*, never toward open access.
 - **Every ambiguous case resolves to deny.**
 
-> **The honouring of valid tokens during an outage is a configurable default, not an invariant, and
-> the document previously presented it as one.** Measured: with no staleness window configured, 150 s
+> **The honouring of valid tokens during an outage is a configurable default, not an invariant.**
+> Measured: with no staleness window configured, 150 s
 > of authorization-endpoint outage cost not one byte, and admission failures fail closed. But where
 > `stale-while-revalidate` or `stale-if-error` is set, the relay stops honouring established sessions
 > when the window lapses — and it closes **publisher** sessions on the same rule, so a control-plane
@@ -560,19 +555,17 @@ makes the silent-disable case survivable rather than unbounded.
 
 **The latency target is retired rather than restated.** The mechanism's period is integer
 delta-seconds with a one-second floor, so no configuration reaches sub-second — but a few seconds is
-acceptable for a primary broadcast feed, so there is no corrected figure to commit to and no work
-outstanding. The measurement stands and is the right one to quote for any future case that *is*
-latency-sensitive, where the multi-session figure is the one to use: a single-session reading
-understates a deployed estate by up to a factor of two
+acceptable for a primary broadcast feed, so there is no figure to commit to and no work outstanding.
+For any future case that *is* latency-sensitive, quote the multi-session measurement of §4.1
 ([Evidence](evidence.md) §3.10, [T37](../lab/test-37-entitlement-revocation.md) D7).
 
-The measurement boundary has been changed throughout: "teardown at the relay" is the relay's account
-of itself, and the figure that matters commercially is the last byte the affiliate actually received.
+Every measurement boundary is the last byte the affiliate actually received, which is the figure that
+matters commercially, not teardown at the relay, which is the relay's account of itself.
 
 Behavioural criteria, which matter more than the numbers:
 
 - **Revocation correctness.** A revoked or unrefreshed entitlement results in no further delivery
-  within the stated bound — one re-check period plus ≈ 0.11 s, worst case one TTL otherwise.
+  within the stated bound — one to two re-check periods plus ≈ 0.11 s, worst case one TTL otherwise.
   **Measured; and the TTL backstop holds even with revalidation disabled.**
 - **Enforcement correctness.** No delivery ever occurs without a valid, in-scope, unexpired token,
   verified by attempting out-of-scope and expired subscriptions and confirming denial. **Measured:
@@ -586,7 +579,7 @@ Behavioural criteria, which matter more than the numbers:
   a session unrevocable, and it reports no error.
 - **Key handling.** Keys never present on edge nodes; no cleartext media or control path. **Measured
   and met** (§7.2); no transport-stream structure was recoverable from the wire.
-- **De-provisioning granularity.** *New criterion, from measurement.* Withdrawing one channel from a
+- **De-provisioning granularity.** *A criterion from measurement.* Withdrawing one channel from a
   multi-channel affiliate must not interrupt the channels it keeps. Met only under one key per unit of
   entitlement (§4).
 
@@ -602,7 +595,7 @@ windows.
 
 ## 9. Open questions
 
-- **Which layers are bought and which are built?** No longer wholly open: the mechanism — token issue
+- **Which layers are bought and which are built?** Partly answered: the mechanism — token issue
   and verification, key rotation, enforcement — generalises and should be adopted rather than written,
   while policy and the integration with rights, scheduling and CA systems do not generalise and are
   built ([Economics](economics.md) §8). What remains open is the middle: how much of orchestration and

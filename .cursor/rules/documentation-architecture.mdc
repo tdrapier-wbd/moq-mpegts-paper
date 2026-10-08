@@ -23,7 +23,7 @@ Every fact has one authoritative home. Anywhere else it is absent, or at most a 
 
 The paper's own map: requirements R1–R8 in `docs/problem.md` §5; the data-plane verdict in
 `docs/comparison.md`; grooming and redundancy design in `docs/architecture.md` §4–§5; control,
-entitlement and security (design only, no evidence) in `docs/control-plane.md`; every measurement in
+entitlement and security (enforcement measured, the rest design) in `docs/control-plane.md`; every measurement in
 `docs/evidence.md`; cost in `docs/economics.md`; terms in `docs/glossary.md`.
 
 ## Layers and promotion
