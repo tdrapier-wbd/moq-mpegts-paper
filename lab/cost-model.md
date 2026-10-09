@@ -257,7 +257,7 @@ On-demand cloud list is deliberately not a column here: a transponder is leased 
 honest counterpart is committed or commodity capacity, not a rate that assumes the traffic could
 stop tomorrow. Eight services × 10 Mbps × 1+1, delivery cost only, no relay compute, annual USD:
 
-| Destinations | Aggregate wire | MediaConnect reserved | Cloud at 70 % private | CDN @ $0.010/GB *(assumed)* | CDN @ $0.005/GB *(assumed)* | IP transit *(bandwidth only)* |
+| Destinations | Aggregate wire | MediaConnect reserved | Cloud at 70 % private *(hypothetical)* | CDN @ $0.010/GB *(assumed)* | CDN @ $0.005/GB *(assumed)* | IP transit *(bandwidth only)* |
 |---:|---:|---:|---:|---:|---:|---:|
 | 1 | 157 Mbps | 52,404 | 14,861 | 6,194 | 3,097 | 132 |
 | 2 | 314 Mbps | 79,138 | 27,144 | 12,387 | 6,194 | 264 |
@@ -279,6 +279,7 @@ Marginal cost of one additional destination for the whole 8-service 1+1 multiple
 | Cloudflare MoQ, announced | 30,968 | 32.3 |
 | AWS deepest tier | 28,842 | 34.7 |
 | MediaConnect reserved, 1500 Mbps tier | 10,501 | 95.2 |
+| AWS deepest tier less 70 % *(hypothetical)* | 8,653 | 115.6 |
 | CDN MoQ relay @ $0.010/GB *(assumed)* | 6,194 | 161.5 |
 | CDN MoQ relay @ $0.005/GB *(assumed)* | 3,097 | 322.9 |
 | IP transit, 10 GigE *(bandwidth only, §10)* | 132 | 7,577 |

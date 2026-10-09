@@ -21,7 +21,7 @@ results and what they do and do not support.
 > our own figures instead of theirs.
 >
 > Three inputs are neither published nor measured, and each is labelled wherever it appears. The
-> negotiated-discount column in §4.4 is a **hypothetical** percentage off published list —
+> negotiated-discount figure in §4.4 is a **hypothetical** percentage off published list —
 > illustrative arithmetic, not anyone's terms. The CDN relay rates are **assumptions** about where a
 > competitive market would land, since only one provider has announced a MoQ relay tariff. The
 > self-hosted build-up is **illustrative**. Nothing here should be read as evidence that a particular
@@ -196,20 +196,11 @@ needs a control plane. **The barrier is lower, not absent.**
 ### 4.4 A transponder's worth of channels: the parity threshold
 
 Like-for-like against a 36 MHz transponder (~8 HD services at 10 Mbps, 1+1, committed capacity only,
-delivery cost):
-
-| Destinations | Aggregate wire | Cloud, MediaConnect reserved *(published)* | Cloud, tiered list less 70 % *(hypothetical)* | CDN relay @ $0.010/GB *(assumed)* | CDN relay @ $0.005/GB *(assumed)* |
-|---:|---|---:|---:|---:|---:|
-| 1 | 157 Mbps | 52,400 | 14,900 | 6,200 | 3,100 |
-| 8 | 1.3 Gbps | 122,700 | 83,200 | 49,500 | 24,800 |
-| 32 | 5.0 Gbps | 445,800 | 290,900 | 198,200 | 99,100 |
-| 128 | 20.1 Gbps | 1,610,100 | 1,121,500 | 792,800 | 396,400 |
-| 512 | 80.4 Gbps | 6,297,300 | 4,444,000 | 3,171,200 | 1,585,600 |
-| 1024 | 160.9 Gbps | 12,551,000 | 8,874,100 | 6,342,300 | 3,171,200 |
-| *per destination, at scale* | | *10,500* | *8,700* | *6,200* | *3,100* |
-
-Only MediaConnect is buyable at the price shown. The 70 % column is **hypothetical** and the CDN
-columns are **assumed**; the one announced MoQ relay rate, Cloudflare's, is $0.050/GB. **Parity** is the
+delivery cost), each further destination costs, at scale, about **$10,500 a year** on MediaConnect
+reserved *(published)*, **$8,700** on tiered cloud list less 70 % *(hypothetical)*, and **$6,200** and
+**$3,100** on a CDN relay at $0.010 and $0.005/GB *(assumed)* ([cost model](../lab/cost-model.md) §6).
+Only MediaConnect is buyable at the price shown; the one announced MoQ relay rate, Cloudflare's, is
+$0.050/GB. **Parity** is the
 incumbent's space-segment cost divided by the per-destination figure. Per $1M a year of that cost it
 falls at **~95** destinations on committed cloud, **115** at the *hypothetical* 70 % discount, **162** at
 an *assumed* $0.010 CDN rate and **323** at an *assumed* $0.005. Self-hosting, at ~970 per destination on
@@ -218,11 +209,11 @@ an *assumed* $0.010 CDN rate and **323** at an *assumed* $0.005. Self-hosting, a
 **The reclamation bound follows.** Displacing the incumbent is arguable to ~95 destinations on published
 cloud rates, and to the high hundreds if a relay can be rented at commodity CDN rates, which is an
 *assumption* and not a rate anyone has announced. A thousand or more is out of reach for anything
-purchasable today. The incumbent's fan-out inside its footprint is free while every column here is
+purchasable today. The incumbent's fan-out inside its footprint is free while every option here is
 linear in destinations, so a better rate *moves* the ceiling rather than removing it.
 
-**Transport choice moves the table by single-digit percentages; destination count moves it by three
-orders of magnitude** (§1). The one economic question transport choice does raise is whether the far end
+**Transport choice moves these figures by single-digit percentages; destination count moves them by
+three orders of magnitude** (§1). The one economic question transport choice does raise is whether the far end
 needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |

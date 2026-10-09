@@ -279,7 +279,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | Groomed, MoQ lane, **against the T-STD buffer model** | **fails on the configuration above**, and on every build graded from moq 0.10.0 to 0.13.0, in either clock mode: video, audio and PSI transport buffers overflow throughout, and no PCR offset makes the audio decoder buffers legal in any 2 s window. The same groomer fed by SRT passes every transport buffer and every 2 s window | **wire**, loopback |
 | The same groomed MoQ wire, **re-multiplexed offline** against the T-STD | **passes every buffer** over the whole capture, on its own PCR, from three builds' egress, at 0.9–1.4 s of decoder delay against that egress's clock | **file** |
 | The MoQ lane's TS-out, **re-multiplexed live** in this gateway's place, a laboratory stage | **passes every buffer and P1/P2** over 270 s with nothing sent late, at **2,196.7 ms of presentation latency** on moq 0.12.1; two clips of one service, one run each, at the lowest lead that passes | **wire**, loopback |
-| The MoQ lane's TS-out from upstream's **fixed-delay export**, merged on October 2026 `main`, which re-multiplexes in the subscriber | **passes every buffer and P1/P2 with every track carried on every join tried**, at 500 ms to 1 s, on loopback, across hosts and at 1 % loss; 2,272–2,274 ms at a 1 s delay. 500 ms does not last a 540 s capture, and 10 % loss ends it | **wire**, one clip |
+| The MoQ lane's TS-out from upstream's **fixed-delay export**, merged on October 2026 `main`, which re-multiplexes in the subscriber | **passes every buffer and P1/P2 with every track carried on every join tried**, at 500 ms to 1 s, on loopback, across hosts and at 1–2 % loss; 2,272–2,274 ms at a 1 s delay. 500 ms does not last a 540 s capture, and 2–3 % loss ends it at 1 s | **wire**, one clip |
 | Byte-faithful SRT or UDP, **stream-clocked** groomer, against the T-STD | **passes every buffer** over the whole capture, at the source's own legal offsets, with every source null stripped. Arrival-clocked, the decoder buffers drift out | **wire**, loopback |
 | Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors; buffer model not graded | **wire** |
 | Any lane | — | **hardware IRD: not run** |
@@ -370,17 +370,17 @@ that the ordering removed.
 **In the subscriber, upstream has built it** ([Evidence](evidence.md) §3.16; wire, one clip). The
 fixed-delay export merged on October 2026 `main` schedules every PID against the decoder model inside
 `moq export ts`, and carries every track conformantly on every join tried at 500 ms to 1 s, on
-loopback, across hosts and at 1 % loss. It presents at twice its delay plus about 275 ms. Its limits
-bear on a deployment: 500 ms does not last a 540 s capture, 10 % loss ends it, and so does a
-re-request onto a live route ([Evidence](evidence.md) §3.4).
+loopback, across hosts and at 1–2 % loss. It presents at twice its delay plus about 275 ms. Its limits
+bear on a deployment: 500 ms does not last a 540 s capture, loss of 2–3 % ends it at 1 s and 1–2 % at
+500 ms on a 25 ms path, and so does a re-request onto a live route ([Evidence](evidence.md) §3.4).
 
 Two problems remain that one host does not exercise. The first is clock recovery: across hosts the
 stage and the source do not share a clock, and the lane carries no source PCR, so the output clock
 must be locked to the source from the arrivals and timestamps alone. The second is determinism: two
 legs are byte-identical, as ST 2022-7 requires, only if the schedule is computed from the stream
-alone, not from arrival (§5.1). The merged export answers part of each: it held conformance in two
-runs across hosts, and two exports started together are byte-identical, while a leg started 8 s
-later is not (§5.1). Until conformance is shown sustained across hosts, the
+alone, not from arrival (§5.1). The merged export answers part of each: it held conformance across
+hosts, for 595 s on its own host's clock rather than the source's, and two exports started together
+are byte-identical, on one host or two, while a leg started 8 s later is not (§5.1). Until conformance is shown sustained across hosts, the
 media-aware lane feeds a remote TS receiver on the receiver's tolerance rather than on sustained
 conformance; until a late leg merges, rebuilt legs must be co-started. How much tolerance real IRDs
 have is unmeasured.
@@ -1151,13 +1151,15 @@ Ranked by how much a negative answer would change the architecture.
    ends the import at the first backward step by design, flagged or not
    ([T40](../lab/test-40-continuous-join-through-srt.md),
    [T41](../lab/test-41-import-reanchor-coverage.md); [Evidence](evidence.md) §3.13). A deployment
-   whose source timeline steps back must republish at each step or pin the build.
+   whose source timeline steps back must republish at each step, at about 3 s of programme a step,
+   or pin the build.
    **T-STD occupancy is tested in software**: behind the media-aware lane it is beyond this gateway's
    reach, and upstream's merged fixed-delay export meets it in the subscriber (§4.3). What remains
    untested is source-clock drift and mid-stream PID change; each has a reproducible stimulus and an
    instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled
-   (§5.1). Behind upstream's merged fixed-delay export a co-started pair merges; what remains is a leg
+   (§5.1). Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two,
+   and its exports stay identical across a republish in 8 of 13 runs; what remains is a leg
    started later, whose continuity counters are per-process and whose remaining residue is not yet
    attributed on the merged build.
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves

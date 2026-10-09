@@ -274,7 +274,8 @@ graded on a hardware IRD** ([Evidence](evidence.md) §4).
 **A deployment constraint separate from latency.** On the September 2026 builds measured, every placed
 PCR-timeline class crosses the lane at the control's content gap. From moq 0.14.0 a backward timestamp
 step ends the import by design, flagged or not, and upstream has declined an in-process restart, so a
-supervisor must republish under a new epoch at each step. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
+supervisor must republish under a new epoch at each step, at about 3 s of programme a step and with a
+1+1 pair not yet hitless across it. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
 classes re-measured, so no build is *measured* to carry both cases, and a deployment must pin the build
 or republish at each backward step ([Evidence](evidence.md) §3.13).
 
@@ -577,7 +578,7 @@ under what conditions each is preferable.
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Excluded on the media-aware lane** (specified); a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Partial: a day, on two builds, never a week** — delivery and conformance on moq 0.11.2, resources on moq 0.12.8 ([Evidence](evidence.md) §3.6) | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux only for a co-started pair behind the merged fixed-delay export ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux only for a co-started pair, on one host or two, behind the merged fixed-delay export ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU, in one region (§2) | **Indicated.** Cache offload at one node, not a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
@@ -605,8 +606,10 @@ Ranked by leverage:
    neither has been near an IRD; on the media-aware lane it would also show how far receivers tolerate a
    wire that fails the buffer model (§5.1, §8).
 2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The merged
-   export keeps every track across hosts at 500 ms and 1 s. Open: its clock over tens of minutes, a
-   laboratory stage following a remote clock, and deterministic scheduling for a late-joining leg
+   export keeps every track across hosts at 500 ms and 1 s, and two exports on two hosts are
+   byte-identical. Open: its clock over tens of minutes (over 595 s it stayed on its own host's clock,
+   not the source's), a laboratory stage following a remote clock, and deterministic scheduling for a
+   late-joining leg
    ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane
    serves TS-out to an IRD in a deployment; its comparator, segmented HTTP's wire graded against the same
    model, has not been run either.
