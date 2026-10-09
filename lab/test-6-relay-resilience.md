@@ -226,7 +226,7 @@ with both relays and all clients opted in (#2424 — a standby seeds a high `rou
 drops to 0 while it carries), the mesh drill behaved exactly as before, because pricing decides
 between the routes a relay is willing to offer and does not create one.
 
-### Mesh source failover: on `ffa5b81b` a hard kill fails over, bounded by the later of detection and the standby's lag; on `main` a splice that waits for the standby's numbering is fatal; on both a shared-hop standby ends its own relay's subscribers
+### Mesh source failover: on `ffa5b81b` a hard kill fails over, bounded by the later of detection and the standby's lag; on `main` a splice that waits for the standby's numbering is fatal; on both a shared-hop standby ends its own relay's subscribers; with a shared epoch on `moq-lite-07` nothing fails over
 
 [#2473](https://github.com/moq-dev/moq/pull/2473) (*"fail over across redundant publishers via
 per-peer route selection"*, addressing #2461) is what first made the two-relay drill pass. It adds per-peer
@@ -344,6 +344,40 @@ and host, unchanged. `main` accepts every flag the rig passes: its CLI only adds
 The `main` arms share the limits of the `ffa5b81b` arms above (one host, loopback including the
 cluster link, one replicate of each 30 s and join-offset arm), without the single-relay drill
 running beside them. Splice quality is again ungraded.
+
+**On upstream `main` at `f8215bc47` (moq 0.14.2 / moq-relay 0.17.2 as reported), with a shared
+`--epoch` and every process on `moq-lite-07-wip`, nothing fails over in the mesh.** The same rig,
+matrix and host; the shared-identity arms now pass one UUIDv7 per run as `--epoch` to both
+publishers, and both relays logged `moq-lite-07-wip` for every session. The checks are unchanged.
+The unset-timeout arms run at this build's 10 s default.
+
+| Arm | Runs | `sub1` and `sub2` on relay A | `sub3` on relay B | CHECK 1 | CHECK 2 |
+|---|---:|---|---|---|---|
+| Shared epoch, kill (6 s ×3, default ×1, join at t=0 and t=20 ×1 each) | 6 | relay A detects at kill + 8 s (kill + 11.6 s at the default) and re-subscribes every track through relay B at once, from group 21; **nothing arrives**: alive and silent to the end, no error | survives the join; silent from the kill to the end | fail ×6 | pass ×6 |
+| Shared epoch, clean end (6 s ×3, default ×1) | 4 | end 2 s after the event, no error, no failover | survives the join; silent after the event | — | pass ×4 |
+| Fresh identities, kill and clean end (6 s ×3 each, default ×1 each) | 8 | exit `unroutable` **at the join** | exits `unroutable` at the join | fail | fail ×8 |
+
+- **The standby's relay asks it once, before it has tracks, and never again.** In all ten
+  shared-epoch runs relay B probed `pubB` the moment it announced, for every track `sub3` held, and
+  got `not found` for 9–11 of them: the importer had not yet parsed a PMT. Relay B kept the
+  incumbent route through relay A, which is why `sub3` survives the join, and asked `pubB` for none
+  of those tracks again. At the failover relay B accepted relay A's re-subscriptions and forwarded
+  none to `pubB`, which served no video in any run; the one track it did serve, in the two
+  join-offset runs, was an SI track first requested after `pubB` had it. This traces, in the mesh,
+  the kept refusals reasoned for the single-relay `moq-lite-07` arms (§ *Single-relay standby*),
+  and it is the refusal upstream's aligned-import plan diagnoses.
+- **So the epoch moves the arrival teardown to the failover and makes it silent.** On `2b689c24`
+  the standby's arrival ended `sub3` with `not found`; here every subscriber survives it and is
+  then frozen without an error, which a supervisor watching for an exit never sees.
+- **Without a shared epoch the standby replaces the broadcast as it arrives**, as the epoch design
+  intends: a newer, different epoch is new content, so every subscriber on both relays exits
+  `unroutable` at the join, 8 of 8. The drill's exporters run without `--linger`; whether a
+  lingering one would follow the replacement is not tested here.
+- **A clean end is still not failed over**, 4 of 4.
+
+Same limits as above (one host, loopback including the cluster link, one replicate of each
+default-timeout and join-offset arm). Nothing was spliced, so splice quality and the group-numbering
+lag do not arise; they return once the standby is asked again.
 
 ### Graceful source departure is never reliably failed over
 
@@ -610,8 +644,9 @@ early-subscriber hard kill fails the same way on both protocols, 2 runs each.
 - **A subscription made before the standby announced is not resumed on `moq-lite-07`.** It gets
   `not found` on most of its tracks at the failover (3 of 3). That fits the standby's refusals at
   its arrival being kept against those subscriptions, the mechanism of
-  [#4352](https://github.com/moq-dev/moq/issues/4352) no longer fatal at arrival. The fit is
-  *reasoned*, not confirmed in code.
+  [#4352](https://github.com/moq-dev/moq/issues/4352) no longer fatal at arrival. The mesh drill on
+  `f8215bc47` shows the refusals kept in the relay's own log (§ *Mesh source failover*); the code
+  path is not located.
 - **A clean exit on `moq-lite-07` is switched at the signal and still ends the export.** The relay
   moves the subscriptions to the standby at once, not after the idle timeout. In the SIGTERM run it
   did so with no error; in the SIGINT run five tracks drew `not found` and were re-requested. Both

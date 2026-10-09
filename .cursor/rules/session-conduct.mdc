@@ -1,0 +1,11 @@
+---
+description: How the agent conducts a working session in this repository
+alwaysApply: true
+---
+
+# Session conduct
+
+- **Do the work in the main session; do not spawn subagents.** The author prefers one agent that
+  reads, runs, edits and verifies everything itself, so its context holds the whole picture. This
+  covers rewrites, research and audits as well as experiments. If a task looks too large for one
+  session, say so and propose how to split it across sessions instead of delegating it.

@@ -554,8 +554,8 @@ What stops both cases short of *byte*-identity is not the groomer but the export
 continuity counters from its own process state. So **which receiver a deployment uses decides whether
 a single leg can be restarted alone**: input-select protection returns immediately, while a
 sequence-merge receiver needs the pair restarted together. Upstream has declined to change the
-counters, so that holds unless a filter outside upstream renumbers them ([Evidence](evidence.md)
-§3.4). This is an operational constraint on planned maintenance, and it is the reason §9's runbook
+default counters and plans, but has not built, an opt-in mode that numbers them from the media, so
+that holds unless a filter outside upstream renumbers them ([Evidence](evidence.md) §3.4). This is an operational constraint on planned maintenance, and it is the reason §9's runbook
 says what it says.
 
 ### 5.3 A groomer must stop when its content stops, and only the groomer can
@@ -582,9 +582,8 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
     both publishers**, with the second path held as source-side failover for both. What must not
     differ is the *content*. A standby that joins that shared feed mid-stream is still a valid pair,
     but each importer numbers its groups from its own start, so a standby behind in numbering adds
-    to the failover outage and one ahead of it can rewind the export; in the mesh, on the builds before
-    `--epoch`, its arrival or the failover itself could also cost its own relay's subscribers
-    ([Evidence](evidence.md) §3.4).
+    to the failover outage and one ahead of it can rewind the export; in the mesh its arrival or the
+    failover itself can also cost subscribers ([Evidence](evidence.md) §3.4).
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout
   tuning, cache and fan-out, announce propagation, and route selection across the fabric.
 - **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless selection.**

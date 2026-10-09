@@ -89,7 +89,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design | The in-process restart upstream plans | §3.13 |
+| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design | The programme a supervisor's republish under a new epoch costs per backward step; upstream declined an in-process restart | §3.13 |
 | **Interop** | Media flows within one implementation and through none of eight other relays; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays fail | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 2,272–2,274 ms at a 1 s delay, also over 540 s, through the merged fixed-delay export | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -291,15 +291,18 @@ the supervisor takes over within about a second, though the export still does no
 runs, same conditions). So a standing egress on the default protocol still needs its supervisor for a
 publisher crash.
 
-**Source failover across a relay mesh works for a hard kill, bounded by detection and by the standby's
-lag** ([T6](../lab/test-6-relay-resilience.md); P1, two relays on one host). A shared publisher identity
-declares two feeds interchangeable — `--hop` on the builds measured in the mesh, a shared `--epoch` on
-October 2026 `main`, graded so far on one relay only (below). Nothing downstream learns of a hard failure
-until the QUIC idle timeout, so the resume is at least one timeout after the kill: ~30 s at the 30 s
-default of the builds measured, ~11 s at 10 s, the default from moq 0.14.0. **The precondition is a
-common source**, and on moq 0.12.1 a standby that joined mid-stream adds its group-numbering lag to the
-outage. The standby relay's own subscribers are lost at its arrival or at the failover, so mesh
-failover is not yet reliable for every subscriber. **Continuity-clean is not hitless**: the outage is a
+**Source failover across a relay mesh worked for a hard kill on the builds before the epoch, bounded by
+detection and by the standby's lag** ([T6](../lab/test-6-relay-resilience.md); P1, two relays on one
+host). A shared publisher identity declares two feeds interchangeable — `--hop` on those builds, a
+shared `--epoch` on October 2026 `main`, with which nothing fails over in the mesh: the standby's relay
+asks it for its tracks once, before its PMT, and never again, so every subscriber on both relays is
+silent from the failover on, without an error (10 of 10 runs, `moq-lite-07` on every process).
+Nothing downstream learns of a hard failure until the QUIC idle timeout, so the resume is at least one
+timeout after the kill: ~30 s at the 30 s default of the builds measured, ~11 s at 10 s, the default
+from moq 0.14.0. **The precondition is a common source**, and on moq 0.12.1 a standby that joined
+mid-stream adds its group-numbering lag to the outage. On the `--hop` builds the standby relay's own
+subscribers are lost at its arrival or at the failover, so on no build measured is mesh failover
+reliable for every subscriber. **Continuity-clean is not hitless**: the outage is a
 PCR/PTS discontinuity across a content hole. **A graceful exit is never reliably failed over** — the
 relay propagates completion, or hands the exporter a standby behind its live edge, and the subscriber
 ends either way — so failover covers host loss and not the commoner SIGTERM or rolling restart.
@@ -576,8 +579,9 @@ exactly the outage, so what was lost is gone and only redundancy mitigates it.
 **For an operator:** on the builds measured in September 2026, a PCR base rollover, a forward jump, a
 rewind and an encoder restart each cross the lane with no programme hole and no deep buffer. **From moq
 0.14.0 a backward timestamp step ends the import instead, flagged or not, on every stream kind measured**,
-while a flagged forward jump still publishes; upstream plans an in-process restart for the flagged case.
-A source whose timeline steps back must then be republished at each step, or the build pinned.
+while a flagged forward jump still publishes; upstream has declined an in-process restart, even for the
+flagged case. A source whose timeline steps back must then be republished at each step, by a
+supervisor under a new epoch, or the build pinned; what each republish costs is not yet measured.
 
 [T23](../lab/test-23-pcr-discontinuity-classes.md) (P0/P2, software; one run per arm per build) places
 one event at 45 s of a 105 s run, shifting PTS and DTS with PCR, and grades source, round trip and groomed

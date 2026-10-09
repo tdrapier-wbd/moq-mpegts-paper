@@ -183,12 +183,11 @@ is unaffected and why the defect needs an *unflagged* wrap to appear at all.
    permanence re-soak that #3798 blocked can run on that build.
 6. **On `main` from #4543 an unflagged wrap is the end of the stream, by design**, on every stream
    kind (`83ce47fe`). A looping playout or any source whose timestamps step back without
-   `discontinuity_indicator` cannot be published continuously on the current trunk. The planned
-   in-process restart (`quest/m0/broadcast-epoch/ts-restart.md`, which closes
-   [#4582](https://github.com/moq-dev/moq/issues/4582)) covers a *flagged* backward step only; an
-   unsignalled one stays fatal. Until it lands a flagged step ends a pipe-fed import too
-   ([upstream contributions](upstream-contributions.md), the #4513/#4543 entry); after it, a source
-   of this kind needs a stage in front of the importer that flags its wraps.
+   `discontinuity_indicator` cannot be published continuously on the current trunk. A flagged step
+   ends a pipe-fed import too, and upstream has declined an in-process restart for it
+   ([#4582](https://github.com/moq-dev/moq/issues/4582), closed as not planned): such a source is
+   carried only by a supervisor that republishes under a new epoch at each step, paying a restart
+   per wrap ([upstream contributions](upstream-contributions.md), the #4513/#4543 entry).
 
 ## What this does not show
 

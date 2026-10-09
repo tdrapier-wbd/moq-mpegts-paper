@@ -33,8 +33,12 @@
 # EVENT, so sub3 freezing after it is ungraded. cluster-failover-table.sh prints, per run, every
 # subscriber's resume and stall, which tracks completed to sub1 and which pubB served afterwards.
 #
-# Env: HOP  one hop id for both publishers (`--hop`, or `--origin` on builds that predate it),
-#           which declares them interchangeable. Default 424242; HOP= (empty) lets each mint its own.
+# Env: HOP  set, both publishers share one identity, which declares them interchangeable: `--epoch`
+#           (a UUIDv7, EPOCH or one minted per run) on builds that have it, else this value as
+#           `--hop`, or `--origin` on builds that predate it. Default 424242; HOP= (empty) lets each
+#           mint its own. The epoch reaches the wire only on moq-lite 07, which every process opts
+#           into with MOQ_CONNECT_VERSION / MOQ_LISTEN_VERSION; the RESULT line counts the versions
+#           the relays negotiated.
 #      SIDLE  the relays' QUIC idle timeout, e.g. 6s; QUIC uses the smaller of the two sides' values,
 #           so it also bounds detection of a dead publisher. Unset = the build's default (30 s).
 #           When set, the relays' keep-alive drops to 2 s, which must stay below it.
@@ -82,9 +86,12 @@ case $EVENT in kill | eof) ;; *) echo "EVENT must be kill or eof"; exit 1 ;; esa
 moq_cli_detect "$MOQ" "$RELAY"
 HOPARG=()
 if [ -n "$HOP" ]; then
-	if "$MOQ" --help 2>&1 | grep -q -- '--hop <'; then HOPARG=(--hop "$HOP")
+	if "$MOQ" --help 2>&1 | grep -q -- '--epoch <'; then
+		EPOCH=${EPOCH:-$(uuidgen -7 2>/dev/null || python3 -c 'import os,time;b=bytearray(int(time.time()*1000).to_bytes(6,"big")+os.urandom(10));b[6]=b[6]&15|112;b[8]=b[8]&63|128;h=b.hex();print(f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}")')}
+		HOPARG=(--epoch "$EPOCH")
+	elif "$MOQ" --help 2>&1 | grep -q -- '--hop <'; then HOPARG=(--hop "$HOP")
 	elif "$MOQ" --help 2>&1 | grep -q -- '--origin <'; then HOPARG=(--origin "$HOP")
-	else echo "this build has neither --hop nor --origin"; exit 1; fi
+	else echo "this build has none of --epoch, --hop and --origin"; exit 1; fi
 fi
 if [ "$RELAY_CLI_NEW" -eq 1 ]; then RINSECURE=--connect-tls-insecure; else RINSECURE=--client-tls-disable-verify; fi
 RIDLE=()
@@ -267,7 +274,8 @@ PRE1=$(at sub1 "$PRE_AT")
 	echo "CHECK 2 (standby arrival): $c2 — sub3 alive_until=$A3, +${GROW3}B in the 5 s before the event, error before it: ${E3:-none}"
 	[ "$EVENT" = kill ] && echo "CHECK 1 (failover): $c1 — sub1 resumed=${R1:-no-stall} (deadline t=$DEADLINE), alive_until=$A1 of $END, +${TAIL1}B over the last 5 s"
 	[ "$EVENT" = eof ] && echo "CHECK 3 (graceful end): sub1 $c3 — alive_until=$A1 of $END, +${TAIL1}B over the last 5 s, $(first_error sub1)"
-	echo "RESULT hop=${HOP:-fresh} idle=${IDLE}s event=$EVENT join=$JOIN check1=$c1 check2=$c2 check3=$c3 event_t=$TE detect_t=${detect:-none} reselect_t=${reselect:-none} resumed_t=${R1:-none} stall1=${S1}s alive1=$A1/$END alive3=$A3"
+	VER=$(cat "$OUT"/relay*.log | sed 's/\x1b\[[0-9;]*m//g' | grep -oE 'moq-lite-0[0-9](-wip)?' | sort | uniq -c | awk '{printf "%s%s:%s", (NR > 1 ? "," : ""), $2, $1}')
+	echo "RESULT hop=${HOP:-fresh} id=${HOPARG[0]:-fresh} ver=${VER:-none} idle=${IDLE}s event=$EVENT join=$JOIN check1=$c1 check2=$c2 check3=$c3 event_t=$TE detect_t=${detect:-none} reselect_t=${reselect:-none} resumed_t=${R1:-none} stall1=${S1}s alive1=$A1/$END alive3=$A3"
 } | tee "$OUT/verdict.txt"
 
 if [ "$KEEP_TS" != 1 ]; then rm -f "$OUT"/sub?.ts; fi

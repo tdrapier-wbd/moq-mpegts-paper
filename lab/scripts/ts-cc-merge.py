@@ -123,7 +123,8 @@ def main():
 	print(f'identical from B[{clean_from:,}] ({(clean_from - start_b) / pps:.3f} s) to the end of the overlap')
 	for j in bad[:args.show]:
 		x, y = a[j + shift], b[j]
-		print(f'  B[{j:,}] {(j - start_b) / pps:8.3f} s  A pid 0x{pid(x):x} cc {x[3] & 15:2d}   B pid 0x{pid(y):x} cc {y[3] & 15:2d}')
+		print(f'  B[{j:,}] {(j - start_b) / pps:8.3f} s  A pid 0x{pid(x):x} cc {x[3] & 15:2d}'
+			f'   B pid 0x{pid(y):x} cc {y[3] & 15:2d}')
 	return 1
 
 

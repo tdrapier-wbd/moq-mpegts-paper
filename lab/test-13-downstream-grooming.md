@@ -725,7 +725,9 @@ and continue arms resume three times each and exit 0 (394,324 and 400,462 packet
 lingers, resumes once and exits 0. The new path fired only where the broadcast stayed up. *P1, file
 domain, loopback, `CNNiEMEA2.ts`, one relay; three kill runs, one run per other arm.* A crash on the
 default protocol therefore reaches a supervisor about a second after the export fails, rather than
-after the linger.
+after the linger. On `main` at `f8215bc47`, which adds a replacement track continuing its
+predecessor's sequences and four relay demand fixes, every arm repeats to the packet, failure to
+exit included (1.03–1.04 s).
 
 - **The resume is continuity-clean on every PID.** No PID jumped in 24 resumes, so the audio jump one
   `6f1a9e33` run showed is not reproduced at that sample size. `discontinuity_indicator` is set on the

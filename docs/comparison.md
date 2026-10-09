@@ -273,8 +273,8 @@ graded on a hardware IRD** ([Evidence](evidence.md) §4).
 
 **A deployment constraint separate from latency.** On the September 2026 builds measured, every placed
 PCR-timeline class crosses the lane at the control's content gap. From moq 0.14.0 a backward timestamp
-step ends the import by design, flagged or not, and upstream plans an in-process restart for the flagged
-case only. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
+step ends the import by design, flagged or not, and upstream has declined an in-process restart, so a
+supervisor must republish under a new epoch at each step. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
 classes re-measured, so no build is *measured* to carry both cases, and a deployment must pin the build
 or republish at each backward step ([Evidence](evidence.md) §3.13).
 
