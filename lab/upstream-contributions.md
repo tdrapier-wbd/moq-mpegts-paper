@@ -1802,7 +1802,10 @@ restarting a broadcast inside the importer is the wrong abstraction, so a TS rew
 stays fatal as #4543 made it; a supervisor that wants to continue publishes a new broadcast under a
 new epoch, or the source splits its own feed. The quest is deleted
 ([#5058](https://github.com/moq-dev/moq/pull/5058)). The cost per rewind is then the supervisor's
-restart plus the subscriber's move to the new epoch, unmeasured on any current build (P1-r). E
+restart plus the subscriber's move to the new epoch: on `f8215bc47`, `moq-lite-07`, 2.9–3.0 s of
+programme pipe-fed and the first post-step picture out 4.7 s after sending through the SRT gateway,
+with a co-started 1+1 pair byte-identical across it in 8 of 13 runs
+([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*). E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
 ([method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
 
