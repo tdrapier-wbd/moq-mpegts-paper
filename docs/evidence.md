@@ -82,7 +82,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 |---|---|---|---|
 | **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond loopback | §3.1 |
 | **Timing** | Grooming restores P1 PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; beyond a day; a real encoder's timeline | §3.2 |
-| **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer on every join tried at 500 ms–1 s, eight spread across a GOP included, on loopback, across hosts and up to 2 % loss at 1 s, and over 35 min at 1 s on loopback and across hosts, where its clock follows a source 25 ppm fast at its slew limit; but not over a whole capture at 500 ms | Hardware; the re-multiplexer across hosts and for 1+1; the merged export's drift rate, which the picture tap cannot resolve | §3.16 |
+| **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer on every join tried at 500 ms–1 s, eight spread across a GOP included, on loopback, across hosts and up to 2 % loss at 1 s, and over 35 min at 1 s on loopback and across hosts, where its clock follows a drifting source at its slew limit and settles on it within 2 h, its 1 ms departure steps taking the drift rate past 0.075 Hz/s; but not over a whole capture at 500 ms, nor where the multiplex outruns the video's Rx | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
 | **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane under every shape run**, by a margin the build and QUIC stack set | The trunking knee; a real CDN edge; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
 | **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. Multi-track legs merge only behind the fixed-delay export merged on October 2026 `main`, and only as a co-started pair, on one host or two. Relay source failover is not hitless on any build measured, a shared publisher epoch included. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late-joining multi-track leg; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
 | **Cost** | Wire: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived). Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on | The opaque lane's wire cost; other sources; wide-area fan-out | §3.5, §3.6 |
@@ -143,6 +143,9 @@ exactly 1.00 pair per segment head and 302.148 µs against 302.4 µs predicted, 
 
 **The opaque lane is byte-transparent on one run** ([T3](../lab/test-3-opaque-transparency.md)) —
 loopback, file-fed, on a pinned obsolete draft and a private implementation, never repeated (§4).
+Upstream now imports a whole multiplex as one track, byte-identical from the first group through a
+flagged 20 s forward jump but for the break marker's sequence, in its own relay test on `moq-lite` 06
+and `moq-transport` 14 (P0, software; not measured here); its export is not built.
 
 ### 3.2 What does delivery do to the clock, and can it be repaired? — Yes, on both lanes and on the wire in software; the wire is not the file, and on the media-aware lane the repair costs latency
 
@@ -585,7 +588,7 @@ rewind and an encoder restart each cross the lane with no programme hole and no 
 while a flagged forward jump still publishes; upstream has declined an in-process restart, even for the
 flagged case. A source whose timeline steps back must then be republished at each step, by a
 supervisor under a new epoch, or the build pinned. Each republish costs about 3 s of programme, and a
-1+1 pair is not yet hitless across it.
+1+1 pair is not hitless across it, nor meant to be on this export.
 
 [T23](../lab/test-23-pcr-discontinuity-classes.md) (P0/P2, software; one run per arm per build) places
 one event at 45 s of a 105 s run, shifting PTS and DTS with PCR, and grades source, round trip and groomed
@@ -616,8 +619,10 @@ picture about 0.6 s beyond its steady latency. Through an SRT gateway it lost 3.
 latency the gateway path had built up before the step and the restart discarded. **The two exports
 stayed byte-identical across the break in 8 of 13 runs.** In four only the video PID later differs, on
 the one examined as the same content packetised differently, and in one the legs left the old
-broadcast one picture apart. Either breaks the packet identity an ST 2022-7 merge needs, and the cause
-is not located.
+broadcast one picture apart. Either breaks the packet identity an ST 2022-7 merge needs. The cause is
+not located, and upstream holds the outcome by design: after a replacement each export starts a fresh
+stream, its byte identity promised within one epoch only, and identity across a republish is left to
+an export of the whole multiplex, designed but not built.
 
 ### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
 
@@ -723,12 +728,21 @@ conformant on loopback and across hosts** (moq 0.14.2), through three joins of a
 each join passes the T-STD, with every unit of every track carried inside the run. Across hosts, with
 the source paced 25 ppm fast, its clock follows the source at about its 0.075 Hz/s slew limit, from 0
 to +4.6 ppm over the run and inside 13818-1's 30 ppm, and presentation latency rises 31.8 ms as the
-gap closes; following 25 ppm fully would take about 2.5 h (derived). **Its limits**: over 540 s at 500 ms
+gap closes; following 25 ppm fully would take about 2.5 h (derived). **Behind a source 4 ppm fast it
+settles on the source's rate after about 100 min** (P1, wire; across hosts, 1 s, moq 0.14.2 with its
+steering logged, PCR arrivals tapped on both hosts; one 2 h run): its estimate follows the source, and it first
+spends, at the slew limit and up to 5.3 ppm past the source, the 10–12 ms of delay the lane gives back
+in the 20 s after the export anchors. Its clock changes rate at the limit, but on arrivals the drift
+rate reaches 0.088 Hz/s between 600 s windows, over 13818-1's 0.075 Hz/s: the export writes on a 1 ms
+timer, so the wire's phase moves in 1 ms steps. **Its limits**: over 540 s at 500 ms
 it stops about 157 s in on the video's schedule, so 500 ms is not a working delay over a whole capture;
 **on a 25 ms path it stops between 2 % and 3 % loss at 1 s, and between 1 % and 2 % at 500 ms**,
 skipping evicted groups and then exiting loud on a missed deadline (at 500 ms and 2 % it runs the
-capture conformant but with units missing); and it does not survive a re-request onto a live route
-(§3.4). **It presents at twice the delay plus about 275 ms** at
+capture conformant but with units missing); it does not survive a re-request onto a live route
+(§3.4); and where the multiplex runs faster than the video's Rx, its slot layout overruns the video's
+transport buffer, on 36 % of the video packets of a 25 Mb/s broadcast recording (peak 1,311 B against
+512 B; P1, wire, loopback, moq 0.14.2, one 110 s cut), a fault of the layout rather than the rate,
+since the same slot's packets interleaved evenly stay within it. **It presents at twice the delay plus about 275 ms** at
 750 ms and 1 s (2,272–2,274 ms at 1 s, also over 540 s). At 500 ms it presents at 991–1,276 ms over
 eight joins as merged, and **which track anchors its clock sets the figure**: on this source AC-3
 reads about 250 ms further behind its decode time than MP2, the next track, so a join that hears
@@ -744,11 +758,9 @@ the output clock, catches these ([T47](../lab/test-47-fixed-delay-export.md)).
 
 **Not established**: how a hardware IRD responds (**hardware: not run**); the re-multiplexer's clock
 recovery across hosts, and the stream-only schedule 1+1 needs (§3.4); another source profile; the
-decoded-picture buffer, which the grader does not model; segmented HTTP's wire, *reasoned* to behave as
-SRT's; and, for the merged export, its drift rate, which a tap on picture arrivals cannot resolve at
-0.075 Hz/s because the export writes on 25 ms slots, and whether it settles on a remote source's rate.
-The arms that settle it are a hardware IRD fed this wire and its rebuild, the re-multiplexer across
-hosts, and the merged export's drift rate graded on PCR arrivals.
+decoded-picture buffer, which the grader does not model; and segmented HTTP's wire, *reasoned* to
+behave as SRT's. The arms that settle it are a hardware IRD fed this wire and its rebuild, and the
+re-multiplexer across hosts.
 
 ---
 
@@ -767,7 +779,8 @@ the WAN leg was 12.8 ms, so nothing exercised the recovery the tunnels exist for
 lossy path could change the ordering.
 
 **The opaque lane has one measurement** — loopback, file-fed, one run, an obsolete draft, a private
-implementation. It is a demonstrated principle, not a validated component.
+implementation. It is a demonstrated principle, not a validated component; its public import is
+upstream-tested only, and its export unbuilt (§3.1).
 
 **The data-plane comparison is single-route, single-clip and single-host.** The segmented arm of the
 carriage, cadence and latency comparisons is one route, one clip and one run per leg on loopback, with
@@ -812,8 +825,8 @@ rebuild.
 | # | Question | Blocked on | What it moves |
 |---|---|---|---|
 | 1 | **Does groomed output pass TR 101 290 P1/P2 on hardware IRDs, sustained, including ST 2022-7 under loss?** | A hardware IRD and analyser | Everything. Until it passes, the grooming design is software-validated, not broadcast-acceptable |
-| 2 | **Can a live re-multiplexer keep the lane's wire T-STD-conformant across hosts, and for 1+1?** On one host it can; the merged export does across hosts for 35 min, its clock following the source's, and as a co-started pair (§3.4, §3.16) | The drift rate graded on PCR arrivals; a schedule computed from the stream alone | Whether the lane serves TS-out to an IRD at conformance in a deployment |
-| 3 | **Does upstream's merged fixed-delay export keep its drift rate within 0.075 Hz/s while it follows a remote source?** It carries every track conformantly for 35 min across hosts, its clock following a source 25 ppm fast at its slew limit, and 500 ms does not last a whole capture (§3.16) | PCR-arrival timing of the export across hosts | Whether the subscriber is itself the conformant stage, and at what latency |
+| 2 | **Can a live re-multiplexer keep the lane's wire T-STD-conformant across hosts, and for 1+1?** On one host it can; the merged export does across hosts and as a co-started pair (§3.4, §3.16) | A schedule computed from the stream alone; a source of another profile that passes the T-STD | Whether the lane serves TS-out to an IRD at conformance in a deployment |
+| 3 | **Is upstream's merged fixed-delay export itself an acceptable conformant stage?** It carries every track conformantly for 35 min across hosts and settles on a drifting remote source, but its wire's drift rate exceeds 0.075 Hz/s, and 500 ms does not last a whole capture (§3.16) | A hardware IRD and analyser, for whether those steps matter | Whether the subscriber is itself the conformant stage, and at what latency |
 | 4 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs; 80–150 ms of RTT | The case that should favour the tunnels |
 | 5 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's edge stage?** | MEG- or TITAN-class hardware | The only route to a low-latency TS-in-HLS receiver ([Comparison](comparison.md) §6.1) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | MoQ's remaining carriage-fidelity advantage |

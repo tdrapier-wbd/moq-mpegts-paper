@@ -275,7 +275,7 @@ graded on a hardware IRD** ([Evidence](evidence.md) §4).
 PCR-timeline class crosses the lane at the control's content gap. From moq 0.14.0 a backward timestamp
 step ends the import by design, flagged or not, and upstream has declined an in-process restart, so a
 supervisor must republish under a new epoch at each step, at about 3 s of programme a step and with a
-1+1 pair not yet hitless across it. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
+1+1 pair not hitless across it, which upstream leaves to an export of the whole multiplex, not yet built. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
 classes re-measured, so no build is *measured* to carry both cases, and a deployment must pin the build
 or republish at each backward step ([Evidence](evidence.md) §3.13).
 
@@ -607,9 +607,10 @@ Ranked by leverage:
    wire that fails the buffer model (§5.1, §8).
 2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The merged
    export keeps every track across hosts at 500 ms and 1 s, and two exports on two hosts are
-   byte-identical; over 35 min across hosts it stays conformant, its clock following the source's at
-   its slew limit. Open: that clock's drift rate, a laboratory stage following a remote clock, and
-   deterministic scheduling for a late-joining leg
+   byte-identical; over 35 min across hosts it stays conformant, and over 2 h its clock settles on a
+   drifting source's, though its 1 ms departure steps take the drift rate on arrivals past
+   0.075 Hz/s. Open: a laboratory stage following a remote clock, and deterministic scheduling for a
+   late-joining leg
    ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane
    serves TS-out to an IRD in a deployment; its comparator, segmented HTTP's wire graded against the same
    model, has not been run either.
