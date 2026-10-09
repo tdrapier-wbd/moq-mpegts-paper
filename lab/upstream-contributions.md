@@ -807,8 +807,9 @@ its removal of the anchor, would each moot it; the A/B result is on the issue.
 **The refusal has since landed, with selection**, in [#4505](https://github.com/moq-dev/moq/pull/4505)
 (next entry). On `main` at `6f1a9e33` an unselected multiplex is refused with exit 1, and on the T10
 rig every programme is carried on `mpts3.ts` and `mpts3-cc.ts` alike, independent clocks included, in
-four of four runs (T10 § *The split on the T10 rig*). The issue itself is still open on the tracker.
-What a selected programme still carried of the other services is the next entry.
+four of four runs (T10 § *The split on the T10 rig*). **Closed by us** as answered by #4505 and
+#4580 ([comment](https://github.com/moq-dev/moq/issues/4353#issuecomment-6084813480)). What a
+selected programme still carried of the other services is the next entry.
 
 ### A selected programme still carried the whole multiplex's SI — contributed as [#4580](https://github.com/moq-dev/moq/pull/4580), merged
 
@@ -1146,7 +1147,10 @@ parts: the auth-proxy API on **`main`** **already** forwards the mTLS identity p
 server can answer for it, and the default token path cannot because its cache is keyed per key. On scoping,
 mTLS is what the maintainer uses for cluster sync, and per-identity scoping is preferred over a global
 config option; on the startup warning the maintainer agreed the current approach is confusing and not good
-security practice. Planned as `quest/m1/auth/relay.md` on **`main`**. **The correction this campaign
+security practice. **Closed by us as fixed** on `main` at `f8215bc47`, read from the code: a
+certificate admits nothing on its own, its name, fingerprint, expiry and issuer reach the auth server,
+and a client CA beside `--auth-public` is refused at startup
+([comment](https://github.com/moq-dev/moq/issues/3603#issuecomment-6084812116)). **The correction this campaign
 posted before anyone spent time on it** is why the third ask was judged on its merits: the issue had claimed
 a startup-warning precedent that does not exist, and said so in a comment.
 
@@ -1276,9 +1280,10 @@ harness's generated `ffmpeg -muxrate` clip grades 100 % (25,004 / 25,004 B) and 
 three 20 s runs (31,208 / 31,250 B), because that fixture is mostly padding, which is why a burst fixture
 is listed below.
 
-**Open:** [#3925](https://github.com/moq-dev/moq/issues/3925) is **open** with state **reopened**; residual
-on `main` at `6f1a9e33` is **3.27 %** ([T13](test-13-downstream-grooming.md)); a burst fixture for the
-recipe gate; unpadded export start; and `pcr-value-interval` pooling across PIDs.
+**Closed:** [#3925](https://github.com/moq-dev/moq/issues/3925), by us, as answered by #4645's PCR grid:
+on `f8215bc47` over 35 min every PCR checked is within ±481 ns of its byte position
+([comment](https://github.com/moq-dev/moq/issues/3925#issuecomment-6084812727)). Still ours: a burst
+fixture for the recipe gate; unpadded export start; and `pcr-value-interval` pooling across PIDs.
 
 ### The byte schedule itself — contributed as [#4579](https://github.com/moq-dev/moq/pull/4579), overtaken by the maintainer's fixed-delay export
 
@@ -1479,7 +1484,7 @@ the video is lost to group eviction on every head run.
 
 **Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair; release-clock
 statistics that count neither a skipped group nor an absent track, and an `out_of_tolerance` count
-that climbs through every start; the export that does not resume across a publisher `SIGKILL`; the join-dependent latency at 500 ms, which on `f8215bc47` is whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusion 20; drafted, not reported); and the latency
+that climbs through every start; the export that does not resume across a publisher `SIGKILL`; the join-dependent latency at 500 ms, which on `f8215bc47` is whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusion 20; [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)); and the latency
 [#4681](https://github.com/moq-dev/moq/pull/4681) recovers. Detail, tables and reproduction live in [T44](test-44-tstd-grading.md),
 [T45](test-45-live-tstd-remux.md), [T46](test-46-tstd-check-cross-validation.md), and
 [T47](test-47-fixed-delay-export.md); summarised measurement points in
@@ -1545,7 +1550,8 @@ every defect intact (source and wire):
 | [#3731](https://github.com/moq-dev/moq/issues/3731) | **not actionable either way** — quest defers to msfts#33, since answered and closed | `quest/m4/msfts-convergence.md` |
 
 On `ffa5b81b` **nothing blocked was unblocked**; #3798 has since been fixed on `main` and #3926
-closed by #4504 (both below), and the maintainer reopened #3925 and #3731 on 2026-09-28. Method
+closed by #4504 (both below), and the maintainer reopened #3925 and #3731 on 2026-09-28; #3925 is
+now closed, answered by #4645 (above). Method
 rule: [`method-notes.md`](method-notes.md) § *A closed issue is a claim about a tracker, not about a
 binary*.
 
@@ -1697,10 +1703,15 @@ late video unit instead of dropping it, as it drops late audio. *P1, file domain
 `CNNiEMEA2.ts`, one relay.* **Reported as [#5052](https://github.com/moq-dev/moq/issues/5052)**,
 with both rigs and a `--delay 1s` control: at 1 s, which carries the clip over 540 s in steady state
 (T47), 2 of 2 crash-replace runs and 4 of 4 failovers end the same way, so it is not the 500 ms
-default's floor. The cause is not located; the issue offers a hypothesis reasoned from the code (the
-jitter buffer accepts a unit without asking whether its packets still fit before its deadline at the
-multiplex rate) and no fix. **Open**, and unchanged on `main` at `f8215bc47`, after a replacement
-track began continuing its predecessor's sequences (#4929) and four relay demand fixes: 3 of 3
+default's floor. **Cause located** on `f8215bc47` by instrumenting the jitter buffer and the
+schedule, in two variants of the crash-replace rig (13 and 20 frames stranded): on `moq-lite-06` a
+re-request neither ends nor restarts the track, so the dead session's last video frames wait in the
+decode-clock hold through the silence. The replacement's frames release them 13–27 s later, still
+carrying the arrival stamps that the jitter buffer admits them on. The schedule has already passed
+them, and the one due exactly at its next slot finds no room and bails.
+[Posted](https://github.com/moq-dev/moq/issues/5052#issuecomment-6084803300) with the trace and two
+fix directions. **Open**, and unchanged on `main` at `f8215bc47`,
+after a replacement track began continuing its predecessor's sequences (#4929) and four relay demand fixes: 3 of 3
 crash-replace runs exit 1 with the same 61,667 packets (T13 § *Liveness*).
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
@@ -1805,7 +1816,9 @@ new epoch, or the source splits its own feed. The quest is deleted
 restart plus the subscriber's move to the new epoch: on `f8215bc47`, `moq-lite-07`, 2.9–3.0 s of
 programme pipe-fed and the first post-step picture out 4.7 s after sending through the SRT gateway,
 with a co-started 1+1 pair byte-identical across it in 8 of 13 runs
-([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*). E
+([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*); the
+other five are **reported as [#5101](https://github.com/moq-dev/moq/issues/5101)**, asking whether
+the schedule after a re-acquisition is meant to depend on the stream alone. E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
 ([method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
 
