@@ -1357,8 +1357,11 @@ notes after the quest audit move `msfts-convergence` to `quest/m3/` and drop the
 [reply](https://github.com/moq-dev/moq/pull/5003#issuecomment-6080453604): the section now goes when
 the importer drops, however the track ended, as the demultiplexed lane's entries do, with a test
 that fails without it; a test pins objects after the last PCR; and the bound is kept, since at
-100 Mbit/s it is about thirteen of the 100 ms PCR gaps ISO/IEC 13818-1 allows. **Awaiting the
-maintainer.** A
+100 Mbit/s it is about thirteen of the 100 ms PCR gaps ISO/IEC 13818-1 allows. **Merged on
+2026-10-09** as `5566e4128`, our commit plus two of the maintainer's: a splice that is both a flagged
+forward jump and a random access point keeps its break marker, and `randomAccess` stays false once a
+layout has allowed none. CI passed on the merge; we have not re-measured it. The export half,
+`ts-passthrough-export`, is unbuilt. A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
@@ -1722,7 +1725,16 @@ go to none ([T13](test-13-downstream-grooming.md) § *Liveness*, [T6](test-6-rel
 § *Single-relay standby*). A replay replacement still does not resume on `moq-lite-06`, which
 carries no restart marker. An automated review found the stamp also ran at a track's end, dropping
 a tail `main` sends late; `8557520bc` exempts that flush, with a test that drops 8 frames without
-it ([reply](https://github.com/moq-dev/moq/pull/5109#issuecomment-6087692516)). Awaiting review.
+it ([reply](https://github.com/moq-dev/moq/pull/5109#issuecomment-6087692516)); a second automated
+review found nothing new. **#5052 was closed on 2026-10-09 by the merge of
+[#5108](https://github.com/moq-dev/moq/pull/5108)**, a quest (`broadcast-epoch/no-stitch`) that
+plans the epochless case's fix at its source: an epochless track ends on an upstream error instead
+of re-splicing onto whatever instance now serves the path. It decides against an exporter-side guard
+(a unit due behind the schedule still bails). #5109 is not one: it leaves the bail, and has the
+jitter buffer judge held frames late before they reach the schedule. It still applies within an
+epoch, where the quest keeps a shared-epoch pair failing over with no error downstream, which is
+rig 2. The quest asks for both rigs to be re-run once it lands, and flags a rig-2 exit 1.4 s after a
+mid-GOP join, before any failover, as possibly separate. **#5109 open.**
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110).** `mpeg2ts` serialises the rebuilt PMT into a
@@ -1832,8 +1844,14 @@ restart plus the subscriber's move to the new epoch: on `f8215bc47`, `moq-lite-0
 programme pipe-fed and the first post-step picture out 4.7 s after sending through the SRT gateway,
 with a co-started 1+1 pair byte-identical across it in 8 of 13 runs
 ([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*); the
-other five are **reported as [#5101](https://github.com/moq-dev/moq/issues/5101)**, asking whether
-the schedule after a re-acquisition is meant to depend on the stream alone. E
+other five were **reported as [#5101](https://github.com/moq-dev/moq/issues/5101)**, asking whether
+the schedule after a re-acquisition is meant to depend on the stream alone, and **closed as not
+planned on 2026-10-09**: a replaced broadcast is a new broadcast, so identical legs across a
+republish are not a goal. `ts-hitless --sync` promises identity within one epoch only, and the
+planned TS export restart (quest `broadcast-epoch/export-ts`, from
+[#5108](https://github.com/moq-dev/moq/pull/5108)) ends the export on a replacement unless
+`--stitch` asks for a fresh export with a full program switch; `Export::resume()` goes. Identity
+across a republish is left to the passthrough export, unbuilt. E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
 ([method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
 
