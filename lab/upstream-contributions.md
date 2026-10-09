@@ -746,7 +746,11 @@ failover*).
   fix is not landed; our counts are the before-measurement on the issue. With a shared `--epoch` on
   `main` at `82c3f2fe4` the standby's arrival ends no subscriber, on either protocol; on
   `moq-lite-07` subscribers present before it arrived instead end `not found` at the failover, 3 of
-  3, which fits those refusals being kept (reasoned, not traced; T6 § *Single-relay standby*).
+  3 (T6 § *Single-relay standby*). In the mesh on `f8215bc47` the refusals are visibly kept: the
+  standby's relay probes it once as it announces, gets `not found` for every track, and never asks
+  again, so after the failover nothing reaches any subscriber on either relay and none gets an
+  error, 6 of 6 hard kills and 4 of 4 clean ends (T6 § *Mesh source failover*);
+  [posted on the issue](https://github.com/moq-dev/moq/issues/4352#issuecomment-6080454156).
 - **A fast switch to a same-hop standby ends `export ts` with `TimestampRewind`.** On `ffa5b81b` a
   SIGINT made the relay move to the standby and the exporter abort. On `main` at `2b689c24`, where the CLI closes
   the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
@@ -1330,17 +1334,26 @@ questline's nightly proof. We proposed TS passthrough and clock-recovery quests 
 into [#4645](https://github.com/moq-dev/moq/pull/4645) directly, dropping the separate quest. The
 passthrough import, with the hang catalog's `m2ts` section and its mapping onto MSFTS in the draft, is
 contributed as draft [#5003](https://github.com/moq-dev/moq/pull/5003). The maintainer held its first
-head for rework: a flagged *backward* PCR is a restart, which
-[`ts-restart`](https://github.com/moq-dev/moq/blob/main/quest/m0/broadcast-epoch/ts-restart.md) turns
-into a new broadcast under a fresh epoch, so timestamps never go backwards within one broadcast. The
+head for rework: a flagged *backward* PCR is a restart, never a continuation, so timestamps never go
+backwards within one broadcast; and since #4582's closure no importer restarts in-process. The
 reworked head writes through moq-mux's standard producer: a flagged forward jump carries into the
-timestamps behind a break marker, and any step back ends the import until `ts-restart` lands. Its
+timestamps behind a break marker, and any step back ends the import. Its
 relay test is byte-identical from the first group on `moq-lite-06` and `moq-transport-14` through a
 flagged 20 s forward jump, with only the break marker's sequence missing, and fails without the
 marker. Both automated-review findings (a packet-size probe that lost the grid behind leading junk,
 and `randomAccess` claimed for a `--pcr-pid` no programme names) are fixed with regressions. As the
-maintainer suggested, the export half is split into its own quest (`ts-passthrough-export`), and
-`ts-passthrough` keeps only the restart path. A
+maintainer suggested, the export half is split into its own quest (`ts-passthrough-export`). An
+automated review of that head recommends merging, with three non-blocking findings (`finish()` keeps
+the `m2ts` section that `abort()` removes; the 16 MiB PCR-gap bound counts queued objects, so a fast
+mux with a long PCR gap trips it; no test pins the end-of-input path). The maintainer's rebase
+notes after the quest audit move `msfts-convergence` to `quest/m3/` and drop the restart remainder of
+`ts-passthrough` with its link, keeping only the export quest. Rebased accordingly onto `main` at
+`f8215bc47`, gate passed, pushed with a
+[reply](https://github.com/moq-dev/moq/pull/5003#issuecomment-6080453604): the section now goes when
+the importer drops, however the track ended, as the demultiplexed lane's entries do, with a test
+that fails without it; a test pins objects after the last PCR; and the bound is kept, since at
+100 Mbit/s it is about thirteen of the 100 ms PCR gaps ISO/IEC 13818-1 allows. **Awaiting the
+maintainer.** A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
@@ -1686,7 +1699,9 @@ with both rigs and a `--delay 1s` control: at 1 s, which carries the clip over 5
 (T47), 2 of 2 crash-replace runs and 4 of 4 failovers end the same way, so it is not the 500 ms
 default's floor. The cause is not located; the issue offers a hypothesis reasoned from the code (the
 jitter buffer accepts a unit without asking whether its packets still fit before its deadline at the
-multiplex rate) and no fix. **Open.**
+multiplex rate) and no fix. **Open**, and unchanged on `main` at `f8215bc47`, after a replacement
+track began continuing its predecessor's sequences (#4929) and four relay demand fixes: 3 of 3
+crash-replace runs exit 1 with the same 61,667 packets (T13 § *Liveness*).
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
@@ -1781,10 +1796,13 @@ against the pre-flip `main` at `6a016409`; [T23](test-23-pcr-discontinuity-class
 Error: *frame timestamp is below the previous group's start*. Flagged backward discontinuity now
 kills a pipe-fed importer; SRT with redial + linger costs 1.1–1.5 s in four of five A/E runs;
 without linger, whole feed. **Reported [#4582](https://github.com/moq-dev/moq/issues/4582)** for
-in-connection republish after a signalled rewind. **Upstream now plans
-`quest/m0/broadcast-epoch/ts-restart.md`** ([#4587](https://github.com/moq-dev/moq/pull/4587)): a
-**flagged** rewind finishes the broadcast and continues the same input as a new broadcast under a
-fresh epoch in the same process; an **unsignalled** rewind stays fatal — gates the next release. E
+in-connection republish after a signalled rewind; first planned as `ts-restart`
+([#4587](https://github.com/moq-dev/moq/pull/4587)), then **closed as not planned on 2026-10-08**:
+restarting a broadcast inside the importer is the wrong abstraction, so a TS rewind, flagged or not,
+stays fatal as #4543 made it; a supervisor that wants to continue publishes a new broadcast under a
+new epoch, or the source splits its own feed. The quest is deleted
+([#5058](https://github.com/moq-dev/moq/pull/5058)). The cost per rewind is then the supervisor's
+restart plus the subscriber's move to the new epoch, unmeasured on any current build (P1-r). E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
 ([method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
 
