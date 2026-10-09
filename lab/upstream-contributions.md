@@ -296,8 +296,8 @@ eighteen prior experiments missed because instruments read values not padding; T
 bitrate for the export went from a meaningless 20.7 Gb/s to 9.57 Mb/s once clustered values stopped
 poisoning rate estimates. On reordered content the authored decode clock is a saw and each B-frame
 below it is nudged one 90 kHz tick (**11.1 µs**) past the previous DTS — the **11 µs** median the
-distribution showed before the code was read. **It does not yet meet the requirement #2937 named:**
-#2967 stamps each PCR as its own `Frame`, but `moq export ts` to stdout discards timestamps — on
+distribution showed before the code was read. **It did not meet the requirement #2937 named:**
+#2967 stamped each PCR as its own `Frame`, but `moq export ts` to stdout discarded timestamps — on
 exported bytes **87.2 %** of consecutive PCR packets sit back-to-back (bursts to 13). Clustering
 changed domain: even values at clustered positions.
 
@@ -727,7 +727,7 @@ intended semantics — failover covers host loss, not the common clean exit. Rem
 [#2610](https://github.com/moq-dev/moq/issues/2610) (publisher-minted epoch plus `Ended`).
 **Specified, not shipped.**
 
-**On the build under test the failover picture has moved, and both new findings are reported.**
+**On `ffa5b81b` the failover picture moved, and both new findings were reported.**
 `ffa5b81b` renamed the knob to `--hop <id>` and refuses `--origin`. On one relay two publishers now
 coexist and a hard kill fails over within the idle timeout; in the mesh a hard kill fails over for the
 dead publisher's relay, bounded by the later of detection and the standby's group lag
@@ -1373,9 +1373,9 @@ the same failure classes T44 saw on a broadcast clip, reporting only until the d
 with a measured rate the output is constant-rate, runs up to two delays behind the source, reorders DTS
 frame-spaced, and fails bursts that do not fit the delay. On the generated 20 s clip it passed the strict
 check at 10 and 2 Mb/s on a clean path; the loss rig and broadcast clip were not run on that head.
-[#4645](https://github.com/moq-dev/moq/pull/4645) remains an open draft through maintainer rework heads
-`49efbc9a1`, `2dc542b4a`, `559a35244` and `fe7cec106`, the last with `main` merged in rather than
-rebased. Under the `--linger` rig, `559a35244` ended the export within 7 s of joining a broadcast as it
+[#4645](https://github.com/moq-dev/moq/pull/4645) went through maintainer rework heads `49efbc9a1`,
+`2dc542b4a`, `559a35244` and `fe7cec106`, the last with `main` merged in rather than rebased, before
+it merged. Under the `--linger` rig, `559a35244` ended the export within 7 s of joining a broadcast as it
 starts, and `--linger` then waited for a replacement broadcast while the one it was reading was still
 live. Reported (issuecomment-6013366214), with an offer to do the CLI side; the maintainer agrees the
 misread is wrong, leaves it as a follow-up and invited us to do `subscribe.rs`. The session-start exit
@@ -1710,9 +1710,23 @@ decode-clock hold through the silence. The replacement's frames release them 13�
 carrying the arrival stamps that the jitter buffer admits them on. The schedule has already passed
 them, and the one due exactly at its next slot finds no room and bails.
 [Posted](https://github.com/moq-dev/moq/issues/5052#issuecomment-6084803300) with the trace and two
-fix directions. **Open**, and unchanged on `main` at `f8215bc47`,
+fix directions. Unchanged on `main` at `f8215bc47`,
 after a replacement track began continuing its predecessor's sequences (#4929) and four relay demand fixes: 3 of 3
-crash-replace runs exit 1 with the same 61,667 packets (T13 § *Liveness*).
+crash-replace runs exit 1 with the same 61,667 packets (T13 § *Liveness*). **Fix proposed as
+[#5109](https://github.com/moq-dev/moq/pull/5109)** (`e27539ea8` on `5579e22b2`): the smaller of the two directions, a frame leaving the hold
+judged as arriving no earlier than the frame that settled it, so frames held through a silence drop
+as late, with a paused-time test that fails on `main` with the issue's error. On loopback against
+`f8215bc47` the replay crash arm goes from 3 of 3 exits to none, and the late video units in the
+continue crash arm (20) and the shared-epoch hard kill (20 on `moq-lite-06`, 4 on `moq-lite-07-wip`)
+go to none ([T13](test-13-downstream-grooming.md) § *Liveness*, [T6](test-6-relay-resilience.md)
+§ *Single-relay standby*). A replay replacement still does not resume on `moq-lite-06`, which
+carries no restart marker.
+
+**A PMT longer than one packet ends the export before it writes anything — reported as
+[#5110](https://github.com/moq-dev/moq/issues/5110).** `mpeg2ts` serialises the rebuilt PMT into a
+single packet, so a playout recording with eleven AC-3 services (a 391-byte section over three
+packets) is imported whole and exported not at all, on `f8215bc47`, while a 153-byte PMT exports
+through ([T45](test-45-live-tstd-remux.md)). **Open.**
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
@@ -1758,8 +1772,7 @@ recipe.
 **Verified fixed on `main` at `9d2a4f6e`:** every stream kind on which `ffa5b81b` aborted survives
 three unflagged wraps ([T41](test-41-import-reanchor-coverage.md)), and the SRT chain holds full
 export rate through five joins ([T40](test-40-continuous-join-through-srt.md)). The likely fix is
-[#3997](https://github.com/moq-dev/moq/pull/3997), and the permanence re-soak is unblocked on that
-build. On `main` after the branch flip the question is moot rather than reopened: from #4543 every
+[#3997](https://github.com/moq-dev/moq/pull/3997). On `main` after the branch flip the question is moot rather than reopened: from #4543 every
 unflagged wrap ends the import by design, on every stream kind (`83ce47fe`,
 [T41](test-41-import-reanchor-coverage.md)). The exit-code baseline for #3926 went to that issue the same way: its plan specifies 0 for a
 clean end and 1 for a drop, while the filing had recorded only the error text, and the build of the
