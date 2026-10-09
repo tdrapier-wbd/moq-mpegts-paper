@@ -1745,6 +1745,13 @@ single packet, so a playout recording with eleven AC-3 services (a 391-byte sect
 packets) is imported whole and exported not at all, on `f8215bc47`, while a 153-byte PMT exports
 through ([T45](test-45-live-tstd-remux.md)). **Open.**
 
+**Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
+as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
+`Slot::layout` spaces each PID by its own count, so PIDs with equal counts coincide and video runs
+back to back between them; a unit test of one full slot of a 25 Mb/s broadcast fails at a TB peak
+of 1,067 B on `f8215bc47` (`schedule.rs` unchanged on `d006689f8`), and the same packets in
+smooth weighted round-robin peak at 459 B ([T45](test-45-live-tstd-remux.md)). **Open.**
+
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
