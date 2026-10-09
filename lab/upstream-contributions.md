@@ -1720,7 +1720,9 @@ as late, with a paused-time test that fails on `main` with the issue's error. On
 continue crash arm (20) and the shared-epoch hard kill (20 on `moq-lite-06`, 4 on `moq-lite-07-wip`)
 go to none ([T13](test-13-downstream-grooming.md) § *Liveness*, [T6](test-6-relay-resilience.md)
 § *Single-relay standby*). A replay replacement still does not resume on `moq-lite-06`, which
-carries no restart marker.
+carries no restart marker. An automated review found the stamp also ran at a track's end, dropping
+a tail `main` sends late; `8557520bc` exempts that flush, with a test that drops 8 frames without
+it ([reply](https://github.com/moq-dev/moq/pull/5109#issuecomment-6087692516)). Awaiting review.
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110).** `mpeg2ts` serialises the rebuilt PMT into a
