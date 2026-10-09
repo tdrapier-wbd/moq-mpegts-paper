@@ -1734,7 +1734,10 @@ of re-splicing onto whatever instance now serves the path. It decides against an
 jitter buffer judge held frames late before they reach the schedule. It still applies within an
 epoch, where the quest keeps a shared-epoch pair failing over with no error downstream, which is
 rig 2. The quest asks for both rigs to be re-run once it lands, and flags a rig-2 exit 1.4 s after a
-mid-GOP join, before any failover, as possibly separate. **#5109 open.**
+mid-GOP join, before any failover, as possibly separate. **#5109 merged on 2026-10-09** as
+`d006689f8`, accepted as that same-epoch fix, its body now referring to #5052 rather than closing
+it; the maintainer reworded the quest to reject only a guard at the schedule's bail, which stays.
+We have not re-measured the merge.
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110).** `mpeg2ts` serialises the rebuilt PMT into a
