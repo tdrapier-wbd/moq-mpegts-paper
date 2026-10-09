@@ -698,9 +698,12 @@ relay log confirms the version every session negotiated.
 
 - **On `moq-lite-06` the exporter's recovery fails, not the relay.** That version cannot carry the
   publisher epoch, so the replacement is a new route at the same path and the old subscription ends
-  only when the relay times the dead session out, as upstream documents. The re-request then fetches
-  the replacement's in-progress video group, whose frames are already behind the release clock: up to
-  16 audio and teletext frames are dropped as late, and the first late video unit is fatal. `--linger`
+  only when the relay times the dead session out, as upstream documents. After the re-request up to
+  16 audio and teletext frames are dropped as late, and a late video unit is fatal. That unit is not
+  the replacement's: instrumented on `f8215bc47`, it is one of the dead session's last video frames,
+  held in the decode clock through the silence because nothing on `moq-lite-06` flushes it, and
+  released behind the schedule when the replacement's frames pass its PTS (13 and 20 frames stranded
+  in two variants; [upstream contributions](upstream-contributions.md)). `--linger`
   then waits out 60 s for a broadcast that is already live. `83ce47fe` wrote 142,188–184,460 packets
   on the same arm and exited 0. At `--delay 1s`, which carries this clip over 540 s in steady state
   ([T47](test-47-fixed-delay-export.md)), the arm fails the same way in 2 of 2 runs, so the failure is

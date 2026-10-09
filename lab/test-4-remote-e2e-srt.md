@@ -240,10 +240,8 @@ tsp -I file loop_out.ts -P analyze -O drop   # + continuity, pcrextract per lab/
   --broadcast cnn.international.emea.live.hang export ts --latency-max 5s > t4_live_out.ts
 tsp -I file t4_live_out.ts -P analyze -O drop     # + continuity, pcrextract per lab/README.md
 
-# C. opaque remote (T3 over the wire) — NOT YET RUN. The lane is installed on EC2
-#    (~/moq-publisher-subscriber, binaries + source, Cargo.lock pinning T3's exact versions) but
-#    its units are commented out and the binaries are Linux, so an over-the-wire run needs a
-#    macOS-side subscriber built from that source:
+# C. opaque remote (T3 over the wire) — NOT RUN: the lane's egress delivers nothing to a reader
+#    (Still open 4). The subscriber, built on macOS from the source pinned on EC2:
 # moq_subscriber --output-protocol tcp --playout-bind 127.0.0.1:5002 --no-pacing \
 #   --broadcast mpegts --track ts https://<EC2_IP>:443/anon
 ```
@@ -464,10 +462,7 @@ transport.
 - **On PCR cadence: the media-aware lane does not transport the spacing the encoder produced.** It
   conserves the *mean* while destroying the *distribution* — clustering PCRs sub-millisecond and
   collecting the residual into gaps up to 320 ms, from a source that has no interval above 40 ms
-  anywhere in 600 s. The leg's earlier reading, that 13.2 % of intervals > 40 ms "reflects the source",
-  was an artefact of comparing a 60 s egress maximum against a whole-clip source maximum. Timing
-  conformance remains a groomer/egress responsibility (T7) — but the groomer is *reconstructing* a
-  cadence, not tidying one.
+  anywhere in 600 s. Timing conformance remains a groomer/egress responsibility (T7).
 - **The three lanes separate "the mux as bytes" from "the mux as a timed object", and only the second
   is where they differ.** SRT preserves both. The media-aware lane now preserves the first completely
   (identity, PIDs, SI, splice) and none of the second (stuffing, mux rate, PSI cadence, PCR grid). That
@@ -484,32 +479,26 @@ transport.
   against the source's 29.97 s. The media-aware lane puts **31.12 s** in the same count. A packet bound
   is therefore an equal-media bound only for a byte-faithful lane, and the choice of bound has to be
   justified per lane rather than per rig.
-- **The opaque lane is not *running* on EC2, but it is installed there — and that changes leg C from
-  blocked to runnable.** Its service unit lines are commented out, so nothing serves it; the
-  `moq_relay` / `moq_publisher` / `moq_subscriber` binaries and the full source tree with its
+- **The opaque lane is installed on EC2 at T3's pinned versions, and its egress delivers nothing.**
+  Its service unit lines are commented out, so nothing serves it; the `moq_relay` /
+  `moq_publisher` / `moq_subscriber` binaries and the full source tree with its
   `Cargo.lock` are on the box. The lock pins **`moq-transport` 0.14.2, `moq-native` 0.17.0,
   `moq-relay` 0.12.9** — the exact versions [T3](test-3-opaque-transparency.md) recorded, so a run
-  there is comparable with T3's published opaque results rather than being a different lane. That also
-  matters to T3, whose P2 PCR-accuracy cell is blocked precisely because this checkout no longer exists
-  on the workstation. The source **builds on macOS** from that lock, so the subscriber side of leg C exists now
-  and [`t3-opaque-lane.sh`](scripts/t3-opaque-lane.sh) scripts the chain. Leg C is nonetheless still
-  unrun, because the lane's **egress delivers nothing**: publisher, relay and subscriber connect and
-  the subscriber reports `bytes_out` climbing at ~10 Mb/s while zero bytes reach a connected reader,
+  there is comparable with T3's published opaque results rather than being a different lane. The
+  source **builds on macOS** from that lock, so the subscriber side of leg C exists, and
+  [`t3-opaque-lane.sh`](scripts/t3-opaque-lane.sh) scripts the chain. Leg C is unrun because the
+  lane's **egress delivers nothing**: publisher, relay and subscriber connect and the subscriber reports `bytes_out` climbing at ~10 Mb/s while zero bytes reach a connected reader,
   on TCP paced and unpaced, on UDP, and under `--egress-profile broadcast`. `lsof` shows one
   established connection and the subscriber logs no write error. Whether this is a defect in the build
-  or specific to compiling it on macOS is unresolved, and the cheap discriminator is to run the same
-  chain against the Linux binaries already on the box.
+  or specific to compiling it on macOS is unresolved.
 - **Home uplink < 10 Mbps sustained**, so a full-rate mux cannot be *published* from the local end;
   the SRT leg was transcoded (`h264_videotoolbox`). 3.5 Mbps dropped after ~30 s; 2 Mbps was stable.
   Publish-side figures are bounded by the access link, and the SRT transcode is not byte-transparent
   (that is T3's claim, not T4's).
-- **EC2 restored as found.** Relay service never stopped (same PID throughout); the SRT publisher
-  auto-restarts on SRT EOF (normal) and was left active. No processes left running by this test.
 
 ## Conclusion
 
-Over the public internet the data planes fail **different halves of the same question**, and the split
-is not the one this file originally reported.
+Over the public internet the data planes fail **different halves of the same question**.
 
 **SRT is byte-faithful, and that is now measured rather than assumed** — 13 PIDs of 13 at their source
 numbers, both SI tables, TDT/TOT, three splice PIDs, stuffing, the exact source mux rate, an identical
@@ -520,11 +509,10 @@ at the instrument's floor, one at a known and fully explained displacement.
 
 **The MoQ media-aware lane is now faithful to the mux as a set of bytes and unfaithful to it as a timed
 object.** Identity, PIDs, SI and splice signalling survive the internet path intact with 0 continuity
-errors — everything the leg originally reported as stripped, less TDT/TOT, which has a merged upstream
-fix this build predates. What does not survive is stuffing, the mux rate, PSI density (8.04 → 2.51
-PAT/s) and the PCR grid (gaps to 320 ms from a source with none above 40 ms in 600 s). So "works on the
-wire" is closed for delivery *and* for carriage, and is **not** closed for cadence — and the groomer's
-role is larger than this file previously implied: it rebuilds a timeline rather than tidying one.
+errors; TDT/TOT does not, and has a merged upstream fix this build predates. What does not survive
+is stuffing, the mux rate, PSI density (8.04 → 2.51 PAT/s) and the PCR grid (gaps to 320 ms from a source with none above 40 ms in 600 s). So "works on the
+wire" is closed for delivery *and* for carriage, and is **not** closed for cadence — and the groomer
+rebuilds a timeline rather than tidying one.
 
 **Segmented HTTP is transparent to the mux's content over the real path and additive by exactly one
 PAT/PMT pair per segment — the loopback result, reproduced to 0.1 % on a prediction made before the
@@ -534,19 +522,18 @@ does not touch the injection accounting**: per-segment TCP fetches across ~125 m
 carriage measure, exactly as loopback did. So of the three lanes, the two byte-faithful ones differ from
 each other only in whether the segmenter's two packets are there.
 
-The contribution-chain result stands unchanged: live SRT contribution → EC2 → MoQ publish → relay →
-local subscribe, 0 CC.
+The live contribution chain works end to end: SRT contribution into EC2, MoQ publish, relay and local
+subscribe, with 0 continuity errors.
 
-Opaque-remote (leg C) remains unrun, but it is a **build** step rather than a deployment one: the lane
-is installed on EC2 at T3's exact pinned versions, and only a macOS-side subscriber is missing.
+Opaque-remote (leg C) remains unrun, blocked on the lane's egress delivering nothing to a reader.
 Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §1.
 
 ## Still open
 
-1. **Why the media-aware lane clusters PCRs.** The distribution's shape (86 % of intervals sub-1 ms,
-   monotonic, mean conserved) points at group-wise reassembly, but this is inferred from the output and
-   not confirmed against the exporter's code. Worth confirming before it is reported upstream, because
-   if PSI density and PCR spacing are both group-derived then a group-size change moves both.
+1. **Why this build's media-aware lane clusters PCRs.** The distribution's shape (86 % of intervals
+   sub-1 ms, monotonic, mean conserved) points at group-wise reassembly, inferred from the output and
+   not confirmed against the exporter's code. Not pursued: the current export puts a PCR in every
+   25 ms slot ([T47](test-47-fixed-delay-export.md)).
 2. **The maximum PAT interval on the media-aware lane**, which no instrument can currently give: with
    no mux rate, `analyze`'s repetition figures are meaningless and only an average over the PCR span is
    available (399 ms against P1's 500 ms limit). Whether individual gaps breach P1 is unknown.
@@ -568,27 +555,15 @@ is not part of the rig needs its publisher recorded as an input — the same cla
 a lane an ffmpeg remux and attributing the remuxer's output to the transport
 ([T3](test-3-opaque-transparency.md)).
 
-**This file credited the lane's 320 ms PCR gaps to the encoder, and concluded the opposite of what the
-data supports.** It reported the egress at "mean/max 33.52 / 319.98 ms" and called the maximum
-"identical to the source's own 319.98 ms", concluding that the lane "transports the cadence the encoder
-produced". The source's maximum PCR interval is **24.95 ms**, in every span of the clip and over all
-600 s of it; the 320 ms gaps are introduced between importer and exporter. The error was comparing a
-60 s egress extremum against a whole-clip source extremum and reading the coincidence as identity — and
-it survived because a 320 ms figure existed on both sides of the comparison, so the numbers looked like
-they matched.
-
-The aggravating detail is that **the campaign already knew better**:
-[T2](test-2-media-aware-transparency.md) lists this figure under "impairments introduced by the lane"
-with the source at 20–28 ms and 0 % above 40 ms. So this was not a gap in the evidence but a
-contradiction between two lab files, and the wrong one of the two was the one being cited.
-
-*Lesson: two extrema are only comparable when taken over the same window, and a matching pair of extrema
-is the easiest kind of agreement to fake accidentally. When a lane appears to preserve a property,
-verify it against the source **in the same window**, and prefer a distribution to a maximum — here the
-giveaway was not the 320 ms tail but the 0.01 ms minimum, which no conformant mux can produce. And
-before recording that a lane preserves something, check whether another experiment already found that
-it does not: a contradiction between two files is worth more than a re-measurement, because one of them
-is already wrong.*
+**Believed:** the lane's 320 ms PCR gaps were the encoder's — the egress maximum (319.98 ms over 60 s)
+was "identical to the source's own", so the lane "transports the cadence the encoder produced", and
+13.2 % of intervals above 40 ms "reflects the source". **True:** the source's maximum PCR interval is
+**24.95 ms** in every span of the clip and over all 600 s of it; the gaps are introduced between
+importer and exporter, as [T2](test-2-media-aware-transparency.md) already recorded (source 20–28 ms,
+0 % above 40 ms). The error was comparing a 60 s egress extremum against a whole-clip source extremum.
+**Rule:** a matching pair of extrema is the easiest agreement to fake, so compare in the same window
+and prefer a distribution (here the 0.01 ms minimum gave it away, which no conformant mux produces); and
+before recording that a lane preserves a property, check whether another experiment found it does not.
 
 **Believed:** the origin security group admitted no inbound TCP but SSH. **True:** an `nc -z` probe with
 nothing listening measures the absence of a server, not a filter — refusal is expected whether or not a

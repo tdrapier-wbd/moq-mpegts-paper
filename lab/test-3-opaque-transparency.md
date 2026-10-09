@@ -418,7 +418,7 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 | PCR accuracy, file domain | **gate is degenerate ungroomed** — no mux rate to grade against, and meaningful only once a groomer restores one (below) | not measurable on this machine (below) | **37–74 ns → 109–302 µs**; 0 violations at 500 µs; **0 at 481 ns once groomed** ([T16](test-16-grooming-segmented-http.md)) |
 | Packets added to the mux | rebuilt, so not comparable | **none** | **one PAT/PMT pair per segment, and nothing else** |
 | Egress monitoring | none | **built-in TR 101 290** | none |
-| Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** (until [#2824](https://github.com/moq-dev/moq/pull/2824) merges) | **broadcast-transparent** | **transparent to the mux's content; not to its clock** |
+| Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** ([#2824](https://github.com/moq-dev/moq/pull/2824), which would have carried it, closed unmerged) | **broadcast-transparent** | **transparent to the mux's content; not to its clock** |
 
 #### Why the PCR-accuracy row cannot be filled across lanes
 
@@ -487,43 +487,11 @@ an argument, and the row says so rather than showing a number.
   It preserves everything, including two tables the media-aware lane drops, and it inserts a
   PAT/PMT pair every segment that no MoQ lane inserts. Fidelity to the payload and fidelity to the
   multiplex are different properties, and a lane can hold the first while breaking the second.
-- **A transparency claim needs a "what was added" column, not only a "what survived" one.** The
-  census that a lane is scored on is naturally a loss detector: it counts what the source had and
-  looks for it at egress. Nothing in that shape can see 46 extra packets, and on this lane those 46
-  packets are the entire deviation — they move the P2 PCR-accuracy figure by four orders of
-  magnitude while every survival row reads clean. This generalises past segmented HTTP to any stage
-  that re-heads, re-indexes or re-stamps a mux.
-- **Predicting the deviation before measuring it is what made it attributable.** 376 bytes at the
-  clip's own rate is 300.8, 109.4 and 302.4 µs on the three clips; the measured maxima are 297.7,
-  109.4 and 301.9. Had the same numbers arrived without the prediction they would have been
-  reported as "sub-millisecond PCR error at segment boundaries" and left there. The 2.75× bitrate
-  spread is what turns agreement into evidence, because a wrong mechanism would not track 1/bitrate.
-- **The error is per-segment, which a duration sweep can prove and a single duration cannot.** Holding
-  the clip and the window fixed and moving segment duration 1 s → 6 s changes the injection count by
-  5.7× and the maximum PCR error by 1 %. That is the difference between a per-event displacement and an
-  accumulating one, and it is only visible by varying the thing the mechanism says should not matter.
-  The same sweep shows the *count* of P2 violations collapsing 2,456 → 8, which is why the count is
-  reported as an indication and the max as the result.
-- **A gate can be undefined on a lane rather than merely unmeasured, and the difference is not
-  cosmetic.** The P2 PCR-accuracy row looked like a missing measurement; it is a category error on the
-  media-aware lane, whose ungroomed egress has no mux rate for an absolute gate to reference. The
-  instrument does not refuse — it returns the maximum PCR interval, a plausible-looking number three
-  orders of magnitude from the truth. An unfilled cell is worth interrogating before it is filled.
-- **The two timing gates disagree about this lane, and both are right.** PCR *repetition* — the P1
-  interval — is untouched, because inserting packets does not change PCR *values*. PCR *accuracy* —
-  the P2 arithmetic — moves a long way, because it compares those values against the byte positions
-  they arrived at, and the lane changed the byte positions. A rig quoting one gate as "PCR
-  conformance" would report this lane as perfect or as broken depending on which it happened to run.
-- **The deviation is discharged by a stage both planes already need.** T16 measured the groomed
+- **The injected pair's PCR displacement is discharged by a stage both planes already need.** T16 measured the groomed
   version of this chain at 0 violations at 481 ns, so nothing here argues against segmented HTTP on
   fidelity grounds. What it does establish is that the segmented lane's egress **cannot be handed to
   an IRD ungroomed** on the strength of being verbatim, which is how a reading of T14 alone might
   have it.
-- Transparency is only as good as what touches the TS on either side: an FFmpeg `-c copy` remux in
-  the contribution path, or a demux/remux lane (T2), rewrites the stream regardless of MoQ or HTTP.
-- Capture-tooling detail: TSDuck's UDP `ip` input dropped some subscribers' non-188-aligned egress
-  datagrams (0 bytes captured while the subscriber's own counters showed full egress); the aligned
-  TCP playout capture was used for `CNNiEMEA` / `testloop`. Not a lane defect.
 
 ---
 
@@ -551,8 +519,9 @@ is what caught the injected pair. Where it is not, it returns the maximum PCR in
 an answer.
 
 The load-bearing gaps that remain are **P2 hardware conformance** ([T7](test-7-timing-integrity.md),
-Gate 2) and a **real-time / remote contribution path** ([T4](test-4-remote-e2e-srt.md)) —
-file-based localhost transparency is necessary, not sufficient. Recorded as a permanent finding in
+Gate 2) and **the opaque lane over a real path** ([T4](test-4-remote-e2e-srt.md) leg C, not run;
+T4 carries segmented HTTP over the public internet) — file-based localhost transparency is
+necessary, not sufficient. Recorded as a permanent finding in
 [`docs/evidence.md`](../docs/evidence.md).
 
 ### Still open
@@ -560,7 +529,7 @@ file-based localhost transparency is necessary, not sufficient. Recorded as a pe
 | Cell | Needs |
 |---|---|
 | The opaque lane at the P2 PCR-accuracy gate | **a working egress on that lane.** The build is recovered (source survives on EC2, compiles on macOS at its own lock) and rigged in [`t3-opaque-lane.sh`](scripts/t3-opaque-lane.sh), but no output protocol delivers bytes to a reader while the subscriber reports them sent — four configurations tried. Next step is the same chain on EC2's Linux binaries, to separate a build defect from a macOS one. The media-aware half of this cell is closed, with the finding that the gate is degenerate there |
-| Multi-programme carriage through both lanes | the MPTS fixture and, for HLS, a real CDN ([planned-experiments](planned-experiments.md)). This now carries the whole of MoQ's residual carriage advantage |
+| Multi-programme carriage through both lanes | the MPTS fixture and, for HLS, a real CDN ([planned-experiments](planned-experiments.md)) |
 | A lossy segmented path | a path that drops segments. Nothing was ever missing here, only late — so this experiment says what a lane *does* to a mux, never what it does when the path damages one |
 | The opaque lane on a current draft | it remains pinned to draft-14 against a private implementation, and has never been repeated |
 | The duration sweep on the 27.5 Mbps clip | one rig invocation. The sweep ran on `CNNiEMEA` only; the invariance claim rests on the bitrate spread from the three-clip runs rather than on a second sweep |
@@ -578,11 +547,8 @@ file-based localhost transparency is necessary, not sufficient. Recorded as a pe
 analyser reading stdout receives an empty series. The interval computation then returned nothing, the
 rows were skipped by a truthiness test, and three complete-looking tables were produced with the PCR
 interval and the >40 ms rows simply not there. The mistake was visible only by comparing the output
-against the columns it was supposed to have. *Lesson: a harness that skips a row when its instrument
-returns nothing cannot distinguish "no violations" from "no measurement". Make the analyser fail on
-an empty series rather than omit the row — and note that this is the same class of error as
-[T16](test-16-grooming-segmented-http.md)'s `--jitter-max` unit confusion: both are TSDuck options
-whose behaviour depends on a sibling flag rather than on the value passed.*
+against the columns it was supposed to have. *Rule: the analyser fails on an empty series rather
+than omitting the row.*
 
 **"Closing the PCR-accuracy row is cheap" was wrong, and wrong in a way that mattered.** This file
 listed the row as needing "nothing — the captures and the analyser exist", on the assumption that an
@@ -590,19 +556,15 @@ unfilled cell is unfilled for want of instrument time. Two things were false. Th
 was gone from the machine, so half the cell was blocked on an artefact rather than on a run; and on the
 half that *could* be run, the gate turned out not to measure the quantity its name implies — on a
 stuffing-free egress `pcrverify --absolute` returns the maximum PCR interval, matching it to 0.003 % on
-three clips. *Lesson: before booking a gap as cheap, check that the instrument is defined on the thing
-being compared. A conformance gate that presupposes a property of the stream — here a constant mux
-rate — cannot rank lanes that differ in whether they have that property, and will silently return a
-plausible number instead of refusing. This is the same failure family as the two below: an instrument
-that answers a question adjacent to the one asked.*
+three clips. *Rule: before booking a gap as cheap, check that the instrument is defined on the thing
+being compared.*
 
 **A PCR-accuracy figure is window-dependent, so it carries its window like any other count.** The
 `CNNiEMEA` source reads **37 ns** over the 60 s reference cut used throughout this experiment and
 **74 ns** over the whole 5-minute clip, because a maximum over more media can only grow. Both numbers
 are correct and they are not interchangeable; the tables here are the reference-cut figures, matching
-the egress windows they are compared against. *Lesson: the campaign's equal-window rule is not only
-about rates and ratios — it applies to any statistic that is an extremum, which includes every
-"tightest clean bound" in this repository.*
+the egress windows they are compared against. *Rule: an extremum, including every "tightest clean
+bound", carries its window.*
 
 **The source reference was cut from the head of the file, and one clip is not homogeneous there.**
 The census compares two equal-packet windows, which measures the lane only if both cover equivalent
@@ -611,10 +573,8 @@ so a head cut against a live-edge egress reported stuffing falling 18.43 → 14.
 by 13,858 packets — which reads exactly like a lane stripping padding, and is a property of the clip.
 The rig now offsets the reference by the publisher's elapsed run time at the join, which brings the
 same comparison to 14.83 → 14.95 %, and the analyser reports the reference's stuffing by quarter so a
-non-homogeneous window is declared rather than discovered. *Lesson: this is [T9](test-9-performance.md)'s
-loopback span artefact in its content form — the windows were the same length and still not
-comparable. Equal duration is not equal media, and the assertion belongs in the instrument, because
-the failure produces a plausible number rather than an error.*
+non-homogeneous window is declared rather than discovered. *Rule: equal duration is not equal
+media, and the instrument asserts the reference's homogeneity.*
 
 ---
 

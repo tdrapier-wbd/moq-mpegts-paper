@@ -653,9 +653,10 @@ early-subscriber hard kill fails the same way on both protocols, 2 runs each.
   exports ended on a late teletext unit within 4 s of the switch. Why the continuation arrives late
   after a clean exit, when it does not after a hard kill, is not established.
 - **The exporter rarely survives a re-request.** Every `not found` and every lite-06 failover reaches
-  `export ts` as a re-request. The re-request fetches the in-progress group, which arrives behind
-  the release clock. Late audio and data frames are dropped, but the first late video or teletext
-  unit is fatal. The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on
+  `export ts` as a re-request, after which units reach the release clock late. Late audio and data
+  frames are dropped, but the first late video or teletext unit is fatal. On the crash-replace rig
+  the late video units are the dead session's own, held through the silence
+  ([T13](test-13-downstream-grooming.md) § *Liveness*); here that is reasoned, not traced. The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on
   lite-07. Six of the seven that ended did so on a missed decode deadline, and one on a timestamp
   rewind.
 - **A different epoch on `moq-lite-07` is a replacement by design**: the newer epoch takes the

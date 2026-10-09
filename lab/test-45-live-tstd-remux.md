@@ -1,11 +1,11 @@
 # Test 45 — A live T-STD re-multiplexer behind the media-aware lane
 
 **State: questions 1–3 answered on two clips, loopback, for a Python re-multiplexer. Questions 4
-and 5, put to upstream's merged export: across hosts two exports are byte-identical for 120 s; over
-595 s the output stayed on its host's clock while the source ran 25 ppm fast, and the 2,100 s run
-stopped at its looped source's non-conformant join, so clock recovery is not measured. Another
-profile is not answered: the clip tried fails the T-STD itself** (§ *Questions 4 and 5, put to the
-merged export*).
+and 5, put to upstream's merged export: across hosts two exports are byte-identical for 120 s, and
+over 2,100 s the export stays conformant across three source joins while its clock follows a source
+25 ppm fast at its slew limit, reaching +4.6 ppm; PCR_FO passes and PCR_DR is beyond the instrument.
+Another profile is not answered: the clip tried fails the T-STD itself** (§ *Questions 4 and 5, put
+to the merged export*).
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
   a subscriber has — each PID's packets in order, when each arrived, and the timestamps they carry —
@@ -81,8 +81,8 @@ now schedules against the T-STD itself and steers its clock to the source's
 `f8215bc47`. Fixed before the runs, with T47's criteria 1–4 (both T-STD checks, P1/P2, the whole
 capture, every unit of every track):
 
-- **Clock recovery across hosts.** Relay and importer on one host, the clip's four-pass continuous
-  source paced 25 ppm fast (`tsp -P regulate --bitrate` at the CBR rate plus 25 ppm, inside the
+- **Clock recovery across hosts.** Relay and importer on one host, the clip looped four times by
+  [`ts-seamless-loop.py`](scripts/ts-seamless-loop.py), whose joins pass the T-STD, paced 25 ppm fast (`tsp -P regulate --bitrate` at the CBR rate plus 25 ppm, inside the
   30 ppm a source is allowed), the export at 1 s on a second host, 2,100 s. It passes on criteria
   1–4, its output PCR within 30 ppm of its host's clock on the whole-run fit (PCR_FO), and a change
   of at most 0.075 Hz/s between consecutive 600 s windows (PCR_DR). The source's rate, from a tap on
@@ -357,19 +357,25 @@ cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on
 P1, wire domain, `moq-lite-06`, the origin on one EC2 host and the export on another in the same
 region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
 
-- **Clock recovery across hosts: not reached; the run stopped at 595 s on the source's first join.**
-  The export exited on *missed a decode deadline on PID 123* where the four-pass source's first pass
-  ends. That join fails the T-STD in the source itself
-  ([T47](test-47-fixed-delay-export.md) § *As merged, `f8215bc47`*), so the 2,100 s question is
-  unanswered. Over the 595 s it delivered, it passes criteria 1, 2 and 4: 295 of 295 windows,
-  `compliance.py`, 23,810 PCRs within ±481 ns, and every unit of every PID with 0 late drops.
-  **Its output PCR ran at its own host's clock and did not follow the source**: +0.02 ppm against
-  that clock over 585 s, within 2.3 ppm in each 120 s window, while the source was paced 25 ppm
-  fast. Presentation latency was 2,279.9 ms median and rose 9.3 ms from the first third to the
-  last, as the source's surplus filled the buffer. At the 0.075 Hz/s drift-rate limit the export
-  slews by at most 2.8 ppb per second, so following 25 ppm takes about 2.5 h (derived). Its own
-  estimate of the source's rate still read +64.6 ppm at the exit, where 600 s of arrivals had not
-  yet filled its rate window. With less than one 600 s window, PCR_DR as fixed is not graded.
+- **Clock recovery across hosts: the output follows the source at its slew limit; PCR_FO passes,
+  and PCR_DR is beyond this instrument.** 2,100 s, the source at +25.02 ppm against the origin's
+  clock (+24.8 to +25.2 ppm in every 600 s window). Across all three joins it passes criteria 1–3:
+  1,046 of 1,046 windows with every buffer legal (least margin 362.7 ms video, 68.1 ms MP2,
+  143.6 ms AC-3; EB peak 99.8 %), `compliance.py`, 83,939 PCRs within ±481 ns, 0 continuity
+  errors and 0 late drops. Every video, audio and teletext unit and every SCTE-35 cue is carried.
+  Three SCTE-35 heartbeat sections on PID 141 are missing, one 0.4 s after the span starts and two
+  in its last 1.03 s: one over the grader's edge allowance, so criterion 4 fails by its rule at
+  the edges, with nothing missing inside the run. **The output's rate against its own host's clock
+  rose from −0.04 ppm in the first 600 s window to +4.60 ppm in the last**, a trend of 2.94 ppb/s
+  (0.0795 Hz/s) against the export's cap of 2.78 ppb/s (0.075 Hz/s), and +2.80 ppm on the whole-run
+  fit, so PCR_FO passes. PCR_DR as fixed fails, at 0.106 Hz/s between consecutive 600 s windows,
+  and that is the egress tap's floor rather than the clock's: the export writes on 25 ms slots,
+  so each picture's arrival is quantized by ±12.5 ms, about 0.34 ppm of slope in a 600 s window
+  (0.40 ppm measured about the trend), or 0.025 Hz/s on the difference of two windows. The source
+  tap, written continuously, has 0.014 Hz/s. A clock slewing exactly at the limit cannot pass this
+  test on this tap. Presentation latency was 2,277.5–2,327.1 ms and rose 31.8 ms from the first
+  third to the last, the rate gap integrated over the run (about 22.5 ppm over 1,400 s). Following
+  25 ppm fully at the cap takes about 2.5 h (derived).
 - **1+1 across hosts: byte-identical.** Two exports at 1 s, one on each host, began 5 ms apart and
   are identical from the first packet through all 782,483 packets both captured, the longer capture
   ending 165 packets later. This is 120 s, before either export's clock has steered, so whether two
@@ -407,8 +413,10 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
 
 - **Clock recovery.** One host, one clock. A remote source's rate differs from the subscriber's by
   up to the encoder's tolerance, and the output clock would have to track it from arrivals alone,
-  within the frequency-offset and drift-rate limits. The merged export, across hosts, had not
-  begun to follow a source 25 ppm fast after 595 s.
+  within the frequency-offset and drift-rate limits. The merged export, across hosts, follows a
+  source 25 ppm fast at its slew cap, +4.6 ppm after 29 min; whether it settles on the source's
+  rate, and its drift rate at 0.075 Hz/s resolution, which needs a PCR-arrival tap, are not
+  measured.
 - **1+1 determinism.** This schedule depends on when each packet arrived, which differs between
   legs, and the exporter's PSI and SI are placed by its own arrivals. The merged export's schedule
   does not: two legs on two hosts were byte-identical for 120 s.

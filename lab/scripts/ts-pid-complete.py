@@ -19,6 +19,9 @@ elementary-stream PID it lists, what the output lacks inside the span the output
   output's PCR runs on the source's timeline (PTS are carried through and the decode buffer ties
   PCR to them), but a section can sit up to a schedule lead either side of the span's edge, so a
   deficit of up to `--edge` sections is not resolved.
+- **Duplicate packets** (a payload packet repeating its predecessor's continuity counter and
+  payload, which ISO/IEC 13818-1 2.4.3.3 permits once) are discarded from both files, as a
+  receiver discards them, so a source's duplicate is not a unit the output owes.
 
 A source whose video PES carry several access units is not handled: the frame expansion meant for
 audio misreads it.
@@ -101,6 +104,7 @@ def scan(path, es=None):
     stc = None
     span = [None, None]
     clocks = {}
+    last = {}
     for p in packets(path):
         pid = ((p[1] & 0x1F) << 8) | p[2]
         pusi = p[1] & 0x40
@@ -125,6 +129,11 @@ def scan(path, es=None):
                 stc = clocks.setdefault("pcr", Unwrap())(v)
                 span[0] = stc if span[0] is None else span[0]
                 span[1] = stc
+        if (p[3] >> 4) & 1:
+            key = (p[3] & 0x0F, payload(p))
+            if last.get(pid) == key:
+                continue
+            last[pid] = key
         want = es if es is not None else found
         if pid not in want or not pusi:
             continue

@@ -379,7 +379,7 @@ stage and the source do not share a clock, and the lane carries no source PCR, s
 must be locked to the source from the arrivals and timestamps alone. The second is determinism: two
 legs are byte-identical, as ST 2022-7 requires, only if the schedule is computed from the stream
 alone, not from arrival (§5.1). The merged export answers part of each: it held conformance across
-hosts, for 595 s on its own host's clock rather than the source's, and two exports started together
+hosts for 35 min, its clock following the source's at its slew limit, and two exports started together
 are byte-identical, on one host or two, while a leg started 8 s later is not (§5.1). Until conformance is shown sustained across hosts, the
 media-aware lane feeds a remote TS receiver on the receiver's tolerance rather than on sustained
 conformance; until a late leg merges, rebuilt legs must be co-started. How much tolerance real IRDs

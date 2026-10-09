@@ -607,9 +607,9 @@ Ranked by leverage:
    wire that fails the buffer model (§5.1, §8).
 2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The merged
    export keeps every track across hosts at 500 ms and 1 s, and two exports on two hosts are
-   byte-identical. Open: its clock over tens of minutes (over 595 s it stayed on its own host's clock,
-   not the source's), a laboratory stage following a remote clock, and deterministic scheduling for a
-   late-joining leg
+   byte-identical; over 35 min across hosts it stays conformant, its clock following the source's at
+   its slew limit. Open: that clock's drift rate, a laboratory stage following a remote clock, and
+   deterministic scheduling for a late-joining leg
    ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane
    serves TS-out to an IRD in a deployment; its comparator, segmented HTTP's wire graded against the same
    model, has not been run either.
