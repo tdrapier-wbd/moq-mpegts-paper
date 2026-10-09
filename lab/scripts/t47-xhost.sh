@@ -10,9 +10,12 @@
 #
 # env: PORT (4443, UDP, must be reachable between the hosts), CC (delay = BBRv3 on noq),
 #      CLIP (~/CNNiEMEA2.ts), LAT (1s, the export's --delay or --max-age value),
-#      OUT (~/t47/xhost), TAP (0; 1 stamps each egress picture's arrival into egress.csv
-#      through t18-latency.py's tap, VPID 111 by default), and any MOQ_TS_* variables, which
-#      reach the export unchanged.
+#      OUT (~/t47/xhost), TAP (0; 1 stamps each picture's arrival through t18-latency.py's tap,
+#      VPID 111 by default: into egress.csv on the subscriber, source.csv on the origin),
+#      REGULATE (--pcr-synchronous; `--bitrate <b/s>` paces a CBR clip at a rate of its own, a
+#      source clock that many ppm off), AT (unset; a Unix time the subscriber starts at, so two
+#      subscribers on two hosts start together), and any MOQ_TS_* variables, which reach the
+#      export unchanged.
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -36,7 +39,7 @@ mkdir -p "$OUT"
 {
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	[ -f "$BIN.sha" ] && echo "sha: $(cat "$BIN.sha")"
-	echo "role=$ROLE label=$LABEL origin=$IP:$PORT cc=$CC lat=$LAT secs=$SECS host=$(hostname)"
+	echo "role=$ROLE label=$LABEL origin=$IP:$PORT cc=$CC lat=$LAT secs=$SECS host=$(hostname) regulate=${REGULATE:---pcr-synchronous}"
 	env | grep '^MOQ_TS_' | sort
 	echo "started=$(date -Is)"
 } >"$OUT/$ROLE-meta.txt"
@@ -53,12 +56,18 @@ origin)
 		echo "relay exited at start; is port $PORT still held by an earlier origin?" >&2
 		exit 1
 	}
-	timeout $((SECS + 40)) bash -c "tsp --realtime -I file '$CLIP' -P regulate --pcr-synchronous -O file - 2>/dev/null \
-		| '$BIN/moq' $(printf '%q ' "${MOQ_DIAL[@]}") https://$IP:$PORT --broadcast '$BCAST' import ts" \
+	TAPCMD=cat
+	[ "${TAP:-0}" = 1 ] && TAPCMD="python3 '$HERE/t18-latency.py' tap ${VPID:-111} '$OUT/source.csv' --pipe --seconds $((SECS + 40))"
+	timeout $((SECS + 40)) bash -c "tsp --realtime -I file '$CLIP' -P regulate ${REGULATE:---pcr-synchronous} -O file - 2>/dev/null \
+		| $TAPCMD | '$BIN/moq' $(printf '%q ' "${MOQ_DIAL[@]}") https://$IP:$PORT --broadcast '$BCAST' import ts" \
 		>"$OUT/import.log" 2>&1
 	kill "$RELAY_P" 2>/dev/null
 	;;
 sub)
+	if [ -n "${AT:-}" ]; then
+		sleep "$(python3 -c "import time; print(max(0.0, $AT - time.time()))")"
+		echo "began=$(python3 -c 'import time; print(f"{time.time():.3f}")')" >>"$OUT/$ROLE-meta.txt"
+	fi
 	if [ "${TAP:-0}" = 1 ]; then
 		# Stamp each picture's arrival on this host's clock, for the PCR clock-rate fit.
 		timeout "$SECS" "$BIN/moq" "${MOQ_DIAL[@]}" "https://$IP:$PORT" --broadcast "$BCAST" \

@@ -8,9 +8,14 @@ drops on loopback at 500 ms, 750 ms and 1 s, over 540 s at 1 s, across hosts at 
 under 0 % and 1 % loss at both delays, each passing the buffer model in every window, P2 and
 `compliance.py`. Presentation latency is twice the delay plus about 275 ms at 750 ms and 1 s; at
 500 ms the join moves it. At 500 ms the 540 s run still stops on the video's schedule, at the same
-point as the draft. A co-started 1+1 pair now exports byte-identical streams before any groomer. At
-10 % loss the export fails loud, sooner than the draft. What it does not survive is being handed
-another route's in-progress group after a re-request (§ *As merged*).
+point as the draft. A co-started 1+1 pair now exports byte-identical streams before any groomer.
+What it does not survive is being handed another route's in-progress group after a re-request
+(§ *As merged*). **On `f8215bc47`, whose export differs only in exiting on failure**, every track
+survives joins spread across a whole GOP at 500 ms. The join's latency is set by whether the clock
+anchors on AC-3, which adds about 250 ms the schedule did not need in any of the eight joins.
+Under loss the export stops between 2 % and 3 % at 1 s, and between 1 % and 2 % at 500 ms. The clock
+over tens of minutes is not measured, because the looped source fails the T-STD at its joins
+(§ *As merged, `f8215bc47`*).
 
 **As merged, on `82c3f2fe4`:**
 
@@ -243,6 +248,9 @@ questions of it on a real broadcast multiplex:
    Asked of `49efbc9a1`, which took up the per-PID admission and the one-clock release stage.
 6. **Does holding the clock to 30 ppm, with a live-edge join, keep the output conformant, at what
    latency, under loss and across hosts?** Asked of `2dc542b4a`.
+7. **As merged, does every track survive a join anywhere in the GOP, does the clock hold over tens
+   of minutes, and where between 1 % and 10 % loss does the export stop?** Asked of upstream `main`
+   at `f8215bc47`, whose export is `82c3f2fe4`'s but for the exit on failure.
 
 ## Pass criteria
 
@@ -258,6 +266,33 @@ A cell that fails criterion 3 has its latency and buffers quoted only for the pa
 From `2dc542b4a` on, each cell is also checked for completeness: every PID the source carries is in
 the output, with its unit count against the source's. This was added after a cell passed criteria 1
 and 2 with its audio missing, so it was not fixed in advance.
+
+For the `f8215bc47` cells, fixed before they ran:
+
+4. **Every unit of every track**, by [`ts-pid-complete.py`](scripts/ts-pid-complete.py): each PID
+   the source's PMT lists is present; no source unit is missing between the output's first and last
+   decode time on its PID, except in the last second, where the rig's stopping of its source loses
+   a few (counted apart); each PID starts within one GOP (1.2 s) of the video; each SCTE-35 PID is
+   within two sections of the source over the output's span. On cells of known outcome it passes
+   the `82c3f2fe4` 60 s and 540 s cells, fails the `2dc542b4a` join that lost a tenth of its AC-3
+   (189 frames) and fails the `559a35244` join without audio (three PIDs absent).
+
+- **Joins across a GOP:** eight 60 s joins at 500 ms, the source started 0 to 1.05 s later in
+  0.15 s steps across the clip's 1.2 s GOP. Each passes criteria 1–4. The presentation latency of
+  each is recorded; the join-dependent latency is explained if a scratch build logging only the
+  clock's anchor (track, and how far behind its decode time it was read) shows what decides it.
+- **Tens of minutes:** 35 min at 1 s on loopback, from the clip played four times on one continuous
+  timeline by [`ts-continuous-source.py`](scripts/ts-continuous-source.py), whose three joins
+  `ts-join-scan.py` finds continuous on every PID. It passes criteria 1–4 over the whole capture.
+  Its output PCR, fitted against the receiving host's clock, is within 30 ppm on the whole-run fit
+  (PCR_FO) and changes by at most 0.075 Hz/s between consecutive 600 s windows (PCR_DR, 1.67 ppm a
+  window). PCR_DR is graded only where the source tap's own change between the same windows, the
+  instrument's floor on the same run, is below that limit; otherwise it is reported as out of
+  reach. Source and export share one oscillator here, so this grades the export's own clock and
+  steering, not its following of a source that drifts.
+- **Loss between 1 % and 10 %:** 2, 3, 5 and 7 % at 1 s, and 2, 3 and 5 % at 500 ms, on the T8b
+  loss rig, 120 s. A cell passes on criteria 1–4; one that fails is reported with when and why it
+  stopped.
 
 ## Instruments
 
@@ -1047,10 +1082,69 @@ hand before the first unit is due.
   packet. Over the whole capture the residuals reach 22 ms, from the unpadded first ~2 s before the
   catalog rate arrives.
 
+### As merged, `f8215bc47`
+
+P1, file domain, `moq-lite-06`, BBRv3. The joins and the long run are on loopback, and the loss
+cells on the T8b rig on the second EC2 host. [`ts-pid-complete.py`](scripts/ts-pid-complete.py)
+grades criterion 4 and was validated first on the cells of known outcome named in the criteria.
+
+**Every track survives a join anywhere in the GOP.** Each of the eight 60 s joins at 500 ms passes
+criteria 1–4. Every 2 s window is legal (26 of 26), `compliance.py` passes, P2 reads 0 PCRs outside
+±481 ns, and no unit is missing on any PID, except 6 video units in the last second, counted apart.
+Each SCTE-35 PID is within two sections of the source, there are 0 late drops, and the minimum
+margins are identical in all eight: video 213.9 ms, MP2 69.3 ms, AC-3 144.6 ms.
+
+**What sets the latency is which track anchors the clock.** The same eight joins were re-run on a
+scratch build of `f8215bc47` that only logs the anchor. Each join's latency came back within 2 ms of
+its first run:
+
+| Source started later by (s) | Presentation (ms), first run / re-run | Tracks heard before anchoring | Anchor |
+|---:|---|---|---|
+| 0 | 1,275.7 / 1,274.4 | all, in 938 ms | AC-3 |
+| 0.15 | 1,025.6 / 1,024.4 | all but AC-3; acquisition timed out at 1 s | MP2 |
+| 0.3 | 991.3 / 991.0 | all but AC-3 and MP2; timed out at 1 s | teletext |
+| 0.45 | 1,273.1 / 1,274.5 | all, in 260 ms | AC-3 |
+| 0.6 | 1,274.0 / 1,272.2 | all, in 416 ms | AC-3 |
+| 0.75 | 1,272.5 / 1,274.2 | all, in 555 ms | AC-3 |
+| 0.9 | 1,275.5 / 1,273.5 | all, in 709 ms | AC-3 |
+| 1.05 | 1,272.1 / 1,272.7 | all, in 847 ms | AC-3 |
+
+The clock anchors on the track whose freshest frame is furthest behind its decode time. That is
+AC-3 whenever it is heard: packed nine frames to a PES, it reads 249 ms further behind than MP2 at
+the first join. A join whose acquisition times out before AC-3 arrives anchors on MP2 or teletext
+and presents 250–283 ms sooner, **and still delivers every AC-3 unit with the same margins**. So in
+all eight joins the schedule did not need the 250 ms that anchoring on AC-3 adds. Why AC-3 can go
+unheard for the whole 1 s acquisition window is not located.
+
+**The loss point.** On the T8b rig, 25 ms each way, 120 s:
+
+| Delay | Loss | Outcome |
+|---|---:|---|
+| 1 s | 2 % | **passes 1–4**; 56 of 56 windows, 4,748 PCRs within ±481 ns, 0 late drops |
+| 1 s | 3 % | exits 51 s in on *missed a decode deadline on PID 131* (teletext) |
+| 1 s | 5 % | exits 27 s in, PID 131 |
+| 1 s | 7 % | exits 27 s in, PID 131 |
+| 500 ms | 2 % | runs 120 s; passes 1–2 (57 of 57 windows, 4,768 PCRs) with 3 late drops; fails 4: 142 groups skipped as evicted, 734 video and 819 AC-3 units missing, 396 video units re-authored 1,799 ticks off a source DTS |
+| 500 ms | 3 % | exits 42 s in, PID 111 |
+| 500 ms | 5 % | exits 8.6 s in, PID 111 |
+
+So at 1 s the export stops between 2 % and 3 % loss on this path, and at 500 ms between 1 %
+(passed on `82c3f2fe4`) and 2 %. Before exiting, the failing cells skipped 102–155 groups as
+evicted, except the 500 ms, 5 % cell, which exited after 8.
+
+**Tens of minutes: not reached.** The 35 min run at 1 s exited 600 s in on *missed a decode
+deadline on PID 123*, where the four-pass source's first pass ends, and the cross-host run in
+[T45](test-45-live-tstd-remux.md) stopped there too. A 120 s cut with that join at 60 s stops at the
+same picture, and a 120 s cut from inside the second pass runs to its end. The join is not
+conformant in the source itself. `ts-tstd.py` finds MP2 underflowing 5 times (to −8.7 ms) and
+AC-3 4 times (to −11.7 ms) on the cut with the join, and neither on the cut without it. The export's
+exit there is its fail-loud on an input it cannot schedule, so the clock over tens of minutes is
+not measured (see Corrections).
+
 ## Conclusions
 
 Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `49efbc9a1`, 13–16
-on `2dc542b4a`, and 17–19 on `559a35244` and its scratch build.
+on `2dc542b4a`, 17–19 on `559a35244` and its scratch build, and 20–21 on `f8215bc47`.
 
 1. **On `4b7158d6c00d`, #4645 did not carry a real broadcast multiplex.** At every delay tried up
    to 3 s, and in each variation tried at one delay (a higher rate, subscribing first, the video
@@ -1155,9 +1249,19 @@ on `2dc542b4a`, and 17–19 on `559a35244` and its scratch build.
     ([T45](test-45-live-tstd-remux.md)), so no latency advantage is shown here for the in-export
     schedule. Different builds and single runs do not rank them. #4681's send-ahead cap, which
     would also redefine what the delay covers, is the change that would move it (reasoned).
+20. **On `f8215bc47` the join's latency at 500 ms is the anchor's track.** The clock anchors on the
+    track read furthest behind. That is AC-3 whenever acquisition hears it, and AC-3 adds about
+    250 ms that the schedule did not need in any of eight joins. This settles conclusion 15's
+    open point for this clip: the join decides the latency only by whether AC-3 is heard in time.
+21. **On `f8215bc47` the loss point on a 25 ms path is between 2 % and 3 % at 1 s, and between 1 %
+    and 2 % at 500 ms.** Above it, the export skips evicted groups, over a hundred in all but the
+    shortest run, and then exits on a missed deadline. At 500 ms and 2 % it runs the whole capture conformant but incomplete.
 
 ## Limits
 
+- **On `f8215bc47`:** one clip, one run per loss cell and per join phase (each phase re-run once
+  on the anchor-logging build), one loss path (25 ms each way, BBRv3, `moq-lite-06`). The clock over
+  tens of minutes is not measured.
 - **On `559a35244` and its scratch build:** nine loopback cells on the head and seven on the scratch
   build, 60 s except one 540 s cell on the head and two on the scratch build; two cross-host runs on
   each; four loss arms on the head and five on the scratch build. One clip, untraced. The loss rig
@@ -1306,6 +1410,13 @@ time and passes the whole file. A different export rate goes in through a wrappe
 
 ## Corrections
 
+- **Believed:** the four-pass continuous source was fit for a 35 min run of the export, because
+  `ts-join-scan.py` passed its joins on every PID, and the criterion said so. **True:** the scan
+  rules out only a step back of more than 100 ms. At the first join the MP2 PES overlap by 49 ms
+  and AC-3 has a 95 ms gap, and the source itself fails the T-STD there, which a cut from inside
+  one pass does not. The export exits at that join on a missed AC-3 deadline, at the same picture
+  each time. **Rule:** before soaking a T-STD-scheduling stage on a looped source, grade the source
+  across a join with `ts-tstd.py` ([method notes](method-notes.md)).
 - **Believed:** the release stage starved the schedule. In the short captures the PTS covered
   13–29 % less than the PCR, and the PTS-to-PCR lead shrank before the overrun. That was reported
   upstream as "starved of frames rather than overfull". **True:** the schedule is overfull. The

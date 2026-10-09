@@ -14,7 +14,10 @@ or loop wrap and fails at the next. `ffa5b81b` is `main` after
 below the live edge; which commit made the offset survive a second wrap is not bisected. On `main`
 at `83ce47fe`, after the branch flip brought #4543 in, all three arms end at the **first** wrap with
 *frame timestamp is below the previous group's start*: the importer now publishes source timestamps
-verbatim and treats any backward step as the end of the stream, flagged or not.
+verbatim and treats any backward step as the end of the stream, flagged or not. Carried instead by
+restarting the import under a new epoch (`f8215bc47`, `moq-lite-07`), a flagged step costs 2.9–3.0 s
+of programme pipe-fed, whether 1 s or 600 s back, and a co-started 1+1 pair of exports stays
+byte-identical across it in 8 of 13 runs (§ *A flagged rewind carried as a new broadcast*).
 
 ## Objective
 
@@ -206,3 +209,66 @@ is unaffected and why the defect needs an *unflagged* wrap to appear at all.
   0.01 is corroboration; but a defect that depends on where a frame falls relative to a boundary
   could in principle land differently on a fixture whose wrap does not coincide with a frame
   boundary.
+
+## A flagged rewind carried as a new broadcast
+
+Conclusion 6 leaves one way to carry a source whose timeline steps back: a supervisor restarts
+`moq import ts` each time the step ends it, each restart mints a fresh epoch, and on `moq-lite-07` the
+newer epoch replaces the old broadcast at the relay, which `export ts --linger` follows
+([T13](test-13-downstream-grooming.md) § *Liveness*). This asks what one step costs, and whether a
+co-started 1+1 pair of exports stays byte-identical across it.
+
+**Procedure.** [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh) on upstream `main` at
+`f8215bc47`, `moq-lite-07` on every process, a local relay, two exports at `--delay 1s --linger 30s`
+co-started before the source, and a supervisor that restarts the import at once. The stimulus is
+`CNNiEMEA2.ts` with one flagged step back 40 s in (`t23-pcr-stimuli.py`: arm A, 1 s back; arm B,
+600 s back), played for 90 s. Pipe-fed, the importer reads `tsp -P regulate` directly; through the
+gateway, the source goes over SRT to the srt-ingest shape and multicast to a supervised
+`tsp -I ip | moq import ts`, as [T40](test-40-continuous-join-through-srt.md)'s chain does. Three
+runs per arm and feed, graded by [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py).
+
+**Pass criteria, fixed before running.** The step is a cost to measure, so the criteria mark what
+must hold for the measurement to count, and what passes for 1+1:
+
+1. The importer exits at the step, once, and the supervisor's next importer publishes; a run in
+   which it does not is reported as such, not graded for cost.
+2. Each export resumes on the new broadcast without exiting, with no unit missing on either side of
+   the break and no late drop.
+3. Measured per step: the programme lost (the stimulus's video around the cut that the export never
+   carried, in content time), the gap in the export's picture arrivals, and the time from the
+   source sending the first post-step picture to the export's first post-break picture, beyond its
+   latency.
+4. 1+1 passes if the two exports are byte-identical across the break; otherwise the first
+   difference is located against it.
+
+**Results.** Thirteen runs: the twelve above and a pipe-fed arm-A run on the same rig before them.
+
+- **Criterion 1 holds in all thirteen.** The importer exits once, on *frame timestamp … is below the
+  previous group's start*, and the next one starts 11–12 ms later and publishes to the end.
+- **Criterion 2 holds across the break in all thirteen.** Both exports resume on the new broadcast
+  and exit 0, with no unit missing after the break, no unit foreign to the stimulus and no late
+  drop. Before the break, three of the six gateway runs lack 42–68 pictures from their first
+  seconds, the same in both legs: the gateway path skips about 1.5 s as it joins, before any step.
+- **The cost is the export's, not the step's.** From the source sending the first post-step picture
+  to the export carrying it took 2.69–2.71 s pipe-fed for either step, about 0.6 s beyond the steady
+  latency, and 4.70–4.72 s through the gateway in every run, which is 2.0 s more: the SRT receive
+  latency. Pipe-fed, the programme lost is 2.9–3.0 s. Through the gateway the latency before the
+  step varied by run, and after the restart it is back to the same figure every time, so the
+  restart discards the excess. That is why the gateway loses 3.2–7.7 s, or 3.4–3.7 s net of the
+  discarded excess. Where on the gateway path the excess builds up is not located.
+
+| Feed, step | Runs | Programme lost (ms) | Longest arrival gap (ms) | Send to export, first post-step picture (ms) | Latency before the step (ms) |
+|---|---:|---|---|---|---|
+| Pipe, 1 s back | 4 | 2,880–2,920 | 2,472–2,522 | 2,705–2,707 | 2,122–2,123 |
+| Pipe, 600 s back | 3 | 2,960 | 2,707–2,709 | 2,691–2,692 | 2,058 |
+| Gateway, 1 s back | 3 | 3,920; 6,840; 7,720 | 2,466–2,617 | 4,714–4,715 | 5,188; 8,094; 8,951 |
+| Gateway, 600 s back | 3 | 4,040; 5,000; 3,240 | 2,677–2,689 | 4,699–4,700 | 5,058; 6,011; 4,369 |
+
+- **1+1 is byte-identical across the break in 8 of 13 runs** (pipe-fed 4 of 7, gateway 4 of 6). In
+  four, three pipe-fed and one gateway, the legs part 10.6 or 25.6 s after the break and are
+  99.02–99.52 % identical. Only the video PID differs. On the first such run the video payload and
+  all 3,532 PCR values are identical in both legs; what differs is which packets carry a PCR and
+  stuffing, after the two multiplexers ordered one pair of packets differently. In the fifth
+  (gateway, 1 s back), the two exports left the old broadcast one picture apart, 1,300 against
+  1,299 pictures, and everything after differs. Both break the packet identity an ST 2022-7 merge
+  needs. Before the break no run differed.

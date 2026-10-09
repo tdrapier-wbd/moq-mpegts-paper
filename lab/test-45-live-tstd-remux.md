@@ -1,7 +1,11 @@
 # Test 45 — A live T-STD re-multiplexer behind the media-aware lane
 
-**State: questions 1–3 answered on two clips, loopback; clock recovery and 1+1 determinism not
-attempted.**
+**State: questions 1–3 answered on two clips, loopback, for a Python re-multiplexer. Questions 4
+and 5, put to upstream's merged export: across hosts two exports are byte-identical for 120 s; over
+595 s the output stayed on its host's clock while the source ran 25 ppm fast, and the 2,100 s run
+stopped at its looped source's non-conformant join, so clock recovery is not measured. Another
+profile is not answered: the clip tried fails the T-STD itself** (§ *Questions 4 and 5, put to the
+merged export*).
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
   a subscriber has — each PID's packets in order, when each arrived, and the timestamps they carry —
@@ -45,7 +49,8 @@ asks the P0-l questions of a live implementation:
 4. **Clock recovery** — locking the output clock to a remote source's rate from the timestamps alone.
 5. **1+1 determinism** — two legs rebuilt byte-identically from a schedule computed from the stream.
 
-Questions 4 and 5 were not attempted; see [Limits](#limits).
+Questions 4 and 5 were not put to the Python re-multiplexer. They were put to upstream's merged
+export, with criteria fixed below.
 
 ## Pass criteria
 
@@ -69,6 +74,26 @@ method rule requires ([method notes](method-notes.md) §2, *Pass `pcrverify --bi
 and the rig had not applied. And the comparators, which fail
 criterion 2 only in the groomer's start-up or on one transport loss, are also reported for the part
 of each capture that passes, with that part stated.
+
+**Questions 4 and 5, and another profile, asked of the merged export.** Upstream's `moq export ts`
+now schedules against the T-STD itself and steers its clock to the source's
+([T47](test-47-fixed-delay-export.md)), so it is the live re-multiplexer these are put to, on
+`f8215bc47`. Fixed before the runs, with T47's criteria 1–4 (both T-STD checks, P1/P2, the whole
+capture, every unit of every track):
+
+- **Clock recovery across hosts.** Relay and importer on one host, the clip's four-pass continuous
+  source paced 25 ppm fast (`tsp -P regulate --bitrate` at the CBR rate plus 25 ppm, inside the
+  30 ppm a source is allowed), the export at 1 s on a second host, 2,100 s. It passes on criteria
+  1–4, its output PCR within 30 ppm of its host's clock on the whole-run fit (PCR_FO), and a change
+  of at most 0.075 Hz/s between consecutive 600 s windows (PCR_DR). The source's rate, from a tap on
+  the origin against that host's clock, and the output's in each window are reported, as how far the
+  export followed the source.
+- **1+1 across hosts.** Two exports at 1 s of one broadcast, one on each of two hosts, started at
+  the same wall-clock instant, 120 s. It passes if the captures are byte-identical from the first
+  packet both carry; otherwise the identical fraction after one counter offset per PID
+  ([`ts-cc-merge.py`](scripts/ts-cc-merge.py)) and the first difference are reported.
+- **Another profile and rate.** `testloop.ts`, H.264 High 4:2:2 at 25 Mb/s in a 27.5 Mb/s CBR
+  multiplex with MP2 audio, on loopback at 1 s and 500 ms, 120 s each. Each passes on criteria 1–4.
 
 ## Instruments
 
@@ -327,6 +352,37 @@ at a 100 ms cushion and a 150 ms cap. Graded the same way.
 cleanly and at once: the re-multiplexer sends nothing for its 60 s warm-up, and the groomer at this
 cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on a single loss.
 
+### Questions 4 and 5, put to the merged export (`f8215bc47`)
+
+P1, wire domain, `moq-lite-06`, the origin on one EC2 host and the export on another in the same
+region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
+
+- **Clock recovery across hosts: not reached; the run stopped at 595 s on the source's first join.**
+  The export exited on *missed a decode deadline on PID 123* where the four-pass source's first pass
+  ends. That join fails the T-STD in the source itself
+  ([T47](test-47-fixed-delay-export.md) § *As merged, `f8215bc47`*), so the 2,100 s question is
+  unanswered. Over the 595 s it delivered, it passes criteria 1, 2 and 4: 295 of 295 windows,
+  `compliance.py`, 23,810 PCRs within ±481 ns, and every unit of every PID with 0 late drops.
+  **Its output PCR ran at its own host's clock and did not follow the source**: +0.02 ppm against
+  that clock over 585 s, within 2.3 ppm in each 120 s window, while the source was paced 25 ppm
+  fast. Presentation latency was 2,279.9 ms median and rose 9.3 ms from the first third to the
+  last, as the source's surplus filled the buffer. At the 0.075 Hz/s drift-rate limit the export
+  slews by at most 2.8 ppb per second, so following 25 ppm takes about 2.5 h (derived). Its own
+  estimate of the source's rate still read +64.6 ppm at the exit, where 600 s of arrivals had not
+  yet filled its rate window. With less than one 600 s window, PCR_DR as fixed is not graded.
+- **1+1 across hosts: byte-identical.** Two exports at 1 s, one on each host, began 5 ms apart and
+  are identical from the first packet through all 782,483 packets both captured, the longer capture
+  ending 165 packets later. This is 120 s, before either export's clock has steered, so whether two
+  hosts' steering keeps the PCR values equal over hours is not measured.
+- **Another profile: not answered, because `testloop.ts` is not a conformant source.** Its own
+  audio transport buffers overflow (94–622 packets per PID in 120 s), and each video PES carries
+  several access units, which `ts-tstd.py` refuses to grade and `ts-pid-complete.py` miscounts. On
+  loopback the export exits after 67 pictures at both 1 s and 500 ms, on *missed a decode deadline
+  on PID 48* (the video). The export's video leak is 1,200 × MaxBR, 24 Mb/s at this level 4.0,
+  which is the Rbx `ts-tstd.py` uses too. A scratch build with High 4:2:2's cpbBrNalFactor instead
+  (96 Mb/s) runs the whole capture with every audio unit, but its video fails both T-STD checks,
+  so the factor is not the cause. Another profile needs a source that passes the T-STD itself.
+
 ## Conclusions
 
 **Established** (P1, wire, loopback, one clip, `ffa5b81b`, one conformant run):
@@ -351,9 +407,11 @@ cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on
 
 - **Clock recovery.** One host, one clock. A remote source's rate differs from the subscriber's by
   up to the encoder's tolerance, and the output clock would have to track it from arrivals alone,
-  within the frequency-offset and drift-rate limits.
+  within the frequency-offset and drift-rate limits. The merged export, across hosts, had not
+  begun to follow a source 25 ppm fast after 595 s.
 - **1+1 determinism.** This schedule depends on when each packet arrived, which differs between
-  legs, and the exporter's PSI and SI are placed by its own arrivals.
+  legs, and the exporter's PSI and SI are placed by its own arrivals. The merged export's schedule
+  does not: two legs on two hosts were byte-identical for 120 s.
 - **Any other clip, a cross-host lane, a long run, or `main`**, which rebases the PTS and so defeats
   the latency instruments' PTS keys.
 - **The decoded-picture buffer.** The grader does not model it. The exporter decodes each picture
