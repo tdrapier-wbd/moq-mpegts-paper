@@ -3,8 +3,8 @@
 **State: questions 1–3 answered on two clips, loopback, for a Python re-multiplexer. Questions 4
 and 5, put to upstream's merged export: across hosts two exports are byte-identical for 120 s, and
 over 2,100 s the export stays conformant across three source joins while its clock follows a source
-25 ppm fast at its slew limit, reaching +4.6 ppm; PCR_FO passes and PCR_DR is beyond the instrument.
-Another profile is not answered: the clip tried fails the T-STD itself** (§ *Questions 4 and 5, put
+25 ppm fast at its slew limit, reaching +4.6 ppm; behind a source 4 ppm fast it settles after about
+100 min. PCR_FO passes; PCR_DR fails, on the output's own 1 ms departure steps. Another profile is not answered: the clip tried fails the T-STD itself** (§ *Questions 4 and 5, put
 to the merged export*).
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
@@ -98,6 +98,14 @@ capture, every unit of every track):
   simulating the steering law before the run: the output slews at its cap past the source's rate,
   to about 6.7 ppm near 40 min, to win back the delay it lost catching up, and is within 0.5 ppm
   by about 55 min.
+- **Why the clock had not settled**, fixed after that run. As that run for 7,200 s (the loop 13
+  times), the export logging each steering step: its estimate of the source's rate, the phase it
+  steers on, the gap it is closing, its target rate and its rate (one log line on `f8215bc47`, on
+  the export's host only). If over the last 30 min the estimate is within 0.5 ppm of the source's
+  rate on the taps while the output is more than 0.5 ppm past it, the steering does not converge on
+  a correct estimate. If the estimate is itself more than 0.5 ppm past the source's, the export
+  follows what it measures, and the steered phase against the source's tapped rate says whether
+  arrivals came earlier through the run, the lane's delay falling. Settled as before.
 - **1+1 across hosts.** Two exports at 1 s of one broadcast, one on each of two hosts, started at
   the same wall-clock instant, 120 s. It passes if the captures are byte-identical from the first
   packet both carry; otherwise the identical fraction after one counter offset per PID
@@ -394,8 +402,8 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   test on this tap. Presentation latency was 2,277.5–2,327.1 ms and rose 31.8 ms from the first
   third to the last, the rate gap integrated over the run (about 22.5 ppm over 1,400 s). Following
   25 ppm fully at the cap takes about 2.5 h (derived).
-- **Drift rate on PCR arrivals: criteria 1–4 and PCR_FO pass, PCR_DR fails as fixed, and the output
-  does not settle on the source's rate.** 4,500 s, the source at +4.02 ppm against the origin's clock (+3.85
+- **Drift rate on PCR arrivals: criteria 1–4 and PCR_FO pass, PCR_DR fails as fixed, and at 75 min
+  the output had not settled on the source's rate.** 4,500 s, the source at +4.02 ppm against the origin's clock (+3.85
   to +4.16 ppm in every 300 s window). The hosts' clocks agree within 0.05 ppm (each one's chrony
   skew), and the loop's media clock follows its PCR within 0.02 ppm. PCR_FO is +5.74 ppm on the
   whole-run fit. PCR_DR is 0.114 Hz/s between the first two 600 s windows and 0.085 between the third
@@ -417,11 +425,37 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     as predicted, then kept rising, more slowly, to 8.3–9.1 ppm over the last 800 s**, where the
     prediction had it back at the source's rate by 55 min. It gained 24.1 ms on the host against the
     source's 18.1 ms, so it ended about 6 ms shallower than it began while still steering as if it
-    had slack to spend. In other words, what it saw arriving got earlier through the run. Whether the
-    lane's delay fell or the steering does not converge cannot be separated here: the export logs its
-    estimate of the source only when its drop or tolerance counters move.
+    had slack to spend: slack the logged run below traces to the export's first 20 s.
   - The out-of-tolerance counter reads 19, all within the first 40 s, while the rate window held
     under a minute of floors and the estimates ran from −471 to +211 ppm.
+- **Settling, with the steering logged: the clock settles after about 100 min on a correct
+  estimate, once it has spent at its slew limit 10–12 ms the lane gave back in its first 20 s.
+  PCR_FO passes; PCR_DR fails as fixed, on the same 1 ms steps.** 7,200 s (the loop 13 times), one
+  log line per steering step (4,572 steps), the source at +4.02 ppm against the origin's clock
+  (+3.92 to +4.07 ppm in every 600 s window); no late drops. The output's rate in successive 600 s
+  windows was +0.28, +2.04, +3.98, +5.70, +7.49, +8.59, +9.35, +8.45, +6.98, +5.47 and +3.91 ppm.
+  - **The estimate follows the source, and the lane held.** Over the last 30 min the export put
+    the source at +4.22 ppm, against +4.02 ppm on the source's tap; the hosts' clocks were not
+    compared on this run. The earliest arrival phase it steers on rose 26.3 ms between the first
+    and last 600 s windows, 6,600 s apart: 3.99 ppm, the source's rate alone.
+  - **The slack it spent was there within 20 s.** At its first step, 5 s in, frames were arriving
+    6.0 ms ahead of the delay, and 12.1 ms ahead by 23 s, while its estimate of the source swung
+    from −147 to +547 ppm on a nearly empty window: the lane settling after the export had anchored
+    on its first frame. Catching the source's rate from zero at the cap added about 3 ms, the gap
+    peaking at 12.7 ms in the fourth window. The steering then closed it no faster than the cap can
+    stop on it, taking the output 5.3 ppm past the source in the seventh window and the gap through
+    zero near 5,000 s. It overshot by 0.96 ms and was still 0.75 ms short of the delay in the last
+    window, its pull holding the target 1.6–1.8 ppm below the source's rate to restore it. The prediction counted only the delay lost
+    catching up, hence its 55 min; the 75 min run ended on the way up.
+  - **Settled as fixed.** In the grader's last full window (6,010–6,610 s) the output is within
+    0.01 ppm of the source, and over the last 30 min it is +4.22 against +4.02 ppm. The final
+    588 s, not a full window, read −0.57 ppm, within the error that 1 ms steps every 250 s leave in
+    a 600 s fit.
+  - **PCR_FO is +6.54 ppm on the whole-run fit. PCR_DR is 0.077–0.088 Hz/s on each of the first
+    four pairs of 600 s windows (0.034–0.070 on the other six), while the logged rate changed by at
+    most 1.666 ppm a window, 0.0750 Hz/s.** The difference is the steps: the output's phase against
+    the host held at −1.15 ms from 620 s to 1,070 s, then at −2.1 ms, and each window's fit lies
+    within 0.46 ppm of the logged rate.
 - **1+1 across hosts: byte-identical.** Two exports at 1 s, one on each host, began 5 ms apart and
   are identical from the first packet through all 782,483 packets both captured, the longer capture
   ending 165 packets later. This is 120 s, before either export's clock has steered, so whether two
@@ -443,8 +477,15 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   in 25 Mb/s CBR, with all 4,146 PCRs within ±481 ns and no interval over 25 ms. Of the source's own
   faults, the late audio is repaired: no audio unit decodes before it has arrived, against 103–301 a
   PID in the source, as much as 394 ms late. The output adds faults the source does not have. Video
-  overruns TB on 36 % of its packets (peak 1,311 B): the multiplex runs faster than the 21.6 Mb/s leak
-  this stream's HRD sets, and the export holds video only to the level's 24 Mb/s. Eight AC-3 units
+  overruns TB on 36 % of its packets (peak 1,311 B), though the export reads the SPS's HRD and holds
+  video to its 21.6 Mb/s Rx, 358 packets a 25 ms slot (logged by a scratch build; reproduced). The
+  slot's layout spaces each PID by its own count, so PIDs with equal counts land together: in a full
+  slot the three MPEG audio PIDs, five packets each, arrive as one cluster, and between clusters video
+  runs 12–13 packets back to back between nulls at the 25 Mb/s multiplex rate, each adding 26 B to a
+  TB that drains at Rx. A unit test laying out that slot overruns TB on 932 of 1,436 video packets
+  over four slots (peak 1,067 B); the same packets in smooth weighted round-robin peak at 459 B, so
+  the slot is feasible and the layout is the cause. No clip here before ran its multiplex faster than
+  its video's Rx, which is when this shows. Eight AC-3 units
   stay in B up to 1.05 s, and the system TB overflows by four packets. The recording has 1,398
   continuity gaps of its own across every PID, so its completeness grade (a third of the video and a
   tenth of each audio missing) measures the recording, not the export.

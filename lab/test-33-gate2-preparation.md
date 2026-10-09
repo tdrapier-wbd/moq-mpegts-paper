@@ -560,8 +560,9 @@ chain is the one above, at 1 s, on `moq-lite-06` unless stated.
      1.2 × the video's HRD bitrate ([T45](test-45-live-tstd-remux.md)).
 4. **PCR frequency offset within 30 ppm; drift rate on arrivals over 0.075 Hz/s.** While the clock
    follows the source it slews at exactly the limit, and its departures sit on a 1 ms timer grid, so
-   the wire phase moves in 1 ms steps. Behind a source 4 ppm fast it had not settled after 75 min,
-   ending 5 ppm past it ([T45](test-45-live-tstd-remux.md)).
+   the wire phase moves in 1 ms steps. Behind a source 4 ppm fast it settles after about 100 min,
+   peaking 5 ppm past it while it spends the delay the lane gave back after the join
+   ([T45](test-45-live-tstd-remux.md)).
 5. **A publisher outage is input loss at the IRD, not a decoder fault.** The export writes nothing
    through the silence, so the IRD loses input and freezes or blanks, then resumes at the next
    keyframe. On `moq-lite-06` the PCR resumes advanced by the silence without

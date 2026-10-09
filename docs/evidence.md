@@ -89,7 +89,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair stays identical across it in 8 of 13 runs | Why the other five diverge; a real encoder's step; upstream declined an in-process restart | §3.13 |
+| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair stays identical across it in 8 of 13 runs | Why the other five diverge; a real encoder's step | §3.13 |
 | **Interop** | Media flows within one implementation and through none of eight other relays; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays fail | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 2,272–2,274 ms at a 1 s delay, also over 540 s, through the merged fixed-delay export | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -608,7 +608,7 @@ a continuous restarting source and the current design**, so §3.2's day is not r
 
 **Republishing at each backward step costs about 3 s of programme, set by the export, not the step**
 ([T41](../lab/test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*;
-moq 0.14.2, `moq-lite-07`, one host, one clip, a flagged 1 s or 600 s step, thirteen runs). A supervisor
+P1, wire; moq 0.14.2, `moq-lite-07`, one host, one clip, a flagged 1 s or 600 s step, thirteen runs). A supervisor
 restarted the import at the step, under a fresh epoch, and two co-started exports at a 1 s delay
 followed the new broadcast with no unit missing on either side of the break. Pipe-fed, 2.9–3.0 s of
 programme never reached the output, for either step size; the export carried the first post-step

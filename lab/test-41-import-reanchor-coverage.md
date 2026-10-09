@@ -271,4 +271,6 @@ must hold for the measurement to count, and what passes for 1+1:
   stuffing, after the two multiplexers ordered one pair of packets differently. In the fifth
   (gateway, 1 s back), the two exports left the old broadcast one picture apart, 1,300 against
   1,299 pictures, and everything after differs. Both break the packet identity an ST 2022-7 merge
-  needs. No pair differed before the first discontinuity flag of either leg.
+  needs. No pair differed before the first discontinuity flag of either leg. Upstream holds this by
+  design: after a replacement each export starts a fresh stream, and identity is promised within one
+  epoch only ([ledger](upstream-contributions.md#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543)).
