@@ -1479,7 +1479,7 @@ the video is lost to group eviction on every head run.
 
 **Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair; release-clock
 statistics that count neither a skipped group nor an absent track, and an `out_of_tolerance` count
-that climbs through every start; the export that does not resume across a publisher `SIGKILL`; the join-dependent latency at 500 ms; and the latency
+that climbs through every start; the export that does not resume across a publisher `SIGKILL`; the join-dependent latency at 500 ms, which on `f8215bc47` is whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusion 20; drafted, not reported); and the latency
 [#4681](https://github.com/moq-dev/moq/pull/4681) recovers. Detail, tables and reproduction live in [T44](test-44-tstd-grading.md),
 [T45](test-45-live-tstd-remux.md), [T46](test-46-tstd-check-cross-validation.md), and
 [T47](test-47-fixed-delay-export.md); summarised measurement points in
