@@ -11,7 +11,9 @@
 # env: PORT (4443, UDP, must be reachable between the hosts), CC (delay = BBRv3 on noq),
 #      CLIP (~/CNNiEMEA2.ts), LAT (1s, the export's --delay or --max-age value),
 #      OUT (~/t47/xhost), TAP (0; 1 stamps each picture's arrival through t18-latency.py's tap,
-#      VPID 111 by default: into egress.csv on the subscriber, source.csv on the origin),
+#      VPID 111 by default: into egress.csv on the subscriber, source.csv on the origin; pcr
+#      stamps each PCR on that PID instead, into egress-pcr.csv and source-pcr.csv, for
+#      ts-pcr-rate.py),
 #      REGULATE (--pcr-synchronous; `--bitrate <b/s>` paces a CBR clip at a rate of its own, a
 #      source clock that many ppm off), AT (unset; a Unix time the subscriber starts at, so two
 #      subscribers on two hosts start together), and any MOQ_TS_* variables, which reach the
@@ -58,6 +60,7 @@ origin)
 	}
 	TAPCMD=cat
 	[ "${TAP:-0}" = 1 ] && TAPCMD="python3 '$HERE/t18-latency.py' tap ${VPID:-111} '$OUT/source.csv' --pipe --seconds $((SECS + 40))"
+	[ "${TAP:-0}" = pcr ] && TAPCMD="python3 '$HERE/t18-latency.py' tap ${VPID:-111} '$OUT/source-pcr.csv' --pipe --pcr --seconds $((SECS + 40))"
 	timeout $((SECS + 40)) bash -c "tsp --realtime -I file '$CLIP' -P regulate ${REGULATE:---pcr-synchronous} -O file - 2>/dev/null \
 		| $TAPCMD | '$BIN/moq' $(printf '%q ' "${MOQ_DIAL[@]}") https://$IP:$PORT --broadcast '$BCAST' import ts" \
 		>"$OUT/import.log" 2>&1
@@ -68,11 +71,13 @@ sub)
 		sleep "$(python3 -c "import time; print(max(0.0, $AT - time.time()))")"
 		echo "began=$(python3 -c 'import time; print(f"{time.time():.3f}")')" >>"$OUT/$ROLE-meta.txt"
 	fi
-	if [ "${TAP:-0}" = 1 ]; then
-		# Stamp each picture's arrival on this host's clock, for the PCR clock-rate fit.
+	if [ "${TAP:-0}" != 0 ]; then
+		# Stamp each picture's (or PCR's) arrival on this host's clock, for the clock-rate fit.
+		TAPARGS=("$OUT/egress.csv")
+		[ "$TAP" = pcr ] && TAPARGS=("$OUT/egress-pcr.csv" --pcr)
 		timeout "$SECS" "$BIN/moq" "${MOQ_DIAL[@]}" "https://$IP:$PORT" --broadcast "$BCAST" \
 			export ts "${MOQ_LAT[@]}" "$LAT" 2>"$OUT/export.log" |
-			python3 "$HERE/t18-latency.py" tap "${VPID:-111}" "$OUT/egress.csv" --pipe --seconds "$SECS" \
+			python3 "$HERE/t18-latency.py" tap "${VPID:-111}" "${TAPARGS[@]}" --pipe --seconds "$SECS" \
 				>"$OUT/egress.ts"
 		echo "export_rc=${PIPESTATUS[0]} (124 = ran the window)" >>"$OUT/$ROLE-meta.txt"
 	else

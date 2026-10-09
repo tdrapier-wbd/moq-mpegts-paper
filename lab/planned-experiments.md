@@ -20,8 +20,8 @@ defined [below](#blocked-on-apparatus).
 | P0-d | The analyser-specific rows of the Gate 2 acceptance harness | Completes the acceptance test the harness was built for | B-6 | Every analyser row of T33's fixed pass table taken | [T33](test-33-gate2-preparation.md) |
 | P0-j | A real never-repeating encoder against the continuous-source fence | The import's survival of a real encoder's hard cuts is shown on synthesised joins only | B-7 | The live feed graded through `moq export ts` with TSDuck over T34's arm | [T34](test-34-real-encoder-severity.md) |
 | P0-g | Permanence: the seven-day MoQ soak, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 15, 16) | — (a host for a week; nginx for the segmented arm) | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
-| P0-l | A live T-STD re-multiplexer across hosts and for 1+1 | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | — | The cross-host export's drift rate graded on PCR arrivals while it follows a drifting source, which a picture tap cannot resolve; the 550–600 ms floor bisected on a lane that holds its band; one clip of another profile or rate that itself passes the T-STD | [T45](test-45-live-tstd-remux.md) |
-| P0-m | Upstream's merged fixed-delay export, beyond the cells already graded | Whether the subscriber is itself the conformant stage, and at what latency (§5 row 3) | upstream: a fix for the exporter's re-request exit | The re-request arms of T6 and T13 re-run on the fixed build | [T47](test-47-fixed-delay-export.md) |
+| P0-l | A live T-STD re-multiplexer across hosts and for 1+1 | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | the clip: a source of another profile or rate that passes the T-STD itself (none of five recordings does; possibly B-7's feed); the clock: none | One such clip through the export, graded on T47's criteria 1–4; and why the export's clock did not settle behind a drifting source in 75 min, from its source estimate logged through the same cross-host run | [T45](test-45-live-tstd-remux.md) |
+| P0-m | Upstream's merged fixed-delay export, beyond the cells already graded | Whether the subscriber is itself the conformant stage, and at what latency (§5 row 3) | upstream: the held-frame fix merging ([T13](test-13-downstream-grooming.md) § *Liveness*) | The re-request arms of T6 and T13 re-run on the merged build | [T47](test-47-fixed-delay-export.md) |
 
 ## P1 — establishes where one architecture is superior
 
@@ -75,7 +75,7 @@ P1-r → [T41](test-41-import-reanchor-coverage.md), P2-b → [T25](test-25-isol
 | Gate | State | Unblocks |
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d, P1-i, P2-k |
-| **B-7** A live contribution feed of a real service (~10 Mb/s over SRT to both EC2 hosts) | not arrived; the standing ingest chain is verified with a clip pushed into its multicast group (`INSTRUCTIONS.local.md`) | P0-j, P2-d; possibly B-3 |
+| **B-7** A live contribution feed of a real service (~10 Mb/s over SRT to both EC2 hosts) | not arrived; the standing ingest chain is verified with a clip pushed into its multicast group (`INSTRUCTIONS.local.md`) | P0-j, P2-d; possibly B-3 and P0-l |
 | **B-2** A `moq2ts` subscriber published by its authors | not published | P1-h (T11c) |
 | **B-3** A true CBR hardware source | none in the lab; check whether the live feed's encoder is one before assuming it | the residual in [T15](test-15-point-to-point-cadence.md) |
 | **B-4** A commercial ABR-to-TS gateway | none | the segmented lane's low-latency arm at equal conformance (§5 row 5); P1-i |
@@ -83,9 +83,7 @@ P1-r → [T41](test-41-import-reanchor-coverage.md), P2-b → [T25](test-25-isol
 
 **Inside the hardware window.** The feed, analyser and IRDs are expected to arrive and leave together,
 so the window is for measurement, not for debugging a harness or for speculative cells the feed would
-invalidate. Grade the feed through `moq export ts` with TSDuck before anyone reads an analyser front
-panel: a service whose video and primary audio stop while PSI continues looks, on an IRD, like a dozen
-other faults.
+invalidate. The order of work before and in it is [T33](test-33-gate2-preparation.md)'s.
 
 ## Scheduling constraints
 
@@ -103,6 +101,8 @@ other faults.
 
 Recorded so they are not proposed again; where a result exists, it is in the file named.
 
+- **The lab re-multiplexer's 550–600 ms floor**: the merged export superseded it as the live stage,
+  and the export's own floor is [T47](test-47-fixed-delay-export.md)'s.
 - **The arrival oracle on a bigger host**: run, and the caveat it existed to retire is retired
   ([T19](test-19-pcr-grid-verification.md)).
 - **Another clean two-host 1+1 arm or two-publisher two-relay topology**: both run; what remains of

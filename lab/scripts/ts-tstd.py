@@ -765,6 +765,7 @@ def grade(path, rx_override, assume_si=True, offsets_ms=(), scan=None, skip_s=0.
     mv = memoryview(data)
     # Pass 1: PSI, PCR samples, discontinuities.
     pmt_pids, pcr_pid, streams = {}, None, {}
+    pmt_buf = b""
     pcr_raw = []
     discont = 0
     for i in range(n):
@@ -777,8 +778,10 @@ def grade(path, rx_override, assume_si=True, offsets_ms=(), scan=None, skip_s=0.
             sec = section_body(bytes(payload_of(p)))
             if sec and sec[0] == 0x00:
                 pmt_pids = parse_pat(sec)
-        elif pusi and pid in pmt_pids and not streams:
-            sec = section_body(bytes(payload_of(p)))
+        elif pid in pmt_pids and not streams and (pusi or pmt_buf):
+            # A PMT with many streams spans several packets.
+            pmt_buf = bytes(payload_of(p)) if pusi else pmt_buf + bytes(payload_of(p))
+            sec = section_body(pmt_buf)
             if sec and sec[0] == 0x02:
                 pcr_pid, streams = parse_pmt(sec)
         if pcr_pid is not None and pid == pcr_pid:

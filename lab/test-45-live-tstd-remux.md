@@ -88,12 +88,30 @@ capture, every unit of every track):
   of at most 0.075 Hz/s between consecutive 600 s windows (PCR_DR). The source's rate, from a tap on
   the origin against that host's clock, and the output's in each window are reported, as how far the
   export followed the source.
+- **Drift rate on PCR arrivals, and settling**, fixed after the 2,100 s run put the picture tap's
+  floor at a third of the limit. As that run, but the loop eight times (4,631 s), paced 4 ppm fast,
+  for 4,500 s, with each PCR's arrival stamped on both hosts (`t18-latency.py tap --pcr`, graded by
+  [`ts-pcr-rate.py`](scripts/ts-pcr-rate.py)). It passes on criteria 1–4; PCR_FO within 30 ppm on
+  the whole-run fit; PCR_DR at most 0.075 Hz/s between consecutive 600 s windows, the arm void
+  rather than passed unless the tap's floor on such a difference is under a third of that; and
+  settled, the last 600 s window's output rate within 0.5 ppm of the source's. Predicted by
+  simulating the steering law before the run: the output slews at its cap past the source's rate,
+  to about 6.7 ppm near 40 min, to win back the delay it lost catching up, and is within 0.5 ppm
+  by about 55 min.
 - **1+1 across hosts.** Two exports at 1 s of one broadcast, one on each of two hosts, started at
   the same wall-clock instant, 120 s. It passes if the captures are byte-identical from the first
   packet both carry; otherwise the identical fraction after one counter offset per PID
   ([`ts-cc-merge.py`](scripts/ts-cc-merge.py)) and the first difference are reported.
 - **Another profile and rate.** `testloop.ts`, H.264 High 4:2:2 at 25 Mb/s in a 27.5 Mb/s CBR
   multiplex with MP2 audio, on loopback at 1 s and 500 ms, 120 s each. Each passes on criteria 1–4.
+- **Real playout that fails the T-STD itself.** Two off-air recordings, each failing `ts-tstd.py` as
+  a source: a playout chain's 1080i29.97 H.264 Main with eleven AC-3 services, SCTE-35 and SMPTE
+  2038 in a 36.6 Mb/s multiplex, whose video packets overrun TB at the leak its HRD sets; and a
+  1080i25 H.264 service with MPEG and AC-3 audio, teletext and SCTE-35 at 25 Mb/s, whose audio
+  arrives up to 352 ms after it decodes. On loopback at 1 s, 110 s each. Not graded as the export's
+  pass or fail, since a source can make a conformant output impossible: reported is whether the
+  export runs the capture and, if it does, criteria 1–4 on its output, to show what a real feed
+  does to it.
 
 ## Instruments
 
@@ -376,6 +394,34 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   test on this tap. Presentation latency was 2,277.5–2,327.1 ms and rose 31.8 ms from the first
   third to the last, the rate gap integrated over the run (about 22.5 ppm over 1,400 s). Following
   25 ppm fully at the cap takes about 2.5 h (derived).
+- **Drift rate on PCR arrivals: criteria 1–4 and PCR_FO pass, PCR_DR fails as fixed, and the output
+  does not settle on the source's rate.** 4,500 s, the source at +4.02 ppm against the origin's clock (+3.85
+  to +4.16 ppm in every 300 s window). The hosts' clocks agree within 0.05 ppm (each one's chrony
+  skew), and the loop's media clock follows its PCR within 0.02 ppm. PCR_FO is +5.74 ppm on the
+  whole-run fit. PCR_DR is 0.114 Hz/s between the first two 600 s windows and 0.085 between the third
+  and fourth (the other four pairs 0.032–0.067). The output's rate in successive 600 s windows was
+  +0.11, +2.65, +3.93, +5.82, +7.31, +8.02 and +9.03 ppm, the last 5.06 ppm above the source's.
+  - **Criteria 1–4 pass over the whole run, at the 35 min runs' margins.** All 2,246 windows
+    (least margin 362.7 / 68.1 / 143.6 ms on video, MPEG audio and AC-3); compliance PASS in each
+    of four consecutive segments covering every packet after the 5 s cut, since the checker holds
+    a whole capture in memory and the 5.6 GB one exhausted the host; all 179,932 PCRs within
+    ±481 ns; every PES unit of the four PES PIDs present, each SCTE-35 PID one section short,
+    inside the grader's edge allowance; no late drops.
+  - **On the wire the clock moves in 1 ms steps.** The export writes each slot when tokio's
+    millisecond timer fires, so a slot leaves at the clock's instant rounded up to the next tick,
+    and the output's phase against the host stays flat for minutes and then steps 1 ms. A 600 s
+    window resolves a rate only to about ±1.67 ppm of that, ±0.075 Hz/s on a difference: the limit
+    itself. The tap's floor (0.001 Hz/s) assumes white noise and does not see it, so the void clause
+    did not trigger. The steps are the output's, and an analyser on the wire would see them too.
+  - **Read from when the steps fall, the clock slewed at its cap (0.075 Hz/s) to 6.7 ppm at 2,550 s,
+    as predicted, then kept rising, more slowly, to 8.3–9.1 ppm over the last 800 s**, where the
+    prediction had it back at the source's rate by 55 min. It gained 24.1 ms on the host against the
+    source's 18.1 ms, so it ended about 6 ms shallower than it began while still steering as if it
+    had slack to spend. In other words, what it saw arriving got earlier through the run. Whether the
+    lane's delay fell or the steering does not converge cannot be separated here: the export logs its
+    estimate of the source only when its drop or tolerance counters move.
+  - The out-of-tolerance counter reads 19, all within the first 40 s, while the rate window held
+    under a minute of floors and the estimates ran from −471 to +211 ppm.
 - **1+1 across hosts: byte-identical.** Two exports at 1 s, one on each host, began 5 ms apart and
   are identical from the first packet through all 782,483 packets both captured, the longer capture
   ending 165 packets later. This is 120 s, before either export's clock has steered, so whether two
@@ -388,6 +434,20 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   which is the Rbx `ts-tstd.py` uses too. A scratch build with High 4:2:2's cpbBrNalFactor instead
   (96 Mb/s) runs the whole capture with every audio unit, but its video fails both T-STD checks,
   so the factor is not the cause. Another profile needs a source that passes the T-STD itself.
+- **Real playout: a PMT longer than one packet stops the export before its first packet; a damaged
+  25 Mb/s service runs.** On loopback at 1 s, `f8215bc47`. The 36.6 Mb/s playout recording, whose PMT
+  is one 391-byte section over three packets (eleven AC-3 services with their descriptors, SCTE-35,
+  captions), is imported whole. The export subscribes to its fifteen tracks and exits 2 s later with
+  nothing written, on *failed to write whole buffer* in `mpeg2ts`'s PSI writer, which writes a
+  section into a single packet. The 1080i25 service's PMT is 153 bytes, and the export runs its 110 s
+  in 25 Mb/s CBR, with all 4,146 PCRs within ±481 ns and no interval over 25 ms. Of the source's own
+  faults, the late audio is repaired: no audio unit decodes before it has arrived, against 103–301 a
+  PID in the source, as much as 394 ms late. The output adds faults the source does not have. Video
+  overruns TB on 36 % of its packets (peak 1,311 B): the multiplex runs faster than the 21.6 Mb/s leak
+  this stream's HRD sets, and the export holds video only to the level's 24 Mb/s. Eight AC-3 units
+  stay in B up to 1.05 s, and the system TB overflows by four packets. The recording has 1,398
+  continuity gaps of its own across every PID, so its completeness grade (a third of the video and a
+  tenth of each audio missing) measures the recording, not the export.
 
 ## Conclusions
 
@@ -414,9 +474,9 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
 - **Clock recovery.** One host, one clock. A remote source's rate differs from the subscriber's by
   up to the encoder's tolerance, and the output clock would have to track it from arrivals alone,
   within the frequency-offset and drift-rate limits. The merged export, across hosts, follows a
-  source 25 ppm fast at its slew cap, +4.6 ppm after 29 min; whether it settles on the source's
-  rate, and its drift rate at 0.075 Hz/s resolution, which needs a PCR-arrival tap, are not
-  measured.
+  source at its slew cap. Over 75 min behind a source 4 ppm fast it passed the source's rate and
+  did not settle, ending 5 ppm above it, and why is not established. Its wire phase moves in 1 ms
+  steps, so on arrivals its drift rate fails at 600 s windows.
 - **1+1 determinism.** This schedule depends on when each packet arrived, which differs between
   legs, and the exporter's PSI and SI are placed by its own arrivals. The merged export's schedule
   does not: two legs on two hosts were byte-identical for 120 s.

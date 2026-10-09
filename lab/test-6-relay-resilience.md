@@ -656,11 +656,33 @@ early-subscriber hard kill fails the same way on both protocols, 2 runs each.
   `export ts` as a re-request, after which units reach the release clock late. Late audio and data
   frames are dropped, but the first late video or teletext unit is fatal. On the crash-replace rig
   the late video units are the dead session's own, held through the silence
-  ([T13](test-13-downstream-grooming.md) § *Liveness*); here that is reasoned, not traced. The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on
+  ([T13](test-13-downstream-grooming.md) § *Liveness*); here that is not traced, but the fix for it
+  removes the late video on the hard-kill arm (below). The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on
   lite-07. Six of the seven that ended did so on a missed decode deadline, and one on a timestamp
   rewind.
 - **A different epoch on `moq-lite-07` is a replacement by design**: the newer epoch takes the
   broadcast, and subscriptions on the older one end `unroutable`.
+
+**The fix for the held video frames passes the shared-epoch hard kill, and removes the late video
+the base sends there.** The fix is [T13](test-13-downstream-grooming.md) § *Liveness*'s (`0ebef72c`).
+Criteria, fixed before its first run: the shared-epoch hard kill with subscribers started before the
+standby, on `moq-lite-06` and on `moq-lite-07-wip`, two runs each on the fix and one each on its base
+(`f8215bc47`), on the workstation's loopback; it passes if neither exporter exits on a missed decode
+deadline on the video PID and both resume on the standby's media. The teletext exits after a clean
+switch are outside it: teletext is not held for its DTS. Every exporter on both builds was alive at
+60 s, resumed 3–6 s after the kill and never restarted, so on this host the base did not reproduce
+the exits above, and `ts-tstd.py` on each output discriminates instead:
+
+| Protocol | Build | Runs × exporters | Held video frames dropped | Video units after their decode time | Audio unit over 1 s in B |
+|---|---|---|---|---|---|
+| `moq-lite-06` | base | 1 × 2 | 0 | 20 each, the latest by 487.9 ms | 2 of 2, 7.4 s |
+| `moq-lite-06` | fix | 2 × 2 | 1 each | 0 (least margin 141.4 ms) | 0 of 4 |
+| `moq-lite-07-wip` | base | 1 × 2 | 0 | 4 each, the latest by 142.1 ms | 1 of 2, 6.7 s |
+| `moq-lite-07-wip` | fix | 2 × 2 | 1–2 each | 0 (least margin 141.2 ms) | 4 of 4, 7.8 s |
+
+The audio unit sent before the silence and decoded after it is on both builds, so it is not the
+fix's. One fix run on `moq-lite-07-wip` also overflows the system TB by one packet (676 of 512 B);
+the base's single run does not, and the fix does not touch table emission, so it is not attributed.
 
 So on this build no configuration of two `moq import ts` publishers survives every case on one
 relay. The closest is moq-lite 07 with a shared epoch, subscribers that joined after both publishers,

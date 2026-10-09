@@ -717,6 +717,29 @@ relay log confirms the version every session negotiated.
 - The clean-end replay and continue arms on the same build, on `moq-lite-06`, resume three times each
   and exit 0.
 
+**A fix that judges a held frame from when it could leave the hold passes on `moq-lite-06`.** The
+fix (`0ebef72c`, on `586112714`; [upstream contributions](upstream-contributions.md)) stamps a frame
+leaving the decode clock as arriving no earlier than the frame that settled it, so frames held
+through a silence are late by the silence and dropped. Criteria, fixed before its first run: the kill
+arm, three replay runs and one continue run, on the fix and on its base (`f8215bc47`); it passes if
+no run exits on a missed decode deadline, the frames held through each silence are dropped as late,
+and the clean-end arms still resume three times and exit 0.
+
+| Arm | Base | Fix |
+|---|---|---|
+| Replay kill, 3 runs | exit 1 in 3 of 3 on PID 111, 61,667 packets | exit 0 in 3 of 3, each dropping its 5 held video frames; 61,670 packets |
+| Continue kill, 1 run | exit 0, 219,555 packets; 20 video units after their decode time, the latest by 767 ms | exit 0, 213,603 packets; 2 held frames dropped, no unit late |
+| Clean-end replay and continue | — | three resumes each, continuity-clean, exit 0 |
+
+- **As predicted, a replay replacement still does not resume on this version.** It restarts the
+  clip with no marker, so its frames sit on the dead session's timeline about 26 s late and are
+  dropped as late too (368 frames a run), and nothing after the first session is written. That is
+  the absent epoch, not the fix; `moq-lite-07` resumes the same arm.
+- **The base's continue run survived this time**, where it exited in the table above, so the
+  continue arm alone does not discriminate. Graded by `ts-tstd.py`, its output carries the held
+  frames after they decode; the fix's carries none. Both continue outputs hold an audio unit in B
+  across a silence for 10–14 s, against 13818-1's 1 s, on both builds: not the fix's.
+
 **With [#4947](https://github.com/moq-dev/moq/pull/4947) merged, the failed export no longer
 lingers.** Upstream `main` at `1ec21ac23`, the merge itself, whose only other Rust change since
 `82c3f2fe4` is a test; the same rig and arms. On `moq-lite-06`, 3 of 3 crash-replace runs log *export

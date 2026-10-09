@@ -421,13 +421,13 @@ of IRDs**, on tin or VMs inside the operator's own network rather than in the la
 shape — it is the edge gateway of [`docs/architecture.md`](../docs/architecture.md) §4 built for real —
 and it changes four things about this experiment's plan.
 
-**The groomer is not optional in this topology, and skipping it would waste the hardware window.** Raw
-`moq export ts` has no mux rate, carries no stuffing, thins PSI from 8.04 to 2.51 PAT/s and opens PCR
-gaps to 320 ms on a source with none above 40 ms ([T4](test-4-remote-e2e-srt.md)). An IRD will not hold
-on that and an analyser will fill a page with P1 failures that belong to the lane rather than to the
-path — none of it new information. The gateway chain is
-`moq export ts --latency-max <budget> | mpegts-pacer | tsp -O ip <group>`, and the CBR target has to be
-declared rather than inherited.
+**The gateway has to be a conformant stage, and on the merged build the export is one.** The raw
+export of earlier builds had no mux rate, carried no stuffing, thinned PSI from 8.04 to 2.51 PAT/s and
+opened PCR gaps to 320 ms ([T4](test-4-remote-e2e-srt.md)), so it needed `mpegts-pacer` behind it.
+`moq export ts --delay 1s` writes CBR on a 25 ms PCR grid and passes both T-STD checks and P1/P2 on
+the broadcast clip, across hosts and across source joins ([T47](test-47-fixed-delay-export.md)), so
+the gateway chain is `moq export ts --delay 1s | tsp -O ip <group>`. What a real service does to it
+is predicted [below](#predicted-at-the-ird-and-the-analyser-fixed-before-the-window).
 
 **The gateway has to be characterised as an instrument before it is used as one.** This is the item
 most likely to be skipped and the one that decides whether the P2 figures mean anything. A virtual
@@ -536,6 +536,48 @@ interval above 40 ms in either. As on `d518b61b`, the raw export fails the 481 n
 every interval (12,415 bad from 12,416 PCRs on the soak) and the groomer clears it to 0. The rig needed
 no change for `main`'s stricter CLI. It ran alongside the 2 h importer re-soak on the same 8-vCPU
 host, and one run was made.
+
+## Predicted at the IRD and the analyser, fixed before the window
+
+Written from software measurements before any hardware result, so that the window tests them. The
+chain is the one above, at 1 s, on `moq-lite-06` unless stated.
+
+1. **The feed fails the T-STD as a source.** None of the five off-air recordings to hand passes
+   `ts-tstd.py`: TB overruns at the leak the HRD sets, audio that arrives after it decodes, several
+   access units to a PES ([T45](test-45-live-tstd-remux.md)). A fault the tap shows is not the lane's.
+2. **A service whose PMT is longer than one packet does not start.** The export writes its PMT into
+   a single packet and exits on a longer one before writing anything ([T45](test-45-live-tstd-remux.md)).
+   A playout service with many audio languages has one. Nothing below applies to such a feed until
+   the export is fixed.
+3. **In steady state the IRD locks and P1 is clean**, as on the broadcast clip
+   ([T47](test-47-fixed-delay-export.md)): no continuity errors, PSI on time, a PCR every 25 ms within
+   ±481 ns. The analyser will still report:
+   - `PID_error` on sparse PIDs (SCTE-35, teletext) wherever its timeout is shorter than the source's
+     own gaps, which the tap shows too;
+   - arrival bursts of one 25 ms slot, as MDI delay factor and PCR overall jitter of that order,
+     which an IRD's de-jitter buffer absorbs;
+   - on an analyser that models the T-STD, video TB overruns wherever the multiplex runs faster than
+     1.2 × the video's HRD bitrate ([T45](test-45-live-tstd-remux.md)).
+4. **PCR frequency offset within 30 ppm; drift rate on arrivals over 0.075 Hz/s.** While the clock
+   follows the source it slews at exactly the limit, and its departures sit on a 1 ms timer grid, so
+   the wire phase moves in 1 ms steps. Behind a source 4 ppm fast it had not settled after 75 min,
+   ending 5 ppm past it ([T45](test-45-live-tstd-remux.md)).
+5. **A publisher outage is input loss at the IRD, not a decoder fault.** The export writes nothing
+   through the silence, so the IRD loses input and freezes or blanks, then resumes at the next
+   keyframe. On `moq-lite-06` the PCR resumes advanced by the silence without
+   `discontinuity_indicator`, which TR 101 290 counts as PCR repetition and discontinuity-indicator
+   errors; on `moq-lite-07` the resume sets the flag and repeats PAT and PMT within two packets
+   ([T13](test-13-downstream-grooming.md) § *Liveness*). An audio unit sent before the silence and
+   decoded after it breaches the T-STD's 1 s residence ([T6](test-6-relay-resilience.md)).
+6. **The TDT and TOT are the source's**, late by the end-to-end latency, about 2.3 s; an analyser
+   that compares them with its own clock reports that offset.
+7. **Not predicted:** SMPTE 2038 and closed captions, since the one recording carrying them did not
+   start (item 2), and an MPTS feed.
+
+**Before the window, in order:** read the feed's PMT size (`tstables`); grade the tap with
+`ts-tstd.py` and TSDuck over an hour; replay the known-good file through the gateway (above); start
+the gateway hours before anyone reads PCR_FO or PCR_DR, log its clock through the window, and record
+the analyser's PCR measurement filter; set its per-PID timeouts from the tap's own gaps.
 
 ## Open
 

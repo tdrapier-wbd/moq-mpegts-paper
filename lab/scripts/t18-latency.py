@@ -2,7 +2,7 @@
 """T18 delivery latency: how long a picture takes to cross a data plane.
 
     t18-latency.py tap <pid> <out.csv> [--pipe|--udp PORT] [--rtp] [--seconds N] [--chunk N]
-                                       [--save <stream.ts>]
+                                       [--save <stream.ts>] [--pcr]
     t18-latency.py clock-server <port> [--seconds N]
     t18-latency.py clock-client <host> <port> [--samples N]
     t18-latency.py report <source.csv> <egress.csv> [--label L] [--clock-offset S] [--settle N]
@@ -25,7 +25,10 @@ so it can sit inline at the source (`--pipe`) or read a groomer's datagrams
 (`--udp`, `--rtp` to skip the RTP header). Read size bounds the resolution and
 must match on both ends, exactly as in `t13-cadence.py`: the default 1316 B is
 one datagram, about a millisecond of a 10 Mb/s mux, against latencies measured
-in hundreds of milliseconds.
+in hundreds of milliseconds. With `--pcr` it records each PCR on the PID instead,
+for the output's clock rate against this host's (`ts-pcr-rate.py`): a stage that
+releases each slot at the PCR opening it is timed at the write, where a picture's
+PES header, anywhere in a 25 ms slot, is off by up to half a slot.
 
 `clock-server` / `clock-client` price the one thing a two-host measurement cannot
 assume. Absolute latency compares a timestamp taken on the origin with one taken
@@ -65,12 +68,20 @@ def pts_at(buf: bytes, off: int) -> int:
 	)
 
 
-def scan(block: bytes, pid: int, now: int, out) -> None:
-	"""Record (wall clock, PTS) for every PES header on `pid` in one read."""
+def scan(block: bytes, pid: int, now: int, out, pcr: bool = False) -> None:
+	"""Record (wall clock, PTS) for every PES header on `pid` in one read, or with `pcr`
+	(wall clock, PCR in 27 MHz ticks) for every PCR on it."""
 	for base in range(0, len(block) - PKT + 1, PKT):
 		if block[base] != 0x47:
 			return  # alignment lost; the caller resyncs on the next read
 		if (((block[base + 1] & 0x1F) << 8) | block[base + 2]) != pid:
+			continue
+		if pcr:
+			if (block[base + 3] >> 4) & 0x2 and block[base + 4] >= 7 and block[base + 5] & 0x10:
+				b = block[base + 6 : base + 12]
+				ticks = (b[0] << 25 | b[1] << 17 | b[2] << 9 | b[3] << 1 | b[4] >> 7) * 300
+				out.write(f"{now},{ticks + ((b[4] & 1) << 8 | b[5])}\n")
+				out.flush()
 			continue
 		if not block[base + 1] & 0x40:  # payload_unit_start_indicator
 			continue
@@ -95,7 +106,15 @@ def align(buf: bytearray) -> bytearray:
 
 
 def tap(
-	pid: int, path: str, mode: str, port: int, rtp: bool, seconds: float, chunk: int, save: str
+	pid: int,
+	path: str,
+	mode: str,
+	port: int,
+	rtp: bool,
+	seconds: float,
+	chunk: int,
+	save: str,
+	pcr: bool = False,
 ) -> None:
 	# Take the exclusive resource *before* touching the output files. A second tap on
 	# a port that is already held used to open the log in write mode, truncating it,
@@ -112,7 +131,7 @@ def tap(
 		sock.settimeout(2.0)
 
 	out = open(path, "w")
-	out.write("t_ns,pts\n")
+	out.write("t_ns,pcr\n" if pcr else "t_ns,pts\n")
 	# One pass has to answer both halves of the experiment, so the stream is kept as
 	# well as timed: the conformance gate is applied to the same bytes whose latency
 	# was measured, rather than to a second run that might have settled differently.
@@ -127,7 +146,7 @@ def tap(
 			except socket.timeout:
 				continue
 			payload = data[RTP_HEADER:] if rtp else data
-			scan(payload, pid, time.time_ns(), out)
+			scan(payload, pid, time.time_ns(), out, pcr)
 			if keep:
 				keep.write(payload)
 			n += 1
@@ -149,7 +168,7 @@ def tap(
 				buf = align(buf)
 			usable = len(buf) - (len(buf) % PKT)
 			if usable:
-				scan(bytes(buf[:usable]), pid, now, out)
+				scan(bytes(buf[:usable]), pid, now, out, pcr)
 				del buf[:usable]
 			n += 1
 
@@ -307,6 +326,7 @@ def main() -> None:
 			opt("--seconds", 0.0, float),
 			opt("--chunk", CHUNK, int),
 			opt("--save", ""),
+			"--pcr" in rest,
 		)
 	elif cmd == "clock-server":
 		clock_server(int(rest[0]), opt("--seconds", 120.0, float))

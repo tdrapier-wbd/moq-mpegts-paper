@@ -1180,9 +1180,9 @@ move.** Pinned binaries survive rebuilds; a control that forbids upgrades is eve
 
 **Record which signal drove a graceful arm and which CLI version received it, and prefer ending the importer's input as the build-independent clean exit.** *(T6.)*
 
-### With a shared hop the newest publisher serves, so a standby drill must know which one it killed
+### With a shared identity the rig does not choose which publisher serves, so a standby drill must know which one it killed
 
-*(From the same drill, [T6](test-6-relay-resilience.md).)* Recency ranking and hash ties mean subscribers may not be on the publisher you signalled; idle-publisher kill is the control and should show no stall.
+*(From the same drill, [T6](test-6-relay-resilience.md).)* Recency ranking and hash ties under a shared `--hop`, and a race between equal routes under a shared `--epoch`, mean subscribers may not be on the publisher you signalled; idle-publisher kill is the control and should show no stall.
 
 **Start subscribers after both publishers are producing, log each publisher separately, and read which one received the media subscriptions before and after the signal.** *(T6.)*
 
@@ -1429,7 +1429,7 @@ An export at 500 ms dropped every MP2, AC-3 and teletext unit yet passed `ts-tst
 
 Presentation-latency trends between run thirds reported 290–370 ppm off; fitting wall-minus-STC against tap clock gave ~500 ppm (the steering limit). Medians of thirds dilute a steady rate; a 30 s window alone reads ±45–60 ppm on one host.
 
-**Fit the PCR against the receiving clock (`ts-decode-latency.py`'s "PCR clock vs tap") over the longest span available, and compare egress with the source tap of the same run.** Grade 30 ppm on the whole-run fit. The slew limit (2.8 ppb/s) is below this instrument's reach; say so rather than quoting per-window change. Even 600 s windows do not reach it on an export that writes on 25 ms slots: each picture's arrival is quantized by ±12.5 ms, 0.025 Hz/s on the difference of two windows, and a source tap's lower floor does not stand in for the egress tap's. Drift rate needs PCR-arrival timing. *([T45](test-45-live-tstd-remux.md).)*
+**Fit the PCR against the receiving clock (`ts-decode-latency.py`'s "PCR clock vs tap") over the longest span available, and compare egress with the source tap of the same run.** Grade 30 ppm on the whole-run fit. The slew limit (2.8 ppb/s) is below this instrument's reach; say so rather than quoting per-window change. Even 600 s windows do not reach it on an export that writes on 25 ms slots: each picture's arrival is quantized by ±12.5 ms, 0.025 Hz/s on the difference of two windows, and a source tap's lower floor does not stand in for the egress tap's. Drift rate needs PCR-arrival timing (`t18-latency.py tap --pcr`, graded by `ts-pcr-rate.py`), and even then a white-noise floor misleads where departures are quantized: an export on a 1 ms timer moves its wire phase in 1 ms steps, ±0.075 Hz/s on a 600 s window difference. Read the clock from when the steps fall; grade the windows as what the wire carries. *([T45](test-45-live-tstd-remux.md).)*
 
 ### A transparent control through an arrival-clocked groomer attributes the transport buffers, not the decoder buffers
 
