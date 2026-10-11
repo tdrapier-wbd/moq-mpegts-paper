@@ -1747,7 +1747,10 @@ switching programs on a replacement.
 single packet, so a playout recording with eleven AC-3 services (a 391-byte section over three
 packets) is imported whole and exported not at all, on `f8215bc47`, while a 153-byte PMT exports
 through ([T45](test-45-live-tstd-remux.md)). Accepted as `quest/m1/ts-pmt-split.md`; the maintainer's
-fix, [#5220](https://github.com/moq-dev/moq/pull/5220), is open. **Open.**
+fix, [#5220](https://github.com/moq-dev/moq/pull/5220), is open. Its head `d7dc586e7` writes that PMT
+whole on the same recording (one 391-byte section, all fourteen streams, no continuity error), as we
+[reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794). **Open**
+until it merges.
 
 **Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
 as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
