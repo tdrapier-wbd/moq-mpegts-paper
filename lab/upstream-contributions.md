@@ -1737,20 +1737,26 @@ rig 2. The quest asks for both rigs to be re-run once it lands, and flags a rig-
 mid-GOP join, before any failover, as possibly separate. **#5109 merged on 2026-10-09** as
 `d006689f8`, accepted as that same-epoch fix, its body now referring to #5052 rather than closing
 it; the maintainer reworded the quest to reject only a guard at the schedule's bail, which stays.
-We have not re-measured the merge.
+We have not re-measured the merge. The no-stitch fix itself landed on 2026-10-10
+([#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)):
+an epochless track ends on an upstream error, and the export lingers within an epoch only, `--stitch`
+switching programs on a replacement.
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110).** `mpeg2ts` serialises the rebuilt PMT into a
 single packet, so a playout recording with eleven AC-3 services (a 391-byte section over three
 packets) is imported whole and exported not at all, on `f8215bc47`, while a 153-byte PMT exports
-through ([T45](test-45-live-tstd-remux.md)). **Open.**
+through ([T45](test-45-live-tstd-remux.md)). Accepted as `quest/m1/ts-pmt-split.md`; the maintainer's
+fix, [#5220](https://github.com/moq-dev/moq/pull/5220), is open. **Open.**
 
 **Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
 as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
 `Slot::layout` spaces each PID by its own count, so PIDs with equal counts coincide and video runs
 back to back between them; a unit test of one full slot of a 25 Mb/s broadcast fails at a TB peak
 of 1,067 B on `f8215bc47` (`schedule.rs` unchanged on `d006689f8`), and the same packets in
-smooth weighted round-robin peak at 459 B ([T45](test-45-live-tstd-remux.md)). **Open.**
+smooth weighted round-robin peak at 459 B ([T45](test-45-live-tstd-remux.md)). **Fixed by
+[#5207](https://github.com/moq-dev/moq/pull/5207), merged on 2026-10-10**: each slot interleaved so
+no PID overruns its transport buffer, our test as the regression. Not re-measured.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
@@ -2355,8 +2361,9 @@ each gap's Location and duration; one-sentence **scope-out of error correction**
 [#42](https://github.com/mondain/msfts/issues/42) (**T-STD** conformance in unmodified modes)
 answered for conformance testing.
 
-**Not taken up:** a normative time reference; the `es-packets` schedule; CAT rewrite, peak-rate window,
-`version_number` after a switch, `discontinuity_indicator` on non-continuity PIDs. Egress-timing promotion
+**Not taken up:** a normative time reference; the `es-packets` schedule; `discontinuity_indicator` on
+non-continuity PIDs. (The CAT rewrite, the peak-rate window and `version_number` after a switch came
+in #46, below.) Egress-timing promotion
  ([#32](https://github.com/mondain/msfts/issues/32)) is partially addressed by unmodified output rules and
 #42 T-STD scope for verbatim modes; demuxed timing and ES recombination obligations that lived in -01 are
 out of MSFTS until `draft-lcurley-moq-mpegts`.
@@ -2366,8 +2373,15 @@ the -02 text: the 2-second Group bound against the random access rule, a multipl
 program having nothing to pace on, where a timing method would go, `es-packets` without arrival times,
 whether a baseline subscriber can take `per-program`, and the two meanings of
 `mpeg2tsProgramNumber`. It offers neither the test vectors the co-author asked for nor a companion
-draft on TS-output health. Their reply is
-awaited.
+draft on TS-output health. **[#46](https://github.com/mondain/msfts/pull/46) answered it (merged
+2026-10-09, `14022fae`):** a multiplex paces on the first program in the PAT by default; every
+TS-output subscriber MUST also support 188-octet `per-program`; the CAT rule, the peak-rate window
+and the version rewrite after a switch are in; a source discontinuity in the unmodified modes reaches
+the subscriber unchanged. The Group bound, the timing method and `es-packets` timing were not taken up.
+**Round three posted as [#47](https://github.com/mondain/msfts/issues/47)** (2026-10-11, the author's
+go-ahead): one testable output rule in every mode, following the source clock within 2.4.2.1's
+limits, no waiting for a late Object, a replacement track or an unflagged PCR step treated as a
+switch, and the Group bound against random access as the one open question. Open.
 
 ---
 
