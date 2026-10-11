@@ -1759,7 +1759,9 @@ back to back between them; a unit test of one full slot of a 25 Mb/s broadcast f
 of 1,067 B on `f8215bc47` (`schedule.rs` unchanged on `d006689f8`), and the same packets in
 smooth weighted round-robin peak at 459 B ([T45](test-45-live-tstd-remux.md)). **Fixed by
 [#5207](https://github.com/moq-dev/moq/pull/5207), merged on 2026-10-10**: each slot interleaved so
-no PID overruns its transport buffer, our test as the regression. Not re-measured.
+no PID overruns its transport buffer, our test as the regression. On `main` (`9f1dd1afd`) the same
+110 s cut overruns video TB on 88 of 943,296 packets (peak 646 B), against 36 % (peak 1,311 B)
+before: the layout cause is gone, and a residue remains, not yet diagnosed. **Fixed**, residue open.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
