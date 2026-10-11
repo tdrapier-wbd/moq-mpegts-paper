@@ -473,8 +473,12 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   is one 391-byte section over three packets (eleven AC-3 services with their descriptors, SCTE-35,
   captions), is imported whole. The export subscribes to its fifteen tracks and exits 2 s later with
   nothing written, on *failed to write whole buffer* in `mpeg2ts`'s PSI writer, which writes a
-  section into a single packet. The 1080i25 service's PMT is 153 bytes, and the export runs its 110 s
-  in 25 Mb/s CBR, with all 4,146 PCRs within ±481 ns and no interval over 25 ms. Of the source's own
+  section into a single packet. The PMT-split fix (`d7dc586e7`, unmerged) writes the section whole,
+  with no continuity error, but the export then stops after 6 pictures on *missed a decode deadline on
+  PID 201*, the first AC-3, at both 1 s and 2 s. That PID's audio is on time in the source (no
+  underflow, margin ≥ 38.7 ms over the first 13 s) while the source's video overruns TB, so this
+  recording fails the T-STD too and is no clip for P0-l. The 1080i25 service's PMT is 153 bytes, and
+  the export runs its 110 s in 25 Mb/s CBR, with all 4,146 PCRs within ±481 ns and no interval over 25 ms. Of the source's own
   faults, the late audio is repaired: no audio unit decodes before it has arrived, against 103–301 a
   PID in the source, as much as 394 ms late. The output adds faults the source does not have. Video
   overruns TB on 36 % of its packets (peak 1,311 B), though the export reads the SPS's HRD and holds
@@ -485,7 +489,10 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   TB that drains at Rx. A unit test laying out that slot overruns TB on 932 of 1,436 video packets
   over four slots (peak 1,067 B); the same packets in smooth weighted round-robin peak at 459 B, so
   the slot is feasible and the layout is the cause. No clip here before ran its multiplex faster than
-  its video's Rx, which is when this shows. Eight AC-3 units
+  its video's Rx, which is when this shows. With the slot interleaved (`main`, `9f1dd1afd`, same
+  rig) video overruns TB on 88 of 943,296 packets in 32 events from 14 s on (peak 646 B), one video
+  frame is dropped late, and the PCR stays within ±481 ns: the layout cause is gone and a small
+  residue is not yet explained. Eight AC-3 units
   stay in B up to 1.05 s, and the system TB overflows by four packets. The recording has 1,398
   continuity gaps of its own across every PID, so its completeness grade (a third of the video and a
   tenth of each audio missing) measures the recording, not the export.
