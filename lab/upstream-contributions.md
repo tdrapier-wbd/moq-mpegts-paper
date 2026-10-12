@@ -1242,6 +1242,9 @@ message can now open with the measured MoQ-versus-SRT table and its qualificatio
 
 ## 5c. The TS export's schedule and lifecycle, and import robustness
 
+Every fix below that is described as on `main` is in no release yet: moq-cli 0.14.3 and moq-relay
+0.17.3 (2026-10-11) were cut from the `release` branch without them.
+
 ### The determinism measurement, posted to #2829 — and the correction it needed first
 
 The head-to-head pair comparison was posted on [#2829](https://github.com/moq-dev/moq/issues/2829): two
@@ -1737,20 +1740,29 @@ rig 2. The quest asks for both rigs to be re-run once it lands, and flags a rig-
 mid-GOP join, before any failover, as possibly separate. **#5109 merged on 2026-10-09** as
 `d006689f8`, accepted as that same-epoch fix, its body now referring to #5052 rather than closing
 it; the maintainer reworded the quest to reject only a guard at the schedule's bail, which stays.
-We have not re-measured the merge. The no-stitch fix itself landed on 2026-10-10
+The no-stitch fix itself landed on 2026-10-10
 ([#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)):
 an epochless track ends on an upstream error, and the export lingers within an epoch only, `--stitch`
-switching programs on a replacement.
+switching programs on a replacement. **Both rigs re-run on `main` at `90500867d`, with and without
+`--stitch`: no run of 32 dies on a late unit, on either rig, so #5052 is verified fixed**
+([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*). Without `--stitch` every
+replacement ends the export at once, as designed; with it 6 of 7 crash or clean replacements resume,
+and the shared-epoch failover is taken over on `moq-lite-07`, and on `moq-lite-06` with `--linger`.
+One residue, **not reported**: in 1 of 4 `moq-lite-06` crash runs under `--stitch`, the dead
+instance's in-flight catalog request failed at the relay as `internal error`, which the follower's
+resolve treats as a refusal from a live instance and fails loud on, where the same error on a track
+read lingers and resumes.
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
-[#5110](https://github.com/moq-dev/moq/issues/5110).** `mpeg2ts` serialises the rebuilt PMT into a
+[#5110](https://github.com/moq-dev/moq/issues/5110), fixed by #5220, merged and verified.** `mpeg2ts` serialises the rebuilt PMT into a
 single packet, so a playout recording with eleven AC-3 services (a 391-byte section over three
 packets) is imported whole and exported not at all, on `f8215bc47`, while a 153-byte PMT exports
 through ([T45](test-45-live-tstd-remux.md)). Accepted as `quest/m1/ts-pmt-split.md`; the maintainer's
-fix, [#5220](https://github.com/moq-dev/moq/pull/5220), is open. Its head `d7dc586e7` writes that PMT
-whole on the same recording (one 391-byte section, all fourteen streams, no continuity error), as we
-[reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794). **Open**
-until it merges.
+fix, [#5220](https://github.com/moq-dev/moq/pull/5220), at its head `d7dc586e7` wrote that PMT whole
+on the same recording (one 391-byte section, all fourteen streams, no continuity error), as we
+[reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794). **Merged on
+2026-10-11 as `c053ef01e`, closing #5110; verified on `main` at `90500867d`**: the same PMT, whole, on
+the same recording and rig. **Closed.**
 
 **Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
 as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
@@ -1788,9 +1800,10 @@ resumes once on both. The new path fired in no run, and across the nine failed e
 broadcast closed within 13.8 ms of the first track error, on loopback. Every run that does not
 resume is #4945's.
 
-**Still open:** the export that does not resume across a crash replaced under a fresh epoch; the fMP4
-and MKV exporters have no linger; the error text does not discriminate a
-crash from a clean end, only the exit code does.
+**Still open:** a crash replaced under a fresh epoch is followed only under `--stitch`, and there
+the dead instance's `internal error` can still end the export (above); the fMP4 and MKV exporters
+have no linger; the error text does not discriminate a crash from a clean end, only the exit code
+does.
 
 ### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
 
