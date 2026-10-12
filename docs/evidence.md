@@ -287,8 +287,8 @@ default `--max-age 500ms` each resume flags the PCR discontinuity one to four ti
 any other is an explicit programme switch** (`--stitch`: a new PMT, the break flagged on every PID).
 Without it a replacement ends the export at once (7 of 7 runs, either protocol). With it the export
 resumed at every replacement in 6 of 7, continuity-clean with one flag each and no late unit, in 3–6 s
-(10–13 s where it waited out a dead moq-lite 06 session); in the seventh it took the dead instance's
-`internal error` for a refusal and exited (P1, file domain, loopback, one relay, one to four runs per
+(10–13 s where it waited out a dead moq-lite 06 session); in the seventh a request dropped by a
+just-killed replacement reached it as `internal error`, which it took for a refusal and exited on (P1, file domain, loopback, one relay, one to four runs per
 arm; [T47](../lab/test-47-fixed-delay-export.md) § *Re-requests on `main`*). So a standing egress keeps
 its supervisor as a backstop. A fresh importer reusing its predecessor's epoch is taken for the same
 instance and carries nothing, since each importer numbers its groups from zero.

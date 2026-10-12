@@ -857,7 +857,8 @@ same process, flagging each resume on the PCR PID, up to four times per resume a
 than the recovery path. On later October 2026 `main` the linger covers only the same publisher
 instance; a replacement, whether a crash's or a clean restart's, is followed only under `--stitch`, as
 a programme switch with a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out
-a dead session. One crash in seven still ended the export, so the supervisor stays as a backstop.
+a dead session. One replacement in seven still ended the export, so the supervisor stays as a
+backstop.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.

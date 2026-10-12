@@ -1193,10 +1193,10 @@ idle timeout. **No cell of either rig died on a late unit**: 0 *missed a decode 
 - **Criterion 6 holds in 6 of 7.** Each resume flags the PCR PID once and TSDuck reads 0 continuity
   errors; the resume costs 3.2–4.0 s after a crash on either protocol, except the second crash on
   `moq-lite-06` (10.4–12.6 s, the export waiting out the dead session), and 4.9–6.1 s across a clean
-  end with a 5 s publisher gap. The exit: the dead instance's in-flight requests fail at the relay
-  as `internal error`; where the export's own track read gets that error first, it lingers and
-  resumes, and where the catalog lookup does, the error reads as a refusal from a live instance and
-  the export fails loud.
+  end with a 5 s publisher gap. The exit: as the linger began, the export's catalog lookup went to
+  the first replacement, killed 60 ms earlier and not yet timed out; 10 s later the relay dropped
+  the request, and `Dropped`, having no stream code, reaches the export as `internal error`, which
+  the follower takes for a refusal from a live instance and fails loud on.
 - **Criterion 7 holds on `moq-lite-07` only.** On 07 all eight exports take over 6–9 s after the
   kill, after a 3–6 s stall, and none exits at the mid-GOP join. On 06 without `--linger` the export
   waits out the dead session and exits on the error, with or without `--stitch`.
@@ -1335,7 +1335,8 @@ on `2dc542b4a`, 17–19 on `559a35244` and its scratch build, 20–22 on `f8215b
 23. **On `90500867d` a re-request no longer kills the export, and following another instance is an
     explicit programme switch.** No re-request ended on a late unit in 32 runs. A replacement is
     followed only under `--stitch`, each resume costing 3–6 s, or up to 13 s where the export waits
-    out a dead session, and once in seven it ends the export on the dead instance's `internal error`. A shared-epoch standby on one relay is taken over on
+    out a dead session, and once in seven it ends the export on a request dropped by a just-killed
+    replacement, which reaches it as `internal error`. A shared-epoch standby on one relay is taken over on
     `moq-lite-07`, and on `moq-lite-06` only with `--stitch --linger`.
 
 ## Limits
