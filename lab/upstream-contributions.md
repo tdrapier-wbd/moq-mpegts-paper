@@ -1751,7 +1751,8 @@ and the shared-epoch failover is taken over on `moq-lite-07`, and on `moq-lite-0
 One residue, **drafted, not yet reported**: in 1 of 4 `moq-lite-06` crash runs under `--stitch`,
 the export's catalog lookup went to a replacement killed 60 ms earlier; the relay dropped it when
 that session timed out, and `Error::Dropped`, which has no stream code, went out as `Internal`, so
-the follower, which exempts only a local `Dropped`, took it for a refusal and failed loud.
+the follower, which exempts only a local `Dropped`, took it for a refusal and failed loud. The
+unclaimed `quest/m1/dropped-sources.md` already plans the mapping; the draft offers this as its case.
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110), fixed by #5220, merged and verified.** `mpeg2ts` serialises the rebuilt PMT into a
