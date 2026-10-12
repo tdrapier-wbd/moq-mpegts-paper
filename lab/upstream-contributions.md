@@ -1611,8 +1611,11 @@ under loss is a rewind, and `rewind()` renewed the hold's full `max_age` budget,
 skipped again. An instrumented build of `main` at `5124f8134` with only the hold varied gives 1.13 Mb/s
 at 10 % loss as it stands, 9.80 with the hold disabled and 8.37 with it capped at 200 ms; the PR before
 merge gives 9.70 and 9.87 at 10 % loss, and 9.84 at 0 % against 9.85 unfixed. The merged commit also
-clears the stall in `resume()`, which the measured arms predate. **Open:** a rerun of C7 on the merged
-build.
+clears the stall in `resume()`, which the measured arms predate. **Those rates are egress, which the
+export pads:** graded on content, the merged build (`83ce47fe`) carries 8.0 % and 2.6 % of the video at
+10 % loss, as little as the standing `84b34f54` (2.7 %), so the fix ends the exporter's stall but not
+the loss #4613 reports ([T8b](test-8b-congestion-control.md) § *C7*). A correction for #4613 is drafted,
+unsent.
 
 ### The video DTS reserve froze at the PMT — contributed as [#4500](https://github.com/moq-dev/moq/pull/4500), merged and verified on `main`
 
@@ -2450,7 +2453,11 @@ the subscriber unchanged. The Group bound, the timing method and `es-packets` ti
 **Round three posted as [#47](https://github.com/mondain/msfts/issues/47)** (2026-10-11, the author's
 go-ahead): one testable output rule in every mode, following the source clock within 2.4.2.1's
 limits, no waiting for a late Object, a replacement track or an unflagged PCR step treated as a
-switch, and the Group bound against random access as the one open question. Open.
+switch, and the Group bound against random access as the one open question. **Answered by
+[#48](https://github.com/mondain/msfts/pull/48)** (open, approved by the co-author): MSFTS now
+specifies only the Objects, the Groups and the catalog, and leaves subscriber output to the
+receiver's standards. It removes points 1–4 and every subscriber output rule above, #46's included,
+and settles point 5 by deleting the Group bound.
 
 ---
 
