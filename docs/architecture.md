@@ -381,10 +381,9 @@ must be locked to the source from the arrivals and timestamps alone. The second 
 legs are byte-identical, as ST 2022-7 requires, only if the schedule is computed from the stream
 alone, not from arrival (§5.1). The merged export answers part of each: it held conformance across
 hosts for 35 min, its clock following the source's at its slew limit, and two exports started together
-are byte-identical, on one host or two, while a leg started 8 s later is not (§5.1). Until conformance is shown sustained across hosts, the
+are byte-identical, on one host or two (§5.1). Until conformance is shown sustained across hosts, the
 media-aware lane feeds a remote TS receiver on the receiver's tolerance rather than on sustained
-conformance; until a late leg merges, rebuilt legs must be co-started. How much tolerance real IRDs
-have is unmeasured.
+conformance. How much tolerance real IRDs have is unmeasured.
 
 ### 4.4 Placement and scaling
 
@@ -684,8 +683,8 @@ media-aware unless a specific feed or endpoint forces the fallback.**
 
 **For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS
 hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps
-the opaque lane the fallback is its evidence and its ecosystem. Its evidence is one run per setting, and no
-merged open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
+the opaque lane the fallback is its evidence, narrow as above, and its ecosystem: no merged open
+implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
 therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose
 receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which
 routes those are.
@@ -1158,11 +1157,12 @@ Ranked by how much a negative answer would change the architecture.
    reach, and upstream's merged fixed-delay export meets it in the subscriber (§4.3). What remains
    untested is source-clock drift and mid-stream PID change; each has a reproducible stimulus and an
    instrument asserted to grade it, but has met neither stage.
-4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled
-   (§5.1). Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two,
-   and its exports stay identical across a republish in 8 of 13 runs; what remains is a leg
-   started later, whose continuity counters are per-process and whose remaining residue is not yet
-   attributed on the merged build.
+4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled.
+   Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two, and its
+   exports stay identical across a republish in 8 of 13 runs; a leg started later does not, its
+   continuity counters being per-process and the rest of its residue unattributed. On the opaque
+   lane a leg joining 8 s late is already the same stream ([Evidence](evidence.md) §3.1), so what
+   remains there is a merge run.
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves
    most of the delivery bill.
 6. **Relay portability between implementations (§8).** This architecture treats the relay as a
