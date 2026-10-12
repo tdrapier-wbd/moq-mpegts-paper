@@ -1614,8 +1614,9 @@ merge gives 9.70 and 9.87 at 10 % loss, and 9.84 at 0 % against 9.85 unfixed. Th
 clears the stall in `resume()`, which the measured arms predate. **Those rates are egress, which the
 export pads:** graded on content, the merged build (`83ce47fe`) carries 8.0 % and 2.6 % of the video at
 10 % loss, as little as the standing `84b34f54` (2.7 %), so the fix ends the exporter's stall but not
-the loss #4613 reports ([T8b](test-8b-congestion-control.md) § *C7*). A correction for #4613 is drafted,
-unsent.
+the loss #4613 reports ([T8b](test-8b-congestion-control.md) § *C7*). **Corrected on #4613**
+([comment](https://github.com/moq-dev/moq/issues/4613#issuecomment-6131858696)), offering a fresh
+issue for the loss.
 
 ### The video DTS reserve froze at the PMT — contributed as [#4500](https://github.com/moq-dev/moq/pull/4500), merged and verified on `main`
 
