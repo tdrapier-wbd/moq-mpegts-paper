@@ -1748,10 +1748,10 @@ switching programs on a replacement. **Both rigs re-run on `main` at `90500867d`
 ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*). Without `--stitch` every
 replacement ends the export at once, as designed; with it 6 of 7 crash or clean replacements resume,
 and the shared-epoch failover is taken over on `moq-lite-07`, and on `moq-lite-06` with `--linger`.
-One residue, **not reported**: in 1 of 4 `moq-lite-06` crash runs under `--stitch`, the dead
-instance's in-flight catalog request failed at the relay as `internal error`, which the follower's
-resolve treats as a refusal from a live instance and fails loud on, where the same error on a track
-read lingers and resumes.
+One residue, **drafted, not yet reported**: in 1 of 4 `moq-lite-06` crash runs under `--stitch`,
+the export's catalog lookup went to a replacement killed 60 ms earlier; the relay dropped it when
+that session timed out, and `Error::Dropped`, which has no stream code, went out as `Internal`, so
+the follower, which exempts only a local `Dropped`, took it for a refusal and failed loud.
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110), fixed by #5220, merged and verified.** `mpeg2ts` serialises the rebuilt PMT into a
@@ -1763,6 +1763,14 @@ on the same recording (one 391-byte section, all fourteen streams, no continuity
 [reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794). **Merged on
 2026-10-11 as `c053ef01e`, closing #5110; verified on `main` at `90500867d`**: the same PMT, whole, on
 the same recording and rig. **Closed.**
+
+**The same-instance resume regression — measured for `quest/m1/ts-same-instance-resume.md` and
+[posted on #5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371).** The CLI test
+the quest names passed 40 of 40 on `main` at `90500867d` with the exporter's stderr kept in its
+assertion, alone and with its file's tests in parallel under CPU load, so the validation branch's
+failure is not yet tied to `main`. Live, a fresh importer under a reused epoch is resumed into and
+carries nothing, exit 0 ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*), offered as
+the quest's invalid-replay control. **Open**, with the maintainer.
 
 **Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
 as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
