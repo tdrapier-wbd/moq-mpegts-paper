@@ -35,8 +35,10 @@
 > The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews
 > the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate, measured
 > on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`),
-> and confirmed on the merged build: `main` at `83ce47fe` delivers the full rate at 10 % loss.
-> The upstream discussion this test came from is
+> and confirmed on the merged build: `main` at `83ce47fe` delivers the full rate at 10 % loss. Every
+> C7 rate is egress bytes, which the export pads: graded on content, the older build's 10 % run
+> carries 2.7 % of the video ([T48](test-48-passthrough-export.md)), and the merged build's is not yet
+> graded. The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
@@ -918,9 +920,10 @@ merged commit adds one change the arms did not carry: `resume()` now clears the 
 replacement broadcast starts with a fresh budget. Before the merge, a receiver on `main` had to choose
 between #4001's deterministic multi-track interleave ([T12](test-12-dual-path-handoff.md)) and
 delivery under loss, because pinning the subscriber to #4001's parent gave up the interleave. A
-subscriber at or after `e488e699` keeps the full rate under loss, falling back to arrival order while
-the loss lasts: the merged build at `83ce47fe` measures 9.68 and 10.82 Mb/s at 10 % loss against
-9.84 Mb/s at 0 %, matching the pre-merge arms. That it keeps the interleave on a clean path is
+subscriber at or after `e488e699` keeps the full egress rate under loss, falling back to arrival order
+while the loss lasts: the merged build at `83ce47fe` measures 9.68 and 10.82 Mb/s at 10 % loss against
+9.84 Mb/s at 0 %, matching the pre-merge arms. How much of that is content is not measured
+(§ *Corrections*). That it keeps the interleave on a clean path is
 #4001's result and is not re-measured here. These are the figures the hardware-window rehearsal
 build should be checked against.
 
@@ -1103,6 +1106,14 @@ track one wait. The collapse needs `rewind()` to renew the hold at every source 
 the diff never reached that, because the renewal sits in another function, reached only through the
 consumer's discontinuity counter. **Rule:** see
 [method notes § a mechanism read from a diff names the component, not the loop](method-notes.md#a-mechanism-read-from-a-diff-names-the-component-not-the-loop).
+
+**Believed** (C7): a build delivering at least 90 % of its 0 % egress rate at 10 % loss delivers the
+programme. **True:** the export pads to the mux rate, and graded on content `84b34f54`'s 7.21 Mb/s at
+10 % loss is 95.9 % null packets carrying 2.7 % of the video, against 100 % at 0 % loss
+([T48](test-48-passthrough-export.md) § *Under 10 % loss*). C7's rates compare how much each build's
+export pads; the #4001 bisection and #4618's mechanism stand as findings about the exporter's output
+stalling, not about content delivered. **Rule:** the existing one, grade a padding exporter on its
+content PIDs ([method notes](method-notes.md), from T20 4a); C7 predates it and was not re-graded.
 
 ## References
 

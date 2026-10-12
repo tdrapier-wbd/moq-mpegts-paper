@@ -11,7 +11,9 @@
 # env: LOSS_PCT (10), DELAY_MS (25, each way), CC (delay = BBRv3 on noq), CLIP, OUT (~/t8b-loss),
 #      SUB_BIN (the subscriber's build; defaults to <bin-dir>, set it to cross builds),
 #      LAT (2s, the export's --max-age or --delay value), KEEP_EGRESS (0; 1 keeps egress.ts for
-#      grading), and any MOQ_TS_* variables, which reach the export unchanged
+#      grading), IMPORT_ARGS / EXPORT_ARGS (flags appended to `import ts` / `export ts`, split on
+#      spaces; `--passthrough` on both for the passthrough lane), and any MOQ_TS_* variables, which
+#      reach the export unchanged
 #
 # Oracle: the relay and both clients stay alive for the window (an abort is a result), plus the
 # subscriber's delivered rate and TSDuck continuity on what it wrote. The egress file is deleted
@@ -28,6 +30,8 @@ DELAY_MS=${DELAY_MS:-25}
 CC=${CC:-delay}
 LAT=${LAT:-2s}
 KEEP_EGRESS=${KEEP_EGRESS:-0}
+read -ra IMPORT_EXTRA <<<"${IMPORT_ARGS:-}"
+read -ra EXPORT_EXTRA <<<"${EXPORT_ARGS:-}"
 CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
 OUT=${OUT:-/home/ubuntu/t8b-loss}/$LABEL
 PORT=4443
@@ -46,6 +50,7 @@ mkdir -p "$OUT"
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	[ "$SUB_BIN" = "$BIN" ] || echo "subscriber: $("$SUB_BIN/moq" --version 2>&1 | head -1) from $SUB_BIN"
 	echo "label=$LABEL loss=${LOSS_PCT}% delay=${DELAY_MS}ms each way cc=$CC secs=$SECS lat=$LAT"
+	echo "import_args=${IMPORT_ARGS:-} export_args=${EXPORT_ARGS:-}"
 	env | grep '^MOQ_TS_' | sort
 	echo "started=$(date -Is)"
 } | tee "$OUT/meta.txt"
@@ -72,13 +77,15 @@ sleep 2
 
 BCAST="t8b.loss.$LABEL.hang"
 DIAL=$(printf '%q ' "${MOQ_DIAL[@]}")
+IMPORT_TAIL=
+((${#IMPORT_EXTRA[@]})) && IMPORT_TAIL=$(printf '%q ' "${IMPORT_EXTRA[@]}")
 ip netns exec t8b-pub bash -c "tsp --realtime -I file '$CLIP' -P regulate --pcr-synchronous -O file - 2>/dev/null \
-	| '$BIN/moq' $DIAL https://10.99.0.1:$PORT --broadcast '$BCAST' import ts" >"$OUT/import.log" 2>&1 &
+	| '$BIN/moq' $DIAL https://10.99.0.1:$PORT --broadcast '$BCAST' import ts $IMPORT_TAIL" >"$OUT/import.log" 2>&1 &
 PIDS+=($!)
 sleep 4
 
 ip netns exec t8b-sub "$SUB_BIN/moq" "${SUB_DIAL[@]}" "https://10.99.0.1:$PORT" --broadcast "$BCAST" \
-	export ts "${SUB_LAT[@]}" "$LAT" >"$OUT/egress.ts" 2>"$OUT/export.log" &
+	export ts "${SUB_LAT[@]}" "$LAT" "${EXPORT_EXTRA[@]}" >"$OUT/egress.ts" 2>"$OUT/export.log" &
 SUB_P=$!
 PIDS+=("$SUB_P")
 

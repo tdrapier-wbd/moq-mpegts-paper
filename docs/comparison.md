@@ -36,7 +36,7 @@ Point-to-point incumbents set a low bar on fan-out (§10).
 | Candidate | What it is here | Class |
 |---|---|---|
 | **MoQ** | `moq import ts` → relay fabric → `moq export ts`, on QUIC/WebTransport | live publish/subscribe with native relay |
-| **Segmented HTTP** | HLS carrying MPEG-TS segments (and DVB-DASH), over HTTP/2 or HTTP/3 | cacheable-object pull over commodity delivery |
+| **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (and DVB-DASH), over HTTP/2 or HTTP/3 | cacheable-object pull over commodity delivery |
 | **SRT / Zixi / RIST** | a reliable UDP tunnel per destination, optionally through a gateway tier | point-to-point session transport |
 
 They are grouped by *scaling shape*, not by quality, which flatters two of them: RIST is openly
@@ -49,7 +49,7 @@ and several incompatible implementations, so choosing it buys a vendor rather th
 does not carry an MPEG-TS at all. Segmented HTTP is assessed against [HTTP Live Streaming 2nd
 Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)
 (`draft-pantos-hls-rfc8216bis-22`, which obsoletes RFC 8216 and folds in Low-Latency HLS), quoted from
-the normative text because practitioner convention diverges from it in both directions (§13).
+the normative text because practitioner convention diverges from it in both directions.
 
 ---
 
@@ -120,10 +120,9 @@ live subscription and a deliberately shallow relay cache ([Evidence](evidence.md
 segmented HTTP in the protocol, and the tooling does not deliver it**: no off-the-shelf TS client survives
 an origin restart ([T6](../lab/test-6-relay-resilience.md)), and Content Steering is specification-only.
 An origin killed for ten seconds costs the segmented lane no content, where the media-aware exporter
-skips to the live edge. Across a *transport* outage the media-aware lane recovers nearly all of the
-content from the relay cache, but pays in a latency step that does not reverse, where SRT holds its
-latency and discards the content: the two are billed in different currencies ([Evidence](evidence.md)
-§3.3).
+skips to the live edge. Across a *transport* outage, graded on content, the media-aware lane loses
+more of the programme than SRT and also pays in a latency step that does not reverse, where SRT holds
+its latency ([Evidence](evidence.md) §3.3).
 
 **Neither lane's transport reports a stalled source, and only the segmented one offers a substitute**: its
 playlist media sequence stops advancing, which a poller can alarm on without parsing media
@@ -461,7 +460,7 @@ grooming function at the receiver.
 absence), and named objects are a substrate for range repair only in *reasoning*. Part 7 was approved in
 July 2025 and revised in December 2025, Part 8 in June 2026, with implementation evidence limited to
 vendor announcement and single-vendor demonstration. **Nothing in §10.2 is measured here**, which is why
-§14.1 frames the model as a competing resolution rather than scoring it.
+§13.1 frames the model as a competing resolution rather than scoring it.
 
 ---
 
@@ -481,8 +480,7 @@ HLS back into a transport stream** ([Evidence](evidence.md) §3.9):
 | **CBR TS → paced wire** | [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts), `mpegts-pacer` | identical | the same gateways |
 
 The receive row is the layer §6.1 leaves open, and it points both ways: the free low-latency receiver is
-MoQ's, the commercial one segmented HTTP's. Extending TSDuck's `hls` input for partial segments is in
-[planned-experiments](../lab/planned-experiments.md).
+MoQ's, the commercial one segmented HTTP's.
 
 ---
 
@@ -507,36 +505,16 @@ nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less
 pressure and ends a broadcast with its publisher ([Architecture](architecture.md) §5).
 
 **No open implementation subscribes to whole-TS carriage**, as of October 2026: `moq2ts` and `moqxr`
-publish only, `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside the media-aware
-lane, and the opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore not
+publish only, as does `moq-dev`'s whole-multiplex import, whose export is not built
+([Evidence](evidence.md) §3.1); `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside
+the media-aware lane; and the opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore not
 runnable against an open receiver, which is why §8's structural limits do not by themselves move the
 preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
 ([Evidence](evidence.md) §3.7).
 
 ---
 
-## 13. Seven readings the comparison corrects
-
-The measurement rules behind them are in [`lab/method-notes.md`](../lab/method-notes.md).
-
-- **TS-in-HLS is not new** — MPEG-TS was HLS's original container; Low-Latency mode added partial
-  segments.
-- **QUIC is not decisive** — Low-Latency HLS requires HTTP/2 or HTTP/3, and MoQ differs in the object
-  model above QUIC (§3.1).
-- **Client-side HLS inputs do not discharge the distributor's grooming obligation** (§4.1).
-- **TS segments are verbatim in payload, not as a mux** — one inserted PAT/PMT pair costs PCR accuracy
-  (§8).
-- **Stuffing retention is not optional on segmented HTTP** — stripping it would forfeit the §8 advantage
-  (§9).
-- **Transparent tunnels pass the source's cadence; MoQ re-paces** — 30.6 kB bursts against 12.2–12.4 kB
-  whatever the source (§4.3).
-- **Sub-second MoQ delivery is measured, and not at conformance** — 109 ms on a wire that is not
-  P1-conformant, against 2,447 ms conformant (§5.1). A latency figure and a conformance figure must come
-  from the same bytes.
-
----
-
-## 14. Verdict, axis by axis
+## 13. Verdict, axis by axis
 
 Read "favours" as *today*, on the evidence in this repository and the current specifications. **Basis**:
 **M** measured here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none.
@@ -567,7 +545,7 @@ enforcement, ~7 % less wire volume — a rounding error against five-to-ten× de
 P1/P2 conformance, a decisive margin in the two-to-nine-second band that is not a sub-second result.
 **Broadcast-grade work is common to both** and sits above neither specification.
 
-### 14.1 The framework the final conclusion has to satisfy
+### 13.1 The framework the final conclusion has to satisfy
 
 **Viability is a gate, not a score** — whether each plane can serve permanent primary distribution, and
 under what conditions each is preferable.
@@ -598,7 +576,7 @@ footprint on a common always-on feed — and a route that reads "incumbent" on d
 
 ---
 
-## 15. Open questions
+## 14. Open questions
 
 Ranked by leverage:
 
@@ -630,7 +608,7 @@ Ranked by leverage:
 
 ---
 
-## 16. References
+## 15. References
 
 The implementations and specifications this comparison assesses. Where a row is graded rather than
 described, the grading is in [Evidence](evidence.md) §3.7 (interop) and §3.1 (carriage).

@@ -1097,6 +1097,26 @@ failure class if its median media lost across three repeats is lower than the ot
 ingress rate and matched conformance of pre-fault bytes. A tie within ± 0.5 s programme time is
 reported as tied.
 
+**For the remaining MoQ cells on builds whose export takes `--delay` (P1-a), fixed before they
+run.** `--delay` is a release delay: a frame goes out at its timestamp plus the delay, and one that
+arrives later is dropped and counted. Unlike `--max-age`, it is meant to set delivered latency, so the
+lanes can be matched on the setting itself and the scoring gains the latency axis it lacked.
+
+6. **Matched by setting, and checked.** MoQ at `--delay D` against SRT at `--latency D`, D ∈ {1, 2,
+   3, 6 s}; 500 ms is excluded because the export does not last a whole capture there
+   ([T47](test-47-fixed-delay-export.md)). A cell is matched only if each lane's median delivery latency
+   in the unimpaired window is within 100 ms of D plus the path's one-way delay; otherwise it is reported
+   as unmatched and not ranked.
+7. **Graded as before, three replicates.** Content lost, conserved, on the MoQ lane; the PCR timeline
+   on SRT's byte-faithful output. The exporter's late-drop count is read beside it.
+8. **Two-axis verdict.** At a matched D a lane is superior for a shape if its median media lost is lower
+   by more than 0.5 s and its delivery latency, 30 s after the impairment ends, is back within 100 ms of
+   its pre-fault median. A lane that loses less but holds a higher latency afterwards is not superior,
+   and the cell says so.
+9. **The infrastructure axis** (kill and restart the publisher, the relay and the exporter, one per
+   run) is graded the same way on both lanes in the `netns` rig, three replicates per cell, with the
+   time to stable operation as defined above.
+
 ## Limits, stated in advance
 
 - **P1 file egress only in v1.** Wire timing (P2) and hardware IRD merge are out of scope; outage
@@ -1129,23 +1149,28 @@ and the grader are all on the EC2 secondary.
 
 - **Which `dev` changes raised the outage cost.** The stack and the controller are excluded, and the
   probes place the cost on `dev` in at least two steps, but three-replicate bisections of each step
-  end on merges whose parents both pass (§ *The build bisection*). The arm that settles it runs each
-  merge and both its parents at ten replicates and compares distributions rather than worst cases,
-  about six hours of the secondary. What upstream could act on without it is the cell and the range.
+  end on merges whose parents both pass (§ *The build bisection*). The arm running now takes each
+  merge (`b22ddbf59`, parents `16f177925` and `850a7ee64`; `07f313286`, parents `d5621226b` and
+  `68c46e50e`) at ten replicates of the 5 s outage cell at the 3 s budget, built and graded as the
+  bisection was ([`t2831-idle-bisect.sh`](scripts/t2831-idle-bisect.sh) `--step`,
+  `JUDGE=missing`, one replicate per invocation so a void replicate costs only itself). **Rule,
+  fixed before it ran:** one build is *above* another when a one-sided Mann–Whitney test on video
+  missing gives p < 0.05 and the medians differ by at least 2 s, twice the method's resolution. A
+  merge above both parents carries the step itself, as an interaction. A merge above one parent only
+  matches the other, so the step came in on that side and the three-replicate verdict there was
+  wrong. A merge above neither does not carry a step. If neither merge does, the cost is recorded as
+  spread across `dev` at this resolution, and P1-q closes on the cell and the range, which is what
+  upstream could act on either way.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.
-- **Add the latency axis to the pre-registered scoring rule.** Criterion 5 ranks on media lost alone.
-  On content the MoQ lane now loses on that axis as well, so the omission no longer flatters it, but
-  it still cannot see that the lane also re-times the service after an outage; any future lane
-  comparison here needs a two-axis verdict, and that revision is not yet written.
 - **Extend the re-convergence pass beyond 117.8 s.** The source clip, not the commanded window, ended
   it. A lane flat to ±0.24 s over 75 s is not converging, but "never" is not yet measured.
 - **Replicate the idle-timeout bracketing, graded on content with its controls kept.** One replicate
   per cell, and the missing-at-close figures in § *The 30 s cell* are estimated from another run's
   join offsets.
 - **A genuine SRT budget sweep under sustained loss.** Matching on measured latency collapsed the
-  three budgets onto one ≈2 s setting.
+  three budgets onto one ≈2 s setting; criterion 6's ladder is that sweep.
 - **The bandwidth step** is in [T31](test-31-congestion-capacity-ladders.md); **the infrastructure
   axis** — kill and restart a publisher, a relay and an exporter — is not run in this rig and graded
   on content. [T6](test-6-relay-resilience.md) drills the relay and publisher restarts on loopback,
@@ -1153,7 +1178,7 @@ and the grader are all on the EC2 secondary.
 - **The segmented lane in the `netns` rig**: reorder is not run there, the 5 s outage is one sample,
   and the loss collapse is attributed to the origin's loss-based sender by reasoning; the arm that
   would test it runs the origin with BBR. Criterion 3's three-way ranking needs the reorder cell and
-  the latency axis above, since this lane is never at the other two lanes' latency.
+  a two-axis rule that, unlike criterion 8, can rank a lane never at the other two lanes' latency.
 
 Quoting [T6](test-6-relay-resilience.md) recovery times as programme-loss figures remains
 methodologically out of bounds; the MoQ lane now has programme-loss figures of its own, graded on

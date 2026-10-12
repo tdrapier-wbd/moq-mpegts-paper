@@ -525,6 +525,27 @@ failure mode is a finding.
    aggregate stays above 95 % of uncontended single-flow delivery through the **permanent 8 Mb/s** step,
    or record that no budget in {1, 3, 4, 6 s} suffices — falsifying deployment at that contention level.
 
+**Restated for builds whose export takes `--delay` (P1-d, P2-e), fixed before they run.** `--delay` is
+a release delay: each frame goes out at its timestamp plus the delay, and one arriving later is
+dropped and counted, so it sets delivered latency where `--latency-max` bounded staleness. Criterion 5
+is replaced on those builds by:
+
+6. **Delivered latency is the delay.** In each subscriber's unimpaired window its median delivery
+   latency is within 100 ms of the delay plus the path's one-way delay. A subscriber that fails this is
+   reported, and its cell is not used for criterion 7.
+7. **Delay × contention × RTT (MoQ).** T8b C3's shared bottleneck with n ∈ {2, 3} subscribers,
+   `--delay` ∈ {1, 2, 4, 6 s}, base RTT ∈ {20, 100, 200 ms}, through the permanent 0.8× rung. Each
+   subscriber is graded on content, with its late-drop count. For each (n, RTT) the result is video lost
+   against delay as a curve, and the smallest delay at which every subscriber is within the method's
+   ±1 s of its unimpaired control, or the record that none in the ladder is. A curve that rises with
+   the delay is a finding, not a failed cell.
+8. **Recovery operating point on `--delay` builds.** The export holds a fixed delay by construction, so
+   criterion 2's buffer test reads the relay's per-subscriber queue (the instrumentation P1-d asks
+   for); the rate test is unchanged.
+9. **Error bars (P2-e).** Every aggregate quoted from criterion 7, and every ladder rung on either lane,
+   rests on at least three replicates and is quoted as a range; rungs with fewer are re-run to three
+   before they are quoted again.
+
 ## Limits, stated in advance
 
 - **Namespace primary; wide-area corroboration optional.** Results bound behaviour at a controlled
@@ -564,9 +585,9 @@ a third party.
 - **Whether the MoQ boundary is the lane's or the wire's.** The rungs are multiples of the TS rate
   and the bottleneck shapes packets; measuring the lane's wire rate at 1.2× would say how much of
   the 1.0×–1.1× boundary is framing overhead.
-- **The latency-max × contention matrix** (criterion 5) at n ∈ {2, 3}, against capacity steps rather
-  than outages, and phrased so a non-monotonic answer is expressible.
-- **Buffer and RSS instrumentation** for criterion 2, which the current rig does not collect.
+- **The delay × contention × RTT matrix** (criterion 7), against a capacity step rather than an
+  outage, on a `--delay` build.
+- **Buffer and RSS instrumentation** for criteria 2 and 8, which the current rig does not collect.
 - **The segmented lane under loss with a sender that does not yield to it** — the same origin with
   BBR — which would say whether the collapse at 100 ms RTT is the lane's or its origin's controller.
 - **Durations beyond 60 s** on either lane's boundary rungs; the segmented lane's margin is set by
