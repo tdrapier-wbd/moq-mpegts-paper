@@ -5,7 +5,7 @@ the experiment record because the argument is different from "does MoQ suit broa
 distribution", and because much of the campaign's effort lives here in a way the per-experiment results
 alone do not show.
 
-**Why it belongs in the repository at all.** [Comparison](../docs/comparison.md) §14 scores
+**Why it belongs in the repository at all.** [Comparison](../docs/comparison.md) §13 scores
 operational maturity against a pre-1.0 ecosystem. This file is the concrete form: what a broadcaster
 procures is an implementation, not a specification, so much of what reads as "MoQ does X" is really
 "this build does X" — and several gaps recorded here have since closed. That is implementations
@@ -1364,7 +1364,8 @@ that fails without it; a test pins objects after the last PCR; and the bound is 
 2026-10-09** as `5566e4128`, our commit plus two of the maintainer's: a splice that is both a flagged
 forward jump and a random access point keeps its break marker, and `randomAccess` stays false once a
 layout has allowed none. CI passed on the merge; we have not re-measured it. The export half,
-`ts-passthrough-export`, is unbuilt. A
+`ts-passthrough-export`, is implemented on a branch and graded in
+[T48](test-48-passthrough-export.md), not yet proposed upstream. A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
@@ -1900,7 +1901,7 @@ republish are not a goal. `ts-hitless --sync` promises identity within one epoch
 planned TS export restart (quest `broadcast-epoch/export-ts`, from
 [#5108](https://github.com/moq-dev/moq/pull/5108)) ends the export on a replacement unless
 `--stitch` asks for a fresh export with a full program switch; `Export::resume()` goes. Identity
-across a republish is left to the passthrough export, unbuilt. E
+across a republish is left to the passthrough export, unmerged. E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
 ([method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
 
