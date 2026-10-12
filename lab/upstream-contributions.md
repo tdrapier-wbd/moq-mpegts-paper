@@ -1363,9 +1363,12 @@ that fails without it; a test pins objects after the last PCR; and the bound is 
 100 Mbit/s it is about thirteen of the 100 ms PCR gaps ISO/IEC 13818-1 allows. **Merged on
 2026-10-09** as `5566e4128`, our commit plus two of the maintainer's: a splice that is both a flagged
 forward jump and a random access point keeps its break marker, and `randomAccess` stays false once a
-layout has allowed none. CI passed on the merge; we have not re-measured it. The export half,
-`ts-passthrough-export`, is implemented on a branch and graded in
-[T48](test-48-passthrough-export.md), not yet proposed upstream. A
+layout has allowed none. CI passed on the merge; we have not re-measured it. The export half, graded in
+[T48](test-48-passthrough-export.md), is proposed in [#5349](https://github.com/moq-dev/moq/pull/5349)
+as the mode alone. It leaves `ts-passthrough-export` open, because the maintainer's
+[#5327](https://github.com/moq-dev/moq/pull/5327) is rewriting that quest's acceptance: the T-STD
+verdict and release schedule checked in CI, a wider fixture set, counted group omissions, and
+TSDuck and FFmpeg runs. A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
