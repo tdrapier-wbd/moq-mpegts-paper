@@ -82,14 +82,14 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 |---|---|---|---|
 | **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond loopback | §3.1 |
 | **Timing** | Grooming restores P1 PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; beyond a day; a real encoder's timeline | §3.2 |
-| **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer on every join tried at 500 ms–1 s, eight spread across a GOP included, on loopback, across hosts and up to 2 % loss at 1 s, and over 35 min at 1 s on loopback and across hosts, where its clock follows a drifting source at its slew limit and settles on it within 2 h, its 1 ms departure steps taking the drift rate past 0.075 Hz/s; but not over a whole capture at 500 ms, nor where the multiplex outruns the video's Rx | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
+| **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer on every join tried at 500 ms–1 s, eight spread across a GOP included, on loopback, across hosts and up to 2 % loss at 1 s, and over 35 min at 1 s on loopback and across hosts, where its clock follows a drifting source at its slew limit and settles on it within 2 h, its 1 ms departure steps taking the drift rate past 0.075 Hz/s; but not over a whole capture at 500 ms, nor, by a residue of 88 in 943,296 video packets, where the multiplex outruns the video's Rx | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
 | **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane under every shape run**, by a margin the build and QUIC stack set | The trunking knee; a real CDN edge; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
 | **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. Multi-track legs merge only behind the fixed-delay export merged on October 2026 `main`, and only as a co-started pair, on one host or two. Relay source failover is not hitless on any build measured, a shared publisher epoch included. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late-joining multi-track leg; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
 | **Cost** | Wire: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived). Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on | The opaque lane's wire cost; other sources; wide-area fan-out | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair stays identical across it in 8 of 13 runs | Why the other five diverge; a real encoder's step | §3.13 |
+| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair of exports stays identical across it in 8 of 13 runs, and a pair of republishing importers keeps both legs but follows the last to announce, so a step costs up to the legs' skew more | Why the other five diverge; a real encoder's step | §3.13 |
 | **Interop** | Media flows within one implementation and through none of eight other relays; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays fail | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 2,272–2,274 ms at a 1 s delay, also over 540 s, through the merged fixed-delay export | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -283,16 +283,15 @@ across a relay restart it resumed in-process with 0 continuity jumps after a 12.
 outage, and across 24 resumes over a publisher's clean end or crash no PID's counter jumped; at the
 default `--max-age 500ms` each resume flags the PCR discontinuity one to four times rather than once
 (P1, file domain, loopback, one relay, one run per arm; [T13](../lab/test-13-downstream-grooming.md)
-§ *Liveness*). **On October 2026 `main` a crashed publisher's replacement is resumed only where the
-publisher epoch is on the wire**, the opt-in moq-lite 07: the replacement's newer epoch ends the old
-broadcast as it announces, and the exporter resumed 8 of 8 crashes continuity-clean, one flag each, with
-no detection wait. On the default moq-lite 06 the exporter waits out the dead session, re-requests onto
-the live replacement, and exits on a late video unit, in 4 of 4 runs
-(P1, file domain, loopback, one relay; same section). On that build the exit comes only after the
-60 s linger; with upstream's later October 2026 linger fix it comes about 1 s after the failure, so
-the supervisor takes over within about a second, though the export still does not resume (3 of 3
-runs, same conditions). So a standing egress on the default protocol still needs its supervisor for a
-publisher crash.
+§ *Liveness*). **On later October 2026 `main` the linger covers one publisher instance, and following
+any other is an explicit programme switch** (`--stitch`: a new PMT, the break flagged on every PID).
+Without it a replacement ends the export at once (7 of 7 runs, either protocol). With it the export
+resumed at every replacement in 6 of 7, continuity-clean with one flag each and no late unit, in 3–6 s
+(10–13 s where it waited out a dead moq-lite 06 session); in the seventh it took the dead instance's
+`internal error` for a refusal and exited (P1, file domain, loopback, one relay, one to four runs per
+arm; [T47](../lab/test-47-fixed-delay-export.md) § *Re-requests on `main`*). So a standing egress keeps
+its supervisor as a backstop. A fresh importer reusing its predecessor's epoch is taken for the same
+instance and carries nothing, since each importer numbers its groups from zero.
 
 **Source failover across a relay mesh worked for a hard kill on the builds before the epoch, bounded by
 detection and by the standby's lag** ([T6](../lab/test-6-relay-resilience.md); P1, two relays on one
@@ -311,18 +310,22 @@ relay propagates completion, or hands the exporter a standby behind its live edg
 ends either way — so failover covers host loss and not the commoner SIGTERM or rolling restart.
 
 **On one relay, October 2026 `main`'s shared epoch removes the standby's arrival teardown but not the
-outage** ([T6](../lab/test-6-relay-resilience.md) § *Single-relay standby*; P1, loopback, one host,
-two publishers of one forked feed, a 6 s idle timeout, one to three runs per arm). The epoch travels
-only on the opt-in moq-lite 07; on the default 06 the relay sees two unrelated routes, and every
-failover is the exporter re-requesting. On 07 a hard kill moves a subscription to the standby with no
-error at the subscriber, but each importer still numbers its groups from its own start, so the
-continuation lands on different media: the export survived all three such failovers where the standby
-had started later, after a 3–6 s stall, and aborted on a timestamp rewind in two of three where it had
-started earlier. A subscription made before the standby announced is not resumed (3 of 3), a clean exit
-is switched at the signal and still ends the export (2 of 2), and the exporter survived 2 of 9
-re-requests. Upstream documents the pairing as requiring identical tracks with aligned groups, which no
-importer yet guarantees, so no configuration of two `moq import ts` publishers on one relay survives
-every case until one does.
+outage** ([T6](../lab/test-6-relay-resilience.md) § *Single-relay standby*,
+[T47](../lab/test-47-fixed-delay-export.md) § *Re-requests on `main`*; P1, loopback, one host, two
+publishers of one forked feed, a 6 s idle timeout, one to three runs per arm). The epoch travels only on
+the opt-in moq-lite 07; on the default 06 the relay sees two unrelated routes, and every failover is the
+exporter re-requesting. On 07 a hard kill moves a subscription to the standby with no error at the
+subscriber, but each importer still numbers its groups from its own start, so the continuation lands on
+different media: the export survived every such failover where the standby had started later (3 of 3,
+and all 8 exports on later `main`), after a 3–6 s stall, and aborted on a timestamp rewind in two of
+three where it had started earlier. A subscription made before the standby announced is not resumed
+(3 of 3), and a clean exit is switched at the signal and still ends the export (2 of 2). On 06, later
+`main` ends the export at the re-request unless it runs with `--stitch --linger`; with both, all four
+exports took over the kill of the instance they followed after a 4–6 s stall, one flag each, though a
+request racing the standby's arrival can move the export onto the standby as it arrives. Upstream
+documents the pairing as requiring identical tracks with aligned groups, which no importer yet
+guarantees, so no configuration of two `moq import ts` publishers on one relay survives every case
+until one does.
 
 **The segmented lane answers the other way, because its serving node holds no state**
 ([T6](../lab/test-6-relay-resilience.md); P0/P1, same clip and host):
@@ -624,6 +627,15 @@ not located, and upstream holds the outcome by design: after a replacement each 
 stream, its byte identity promised within one epoch only, and identity across a republish is left to
 an export of the whole multiplex, designed but not built.
 
+**A 1+1 ingest pair republished this way keeps both legs, but each export follows whichever leg
+announced last** ([T41](../lab/test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose
+importers each mint an epoch*; P1, wire, later October 2026 `main` with `--stitch`, `moq-lite-07`, one
+host, a flagged 1 s step, five runs and a single-importer control). Fed from one source, the legs
+restart together and the step costs the single importer's 2.9 s, with one flagged break; with one leg
+2 s behind, the export ends on the lagging leg and the step costs up to the skew more. Losing the leg
+followed is a further switch, with about 1.1 s missing. Such a pair is two supervised feeds under one
+name, not a hitless pair.
+
 ### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
 
 **For an operator:** a misbehaving receiver cannot damage another subscriber's programme, but receivers
@@ -738,11 +750,13 @@ timer, so the wire's phase moves in 1 ms steps. **Its limits**: over 540 s at 50
 it stops about 157 s in on the video's schedule, so 500 ms is not a working delay over a whole capture;
 **on a 25 ms path it stops between 2 % and 3 % loss at 1 s, and between 1 % and 2 % at 500 ms**,
 skipping evicted groups and then exiting loud on a missed deadline (at 500 ms and 2 % it runs the
-capture conformant but with units missing); it does not survive a re-request onto a live route
-(§3.4); and where the multiplex runs faster than the video's Rx, its slot layout overruns the video's
-transport buffer, on 36 % of the video packets of a 25 Mb/s broadcast recording (peak 1,311 B against
-512 B; P1, wire, loopback, moq 0.14.2, one 110 s cut), a fault of the layout rather than the rate,
-since the same slot's packets interleaved evenly stay within it. **It presents at twice the delay plus about 275 ms** at
+capture conformant but with units missing); on later October 2026 `main` it follows another publisher
+instance only as a flagged programme switch (§3.4); and where the multiplex runs faster than the video's
+Rx, moq 0.14.2's slot layout overran the video's transport buffer on 36 % of the video packets of a
+25 Mb/s broadcast recording (peak 1,311 B against 512 B; P1, wire, loopback, one 110 s cut). With each
+slot interleaved, on later October 2026 `main`, the same cut overruns on 88 of 943,296 video packets
+(peak 646 B), a residue not yet explained
+([T45](../lab/test-45-live-tstd-remux.md)). **It presents at twice the delay plus about 275 ms** at
 750 ms and 1 s (2,272–2,274 ms at 1 s, also over 540 s). At 500 ms it presents at 991–1,276 ms over
 eight joins as merged, and **which track anchors its clock sets the figure**: on this source AC-3
 reads about 250 ms further behind its decode time than MP2, the next track, so a join that hears

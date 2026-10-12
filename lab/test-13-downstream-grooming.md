@@ -716,6 +716,9 @@ relay log confirms the version every session negotiated.
   and is followed by PAT within 1 packet and PMT within 2 (within 11 and 12 at one continue resume).
 - The clean-end replay and continue arms on the same build, on `moq-lite-06`, resume three times each
   and exit 0.
+- **On `90500867d`, where `--linger` covers one publisher instance only, these arms were re-run with
+  and without `--stitch`** ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*): no run
+  dies on a late unit, and a replacement on either protocol is followed only as a programme switch.
 
 **A fix that judges a held frame from when it could leave the hold passes on `moq-lite-06`.** The
 fix (`0ebef72c`, on `586112714`; [upstream contributions](upstream-contributions.md)) stamps a frame

@@ -371,8 +371,9 @@ that the ordering removed.
 fixed-delay export merged on October 2026 `main` schedules every PID against the decoder model inside
 `moq export ts`, and carries every track conformantly on every join tried at 500 ms to 1 s, on
 loopback, across hosts and at 1–2 % loss. It presents at twice its delay plus about 275 ms. Its limits
-bear on a deployment: 500 ms does not last a 540 s capture, loss of 2–3 % ends it at 1 s and 1–2 % at
-500 ms on a 25 ms path, and so does a re-request onto a live route ([Evidence](evidence.md) §3.4).
+bear on a deployment: 500 ms does not last a 540 s capture, and loss of 2–3 % ends it at 1 s and 1–2 %
+at 500 ms on a 25 ms path. It follows a replacement publisher only when told to, as a flagged programme
+switch ([Evidence](evidence.md) §3.4).
 
 Two problems remain that one host does not exercise. The first is clock recovery: across hosts the
 stage and the source do not share a clock, and the lane carries no source PCR, so the output clock
@@ -853,10 +854,10 @@ should treat that supervisor as part of the egress, not as operations tooling. F
 `export ts --linger` carries the exporter across a relay restart and a publisher's clean restart in the
 same process, flagging each resume on the PCR PID, up to four times per resume at the default
 `--max-age` and once at 2 s ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather
-than the recovery path. A publisher **crash** is carried only where the publisher epoch is on the
-wire: on October 2026 `main` with the opt-in moq-lite 07 the export resumes onto the replacement, and on
-the default moq-lite 06 it re-requests onto it and exits, so on the default protocol the supervisor is
-still the recovery path for a crash.
+than the recovery path. On later October 2026 `main` the linger covers only the same publisher
+instance; a replacement, whether a crash's or a clean restart's, is followed only under `--stitch`, as
+a programme switch with a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out
+a dead session. One crash in seven still ended the export, so the supervisor stays as a backstop.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.

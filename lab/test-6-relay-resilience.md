@@ -459,7 +459,9 @@ On `ffa5b81b` and `2b689c24` a hard kill fails over, a shared-hop standby's arri
 subscriber, and a clean exit is not failed over. On October 2026 `main` a shared `--epoch` removes
 the arrival teardown, and resumes a subscription without a seam only on the opt-in moq-lite 07,
 where the two importers' unaligned group numbering then decides whether the export survives (the
-last part of this section).
+last part of this section). On `90500867d` the `--epoch` kill arm was re-run with and without
+`--stitch` ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*): on moq-lite 07 every
+export takes the failover over, and on 06 only with `--stitch --linger`.
 
 `ffa5b81b` renamed the client's `--origin <id>` to `--hop <id>`, and refuses `--origin` at startup
 with a migration message. The value becomes the first hop of the publisher's route, which is how the

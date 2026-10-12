@@ -9,8 +9,10 @@ under 0 % and 1 % loss at both delays, each passing the buffer model in every wi
 `compliance.py`. Presentation latency is twice the delay plus about 275 ms at 750 ms and 1 s; at
 500 ms the join moves it. At 500 ms the 540 s run still stops on the video's schedule, at the same
 point as the draft. A co-started 1+1 pair now exports byte-identical streams before any groomer.
-What it does not survive is a re-request onto a live route, where frames held through the silence
-reach the schedule behind it (§ *As merged*). **On `f8215bc47`, whose export differs only in exiting on failure**, every track
+On `82c3f2fe4` it did not survive a re-request onto a live route (§ *As merged*); **on `90500867d`
+no re-request ends on a late unit**, a replacement is followed only under `--stitch`, and a
+shared-epoch standby on one relay is taken over on `moq-lite-07`, or on `moq-lite-06` with
+`--stitch --linger` (§ *Re-requests on `main`*). **On `f8215bc47`, whose export differs only in exiting on failure**, every track
 survives joins spread across a whole GOP at 500 ms. The join's latency is set by whether the clock
 anchors on AC-3, which adds about 250 ms the schedule did not need in any of the eight joins.
 Under loss the export stops between 2 % and 3 % at 1 s, and between 1 % and 2 % at 500 ms. Over
@@ -46,7 +48,8 @@ across hosts, and across hosts its clock follows a source 25 ppm fast at its sle
   [#5052](https://github.com/moq-dev/moq/issues/5052). Cause, located on `f8215bc47` for the
   crash-replace rig: the frames read before the publisher died wait out the silence in the decode
   clock's hold, nothing on `moq-lite-06` flushes it, and they reach the schedule behind its next
-  slot ([upstream contributions](upstream-contributions.md)). The mid-GOP join is not explained.
+  slot ([upstream contributions](upstream-contributions.md)). Neither rig reproduces it on
+  `90500867d`.
 
 **The last draft before merge, `fe7cec106`:** it anchors and steers on the track sent latest, as
 our scratch build did.
@@ -280,6 +283,23 @@ For the `f8215bc47` cells, fixed before they ran:
    within two sections of the source over the output's span. On cells of known outcome it passes
    the `82c3f2fe4` 60 s and 540 s cells, fails the `2dc542b4a` join that lost a tenth of its AC-3
    (189 frames) and fails the `559a35244` join without audio (three PIDs absent).
+
+For the re-request cells on `90500867d` (no-stitch on `main`), fixed before they ran, on the T13
+linger rig and T6's shared-epoch standby rig, each with and without `--stitch`:
+
+5. **Without `--stitch`, a replacement ends the export at the replacement**: exit 1 within the
+   linger's first seconds, on the replacement, not on *missed a decode deadline*; the output before
+   it continuity-clean.
+6. **With `--stitch`, every replacement resumes**: one discontinuity flag per resume on the PCR PID,
+   no continuity jump without one, no *missed a decode deadline*, exit 0 after the last session.
+7. **A shared-epoch standby takes over with either setting**: both exports alive at the rig's end,
+   writing after the kill, no exit before the kill (the mid-GOP join), no flag needed.
+8. Added after the `moq-lite-06` arm at `--stitch --linger 30s` showed the export switching to the
+   standby as it arrives, so that the kill of the oldest instance tested nothing: the same arm with
+   the kill sent to the instance the export follows passes criterion 7 with one flag per switch
+   allowed. Sending it to the newest instance missed as well (the export had stayed on the oldest),
+   so the instance followed is made certain by starting the standby 8 s after the primary, once
+   every track is subscribed, and killing the oldest.
 
 - **Joins across a GOP:** eight 60 s joins at 500 ms, the source started 0 to 1.05 s later in
   0.15 s steps across the clip's 1.2 s GOP. Each passes criteria 1–4. The presentation latency of
@@ -1151,10 +1171,50 @@ carried one false duplicate SCTE-35 heartbeat packet at each join (the generator
 across passes; fixed), which the importer discards as 13818-1 2.4.3.3 permits; `ts-pid-complete.py`
 now discards duplicates in both files, as a receiver does.
 
+### Re-requests on `main`, `90500867d`
+
+`main` now lingers within one publisher instance only, follows a replacement only under `--stitch`
+(as a programme switch: a new PMT and the break flagged on every PID), and exits at once when it
+fails with the broadcast still up. P1, file domain, loopback, one relay, `CNNiEMEA2.ts` at
+`--delay 1s`; the T13 linger rig (`lin.sh`) and T6's standby rig with a shared `--epoch` and a 6 s
+idle timeout. **No cell of either rig died on a late unit**: 0 *missed a decode deadline* in 32 runs.
+
+| Rig, case | Without `--stitch` | With `--stitch` |
+|---|---|---|
+| T13, crash replaced ×3 and continuing, `moq-lite-06` | 4 of 4 exit 1 at the replacement | 3 of 4 resume at both replacements; 1 exits on `internal error` |
+| T13, crash replaced, `moq-lite-07` | 1 of 1 exits 1 | 1 of 1 resumes twice |
+| T13, clean end, replayed and continuing | 2 of 2 exit 1 | 2 of 2 resume three times |
+| T6 standby, `moq-lite-07` | 2 of 2 runs, both exports take over | 2 of 2, the same |
+| T6 standby, `moq-lite-06` | 2 of 2 runs, both exports exit | 2 of 2, both exports exit |
+| T6 standby, `moq-lite-06`, `--linger 30s` | — | 6 of 6 runs, both exports carry on; in 2 the kill hit the instance followed |
+
+- **Criterion 5 holds:** every unstitched replacement ends the export with *pass --stitch to follow
+  a replacement as a program switch*, its output continuity-clean.
+- **Criterion 6 holds in 6 of 7.** Each resume flags the PCR PID once and TSDuck reads 0 continuity
+  errors; the resume costs 3.2–4.0 s after a crash on either protocol, except the second crash on
+  `moq-lite-06` (10.4–12.6 s, the export waiting out the dead session), and 4.9–6.1 s across a clean
+  end with a 5 s publisher gap. The exit: the dead instance's in-flight requests fail at the relay
+  as `internal error`; where the export's own track read gets that error first, it lingers and
+  resumes, and where the catalog lookup does, the error reads as a refusal from a live instance and
+  the export fails loud.
+- **Criterion 7 holds on `moq-lite-07` only.** On 07 all eight exports take over 6–9 s after the
+  kill, after a 3–6 s stall, and none exits at the mid-GOP join. On 06 without `--linger` the export
+  waits out the dead session and exits on the error, with or without `--stitch`.
+- **Criterion 8 holds.** On 06 with `--stitch --linger 30s`, with the standby 8 s behind, all four
+  exports take over the kill of the instance they follow after a 4–6 s stall, one flag each. With
+  the standby 2 s behind, a late SI request racing its arrival decided which instance the export
+  followed: in two of four runs it switched to the standby as it arrived, after a 5 s startup stall.
+- **A fresh importer that reuses the epoch is resumed into, and carries nothing.** Four `lin.sh`
+  runs on `moq-lite-07` with each publisher passed one `--epoch`: the export resumes at every
+  return without a flag and exits 0, but writes only the first session's 14.6 s; each later
+  importer numbers its groups from zero, below what was delivered. `--epoch`'s help forbids a
+  restarted publisher reusing one, and nothing at the export reports it.
+
 ## Conclusions
 
 Conclusions 1–9 are on `4b7158d6c00d` and its scratch builds; 10–12 are on `49efbc9a1`, 13–16
-on `2dc542b4a`, 17–19 on `559a35244` and its scratch build, and 20–22 on `f8215bc47`.
+on `2dc542b4a`, 17–19 on `559a35244` and its scratch build, 20–22 on `f8215bc47`, and 23 on
+`90500867d`.
 
 1. **On `4b7158d6c00d`, #4645 did not carry a real broadcast multiplex.** At every delay tried up
    to 3 s, and in each variation tried at one delay (a higher rate, subscribing first, the video
@@ -1272,6 +1332,11 @@ on `2dc542b4a`, 17–19 on `559a35244` and its scratch build, and 20–22 on `f8
     25 ppm fast at its 0.075 Hz/s cap and stays inside 2.4.2.1's frequency tolerance; whether its
     drift rate stays inside 0.075 Hz/s is beyond the picture tap
     ([T45](test-45-live-tstd-remux.md)).
+23. **On `90500867d` a re-request no longer kills the export, and following another instance is an
+    explicit programme switch.** No re-request ended on a late unit in 32 runs. A replacement is
+    followed only under `--stitch`, each resume costing 3–6 s, or up to 13 s where the export waits
+    out a dead session, and once in seven it ends the export on the dead instance's `internal error`. A shared-epoch standby on one relay is taken over on
+    `moq-lite-07`, and on `moq-lite-06` only with `--stitch --linger`.
 
 ## Limits
 

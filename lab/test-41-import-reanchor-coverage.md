@@ -17,7 +17,10 @@ at `83ce47fe`, after the branch flip brought #4543 in, all three arms end at the
 verbatim and treats any backward step as the end of the stream, flagged or not. Carried instead by
 restarting the import under a new epoch (`f8215bc47`, `moq-lite-07`), a flagged step costs 2.9–3.0 s
 of programme pipe-fed, whether 1 s or 600 s back, and a co-started 1+1 pair of exports stays
-byte-identical across it in 8 of 13 runs (§ *A flagged rewind carried as a new broadcast*).
+byte-identical across it in 8 of 13 runs (§ *A flagged rewind carried as a new broadcast*). On
+`90500867d`, a 1+1 ingest pair carried that way keeps both legs, but each export follows whichever
+leg announced last, so a step costs the single importer's 2.9 s when the legs are aligned and up to
+the legs' skew more when they are not (§ *A 1+1 ingest pair whose importers each mint an epoch*).
 
 ## Objective
 
@@ -274,3 +277,53 @@ must hold for the measurement to count, and what passes for 1+1:
   needs. No pair differed before the first discontinuity flag of either leg. Upstream holds this by
   design: after a replacement each export starts a fresh stream, and identity is promised within one
   epoch only ([ledger](upstream-contributions.md#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543)).
+
+### A 1+1 ingest pair whose importers each mint an epoch
+
+On current `main` the export lingers within one publisher instance only, and follows a replacement
+only under `--stitch`, as a programme switch. A 1+1 ingest pair supervised this way mints two epochs
+at one step, one per importer, so the export may switch twice and the later epoch may end the other
+leg. **Procedure.** The same rig with `PAIR=1`: the regulated stimulus teed into two importers of
+one broadcast, each under its own supervisor; both exports at `--delay 1s --linger 30s --stitch`;
+`moq-lite-07`; arm A, pipe-fed, 90 s; three runs, and one single-importer run with `--stitch` as the
+control. **Measured, fixed before running:**
+
+1. Per leg, whether its importer exits once at the step and its supervisor's next importer
+   publishes to the source's end, or is ended by the other leg's epoch (its exit and error).
+2. Per export, the programme switches: discontinuity-flagged breaks on the PCR PID and the export's
+   own switch log lines, before and at the step, against the control's one.
+3. Per export, its exit, any *missed a decode deadline*, and whether any video unit after the last
+   switch is missing.
+
+The pair keeps both legs across the step if criterion 1 holds on both legs and each export switches
+once at the step; two switches at the step, or a leg ended, is the double switch.
+
+Added after the three runs, whose legs share one tee and so restart within a millisecond: two runs
+with the second leg's feed delayed 2 s (`SKEW2=2`), as unequal ingest paths would, graded on the
+same criteria plus whether either export repeats or skips content across its breaks.
+
+**Results, on `90500867d`.** The double switch happens and both legs are kept; what it costs is
+set by the legs' skew.
+
+- **Criterion 1 holds on both legs in all five runs.** Each importer exits once at its step and its
+  successor, 23–26 ms later under a fresh epoch, publishes to the source's end; neither leg's epoch
+  ended the other.
+- **Each export switches twice at the step, 150 ms apart, against the control's one resume**, in
+  all three aligned runs: onto the first leg's new instance, then onto the second's newer epoch.
+  The first instance is left before anything is written from it, so the output carries one flagged
+  break, as the control's does, and the same cost: 2,880 ms of programme lost and a 2.6 s gap.
+  Every export exits 0 with no late drop and no missing unit after the break; the two exports are
+  byte-identical in two of three runs.
+- **Skewed 2 s, each export ends on the lagging leg**, which restarts last and so holds the newest
+  epoch, after two or three switches at the step that still leave one flagged break. Coming from
+  the leading leg, the programme lost is unchanged but the gap grows by the skew, to 4.6 s, and the
+  latency after it by 2 s. Already on the lagging leg, the export spends 1.7 s on the leading leg's
+  restart without writing it and so abandons the lagging leg's last 1.7 s before the step: 4,600 ms
+  lost.
+- **Losing the leg followed is a second switch.** In one aligned run and both skewed runs the newer
+  leg's importer ended first at the source's end, and the export switched back to the older leg:
+  a flagged break and 28–29 pictures missing.
+
+So a 1+1 ingest pair that mints an epoch per importer works as two supervised feeds under one name
+rather than as a hitless pair: each export follows whichever leg announced last, and every leg event
+is a programme switch whose cost grows with the skew.
