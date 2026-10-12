@@ -1050,6 +1050,8 @@ move.** Pinned binaries survive rebuilds; a control that forbids upgrades is eve
 
 **Choose the statistic to match the shape of the change.** *(T28.)* For a step, report late-window value and trend; keep median only for stationary quantities. Where a metric is still moving at window end, call the figure a lower bound.
 
+**Look at the replicates before fixing a judge across builds.** *(T28 bisection, P1-q.)* The 5 s outage cell is bimodal on every build (4.6–8.8 s or 10.6–13.1 s); a build's median reports how many replicates landed high, so a median gap or a rank test on ten replicates cannot see a step that moves the mix by less than about half, and a three-replicate worst-case judge follows one outlier. On two modes, judge the share in the high mode and size the replicates for the shift that matters.
+
 ### A declared CSV column that is never written shifts every field after it
 
 *(From [T28](test-28-failure-injection-matrix.md) P1-m.)* Header declared sixteen columns, writer emitted fifteen (`sys.argv[2:8]` dropped `capture_bytes`); name-based reads from `media_lost_s` onward returned neighbours' values.

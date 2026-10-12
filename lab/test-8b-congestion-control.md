@@ -35,10 +35,10 @@
 > The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews
 > the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate, measured
 > on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`),
-> and confirmed on the merged build: `main` at `83ce47fe` delivers the full rate at 10 % loss. Every
+> and confirmed on the merged build: `main` at `83ce47fe` keeps the full egress rate at 10 % loss. Every
 > C7 rate is egress bytes, which the export pads: graded on content, the older build's 10 % run
-> carries 2.7 % of the video ([T48](test-48-passthrough-export.md)), and the merged build's is not yet
-> graded. The upstream discussion this test came from is
+> carries 2.7 % of the video ([T48](test-48-passthrough-export.md)) and the merged build's two carry
+> 8.0 % and 2.6 %. The fix restores the export's output, not the programme. The upstream discussion this test came from is
 > [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
@@ -902,6 +902,14 @@ catches up after its early holds, so a figure above the clip's rate compares bui
 is not a measure of content delivered. Neither process died in any merged-build run, and TSDuck
 counted every packet written.*
 
+**Graded on content, the merged build loses the programme at 10 % loss.** Two more runs a cell on
+`83ce47fe`, same rig, graded with [`t28-content-lost.py`](scripts/t28-content-lost.py): at 0 % each
+egress (9.85 Mb/s, 3.9–4.2 % null) carries all 4,262 access units; at 10 % the egress stays at
+9.92 and 10.49 Mb/s, but 88.5 % and 94.2 % of it is null packets, carrying 339 and 109 access units
+(8.0 % and 2.6 % of the video) and losing 20.3 s and 11.0 s of audio. The hold fix ends the
+exporter's stall; what reaches it under loss is set upstream of the exporter, as T48's controls
+inferred.
+
 Disabling the hold alone restores the full rate, so the hold is the cause. The unfixed run's log
 shows why it compounds rather than costing a fixed latency. Of 56 holds, 2 ended with the lagging
 track catching up, and a rewind restarted all the rest at the full 2 s. The sources' distance
@@ -1112,8 +1120,9 @@ programme. **True:** the export pads to the mux rate, and graded on content `84b
 10 % loss is 95.9 % null packets carrying 2.7 % of the video, against 100 % at 0 % loss
 ([T48](test-48-passthrough-export.md) § *Under 10 % loss*). C7's rates compare how much each build's
 export pads; the #4001 bisection and #4618's mechanism stand as findings about the exporter's output
-stalling, not about content delivered. **Rule:** the existing one, grade a padding exporter on its
-content PIDs ([method notes](method-notes.md), from T20 4a); C7 predates it and was not re-graded.
+stalling, not about content delivered; the merged build, re-graded, carries 2.6–8.0 % of the video at
+10 % loss (§ *C7*). **Rule:** the existing one, grade a padding exporter on its content PIDs
+([method notes](method-notes.md), from T20 4a).
 
 ## References
 

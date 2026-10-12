@@ -375,7 +375,8 @@ identical as merged and were 98.52 % behind the last draft, where every remainin
 placed on arrival rather than media time, which placing it by media time would remove (*reasoned*); the
 merged build's residue is not yet attributed. Upstream declined the counter rewrite, so a late or
 restarted leg needs one outside upstream. The export's media-time interleave falls back to arrival order under sustained loss, which
-keeps delivery at 10 % loss and limits determinism to a clean path (moq 0.14.0,
+keeps its output at the mux rate at 10 % loss, though graded on content that output carries 3–8 % of
+the video, and limits determinism to a clean path (moq 0.14.0,
 [T8b](../lab/test-8b-congestion-control.md) § *C7*). **A groomer must also stop when its content
 stops**: one that keeps emitting valid CBR with no programme defeats every receiver-side switch.
 
@@ -863,6 +864,6 @@ rebuild.
 | 15 | **Does the quinn relay's memory plateau at year scale, and what is the exporter's daily +11.8 MB step?** (§3.6) | Longer soaks, with memory pressure and allocation traced | Whether either is a slow leak with a long period |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin and a soak | Its per-role CPU, memory and fan-out knee; the origin measured is `python3 -m http.server` |
 | 17 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Upstream `main` now counts TR 101 290 errors at `moq import ts`, equal per PID to TSDuck's on a 72 s excerpt at P0 and P1, but signals nothing downstream and does not grade PCR accuracy ([upstream contributions](../lab/upstream-contributions.md)) |
-| 18 | **Why does the media-aware lane lose more programme than SRT, and why does the figure move with the build?** (§3.3) | A bisection of the outage cost | Whether SRT's lead belongs to the lane or to one QUIC stack's configuration |
+| 18 | **Why does the media-aware lane lose more programme than SRT, and why does the figure move with the build?** (§3.3) | A trace of one outage on a current build, naming the groups it loses | Whether SRT's lead belongs to the lane or to one QUIC stack's configuration |
 
 Protocols for the runnable ones are in [planned-experiments](../lab/planned-experiments.md).

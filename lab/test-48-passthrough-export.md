@@ -1,8 +1,8 @@
 # Test 48 — The passthrough TS export on real captures
 
-**State: complete.** On a dedicated host criteria 1–4 pass on both clips: each leg is the source's
-bytes, a leg joining 8 s late is the same stream, and every PCR goes out within 2 ms of its value's
-schedule. Criterion 5 fails on its accounting clause, and under 10 % loss this lane delivers as
+**State: complete.** On a dedicated host criteria 1–4 pass on both clips, and on the live feed across
+hosts: each leg is the source's bytes, a leg joining 8 s late is the same stream, a leg over the
+internet is too, and every PCR goes out within 2 ms of its value's schedule. Criterion 5 fails on its accounting clause, and under 10 % loss this lane delivers as
 little video as every other MoQ export graded on content in the same rig.
 
 ## Objective
@@ -31,6 +31,12 @@ claim neither.
   on the relay-to-subscriber direction, 25 ms each way, `CNNiEMEA2.ts`, `--delay 2s` and 6 s, 120 s.
   Controls: the same build's demultiplexed export, and the standing `84b34f54` (`--max-age 2s`) at
   0 % and 10 %, every egress graded on content.
+- **Live arm (P1-t):** the live hand-off (25 Mb/s CBR, no nulls; [T45](test-45-live-tstd-remux.md))
+  read from the primary's loopback multicast beside the standing ingest, which it does not touch. On
+  the primary: a relay of this build, `import ts --passthrough`, and the hand-off capture, the
+  reference. Legs A and B (8 s late) on the secondary, cross-AZ; leg W at the workstation, over the
+  internet. `--delay 2s` on every leg, 150 s
+  ([`p1t-live-passthrough.sh`](scripts/p1t-live-passthrough.sh)).
 
 ## Procedure
 
@@ -57,6 +63,12 @@ cross-validates it). The loss arm keeps its egress and runs the identity check o
    (the PCR clock within 30 ppm of the release clock).
 5. **Under 10 % loss.** The relay and both clients stay up for the 120 s; the egress has 0 foreign
    packets; it has no gap unless the exporter reports drops, and no more gaps than reported drops.
+
+The live arm is graded on criteria 1–4 against the hand-off capture, with W held to criteria 1 and 2
+as a third leg, and reports, without a threshold, the bytes the relay sent each leg against the
+source bytes it delivered. A run of packets that the hand-off capture and the publisher's socket
+disagree on, both reading one multicast group, is the rig's, not the lane's; the capture's own
+continuity check tells them apart.
 
 Criterion 3 is implied by criterion 1, since `compliance.py` grades a file on its own PCR; it is kept
 because it is the quest's own test. Criterion 4 is the one the file-domain checks cannot see.
@@ -85,6 +97,30 @@ grader on the dedicated host put every PCR within 1.9 ms). Graded the same way t
 (`tsp regulate --pcr-synchronous`) puts 4,279 of 4,326 TNT4 intervals outside ± 10 ms (p95 46 ms), so
 the export re-paces a bursty input to within a few milliseconds of the source's PCR.
 
+### The live feed across hosts (P1-t)
+
+| Leg | Packets | Gaps, foreign, dropped | Against A | `tstd`, A / source span | Release timing, A | PCR rate, A |
+|---|---:|---|---|---|---|---:|
+| A, secondary | 2,294,914 | 0, 0, 0 | — | fail / fail, identical | 0 of 7,358 outside ± 10 ms; worst 2.0 ms | −0.10 ppm |
+| B, secondary, 8 s late | 2,337,508 | 0, 0, 0 | identical, 408.4 MB | | | |
+| W, workstation, internet | 2,464,773 | 0, 0, 0 | identical, 423.3 MB | | | |
+
+*Measured, P1, wire domain (each leg's stdout), build `0da3a7736`, `--delay 2s`, one 150 s run; the
+hand-off capture is the reference, and the relay, publisher and capture shared the primary with the
+standing ingest.*
+
+All four criteria pass, and the internet leg holds criteria 1 and 2 as well. The `tstd` verdict is the
+source's, as with TNT4: the span A covers opens mid-frame on both audio PIDs, which the strict model
+refuses, and the video stays inside its buffers (EB peak 79.9 %). On the primary the passthrough
+import took 6.4 % of a core and the relay 8.4 % serving three legs, against 74.8 % for the standing
+media-aware import of the same feed. The relay sent W 1.046× the bytes W wrote, counted above GSO, so
+without each datagram's IP and UDP headers; the secondary's two legs were not counted separately.
+
+Each exporter's release clock counted steps out of tolerance for the first 25–70 s (A 9, B 4, W 23)
+and none after, with nothing dropped. The count is of the source rate
+the steering estimates, which starts at hundreds of ppm on a live join; the output's PCR rate over
+the leg is −0.10 ppm. On a live join that counter is a startup alarm, not an output fault.
+
 ### Under 10 % loss
 
 | Arm: export, build, `--delay` | Egress | Nulls | Video delivered | Audio lost | Identity |
@@ -96,6 +132,8 @@ the export re-paces a bursty input to within a few milliseconds of the source's 
 | demultiplexed, `0da3a7736`, 6 s | 9.20 Mb/s | 95.0 % | **3.5 %** (91) | 0 s | — |
 | demultiplexed, `84b34f54` (`--max-age`), 2 s, **0 % loss** | 9.89 Mb/s | 5.5 % | 100 % (4,232) | 0 s | — |
 | demultiplexed, `84b34f54` (`--max-age`), 2 s | 7.21 Mb/s | 95.9 % | **2.7 %** (74) | 1.0 s | — |
+| demultiplexed, `83ce47fe`, 2 s, **0 % loss**, two runs | 9.85 Mb/s | 3.9, 4.2 % | 100 % (4,262) | 0.4, 0.2 s | — |
+| demultiplexed, `83ce47fe`, 2 s, two runs | 9.92, 10.49 Mb/s | 88.5, 94.2 % | **8.0, 2.6 %** (339, 109) | 20.3, 11.0 s | — |
 
 *Measured, P1, EC2 secondary, BBRv3 on noq, 25 ms each way, 120 s, one run per cell. Egress is wire
 domain; video and audio are content domain ([`t28-content-lost.py`](scripts/t28-content-lost.py)).
@@ -112,7 +150,8 @@ newest content is a budget past the start of the group after it, while the strea
 transport. **So criterion 5 fails on its accounting clause.**
 
 **The collapse is not the passthrough lane's.** Graded on content, the demultiplexed export of the
-same build delivers 3.5–8.2 % of the video, and the standing older build 2.7 %. Tripling the delay,
+same build delivers 3.5–8.2 % of the video, the standing older build 2.7 %, and `main` with the
+interleave-hold fix ([T8b](test-8b-congestion-control.md) § *C7*) 2.6–8.0 %. Tripling the delay,
 and with it the relay's budget, helps neither export, so what arrives is set upstream of both
 (*inferred*). The demultiplexed export keeps the audio because audio rides tracks of its own; in the
 passthrough lane it shares the video's groups. The older build's row also corrects

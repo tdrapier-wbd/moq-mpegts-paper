@@ -191,12 +191,28 @@ replicates each, graded by the programme missing ([`t2831-idle-bisect.sh`](scrip
 after the second, and the tip is bimodal (8.82 s against 17.3–17.6 s), so a median judge misreads it
 and each half is bisected on the worst replicate against its own threshold.
 
-**Neither step is attributed to a commit.** Bisected at three replicates a step, both halves end on
-a merge of `main` into `dev` — `b22ddbf59` against 10 s and `07f313286` against 14 s — and in each case
-both parents pass. The verdicts sit inside the replicate scatter: passing commits in the first half
-reach 9.72 s, and `07f313286` fails on one replicate of 38.22 s beside 7.52 s and 7.36 s. A step this
-small against the cell's scatter cannot be located by a three-replicate judge, and a merge whose
-parents both pass may be an interaction or noise.
+**Neither step is attributed to a commit, and ten replicates do not change that.** Bisected at three
+replicates a step, both halves end on a merge of `main` into `dev` — `b22ddbf59` against 10 s and
+`07f313286` against 14 s — and in each case both parents pass. Each merge and its parents were then
+run at ten replicates, built and graded as above (one replicate per invocation), under a rule fixed
+before the run: a build is *above* another when a one-sided Mann–Whitney test on video missing gives
+p < 0.05 and the medians differ by at least 2 s. Neither merge is above either parent (p ≥ 0.16):
+
+| Build | Role | Video missing (s): median (range) | Replicates ≥ 10 s |
+|---|---|---|---|
+| `16f177925` | first parent of `b22ddbf59` | 7.20 (6.08–13.04) | 2 of 10 |
+| `850a7ee64` | second parent | 8.52 (4.84–8.80) | 0 of 10 |
+| `b22ddbf59` | merge | 8.86 (5.52–13.04) | 5 of 10 |
+| `d5621226b` | first parent of `07f313286` | 7.62 (4.92–38.22) | 4 of 10 |
+| `68c46e50e` | second parent | 11.82 (4.60–13.08) | 8 of 10 |
+| `07f313286` | merge | 9.06 (4.92–12.76) | 5 of 10 |
+
+So the cost is recorded as spread across `dev` at this resolution. The rule could not weigh two
+things. Every build is bimodal, at 4.6–8.8 s or 10.6–13.1 s, so a median reports how many replicates
+landed high ([method-notes](method-notes.md) § *A median across a window containing a step*). And no
+replicate of these six builds reaches the 17–18 s of `dev`'s tip, so that step came in with commits
+`07f313286` does not contain: the three-replicate verdict that ended there rested on one 38.22 s
+replicate, an outcome `d5621226b` also shows once in ten.
 
 **Under a 0.9× capacity step the stack does separate, and the controller does not change that.** The
 same `cubic` pass ran the 3 s ladder's 0.9× rung for 60 s: quinn lost 15.90, 20.88 and 19.18 s and noq
@@ -1147,20 +1163,10 @@ lanes can be matched on the setting itself and the scoring gains the latency axi
 Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
 and the grader are all on the EC2 secondary.
 
-- **Which `dev` changes raised the outage cost.** The stack and the controller are excluded, and the
-  probes place the cost on `dev` in at least two steps, but three-replicate bisections of each step
-  end on merges whose parents both pass (§ *The build bisection*). The arm running now takes each
-  merge (`b22ddbf59`, parents `16f177925` and `850a7ee64`; `07f313286`, parents `d5621226b` and
-  `68c46e50e`) at ten replicates of the 5 s outage cell at the 3 s budget, built and graded as the
-  bisection was ([`t2831-idle-bisect.sh`](scripts/t2831-idle-bisect.sh) `--step`,
-  `JUDGE=missing`, one replicate per invocation so a void replicate costs only itself). **Rule,
-  fixed before it ran:** one build is *above* another when a one-sided Mann–Whitney test on video
-  missing gives p < 0.05 and the medians differ by at least 2 s, twice the method's resolution. A
-  merge above both parents carries the step itself, as an interaction. A merge above one parent only
-  matches the other, so the step came in on that side and the three-replicate verdict there was
-  wrong. A merge above neither does not carry a step. If neither merge does, the cost is recorded as
-  spread across `dev` at this resolution, and P1-q closes on the cell and the range, which is what
-  upstream could act on either way.
+- **Where the outage cost goes.** Ten-replicate merges spread the first rise across `dev` and place
+  the step to 17–18 s in commits `07f313286` lacks (§ *The build bisection*). Either a trace of one
+  5 s outage on a current build, naming the groups it loses, or the commits `07f313286` lacks judged
+  on the share of replicates above 14 s, would say more than another median bisection.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.
