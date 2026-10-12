@@ -26,9 +26,11 @@
 #            (1000 packets, 2 RTT) on noq and on quinn (`$HOME/bin-5d0991b9-thresh`), and the time
 #            threshold alone on noq, each under a qlog. The cell reorders by up to its 50 ms one-way
 #            delay against a 100 ms RTT, so a 2 RTT time threshold clears it with the ACK delay.
+#   thresh-quinn  The quinn arm of `thresh` alone, one replicate.
 #
 # Usage: t2831-attrib.sh [outroot] [phase...]
-#        (phases: reorder qlog cubic idle supervise qlog-quinn pthresh thresh; default reorder cubic idle)
+#        (phases: reorder qlog cubic idle supervise qlog-quinn pthresh thresh thresh-quinn;
+#        default reorder cubic idle)
 # shellcheck disable=SC2024  # the logs belong to the invoking user, by intent
 set -uo pipefail
 ROOT=${1:-$HOME/t2831-attrib}
@@ -129,6 +131,12 @@ for phase in $PHASES; do
 		matched r-thresh-noq-t2 "$FFA-thresh" "${R2[@]}" MOQ_LAB_TIME_THRESHOLD=2.0 \
 			RELAY_EXTRA="--quic-qlog $ROOT/qlog-thresh-noq-t2"
 		matched r-thresh-quinn "$Q5D-thresh" IMPAIRS="none reorder20" REPS=2 \
+			MOQ_LAB_PACKET_THRESHOLD=1000 MOQ_LAB_TIME_THRESHOLD=2.0 RELAY_EXTRA="--quic-qlog $ROOT/qlog-thresh-quinn"
+		;;
+	thresh-quinn)
+		[ -x "$Q5D-thresh/moq-relay" ] || { echo "no $Q5D-thresh/moq-relay (t2831-build-diag.sh thresh-quinn)"; continue; }
+		sudo mkdir -p "$ROOT/qlog-thresh-quinn"
+		matched r-thresh-quinn "$Q5D-thresh" IMPAIRS="none reorder20" REPS=1 \
 			MOQ_LAB_PACKET_THRESHOLD=1000 MOQ_LAB_TIME_THRESHOLD=2.0 RELAY_EXTRA="--quic-qlog $ROOT/qlog-thresh-quinn"
 		;;
 	esac

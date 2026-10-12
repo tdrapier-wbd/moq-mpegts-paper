@@ -19,8 +19,9 @@ loses nothing, and the MoQ lane loses 0–0.6 s on quinn, whose `delay` controll
 bandwidth model that ignores loss, but 26.6–37.5 s of a 60 s window on noq, under BBRv3 and CUBIC alike. Under 20 % reorder SRT
 loses no pictures and carries several hundred continuity errors; the MoQ lane loses 30.8–38.3 s on
 every build, both stacks included. On noq nearly all of that is the stack's loss detection: a relay
-patched to relax its thresholds, which no flag exposes, loses 2–3 s. On quinn the same patch does not
-save the programme. **This reverses what the file published before** — that an outage shorter
+patched to relax its thresholds, which no flag exposes, loses 2–3 s. On quinn it is the same
+detection, but the same patch does not save the programme: the larger window it allows overruns the
+bottleneck, which then drops real packets. **This reverses what the file published before** — that an outage shorter
 than the budget was free and that the MoQ lane was ahead under a discrete outage — and the reason
 is the grader: § *Corrections*. Every MoQ cell still returns 0 continuity errors, which on this lane
 is a property of the exporter and measures nothing.
@@ -283,21 +284,31 @@ detection, not the lane or its buffering. The fix is a configuration the relay d
 all of it as a stream short at close. On the relay's connection to the subscriber it declared 55,546
 of the 84,005 packets it sent lost, from 22.0 s, the moment the impairment starts, and its window
 median fell from 12,128,845 B before to 183,580 B after; the smoothed RTT stayed at about 100 ms.
-quinn's trace carries no frames, so whether those packets were acknowledged later is not recorded,
-and its loss labels have the same defect as noq's. BBRv1's bandwidth model ignores loss, but quinn's
+quinn's trace carries no frames, and its loss labels have the same defect as noq's, but the packets
+it declares lost are not dropped. In two more replicates with both namespaces' qdiscs sampled once a
+second ([`t28-qdisc-sample.sh`](scripts/t28-qdisc-sample.sh)), no qdisc on the path dropped a packet
+in the cell while the relay declared 55,416 and 49,497 lost. The rule fixed before the run (D, the
+qdisc drops, at most 0.1 of L, the declared losses, in both) puts quinn's cost here in its loss
+detection, as on noq. BBRv1's bandwidth model ignores loss, but quinn's
 BBRv1 also bounds its window by packet conservation while in recovery (`quinn-proto` 0.11.17,
 `congestion/bbr`), which a continuous stream of declared losses would hold it in.
 
-**On quinn the same relaxation keeps the window and does not save the programme.** Two replicates on
-the patched `5d0991b9` relay, both thresholds relaxed. The programme missing is 27.42 s and 32.36 s.
-The window median after the impairment starts is 407,757–441,497 B, against 183,580 B with the
-default thresholds. The first loss moves from 22.0 s to 24.5–25.7 s. Yet the relay still declares
-86,272 of its 126,940 packets lost and 83,694 of 117,810, 68–71 %. Under a 2 RTT time threshold, a
-packet overtaken by 50 ms is not declared lost. So these packets were plausibly dropped, or delayed
-by more than two round trips, and quinn's reorder cost would then lie outside loss detection. That
-reading is not established: quinn's trace carries no frames and does not record its thresholds, and
-the rig does not sample the bottleneck's drop counter. The arm that settles it is the same cell with
-`tc -s qdisc` sampled at the shaper.
+**On quinn the same relaxation keeps the window and does not save the programme, because the window
+then outgrows the bottleneck.** Two replicates on the patched `5d0991b9` relay, both thresholds
+relaxed. The programme missing is 27.42 s and 32.36 s. The window median after the impairment starts
+is 407,757–441,497 B, against 183,580 B with the default thresholds. The first loss moves from 22.0 s
+to 24.5–25.7 s. Yet the relay still declares 86,272 of its 126,940 packets lost and 83,694 of
+117,810, 68–71 %, although under a 2 RTT time threshold a packet overtaken by 50 ms is not declared
+lost. Two more replicates with the qdiscs sampled (32.52 s and 29.24 s missing) show where they go.
+The relay sends 140,224 and 127,668 packets, against 88,382 and 84,056 with the default thresholds,
+and the 20 Mb/s cake shaper drops 41,773 and 30,402 of them in the reorder cell, against 97,041 and
+84,679 declared lost. That is 0.43 L and 0.36 L, between the bands the second rule fixed before the
+run (drops at least 0.5 L; or at most 0.1 L with the queue past 2 RTT in half the samples), so the
+rule leaves it unresolved. What the counters do establish is that relaxing detection turns spurious
+loss into real loss of the stack's own making: a third to two-fifths of what quinn declares lost is
+dropped at the bottleneck its larger window overruns. The rest was dropped at no qdisc and is not
+attributed. Cake's peak queueing delay passes 2 RTT in 8–15 of the 40 reorder samples on either
+build (peaks 375–754 ms) and in none of the unimpaired ones.
 
 **At an outage equal to the idle timeout, only builds from before upstream's `dev` merge survive,
 because one commit on that branch closes a broadcast with its session.** 30 s is the default idle
@@ -783,8 +794,9 @@ The bisection runs the 2 s / 20 % cell on every build and both stacks, and **eve
 30.8–38.3 s** — `fd4f5d82e` on quinn included — so unlike sustained loss this shape is not the
 backend's, and with CUBIC pinned on `ffa5b81b` it is not the controller's either (34.66–37.7 s). On
 noq it is the stack's loss detection: the relay declares reordered packets lost, and relaxing both
-loss thresholds brings the cell to 2.12–3.0 s (§ *The build bisection*). On quinn the same relaxation
-keeps the window and not the programme, so quinn's cost is not attributed.
+loss thresholds brings the cell to 2.12–3.0 s (§ *The build bisection*). On quinn it is the same
+detection at the default thresholds, since no qdisc drops a packet, and relaxing them lets the window
+overrun the 20 Mb/s shaper, which drops a third to two-fifths of what the relay then declares lost.
 
 *Point P1, both lanes graded on the taps' picture count against each budget's clean cell. Two
 replicates per cell, one control per budget, single host and namespace path at 20 Mb/s and 100 ms
@@ -1123,12 +1135,6 @@ and the grader are all on the EC2 secondary.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.
-- **Where quinn's reorder cost lies.** On noq it is the loss detection: relaxing both thresholds
-  takes the cell from 37.38–38.1 s to 2.12–3.0 s (§ *The build bisection*). On quinn the same
-  relaxation keeps the window and still loses 27.42–32.36 s, with two-thirds of its packets declared
-  lost even under the 2 RTT time threshold. The arm that settles it samples the shaper's drop counter
-  (`tc -s qdisc`) through the quinn reorder cell. If the shaper drops them, quinn's cost is real
-  loss from its own sending, not detection.
 - **Add the latency axis to the pre-registered scoring rule.** Criterion 5 ranks on media lost alone.
   On content the MoQ lane now loses on that axis as well, so the omission no longer flatters it, but
   it still cannot see that the lane also re-times the service after an outage; any future lane

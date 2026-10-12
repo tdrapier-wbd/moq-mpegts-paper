@@ -253,7 +253,7 @@ of 40, and the quinn builds 0.00–0.64 s at 5 %, because BBRv1 does not treat l
 delivers every picture with 430–692 continuity errors in four of six cells. On noq that is the stack's
 loss detection — every packet it declared lost was acknowledged later, and relaxing both QUIC loss
 thresholds cuts the loss to 2.12–3.0 s; on quinn the same relaxation keeps the window and not the
-programme, for a reason not measured. **An impairment figure on this lane must name its shape, build and
+programme. **An impairment figure on this lane must name its shape, build and
 QUIC stack**, and the MoQ lane is graded on its content timeline, not on its egress PCR timeline, which
 the exporter writes across pictures it never received.
 
@@ -755,7 +755,8 @@ instance only as a flagged programme switch (§3.4); and where the multiplex run
 Rx, moq 0.14.2's slot layout overran the video's transport buffer on 36 % of the video packets of a
 25 Mb/s broadcast recording (peak 1,311 B against 512 B; P1, wire, loopback, one 110 s cut). With each
 slot interleaved, on later October 2026 `main`, the same cut overruns on 88 of 943,296 video packets
-(peak 646 B), a residue not yet explained
+(peak 646 B), all in slots where the video is at its admission cap and four program-table packets
+lead it, which the interleave does not spread
 ([T45](../lab/test-45-live-tstd-remux.md)). **It presents at twice the delay plus about 275 ms** at
 750 ms and 1 s (2,272–2,274 ms at 1 s, also over 540 s). At 500 ms it presents at 991–1,276 ms over
 eight joins as merged, and **which track anchors its clock sets the figure**: on this source AC-3
@@ -855,6 +856,6 @@ rebuild.
 | 15 | **Does the quinn relay's memory plateau at year scale, and what is the exporter's daily +11.8 MB step?** (§3.6) | Longer soaks, with memory pressure and allocation traced | Whether either is a slow leak with a long period |
 | 16 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin and a soak | Its per-role CPU, memory and fan-out knee; the origin measured is `python3 -m http.server` |
 | 17 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Upstream `main` now counts TR 101 290 errors at `moq import ts`, equal per PID to TSDuck's on a 72 s excerpt at P0 and P1, but signals nothing downstream and does not grade PCR accuracy ([upstream contributions](../lab/upstream-contributions.md)) |
-| 18 | **Why does the media-aware lane lose more programme than SRT, and why does the figure move with the build?** (§3.3) | A bisection of the outage cost; the quinn reorder cell with the shaper's drop counter sampled | Whether SRT's lead belongs to the lane or to one QUIC stack's configuration |
+| 18 | **Why does the media-aware lane lose more programme than SRT, and why does the figure move with the build?** (§3.3) | A bisection of the outage cost | Whether SRT's lead belongs to the lane or to one QUIC stack's configuration |
 
 Protocols for the runnable ones are in [planned-experiments](../lab/planned-experiments.md).

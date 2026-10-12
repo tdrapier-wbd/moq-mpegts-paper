@@ -489,11 +489,21 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   TB that drains at Rx. A unit test laying out that slot overruns TB on 932 of 1,436 video packets
   over four slots (peak 1,067 B); the same packets in smooth weighted round-robin peak at 459 B, so
   the slot is feasible and the layout is the cause. No clip here before ran its multiplex faster than
-  its video's Rx, which is when this shows. With the slot interleaved (`main`, `9f1dd1afd`, same
-  rig) video overruns TB on 88 of 943,296 packets in 32 events from 14 s on (peak 646 B), one video
-  frame is dropped late, and the PCR stays within ±481 ns: the layout cause is gone and a small
-  residue is not yet explained. Eight AC-3 units
-  stay in B up to 1.05 s, and the system TB overflows by four packets. The recording has 1,398
+  its video's Rx, which is when this shows. With the slot interleaved (`main`, `9f1dd1afd` and
+  `90500867d`, same rig, identical) video overruns TB on 88 of 943,296 packets in 32 events (peak
+  646 B), one video frame is dropped late, and the PCR stays within ±481 ns. **The residue is the
+  same limit at the slot's edges.** Every overflow falls in three slots, one at 14.3 s and two
+  adjacent at 35.8 s. The first slot at each time opens after a slot the paused video left empty (this
+  recording's video stops for over a second at a time), with the video at its admission cap of 358
+  packets and its TB empty; the overflow carries into the next slot. The interleave spreads the video over the positions it counts, and the program tables go
+  ahead of it outside that count. Two table packets leave room: the 36 such slots peak at 232–459 B.
+  The two overflowing slots carry PAT and PMT twice, written for a keyframe and for the 500 ms
+  repeat in the same slot, and peak at 552 and 646 B; the duplicate is also what overflows the
+  system TB by four packets. A scratch build dropping the duplicate as upstream's draft does,
+  padding the slot back at its end, clears the system TB and leaves the video overrun (65 packets,
+  same peak), since the padding sits outside the count too; charging the tables to the null lane's
+  share instead made it worse (479 packets, peak 746 B). A fix has to keep a capped video lane
+  spread over every position it can drain in. Eight AC-3 units stay in B up to 1.05 s. The recording has 1,398
   continuity gaps of its own across every PID, so its completeness grade (a third of the video and a
   tenth of each audio missing) measures the recording, not the export.
 
