@@ -25,7 +25,7 @@ this campaign's own measurements (§8), where the ratio is the point.
 - **Audio and per-stream liveness** (§2): [frame-sync loss](#frame-sync-loss-killed-the-whole-publisher--closed-in-two-days) · [splice substitution](#a-splice-publishes-a-substituted-frame--closed-with-two-measured-residuals) · [recovery signalling](#a-recovered-stream-is-signalled-nowhere--closed-exactly-as-asked-and-it-exposed-a-bigger-gap) · [liveness at import (#4502, #4506)](#per-stream-liveness-in-the-ts-importer--contributed-as-4502-and-4506-both-merged) and [at export (#4577)](#per-stream-liveness-at-the-ts-exporter--contributed-as-4577-merged) · [TR 101 290 counters at ingest (#4750)](#tr-101-290-counters-at-ingest--contributed-as-4750-merged)
 - **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352) and the rewind at the switch (#4354)](#activeactive-source-failover--shipped-bounded) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
 - **Congestion and memory** (§4, §5): [subscriber death under contention](#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) · [the qlog loss trigger](#the-qlog-loss-trigger-is-computed-backwards--fixed-in-quinn-and-in-noq-released-in-neither) · [relay memory](#5-relay-memory) and [the publisher's leak](#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)
-- **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-and-became-a-four-part-questline) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
+- **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-unbuilt) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
 - **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--asked-once-declined-withdrawn-re-asked-narrowly-and-deferred) · [closures by a planning document](#four-of-these-were-closed-as-completed-by-a-planning-document-that-changed-no-code) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged)
 - **Interoperability** (§6, §6b): [the announce convention](#the-announce-convention--reported-as-a-hazard-not-a-bug) · [the empty namespace prefix](#the-empty-namespace-prefix--a-specification-inconsistency) · [the media-level interop profile](#a-media-level-interop-profile--contributed) · [a flag-alias regression](#a-flag-alias-regression--reported-fixed-verified-closed) · [an independent stack](#corroboration-from-an-independent-stack) · [OpenMOQ's MSFTS publisher (moqxr#57)](#openmoqs-msfts-publisher-through-moq-relay--reported-as-openmoqmoqxr57) · [FFmpeg's HLS client](#6b-ffmpeg-an-hls-client-that-asks-for-http3-and-carries-the-media-over-http11)
 - **The MSFTS specification** (§7): [the named modes and output timing](#the-three-named-modes-are-published-and-the-gap-they-leave-is-output-timing) · [the September 2026 round](#the-2026-09-17-round-eleven-issues-filed-plus-one-comment-and-one-cross-venue-pair) · [the output contract (#37)](#the-output-contract-what-a-rebuilding-subscriber-emits-filed-as-37-and-merged) · [the CAT and the retain list](#the-retain-list-drops-the-cat-so-conditional-access-cannot-survive-program-level-filtering) · [mode 3 and the reference implementation](#mode-3-and-the-reference-implementation-are-not-the-same-thing-and-that-is-the-convergence-problem) · [the -02 revision](#the--02-revision-verbatim-only-carriage-41)
@@ -1165,29 +1165,37 @@ now targets **`main`**. **The ask is no longer tracked as its own quest:** the b
 wrong, and the remedy is replacement of the surface rather than a patch to it. Whether the replacement
 closes the specific hazard is not yet checkable; T37 measurements are against a component being redesigned.
 
-### Subscriber-reported health telemetry — accepted, and became a four-part questline
+### Subscriber-reported health telemetry — accepted, re-planned as solicited viewer feedback, unbuilt
 
 [#3608](https://github.com/moq-dev/moq/issues/3608) was filed **as aspirational** because no control
-plane in current use gives an origin this visibility. Upstream planned `quest/m2/qos/stats/` with four
-sub-quests (schema and library, Rust reporters, browser reporters, encoder feedback) that **close #3608
-when the questline finishes**. The plan reuses **`moq-stats`** rather than a catalog section:
-`moq_stats::Producer<E>` flattens an extension beside `Traffic`, so one consumer reads relay delivery
-counters and client media counters on one layout. The convention is a **`.stats` broadcast suffix** at a
-path the token allows (e.g. `pilot/feedback.stats`). Reporting is **bidirectional** — publisher
-self-reports correlate subscriber late frames against publisher CPU starvation — and **closes the loop**
-with encoder feedback from viewers' stats. Reporting is opt-in because reading is, and **self-reports are
-diagnostics only — never billing, authorization, or route-selection input**; the relay emits aggregated
-histograms only. Goal: unknown/healthy/degraded/unhealthy per broadcast *as CMSD does for HLS*
-([`docs/comparison.md`](../docs/comparison.md)). It lands on **`main`** because `moq-stats` is published
-and the generic producer is a breaking change. **The gap is no longer unaddressed, but nothing is
-implemented**, and the campaign position — not via `mpegts-pacer` — is unchanged.
+plane in current use gives an origin this visibility. Upstream accepted it, and after a first design on
+`moq-stats` (a `.stats` broadcast per client beside the relay's counters) closed unmerged, re-planned it
+as hang tracks ([#4510](https://github.com/moq-dev/moq/pull/4510), `quest/m1/stats/`). **A publisher
+names one `stats` snapshot track in its catalog; a publisher that wants to hear from viewers solicits it
+with an `echo: { path }` section, and each viewer then publishes one `.echo` broadcast under that path**
+carrying, per rendition, what it received, decoded, played late and stalled on, with its transport
+counters. A shared model classifies either report as unknown, healthy, degraded or unhealthy and names
+its observer; a preflight run reports which media layer is broken. Reporting is opt-in, trust is the
+token prefix, and **self-reports are never billing, authorization or route-selection input**; the relay
+keeps aggregated histograms only, and encoder feedback moved to a later milestone. **Nothing is
+implemented or claimed**, and the campaign position — not via `mpegts-pacer` — is unchanged.
+
+**The TS half is `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
+liveness flattened into the publisher's snapshot. Its export side is unsettled and leaning toward being
+dropped, because an export is a viewer and reports only through `.echo`; that side is this campaign's
+case, where the affiliate's edge decodes and the origin cannot see it ([T39](test-39-cross-boundary-observability.md)).
+The schema quest also leaves open whether `stats` and `echo` survive conversion to an MSF catalog.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
 The upstream questline settles the *mechanism*. The open question is where the **convention** is written
-down, and MSFTS is the wrong home for almost all of it: subscriber health applies identically to LOC,
-CMAF and `m2ts`, and MSFTS §4's disciplined scope list is the reason not to fork the work into one
-packaging extension. **One paragraph does belong in MSFTS:** a generic telemetry convention cannot know
+down. **The working group has the same mechanism in MSF**: a catalog's `publishTracks` names tracks its
+receiver publishes back, and draft-wilaw-moq-cmcd-event-timeline (individual, `-00`) carries CMCD v2
+Event Mode reports over Event Timeline tracks named there. CMCD's vocabulary is a player's — buffer,
+bitrate, play state, starvation and errors, per media type — with no key for container health, and the
+draft enables only the keys it lists, so CMCD's custom keys are unavailable as written. MSFTS is the wrong home for almost all of it: subscriber
+health applies identically to LOC, CMAF and `m2ts`, and MSFTS §4's disciplined scope list is the reason
+not to fork the work into one packaging extension. **One paragraph does belong in MSFTS:** a generic telemetry convention cannot know
 that transport-stream health needs TR 101 290 P1, PCR repetition and accuracy, and per-PID access-unit rate
 — nor that **the standard P1 set does not detect the failures this carriage actually produces** (57 s
 missing video with 0 continuity errors and PCR identical to the control
