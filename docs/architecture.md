@@ -664,10 +664,10 @@ natural fit for the object model, inherits per-track prioritisation and selectiv
 subscription, produces the individual renditions endpoints such as OTT origins want, and is the
 upstream project's own preference — so it is the approach most likely to attract ongoing investment.
 
-**Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque payload, packaged per
-MSFTS in one of its unmodified modes (the draft's `mpeg2ts` packaging, which `moq2ts` writes; the
-private prototype measured here predates the rename and uses `m2ts`), publishing an MSF catalog
-describing it. It preserves service signalling
+**Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque payload, as MSFTS's
+unmodified modes do under an MSF catalog (the draft's `mpeg2ts` packaging, which `moq2ts` writes).
+`moq-dev`'s whole-multiplex passthrough, the lane measured here, carries it as one track named in its
+own catalog's `m2ts` section. It preserves service signalling
 and programme structure *by construction* and makes no assumptions about the source encode.
 
 **Media-aware is the default and preferred path; opaque carriage is the fallback.** That ordering is
@@ -676,15 +676,15 @@ one carried end-to-end over the public internet, the one whose contribution-feed
 upstream, and the one that costs 5.3 % less bandwidth than SRT because it declines to carry null
 stuffing ([Evidence](evidence.md) §3.1, §3.5).
 
-**The opaque lane is weaker than its architectural role suggests** — one loopback run on obsolete
-draft-14, never over a real path or current build ([Evidence](evidence.md)). **Demonstrated principle,
-not validated component.** Use it when a receiver needs carried wall clock or unknown provenance forbids
+**The opaque lane's evidence is narrower than its architectural role** — on `moq-dev` it is the
+source's bytes on two clips, but on loopback only, with its export `[unmerged]` and never run over a
+real path ([Evidence](evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids
 assumptions; it forgoes per-track prioritisation and null-stripping savings if truly verbatim. **Rule:
 media-aware unless a specific feed or endpoint forces the fallback.**
 
 **For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS
 hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps
-the opaque lane the fallback is its evidence and its ecosystem. It has one loopback measurement, and no
+the opaque lane the fallback is its evidence and its ecosystem. Its evidence is loopback only, and no
 merged open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
 therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose
 receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which
@@ -1049,9 +1049,9 @@ path is authorized, routed and protocol-legal, and untooled.
 
 **It was proposed upstream as a convention rather than built privately, and upstream has adopted the
 direction.** The
-planned shape is a `.stats` broadcast per client on the existing relay-statistics layout, carrying
-publisher and subscriber self-reports together, with reporting opt-in because reading is, and with
-self-reports explicitly barred from billing, authorization and route selection. Nothing is
+planned shape is a feedback broadcast each subscriber publishes back when the publisher's catalog
+solicits it, beside a stats track the publisher names there, with reporting opt-in and self-reports
+explicitly barred from billing, authorization and route selection. Nothing is
 implemented, so the capability remains prospective — but it is no longer a convention a distributor
 would have to invent.
 
@@ -1080,11 +1080,10 @@ architecture rather than wished away.
 
 **The problem.** Successive drafts change the ALPN identifier, the control-message set, the parameter
 encoding and the data-plane encoding to the point that the working group describes them as "almost a
-completely new protocol". Broadcasters plan on five-to-ten-year horizons. The two lanes sit at
-different points on that moving target and neither sits on the interop target: the preferred
-media-aware lane rides moq-lite, upstream's own simplified wire protocol, so it tracks upstream
-releases rather than the IETF draft series; the opaque prototype pins draft-14, and a draft-14
-endpoint cannot negotiate an ALPN with a draft-18 one.
+completely new protocol". Broadcasters plan on five-to-ten-year horizons. Neither lane, as measured,
+sits on the interop target: both ride moq-lite, upstream's own simplified wire protocol, so they track
+upstream releases rather than the IETF draft series. The earlier private opaque prototype pinned
+draft-14, and a draft-14 endpoint cannot negotiate an ALPN with a draft-18 one.
 
 Multi-draft negotiation from a single build is trending (`moq-dev` carries draft-14–19 alongside
 moq-lite). **Version fragmentation is a real planning problem; measured, it is not what blocks interop**

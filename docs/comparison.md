@@ -309,7 +309,7 @@ MoQ feed carries no media through any of the eight other registered public relay
 distinct causes ([Evidence](evidence.md) §3.7). **Delivery-path interop and multi-programme carriage are
 mutually exclusive on segmented HTTP**: "Transport Stream Segments MUST contain a single MPEG-2 Program."
 HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and TDT/TOT through its catalog. SCTE-35
-has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give client reporting MoQ has no equivalent of —
+has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give client reporting MoQ has only in drafts —
 though they carry request and buffer state rather than delivered-media integrity, so **neither plane lets
 an origin establish that what a subscriber received was intact** ([Architecture](architecture.md) §9.4).
 
@@ -354,15 +354,16 @@ architectural reading.
 | Multi-programme mux | **normatively excluded** (§6) | **flattened** by builds up to moq 0.12.8; **split** into one intact broadcast per programme on upstream `main` from late September 2026, each SDT still listing every service | **verbatim by construction**; measured on one programme | verbatim by construction; measured on one programme |
 | PIDs, PSI, service identity, SDT/NIT, EIT schedule | **preserved**, non-default PIDs included; the 8-day EPG byte-identical | preserved; a joining receiver has the whole EPG in ~1 ms | preserved | **preserved** — measured over the wire; EIT not exercised |
 | TDT/TOT, CAT | **preserved** | TDT/TOT **~14 s late** on moq 0.9.11, a merged fix unmeasured; CAT not carried | preserved | **preserved**; CAT not exercised |
-| Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | carried if verbatim | **preserved; the source mux rate exactly** |
+| Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | **preserved** — the source's bytes, released on its PCR | **preserved; the source mux rate exactly** |
 | PSI cadence, packets added | source cadence plus **one PAT/PMT pair per segment** | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap | unchanged; nothing added | **identical; nothing added** |
-| PCR repetition (P1) and accuracy (P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | unmeasured; byte-preserving by construction | **0 violations at 481 ns**, ungroomed — measured over the wire |
-| Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](evidence.md) §3.16) | preserved by construction; *reasoned* to survive only behind a stream-clocked egress | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
+| PCR repetition (P1) and accuracy (P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | the source's PCRs, file domain; each released within 2 ms of schedule, wire accuracy not graded | **0 violations at 481 ns**, ungroomed — measured over the wire |
+| Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips `[unmerged]` | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
 | TS-level scrambling | carried as bytes; reasoned | **cannot be carried** — the publisher parses PES headers scrambling hides; specified | carried by construction | carried by construction |
-| Byte-identical to source | **in payload, yes; as a mux, no** | no | yes | every field, count and cadence measured identical, not diffed byte-for-byte |
+| Byte-identical to source | **in payload, yes; as a mux, no** | no | **yes**, from the first released group | every field, count and cadence measured identical, not diffed byte-for-byte |
 
 Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-4-remote-e2e-srt.md));
-breadth on three clips on loopback ([T3](../lab/test-3-opaque-transparency.md)); EIT on a synthetic
+the opaque lane on loopback, two clips on `moq-dev` ([T48](../lab/test-48-passthrough-export.md)) and
+three on an earlier prototype ([T3](../lab/test-3-opaque-transparency.md)); EIT on a synthetic
 fixture ([T17](../lab/test-17-si-snapshot-tracks.md)); figures and qualifications in
 [Evidence](evidence.md) §3.1. **Single-programme mux content on segmented HTTP is as verbatim as the
 opaque MoQ lane** — the only difference in a 1,200-packet window is byte 3 on one PAT and one PMT — and
@@ -375,7 +376,7 @@ pacing groomer cannot do — **not insurmountable**, since a laboratory re-multi
 upstream's fixed-delay export, merged in October 2026, does it in the subscriber, keeping every track
 and buffer on every join tried (§5.1). And it **cannot carry a scrambled
 stream**. Byte-faithful carriage has none of the three by construction; on MoQ that is the opaque lane,
-with one loopback measurement and no open subscriber (§12).
+measured on loopback only, with its subscriber unmerged (§12).
 
 **Scrambling is a narrow gate.** Primary distribution is protected by the transport and the operator
 ([Control plane](control-plane.md) §7.3), and consumer conditional access is applied downstream of the
@@ -492,7 +493,7 @@ MoQ's, the commercial one segmented HTTP's.
 
 | | `moq-dev` | `moq2ts` / `moqxr` | Cloudflare `moq-rs` | This work |
 |---|---|---|---|---|
-| Lane | media-aware (+ opaque prototype) | **transparent TS** | none — transport only | **transparent TS** + grooming |
+| Lane | media-aware, and whole-multiplex passthrough (export `[unmerged]`) | **transparent TS** | none — transport only | **transparent TS** + grooming |
 | Scope | publisher, relay, subscriber | **publisher only** | protocol library, **relay**, sample clients | publisher + egress + pacer |
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
 | Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
@@ -508,7 +509,7 @@ pressure and ends a broadcast with its publisher ([Architecture](architecture.md
 **No merged open implementation subscribes to whole-TS carriage**, as of October 2026: `moq2ts` and
 `moqxr` publish only; `moq-dev`'s whole-multiplex import has an export that writes the source's bytes
 back out, but it is `[unmerged]` ([Evidence](evidence.md) §3.1); `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside
-the media-aware lane; and the opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore
+the media-aware lane; and the earlier opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore
 runnable against an open receiver only on an unmerged branch, which is why §8's structural limits do not by themselves move the
 preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
 ([Evidence](evidence.md) §3.7).

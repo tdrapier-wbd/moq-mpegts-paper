@@ -327,6 +327,23 @@ Validated in both directions before use: the campaign clip passes on all seven c
 damaged capture fails on two of them — continuity, and one unsignalled interval of 140 ms — with exit
 status 1.
 
+**The live feed passes the gate at its hand-off** (CNN International EMEA over SRT into the primary
+EC2 host, the caller in-region at ~0.2 ms RTT; a 30 s capture of the listener's output, P1). All seven
+checks pass: 498,674 packets, 0 continuity errors, 1,556 PCR on one PID, intervals 0.06 / 19.29 /
+25.09 ms, and 0 of 1,555 PCRs outside ±500 ns. Against the looped clip of the same service it differs
+in four ways a lane result must account for:
+
+- **25.000 Mb/s constant rate with no null PID and no H.264 filler**: 99.7 % of the video is slice
+  data, so a lane that declines stuffing saves nothing on it.
+- **Open GOP**: an I-frame with a random-access flag every 1.2 s, two IDRs in 30 s, and 82 % B-frames.
+- **Audio PES not frame-aligned**: on both MP2 and AC-3, `data_alignment_indicator` is 0, and 1 PES in
+  101 starts on a sync word (the clip, over its first 50 MB: every PES). Upstream's `compliance.py` refuses both audio PIDs
+  for it. Our `ts-tstd.py` frames them and passes every buffer in every 2 s window over 27 s, at a
+  legal joint PCR offset of +0 to +100 ms.
+- **The TDT lags arrival by 22.9 s** against an NTP-locked clock. Our SRT receive latency accounts
+  for 2 s; the rest is upstream or the inserter's clock, so TDT is not a latency reference until the
+  contribution engineer says which.
+
 **Service presence is in the gate because of what Part A found.** A source with no PMT is not merely
 unconformant, it is un-importable in a way that produces no error at all: the importer resolves no
 tracks and exits zero. Catching that at the source is cheaper than debugging a silent no-op publish.
