@@ -252,8 +252,10 @@ of 40, and the quinn builds 0.00–0.64 s at 5 %, because BBRv1 does not treat l
 (*reasoned*). **Under 20 % reorder every build and both stacks lose 30.8–38.3 s of 60**, while SRT
 delivers every picture with 430–692 continuity errors in four of six cells. On noq that is the stack's
 loss detection — every packet it declared lost was acknowledged later, and relaxing both QUIC loss
-thresholds cuts the loss to 2.12–3.0 s; on quinn the same relaxation keeps the window and not the
-programme. **An impairment figure on this lane must name its shape, build and
+thresholds cuts the loss to 2.12–3.0 s. On quinn the default thresholds' cost is the same detection,
+since no queue on the path drops a packet, and relaxing them lets the window overrun the bottleneck,
+which then drops a third to two-fifths of what the relay declares lost; the programme is not saved.
+**An impairment figure on this lane must name its shape, build and
 QUIC stack**, and the MoQ lane is graded on its content timeline, not on its egress PCR timeline, which
 the exporter writes across pictures it never received.
 
