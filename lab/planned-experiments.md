@@ -41,7 +41,7 @@ defined [below](#blocked-on-apparatus).
 | P1-h | Interoperability, the remaining legs | Relay portability, which underwrites the economic argument (§5 row 12) | B-2 for T11c; upstream adoption of the announce convention | The full suite against a `moq2ts` subscriber; the three undiagnosed relay failures diagnosed | [T11](test-11-interop.md) |
 | P1-i | The three remaining data-plane comparison cells | Three empty cells in the comparison's head-to-head | B-4, B-5, B-6 | Each cell scored | [T14](test-14-data-plane-comparison.md) |
 | P1-k | The `--auth-api` half of the entitlement estate: a real endpoint serving a licensing matrix | Every entitlement run so far used a stub | — (a component to write) | T38's matrix run against the endpoint | [T38](test-38-entitlement-estate.md) § *Open* |
-| P1-l | The telemetry return path end to end | Closes T39 Part B; the same client gives the only way to dump a parsed catalog | — (a small client against the library, outside `mpegts-pacer`, on upstream's planned `.echo` feedback shape; the live feed as source) | A `moq-net` client publishing a telemetry track that the far end reads | [T39](test-39-cross-boundary-observability.md) § *Open* |
+| P1-l | The telemetry return path end to end | Closes T39 Part B; the same client gives the only way to dump a parsed catalog | — (a small `moq-net` client outside `mpegts-pacer`, on the live feed) | A CMCD Event Timeline track and the TS health counters read back over the same relay; T32's faults graded against each | [T39](test-39-cross-boundary-observability.md) § *Open* |
 
 ## P2 — completeness
 
