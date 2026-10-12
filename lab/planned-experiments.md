@@ -20,7 +20,7 @@ defined [below](#blocked-on-apparatus).
 | P0-d | The analyser-specific rows of the Gate 2 acceptance harness | Completes the acceptance test the harness was built for | B-6 | Every analyser row of T33's fixed pass table taken | [T33](test-33-gate2-preparation.md) |
 | P0-j | A real never-repeating encoder against the continuous-source fence | The import's survival of a real encoder's hard cuts is shown on synthesised joins only | — (the primary's standing publisher, a fenced build, has imported the live feed since it arrived; its restarts are logged) | The live feed graded through `moq export ts` with TSDuck over T34's arm | [T34](test-34-real-encoder-severity.md) |
 | P0-g | Permanence: the seven-day MoQ soak on the live feed, which never wraps, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 15, 16) | the secondary's feed (the primary has about one core spare); nginx for the segmented arm | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
-| P0-l | The live T-STD export on a source of another profile or rate | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | the live feed passes `ts-tstd.py` over 27 s at its hand-off ([T33](test-33-gate2-preparation.md) Part C); first a graded 300 s capture, and P1-u's answer on its audio | One such clip through the export, graded on T47's criteria 1–4 | [T45](test-45-live-tstd-remux.md) |
+| P0-l | The live T-STD export on a source of another profile or rate | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | Upstream: the export carrying AC-3 whose PES begin mid-frame, admitting video at its leak, and fitting a source that fills its multiplex; with the first two fixed in a scratch build the live feed passes at 26 Mb/s, not at its own 25 ([T45](test-45-live-tstd-remux.md)) | The live-feed capture through the export at the source's multiplex rate, graded on T47's criteria 1–4 | [T45](test-45-live-tstd-remux.md) |
 ## P1 — establishes where one architecture is superior
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
@@ -28,7 +28,6 @@ defined [below](#blocked-on-apparatus).
 | P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | On current `main` nothing fails over in the mesh, because a standby refused before its PMT is never asked again; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: importers that answer for their tracks before the PMT and align group numbering | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
 | P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | upstream: TDT placement, and `ts-hitless --sync` (within an epoch) or the passthrough export, whose 8 s-late leg is byte-identical unrewritten, unmerged ([T48](test-48-passthrough-export.md); identity across a republish is declined for the demultiplexed export); or two independent passthrough ingests once the secondary is fed | The merged build's residue attributed; an 8 s-late pair byte-identical after a counter rewrite outside upstream, with TDT revisions placed by media time | [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
 | P1-t | The opaque lane on the live feed across hosts | Whether byte-faithful carriage survives a real path and what it costs (§5 row 10), on which [Architecture](../docs/architecture.md) §6.1's TS-out ordering rests | — (the passthrough build on the ingesting host) | The feed through `import ts --passthrough` on one EC2 host, exported on the other and at the workstation, graded on T48's criteria against a hand-off capture, wire bytes counted | [T48](test-48-passthrough-export.md) |
-| P1-u | The media-aware lane on the live feed's unaligned audio | On an older build its AC-3 PES leave unaligned but flagged aligned, with duplicate timestamps; a defect here breaks R1 on a real service and gates P0-l | — (current `main` on a hand-off capture, loopback) | Alignment flag, frame count and timestamp steps graded per audio PID on current `main`; any defect reported | new; criteria fixed before it runs |
 | P1-v | The wire-cost line on the live feed's profile | The feed carries no nulls and no filler, so the stuffing the media-aware lane declines is absent; the cost model's deciding line rests on one clip (§5 row 11) | — | MoQ and SRT wire bytes per delivered byte on the live feed | [T14](test-14-data-plane-comparison.md) measurement 5 |
 | P1-q | Why the media-aware lane loses more programme than SRT, and why the figure moves with the build | Whether SRT's lead belongs to the lane or to one QUIC stack's configuration (§5 row 18) | — | The outage cost bisected across builds | [T28](test-28-failure-injection-matrix.md), [T8b](test-8b-congestion-control.md) |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig; the infrastructure axis on both lanes; replicates of the MoQ latency-budget cells | [T28](test-28-failure-injection-matrix.md) |
@@ -48,7 +47,7 @@ defined [below](#blocked-on-apparatus).
 | # | What remains | Gate | Done when | Protocol |
 |---|---|---|---|---|
 | P2-a | What commercial monitoring would have caught: the vendor survey | — (outreach, not apparatus) | Survey answers mapped against the measured fault-to-telemetry table | [T32](test-32-observability-survey.md) |
-| P2-d | Differential delay on a real pair rather than `netem` | the secondary's feed, over a contribution path that differs from the primary's (the primary's caller is in-region; ask the engineer) | T12's merge graded on the real pair | [T12](test-12-dual-path-handoff.md) |
+| P2-d | Differential delay on a real pair rather than `netem` | a second contribution path; the secondary's feed will share the primary's | T12's merge graded on the real pair | [T12](test-12-dual-path-handoff.md) |
 | P2-e | Replicates for the congestion cells, both lanes | — | An error bar on each quoted aggregate | [T31](test-31-congestion-capacity-ladders.md) |
 | P2-f | LEO handover impairment (a candidate, not committed) | — | Committed or deleted | [T35](test-35-leo-handover-impairment.md) |
 | P2-g | The transparency and three-lane arms from an office network | — | The arms reproduced, with the network's UDP/QUIC posture recorded | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) |
@@ -68,7 +67,7 @@ this file and their IDs are not reused**; a citation of a retired ID resolves to
 discharged it: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
 and [T24](test-24-partial-media-plane-stall.md), P0-i → [T8b](test-8b-congestion-control.md),
 P0-m → [T47](test-47-fixed-delay-export.md), P1-m → [T28](test-28-failure-injection-matrix.md),
-P1-n → [T13](test-13-downstream-grooming.md), P2-h → P1-t, P1-r and P1-s → [T41](test-41-import-reanchor-coverage.md),
+P1-n → [T13](test-13-downstream-grooming.md), P2-h → P1-t, P1-r and P1-s → [T41](test-41-import-reanchor-coverage.md), P1-u → [T45](test-45-live-tstd-remux.md),
 P2-b → [T25](test-25-isolation-under-abuse.md).
 
 ## Blocked on apparatus
@@ -76,9 +75,9 @@ P2-b → [T25](test-25-isolation-under-abuse.md).
 | Gate | State | Unblocks |
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d, P1-i, P2-k |
-| **B-7** A live contribution feed of a real service over SRT to both EC2 hosts | **on the primary** (25 Mb/s, graded at the source in [T33](test-33-gate2-preparation.md) Part C); the secondary's pending | now: P0-j, P0-l, P1-t, P1-u, P1-v; with the secondary's: P0-g's live arm, P1-o's two-ingest arm, P2-d |
+| **B-7** A live contribution feed of a real service over SRT to both EC2 hosts | **on the primary** (25 Mb/s, graded at the source in [T33](test-33-gate2-preparation.md) Part C); the secondary's pending | now: P0-j, P1-t, P1-v; with the secondary's: P0-g's live arm, P1-o's two-ingest arm |
 | **B-2** A `moq2ts` subscriber published by its authors | not published | P1-h (T11c) |
-| **B-3** A true CBR hardware source | the live feed is 25.000 Mb/s CBR with no nulls; whether its encoder is hardware is for the contribution engineer | the residual in [T15](test-15-point-to-point-cadence.md) |
+| **B-3** A true CBR hardware source | **in hand**: the live feed, from a hardware encoder at 25.000 Mb/s CBR with no nulls, reaching us over SRT | the residual in [T15](test-15-point-to-point-cadence.md) |
 | **B-4** A commercial ABR-to-TS gateway | none | the segmented lane's low-latency arm at equal conformance (§5 row 5); P1-i |
 | **B-5** The commercial packaging edge itself | none (a plain byte cache only re-measures nginx) | multi-programme carriage through a media-aware edge; P1-i |
 
