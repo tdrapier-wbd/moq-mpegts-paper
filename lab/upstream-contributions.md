@@ -1185,6 +1185,9 @@ liveness flattened into the publisher's snapshot. Its export side is unsettled a
 dropped, because an export is a viewer and reports only through `.echo`; that side is this campaign's
 case, where the affiliate's edge decodes and the origin cannot see it ([T39](test-39-cross-boundary-observability.md)).
 The schema quest also leaves open whether `stats` and `echo` survive conversion to an MSF catalog.
+**[#5360](https://github.com/moq-dev/moq/issues/5360) asks for both**: the export side through a
+container section in `.echo`, on T24, T27 and T39's evidence, and `echo` carried as an MSF
+`publishTracks` entry, with CMCD as an optional second encoding of the fields it shares.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
@@ -1193,7 +1196,11 @@ down. **The working group has the same mechanism in MSF**: a catalog's `publishT
 receiver publishes back, and draft-wilaw-moq-cmcd-event-timeline (individual, `-00`) carries CMCD v2
 Event Mode reports over Event Timeline tracks named there. CMCD's vocabulary is a player's — buffer,
 bitrate, play state, starvation and errors, per media type — with no key for container health, and the
-draft enables only the keys it lists, so CMCD's custom keys are unavailable as written. MSFTS is the wrong home for almost all of it: subscriber
+draft enables only the keys it lists, so CMCD's custom keys are unavailable as written.
+[wilaw/CMCD-over-MSF-event-timeline#4](https://github.com/wilaw/CMCD-over-MSF-event-timeline/issues/4)
+asks for container health as its own Event Timeline type beside the CMCD track (or custom keys), and a
+[comment on its #3](https://github.com/wilaw/CMCD-over-MSF-event-timeline/issues/3#issuecomment-6127631320)
+supports reports tied to a track. MSFTS is the wrong home for almost all of it: subscriber
 health applies identically to LOC, CMAF and `m2ts`, and MSFTS §4's disciplined scope list is the reason
 not to fork the work into one packaging extension. **One paragraph does belong in MSFTS:** a generic telemetry convention cannot know
 that transport-stream health needs TR 101 290 P1, PCR repetition and accuracy, and per-PID access-unit rate
