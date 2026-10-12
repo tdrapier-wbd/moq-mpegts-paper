@@ -1748,11 +1748,12 @@ switching programs on a replacement. **Both rigs re-run on `main` at `90500867d`
 ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*). Without `--stitch` every
 replacement ends the export at once, as designed; with it 6 of 7 crash or clean replacements resume,
 and the shared-epoch failover is taken over on `moq-lite-07`, and on `moq-lite-06` with `--linger`.
-One residue, **drafted, not yet reported**: in 1 of 4 `moq-lite-06` crash runs under `--stitch`,
+One residue, **reported as [#5347](https://github.com/moq-dev/moq/issues/5347)**: in 1 of 4 `moq-lite-06` crash runs under `--stitch`,
 the export's catalog lookup went to a replacement killed 60 ms earlier; the relay dropped it when
 that session timed out, and `Error::Dropped`, which has no stream code, went out as `Internal`, so
 the follower, which exempts only a local `Dropped`, took it for a refusal and failed loud. The
-unclaimed `quest/m1/dropped-sources.md` already plans the mapping; the draft offers this as its case.
+unclaimed `quest/m1/dropped-sources.md` already plans the mapping; the issue offers this as its case.
+**Open.**
 
 **A PMT longer than one packet ends the export before it writes anything — reported as
 [#5110](https://github.com/moq-dev/moq/issues/5110), fixed by #5220, merged and verified.** `mpeg2ts` serialises the rebuilt PMT into a
