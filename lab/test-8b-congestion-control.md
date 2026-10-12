@@ -904,11 +904,10 @@ counted every packet written.*
 
 **Graded on content, the merged build loses the programme at 10 % loss.** Two more runs a cell on
 `83ce47fe`, same rig, graded with [`t28-content-lost.py`](scripts/t28-content-lost.py): at 0 % each
-egress (9.85 Mb/s, 3.9–4.2 % null) carries all 4,262 access units; at 10 % the egress stays at
-9.92 and 10.49 Mb/s, but 88.5 % and 94.2 % of it is null packets, carrying 339 and 109 access units
-(8.0 % and 2.6 % of the video) and losing 20.3 s and 11.0 s of audio. The hold fix ends the
-exporter's stall; what reaches it under loss is set upstream of the exporter, as T48's controls
-inferred.
+carries all 4,262 access units; at 10 % the egress stays at the mux rate, mostly null packets,
+carrying 8.0 % and 2.6 % of the video ([T48](test-48-passthrough-export.md) § *Under 10 % loss* has
+the rows). The hold fix ends the exporter's stall; what reaches it under loss is set upstream of the
+exporter, as T48's controls inferred.
 
 Disabling the hold alone restores the full rate, so the hold is the cause. The unfixed run's log
 shows why it compounds rather than costing a fixed latency. Of 56 holds, 2 ended with the lagging
