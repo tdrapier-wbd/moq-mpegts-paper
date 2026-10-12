@@ -685,7 +685,7 @@ media-aware unless a specific feed or endpoint forces the fallback.**
 **For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS
 hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps
 the opaque lane the fallback is its evidence and its ecosystem. It has one loopback measurement, and no
-open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
+merged open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
 therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose
 receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which
 routes those are.

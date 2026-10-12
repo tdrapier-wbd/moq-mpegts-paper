@@ -14,7 +14,7 @@ Every measurement cited here is stated with its measurement point, domain and bu
 data planes. They differ most on latency, and the margin depends on the conformance the comparison is
 held at: **at the only configuration each has been measured TR 101 290 P1-conformant in, MoQ delivers a
 picture over one internet path in 2,447 ms and segmented HTTP in 9,286 ms** ([Evidence](evidence.md)
-§3.11). That settles which plane a route in the two-to-nine-second band should use, and nothing else.
+§3.11). That settles the latency question for a route in the two-to-nine-second band, and nothing else.
 **Neither plane is an unconditional choice.** Segmented HTTP leads on most of the remaining axes —
 maturity, delivery economics and the delivery path's interoperability — but those advantages are
 upstream of the receiver, and this evaluation did not establish a receiver path from segmented HTTP back
@@ -274,7 +274,8 @@ graded on a hardware IRD** ([Evidence](evidence.md) §4).
 PCR-timeline class crosses the lane at the control's content gap. From moq 0.14.0 a backward timestamp
 step ends the import by design, flagged or not, and upstream has declined an in-process restart, so a
 supervisor must republish under a new epoch at each step, at about 3 s of programme a step and with a
-1+1 pair not hitless across it, which upstream leaves to an export of the whole multiplex, not yet built. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
+1+1 pair not hitless across it, which upstream leaves to the export of the whole multiplex, implemented `[unmerged]` but not
+measured across a republish. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
 classes re-measured, so no build is *measured* to carry both cases, and a deployment must pin the build
 or republish at each backward step ([Evidence](evidence.md) §3.13).
 
@@ -283,8 +284,8 @@ or republish at each backward step ([Evidence](evidence.md) §3.13).
 **Segmented HTTP is the better engineering choice only where two conditions hold together**: the route's
 destinations absorb seconds — nearer six unless an ABR-to-TS receiver is bought — **and** the receive
 path to an IRD-ready transport stream is supplied separately. Then it wins on maturity, delivery
-economics and delivery-path interoperability, and narrowly on the hand-off. **Between roughly 2.5 and
-9 seconds MoQ is the better choice**, measured at P1/P2 conformance; at the buffer model the band is not
+economics and delivery-path interoperability, and narrowly on the hand-off. **Otherwise, between roughly
+2.5 and 9 seconds, MoQ is the better choice**, measured at P1/P2 conformance; at the buffer model the band is not
 yet compared, since segmented HTTP's wire is ungraded. **Below about two seconds no plane here is
 demonstrated conformant**, and a sub-second route is choosing MoQ on a projection — that the ~650 ms
 regression is recovered, that the VBV-derived bound is smaller for its own content, and that the lane
@@ -504,11 +505,11 @@ Transparent carriage is no longer single-vendor, but **transparent is not verbat
 nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under
 pressure and ends a broadcast with its publisher ([Architecture](architecture.md) §5).
 
-**No open implementation subscribes to whole-TS carriage**, as of October 2026: `moq2ts` and `moqxr`
-publish only, as does `moq-dev`'s whole-multiplex import, whose export is not built
-([Evidence](evidence.md) §3.1); `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside
-the media-aware lane; and the opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore not
-runnable against an open receiver, which is why §8's structural limits do not by themselves move the
+**No merged open implementation subscribes to whole-TS carriage**, as of October 2026: `moq2ts` and
+`moqxr` publish only; `moq-dev`'s whole-multiplex import has an export that writes the source's bytes
+back out, but it is `[unmerged]` ([Evidence](evidence.md) §3.1); `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside
+the media-aware lane; and the opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore
+runnable against an open receiver only on an unmerged branch, which is why §8's structural limits do not by themselves move the
 preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
 ([Evidence](evidence.md) §3.7).
 
@@ -537,9 +538,10 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem |
 
-**Neither column adds up to a winner.** For routes that can absorb five seconds or more, carry a single
-programme, **and have a receive path to an IRD-ready transport stream from somewhere other than this
-evaluation**, segmented HTTP is the better engineering choice. **MoQ's case is route-specific and
+**Neither column adds up to a winner.** For routes whose destinations absorb seconds (nearer six unless
+an ABR-to-TS receiver is bought), that carry a single programme, **and that have a receive path to an
+IRD-ready transport stream from somewhere other than this evaluation**, segmented HTTP is the better
+engineering choice. **MoQ's case is route-specific and
 narrower than its headline latency**: smaller bursts for the groomer, multi-programme carriage, portable
 enforcement, ~7 % less wire volume — a rounding error against five-to-ten× delivery cost — and, at equal
 P1/P2 conformance, a decisive margin in the two-to-nine-second band that is not a sub-second result.

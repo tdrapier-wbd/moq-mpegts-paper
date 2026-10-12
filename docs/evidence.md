@@ -145,7 +145,12 @@ exactly 1.00 pair per segment head and 302.148 µs against 302.4 µs predicted, 
 loopback, file-fed, on a pinned obsolete draft and a private implementation, never repeated (§4).
 Upstream now imports a whole multiplex as one track, byte-identical from the first group through a
 flagged 20 s forward jump but for the break marker's sequence, in its own relay test on `moq-lite` 06
-and `moq-transport` 14 (P0, software; not measured here); its export is not built.
+and `moq-transport` 14 (P0, software; not measured here). **Its export, our implementation, writes the
+source's bytes back out** ([T48](../lab/test-48-passthrough-export.md); P1 and P2, upstream `main`,
+October 2026, `[unmerged]`; loopback on one dedicated host, two clips, 120 s at a 1 s delay, one run
+each). From the first released group each leg is the source's packets in order, a leg joining 8 s late
+matches the first over their overlap, the strict T-STD verdict is the source's (a pass on one clip, a
+fail on the other), and every PCR goes out within 2 ms of its schedule.
 
 ### 3.2 What does delivery do to the clock, and can it be repaired? — Yes, on both lanes and on the wire in software; the wire is not the file, and on the media-aware lane the repair costs latency
 
@@ -627,7 +632,7 @@ the one examined as the same content packetised differently, and in one the legs
 broadcast one picture apart. Either breaks the packet identity an ST 2022-7 merge needs. The cause is
 not located, and upstream holds the outcome by design: after a replacement each export starts a fresh
 stream, its byte identity promised within one epoch only, and identity across a republish is left to
-an export of the whole multiplex, designed but not built.
+the export of the whole multiplex, implemented `[unmerged]` (§3.1) but not measured across one.
 
 **A 1+1 ingest pair republished this way keeps both legs, but each export follows whichever leg
 announced last** ([T41](../lab/test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose
