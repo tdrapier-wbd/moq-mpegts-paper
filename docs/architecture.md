@@ -677,14 +677,14 @@ upstream, and the one that costs 5.3 % less bandwidth than SRT because it declin
 stuffing ([Evidence](evidence.md) §3.1, §3.5).
 
 **The opaque lane's evidence is narrower than its architectural role** — on `moq-dev` it is the
-source's bytes on two clips, but on loopback only, with its export `[unmerged]` and never run over a
-real path ([Evidence](evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids
+source's bytes on two clips on loopback and on one live feed across hosts and over the internet, but
+one run each, with its export `[unmerged]` ([Evidence](evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids
 assumptions; it forgoes per-track prioritisation and null-stripping savings if truly verbatim. **Rule:
 media-aware unless a specific feed or endpoint forces the fallback.**
 
 **For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS
 hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps
-the opaque lane the fallback is its evidence and its ecosystem. Its evidence is loopback only, and no
+the opaque lane the fallback is its evidence and its ecosystem. Its evidence is one run per setting, and no
 merged open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is
 therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose
 receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which

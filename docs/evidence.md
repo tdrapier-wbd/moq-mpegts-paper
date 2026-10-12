@@ -33,7 +33,7 @@ defined in broadcast terms in the [Glossary](glossary.md#moq).
 |---|---|---|
 | **Upstream `moq-dev`, media-aware lane** | The preferred path, and the lane almost every result was measured on | The public internet, through an AWS EC2 [relay](glossary.md#transport-and-deployment-terms) |
 | **[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)** (public, ours) | The CBR/PCR [groomer](glossary.md#broadcast-terms-used-without-definition), deliberately outside the transport | Every lane |
-| **Upstream `moq-dev`, whole-multiplex passthrough** (its export ours, `[unmerged]`) | The opaque lane | **Loopback on one host** |
+| **Upstream `moq-dev`, whole-multiplex passthrough** (its export ours, `[unmerged]`) | The opaque lane | **Loopback on one host; one live feed across hosts** |
 | **Private opaque `m2ts` prototype** (IETF draft-14, MSFTS packaging) | The opaque lane's first reference | Loopback only. One run. Never deployed |
 | **TSDuck plugins** — `hls`, `srt`, `rist` | The alternative data planes, built from the tool used as the oracle throughout | Loopback and the public internet, from the same EC2 origin |
 
@@ -147,7 +147,9 @@ P1 and P2, upstream `main`, October 2026, `[unmerged]`; loopback on one dedicate
 at a 1 s delay, one run each). Upstream's import publishes the whole multiplex as one track and our
 export writes it back out: from the first released group each leg is the source's packets in order, a
 leg joining 8 s late matches the first over their overlap, the strict T-STD verdict is the source's (a
-pass on one clip, a fail on the other), and every PCR goes out within 2 ms of its schedule. Upstream's
+pass on one clip, a fail on the other), and every PCR goes out within 2 ms of its schedule. On a live 25 Mb/s contribution feed it holds across hosts (P1, one 150 s run at a 2 s delay):
+a leg in another availability zone, one joining 8 s late and one over the internet are each the
+hand-off capture's packets in order and identical to each other, every PCR within 2 ms. Upstream's
 relay test holds the import byte-identical through a flagged 20 s forward jump but for the break
 marker's sequence (P0, software, `moq-lite` 06 and `moq-transport` 14). An earlier private prototype
 was byte-transparent on one loopback run ([T3](../lab/test-3-opaque-transparency.md)).
@@ -395,7 +397,7 @@ Measured EC2 to home at ~25 ms RTT, the same clip in the same window ([T9](../la
 | SRT, byte-verbatim | 1.037× | measured, same path |
 | **Segmented HTTP over HTTP/3, 1200 B** | **1.056×** | HTTP layer measured at 1.0006×; framing **derived** |
 | Segmented HTTP over HTTP/2 on TCP+TLS, 1500 B | 1.029× | derived |
-| MoQ, opaque lane | **unmeasured** | derivation puts verbatim near SRT |
+| MoQ, opaque lane | 1.046× | one leg, live feed; counted before segmentation, so without per-datagram headers, and not by the method of the rows above |
 
 MoQ carries the service in **5.3 % less than SRT** (6.2 % with MTU discovery on, off by default) and
 **~7.0 % less than segmented HTTP**, MTU-invariant. The reference clip is 4.57 % nulls, which a byte pipe
@@ -801,8 +803,9 @@ do not differ between planes, so the comparison holds while the total does not. 
 the WAN leg was 12.8 ms, so nothing exercised the recovery the tunnels exist for; a long (80–150 ms) or
 lossy path could change the ordering.
 
-**The opaque lane is measured on loopback only** — on `moq-dev`, two clips on one host, one run
-each, with its export `[unmerged]`; its wire cost and a real path are unmeasured (§3.1).
+**The opaque lane's real path is one run** — on `moq-dev`, two clips on loopback and one live feed
+across hosts, one run each, with its export `[unmerged]`; its wire cost is one leg's, by a method the
+other lanes' figures do not share (§3.1, §3.5).
 
 **The data-plane comparison is single-route, single-clip and single-host.** The segmented arm of the
 carriage, cadence and latency comparisons is one route, one clip and one run per leg on loopback, with
@@ -856,7 +859,7 @@ rebuild.
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
 | 8 | **Can a late-joining multi-track 1+1 leg merge at the byte?** A co-started pair already does behind the merged export, on one host or two (§3.4); on the opaque lane a leg 8 s late is already identical (§3.1) | TDT revisions placed by media time; a counter rewrite outside upstream; a merge run on the opaque lane | [Architecture](architecture.md) §5.1's scope: single-track content, and legs that have run continuously |
 | 9 | **Where does the trunking knee sit, and does it track RTT, group duration or relay buffering?** (§3.3) | A latency-budget ladder at several RTTs | Sizing N contended feeds in latency as well as rate |
-| 10 | **What does the opaque lane cost on the wire, and does it survive a real path?** | The passthrough run across hosts, its wire graded | Whether verbatim carriage is a real cost against SRT |
+| 10 | **What does the opaque lane cost on the wire?** It survives one real path (§3.1) | Its wire counted per datagram on the other lanes' method | Whether verbatim carriage is a real cost against SRT |
 | 11 | **How much of MoQ's carriage advantage survives a different source?** | Two more source profiles | The largest caveat on the cost model's deciding line |
 | 12 | **Does fixing the announce convention clear the relays it blocks, and what are the three undiagnosed failures?** (§3.7) | Upstream adoption; diagnosis | Relay portability, which underwrites the economic argument |
 | 13 | **What does a CDN edge, or an origin whose sender ignores random loss, deliver under loss at 100 ms RTT?** (§3.3) | A tuned edge, or the origin on BBR | The segmented lane's loss curve off loopback |
