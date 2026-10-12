@@ -502,8 +502,9 @@ of media time and the legs agreed on it, but each still placed a few packets of 
 shifted every later slot ([Evidence](evidence.md) §3.4). **The groomer constraint is necessary but not
 sufficient:** the stage above it must place packets deterministically. Behind the fixed-delay export
 below it does so for a co-started multi-track pair, and not for a leg that joins later; where a pair
-cannot be co-started, carry multi-track 1+1 as one pair per elementary stream or merge above the
-transport.
+cannot be co-started, carry multi-track 1+1 as one pair per elementary stream, merge above the
+transport, or carry it on the opaque lane, where a leg joining 8 s late is already the same stream
+though no merge has yet been run ([Evidence](evidence.md) §3.1).
 
 **Prerequisite:** slot derivation assumes PCR *value* and *position* advance together. A stream whose
 PCR values are an even grid but whose PCR packets arrive bunched — the fixed MoQ exporter over a byte
@@ -1161,8 +1162,7 @@ Ranked by how much a negative answer would change the architecture.
    Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two, and its
    exports stay identical across a republish in 8 of 13 runs; a leg started later does not, its
    continuity counters being per-process and the rest of its residue unattributed. On the opaque
-   lane a leg joining 8 s late is already the same stream ([Evidence](evidence.md) §3.1), so what
-   remains there is a merge run.
+   lane what remains is a merge run (§5.1).
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves
    most of the delivery bill.
 6. **Relay portability between implementations (§8).** This architecture treats the relay as a
