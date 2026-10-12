@@ -1783,7 +1783,12 @@ smooth weighted round-robin peak at 459 B ([T45](test-45-live-tstd-remux.md)). *
 [#5207](https://github.com/moq-dev/moq/pull/5207), merged on 2026-10-10**: each slot interleaved so
 no PID overruns its transport buffer, our test as the regression. On `main` (`9f1dd1afd`) the same
 110 s cut overruns video TB on 88 of 943,296 packets (peak 646 B), against 36 % (peak 1,311 B)
-before: the layout cause is gone, and a residue remains, not yet diagnosed. **Fixed**, residue open.
+before: the layout cause is gone. The residue is the slot's edges: after a slot the paused video
+left empty, program tables written twice go ahead of a capped video lane, outside the interleave's
+count, and so would the end padding of the duplicate-run rule in
+[#5304](https://github.com/moq-dev/moq/pull/5304), which clears the system TB but not the video
+([reported there](https://github.com/moq-dev/moq/pull/5304#issuecomment-6125008012), T45).
+**Fixed**, residue reported to the pacing work.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
