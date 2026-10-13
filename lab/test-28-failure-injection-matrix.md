@@ -3,7 +3,7 @@
 **State: run in part. The MoQ and SRT lanes are measured across three impairment shapes — discrete
 outage, sustained partial loss and reorder — matched on measured latency in the `netns`/`cake` rig,
 and the MoQ lane is re-measured on six builds and both QUIC backends with the controller pinned and
-graded on content; the segmented lane is measured on the same three shapes in T20's loopback rig and
+graded on content, and on the merged build at four `--delay` settings; the segmented lane is measured on the same three shapes in T20's loopback rig and
 in part in the `netns` rig; the infrastructure axis is not run.**
 Infrastructure and transport failures have been probed one at a
 time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported as
@@ -13,18 +13,21 @@ This experiment applies one media-domain grader across a full matrix on both lan
 **Headline: graded on the content it delivers, the media-aware lane loses more programme than SRT
 under every impairment shape run at matched latency, and how much more depends on the build and on
 the QUIC stack.** At a 2 s budget a 5 s total outage costs SRT 3.9–5.3 s of video; it costs the MoQ
-lane 7.5 s on the oldest build and 16.3–28.4 s on every later one, where one commit loses the same on
+lane 7.5 s on the oldest build and 16.3–28.4 s on every later `--max-age` build, where one commit loses the same on
 both stacks and under either controller. Under 5 % random loss SRT
 loses nothing, and the MoQ lane loses 0–0.6 s on quinn, whose `delay` controller is BBRv1, with a
 bandwidth model that ignores loss, but 26.6–37.5 s of a 60 s window on noq, under BBRv3 and CUBIC alike. Under 20 % reorder SRT
 loses no pictures and carries several hundred continuity errors; the MoQ lane loses 30.8–38.3 s on
-every build, both stacks included. On noq nearly all of that is the stack's loss detection: a relay
+every `--max-age` build, both stacks included. On noq nearly all of that is the stack's loss detection: a relay
 patched to relax its thresholds, which no flag exposes, loses 2–3 s. On quinn it is the same
 detection, but the same patch does not save the programme: the larger window it allows overruns the
 bottleneck, which then drops real packets. **This reverses what the file published before** — that an outage shorter
 than the budget was free and that the MoQ lane was ahead under a discrete outage — and the reason
 is the grader: § *Corrections*. Every MoQ cell still returns 0 continuity errors, which on this lane
-is a property of the exporter and measures nothing.
+is a property of the exporter and measures nothing. On the merged build's `--delay` export, matched
+at 2.2–5.9 s, the order holds: SRT's medians are 0.18–3.74 s of the outage against 7.0–7.6 s, and 0
+under loss or 20 % reorder against 31–40 s, while the MoQ lane's latency now comes back after an
+outage (§ *The `--delay` ladder*).
 
 **Second headline: at loopback RTT the segmented lane's resilience is bounded by the origin's
 retention and by almost nothing else.** Sustained loss at 5 % and at 10 % returns bytes **identical
@@ -420,6 +423,48 @@ graded by [`t28-outage-trace.py`](scripts/t28-outage-trace.py). One control, fiv
 It does not separate QUIC's probe-timeout backoff from the controller's restart; both are *stack*,
 and a relay qlog of one replicate would split them. On this build `--mux-rate 0` is rejected with a
 warning and ignored; the captures carry no nulls either way.
+
+### The `--delay` ladder: SRT loses less on every shape but light reorder, and the MoQ lane's latency comes back (P1-a)
+
+Criteria 6–8 on the same build (noq, `delay` controller), `export ts --delay D` for D ∈ {1, 2, 3, 6 s},
+in the same rig at 20 Mb/s and 100 ms RTT, three replicates per cell: 60 s outage cells, and 95 s
+sustained cells impaired from 21 s to 61 s. A calibration pass put the MoQ lane at 2,184, 3,931, 5,914
+and 11,870 ms (about 2 × D), and SRT's `--latency` was set to those. Outage cells are conserved
+([`t2831-conservation.py`](scripts/t2831-conservation.py)). For sustained cells the hole count is
+quoted: conservation assumes one window per lane and budget, so the 35 s post-window reads −35 s on
+every sustained cell, and corrected for it, conservation agrees with the holes within 0.4 s. Latency
+return is read by [`t28-latency-return.py`](scripts/t28-latency-return.py). Median video lost over three
+replicates, MoQ / SRT, with the matched latency in each column's head:
+
+| Shape | D = 1 s (2.18 s) | D = 2 s (3.93 s) | D = 3 s (5.91 s) | D = 6 s (11.87 s) |
+|---|---|---|---|---|
+| 5 s outage | 7.56 / 3.74 s | 7.04 / 2.08 s | 7.04 / 0.18 s | 6.12 s / not graded |
+| 5 % loss | 34.16 / 0 s | 33.96 / 0 s | 31.28 / 0 s | 29.52 s / not graded |
+| 10 % loss | 40.04 / 0 s | 39.16 / 0 s | 37.76 / 0 s | 37.24 s / not graded |
+| 5 % reorder | 0 / 0 s | 0 / 0 s | 0 / 0 s | 0 s / not graded |
+| 20 % reorder | 40.20 / 0 s | 38.52 / 0 s | 36.76 / 0 s | 37.24 s / not graded |
+
+- **Matched (6).** SRT's unimpaired median is within 20 ms of its setting at every D. The MoQ lane's
+  own cells at D = 1 s stood at 1,897–1,943 ms in 15 of 16 (2,195 in one), so that column compares SRT
+  about 0.25 s later; that moves no verdict.
+- **Graded (7).** The MoQ lane loses 0.9–2.6 s more than the outage at every D, as the trace above
+  found at 2 s. Under 5–10 % loss and 20 % reorder its video stops for most of the 40 s impairment at
+  every D (largest hole 21.7–40.3 s), while audio loses 0–4.4 s. The export's late drops are 0–28 per
+  cell, at most about a second of frames, so the delay's deadline is not where the programme goes.
+  SRT's loss falls as its latency rises, 3.74, 2.08 and 0.18 s of the outage at 2.18, 3.93 and
+  5.91 s, as retransmission with longer to repair it would; that is not traced.
+- **Two-axis verdict (8).** At D = 1–3 s SRT is superior on the outage, on both loss rates and on
+  20 % reorder: it loses 3.8–40 s less and is back in all 35 of those valid cells. Under 5 % reorder
+  the two are tied at 0 and both come back. The MoQ lane is back after every outage (−82 to +72 ms),
+  where the `--max-age` builds stepped 7.3–11.9 s behind and held. After loss or 20 % reorder its
+  latency settles 114–227 ms *below* its pre-fault level in 33 of 36 cells: outside the 100 ms band,
+  but on the low side.
+- **Not graded: SRT at 11.87 s, and one cell.** Two of three outage captures end when the outage does,
+  with the source tap stopping too, and the third stalls at half the bytes. All six loss cells and two
+  of six reorder cells log 41–47 `RCV-DROPPED` warnings (no cell at ≤ 5.91 s logs more than 9) and
+  return 11.8–12.9 s behind. The cause is not established; libsrt's default 8,192-packet buffers hold
+  about 8.7 s of this 9.95 Mb/s stream, below the latency set, and are the first candidate. SRT's
+  D = 1 s outage replicate 2 is void (a 24.7 MB capture).
 
 ### The budget ladder, and the nominal budget is not a latency setting
 
@@ -1209,9 +1254,13 @@ publisher tap holds and the egress tap lacks; its group is its GOP.
 |---|---|---|
 | 1 | Grader validity: a control reports 0 s lost and 0 continuity errors **on both lanes**; a synthetic hole reproduces the injected duration ± 100 ms | **Passes on both lanes, with a different grader on each.** SRT and segmented cells are graded on the PCR timeline, whose self-test passes and whose controls grade 0.000 s lost; MoQ cells on the content timeline (`t28-content-selftest.sh` within 0–40 ms), conserved against the window, with every clean cell at 0.0–0.9 s. The PCR grader also passed the MoQ controls and was blind on that lane's impaired cells, so a clean control is necessary and was not sufficient (§ *Corrections*). The earlier SRT failure (controls at 4.196–5.391 s lost) was real and the criterion is what caught it; its cause was the split publisher a source-side tap forces, and a single-`tsp` publisher clears it |
 | 2 | Matrix completeness | **Partial.** MoQ and SRT are run on three transport axes, matched on measured latency and two replicates deep: the outage axis (six budgets, plus four outage durations on MoQ and a re-convergence pass), sustained partial loss at 5 % and 10 %, and reorder at 5 % and 20 %; the MoQ lane is repeated on five builds and both backends at three replicates. The segmented lane is run on the same three shapes in the loopback rig at one sample per cell, and in the `netns` rig on both outages and both loss rates, one or two samples per cell, not on reorder. The bandwidth step is in T31; the infrastructure axis is not run |
-| 3 | Ranking published | **Met for MoQ against SRT on all three axes run, and graded on content SRT is ahead on every one.** By criterion 5's rule — lower median media lost wins — SRT is superior under a discrete outage at every budget (5.0–5.4 s against the MoQ lane's 15.1–20.5 s on `53f8aa99d`, and 7.2–28.4 s at a 2 s budget on every `--max-age` build; 7.04–7.10 s on the merged build at `--delay 2s`, the excess the transport's recovery); under sustained loss on the noq builds at every budget and both rates (0 against 23.4–31.5 s), **tied** with the quinn builds at 5 % (0 against 0.00–0.64 s, inside criterion 5's ± 0.5 s at the median); and under 20 % reorder on every build (0.00–0.17 s against 33.4–35.1 s), where SRT's stream carries 430–692 continuity errors whose effect on a decoder is not measured. Criterion 5 still scores media lost alone and so cannot see that on the `--max-age` builds the MoQ lane also re-times the service after an outage. **The three-way ranking is not published**: in the `netns` rig the segmented column has no reorder cell, and its outage cells are read at 18–22 s of lag the other lanes do not carry, which a media-lost rule cannot weigh. In that rig it loses nothing to a 5 s outage, 23.08 s to a 30 s one, and collapses under 5 % loss. What it establishes on its own controls at loopback RTT is that loss at 5 % and 10 % is byte-identical to unimpaired, a 5 s outage likewise, a 30 s outage costs 17.134 s, and reorder is the shape that hurts it |
+| 3 | Ranking published | **Met for MoQ against SRT on all three axes run, and graded on content SRT is ahead on every one.** By criterion 5's rule — lower median media lost wins — SRT is superior under a discrete outage at every budget (5.0–5.4 s against the MoQ lane's 15.1–20.5 s on `53f8aa99d`, and 7.2–28.4 s at a 2 s budget on every `--max-age` build; 7.04–7.10 s on the merged build at `--delay 2s`, the excess the transport's recovery); under sustained loss on the noq builds at every budget and both rates (0 against 23.4–31.5 s), **tied** with the quinn builds at 5 % (0 against 0.00–0.64 s, inside criterion 5's ± 0.5 s at the median); and under 20 % reorder on every build (0.00–0.17 s against 33.4–35.1 s), where SRT's stream carries 430–692 continuity errors whose effect on a decoder is not measured. On the merged build's `--delay` ladder the order holds at every matched latency SRT is valid at, 2.18–5.91 s (criteria 6–8). Criterion 5 still scores media lost alone and so cannot see that on the `--max-age` builds the MoQ lane also re-times the service after an outage. **The three-way ranking is not published**: in the `netns` rig the segmented column has no reorder cell, and its outage cells are read at 18–22 s of lag the other lanes do not carry, which a media-lost rule cannot weigh. In that rig it loses nothing to a 5 s outage, 23.08 s to a 30 s one, and collapses under 5 % loss. What it establishes on its own controls at loopback RTT is that loss at 5 % and 10 % is byte-identical to unimpaired, a 5 s outage likewise, a 30 s outage costs 17.134 s, and reorder is the shape that hurts it |
 | 4 | Comparability | **Pass within each table.** One host, one rig, one clip, one grader and one domain per table, with an unimpaired control through the same path; the build and backend are named on each, because the MoQ figures differ between builds by more than between budgets. On the matched ladder the SRT arm's `--latency` is set from the MoQ lane's measured median rather than its nominal budget |
 | 5 | Segmented receiver axis | **Not run.** The apparatus is on the same host (T20's HTTP/3 and HLS lane), so this is now a session's work rather than a blocker |
+| 6 | Matched on measured latency | **Met at D = 1, 2, 3 and 6 s** (SRT within 20 ms of its setting). The MoQ lane's own D = 1 s cells stood about 0.25 s below their calibration, which moves no verdict: § *The `--delay` ladder* |
+| 7 | Graded, three replicates | **Met, except SRT at 11.87 s**, which fails in a way no cell at ≤ 5.91 s does (truncated outage captures, late drops, 12 s behind after loss), and one SRT outage replicate at 2.18 s, void |
+| 8 | Two-axis verdict | **SRT superior at 1–3 s on the outage, both loss rates and 20 % reorder** (3.8–40 s less lost, back in every valid cell); **tied at 5 % reorder**; 6 s not ranked. The MoQ lane is back after every outage, and after loss or 20 % reorder settles 114–227 ms below its pre-fault latency |
+| 9 | Infrastructure axis | **Not run** |
 | 10–13 | Outage trace | **Valid; *stack* in five of five; the prediction fails narrowly** (*E* 2.14–2.20 s against 2 s): § *The outage traced on the merged build* |
 
 ## What remains
@@ -1229,10 +1278,14 @@ and the grader are all on the EC2 secondary.
 - **Replicate the idle-timeout bracketing, graded on content with its controls kept.** One replicate
   per cell, and the missing-at-close figures in § *The 30 s cell* are estimated from another run's
   join offsets.
-- **A genuine SRT budget sweep under sustained loss.** Matching on measured latency collapsed the
-  three budgets onto one ≈2 s setting; criterion 6's ladder is that sweep.
+- **SRT at an 11.87 s latency.** Re-run the 6 s column's SRT arm with its receive and send buffers
+  and flow-control window sized to latency × rate. If it then grades clean, the column ranks; if
+  not, SRT's behaviour at long latency is a finding of its own.
+- **Conservation for cells of different lengths.** `t2831-conservation.py` takes its reference window
+  from the lane and budget's unimpaired cell, so it misreads any cell whose window differs; the
+  `--delay` ladder's sustained figures are hole counts until it takes the window from the cell.
 - **The bandwidth step** is in [T31](test-31-congestion-capacity-ladders.md); **the infrastructure
-  axis** — kill and restart a publisher, a relay and an exporter — is not run in this rig and graded
+  axis** (criterion 9) — kill and restart a publisher, a relay and an exporter — is not run in this rig and graded
   on content. [T6](test-6-relay-resilience.md) drills the relay and publisher restarts on loopback,
   counting bytes rather than pictures.
 - **The segmented lane in the `netns` rig**: reorder is not run there, the 5 s outage is one sample,
