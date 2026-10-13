@@ -119,7 +119,7 @@ Corrections, counter-evidence and disagreement are welcome.
 
 ## Author
 
-**Thomas Drapier** — Warner Bros. Discovery, Senior Director, Service Management & Partner Services,
-Broadcast Distribution Engineering. [LinkedIn](https://www.linkedin.com/in/tdrapier/)
+**Thomas Drapier** — Skydance (Warner Bros. Discovery), Senior Director, Service Management & Partner Services,
+Broadcast Distribution Engineering (EMEA). [LinkedIn](https://www.linkedin.com/in/tdrapier/)
 
 ---
