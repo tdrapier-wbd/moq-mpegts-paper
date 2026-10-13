@@ -54,7 +54,10 @@
 #      MOQ_CC (relay controller, `delay` = BBRv3 default | `loss` = CUBIC),
 #      MOQ_MUX_RATE (`export ts --mux-rate`; `0` suppresses padding), KEEP_TS=1 (keep captures),
 #      RELAY_EXTRA / SUB_EXTRA (further relay / subscriber flags, e.g. `--quic-send-window 1048576`),
-#      EXPORT_BUDGET (the subscriber's `--max-age`, when it must differ from the cell's budget).
+#      EXPORT_BUDGET (the subscriber's `--max-age`, when it must differ from the cell's budget),
+#      SUB_ENV (environment for the MoQ subscriber, e.g. `RUST_LOG=...`),
+#      WIRE_CAP=1 (UDP headers arriving in the subscriber's namespace, `wire.pcap`, for the
+#      delivered rate around an impairment; `events.txt` stamps the impairment in the taps' clock).
 set -uo pipefail
 
 # Post-#3793 CLI flags, detected per binary rather than assumed.
@@ -128,6 +131,8 @@ clear_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${PA
 # pattern matched the launcher's environment and SIGKILLed the whole run one cell in. Anchor on
 # the interpreter and the subcommand, which only the actual tap process carries.
 cleanup_procs() {
+	# SIGINT, not SIGKILL: tcpdump flushes its buffer on the way out.
+	pkill -INT -f "[t]cpdump -i veth-sub" 2>/dev/null
 	pkill -9 -f "[m]oq-relay.*$PUBIP:$PORT" 2>/dev/null
 	pkill -9 -f "p1mladder" 2>/dev/null
 	pkill -9 -f "[t]sp .*$CLIP" 2>/dev/null
@@ -160,6 +165,12 @@ run_cell() {
 	mkdir -p "$d"
 	cleanup_procs
 	clear_loss
+	echo "cell_start_ns $(date +%s%N)" >"$d/events.txt"
+	# -Z root: the cell directory is root's, and tcpdump otherwise drops to its own user
+	# before opening the file.
+	[ "${WIRE_CAP:-0}" = 1 ] &&
+		sub tcpdump -i veth-sub -n -s 96 -Z root -w "$d/wire.pcap" "udp and src host $PUBIP" \
+			>/dev/null 2>"$d/tcpdump.log" &
 
 	local window=$((SETTLE + OUTAGE + RECOVER))
 	local budget_ms
@@ -241,7 +252,7 @@ run_cell() {
 			"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$MOQ_CC" "${RELAY_X[@]}" --log-level warn >"$d/relay.log" 2>&1 &
 		sleep 3
 		# Subscriber first: reservation gating publishes the catalog once tracks resolve.
-		sub bash -c "timeout $((window + 3)) '$BIN/moq' $SUB_X ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
+		sub bash -c "${SUB_ENV:+env $SUB_ENV} timeout $((window + 3)) '$BIN/moq' $SUB_X ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
                 --broadcast '$BC' export ts ${MOQ_LAT[*]} ${EXPORT_BUDGET:-$budget}s $MUX \
               | $EG_SINK" >"$d/sub.log" 2>&1 &
 		sleep 2
@@ -295,9 +306,11 @@ run_cell() {
 	sleep "$SETTLE"
 	case "$impair" in
 	outage)
+		echo "outage_start_ns $(date +%s%N)" >>"$d/events.txt"
 		set_loss 100
 		sleep "$OUTAGE"
 		clear_loss
+		echo "outage_end_ns $(date +%s%N)" >>"$d/events.txt"
 		sleep "$RECOVER"
 		;;
 	loss*)

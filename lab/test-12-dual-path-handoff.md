@@ -904,25 +904,27 @@ elementary stream as its own 1+1 pair, merging above the transport rather than a
 the interleave upstream. Nothing here is a groomer defect: the groomer places by stream position and
 carries faithfully whatever order it was handed.
 
-## Arm D on the opaque lane, one leg joining late (P1-o): fixed before running
+## Arm D on the opaque lane, one leg joining late (P1-o): the join is clean, a leg's loss and return are not
 
 **Question.** Arm D merges co-started legs of the demultiplexed export, and across independent
 upstreams only single-track content. The opaque lane's export writes the source's own packets, and a
 leg joining 8 s late is byte-identical to the first ([T48](test-48-passthrough-export.md)). Does such a
 pair, each leg through its own stream-clocked groomer, stay hitless when either leg is lost mid-run?
 
-**Rig.** The secondary alone, clear of its standing units: `CNNiEMEA2.ts` played in real time into a
-loopback multicast hand-off, recorded as the reference, for 150 s so the clip never wraps; a merged
-`main` relay with `import ts --passthrough`; legs A and B, each `export ts --passthrough --delay 2s
---mux-rate 0` into its own `mpegts-pacer --rtp --stream-clock` at the clip's rate, with shared SSRC and
-sequence seed, to ports 5100 and 5200. B starts 8 s after A. One loopback `tcpdump` records both legs;
-injections use the per-leg port lane with its watchdog. A live-feed cell follows once a host other than
-the primary is fed.
+**Rig** ([`t12-opaque-late.sh`](scripts/t12-opaque-late.sh)). The secondary alone, clear of its
+standing units: `CNNiEMEA2.ts` paced in real time into `import ts --passthrough` on a merged `main`
+relay and teed as the reference, for 150 s so the clip never wraps; legs A and B, each `export ts
+--passthrough --delay 2s` into its own `mpegts-pacer --rtp --stream-clock` at the clip's rate, with
+shared SSRC and sequence seed, to ports 5100 and 5200. B starts 8 s after A. One loopback `tcpdump`
+records both legs; a blackout drops the leg's QUIC flow both ways by its own UDP ports, with a
+watchdog. A live-feed cell follows once a host other than the primary is fed.
 
 **Cells, one run each.** (1) Control. (2) A blacked out for 15 s at 40 s and cleared, then B for 15 s at
 100 s, so each leg carries the output alone, A after its return. (3) A's export killed at 40 s.
+(2b), fixed after cell 2 and before it ran: cell 2 with 5 s blackouts, because 15 s outlasted the
+session's idle timeout and no leg returned; criterion 3 is graded on it.
 
-**Pass criteria.**
+**Pass criteria, fixed before running.**
 
 1. **Rig gate.** The control's legs align at 100 % with 0 conflicts, or nothing else is reported.
 2. **Hitless.** In every cell the seq-merge output, from B's first aligned datagram, loses no TS packet,
@@ -938,6 +940,51 @@ the primary is fed.
 Passing 1–3 is the evidence for lifting [Architecture](../docs/architecture.md) §5.1's co-start
 condition on the opaque lane, for one clip on one host. If 2 fails only in cell 2 and 3 fails too, the
 defect is the resumed leg's, not the late join's.
+
+**Results** on `main` at `b581c27ed` with the pacer at `5ab84cd`, graded by
+[`t12-merge-oracle.py`](scripts/t12-merge-oracle.py),
+[`ts-passthrough-identity.py`](scripts/ts-passthrough-identity.py) `--groomed`,
+[`t12-resume.py`](scripts/t12-resume.py) and TSDuck `continuity` on the seq-merge output:
+
+| Cell | Legs aligned (mismatched datagrams) | Seq-merge lost | Continuity errors | Identity: gaps (packets), foreign |
+|---|---|---|---|---|
+| 1, control | 100 % (0) | 0 | 0 | 0, 0 |
+| 2, 15 s blackouts | 99.99 % (2) | everything after B's blackout | 3 | 2 (8), 2 |
+| 2b, 5 s blackouts | 97.71 % (2,877) | 0 | on 8 PIDs | 2 (9,621), 100 |
+| 3, A's export killed | 99.93 % (20) | 0 | 0 | 0, 1 |
+
+- **The rig gate passes (1)** and the mask is proven: the control's merge is the source's packets in
+  order, and a copy with 100 packets cut and one corrupted reports 2 gaps and 1 foreign. The grader
+  refuses a lone payload-free packet as an anchor, because with PCR masked such packets repeat.
+- **The late join is clean in every cell.** From B's first datagram, every datagram both legs carry
+  is identical until A's loss. Skew B−A is 18.0–18.3 ms at the median and at most 19.7 ms.
+- **Hitless fails (2) in every impaired cell, each time on a datagram the groomer should not have
+  sent.** A stream-clocked
+  pacer that cannot fill a datagram as the stream dictates sends it anyway, under the sequence number
+  its partner fills with programme, and an ST 2022-7 receiver keeps whichever arrives first. It does
+  so in four places: at stall onset it completes the last datagram with nulls (2 packets lost); while
+  it re-primes its 1.5 s cushion after a return it sends about 1,390 null-only datagrams with PCR
+  re-inserted (9,619 packets lost, because A leads B); when its input ends after a stall it sends one
+  PCR packet under a 9 s-old continuity counter (6 packets displaced); and when its input ends with
+  programme buffered it places the last PCR interval, which has no closing PCR, on slots of its own
+  (A's final 21 datagrams; here the splice left one legal duplicate, but the same shift could drop a
+  packet). Arm D's own exporter-kill and blackout cells, on the demultiplexed lane with the pacer of
+  that time, merged without loss; whether the opaque lane's input or the pacer's five later commits
+  make the difference is not separated.
+- **The resumed leg rejoins the numbering (3), in cell 2b.** After a 3.3 s silence on the wire A's
+  sequence jumps 3,130, and its 91,605 later datagrams match B's at the same sequence numbers once
+  the refill ends, 1.5 s after its return and 55 s before B's blackout; B reads deficit 0. The tool's
+  −1 for A is its counting window, which B's 18 ms lag puts one datagram short.
+- **A 15 s blackout ends the leg.** Each export exits about 13 s into it (`transport: connection
+  error: closed`) instead of reconnecting, so in cell 2 neither leg returned and the output stopped at
+  B's blackout. Beyond the session's idle timeout, a returning leg is a restarted export and pacer,
+  which is a late join.
+- Input-select at k = 50 ms switches once per silence.
+
+**Verdict.** Not passed, so Architecture §5.1's co-start condition stands on the opaque lane. What
+the run moves is where the condition belongs: the join it guards against is clean, and what is not
+hitless is a leg's loss and return, in the groomer. A stream-clocked leg must stay silent rather than send a
+datagram it cannot fill exactly; with that fixed in the pacer, cells 2b and 3 decide it.
 
 ## Corrections
 

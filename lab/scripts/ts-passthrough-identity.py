@@ -9,6 +9,7 @@ behind it: passthrough does not reorder), and the source packets skipped over ar
 found nowhere ahead is foreign, which passthrough must never write.
 
     ts-passthrough-identity.py <source.ts> <capture.ts> [--span-out span.ts] [--json out.json]
+                               [--groomed]
 
 `--span-out` writes the source bytes the capture covers (first matched packet to last), so a grader
 can compare the two over the same span. Exit 0 when nothing is foreign and something matched.
@@ -26,16 +27,37 @@ def pid(p):
     return ((p[1] & 0x1F) << 8) | p[2]
 
 
+def groom(buf):
+    out = bytearray()
+    for i in range(0, len(buf) - PKT + 1, PKT):
+        p = bytearray(buf[i : i + PKT])
+        if pid(p) == NULL_PID:
+            continue
+        if p[3] & 0x20 and p[4] >= 7 and p[5] & 0x10:
+            p[6:12] = bytes(6)
+        out += p
+    return bytes(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("source")
     ap.add_argument("capture")
     ap.add_argument("--span-out")
     ap.add_argument("--json")
+    ap.add_argument(
+        "--groomed",
+        action="store_true",
+        help="drop null packets on both sides and zero PCR fields first: what a stream-clocked "
+        "groomer, which regenerates PCR and stuffs to its own rate, is allowed to change "
+        "(packet indices are then counted without nulls)",
+    )
     a = ap.parse_args()
 
     src = open(a.source, "rb").read()
     cap = open(a.capture, "rb").read()
+    if a.groomed:
+        src, cap = groom(src), groom(cap)
     n_src, n_cap = len(src) // PKT, len(cap) // PKT
     if len(cap) % PKT:
         print(f"capture has {len(cap) % PKT} trailing bytes past its last whole packet", file=sys.stderr)
@@ -48,8 +70,8 @@ def main():
         for k in (8, 4, 2, 1):
             if i + k > n_cap:
                 continue
-            if k == 1 and pid(at(cap, i)) == NULL_PID:
-                return None  # a lone null packet would anchor anywhere
+            if k == 1 and (pid(at(cap, i)) == NULL_PID or not cap[i * PKT + 3] & 0x10):
+                return None  # a lone null, or payload-free packet once PCR is masked, anchors anywhere
             needle = cap[i * PKT : (i + k) * PKT]
             off = src.find(needle, after * PKT)
             while off >= 0 and off % PKT:
