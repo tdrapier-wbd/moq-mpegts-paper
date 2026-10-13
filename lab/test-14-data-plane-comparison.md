@@ -327,6 +327,37 @@ The corollary is that MoQ's ~7 % is contingent on the source. On an unstuffed mu
 vanishes and the gap narrows to roughly 2.5 points of TS packet headers and uncarried SI. Any cost
 model quoting 7 % must quote the stuffing level with it.
 
+#### On the live feed's profile (P1-v)
+
+**Fixed before running.** The live hand-off (25.000 Mb/s CBR, no nulls) on the primary, one
+subscriber host (the secondary, cross-AZ), T9's instrument: `tcpdump` headers on the sender's
+interface, IP bytes over the capture's own span, against the source's 25.000 Mb/s. Three planes, each
+120–150 s: the media-aware lane (the standing relay and import, a `84b34f54` export at
+`--max-age 2s`), the opaque lane (`import ts --passthrough` and `export ts --passthrough` on current
+`main`, P1-t's rig), and SRT (`tsp` from the same multicast group, listener on the primary, latency
+2000 ms). The return path is reported beside each. **Prediction**, from the stuffing argument above:
+the media-aware lane at 1.00–1.03×, SRT at 1.03–1.04× as in T9, the opaque lane at or above SRT. The
+argument is falsified if the media-aware lane stays below 0.99×, which would put its saving somewhere
+other than stuffing, or if it lands above SRT.
+
+| Plane, live feed | IP wire, forward | vs source | Return path | Largest datagram |
+|---|---:|---:|---:|---:|
+| MoQ, media-aware (standing `84b34f54`, GSO off) | 25.81 Mb/s | **1.0325×** | 0.243 Mb/s (0.97 %) | 1,228 B |
+| SRT (`tsp`, latency 2000 ms) | 25.87 Mb/s | **1.0349×** | 0.054 Mb/s (0.21 %) | 1,360 B |
+| MoQ, opaque (`b581c27ed`, GSO on), each of two legs | 26.34 Mb/s | **1.0537×** | 0.172 Mb/s (0.69 %) | 1,228 B |
+
+*Measured, P1, wire domain: IP bytes on the primary's interface over each flow's steady seconds
+(118–140 s), against the source's 25.000 Mb/s; cross-AZ, one run per plane
+([`p1v-wire.sh`](scripts/p1v-wire.sh)). The largest datagram shows the capture saw wire datagrams,
+not GSO batches.*
+
+**The prediction holds, at the top of its band.** With no stuffing to decline, the media-aware
+lane's lead over SRT falls from 5.3 % on the clip to 0.2 % forward, and its acknowledgements (0.97 %
+against SRT's 0.21 %) make it half a point dearer in total. The opaque lane pays QUIC framing on
+verbatim bytes, 1.9 points above SRT. **The deciding line of the cost model is the source's stuffing,
+not the lane.** The media-aware arm ran on the standing build, which current clients cannot read;
+its datagram framing is the same on both builds (*inferred*).
+
 **Putting segmented HTTP on HTTP/3 costs ~2.6 points of bandwidth against HTTP/2 on TCP** (1.056×
 against 1.029×), because QUIC's minimum 1200 B datagram charges 5.5 % framing where a 1500 B TCP path
 charges 2.7 %. The move to HTTP/3 buys loss resilience and no head-of-line blocking, and it is not

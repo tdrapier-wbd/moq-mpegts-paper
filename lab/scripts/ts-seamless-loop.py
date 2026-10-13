@@ -180,7 +180,6 @@ def plan(n, pes, kind, tpkt, vpid, min_pass):
 def spills(pes, k1, d, per, vpid, tpkt):
     """Slots each track's first packet in the next pass waits behind its last in this one, or
     None if a window runs off the clip."""
-    s = k1[0]
     width = round(d * 300 / tpkt)
     out = {}
     win = window(pes, k1, d, per, vpid)

@@ -136,7 +136,10 @@ def main() -> None:
 		sts, sys_, ssteps = load(src_path)
 		slo = next(i for i, t in enumerate(sts) if t >= sts[0] + settle)
 		swhole, srms, _ = fit(sts, sys_, slo, len(sts))
-		print(f"source: {len(sts):,} PCRs, {ssteps} discontinuities, {swhole:+.3f} ppm whole-run, residual RMS {srms * 1e3:.3f} ms")
+		print(
+			f"source: {len(sts):,} PCRs, {ssteps} discontinuities, {swhole:+.3f} ppm whole-run, "
+			f"residual RMS {srms * 1e3:.3f} ms"
+		)
 		src = (sts, sys_)
 
 	rows = []
@@ -175,7 +178,8 @@ def main() -> None:
 			rates = [fit(ts, ys, a, b)[0] for _, a, b in slid]
 			best = max(range(len(rates) - k), key=lambda i: abs(rates[i + k] - rates[i]))
 			print(
-				f"   windows stepped {step:g} s: largest change {abs(rates[best + k] - rates[best]) * HZ / 1e6 / width:.4f} Hz/s, "
+				f"   windows stepped {step:g} s: largest change "
+				f"{abs(rates[best + k] - rates[best]) * HZ / 1e6 / width:.4f} Hz/s, "
 				f"between windows starting +{slid[best][0] - start:.0f} s and +{slid[best + k][0] - start:.0f} s"
 			)
 	if src and rows:

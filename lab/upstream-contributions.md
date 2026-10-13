@@ -26,7 +26,7 @@ this campaign's own measurements (§8), where the ratio is the point.
 - **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352) and the rewind at the switch (#4354)](#activeactive-source-failover--shipped-bounded) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
 - **Congestion and memory** (§4, §5): [subscriber death under contention](#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) · [the qlog loss trigger](#the-qlog-loss-trigger-is-computed-backwards--fixed-in-quinn-and-in-noq-released-in-neither) · [relay memory](#5-relay-memory) and [the publisher's leak](#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)
 - **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-unbuilt) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
-- **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--asked-once-declined-withdrawn-re-asked-narrowly-and-deferred) · [closures by a planning document](#four-of-these-were-closed-as-completed-by-a-planning-document-that-changed-no-code) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-the-ac-3-half-contributed-as-5363)
+- **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--asked-once-declined-withdrawn-re-asked-narrowly-and-deferred) · [closures by a planning document](#four-of-these-were-closed-as-completed-by-a-planning-document-that-changed-no-code) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-the-ac-3-half-merged-as-5363-the-rest-planned)
 - **Interoperability** (§6, §6b): [the announce convention](#the-announce-convention--reported-as-a-hazard-not-a-bug) · [the empty namespace prefix](#the-empty-namespace-prefix--a-specification-inconsistency) · [the media-level interop profile](#a-media-level-interop-profile--contributed) · [a flag-alias regression](#a-flag-alias-regression--reported-fixed-verified-closed) · [an independent stack](#corroboration-from-an-independent-stack) · [OpenMOQ's MSFTS publisher (moqxr#57)](#openmoqs-msfts-publisher-through-moq-relay--reported-as-openmoqmoqxr57) · [FFmpeg's HLS client](#6b-ffmpeg-an-hls-client-that-asks-for-http3-and-carries-the-media-over-http11)
 - **The MSFTS specification** (§7): [the named modes and output timing](#the-three-named-modes-are-published-and-the-gap-they-leave-is-output-timing) · [the September 2026 round](#the-2026-09-17-round-eleven-issues-filed-plus-one-comment-and-one-cross-venue-pair) · [the output contract (#37)](#the-output-contract-what-a-rebuilding-subscriber-emits-filed-as-37-and-merged) · [the CAT and the retain list](#the-retain-list-drops-the-cat-so-conditional-access-cannot-survive-program-level-filtering) · [mode 3 and the reference implementation](#mode-3-and-the-reference-implementation-are-not-the-same-thing-and-that-is-the-convergence-problem) · [the -02 revision](#the--02-revision-verbatim-only-carriage-41)
 - **Asked for, then retracted** (§8): [the ledger and its evidence](#8-what-was-asked-for-at-the-start-what-was-retracted-and-on-what-evidence)
@@ -1181,13 +1181,13 @@ keeps aggregated histograms only, and encoder feedback moved to a later mileston
 implemented or claimed**, and the campaign position — not via `mpegts-pacer` — is unchanged.
 
 **The TS half is `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
-liveness flattened into the publisher's snapshot. Its export side is unsettled and leaning toward being
-dropped, because an export is a viewer and reports only through `.echo`; that side is this campaign's
-case, where the affiliate's edge decodes and the origin cannot see it ([T39](test-39-cross-boundary-observability.md)).
-The schema quest also leaves open whether `stats` and `echo` survive conversion to an MSF catalog.
-**[#5360](https://github.com/moq-dev/moq/issues/5360) asks for both**: the export side through a
-container section in `.echo`, on T24, T27 and T39's evidence, and `echo` carried as an MSF
-`publishTracks` entry, with CMCD as an optional second encoding of the fields it shares.
+liveness flattened into the publisher's snapshot. Its export side is this campaign's case, where the
+affiliate's edge decodes and the origin cannot see it ([T39](test-39-cross-boundary-observability.md)).
+**[#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and for MSF carriage, and the plan
+changed**: the export side stays, through `.echo`, so `moq export ts --echo <name>` folds the TS
+counters in under `mpegts`; MSF is parked: a viewer's `--echo` under an MSF catalog is refused, the
+import's MSF catalog omits `stats` and `echo`, and `echo` as a `publishTracks` entry with an optional
+CMCD encoding is a later-milestone quest. Planned, not implemented.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
@@ -1379,11 +1379,13 @@ that fails without it; a test pins objects after the last PCR; and the bound is 
 2026-10-09** as `5566e4128`, our commit plus two of the maintainer's: a splice that is both a flagged
 forward jump and a random access point keeps its break marker, and `randomAccess` stays false once a
 layout has allowed none. CI passed on the merge; we have not re-measured it. The export half, graded in
-[T48](test-48-passthrough-export.md), is proposed in [#5349](https://github.com/moq-dev/moq/pull/5349)
-as the mode alone. It leaves `ts-passthrough-export` open, because the maintainer's
-[#5327](https://github.com/moq-dev/moq/pull/5327) is rewriting that quest's acceptance: the T-STD
-verdict and release schedule checked in CI, a wider fixture set, counted group omissions, and
-TSDuck and FFmpeg runs. A
+[T48](test-48-passthrough-export.md), merged as [#5349](https://github.com/moq-dev/moq/pull/5349)
+on 2026-10-13, the mode alone, after two review fixes: an object read past its release deadline is
+dropped and counted rather than sent late, and an MSF-only broadcast is refused. On `b581c27ed` the
+live feed gives T48's verdicts again. `ts-passthrough-export` stays open under the acceptance the
+maintainer's [#5327](https://github.com/moq-dev/moq/pull/5327) merged: the T-STD verdict and
+release schedule checked in CI, a wider fixture set, counted group omissions, and TSDuck and FFmpeg
+runs. A
 catalog `burst` field for encoder VBV send-ahead was planned in
 [#4649](https://github.com/moq-dev/moq/pull/4649), reviewed to a definition question — largest access
 unit against VBV/`cpb_size` — and then abandoned by the maintainer, who kept `--delay` covering both
@@ -1989,7 +1991,7 @@ sets rather than the content. The P0 frame counts were not repeated on the merge
 
 **Open.** Loopback SRT loss rate unexplained (to 6 % at 10 Mb/s); libsrt-to-libsrt comparison not yet usable.
 
-### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half contributed as [#5363](https://github.com/moq-dev/moq/pull/5363)
+### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest planned
 
 **Report.** [T45](test-45-live-tstd-remux.md)'s live-feed arm: a hardware encoder's 25 Mb/s CBR
 multiplex with no nulls, conformant as a source, stops `main`'s export within 10 s on AC-3 whose
@@ -2004,7 +2006,12 @@ join or a lost PES, and adds two tests that fail on `main`. Before: 3 PES where 
 split; the live capture stops at 8–10 s. After: on the same capture, all 926 AC-3 frames written
 before the video limit stopped it at 39 s are the source's, in order, PTS exact.
 
-**Open**, both.
+**State.** #5363 merged on 2026-10-13, reworked by the maintainer to split frames before the jitter
+buffer; on `main` at `b581c27ed` the same capture gives the same 926 AC-3 frames, all the source's,
+before the video stops it. #5362 is closed into two unclaimed quests, both answers yes: the cap's slack was not a
+deliberate margin (`tstd/video-leak`: the lesser of Rx in packets and Rbx in payload, fractions
+carried between slots), and the PCR may ride in the PCR PID's adaptation field with several audio
+frames per PES up to B, for every audio codec (`tstd/mux-overhead`).
 
 ---
 

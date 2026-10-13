@@ -1,17 +1,11 @@
 # Test 34 — A real encoder against the continuous-source fence
 
-**State: partial — SRT+recording arm run; export comparison blocked on `5d0991b9`.**
-[#3533](https://github.com/moq-dev/moq/issues/3533)'s export stall is fixed on `5d0991b9`; this arm
-grades whether a real encoder triggers the dev-line join failure (*below the live edge* on import,
-[T40](test-40-continuous-join-through-srt.md)). **2026-09-20 SRT substitute:** `CNNiEMEA2.ts` fed with
-`tsp --infinite` as an SRT caller into the standing ingest (`srt-ingest` → `moq-live-publisher` on
-`5d0991b9`). The publisher import **dies at the first loop wrap** with the same *below the live edge*
-error ([#3798](https://github.com/moq-dev/moq/issues/3798)) — before any `OLD`/`NEW` export comparison
-could run. An isolated SRT chain with a pre-#3375 publisher import did not yield measurable export
-rates in the window (import pipe did not pass bytes). **Export-side fence comparison remains open**,
-but it is no longer blocked: a publisher on upstream `main` at `9d2a4f6e` survives the join
-([T40](test-40-continuous-join-through-srt.md), [T41](test-41-import-reanchor-coverage.md)). On that
-build the real-encoder arm should be expected to pass the join rather than reproduce the exit.
+**State: partial — the import's half answered on the live feed; the export's is ungraded.** A real
+encoder's timeline does step back: on the live feed the standing import ended three times in about
+19 h on *frame timestamp is below the live edge*, with the hand-off clean each time
+(§ *The live feed*). The `OLD`/`NEW` fence comparison below is moot, since from moq 0.14.0 a
+backward step ends the import by design ([Evidence](../docs/evidence.md) §3.13); what remains is a
+subscriber's export graded across one of these steps.
 
 Specified as [P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion). Rig sketch:
 [`t27-realfeed-severity.sh`](scripts/t27-realfeed-severity.sh).
@@ -131,27 +125,32 @@ This experiment **does not pass/fail upstream**; it classifies severity:
 - **Contribution schedule is external.** No claim about encoder vendor until a specific sender is recorded
   (model field TBM when known, placeholder `<ENCODER>` in public notebook).
 
-## Why this has not run
+## The live feed
 
-**It was blocked on access to a live TS source, and that block is being lifted.** The obvious rig was
-attempted and live ingress had no sender
-([P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion)); a contribution feed of a real
-service from AWS MediaConnect is now provisioned to both hosts, with the ingest chain standing and
-measured ([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*). Until this runs, severity for
-real primary distribution rests on code reasoning
-([upstream-contributions.md](upstream-contributions.md)) and the continuous reproducer
-([T27](test-27-liveness-detector.md)) — and the planning record requires keeping that distinction
-explicit.
+The primary's standing chain (`srt-ingest`, the loopback multicast group, `moq import ts` on
+`84b34f54`, restarted by systemd 5 s after an exit) was watched for 14.6 h by
+[`live-feed-monitor.sh`](scripts/live-feed-monitor.sh), which records no media: TSDuck's continuity
+check on the multicast group, the SRT statistics every 5 min, the units' restart counters every
+minute, and every 15 min the bytes a 10 s export of the standing build delivers.
 
-**The block was also wider than it needed to be: the trigger does not require a live source.** What
-the fence needs is a content join on a transport timeline that stays continuous, and
-`tsp -I file A.ts B.ts -P regulate --pcr-synchronous -O srt --caller` supplies exactly that — one
-unbroken SRT session, one continuous transport timeline, a hard content cut at the junction — driven
-through the standing ingest chain rather than beside it. That arm is runnable now and should be, so
-that the real-encoder run becomes *confirmation on a production feed* rather than first contact with
-the defect. What the synthetic version cannot settle is the open question below: whether a real
-encoder and splicer resync the **audio** importer at a junction. The two arms answer different
-questions and neither replaces the other.
+| | |
+|---|---|
+| Hand-off | SRT: 0 restarts, 2 packets lost in one 5 min interval, 0 dropped; 0 continuity errors on the multicast group |
+| Import exits | **3**, each *frame timestamp is below the live edge*, after 2 h 12 min, 4 h 49 min and 3 min on the feed; none in the 12 h since. None falls in an interval with SRT loss or a continuity error |
+| Publisher absent per exit | about 6 s, exit to reconnect, then an MP2 resync |
+| Egress probe | 55 samples, median 22.4 Mb/s; 4 empty, none at an exit (the probe's own; its stderr is not kept) |
+| Import CPU | median 74.9 % of a core; host load median 1.77 of 2 vCPU |
+
+*Measured, P1, the import's log and the hand-off's counters, standing build `84b34f54`, one feed,
+14.6 h monitored within about 19 h on the feed.*
+
+**The steps are the feed's, not the hop's**, and they are not rare: three in 19 h, two of them 3 min
+apart. The class of each is unknown. This build logs nothing before the error and the monitor grades
+continuity, not PCR, so a flagged splice or source switch cannot be told from an unflagged audio
+resync at a hard cut. On any build from moq 0.14.0 the outcome is the same; the class decides
+whether an upstream fix could keep the import across them. The export's half, P0-j's grade, needs a
+subscriber's `moq export ts` analysed live with TSDuck across one step, and the hand-off around it
+kept by a capture the exit triggers, not by recording continuously.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 

@@ -8,7 +8,7 @@ little video as every other MoQ export graded on content in the same rig.
 ## Objective
 
 `moq export ts --passthrough --delay <d>` (our implementation of upstream's `ts-passthrough-export`
-quest, unmerged) writes back out the `m2ts` track an `import ts --passthrough` published, paced on
+quest, since merged) writes back out the `m2ts` track an `import ts --passthrough` published, paced on
 the source's own PCR. The quest's claim is that from the first group it releases the output is the
 source's bytes, less any object dropped late, so it is exactly as T-STD-conformant as the source,
 and that two exporters of one broadcast write identical bytes. If that holds on real captures, the
@@ -20,7 +20,7 @@ claim neither.
 ## Environment
 
 - **Build:** the implementation branch at `0da3a7736` (on upstream `main` `90500867d`), release,
-  default features; `~/bin-0da3a773` on this workstation and on the EC2 secondary.
+  default features; the live arm again on upstream `main` at `b581c27ed`, with the export merged.
 - **Loopback arms**, on the EC2 secondary (Linux, dedicated) and on this workstation (macOS, shared):
   relay, publisher and two subscribers on one host. Clips:
   `CNNiEMEA2.ts` (1080i25 H.264, MP2 and AC-3, 11 Mb/s; passes the T-STD in
@@ -113,8 +113,13 @@ All four criteria pass, and the internet leg holds criteria 1 and 2 as well. The
 source's, as with TNT4: the span A covers opens mid-frame on both audio PIDs, which the strict model
 refuses, and the video stays inside its buffers (EB peak 79.9 %). On the primary the passthrough
 import took 6.4 % of a core and the relay 8.4 % serving three legs, against 74.8 % for the standing
-media-aware import of the same feed. The relay sent W 1.046× the bytes W wrote, counted above GSO, so
-without each datagram's IP and UDP headers; the secondary's two legs were not counted separately.
+media-aware import of the same feed. Counted per datagram, the relay sends each leg 1.054× the
+source's rate ([T14](test-14-data-plane-comparison.md) § *On the live feed's profile*).
+
+**The merged export gives the same verdicts.** On `b581c27ed`, the same rig without W (one 150 s
+run): A 2,308,198 packets and B 2,337,756, each 0 gaps, 0 foreign, 0 dropped; B identical to A over
+408.3 MB; `tstd` fail on A and on its source span, identically; 0 of 7,851 releases outside ± 10 ms,
+worst 1.9 ms; PCR rate +0.14 ppm. The import took 6.1 % of a core and the relay 6.3 %.
 
 Each exporter's release clock counted steps out of tolerance for the first 25–70 s (A 9, B 4, W 23)
 and none after, with nothing dropped. The count is of the source rate
