@@ -2465,8 +2465,8 @@ limits, no waiting for a late Object, a replacement track or an unflagged PCR st
 switch, and the Group bound against random access as the one open question. **Answered by
 [#48](https://github.com/mondain/msfts/pull/48)** (open, approved by the co-author): MSFTS now
 specifies only the Objects, the Groups and the catalog, and leaves subscriber output to the
-receiver's standards. It removes points 1–4 and every subscriber output rule above, #46's included,
-and settles point 5 by deleting the Group bound.
+receiver's standards, removing points 1–4 and every output rule above and deleting the Group bound.
+Our review of #48 is posted (2026-10-13).
 
 ---
 
