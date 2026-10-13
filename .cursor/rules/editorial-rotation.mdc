@@ -16,7 +16,8 @@ The set decays by accretion, not by error. Reserve the tail of every session for
 | 3 | `docs/architecture.md`, `docs/control-plane.md` | design a measurement has overtaken; unimplemented design presented without its weight |
 | 4 | `docs/economics.md`, `docs/glossary.md`, `lab/cost-model.md` | a modelled rate that lost its *hypothetical* label; a term defined twice |
 | 5 | two `lab/test-*.md`, oldest reviewed first | a heading contradicted later in its file; a `Corrections` section grown into narrative; chronology; a rig whose flags the current build rejects |
-| 6 | `lab/method-notes.md`, `lab/planned-experiments.md`, `lab/upstream-contributions.md`, `lab/README.md` | a rule told twice; an entry that has run or will not; an upstream state that moved; a file over its budget |
+| 6 | `lab/method-notes.md`, `lab/planned-experiments.md`, `lab/README.md` | a rule told twice; an entry that has run or will not; a file over its budget |
+| 7 | `lab/upstream-contributions.md` | an upstream state that moved; a merged or closed item still told as a story rather than report, verification and state; a result restated from its test file; review rounds, dates and "then" (the notebook's) |
 
 Apply three lenses, in order, and report what each found, including nothing:
 

@@ -904,6 +904,41 @@ elementary stream as its own 1+1 pair, merging above the transport rather than a
 the interleave upstream. Nothing here is a groomer defect: the groomer places by stream position and
 carries faithfully whatever order it was handed.
 
+## Arm D on the opaque lane, one leg joining late (P1-o): fixed before running
+
+**Question.** Arm D merges co-started legs of the demultiplexed export, and across independent
+upstreams only single-track content. The opaque lane's export writes the source's own packets, and a
+leg joining 8 s late is byte-identical to the first ([T48](test-48-passthrough-export.md)). Does such a
+pair, each leg through its own stream-clocked groomer, stay hitless when either leg is lost mid-run?
+
+**Rig.** The secondary alone, clear of its standing units: `CNNiEMEA2.ts` played in real time into a
+loopback multicast hand-off, recorded as the reference, for 150 s so the clip never wraps; a merged
+`main` relay with `import ts --passthrough`; legs A and B, each `export ts --passthrough --delay 2s
+--mux-rate 0` into its own `mpegts-pacer --rtp --stream-clock` at the clip's rate, with shared SSRC and
+sequence seed, to ports 5100 and 5200. B starts 8 s after A. One loopback `tcpdump` records both legs;
+injections use the per-leg port lane with its watchdog. A live-feed cell follows once a host other than
+the primary is fed.
+
+**Cells, one run each.** (1) Control. (2) A blacked out for 15 s at 40 s and cleared, then B for 15 s at
+100 s, so each leg carries the output alone, A after its return. (3) A's export killed at 40 s.
+
+**Pass criteria.**
+
+1. **Rig gate.** The control's legs align at 100 % with 0 conflicts, or nothing else is reported.
+2. **Hitless.** In every cell the seq-merge output, from B's first aligned datagram, loses no TS packet,
+   has no continuity error, and is the source's packets in order: `ts-passthrough-identity.py`, 0 gaps
+   and 0 foreign, with PCR fields masked, because a stream-clocked groomer regenerates PCR and refuses
+   to preserve it. The mask is added to the grader and proven on the control first.
+3. **A returning leg rejoins the numbering.** In cell 2, A's first datagram after its blackout carries
+   the sequence number its slot implies (deficit 0, `t12-resume.py`), and A realigns before B's
+   blackout.
+4. **Reported, not graded:** skew (median, p99, maximum) per cell, and input-select's artefact at
+   k = 50 ms.
+
+Passing 1–3 is the evidence for lifting [Architecture](../docs/architecture.md) §5.1's co-start
+condition on the opaque lane, for one clip on one host. If 2 fails only in cell 2 and 3 fails too, the
+defect is the resumed leg's, not the late join's.
+
 ## Corrections
 
 > Every general method rule this experiment produced is in [method-notes.md](method-notes.md), with

@@ -1133,6 +1133,27 @@ lanes can be matched on the setting itself and the scoring gains the latency axi
    run) is graded the same way on both lanes in the `netns` rig, three replicates per cell, with the
    time to stable operation as defined above.
 
+**For the outage trace (P1-q), fixed before it runs.** One 5 s outage on the merged `main` build at
+`--delay 2s`, five replicates and a control, in the same rig. The build's QUIC backend and controller are
+named in the result. Each replicate keeps four records on the host clock: a tap on the publisher's input
+and one on the export's output (`t18-latency.py tap`: each picture's wall time and PTS), a header
+capture on `veth-sub`, and the export's warnings (evicted groups, late drops). A lost picture is one the
+publisher tap holds and the egress tap lacks; its group is its GOP.
+
+10. **Validity.** The control loses ≤ 0.1 s; on every replicate the taps' loss and the content grader's
+    agree within 0.5 s; the unimpaired delivered rate is within 2 % of the source's.
+11. **Attribution.** *T_rec* is the first instant after the outage ends from which the delivered rate
+    holds at or above the source rate for 1 s. The excess *E* is the programme lost that was published
+    outside the outage, split by publish time: before it (reported, not attributed), after it but before *T_rec*
+    (*stack*: the transport had not recovered), and after *T_rec* (*lane*: the path could carry it and
+    the relay or export did not deliver it). Each *lane* picture is labelled evicted, dropped late, or
+    neither (expired silently at the relay).
+12. **Verdict.** A replicate is *stack* or *lane* when that share holds ≥ 2/3 of *E*, otherwise
+    *mixed*. The cell takes the verdict of ≥ 4 of 5 replicates; a bimodal cell takes one per mode.
+13. **The prediction it can falsify.** Late frames are dropped at the delay and a stalled group is
+    skipped 1 s behind the newest, so *E* ≤ 2 s. If *E* ≤ 1 s in ≥ 4 of 5, the 15–23 s figures belong
+    to the `--max-age` builds, and the outage row of criterion 3 is re-measured, not explained.
+
 ## Limits, stated in advance
 
 - **P1 file egress only in v1.** Wire timing (P2) and hardware IRD merge are out of scope; outage
@@ -1163,10 +1184,9 @@ lanes can be matched on the setting itself and the scoring gains the latency axi
 Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
 and the grader are all on the EC2 secondary.
 
-- **Where the outage cost goes.** Ten-replicate merges spread the first rise across `dev` and place
-  the step to 17–18 s in commits `07f313286` lacks (§ *The build bisection*). Either a trace of one
-  5 s outage on a current build, naming the groups it loses, or the commits `07f313286` lacks judged
-  on the share of replicates above 14 s, would say more than another median bisection.
+- **Where the outage cost goes**: the trace of criteria 10–13. Judging the commits `07f313286` lacks
+  (§ *The build bisection*) on the share of replicates above 14 s matters only if the merged build
+  still shows the excess.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.
