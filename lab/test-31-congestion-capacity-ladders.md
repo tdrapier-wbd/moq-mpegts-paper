@@ -531,14 +531,17 @@ dropped and counted, so it sets delivered latency where `--latency-max` bounded 
 is replaced on those builds by:
 
 6. **Delivered latency is measured, not assumed.** Each subscriber's median delivery latency in its
-   unimpaired window is quoted beside its `--delay`, and criterion 7 is read against both. A subscriber
+   unimpaired control is quoted beside its `--delay`, and criterion 7 is read against both. A subscriber
    whose latency moves by more than 100 ms across that window (first third against last third) is
    reported, and its cell is not used for criterion 7. Re-fixed before any cell ran: the merged build
    stands at about twice the delay ([T28](test-28-failure-injection-matrix.md) § *The outage traced
    on the merged build*), so a test against the setting would exclude every subscriber.
 7. **Delay × contention × RTT (MoQ).** T8b C3's shared bottleneck with n ∈ {2, 3} subscribers,
-   `--delay` ∈ {1, 2, 4, 6 s}, base RTT ∈ {20, 100, 200 ms}, through the permanent 0.8× rung. Each
-   subscriber is graded on content, with its late-drop count. For each (n, RTT) the result is video lost
+   `--delay` ∈ {1, 2, 4, 6 s}, base RTT ∈ {20, 100, 200 ms}, through the permanent 0.8× rung: the
+   shared class is held at 0.8 × n × the stream's rate for the whole 80 s window, as C3 held its
+   class, and each subscriber's unimpaired control is the same cell at 2 × n
+   ([`t31-delay-matrix.sh`](scripts/t31-delay-matrix.sh)). Each subscriber is graded on content, with
+   its late-drop count. For each (n, RTT) the result is video lost
    against delay as a curve, and the smallest delay at which every subscriber is within the method's
    ±1 s of its unimpaired control, or the record that none in the ladder is. A curve that rises with
    the delay is a finding, not a failed cell.

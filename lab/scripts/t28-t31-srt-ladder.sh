@@ -57,7 +57,9 @@
 #      EXPORT_BUDGET (the subscriber's `--max-age`, when it must differ from the cell's budget),
 #      SUB_ENV (environment for the MoQ subscriber, e.g. `RUST_LOG=...`),
 #      WIRE_CAP=1 (UDP headers arriving in the subscriber's namespace, `wire.pcap`, for the
-#      delivered rate around an impairment; `events.txt` stamps the impairment in the taps' clock).
+#      delivered rate around an impairment; `events.txt` stamps the impairment in the taps' clock),
+#      POST_S (seconds the cell runs on after a sustained loss or reorder shape is lifted, default 0,
+#      so T28's criterion 8 can read the latency 30 s after it ends; `t28-latency-return.py`).
 set -uo pipefail
 
 # Post-#3793 CLI flags, detected per binary rather than assumed.
@@ -88,6 +90,7 @@ DELAY_MS=${DELAY_MS:-50} # 100 ms base RTT, as T8b and the MoQ ladder
 OUTAGE=${OUTAGE:-5}      # T28's 5 s total outage, the cell being replicated
 SETTLE=${SETTLE:-20}
 RECOVER=${RECOVER:-35} # must exceed one QUIC idle/recovery cycle
+POST_S=${POST_S:-0}
 PORT=4443
 SRT_PORT=9010
 PUBIP=10.99.0.1
@@ -136,7 +139,8 @@ cleanup_procs() {
 	pkill -9 -f "[m]oq-relay.*$PUBIP:$PORT" 2>/dev/null
 	pkill -9 -f "p1mladder" 2>/dev/null
 	pkill -9 -f "[t]sp .*$CLIP" 2>/dev/null
-	pkill -9 -f "[t]sp -I srt" 2>/dev/null
+	# The rig's caller only: a standing SRT listener on the host is also `tsp … -I srt`.
+	pkill -9 -f "[t]sp -I srt --caller $PUBIP:$SRT_PORT" 2>/dev/null
 	# The SRT *listener* matches neither of the above — its input is `-I file -`, not the clip —
 	# so without this it survives the cell and holds the port, and every later SRT cell fails
 	# to bind.
@@ -172,7 +176,7 @@ run_cell() {
 		sub tcpdump -i veth-sub -n -s 96 -Z root -w "$d/wire.pcap" "udp and src host $PUBIP" \
 			>/dev/null 2>"$d/tcpdump.log" &
 
-	local window=$((SETTLE + OUTAGE + RECOVER))
+	local window=$((SETTLE + OUTAGE + RECOVER + POST_S))
 	local budget_ms
 	budget_ms=$(awk -v b="$budget" 'BEGIN{printf "%d", b*1000}')
 	# **The matched-buffer correction, and the reason this arm exists.** SRT's `--latency` is a
@@ -317,17 +321,23 @@ run_cell() {
 		# Sustained partial loss, not a burst: held for the rest of the cell, because the
 		# question is how each lane trades content against latency under continuous
 		# impairment rather than how it recovers from a discrete one.
+		echo "impair_start_ns $(date +%s%N)" >>"$d/events.txt"
 		set_loss "${impair#loss}"
 		sleep $((OUTAGE + RECOVER))
 		clear_loss
+		echo "impair_end_ns $(date +%s%N)" >>"$d/events.txt"
+		sleep "$POST_S"
 		;;
 	reorder*)
 		# Held for the rest of the cell, as the loss arm is. Reorder is its own axis and must
 		# not be read off either of the others: the outage and loss ladders rank the two lanes
 		# in *opposite* directions, so no impairment shape here stands for another.
+		echo "impair_start_ns $(date +%s%N)" >>"$d/events.txt"
 		set_reorder "${impair#reorder}"
 		sleep $((OUTAGE + RECOVER))
 		clear_loss
+		echo "impair_end_ns $(date +%s%N)" >>"$d/events.txt"
+		sleep "$POST_S"
 		;;
 	*)
 		sleep $((OUTAGE + RECOVER))
