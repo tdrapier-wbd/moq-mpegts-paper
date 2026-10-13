@@ -32,7 +32,8 @@ which is what the prototype runs on.
 
 ## Segmented HTTP (HLS carrying MPEG-TS)
 
-Terms are from [HTTP Live Streaming 2nd Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)
+Terms are from [HTTP Live Streaming 2nd
+Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)
 (`draft-pantos-hls-rfc8216bis-22`, which obsoletes RFC 8216 and folds in Low-Latency HLS). The
 comparison that uses them is [Comparison](comparison.md).
 

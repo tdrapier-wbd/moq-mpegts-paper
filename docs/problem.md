@@ -145,10 +145,11 @@ All three succeed by *engineering determinism into a dedicated or managed layer 
 determinism*. The buyer is not paying for bandwidth but for the guarantee, which is why a technically
 superior transport does not automatically win.
 
-**The trust argument that blocked the first two has already been settled by the third.** Moving the guarantee onto a best-effort substrate was
-supposed to be the hard part; §2.3 did it, in production, on contracted feeds, and the industry bought
-it. Retransmission, encryption, monitoring and an accountable counterparty turned out to be enough.
-Anyone arguing that broadcast cannot trust the public internet is arguing against deployed practice.
+**The trust argument that blocked the first two has already been settled by the third.** Moving the
+guarantee onto a best-effort substrate was supposed to be the hard part; §2.3 did it, in production,
+on contracted feeds, and the industry bought it. Retransmission, encryption, monitoring and an
+accountable counterparty turned out to be enough. Anyone arguing that broadcast cannot trust the
+public internet is arguing against deployed practice.
 
 **So what remains is not a trust gap but a topology gap, and it is specific: satellite's marginal cost
 per destination approaches zero and every adopted IP architecture's does not.** That gap has its own
@@ -268,17 +269,18 @@ and staff skills that are already in place. That is a real advantage and it will
 it does not do is change the marginal economics of the thousandth destination, which is the one thing
 §2.3 cannot fix from the control plane.
 
-**The second attacks R2 from the opposite direction.** Rather than looking for an IP fan-out model whose marginal cost approaches zero, the
-satellite-hybrid architectures keep the medium that already has that property and use IP only where the
-broadcast medium fails: satellite carries the feed to the whole footprint, and a receiver that loses
-data requests just that data over RIST from a buffered recovery server, falling back to a full IP copy
-of the feed only while it is completely faded. VSF TR-06-4 Parts 7 and 8 specify two ways of doing it.
-**So the choice is not "satellite or Internet-native" but at least three-way**, and the third option is
-not a weaker version of either: it concedes the footprint argument outright, accepts a latency floor no
-better than satellite's, and answers the fan-out arithmetic better than any fully Internet-native plane
-currently can (*reasoned*). What it requires in exchange is a new receiver at every site that is to
-benefit, which under §1.5 is the client's capex rather than the distributor's, and credible internet at
-every such site — the point at which the counterargument becomes serious. The mechanisms, the decision
+**The second attacks R2 from the opposite direction.** Rather than looking for an IP fan-out model
+whose marginal cost approaches zero, the satellite-hybrid architectures keep the medium that already
+has that property and use IP only where the broadcast medium fails: satellite carries the feed to
+the whole footprint, and a receiver that loses data requests just that data over RIST from a
+buffered recovery server, falling back to a full IP copy of the feed only while it is completely
+faded. VSF TR-06-4 Parts 7 and 8 specify two ways of doing it. **So the choice is not "satellite or
+Internet-native" but at least three-way**, and the third option is not a weaker version of either:
+it concedes the footprint argument outright, accepts a latency floor no better than satellite's, and
+answers the fan-out arithmetic better than any fully Internet-native plane currently can
+(*reasoned*). What it requires in exchange is a new receiver at every site that is to benefit, which
+under §1.5 is the client's capex rather than the distributor's, and credible internet at every such
+site — the point at which the counterargument becomes serious. The mechanisms, the decision
 boundary, the open latency comparison and the maturity of the evidence are in
 [Comparison](comparison.md) §10.2, with the cost and risk drivers in [Economics](economics.md) §6.1.
 Nothing about it is measured here.

@@ -884,14 +884,9 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
 
 - **SI emission cadence**, anchored to process start, landed tables on slots where the partner carried
   video: measured at **0.00 %** frame agreement for SDT and NIT over a 45 s overlap. Fixed by
-  [#2825](https://github.com/moq-dev/moq/pull/2825), which takes a single-track pair to 100 %. The
-  review mattered: the form first proposed inflated PSI and **landed inconsistently, costing 5.9 points
-  of agreement** — a one-character change from `!=` to `>` in the due check, which stops a backwards
-  timestamp counting as a new slot. **It merged in the `>` form, changing its own measured result**,
-  which is the argument for treating evidence measured only on a pre-merge PR as provisional. **A
-  residual survives the fix**: #2825 moved the cadence from wall-clock into media time, but its
-  *origin* is still the first frame the exporter saw, so two legs that join at different moments run
-  the same period at different phase — see *The residual #2825 left* below.
+  [#2825](https://github.com/moq-dev/moq/pull/2825), which takes a single-track pair to 100 %. Its
+  due check changed from `!=` to `>` before merging, worth 5.9 points of agreement (T12), so evidence
+  measured only on a pre-merge PR is provisional. Its residual, the cadence's origin, is below.
 - **Continuity counters**, numbered from process state, leave exporters that did not start together
   permanently offset by a constant — the single field whose masking lifts agreement to ~98 %. Filed as
   [#2779](https://github.com/moq-dev/moq/issues/2779), and prototyped here: padding each span to a
@@ -899,9 +894,8 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   to 93.6 % on multi-track, at **10–18 kb/s per PID** almost regardless of payload. **Declined upstream.**
   [#3868](https://github.com/moq-dev/moq/pull/3868) closed the issue as won't-fix. **Byte-identical 1+1
   from two independent exporters is not obtainable from upstream today** without the padding filter or a
-  receiver that merges on something other than the whole packet. **`export ts --sync`** is planned in
-  `quest/m2/ts-hitless.md` ([#4680](https://github.com/moq-dev/moq/pull/4680)); nothing of it is
-  implemented.
+  receiver that merges on something other than the whole packet. **`export ts --sync`**, which would
+  restart counters per group, is planned (§ *What a redundant pair must share*) and unimplemented.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the earliest
   frame, so legs whose bytes arrive at different moments order the same media differently. Multi-track
   content therefore stops at 94–96 % even when co-started, and at **75.56 %** once the two chains are
@@ -923,10 +917,8 @@ inside the media time the two captures share.
 
 On a 30 s round-trip with the second leg joining 8 s in, PAT and PMT reach **94.37 %** agreement, while
 SDT reaches **0.00 %** — both legs running a 2.005 s period, 0.512 s out of phase; it reproduces at
-other join offsets (6 s in: 5.26 % at 0.480 s of phase). **This is a residual
-of #2825 rather than a regression of it.** The fix moved the SI cadence from wall-clock into media time,
-which is what made a single-track, same-start pair reach 100 %; it did not move the cadence's *origin*,
-which is still the first frame the exporter saw. Filed separately as
+other join offsets (6 s in: 5.26 % at 0.480 s of phase). **This is #2825's residual, not a
+regression**: the cadence ran in media time, but from the first frame each exporter saw. Filed as
 [#3948](https://github.com/moq-dev/moq/issues/3948). The mode is opt-in and no CI arm invokes it.
 
 **Merged 2026-09-23** as `d571aed2`. Run as `test/ts/run.sh --pair` on `ffa5b81b`, with the second leg
@@ -962,6 +954,14 @@ no production changes, with deliberately unequal group counts so resume boundari
 
 **Two of our four reports from that work were artefacts of our own harness**, recorded with their method
 rules in [method-notes](method-notes.md) §1 and §5.
+
+### What a redundant pair must share — proposed as [#5412](https://github.com/moq-dev/moq/pull/5412)
+
+A quest-only PR replacing `plan-ts-alignment`: one anchor and timestamp era per epoch, which a later
+importer adopts; `--epoch` refused for capture, `avc3`, `rtc --connect` and `transcode`; passthrough
+cuts on the epoch's grid; `--sync` legs whose counters restart per group, released by clock recovery
+rather than wall time (a 1 s delay lasts about 9 h at 30 ppm); and RTP legs that stay silent rather
+than send a datagram they cannot fill. **Open, ready for review**; it overlaps #5328.
 
 ---
 
@@ -1227,7 +1227,7 @@ covers that gap.
 payloads, so the demuxing importer cannot produce media tracks; it requires transparent MSFTS mode 1
 — the lane with worse measured latency that `moq-dev` does not implement on `main`. **Verdict: do
 not build it** unless a rights deal requires operator-blind carriage; MSFTS §10 already permits
-BISS-CA on transparent carriage. Recorded in `docs/upstream/biss-ca-over-moq.local.md`. **Promoted
+BISS-CA on transparent carriage. Recorded in `lab/discussions/biss-ca-over-moq.local.md`. **Promoted
 to [`control-plane.md`](../docs/control-plane.md) §7.3 and §9:** facility segments MoQ leaves
 unprotected are local and often clear today; the gap matters where operator or environment is not
 trusted; technical half answered (BISS-CA at price of opaque carriage), commercial half open.
@@ -1252,7 +1252,7 @@ loses roughly three to four times the video duration SRT loses at every `--max-a
 latency rises with the allowance and is not bounded by it. How much MoQ loses depends on build and QUIC
 stack; continuity-error counts must not rank the lanes because the MoQ exporter re-synthesises counters.
 MoQ-only ladder non-monotonicity remains *likely rather than established* at one sample per cell. **Venue:
-IETF MoQ list first** (`moq@ietf.org`); position in `docs/upstream/fec-arq-venue.local.md`. **A list
+IETF MoQ list first** (`moq@ietf.org`); position in `lab/discussions/fec-arq-venue.local.md`. **A list
 message can now open with the measured MoQ-versus-SRT table and its qualifications.**
 
 ## 5c. The TS export's schedule and lifecycle, and import robustness

@@ -42,9 +42,10 @@ reliability bar is cleared. Then **total cost of ownership** rather than sticker
 operations and integration dominate over a contract lifetime. Then **operational optionality** — the
 provisioning speed and dynamic reach that a per-route comparison misses entirely.
 
-**Cost is set almost entirely by commercial egress terms, not by engineering.** Published cloud egress
-sits about an order of magnitude above commodity CDN or owned-infrastructure delivery — while protocol
-choice moves the total by single-digit percentages. Egress is roughly 90 % of a self-built transport bill.
+**Cost is set almost entirely by commercial egress terms, not by engineering.** Published cloud
+egress sits about an order of magnitude above commodity CDN or owned-infrastructure delivery — while
+protocol choice moves the total by single-digit percentages. Egress is roughly 90 % of a self-built
+transport bill.
 
 **Destination count decides the rest** (§6): unicast is linear at the last mile; no protocol removes it.
 **A technology comparison is not where this is won or lost.**
@@ -92,19 +93,20 @@ the entire modelled transport line. **This is a transport-line comparison, not a
 
 Two of the model's inputs are measured rather than assumed ([Evidence](evidence.md) §3.5, §3.6).
 
-**Relay compute is not the constraint.** A subscriber session costs 0.34 % / 0.87 % / 1.18 % of a core
-at 2 / 10 / 27 Mbps *co-resident* (subscribers on the relay's own host), so cost per delivered Mbps *falls* as bitrate rises and one core
-forwards on the order of a gigabit. High-bitrate contribution feeds are the *cheapest per Mbps* to relay,
-which cuts against the intuition that they are the expensive case. They are — but on the egress line.
-**For a sizing decision use the cross-host figure instead**: with the relay alone on its own instance and
-every subscriber elsewhere, a remote subscriber costs **1.258 % of a core** on `moq-relay` 0.15.1 (noq),
-measured, which extrapolates to about 80 subscribers per core. An earlier build (`moq-relay` 0.14.15,
-on the quinn QUIC stack) measured 0.806 %, or 124–139 per core ([Evidence](evidence.md) §3.6). Three
-cautions travel with it. A host without GSO, a Linux setting ([Glossary](glossary.md)), overstates relay
-CPU: enabling it cut the cost by 25–29 % on both builds. Past the limit throughput *collapses* rather
-than degrading, so the purchasable capacity is below the measured ceiling. And each carried channel
-adds memory of its own, about 60–69 MB for a 10 Mb/s channel at the relay's default retention window,
-which a setting trades against the history the relay can serve.
+**Relay compute is not the constraint.** A subscriber session costs 0.34 % / 0.87 % / 1.18 % of a
+core at 2 / 10 / 27 Mbps *co-resident* (subscribers on the relay's own host), so cost per delivered
+Mbps *falls* as bitrate rises and one core forwards on the order of a gigabit. High-bitrate
+contribution feeds are the *cheapest per Mbps* to relay, which cuts against the intuition that they
+are the expensive case. They are — but on the egress line. **For a sizing decision use the
+cross-host figure instead**: with the relay alone on its own instance and every subscriber
+elsewhere, a remote subscriber costs **1.258 % of a core** on `moq-relay` 0.15.1 (noq), measured,
+which extrapolates to about 80 subscribers per core. An earlier build (`moq-relay` 0.14.15, on the
+quinn QUIC stack) measured 0.806 %, or 124–139 per core ([Evidence](evidence.md) §3.6). Three
+cautions travel with it. A host without GSO, a Linux setting ([Glossary](glossary.md)), overstates
+relay CPU: enabling it cut the cost by 25–29 % on both builds. Past the limit throughput *collapses*
+rather than degrading, so the purchasable capacity is below the measured ceiling. And each carried
+channel adds memory of its own, about 60–69 MB for a 10 Mb/s channel at the relay's default
+retention window, which a setting trades against the history the relay can serve.
 
 Cloud instances sustain well below headline network capacity — **relay sizing is an instance-family
 decision before core count.**
@@ -177,9 +179,10 @@ self-built fleet cannot buy, so the "build it and keep the service margin" insti
 list prices** — though a commodity CDN still undercuts it two- to threefold, making the inversion
 specific to staying inside one hyperscaler.
 
-**Procurement is the largest lever inside the cloud, and it cannot win the fan-out argument.** Even a
-*hypothetical* 95 % discount off first-tier list moves parity only from ~19 to ~385 destinations. **Supplier choice, not buying power, decides
-whether delivery needed to be inside the cloud at all** (§4.6).
+**Procurement is the largest lever inside the cloud, and it cannot win the fan-out argument.** Even
+a *hypothetical* 95 % discount off first-tier list moves parity only from ~19 to ~385 destinations.
+**Supplier choice, not buying power, decides whether delivery needed to be inside the cloud at all**
+(§4.6).
 
 ### 4.3 Owning the egress
 
@@ -214,8 +217,8 @@ purchasable today. The incumbent's fan-out inside its footprint is free while ev
 linear in destinations, so a better rate *moves* the ceiling rather than removing it.
 
 **Transport choice moves these figures by single-digit percentages; destination count moves them by
-three orders of magnitude** (§1). The one economic question transport choice does raise is whether the far end
-needs the contribution mux back byte-for-byte.
+three orders of magnitude** (§1). The one economic question transport choice does raise is whether
+the far end needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
@@ -335,8 +338,8 @@ market the delivery is bought in**.
 | Global or dynamic reach | challenger | Reach without global procurement or a meet-me point |
 | Feeds that differ per destination | challenger | Satellite cannot sell it at any price (§5) |
 
-**Sensitivities:** 1+1 doubles the dominant line (hold equivalent); staffing dominates at low route counts
-(§2); carriage overhead varies with **source** stuffing, not protocol (§3).
+**Sensitivities:** 1+1 doubles the dominant line (hold equivalent); staffing dominates at low route
+counts (§2); carriage overhead varies with **source** stuffing, not protocol (§3).
 
 ### 6.1 The satellite-hybrid case, and the drivers that decide it
 
@@ -571,16 +574,17 @@ the thesis rather than a detail of it.**
 
 **Platform maturity, which the model assumes away.**
 
-- **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity procurable
-  from more than one supplier; a feed currently traverses only relays from the same implementation as
-  the publisher ([Evidence](evidence.md) §3.7).
-- **What does relay memory cost to operate around?** A sizing line rather than a restart cycle, since it
-  plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot ceiling per
-  publisher** — and the cost lands on multi-channel relay density, not on audience: growth is flat
-  across 0–4 subscribers ([Evidence](evidence.md) §3.6). That plateau was measured on the quinn build;
-  on the noq build one 24 h re-soak read the relay flat, so whether the budget is a property of the
-  design or of the QUIC stack is open. Separately, **`moq import ts` grew linearly at +2.83 MB/h with no drawdown** on moq
-  0.11.2. A 24 h re-soak on moq 0.12.8 reads +0.23 MB/h, which makes it a sizing line rather than a
-  restart cycle ([Evidence](evidence.md) §3.2).
-- **How much of the operational-saving hypothesis survives running an immature platform to a broadcast
-  SLA?** One on-call engineer outweighs the entire modelled transport line at single-route scale.
+- **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity
+  procurable from more than one supplier; a feed currently traverses only relays from the same
+  implementation as the publisher ([Evidence](evidence.md) §3.7).
+- **What does relay memory cost to operate around?** A sizing line rather than a restart cycle,
+  since it plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot
+  ceiling per publisher** — and the cost lands on multi-channel relay density, not on audience:
+  growth is flat across 0–4 subscribers ([Evidence](evidence.md) §3.6). That plateau was measured on
+  the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a
+  property of the design or of the QUIC stack is open. Separately, **`moq import ts` grew linearly
+  at +2.83 MB/h with no drawdown** on moq 0.11.2. A 24 h re-soak on moq 0.12.8 reads +0.23 MB/h,
+  which makes it a sizing line rather than a restart cycle ([Evidence](evidence.md) §3.2).
+- **How much of the operational-saving hypothesis survives running an immature platform to a
+  broadcast SLA?** One on-call engineer outweighs the entire modelled transport line at single-route
+  scale.

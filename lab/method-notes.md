@@ -357,11 +357,6 @@ Exclude warm-up by measuring it, not by default: a 2 h run with a 20 min settle 
 met the same rule live: a re-multiplexer fixed after 5 s warm-up was overtaken by a lane whose delay grows
 ~630 ms over its first 50 s and sent 95 % of packets late.
 
-**Sample resource series per process, not per command-line signature.** *(T21's 24 h soak, and the
-follow-up run it forced, T43.)*
-
-`pgrep -f` on a wrapper matched shell plus binary; `[m]oq-relay.*PORT` once matched the ssh shell and cleanup killed a healthy relay. Resolve each role to the PID from `$!` at launch.
-
 **An instrument that blocks on its input cannot observe the absence of input.** *(T27.)*
 
 A per-PID liveness detector in `read()` during total stall never ran its timeout check. Drive stall detection from wall clock the subject does not control — a dead man's handle, not redundancy with media-time measurement.
@@ -690,10 +685,6 @@ already in use" unchecked, clients attach to the old relay and fail later with e
 name the cause. **Check that a server you started is still running before starting its clients.**
 An exit status from `&` says only that the process was forked.
 
-**A `pkill -f` or `pgrep -f` pattern sent over SSH matches the command line that carries it.** The
-incidents and the remedy are in § *A `pgrep` or `pkill` pattern matches every command line that
-carries it* below.
-
 **When arms run back to back against a service that caches an admission decision, the cache carries
 the previous arm's answer into the next one.** *(T37, T38.)*
 
@@ -889,12 +880,6 @@ Delivery below 85 % of N=1 reported failure while `rx_bytes` and relay egress st
 killed a subscriber. **Where a resource can be measured directly, do not infer it from throughput**;
 watch `MemAvailable` when memory can stop the run.
 
-**A cleanup pattern must name the run, not the tool.** *(T27.)*
-
-§5 already carries *A `pgrep` or `pkill` pattern matches every command line that carries it*. `pkill -f
-ts-liveness.py` killed another experiment's detector on the same host. Scope every pattern to the run's
-label, broadcast name or output path.
-
 **A broadcast name may not be reused by back-to-back arms.** *(T27.)*
 
 The relay retains an abandoned session until QUIC idle timeout; a reused name lets the second subscriber
@@ -1066,17 +1051,18 @@ move.** Pinned binaries survive rebuilds; a control that forbids upgrades is eve
 
 ### A `pgrep` or `pkill` pattern matches every command line that carries it, including the one sending it
 
-*(From [T26](test-26-cross-host-fanout.md), [T8b](test-8b-congestion-control.md) P0-i, [T25](test-25-isolation-under-abuse.md), [T43](test-43-fanout-current-build.md), [T47](test-47-fixed-delay-export.md).)* `pgrep -f` / `pkill -f` match the whole command line, including the SSH shell running the pattern. T26's `pkill -f "broadcast f5.fanout.hang"` killed the remote shell and left a stale publisher competing on the relay; T26 tap validation returned SSH **255** with the pattern present twice; T25 lost a session when `t25seg` appeared in the cleanup command line itself. T8b's `while pgrep -f "t8b-export-death.sh p0i "` matched the monitoring shell; T47's wait on **0.0.0.0:4443** never ended for the same reason.
-
-**Bracket one character of any `pgrep`/`pkill` pattern** — `pkill -9 -f "[t]18-tap-perturb"`, `t8b[-]export-death` — so the pattern cannot match a command line that quotes it. *(T26, T8b, T25, T43, T47.)* Bracketing does not stop a parent argv that still carries the literal (T26, T25). **The reliable fix is to put the patterns in a script file on the host and invoke the file** ([`f5-reset.sh`](scripts/f5-reset.sh)), so the pattern never enters the caller's command line.
-
-**The file protects only a session that does nothing else.** *(T43.)* An unbracketed pattern inside `f5-reset.sh` killed the caller; combining reset and launch in one ssh put the launch name in argv and the reset killed the session. Run the reset in its own ssh call.
-
-**A reset that does not verify is not a reset.** *(T26, T43, T47.)* End with `pgrep -f "[p]attern" && echo STILL RUNNING || echo clean`, or refuse to start when survivors remain; wait on end markers, not only on process absence.
-
-**A bracketed pattern still matches the next waiter in the queue.** *(T28 attribution runs.)* Three queued waits chained on script names deadlocked: the first waiter matched the third's command line. **Queue a chain as one sequential command**, `a; b; c`, or wait on PIDs and end markers only.
-
-**Check that a multi-cell runner is still alive after its first cell.** *(T47.)* A `(nohup bash runner.sh &)` from a short-lived shell ran one **540 s** cell then stopped; the same runner as a job of a persistent shell ran all cells. Look for the second cell's header in the log.
+*(T21, T25, T26, T27, T28, T43, T47, T8b P0-i, the repo-wide rig audit.)* `-f` matches the whole command
+line, so a pattern kills the SSH shell or the waiter that quotes it, and the stale process it was meant
+to catch survives. **Bracket one character** (`[t]18-tap-perturb`); a parent argv that still carries
+the literal defeats the bracket, so **keep reset patterns in a script file on the host and run it in
+its own ssh call** ([`f5-reset.sh`](scripts/f5-reset.sh)). **Match on what will not be renamed**, the
+binary and the address it was given (`[m]oq-relay.*127.0.0.1:$PORT`), scoped to the run's label, broadcast or output path: twenty
+patterns keyed on a flag matched nothing after its rename, behind `|| true`, and one keyed on a tool
+killed another experiment's detector. **Verify the reset** (`pgrep -f
+"[p]attern" && echo STILL RUNNING`); **queue a chain as one sequential command, or wait on PIDs and end
+markers**, since bracketed waiters matched each other; **sample a role by the PID `$!` gave at
+launch**, not by its signature; and **check a multi-cell runner after its first cell**, since one
+launched from a short-lived shell stopped after one.
 
 ### A replicate loop inside one script invocation re-uses the fixed port the last replicate held
 
@@ -1386,14 +1372,6 @@ From `fd4f5d82e` to `ffa5b81b` every backend resolves an unset controller throug
 At 100 ms RTT the unimpaired control fell behind the live window and 404'd — unrelated to the lane. nginx's `http3_stream_buffer_size` defaults to 64k (~4.6 Mb/s per stream at 100 ms), and the receiver spawned `curl` per cycle (new connection from slow start each batch). Raising the buffer fixed the first but not the second; one connection for the run fixed both.
 
 **Before a lane's first impaired cell on a new rig, run its unimpaired control and check that the delivery machinery keeps up with margin**: fetch time against segment period, and bulk transfer through the path at each origin setting that could bind. A rig that changes RTT must re-establish that instrument and origin are not what is being measured. [`t31-origin-window.sh`](scripts/t31-origin-window.sh) checks the origin.
-
-### A cleanup pattern keyed on a flag name stops matching when the flag is renamed
-
-*(From the repo-wide rig audit.)*
-
-Twenty `pkill -f "[m]oq-relay --server-bind $PORT"` patterns matched nothing once the relay used `--listen`; `pkill` exits non-zero when it matches nothing, and each pattern was `|| true`, so a stale relay held the port and the next cell failed to bind elsewhere with no link to the cause.
-
-**Match a process on what will not be renamed** — the binary name and the address it was given — e.g. `[m]oq-relay.*127.0.0.1:$PORT`. A pattern that silently stops matching is worse than one that errors.
 
 ### One measured defect is not a diagnosis of a different symptom
 

@@ -560,9 +560,8 @@ it. This compounds the clustering gap already recorded under *Limits*.
 establishes what the constant is and that the neighbouring doc comment contradicts it. Whether
 `DEFAULT_STALE` was chosen as roughly three times a typical twenty-minute `max-age` — in which case
 the comment is right for one cadence and wrong for all others — or as an independent value, is a
-question for the authors. The draft that asks it is **held unfiled by the operator's decision**, at
-[`docs/upstream/authapi-default-stale-window.local.md`](../docs/upstream/authapi-default-stale-window.local.md);
-it is held for sequencing, not because it is weaker than the findings that were filed.
+question for the authors, and it lapsed unasked: upstream removed `DEFAULT_STALE` when the relay
+began admitting sessions through `moq-auth` leases (#3688).
 
 **The revocation-latency figures are recorded for a case this deployment does not have.** Sub-second
 is unreachable and a few seconds is acceptable for a primary broadcast feed, so nothing here is

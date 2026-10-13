@@ -287,18 +287,17 @@ content the bias is toward short lifetimes and an explicit, tight cadence.
 > ([T37](../lab/test-37-entitlement-revocation.md)). The backstop holds as designed; the fast path
 > holds only at the bound above.
 
-**How this compares with the alternative data plane** is developed in [Comparison](comparison.md) §7.
-The distinction is not push against poll, because MoQ's fast path is itself a poll on an
+**How this compares with the alternative data plane** is developed in [Comparison](comparison.md)
+§7. The distinction is not push against poll, because MoQ's fast path is itself a poll on an
 integer-second period: it is a poll every `max-age` seconds against a check on every part request.
-Where the CDN authorizes each request, the
-segmented bound is one part-target interval, measured in this lab at **0.28–0.30 s**
-([T14](../lab/test-14-data-plane-comparison.md)), against MoQ's **1.7 s measured and 2.11 s
-documented** worst case. **On revocation latency MoQ is the slower of the two, by roughly six to
-seven times**, and it is the only one of the two with configurations that disable revocation
-entirely — or that tolerate an hour of authorization-endpoint outage while continuing to serve. MoQ's real advantage is therefore narrower than a
-latency figure and does not depend on one: the enforcement point is a relay you can operate, so the
-policy is yours and portable, and a subscription is a live queryable fact rather than an inference
-from delivery logs.
+Where the CDN authorizes each request, the segmented bound is one part-target interval, measured in
+this lab at **0.28–0.30 s** ([T14](../lab/test-14-data-plane-comparison.md)), against MoQ's **1.7 s
+measured and 2.11 s documented** worst case. **On revocation latency MoQ is the slower of the two,
+by roughly six to seven times**, and it is the only one of the two with configurations that disable
+revocation entirely — or that tolerate an hour of authorization-endpoint outage while continuing to
+serve. MoQ's real advantage is therefore narrower than a latency figure and does not depend on one:
+the enforcement point is a relay you can operate, so the policy is yours and portable, and a
+subscription is a live queryable fact rather than an inference from delivery logs.
 
 ### 4.2 Failure handling
 
@@ -490,7 +489,7 @@ therefore forfeits the media-aware properties the latency argument rests on
 ([Comparison](comparison.md) §5.1), which makes it an architectural choice rather than a feature to
 add. The forfeit is smaller than it looks: the latency figure is a P1/P2 figure from a wire that fails
 the 13818-1 buffer model ([Comparison](comparison.md) §8). The binding constraint is elsewhere, in the
-lane a scrambled feed must move to, which has no open subscriber today ([Comparison](comparison.md)
+lane a scrambled feed must move to, which has one open implementation today ([Comparison](comparison.md)
 §12). **This design weights conditional access as a
 narrow gate on the carriage choice, not an argument for either lane**: a route that must deliver a
 feed still scrambled selects byte-faithful carriage, and no other route is affected. Nothing here is

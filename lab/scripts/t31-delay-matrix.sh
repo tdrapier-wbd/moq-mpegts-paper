@@ -15,7 +15,7 @@
 #
 #   sudo env BIN=/home/ubuntu/bin-b581c27e bash t31-delay-matrix.sh <label>
 #
-# Env: NS ("2 3"), DELAYS ("1 2 4 6" s), RTTS ("20 100 200" ms), CAP_XS ("2 0.8"), REPS (3),
+# Env: NS ("2 3"), DELAYS ("1 2 4 6" s), RTTS ("20 100 200" ms), CAP_XS ("2 0.8"), REPS (3), REP_FROM (1),
 #      SECS (80), STREAM_MBIT (9.95), CLIP, VPID, NETNS, CONTENT, LATENCY, OUT,
 #      MOQ_CC (relay controller, `delay` = BBRv3 | `loss` = CUBIC), KEEP_TS=1 (keep captures).
 # Output: <OUT>/<label>/summary.csv, one row per subscriber per cell.
@@ -177,7 +177,7 @@ run_cell() {
 }
 
 # Interleaved so a drift in host load lands on every arm, not on one.
-for rep in $(seq 1 "$REPS"); do
+for rep in $(seq "${REP_FROM:-1}" "$REPS"); do
 	for rtt in $RTTS; do
 		for n in $NS; do
 			for delay in $DELAYS; do

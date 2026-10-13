@@ -11,6 +11,9 @@ alwaysApply: true
 - Consult `lab/method-notes.md` when designing or grading an experiment; fix the pass criteria in the
   experiment's `lab/test-*.md` before the first run.
 - Never edit a rig script while a run uses it.
+- **Stop the on-demand host when its work is done.** The third EC2 host bills by the hour: once no
+  experiment or agent uses it, stop it (`INSTRUCTIONS.local.md` §7c) and say so in the report. The
+  primary and secondary carry the live feed's standing units; stop them only for a planned resize.
 - **Leave the disks as you would want to find them.** At the end of any session that built or
  captured, `cargo clean` the worktrees whose binaries are already in `~/bin-*`, and delete graded
  captures, under the safety checks in `INSTRUCTIONS.local.md` §9; report what was freed.
