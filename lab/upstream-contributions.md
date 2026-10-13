@@ -739,11 +739,12 @@ failover*).
   drill once found as `Unroutable`: two of two runs on one relay on `ffa5b81b`, two of two on `main`
   at `2b689c24`, and on the standby's relay in the mesh ten of ten on `ffa5b81b` and twelve of
   twelve on `main` (T6). In the one run where the publishers arrived together it did not occur.
-  Upstream's quest
-  [`quest/m1/hop-aligned-import.md`](https://github.com/moq-dev/moq/blob/main/quest/m1/hop-aligned-import.md)
-  — now titled *Same-epoch importers publish identical tracks* and listing Closes #4352 and #4354 —
-  diagnoses it as a standby refusing every track until it has parsed its PMT. **Open**; the planned
-  fix is not landed; our counts are the before-measurement on the issue. With a shared `--epoch` on
+  Upstream diagnoses it as a standby refusing every track until it has parsed its PMT. **Closed into
+  a quest, not fixed**: [#5438](https://github.com/moq-dev/moq/pull/5438) split the fix out of
+  `hop-aligned-import` as
+  [`quest/m1/import-announce-tracks.md`](https://github.com/moq-dev/moq/blob/main/quest/m1/import-announce-tracks.md)
+  (announce once the tracks are known), ready and unbuilt; our counts are its before-measurement, and
+  #4354 stays with `hop-aligned-import`. With a shared `--epoch` on
   `main` at `82c3f2fe4` the standby's arrival ends no subscriber, on either protocol; on
   `moq-lite-07` subscribers present before it arrived instead end `not found` at the failover, 3 of
   3 (T6 § *Single-relay standby*). In the mesh on `f8215bc47` the refusals are visibly kept: the
@@ -955,13 +956,17 @@ no production changes, with deliberately unequal group counts so resume boundari
 **Two of our four reports from that work were artefacts of our own harness**, recorded with their method
 rules in [method-notes](method-notes.md) §1 and §5.
 
-### What a redundant pair must share — proposed as [#5412](https://github.com/moq-dev/moq/pull/5412)
+### What a redundant pair must share — merged as [#5412](https://github.com/moq-dev/moq/pull/5412), its coordinate since revised
 
-A quest-only PR replacing `plan-ts-alignment`: one anchor and timestamp era per epoch, which a later
-importer adopts; `--epoch` refused for capture, `avc3`, `rtc --connect` and `transcode`; passthrough
-cuts on the epoch's grid; `--sync` legs whose counters restart per group, released by clock recovery
-rather than wall time (a 1 s delay lasts about 9 h at 30 ppm); and RTP legs that stay silent rather
-than send a datagram they cannot fill. **Open, ready for review**; it overlaps #5328.
+A quest-only PR replacing `plan-ts-alignment`: `--epoch` refused for capture, `avc3`,
+`rtc --connect` and `transcode`; passthrough cuts on the epoch's grid; `--sync` legs whose counters
+restart per group, released by clock recovery rather than wall time (a 1 s delay lasts about 9 h at
+30 ppm); and RTP legs that stay silent rather than send a datagram they cannot fill. **Merged.** Its
+coordinate, one anchor and era per epoch that a later importer adopts, was replaced by the
+maintainer's [#5438](https://github.com/moq-dev/moq/pull/5438): importers sharing an epoch each
+derive the catalog clock and era from the epoch and their own source, all stay live, and none reads
+the relay. A rewind stays fatal and needs a successor epoch; that epoch's anchor, a cold co-start
+across clustered relays and a tie-breaker for groups starting together are open in the quests.
 
 ---
 
@@ -1179,6 +1184,10 @@ its observer; a preflight run reports which media layer is broken. Reporting is 
 token prefix, and **self-reports are never billing, authorization or route-selection input**; the relay
 keeps aggregated histograms only, and encoder feedback moved to a later milestone. **Nothing is
 implemented or claimed**, and the campaign position — not via `mpegts-pacer` — is unchanged.
+**Contributed, [#5367](https://github.com/moq-dev/moq/pull/5367), merged**: a catalog entry names
+its track apart from its key, so the snapshots can key by rendition and two broadcasts' same-named
+tracks share one catalog; rebinding an export when a key's track changes is deferred to
+[#5406](https://github.com/moq-dev/moq/pull/5406).
 
 **The TS half is `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
 liveness flattened into the publisher's snapshot. Its export side is this campaign's case, where the
@@ -1752,25 +1761,17 @@ as late, with a paused-time test that fails on `main` with the issue's error. On
 continue crash arm (20) and the shared-epoch hard kill (20 on `moq-lite-06`, 4 on `moq-lite-07-wip`)
 go to none ([T13](test-13-downstream-grooming.md) § *Liveness*, [T6](test-6-relay-resilience.md)
 § *Single-relay standby*). A replay replacement still does not resume on `moq-lite-06`, which
-carries no restart marker. An automated review found the stamp also ran at a track's end, dropping
-a tail `main` sends late; `8557520bc` exempts that flush, with a test that drops 8 frames without
-it ([reply](https://github.com/moq-dev/moq/pull/5109#issuecomment-6087692516)); a second automated
-review found nothing new. **#5052 was closed on 2026-10-09 by the merge of
-[#5108](https://github.com/moq-dev/moq/pull/5108)**, a quest (`broadcast-epoch/no-stitch`) that
-plans the epochless case's fix at its source: an epochless track ends on an upstream error instead
-of re-splicing onto whatever instance now serves the path. It decides against an exporter-side guard
-(a unit due behind the schedule still bails). #5109 is not one: it leaves the bail, and has the
-jitter buffer judge held frames late before they reach the schedule. It still applies within an
-epoch, where the quest keeps a shared-epoch pair failing over with no error downstream, which is
-rig 2. The quest asks for both rigs to be re-run once it lands, and flags a rig-2 exit 1.4 s after a
-mid-GOP join, before any failover, as possibly separate. **#5109 merged on 2026-10-09** as
-`d006689f8`, accepted as that same-epoch fix, its body now referring to #5052 rather than closing
-it; the maintainer reworded the quest to reject only a guard at the schedule's bail, which stays.
-The no-stitch fix itself landed on 2026-10-10
-([#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)):
-an epochless track ends on an upstream error, and the export lingers within an epoch only, `--stitch`
-switching programs on a replacement. **Both rigs re-run on `main` at `90500867d`, with and without
-`--stitch`: no run of 32 dies on a late unit, on either rig, so #5052 is verified fixed**
+carries no restart marker. The stamp also ran at a track's end, dropping a tail `main` sends late;
+`8557520bc` exempts that flush, with a test that drops 8 frames without it. **#5109 merged as
+`d006689f8`**, the same-epoch fix (rig 2): it leaves the schedule's bail, which stays, and has the
+jitter buffer judge held frames late before they reach it. The epochless case was fixed at its
+source by the `broadcast-epoch/no-stitch` quest ([#5108](https://github.com/moq-dev/moq/pull/5108),
+which closed #5052) and its implementation ([#5137](https://github.com/moq-dev/moq/pull/5137),
+[#5147](https://github.com/moq-dev/moq/pull/5147)): an epochless track ends on an upstream error
+instead of re-splicing onto whatever instance now serves the path, and the export lingers within an
+epoch only, `--stitch` switching programs on a replacement. The quest flagged a rig-2 exit 1.4 s
+after a mid-GOP join, before any failover, as possibly separate. **Both rigs re-run on `main` at
+`90500867d`, with and without `--stitch`: no run of 32 dies on a late unit, on either rig, so #5052 is verified fixed**
 ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*). Without `--stitch` every
 replacement ends the export at once, as designed; with it 6 of 7 crash or clean replacements resume,
 and the shared-epoch failover is taken over on `moq-lite-07`, and on `moq-lite-06` with `--linger`.
@@ -1788,8 +1789,8 @@ packets) is imported whole and exported not at all, on `f8215bc47`, while a 153-
 through ([T45](test-45-live-tstd-remux.md)). Accepted as `quest/m1/ts-pmt-split.md`; the maintainer's
 fix, [#5220](https://github.com/moq-dev/moq/pull/5220), at its head `d7dc586e7` wrote that PMT whole
 on the same recording (one 391-byte section, all fourteen streams, no continuity error), as we
-[reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794). **Merged on
-2026-10-11 as `c053ef01e`, closing #5110; verified on `main` at `90500867d`**: the same PMT, whole, on
+[reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794). **Merged as
+`c053ef01e`, closing #5110; verified on `main` at `90500867d`**: the same PMT, whole, on
 the same recording and rig. **Closed.**
 
 **The same-instance resume regression — measured for `quest/m1/ts-same-instance-resume.md` and
@@ -1798,7 +1799,8 @@ the quest names passed 40 of 40 on `main` at `90500867d` with the exporter's std
 assertion, alone and with its file's tests in parallel under CPU load, so the validation branch's
 failure is not yet tied to `main`. Live, a fresh importer under a reused epoch is resumed into and
 carries nothing, exit 0 ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*), offered as
-the quest's invalid-replay control. **Open**, with the maintainer.
+the quest's invalid-replay control. **Waived**: the maintainer recorded in the quest that the
+finding no longer holds #5328, which merges once Interop is green.
 
 **Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
 as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
@@ -1806,23 +1808,23 @@ as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video
 back to back between them; a unit test of one full slot of a 25 Mb/s broadcast fails at a TB peak
 of 1,067 B on `f8215bc47` (`schedule.rs` unchanged on `d006689f8`), and the same packets in
 smooth weighted round-robin peak at 459 B ([T45](test-45-live-tstd-remux.md)). **Fixed by
-[#5207](https://github.com/moq-dev/moq/pull/5207), merged on 2026-10-10**: each slot interleaved so
+[#5207](https://github.com/moq-dev/moq/pull/5207), merged**: each slot interleaved so
 no PID overruns its transport buffer, our test as the regression. On `main` (`9f1dd1afd`) the same
 110 s cut overruns video TB on 88 of 943,296 packets (peak 646 B), against 36 % (peak 1,311 B)
 before: the layout cause is gone. The residue is the slot's edges: after a slot the paused video
 left empty, program tables written twice go ahead of a capped video lane, outside the interleave's
-count, and so would the end padding of the duplicate-run rule in
-[#5304](https://github.com/moq-dev/moq/pull/5304), which clears the system TB but not the video
-([reported there](https://github.com/moq-dev/moq/pull/5304#issuecomment-6125008012), T45).
-**Fixed**, residue reported to the pacing work.
+count ([reported on #5304](https://github.com/moq-dev/moq/pull/5304#issuecomment-6125008012), T45).
+The maintainer dropped #5304's duplicate-run rule for
+[#5306](https://github.com/moq-dev/moq/pull/5306)'s planner and merged #5304 as the remaining
+PSI-pacing quest. **On #5306 at `f944b8320` the same cut overruns neither video nor system TB**
+(peaks 349 and 504 B). **Fixed**; the residue clears on #5306, open.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
 
 **An export failure read as the broadcast ending — contributed as
 [#4947](https://github.com/moq-dev/moq/pull/4947) at the maintainer's invitation on #4645, and merged
-on 2026-10-08 as `1ec21ac23`, our change as written plus the maintainer's doc commit and a test
-updated for a changed API; verified on the merge.** The automated review's two non-blocking
+as `1ec21ac23`; verified on the merge.** The automated review's two non-blocking
 suggestions were not taken up: to scale the 1 s grace with the linger, since across a WAN relay the
 gap between track errors and the close is set by the relay's detection rather than the RTT, and to
 deduct the grace from the linger so the flag is exact. **On the merge, the `moq-lite-06`
@@ -2006,11 +2008,11 @@ audio frames share a PES.
 join or a lost PES, and adds two tests that fail on `main`. Before: 3 PES where 6 frames were
 split; the live capture stops at 8–10 s. After: on the same capture, all 926 AC-3 frames written
 before the video limit stopped it at 39 s are the source's, in order, PTS exact. #5414 builds both
-quests and counts audio PES headers in B (2.4.2.3), which #5306 left out. On the capture,
+quests and counts audio PES headers in B (2.4.2.3), as #5306 now does too. On the capture,
 `b581c27ed` stops at 31 s; #5414 runs 280 s at the source's 25 Mb/s and passes T45's criteria.
 
-**State.** #5363 merged on 2026-10-13, reworked by the maintainer. #5362 closed into two quests,
-the maintainer answering both questions yes. #5414 is a draft stacked on #5306, posted 2026-10-13.
+**State.** #5363 merged, reworked by the maintainer. #5362 closed into two quests, the maintainer
+answering both questions yes. #5414 is a draft stacked on #5306.
 
 ---
 

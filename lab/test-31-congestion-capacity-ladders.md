@@ -3,7 +3,8 @@
 **State: both step-capacity ladders are run, replicated and graded on content in the `netns`/`cake`
 rig — three replicates per MoQ rung, two to three per segmented rung — with each lane's absorption
 boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ
-arm. The latency-max × contention matrix is not run. Every MoQ figure in this file is graded by
+arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release
+delay up to 6 s absorbs a sustained 0.8× share. Every MoQ figure in this file is graded by
 [`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to
 carry were an artefact of the exporter and are withdrawn (see *Corrections*).**
 [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
@@ -305,6 +306,37 @@ The absolute-rate ladder's chronic cell, on `fd4f5d82e` at 8 Mb/s, stays **withd
 different reason: its retained capture spans only 19 s past the join, and a capture that stops
 early grades as clean on any grader.
 
+### No release delay up to 6 s absorbs a sustained 0.8× share, at either contention or any RTT
+
+Criteria 6, 7 and 9 on `b581c27e` (moq 0.14.2, moq-relay 0.17.2, noq, controller `delay`), in the
+`netns`/`cake` rig on the EC2 tertiary (replicate 1) and secondary (replicates 2–3), same build on
+both: 48 cells × 3 replicates, 360 subscriber captures, none void, each graded on content.
+
+**Criterion 6.** All 180 control subscribers lose 0.00 s, and none moves more than 100 ms between the
+first and last third of its window, so none is excluded. Control latency stands at about twice the
+delay: 1.83–2.87 s at 1 s (bimodal only at 20 ms RTT; 1.88–2.26 s at 100 and 200 ms), 3.68–4.84 s at
+2 s, 7.84–7.94 s at 4 s and 11.82–12.14 s at 6 s.
+
+**Criterion 7.** Video lost at 0.8× for 80 s, median and range over three replicates × n subscribers;
+every control is 0.00 s:
+
+| n | RTT | `--delay` 1 s | 2 s | 4 s | 6 s |
+|---|---|---|---|---|---|
+| 2 | 20 ms | 18.3 (18.1–19.2) | 18.1 (17.6–18.5) | 16.3 (15.6–18.2) | 15.3 (14.6–17.2) |
+| 2 | 100 ms | 18.5 (17.8–19.8) | 18.4 (16.7–19.2) | 17.2 (14.0–18.4) | 15.4 (14.6–16.6) |
+| 2 | 200 ms | 19.1 (18.0–21.7) | 18.5 (17.0–21.9) | 17.0 (16.0–18.4) | 16.0 (14.5–18.8) |
+| 3 | 20 ms | 18.0 (17.4–18.9) | 17.9 (16.7–18.6) | 16.8 (15.7–17.4) | 15.3 (14.2–16.7) |
+| 3 | 100 ms | 18.3 (16.8–19.6) | 18.0 (16.3–19.2) | 16.2 (15.6–17.1) | 15.6 (14.0–18.5) |
+| 3 | 200 ms | 19.0 (17.2–19.9) | 18.5 (17.1–20.6) | 17.0 (15.4–21.4) | 15.8 (14.3–17.7) |
+
+**No delay in the ladder brings any subscriber within ±1 s of its control**, at either n or any
+RTT. The curve falls with the delay, by 2.7–3.2 s of median from 1 s to 6 s, so each second of delay
+buys back about 0.6 s of picture for about 2 s of latency. Neither n nor RTT moves a median by more
+than 1.1 s at a given delay. The picture goes in holes of 0.48–1.36 s; audio loses 0–0.16 s; the
+export's late drops are 0–5 per subscriber, so the loss is not the release deadline's. The window's
+20 % shortfall is 16 s at the stream's rate; whether that is the lane's deficit turns on its wire
+rate, which is not measured (*What remains*).
+
 ## Measured — the segmented step-capacity ladder
 
 **Environment.** EC2 secondary, 8 vCPU / 15 GB. Source the same ~9.95 Mb/s CBR slice of
@@ -576,12 +608,16 @@ is replaced on those builds by:
 | 2 | Recovery operating point | **Not measured.** Delivery returned (subsequent cells were clean through the same rig) but buffer occupancy was not instrumented, so neither the 5 % rate nor the 10 % buffer test was applied |
 | 3 | MoQ integrity invariant — any non-zero continuity error fails the cell | **Passes, and tests nothing.** 0 throughout, including the cells that lost 65–76 s of picture, because the exporter writes its own continuity counters. The criterion was written on the assumption that the MoQ egress's counters could show loss; they cannot, and content lost is the only integrity measure on this lane |
 | 4 | C2 re-run validity | **Not run.** The withheld segmented C2 cells remain withheld |
-| 5 | Latency-max ladder at n ∈ {2, 3} | **Not run at contention.** The budget axis was exercised only at n = 1, and only against an outage rather than a capacity step — recorded in [T28](test-28-failure-injection-matrix.md), where it produced a non-monotonic result that this criterion's phrasing assumes cannot happen |
+| 5 | Latency-max ladder at n ∈ {2, 3} | **Not run at contention; superseded by 6–7 on `--delay` builds.** The budget axis was exercised only at n = 1, and only against an outage rather than a capacity step — recorded in [T28](test-28-failure-injection-matrix.md), where it produced a non-monotonic result that this criterion's phrasing assumes cannot happen |
+| 6 | Delivered latency on `--delay` builds | **Met.** About twice the delay; no subscriber drifts more than 100 ms, none excluded |
+| 7 | Delay × contention × RTT | **No delay in {1, 2, 4, 6 s} suffices** at n ∈ {2, 3} or any RTT: 14.0–21.9 s of video lost against 0.00 s controls, falling 2.7–3.2 s in median from 1 s to 6 s |
+| 8 | Recovery on `--delay` builds | **Not run**; the relay's per-subscriber queue is not instrumented |
+| 9 | Error bars | **Met for criterion 7** (three replicates per cell, quoted as ranges); the segmented rungs with two replicates are not yet at three |
 
 Criterion 5 deserves a note rather than a bare "not run": it asks for the *smallest* budget that keeps
 aggregate delivery above 95 %, which presumes delivery improves monotonically with the budget. T28
-measured the opposite against an outage at n = 1. Whether that survives at contention is exactly what
-this criterion should settle, but the criterion as written cannot express the answer if it does.
+measured the opposite against an outage at n = 1. Criterion 7 asks the question as a curve instead,
+and at contention against a capacity step that curve falls with the delay.
 
 ## What remains
 
@@ -591,8 +627,9 @@ a third party.
 - **Whether the MoQ boundary is the lane's or the wire's.** The rungs are multiples of the TS rate
   and the bottleneck shapes packets; measuring the lane's wire rate at 1.2× would say how much of
   the 1.0×–1.1× boundary is framing overhead.
-- **The delay × contention × RTT matrix** (criterion 7), against a capacity step rather than an
-  outage, on a `--delay` build.
+- **A delay against a shortfall shorter than itself.** Criterion 7 holds the shortfall for the
+  whole window, which no delay in the ladder can cover; whether a delay absorbs the 5 s 0.8×
+  transient is the operational question it leaves.
 - **Buffer and RSS instrumentation** for criteria 2 and 8, which the current rig does not collect.
 - **The segmented lane under loss with a sender that does not yield to it** — the same origin with
   BBR — which would say whether the collapse at 100 ms RTT is the lane's or its origin's controller.

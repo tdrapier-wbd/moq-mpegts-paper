@@ -1,11 +1,12 @@
 # Test 34 — A real encoder against the continuous-source fence
 
-**State: partial — the import's half answered on the live feed; the export's is ungraded.** A real
-encoder's timeline does step back: on the live feed the standing import ended three times in about
-19 h on *frame timestamp is below the live edge*, with the hand-off clean each time
-(§ *The live feed*). The `OLD`/`NEW` fence comparison below is moot, since from moq 0.14.0 a
+**State: partial — no real backward step is captured yet.** On the live feed the standing import
+ended three times in about 19 h on *frame timestamp is below the live edge*, with the hand-off clean
+each time (§ *The live feed*). The first exit captured with the hand-off around it was not a step in
+the feed: the standing build stamped a repeated SCTE-35 cue below the section before it, which
+`main` no longer does. The `OLD`/`NEW` fence comparison below is moot, since from moq 0.14.0 a
 backward step ends the import by design ([Evidence](../docs/evidence.md) §3.13); what remains is a
-subscriber's export graded across one of these steps.
+subscriber's export graded across a real step, if the feed has one.
 
 Specified as [P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion). Rig sketch:
 [`t27-realfeed-severity.sh`](scripts/t27-realfeed-severity.sh).
@@ -144,11 +145,11 @@ minute, and every 15 min the bytes a 10 s export of the standing build delivers.
 *Measured, P1, the import's log and the hand-off's counters, standing build `84b34f54`, one feed,
 14.6 h monitored within about 19 h on the feed.*
 
-**The steps are the feed's, not the hop's**, and they are not rare: three in 19 h, two of them 3 min
-apart. The class of each is unknown. This build logs nothing before the error and the monitor grades
-continuity, not PCR, so a flagged splice or source switch cannot be told from an unflagged audio
-resync at a hard cut. On any build from moq 0.14.0 the outcome is the same; the class decides
-whether an upstream fix could keep the import across them.
+**The exits are not the hop's**, and they are not rare: three in 19 h, two of them 3 min apart.
+Whether they are the feed's is not shown: this build logs nothing before the error, the monitor
+grades continuity, not PCR, and the one exit since captured with the hand-off around it was not a
+step at all (below). On any build from moq 0.14.0 a real step ends the import alike; its class
+decides whether an upstream fix could keep the import across one.
 
 **The export's half (P0-j), fixed before running.** [`p0j-step-watch.sh`](scripts/p0j-step-watch.sh)
 runs two roles for 48 h. On the primary, a 60 s ring of the hand-off in RAM, copied to disk 20 s
@@ -166,6 +167,35 @@ is graded when both roles were up across it, on two readings:
    about 6 s.
 
 Neither reading has a pass mark; one graded step answers P0-j, and each further step is a replicate.
+
+### P0-j's first exit is not a step in the feed
+
+*Measured, P1, the hand-off ring (93 s, 1,538,348 packets, every one synced) and the import's
+journal, standing build `84b34f54`, one exit on the live feed.*
+
+**Reading 1, the class: none of the four.** Across the exit the ring has no
+`discontinuity_indicator`, no continuity error, no PCR step backward or above 25 ms, and every PID
+advances: audio PTS by 0.288–0.320 s a PES, teletext by 0.04 s, video DTS by 0.02–0.04 s. The host's
+UDP receive-buffer errors did not move. The ring does hold two SCTE-35 `splice_insert` cues on PIDs
+141 and 143, each sent three times about 2.3 s apart beside a `splice_null` every second: an
+out-of-network cue a minute before the exit and its return cue across it. This build stamps each
+section with the last video PES's PTS, which steps back by up to the B-frame reorder, and writes
+each as its own group. Replayed through that rule, exactly one section in the ring lands below its
+predecessor on its PID: the return cue's second send, 0.12 s below the `splice_null` 327 ms before
+it, at the exit within the ring's ±1 s. The out-of-network cue's three sends all stamp forward.
+`main` has clamped a cue to the live edge since
+[#3997](https://github.com/moq-dev/moq/pull/3997), after this build, so the build under test would
+carry it. Whether the three earlier exits were cues is not recorded.
+
+**Reading 2, what the subscriber lost.** The export ended with the publisher, with no liveness
+alarm, and the next one resubscribed 5.8 s later, when the publisher returned. Its first byte is not
+logged, so the loss is at least 5.8 s plus the export's start. This build's export carries none of
+the SCTE-35 PIDs; the detector reports all three silent.
+
+**The export also ends on its own.** In the same 10.5 h it ended three more times with no import
+exit, each on *no route can serve the rest of this group* (`old`) on the catalog track, then
+`json: old`, twice with a restart that failed at once. That is the subscriber's build, and is not
+graded here.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 
@@ -234,3 +264,12 @@ touches, so unifying the hosts costs nothing this experiment needed. What T40 le
 question T40 cannot answer: **whether a real encoder produces this junction at all.** T40's generator
 cuts hard at an IDR, which is legitimate but synthetic; only the live feed settles whether the fence
 is one production actually meets.
+
+## Corrections
+
+- **The import's exits were read as the feed stepping back.** This file read three exits on *frame
+  timestamp is below the live edge* over a clean hand-off as the feed's timeline stepping back. The
+  first exit captured with the hand-off around it had no step on any PID: the import had stamped a
+  SCTE-35 cue below its predecessor (§ *P0-j's first exit is not a step in the feed*). Method rule:
+  an importer's refusal names what it wrote, not what the source sent; classify from the source's
+  bytes before attributing a refusal to the source.

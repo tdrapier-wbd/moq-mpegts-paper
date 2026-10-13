@@ -525,7 +525,11 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   padding the slot back at its end, clears the system TB and leaves the video overrun (65 packets,
   same peak), since the padding sits outside the count too; charging the tables to the null lane's
   share instead made it worse (479 packets, peak 746 B). A fix has to keep a capped video lane
-  spread over every position it can drain in. Eight AC-3 units stay in B up to 1.05 s. The
+  spread over every position it can drain in. **Upstream's padded planner does** (#5306 at
+  `f944b8320` `[unmerged]`, tables, nulls and media placed at absolute positions; same cut and rig):
+  neither video TB (peak 349 B) nor the system TB (peak 504 B) overruns, and one video frame is
+  still dropped late. On both builds audio units stay in B past 1 s, up to 1.05 s: 12 AC-3 units
+  and 4–5 on each MPEG audio PID, where the source has none above 0.05 s. The
   recording has 1,398 continuity gaps of its own across every PID, so its completeness grade (a
   third of the video and a tenth of each audio missing) measures the recording, not the export.
 - **The live feed (P0-l, P1-u): `main` stops on it; with #5362's two quests `[unmerged]` it
