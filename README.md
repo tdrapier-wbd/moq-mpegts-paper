@@ -22,15 +22,29 @@ reliability** — which needs a cache in the path rather than a better tunnel
 
 ## The conclusion
 
-**The transport is not the decision, and that is the most consequential finding here.** Both candidates are unicast at the last mile, both land within a few percent of the same wire volume,
-and both need the same broadcast-grade edge stage to produce a TR 101 290-conformant transport-stream hand-off — a stage
-neither specification mentions and which the taker must own, because broadcasters no longer supply its clients'
-receivers. Most of the engineering, and most of the risk, sits *above* the transport
-([Comparison](docs/comparison.md), [Architecture](docs/architecture.md)).
+**The transport is not the decision, and that is the most consequential finding here.** Both
+candidates are unicast at the last mile, both land within a few percent of the same wire volume, and
+both need the same broadcast-grade edge stage to produce a TR 101 290-conformant transport-stream
+hand-off — a stage neither specification mentions and which the taker must own, because broadcasters
+no longer supply its clients' receivers. Most of the engineering, and most of the risk, sits *above*
+the transport ([Comparison](docs/comparison.md), [Architecture](docs/architecture.md)).
 
-**Segmented HTTP has a mature cache-delivery model, not an out-of-box broadcast receiver path.** Named segments can be served through commodity CDN infrastructure and retried from another edge while they remain within their availability window. But the target IRD estate does not consume HLS directly: it still needs distributor-owned reassembly, grooming and TS-egress stage. This evaluation did not demonstrate an interoperable, low-latency TS-in-HLS receiving path: free receivers fell back to whole segments, while the commercial ABR-to-TS path remains untested. The measured recovery advantage is therefore conditional and does not establish end-to-end receiver interoperability ([Comparison](docs/comparison.md) §3.2, §4, §5.1).
+**Segmented HTTP has a mature cache-delivery model, not an out-of-box broadcast receiver path.**
+Named segments can be served through commodity CDN infrastructure and retried from another edge
+while they remain within their availability window. But the target IRD estate does not consume HLS
+directly: it still needs distributor-owned reassembly, grooming and TS-egress stage. This evaluation
+did not demonstrate an interoperable, low-latency TS-in-HLS receiving path: free receivers fell back
+to whole segments, while the commercial ABR-to-TS path remains untested. The measured recovery
+advantage is therefore conditional and does not establish end-to-end receiver interoperability
+([Comparison](docs/comparison.md) §3.2, §4, §5.1).
 
-**MoQ beats the other Internet-native plane decisively on latency at the configurations measured TR 101 290-conformant in software.** That makes the case for MoQ on routes with a roughly two-to-nine-second delivery budget. But at conformance it does not necessarily beat the point-to-point incumbents it would displace, which carry their source’s own conformant timing and buy their latency with a jitter buffer the operator sets. No conformant sub-second configuration was produced on any lane, so MoQ’s strategic sub-second case is architecturally credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
+**MoQ beats the other Internet-native plane decisively on latency at the configurations measured TR
+101 290-conformant in software.** That makes the case for MoQ on routes with a roughly
+two-to-nine-second delivery budget. But at conformance it does not necessarily beat the
+point-to-point incumbents it would displace, which carry their source’s own conformant timing and
+buy their latency with a jitter buffer the operator sets. No conformant sub-second configuration was
+produced on any lane, so MoQ’s strategic sub-second case is architecturally credible but not yet
+evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
 
 **Two things separate a credible evaluation from a deployable one, and neither is a transport property.**
 The make-or-break conformance gate has never been attempted — nothing here has been fed to a hardware
@@ -100,11 +114,12 @@ separate public crate, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-p
 
 ## Contributing
 
-This is a public, living reference whose purpose is to support primary distribution discussions. Corrections,
-counter-evidence and disagreement are welcome.
+This is a public, living reference whose purpose is to support primary distribution discussions.
+Corrections, counter-evidence and disagreement are welcome.
 
 ## Author
 
-**Thomas Drapier** — Warner Bros. Discovery, Senior Director, Service Management & Partner Services, Broadcast Distribution Engineering. [LinkedIn](https://www.linkedin.com/in/tdrapier/)
+**Thomas Drapier** — Warner Bros. Discovery, Senior Director, Service Management & Partner Services,
+Broadcast Distribution Engineering. [LinkedIn](https://www.linkedin.com/in/tdrapier/)
 
 ---
