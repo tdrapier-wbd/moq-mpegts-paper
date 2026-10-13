@@ -1816,8 +1816,10 @@ left empty, program tables written twice go ahead of a capped video lane, outsid
 count ([reported on #5304](https://github.com/moq-dev/moq/pull/5304#issuecomment-6125008012), T45).
 The maintainer dropped #5304's duplicate-run rule for
 [#5306](https://github.com/moq-dev/moq/pull/5306)'s planner and merged #5304 as the remaining
-PSI-pacing quest. **On #5306 at `f944b8320` the same cut overruns neither video nor system TB**
-(peaks 349 and 504 B). **Fixed**; the residue clears on #5306, open.
+PSI-pacing quest. **On #5306 at `f944b8320` the cut overruns neither video nor system TB**
+(peaks 349 and 504 B,
+[reported](https://github.com/moq-dev/moq/pull/5304#issuecomment-6155009194)). **Fixed**; the
+residue clears on #5306, open.
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).

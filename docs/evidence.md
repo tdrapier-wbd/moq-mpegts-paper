@@ -90,7 +90,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and the live feed steps back three times in 19 h; a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair of exports stays identical across it in 8 of 13 runs, and a pair of republishing importers keeps both legs but follows the last to announce | Why the other five diverge; what a real step costs a subscriber, and whether it is flagged | §3.13 |
+| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design; a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair of exports stays identical across it in 8 of 13 runs, and a pair of republishing importers keeps both legs but follows the last to announce | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
 | **Interop** | Media flows within one implementation and through none of eight other relays; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays fail | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 2,272–2,274 ms at a 1 s delay, also over 540 s, through the merged fixed-delay export | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -621,11 +621,12 @@ a rewind and an encoder restart each cross the lane with no programme hole and n
 kind measured**, while a flagged forward jump still publishes; upstream has declined an in-process
 restart, even for the flagged case. A source whose timeline steps back must then be republished at
 each step, by a supervisor under a new epoch, or the build pinned. Each republish costs about 3 s of
-programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. **A real feed
-does step back**: the live contribution feed stepped back three times in about 19 h on a clean
-hand-off, two steps 3 min apart, each ending the import
-([T34](../lab/test-34-real-encoder-severity.md); P1, the import's log, one feed, an October 2026
-build). Whether they are flagged is not yet read.
+programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. On a real feed
+the standing import ended three times in about 19 h over a clean hand-off, two exits 3 min apart,
+but the one captured with its source was no step: the import had mis-stamped a SCTE-35 cue, which
+current builds do not. **Whether a real feed steps back is not yet measured**
+([T34](../lab/test-34-real-encoder-severity.md); P1, the import's log and the hand-off ring, one
+feed, an October 2026 build).
 
 [T23](../lab/test-23-pcr-discontinuity-classes.md) (P0/P2, software; one run per arm per build)
 places one event at 45 s of a 105 s run, shifting PTS and DTS with PCR, and grades source, round
