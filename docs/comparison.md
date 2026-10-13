@@ -274,7 +274,7 @@ graded on a hardware IRD** ([Evidence](evidence.md) §4).
 PCR-timeline class crosses the lane at the control's content gap. From moq 0.14.0 a backward timestamp
 step ends the import by design, flagged or not, and upstream has declined an in-process restart, so a
 supervisor must republish under a new epoch at each step, at about 3 s of programme a step and with a
-1+1 pair not hitless across it, which upstream leaves to the export of the whole multiplex, implemented `[unmerged]` but not
+1+1 pair not hitless across it, which upstream leaves to the export of the whole multiplex, merged but not
 measured across a republish. moq 0.12.8 publishes a continuous source whose content restarts but has not had its placed
 classes re-measured, so no build is *measured* to carry both cases, and a deployment must pin the build
 or republish at each backward step ([Evidence](evidence.md) §3.13).
@@ -357,7 +357,7 @@ architectural reading.
 | Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | **preserved** — the source's bytes, released on its PCR | **preserved; the source mux rate exactly** |
 | PSI cadence, packets added | source cadence plus **one PAT/PMT pair per segment** | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap | unchanged; nothing added | **identical; nothing added** |
 | PCR repetition (P1) and accuracy (P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | the source's PCRs, file domain; each released within 2 ms of schedule, wire accuracy not graded | **0 violations at 481 ns**, ungroomed — measured over the wire |
-| Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips `[unmerged]` | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
+| Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips and one live feed | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
 | TS-level scrambling | carried as bytes; reasoned | **cannot be carried** — the publisher parses PES headers scrambling hides; specified | carried by construction | carried by construction |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | **yes**, from the first released group | every field, count and cadence measured identical, not diffed byte-for-byte |
 
@@ -376,7 +376,7 @@ pacing groomer cannot do — **not insurmountable**, since a laboratory re-multi
 upstream's fixed-delay export, merged in October 2026, does it in the subscriber, keeping every track
 and buffer on every join tried (§5.1). And it **cannot carry a scrambled
 stream**. Byte-faithful carriage has none of the three by construction; on MoQ that is the opaque lane,
-measured on loopback only, with its subscriber unmerged (§12).
+measured once per arm, on loopback and one live feed (§12).
 
 **Scrambling is a narrow gate.** Primary distribution is protected by the transport and the operator
 ([Control plane](control-plane.md) §7.3), and consumer conditional access is applied downstream of the
@@ -386,7 +386,7 @@ binary.
 
 **MoQ's remaining mux-content advantage is multi-programme carriage alone, and only on the opaque lane**,
 unmeasured on one. Against the media-aware lane segmented HTTP keeps stuffing, CAT, continuity counters
-and wall clock, and **fidelity costs ~7 % wire volume** on both planes (§9).
+and wall clock, and **fidelity costs the source's stuffing in wire volume** on both planes (§9).
 
 ---
 
@@ -394,9 +394,10 @@ and wall clock, and **fidelity costs ~7 % wire volume** on both planes (§9).
 
 Fully modelled in [Economics](economics.md).
 
-**Wire volume favours MoQ by ~7 %** — §8's fidelity trade: **0.982×** media-aware against **1.056×**
-segmented HTTP/3 (derived) and **1.037×** SRT ([Evidence](evidence.md) §3.5). Only declining verbatim
-carriage sits below 1.0×; the off-the-shelf packager retains stuffing. HTTP overhead is 0.06 %, and
+**Wire volume favours MoQ by the source's stuffing** — §8's fidelity trade: on a clip 4.57 % nulls,
+**0.982×** media-aware against **1.056×** segmented HTTP/3 (derived) and **1.037×** SRT; on a
+stuffing-free feed 1.033× against SRT's 1.035× ([Evidence](evidence.md) §3.5). Verbatim carriage
+costs 1.03–1.06×; the off-the-shelf packager retains stuffing. HTTP overhead is 0.06 %, and
 HTTP/3 costs ~2.6 points more than HTTP/2 on TCP.
 
 **Destination count decides the bill, not the transport** ([Economics](economics.md) §4.4). **The
@@ -451,17 +452,15 @@ probability, unevidenced here**: severe weather stresses local access and power 
 downlink. **The receiver is the gate**: legacy IRDs keep decoding the satellite stream unrepaired until
 the client installs hybrid receivers ([Problem](problem.md) §1.5). **It resolves nothing the footprint
 already limited**: per-destination feeds, reach, event topologies and entitlement. It is also strictly
-worse on R4 than plain satellite, since Part 7's informative sizing guidance bounds the receiver buffer
-below by the satellite latency plus repair margin, and how it compares with §5.1 depends on a buffer the
-specifications do not fix and nobody here has measured. And it relocates the conformance problem: Part 8
+worse on R4 than plain satellite: Part 7's informative sizing bounds the receiver buffer below by the
+satellite latency plus repair margin, a buffer nobody here has measured against §5.1. And it relocates the conformance problem: Part 8
 concedes that splicing recovered data without re-stamping PCRs risks exceeding 13818-1's ±500 ns, a
 grooming function at the receiver.
 
 **MoQ has no equivalent mechanism and is not asked the same question**: neither the IETF MoQ charter nor
 `draft-ietf-moq-transport-19` addresses loss in a parallel unidirectional path (*specified*, by
-absence), and named objects are a substrate for range repair only in *reasoning*. Part 7 was approved in
-July 2025 and revised in December 2025, Part 8 in June 2026, with implementation evidence limited to
-vendor announcement and single-vendor demonstration. **Nothing in §10.2 is measured here**, which is why
+absence), and named objects are a substrate for range repair only in *reasoning*. Both parts date from
+2025–2026, with implementation evidence limited to vendor announcement and single-vendor demonstration. **Nothing in §10.2 is measured here**, which is why
 §13.1 frames the model as a competing resolution rather than scoring it.
 
 ---
@@ -493,7 +492,7 @@ MoQ's, the commercial one segmented HTTP's.
 
 | | `moq-dev` | `moq2ts` / `moqxr` | Cloudflare `moq-rs` | This work |
 |---|---|---|---|---|
-| Lane | media-aware, and whole-multiplex passthrough (export `[unmerged]`) | **transparent TS** | none — transport only | **transparent TS** + grooming |
+| Lane | media-aware, and whole-multiplex passthrough | **transparent TS** | none — transport only | **transparent TS** + grooming |
 | Scope | publisher, relay, subscriber | **publisher only** | protocol library, **relay**, sample clients | publisher + egress + pacer |
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
 | Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
@@ -506,11 +505,12 @@ Transparent carriage is no longer single-vendor, but **transparent is not verbat
 nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under
 pressure and ends a broadcast with its publisher ([Architecture](architecture.md) §5).
 
-**No merged open implementation subscribes to whole-TS carriage**, as of October 2026: `moq2ts` and
-`moqxr` publish only; `moq-dev`'s whole-multiplex import has an export that writes the source's bytes
-back out, but it is `[unmerged]` ([Evidence](evidence.md) §3.1); `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside
-the media-aware lane; and the earlier opaque prototype measured here is private. Byte-faithful carriage over MoQ is therefore
-runnable against an open receiver only on an unmerged branch, which is why §8's structural limits do not by themselves move the
+**One open implementation subscribes to whole-TS carriage**, as of October 2026: `moq-dev`'s
+whole-multiplex import and its export, which writes the source's bytes back out
+([Evidence](evidence.md) §3.1). `moq2ts` and `moqxr` publish only; `moq-dev`'s "verbatim" tracks
+carry undecoded PIDs one per track inside the media-aware lane; and the earlier opaque prototype
+measured here is private. Byte-faithful carriage over MoQ therefore rests on one implementation,
+measured one run per arm, which is why §8's structural limits do not yet by themselves move the
 preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
 ([Evidence](evidence.md) §3.7).
 
@@ -535,7 +535,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Interoperability (R1) | **segmented HTTP on the delivery path; not established on the receive path** | M+S | decisive through caches and general clients, for a single programme; the low-latency receive path is unmet or unmeasured (§6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (S) (§8) |
-| Wire volume | **MoQ** | M+derived | ~7.0 %, MTU-invariant (§9) |
+| Wire volume | **MoQ**, by the source's stuffing | M+derived | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9) |
 | Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem |
 
@@ -544,7 +544,7 @@ an ABR-to-TS receiver is bought), that carry a single programme, **and that have
 IRD-ready transport stream from somewhere other than this evaluation**, segmented HTTP is the better
 engineering choice. **MoQ's case is route-specific and
 narrower than its headline latency**: smaller bursts for the groomer, multi-programme carriage, portable
-enforcement, ~7 % less wire volume — a rounding error against five-to-ten× delivery cost — and, at equal
+enforcement, up to ~7 % less wire volume — a rounding error against five-to-ten× delivery cost — and, at equal
 P1/P2 conformance, a decisive margin in the two-to-nine-second band that is not a sub-second result.
 **Broadcast-grade work is common to both** and sits above neither specification.
 

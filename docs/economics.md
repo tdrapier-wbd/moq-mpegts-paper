@@ -111,8 +111,9 @@ decision before core count.**
 
 **The carriage multiplier is 0.982 for MoQ's media-aware lane against 1.037 for SRT** on the same WAN
 path, because MoQ declines to carry the null stuffing the edge regenerates anyway: a 5.3 % wire saving
-on the reference clip. **Treat it as a wash with upside**, not as 5 % of egress banked, because the
-advantage tracks the source's stuffing ratio (§4.5).
+on the reference clip, 4.57 % nulls, and none on a stuffing-free live feed (1.033 against 1.035; the
+opaque lane 1.054). **Treat it as a wash with upside**, not as 5 % of egress banked, because the
+advantage is the source's stuffing ([Evidence](evidence.md) §3.5).
 
 ---
 
@@ -218,8 +219,8 @@ needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
-| MoQ, media-aware | 0.982 *(measured; 0.973 with MTU discovery)* | **2,447 ms** P1-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations — but carriage **fails against every third-party relay** ([Evidence](evidence.md) §3.7) |
-| SRT | 1.037 *(measured, same path)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
+| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations — but carriage **fails against every third-party relay** ([Evidence](evidence.md) §3.7) |
+| SRT | 1.037 *(measured, same path; 1.035 on the feed)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
 | Zixi | ~1.03 *(estimated)* | sub-second *(vendor claim, not measured here)* | broadcaster fans out | proprietary, per-GB licence |
 | HLS with TS / DVB-DASH | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, ETSI TS 103 285 — **not standards-track, yet carried by every cache, CDN and general-purpose client; the low-latency transport-stream receive path is the exception** ([Comparison](comparison.md) §6.1) |
 
@@ -244,8 +245,8 @@ a full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state*: 2
 core per subscriber on `moq-relay` 0.15.1, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where
 receivers cluster, the relay economises upstream backhaul instead, ~$11,500 a year flat against $185,000
 for sixteen destinations without a relay on the eight-service model, which is the same topology an HTTP
-cache exploits (§4.6). **Carriage overhead is not where the money is**: the 5.3 % wire saving is real,
-but supplier choice dwarfs it (§3).
+cache exploits (§4.6). **Carriage overhead is not where the money is**: the wire saving, at most the
+source's stuffing, is real, but supplier choice dwarfs it (§3).
 
 ### 4.6 The market-structure argument
 
@@ -558,12 +559,10 @@ the thesis rather than a detail of it.**
 
 **Engineering, with a direct economic payoff.**
 
-- **How much of MoQ's carriage advantage survives a different source?** The advantage *is* the 4.57 % of
-  null stuffing the reference clip carries, so two more source profiles turn the model's largest
-  carriage caveat into a range. The cheapest outstanding measurement on the deciding line
+- **How much of MoQ's carriage advantage survives a third source?** On two it *is* the source's
+  stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely
+  filled carrier would bound the range. The cheapest outstanding measurement on the deciding line
   ([Evidence](evidence.md) §5).
-- **What does the opaque lane cost to carry?** Never measured, and it is the lane whose whole promise
-  forgoes the null-stripping saving.
 - **What is the overhead under loss beyond 1 %?** Both protocols are measured back-to-back at 1 % and
   neither moved by more than a point, but retransmission is charged differently by the two and the
   sender-side cost above 1 % is inferred rather than captured.

@@ -539,7 +539,8 @@ for the hardware gate in §4.2.
 **Build two independently stream-clocked groomers.** Groom-once-and-duplicate is equally hitless but
 protects the last hop only. Where deterministic grooming cannot be guaranteed, use 1+1 hot-standby rather
 than a claimed-hitless pair. Stream-derived placement also unlocks stripping null stuffing over the WAN
-(regenerated at the edge regardless) — measured at 5.3 % below SRT ([Evidence](evidence.md) §3.5).
+(regenerated at the edge regardless) — measured at 5.3 % below SRT on a clip 4.57 % nulls
+([Evidence](evidence.md) §3.5).
 On byte-faithful input it is also the mode that keeps the T-STD over a whole capture, which the
 arrival-clocked mode does not (§4.3).
 
@@ -673,12 +674,12 @@ and programme structure *by construction* and makes no assumptions about the sou
 **Media-aware is the default and preferred path; opaque carriage is the fallback.** That ordering is
 supported by what has been measured rather than only by design direction: the media-aware lane is the
 one carried end-to-end over the public internet, the one whose contribution-feed defects have closed
-upstream, and the one that costs 5.3 % less bandwidth than SRT because it declines to carry null
-stuffing ([Evidence](evidence.md) §3.1, §3.5).
+upstream, and the one that costs less bandwidth than SRT, by the source's stuffing, because it
+declines to carry it ([Evidence](evidence.md) §3.1, §3.5).
 
 **The opaque lane's evidence is narrower than its architectural role** — on `moq-dev` it is the
 source's bytes on two clips on loopback and on one live feed across hosts and over the internet, but
-one run each, with its export `[unmerged]` ([Evidence](evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids
+one run per arm and build ([Evidence](evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids
 assumptions; it forgoes per-track prioritisation and null-stripping savings if truly verbatim. **Rule:
 media-aware unless a specific feed or endpoint forces the fallback.**
 
@@ -917,7 +918,7 @@ egress can be read against what actually arrived. Upstream's importer has such c
 2026 `main`, not yet in a release. They cover the P1 set apart from `PID_error`, which the importer's per-stream
 liveness rows already answer, together with the transport, PCR repetition, PCR discontinuity and PTS
 checks of P2. Their measured agreement with an independent analyser is in [Evidence](evidence.md) §5
-row 17. Two things stay outside them. PCR accuracy needs an arrival clock the importer does not have.
+row 16. Two things stay outside them. PCR accuracy needs an arrival clock the importer does not have.
 And they grade the transport rather than the pictures, so a frozen source that keeps sending valid PES
 passes them, which is the case §9.4 addresses.
 
@@ -1109,7 +1110,7 @@ slips.
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
 | Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | The stage cannot improve PCR spacing by re-ordering content, so it must **reserve** an output slot on the repetition deadline and defer the displaced packet — 0.34 % of the carrier, and the only thing that clears the gate on the MoQ lane, where neither an eightfold cushion sweep nor an exporter-side fix to PCR *values* moved it. On that lane it also requires a buffer bound set by the source's peak coded frame, which is content-dependent and costs latency (§4.2), and it cannot repair the lane's T-STD-illegal packet order, which needs exactly the re-multiplexing this row declines (§4.3) |
 | Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Single-track byte-identity settled across independent chains (§5.1); on a multi-track mux, **75.56 %** before upstream's fixed-delay export (reordering, not damage), and behind it byte-identity for a co-started pair only |
-| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in 5.3 % less bandwidth by not carrying stuffing | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent. For TS-out the default is a transmux with structural limits — packet layout lost, the subscriber as multiplexer, no scrambled feeds (§6.2) — and for TS-out its standing as default rests on the fallback's immaturity — one measurement, no open subscriber — rather than on fit (§6.1) |
+| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in less bandwidth by the source's stuffing, which it does not carry | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent. For TS-out the default is a transmux with structural limits — packet layout lost, the subscriber as multiplexer, no scrambled feeds (§6.2) — and for TS-out its standing as default rests on the fallback's immaturity — one measurement, no open subscriber — rather than on fit (§6.1) |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
 | Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the *operator's* to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable *between* implementations |
 | Out-of-band, non-fate-sharing control plane (§1.1, [Control](control-plane.md)) | Data plane survives control-plane outages | Revocation needs a token backstop, not just a live signal |
