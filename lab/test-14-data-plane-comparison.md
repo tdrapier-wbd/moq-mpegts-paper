@@ -444,7 +444,9 @@ the first is true of segmented HTTP.
 **The carriage-fidelity axis moves toward segmented HTTP** for a single programme, verbatim and
 including the DVB service layer, which removes MoQ's advantage everywhere except a contribution mux.
 
-**The cost axis stays with MoQ, at ~7 %, and the fidelity and cost results are one finding.** Arm B1
+**The cost axis stays with MoQ by as much as the source is stuffed, and the fidelity and cost results
+are one finding**: ~7 % on this clip; on the stuffing-free live feed about 2 % against segmented HTTP
+over HTTP/3 (derived, at 1.056×) and nothing against SRT (§ *On the live feed's profile*). Arm B1
 is 7.0 % more expensive on the wire *because* it is verbatim: it carries this clip's 4.57 % stuffing
 and every TS packet header, and the media-aware lane carries neither. Every verbatim data plane
 measured or derived on this campaign — SRT at 1.037×, segmented HTTP at 1.056× — sits above 1.0×
