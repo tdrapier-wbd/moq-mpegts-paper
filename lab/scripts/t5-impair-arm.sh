@@ -207,8 +207,8 @@ moq)
 	# full rate under `delay` (BBR) — and the resolved default is backend-specific, so
 	# an unpinned run records a number without recording what produced it. It goes on
 	# the *relay*, which is the sender on the hop being shaped.
-	# `--auth-public` takes a value on this build (the standing unit passes ""), and
-	# omitting it fails the relay at argument parsing rather than at bind.
+	# `--auth-public` comes from moq-cli-flags.sh, because its value inverted at the CLI
+	# migration, and omitting it fails the relay at argument parsing rather than at bind.
 	# GSO off as well as the kernel offloads: quinn coalesces datagrams into one
 	# `sendmsg` of its own, so `ethtool -K lo gso off` alone still leaves netem
 	# dropping super-packets on this arm while the segmented arm gets wire-sized

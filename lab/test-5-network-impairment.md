@@ -155,8 +155,8 @@ receives less loss than the media-aware lane in every cell and still degrades fu
 > **The two rate columns do not share a congestion controller: the segmented arm is TCP/CUBIC and the
 > media-aware arm is QUIC/BBR.** The loss rows therefore compare controllers as much as lanes, and the
 > matrix that separates them is in [T8](test-8-srt-vs-moq.md) — segmented HTTP given BBR reads 0.971 at
-> 3 % and 1.040 at 10 % on this same rig. Read the reordering row as a lane result and the loss rows as
-> a controller result.
+> 3 % and 1.040 at 10 % on this same rig. Read the loss rows as a controller result; the reordering row
+> compared packet sizes and is superseded (Corrections).
 
 | Condition | Applied loss (seg / MoQ) | Seg rate (CUBIC) | Seg CC | Seg PCR > 40 ms | MoQ rate (BBR) | MoQ CC | MoQ PCR > 40 ms |
 |---|---|---|---|---|---|---|---|
@@ -183,8 +183,8 @@ the section's claim arrived at by a second route.*
 **Replicates of the two decisive cells.** The segmented lane at commanded 5 % loss reads **0.448, 0.493
 and 0.543** across three runs (2.8–3.2 % applied), and the media-aware lane under reordering reads
 **0.192 and 0.150**. So the segmented loss figure carries roughly ±10 % of spread and should be read as
-"about half rate", not as 0.45. Both reproduce well outside that spread — but only the reordering
-figure is a lane result; the loss figure reproduces a *controller*, as the note above the table says.
+"about half rate", not as 0.45. Both reproduce well outside that spread, and neither is a lane result:
+the loss figure reproduces a controller and the reordering figure a packet size.
 
 **The delay rows overstate a steady-state effect, and a longer window says by how much.** At 120 s
 rather than 40 s the segmented lane reads **0.992** at baseline and **0.932** at +200 ms, against 1.040
@@ -294,50 +294,26 @@ capture tool cleanly, so no local TSDuck file was produced.
    media-aware egress stayed bursty (~13 % PCR > 40 ms; on this pre-#2440 build also SI-stripped) and
    the opaque egress stayed IRD-shaped (0 % > 40 ms, full SI, CBR). The property that decides
    broadcast usability is set by the lane and downstream grooming, not by impairment.
-5. **Neither axis separates the two lanes, though it took two corrections to establish that.** The
-   reordering cell reads 0.981 segmented against 0.192 media-aware, and both arms were on a pinned
-   controller — but they were not carrying comparable packets. Offload was disabled on the media-aware
-   arm and not on the segmented one, which left the segmented arm on loopback's 65536-byte MTU: ~34 kB
-   packets against ~931 B ones for the same media, and `netem` reorders *per packet*. Equalise them and
-   the cell reads 0.44 segmented ([T20](test-20-segmented-http3.md)). The loss column of this sweep is
-   **not** a lane comparison either: it ran
-   the media-aware arm on BBR and the segmented arm on the system default, which is CUBIC. Completing
-   the matrix ([T8](test-8-srt-vs-moq.md)) puts segmented HTTP at 0.971 at 3 % and 1.040 at 10 % once
-   it too is given BBR, against the media-aware lane's 0.962 — indistinguishable. Under CUBIC both
-   collapse together. So the loss figures below record what a *controller* does on each lane, and the
-   inversion this experiment originally reported was half an artefact of its own asymmetry.
-6. **The mechanism is the reliability model on the reordering side, and the congestion controller on
-   the loss side.** QUIC's in-order stream delivery converts reordering into head-of-line blocking,
-   which segment fetching does not suffer; that is structural and belongs to the lane. Loss is
-   different: a loss-based controller reads a dropped packet as congestion and backs off on either
-   lane, and a delay-based one does not, on either lane. TCP's retransmit-and-reassemble is why
-   reordering costs the segmented lane nothing, but it is not why that lane loses throughput under
-   loss — CUBIC is.
-7. **Segmented HTTP loses time rather than bytes, for as long as it stays inside the availability
-   window.** Across every *loss* condition in this ladder it recorded **0 continuity discontinuities
-   and 0 PCR intervals above 40 ms**: the media that arrives carries the source's own bytes and its
-   24.4 ms PCR grid, even in the cell where it delivered 17 % of the stream. The one cell that does
-   record damage is the instrument-limited jitter row, and it records it because 0.077 of source rate
-   put the client outside the window inside the 40 s cell — the same failure the next section reaches
-   deliberately, not a different one. Within the
-   window the lane's failure is that it falls behind the live edge, not that it corrupts, and for a
-   downstream groomer that is the easier of the two problems — a bounded buffer absorbs late data and
-   cannot repair damaged data. Past the window it becomes the harder problem: the client re-anchors and
-   the buffer is asked to absorb an 82 s hole, which it cannot. The section above locates the crossing
-   and observation 9 gives the arithmetic.
+5. **Neither axis separates the two lanes once the arms are matched.** The reordering cell compared
+   ~34 kB packets with ~931 B ones, and the loss column compared CUBIC with BBR (Corrections). With
+   comparable packets the segmented lane reads 0.44 under reordering
+   ([T20](test-20-segmented-http3.md)); given BBR it reads 0.971 at 3 % and 1.040 at 10 % loss against
+   the media-aware lane's 0.962 ([T8](test-8-srt-vs-moq.md)), and under CUBIC both collapse together.
+6. **Loss acts through the congestion controller, on either lane.** A loss-based controller reads a
+   dropped packet as congestion and backs off, and a delay-based one does not. Reordering damages both
+   lanes once their packets are comparable, the media-aware lane more (0.13 against 0.44 on TCP).
+7. **Segmented HTTP loses time rather than bytes while the client stays inside the availability
+   window.** Across every loss cell it recorded **0 continuity discontinuities and 0 PCR intervals above
+   40 ms**, even where it delivered 17 % of the stream: what arrives carries the source's bytes and its
+   24.4 ms PCR grid, and a bounded downstream buffer absorbs late data. Past the window it re-anchors and
+   loses bytes silently (the section above, which locates the crossing between 7.7 % and 12.2 % applied
+   loss); the jitter row reached the same failure by a rate cap. Read every zero in the main table's
+   `http_non200` column as "not within this window", not as "does not happen".
 8. **The media-aware lane's PCR non-conformance is not an impairment effect.** It sits at 7.89–9.18 %
    of intervals above 40 ms in *every* cell including the unimpaired baseline, and does not move with
    loss, delay or reordering. That is the exporter defect isolated in [T18](test-18-delivery-latency.md)
    — the right *number* of PCRs emitted in sub-millisecond clusters with long gaps between them —
    showing up again on a third rig. Impairment neither causes it nor worsens it.
-9. **The availability window is a real edge, and this ladder is on the safe side of it by
-   construction.** `http_non200` stays at 0 up to 8 % loss across 40 s cells — but 40 s is shorter than
-   the 18 s window divided by the shortfall, so the cell ends before a segment can expire. Run for
-   120 s the same impairment reaches its first 404, and by 18.3 % applied loss the client is skipping
-   24 s of programme at a time. The boundary is established: between 7.7 % and 12.2 % applied loss on
-   this rig. Read every zero in the `http_non200` column of the main table as "not within this window",
-   not as "does not happen" — and note that past the boundary that column stops working entirely, since
-   the two worst cells took no HTTP errors at all.
 
 ## Limitations
 
@@ -409,79 +385,50 @@ Operating envelope (media-aware, ungroomed, 5 s buffer): usable with 0 CC and ma
 up to **~1 % random loss and ≥ 200 ms added latency**, with in-order jitter tolerated; **starvation**
 sets in by ~3 % loss and **reordering** is the boundary condition. The loss half of that envelope is
 a CUBIC default on either lane and is removed by BBR on either lane
-([T8](test-8-srt-vs-moq.md)); **reordering is the part that is a property of the lane**. Recorded as
-a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §3.3.
+([T8](test-8-srt-vs-moq.md)); reordering is not, and it damages both lanes once their packets are
+comparable ([T20](test-20-segmented-http3.md)). Recorded as a permanent finding in
+[`docs/evidence.md`](../docs/evidence.md) §3.3.
 
 **What would settle the part that is still open** is the same ladder against a real CDN edge rather
-than a single unoptimised origin. The availability-window question is otherwise answered: the section
-above reaches the boundary and characterises what is past it. One residual is worth an hour — the
-10 % cell fetched four consecutive segments before its first 404, which nine segments of retention
-should not have allowed, so either early fetches are much faster than the cell average or the
-packager retains more than it is asked to. Timestamping each GET rather than counting them would
-say which.
+than a single unoptimised origin. The one residual, the 10 % cell's four consecutive fetches before its
+first 404, would be settled by timestamping each GET.
 
 ## Corrections
 
-**Believed:** with the shaper, host, fixture and window held identical, the remaining difference
-between the two arms is the data plane. **True:** the arms did not share a congestion controller. The
-media-aware arm was pinned to BBR *deliberately* — on T8's finding that the controller decides a loss
-result outright — and the segmented arm was left on the system default, which is CUBIC. The one
-variable known to dominate the loss axis was therefore the one variable not controlled, and the
-"disjoint weaknesses" conclusion inherited it: at a matched controller the loss ladder does not
-separate the lanes at all ([T8](test-8-srt-vs-moq.md)). **Rule:** pinning a setting on one arm is
-half a control; the pin has to be applied to every arm, including the arms where the equivalent knob
-has a different name and lives in a different layer. A default is a choice that does not appear in
-the command line, and an experiment that records only what it typed will not notice it.
+Each rule below is in [method-notes.md](method-notes.md) (§1, §2, §3, §5, §6).
 
-**Believed:** a `netem` percentage is the loss the flow experiences, so two arms given the same command
-are comparable. **True:** the drop decision lands on whatever buffer the qdisc is handed, which under
-segmentation offload is a super-packet the stack splits afterwards — and TCP and QUIC offload
-differently, so one `loss 10%` command delivered 7.8 % to the segmented lane and 2.5 % to the
-media-aware one. The first pass of the head-to-head therefore "showed" the media-aware lane shrugging
-off loss that it had largely not received. **Rule:** disable the kernel offloads *and* the
-application's own (quinn coalesces its own datagrams), then label every row with the fraction the
-shaper counted rather than the fraction it was commanded.
+**Believed:** with shaper, host, fixture and window identical, the remaining difference was the data
+plane. **True:** the media-aware arm was pinned to BBR and the segmented arm left on the system's CUBIC,
+and at a matched controller the loss ladder does not separate the lanes ([T8](test-8-srt-vs-moq.md)).
+**Rule:** pin a decisive setting on every arm, under each arm's own name for it.
+
+**Believed:** a `netem` percentage is the loss the flow experiences. **True:** under segmentation
+offload the drop lands on a super-packet, so one `loss 10%` delivered 7.8 % to the segmented lane and
+2.5 % to the media-aware one. **Rule:** disable kernel and application offloads, and label each row with
+the loss the shaper counted.
 
 **Believed:** with offload disabled on the media-aware arm, the reordering cell compared two lanes.
-**True:** it compared two packet sizes. The offload fix above was applied where the problem had been
-found — the media-aware arm, where quinn's own coalescing was also in play — and the segmented arm was
-left on loopback's default 65536-byte MTU. For the same 45 s of media the shaper therefore saw 1,209
-packets averaging 34,380 B on one arm and 29,062 averaging 931 B on the other, and `netem`'s
-`reorder 25 %` is a *per-packet* decision: the segmented arm was given ~24× fewer chances to be
-damaged, and each event displaced 37× more media. Normalise MTU and offloads on both arms and the
-segmented lane drops to 0.44 while the media-aware lane is unchanged at 0.13; restore this cell's
-asymmetry and its numbers return exactly ([T20](test-20-segmented-http3.md)). **Rule:** an impairment
-specified per packet is a claim about packets, so report the packet count and mean size each arm
-actually presented to the shaper beside the delivered ratio. Equal commands are not equal conditions.
+**True:** it compared 1,209 packets averaging 34,380 B with 29,062 averaging 931 B for the same media,
+and `reorder 25 %` decides per packet; normalised, the segmented lane drops to 0.44 and the media-aware
+lane stays at 0.13 ([T20](test-20-segmented-http3.md)). **Rule:** report each arm's packet count and
+mean size beside a per-packet impairment.
 
-**Believed:** a safety watchdog that removes shaping after 30 minutes is free insurance. **True:** it
-outlives its own cell and fires into a later one, deleting that cell's qdisc partway through; the cell
-then completes and reports a plausible, clean result for a condition it never experienced. This is
-invisible in the delivered numbers — it was caught only because the shaper's counters came back empty
-against a root qdisc that was no longer there. **Rule:** cancel the watchdog at teardown, and fail any
-cell whose shaper is missing at the end rather than reporting it.
+**Believed:** a 30-minute safety watchdog is free insurance. **True:** it fired into a later cell and
+deleted its qdisc, and that cell reported a clean result for a condition it never had. **Rule:** cancel
+the watchdog at teardown, and fail a cell whose shaper is missing.
 
-**Believed:** `netem slot MIN MAX` emulates in-order jitter, per the note carried from T8. **True:**
-bare `slot` releases one packet per slot, which at 30–90 ms is a ~200 kb/s rate cap; the segmented lane
-read 0.077 of source rate and the cell was nearly written up as a collapse under jitter that was
-entirely the instrument. Setting `packets`/`bytes` allowances did not fully free the TCP arm either, so
-the jitter cell is reported as unresolved rather than as a number.
+**Believed:** `netem slot MIN MAX` emulates in-order jitter. **True:** bare `slot` is a ~200 kb/s rate
+cap, and allowances did not free the TCP arm, so the jitter cell is unresolved.
 
-**Believed:** the segmented arm recorded 0 continuity errors in every cell because nothing was lost.
-**True:** the counter could not have reported anything else. The arm script grepped `tsp -P continuity`
-output for the word `discontinuity`, which that plugin never prints — it prints `missing N packets` —
-so the column was structurally zero and would have read zero against a deliberately corrupted file.
-Re-graded, the cells that were genuinely clean are still clean, so the conclusion survives; it just was
-not evidence before. **Rule:** a check that has only ever returned "clean" has not been shown to work.
-Feed it something broken before publishing the zeros. The same defect was in five other scripts and is
-recorded once in [method-notes.md](method-notes.md).
+**Believed:** the segmented arm's zero continuity errors meant nothing was lost. **True:** the script
+grepped for a word `tsp -P continuity` never prints, so the column could not read otherwise; re-graded,
+the clean cells stayed clean. **Rule:** a check that has only ever returned "clean" has not been shown
+to work.
 
-**Believed:** `http_non200 = 0` across the ladder showed the segmented lane never falls out of its
-availability window. **True:** it showed the cell was shorter than the window. Nine retained segments
-is 18 s of grace, and a client delivering a fraction *f* of source rate needs 18/(1−*f*) seconds to
-consume it — longer than the 40 s cell at every loss level the ladder ran. The column was measuring the
-experiment's own duration. **Rule:** before reporting that a bounded resource was never exhausted,
-compute how long exhausting it would take and check the window is longer than that.
+**Believed:** `http_non200 = 0` showed the client never leaves its availability window. **True:** a
+client at fraction *f* of source rate needs 18/(1−*f*) s to exhaust nine 2 s segments, longer than every
+40 s cell. **Rule:** before reporting a bounded resource never exhausted, compute how long exhausting it
+takes.
 
 ## References
 

@@ -1115,66 +1115,32 @@ Segmented lane, same clip and host:
 > method rules each correction yields live once, in [method-notes.md](method-notes.md), and are
 > cross-referenced rather than restated.
 
-**The segmented arm's continuity column could not match.** It counted lines of `tsp -P continuity`
-output containing the word "discontinuity", which the plugin prints only in its `--help`; the
-per-event line reads `missing 14 packets`. Every `cc_disc` this rig reported was a structural zero,
-so the claim built on it — that the counter "sees nothing" during the two-packager oscillation — came
-from an instrument that could not have seen anything on any input. Re-graded from the same captures,
-the dual-source cells post 95–96 events and the shared-name hard-kill cells still post 0: the
-*hitless* result stands and was accidentally right, the *blind counter* claim was wrong. The
-underlying argument survives in better shape, because CC does fire and what it reports — a few
-hundred missing packets — describes neither the magnitude nor the nature of a timeline that jumped
-backwards five times. The same defect was present in six rigs
-([method-notes](method-notes.md) § *Controls*).
+**Believed:** the continuity counter "sees nothing" during the two-packager oscillation. **True:** the
+rig grepped for a word `tsp -P continuity` prints only in `--help`; re-graded, the dual-source cells
+post 95–96 events and the shared-name hard-kill cells still 0, so the *hitless* result stands and the
+*blind counter* claim does not. A few hundred missing packets still describe neither the size nor the
+nature of a timeline that jumped backwards five times (method-notes §2).
 
-**Retracted — "the standby route never reaches the relay serving the active source".** Announce
-interest is unconditional across the cluster, so this was an artefact: the drill killed the publisher
-at t = 22 and graded at t = 43, **21 s into a 30 s idle timeout**, which no build could have passed.
-The baseline "no failover on `moq-lite-05`" conclusion stands regardless, corroborated by an extended
-window control that stayed frozen for a full 68 s.
+**Retracted: "the standby route never reaches the relay serving the active source".** The drill graded
+21 s into a 30 s idle timeout, which no build could pass; the baseline "no failover on `moq-lite-05`"
+stands, on a control frozen for 68 s (method-notes §1).
 
-**Retracted — the "8–9 s stall at the standby join".** The symptom reproduces, but it is not a
-routing defect. Two publishers replaying *independent copies of the same clip from its start* leave
-the standby's media timeline lagging the active one by exactly the join delay, so on splice the
-exporter is handed timestamps in the past and emits nothing until the new source overtakes. The stall
-tracks the join delay with slope 1 — under 2 s at a t = 4 join, 9 s at t = 10, 18 s at t = 20 — while
-the relay's own switch is immediate, relay B logging `subscribe started` for all three tracks in the
-millisecond the standby connects.
+**Retracted: the "8–9 s stall at the standby join" as a routing defect.** Two publishers replaying
+independent copies of the clip from its start leave the standby lagging by the join delay, and the
+stall tracks it with slope 1 while the relay switches in the millisecond the standby connects.
 
-**Re-walked — the segmented arm's first active/active drill measured its own start skew**, breaking
-the rule the paragraph above had just produced. Each packager got its own `tsp -I file` read of the
-clip, started twelve seconds apart, so the pair sat twenty seconds apart in the media timeline and
-the ±20 s oscillation is a property of the rig rather than of segmented HTTP. It is kept in the
-results above because the naive configuration is a real deployment mistake with a genuinely
-interesting signature — silent, CC-clean corruption — but **"does an active/active segmented pair
-fail over" is answered only by the `gtee` common-source variant**
-([method-notes](method-notes.md): *"same file" is not "same stream"*).
+**Re-walked: the segmented arm's first active/active drill measured its own 20 s start skew.** It is
+kept in the results as a real deployment mistake with a CC-clean signature, but whether a segmented
+pair fails over is answered only by the `gtee` common-source variant (method-notes §5: *"same file" is
+not "same stream"*).
 
-**Rig — a previous cell's origin answered on the port and served the wrong directory.** One hard-kill
-cell reported a clean hitless result it had not earned: its own origin failed to bind with `Address
-already in use`, and the client spent the drill talking to the previous cell's server over the
-previous cell's document root, where nothing was being killed. Every delivered number was plausible —
-good rate ratio, no continuity errors, no rewinds — and only the traceback in the origin's log gave
-it away ([method-notes](method-notes.md): prove identity, not liveness).
+**Rig:** one hard-kill cell's origin failed to bind and the client was served by the previous cell's
+origin, posting a plausible hitless result; and the rewind metric differenced an unsigned column, which
+wrapped on the event it exists for (6.8 × 10¹¹ s; the PCR value column gives 12–24 s). Both rules are in
+method-notes §2 and §5.
 
-**Rig — the rewind metric was reading an unsigned column.** Differencing `pcrextract`'s "Value offset
-in PID" wrapped on the one event the metric exists to catch, reporting a 6.8 × 10¹¹ second rewind;
-differencing the PCR value column gives the physically sensible 12–24 s. Intervals used elsewhere are
-unaffected, because for a monotonic clock the two columns difference identically — which is why the
-bug survived until a stream ran backwards ([method-notes](method-notes.md)).
-
-**Two of the four issues reported upstream from this work were real defects**, and both are fixed
-in the case they were reported on: the shared-`--origin` `Unroutable` teardown in the mesh, where a
-standby wins dispatch the moment it attaches — before a real publisher has lazily created every
-track — and a per-track refusal was charged as a strike against the whole logical track, now scoped
-per track with fallback to the incumbent (on `ffa5b81b` the same race is open again, on one relay and
-in the mesh, surfacing as `not found`: § *Single-relay standby*, § *Mesh source
-failover*); and the
-exporter's fatal `json: dropped` on session loss, fixed by #2469. The drill found the first because a
-model-level standby accepts a track request immediately where a real publisher does not. The
-contribution record, including the declined failover drill
-([#2545](https://github.com/moq-dev/moq/pull/2545)) and the insight
-[#2713](https://github.com/moq-dev/moq/pull/2713) carried into the model tests instead, is in
+**Two of the four issues reported upstream from this work were real defects**, the shared-`--origin`
+`Unroutable` teardown and the exporter's fatal `json: dropped` (#2469); the record is in
 [upstream-contributions.md](upstream-contributions.md) §3.
 
 ## Observations
@@ -1269,7 +1235,7 @@ decided entirely by whether the pair shares a source and a naming scheme.
 
 ## References
 
-- Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §8.4–§6; [`docs/architecture.md`](../docs/architecture.md) §5 (ST 2022-7 §5.1); [`docs/architecture.md`](../docs/architecture.md) §8.4.
+- Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §5 (ST 2022-7 in §5.1) and §8.4.
 - Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. Cluster/detach/resume rewrite: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
 - Segmented arm: [`lab/scripts/t6-segmented-arm.sh`](scripts/t6-segmented-arm.sh) (drills),
   [`lab/scripts/t6-segmented-sweep.sh`](scripts/t6-segmented-sweep.sh) (the set),
