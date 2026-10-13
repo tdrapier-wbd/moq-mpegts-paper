@@ -7,10 +7,14 @@ elementary-stream PID it lists, what the output lacks inside the span the output
 
 - **PES PIDs** (video, audio, teletext) are keyed by DTS, or PTS where there is none, which the
   export carries through to within the microsecond timestamps' rounding (`--tolerance`, in 90 kHz
-  ticks). The export writes one audio frame per PES where the source may pack several, so a source
-  whose PES are spaced at least twice the output's is counted as frames at the output's spacing up
-  to each next PES. A unit is missing if the source has it between the output's first and last
-  decode time on that PID and the output does not. *Start* is how far the PID's first unit trails
+  ticks). Either side may pack several audio frames to a PES, and differently, so an MP2 or AC-3
+  PID is counted as frames on both, at the duration their headers give, the output's first. A PES
+  flagged `data_alignment_indicator` that opens with a frame carries the frames that start in it,
+  walked by their lengths, so a lost PES or packet loses its frames. Any other PES carries its PTS
+  and the frames after it up to the next PES. Another PID whose source PES are spaced at least
+  twice the output's is counted as frames at the output's spacing. A unit is missing if the
+  source has it between the output's first and last decode time on that PID and the output does
+  not. *Start* is how far the PID's first unit trails
   the video's first, in decode time: what a join costs that track beyond the video's group. Units
   lost in the last `--tail` before the video's last are counted apart, as *tail*: a rig that stops
   its source before the capture ends loses a few there, which is teardown and not carriage.
@@ -35,11 +39,19 @@ short by more than `--edge` (default 2).
 
 import argparse
 import bisect
+import importlib.util
+import os
 import sys
 from collections import Counter
 
 TS = 188
 WRAP = 1 << 33
+
+_spec = importlib.util.spec_from_file_location(
+    "ts_audio_pes", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ts-audio-pes.py")
+)
+tap = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(tap)
 
 
 def packets(path):
@@ -93,14 +105,50 @@ class Unwrap:
         return self.last
 
 
-def scan(path, es=None):
-    """(es {pid: stream_type}, pcr pid, {pid: [pts]}, {pid: [(stc, section)]}, (first stc, last stc)).
+def codec(stream_type, info):
+    """The audio frame parser's codec for a PMT entry, if it is MP2 or AC-3 (ATSC, or DVB's
+    AC-3 descriptor)."""
+    tags, i = set(), 0
+    while i + 2 <= len(info):
+        tags.add(info[i])
+        i += 2 + info[i + 1]
+    if stream_type in (0x03, 0x04):
+        return "mp2"
+    if stream_type == 0x81 or (stream_type == 0x06 and 0x6A in tags):
+        return "ac3"
+    return None
 
-    `es` is the PID set to read; None takes it from the file's own first PMT. The PCR PID is the
-    file's own either way."""
+
+def frame_count(codec, es):
+    """How many sync frames start in `es`, walked by their lengths from its first byte, or None if
+    no frame opens it."""
+    parse = tap.taf.mp2_frame_len if codec == "mp2" else tap.taf.ac3_frame_len
+    pos = n = 0
+    while length := parse(es[pos : pos + 8]):
+        n += 1
+        pos += length
+    return n or None
+
+
+def scan(path, es=None):
+    """(es {pid: stream_type}, pcr pid, {pid: [pts]}, {pid: [(stc, section)]}, (first stc, last stc),
+    {pid: [frames]}, {pid: frame ticks}).
+
+    `es` is the PID set to read; None takes it from the file's own first PMT. The PCR PID and the
+    audio codecs are the file's own either way. Beside each PES's timestamp, the frames an MP2 or
+    AC-3 PES carries if it opens with one, else None."""
     pmt_pid = pcr_pid = None
-    found = {}
+    found, codecs, ticks = {}, {}, {}
     units, sections = {}, {}
+    # The elementary stream so far of each audio PID's PES that opens with a frame.
+    open_es, counts = {}, {}
+
+    def close(pid):
+        es = open_es.pop(pid, None)
+        if es is not None and (n := frame_count(codecs[pid], es)):
+            counts[pid][-1] = n
+            ticks.setdefault(pid, tap.frame_ticks(codecs[pid], es, {"es_offset": 0}))
+
     stc = None
     span = [None, None]
     clocks = {}
@@ -120,8 +168,12 @@ def scan(path, es=None):
             pcr_pid = ((s[8] & 0x1F) << 8) | s[9]
             k = 12 + (((s[10] & 0x0F) << 8) | s[11])
             while k + 5 <= len(s) - 4:
-                found[((s[k + 1] & 0x1F) << 8) | s[k + 2]] = s[k]
-                k += 5 + (((s[k + 3] & 0x0F) << 8) | s[k + 4])
+                es_pid = ((s[k + 1] & 0x1F) << 8) | s[k + 2]
+                info = ((s[k + 3] & 0x0F) << 8) | s[k + 4]
+                found[es_pid] = s[k]
+                if kind := codec(s[k], s[k + 5 : k + 5 + info]):
+                    codecs[es_pid] = kind
+                k += 5 + info
             continue
         if pid == pcr_pid:
             v = pcr(p)
@@ -135,19 +187,30 @@ def scan(path, es=None):
                 continue
             last[pid] = key
         want = es if es is not None else found
-        if pid not in want or not pusi:
+        if pid not in want:
+            continue
+        if not pusi:
+            if pid in open_es:
+                open_es[pid] += payload(p)
             continue
         data = payload(p)
         if data[:3] == b"\x00\x00\x01":
+            close(pid)
             if len(data) >= 14 and data[7] & 0x80:
                 # DTS where there is one, so the span is in decode order: with B-frames the last
                 # picture sent is not the last presented, and a capture cut there is no loss.
                 b = data[14:19] if data[7] & 0x40 and len(data) >= 19 else data[9:14]
                 ts = ((b[0] >> 1) & 7) << 30 | b[1] << 22 | (b[2] >> 1) << 15 | b[3] << 7 | b[4] >> 1
                 units.setdefault(pid, []).append(clocks.setdefault(pid, Unwrap())(ts))
+                counts.setdefault(pid, []).append(None)
+                # data_alignment_indicator: the payload opens with a frame.
+                if pid in codecs and data[6] & 0x04:
+                    open_es[pid] = bytearray(data[9 + data[8] :])
         elif stc is not None:
             sections.setdefault(pid, []).append((stc, section(data)))
-    return found, pcr_pid, units, sections, span
+    for pid in list(open_es):
+        close(pid)
+    return found, pcr_pid, units, sections, span, counts, ticks
 
 
 def frames(pes, spacing):
@@ -159,6 +222,20 @@ def frames(pes, spacing):
         while nxt is not None and spacing and t + k * spacing < nxt - spacing // 2:
             out.append(t + k * spacing)
             k += 1
+    return out
+
+
+def counted(pes, counts, tick):
+    """The frames of PES with PTS `pes`, `tick` apart: as many as each was counted to carry, or
+    else up to the next PES."""
+    pairs = sorted(zip(pes, counts), key=lambda pair: pair[0])
+    out = []
+    for (t, n), (nxt, _) in zip(pairs, pairs[1:] + [(None, None)]):
+        if n is None:
+            n = 1
+            while nxt is not None and t + n * tick < nxt - tick // 2:
+                n += 1
+        out.extend(t + k * tick for k in range(n))
     return out
 
 
@@ -186,10 +263,10 @@ def main():
     ap.add_argument("--tail", type=float, default=1000.0, help="ms before the video's last unit counted apart")
     a = ap.parse_args()
 
-    es, video, src_units, src_sections, _ = scan(a.source)
+    es, video, src_units, src_sections, _, src_counts, src_ticks = scan(a.source)
     if not es:
         sys.exit("no PMT in the source")
-    _, _, out_units, out_sections, out_span = scan(a.output, es=set(es))
+    _, _, out_units, out_sections, out_span, out_counts, out_ticks = scan(a.output, es=set(es))
     fail = []
     first_video = min(out_units[video]) if out_units.get(video) else None
     last_video = max(out_units[video]) if out_units.get(video) else None
@@ -207,10 +284,13 @@ def main():
             have = sorted(got)
             source = sorted(set(src_units.get(pid, [])))
             spacing = mode_gap(have)
+            if tick := out_ticks.get(pid) or src_ticks.get(pid):
+                have = sorted(counted(got, out_counts.get(pid, []), tick))
+                source = sorted(set(counted(src_units.get(pid, []), src_counts.get(pid, []), tick)))
             # Expand only a source that packs several frames per PES, judged on the least gap: a
             # video PID mixing frame and field pictures has gaps of both sizes on both sides, in
             # proportions that vary along the clip.
-            if spacing and least_gap(source) >= 2 * spacing:
+            elif spacing and least_gap(source) >= 2 * spacing:
                 source = frames(source, spacing)
             lo, hi = have[0] - a.tolerance, have[-1] + a.tolerance
             want = [t for t in source if lo <= t <= hi]
@@ -219,7 +299,7 @@ def main():
             foreign = sum(1 for t in have if not near(source, t, a.tolerance))
             start = (have[0] - first_video) / 90.0 if first_video is not None else float("nan")
             print(
-                f"{pid:>5}  {kind:>4}  {len(got):>9,}  {len(want):>8,}  {len(missing):>7,}  "
+                f"{pid:>5}  {kind:>4}  {len(have):>9,}  {len(want):>8,}  {len(missing):>7,}  "
                 f"{len(lost) - len(missing):>4,}  {foreign:>7,}  {start:+9.1f}"
             )
             if missing:

@@ -1992,7 +1992,7 @@ sets rather than the content. The P0 frame counts were not repeated on the merge
 
 **Open.** Loopback SRT loss rate unexplained (to 6 % at 10 Mb/s); libsrt-to-libsrt comparison not yet usable.
 
-### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest planned
+### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest in draft [#5414](https://github.com/moq-dev/moq/pull/5414)
 
 **Report.** [T45](test-45-live-tstd-remux.md)'s live-feed arm: a hardware encoder's 25 Mb/s CBR
 multiplex with no nulls, conformant as a source, stops `main`'s export within 10 s on AC-3 whose
@@ -2005,14 +2005,12 @@ audio frames share a PES.
 **Contributed.** #5363 carries an unfinished AC-3 frame into the next PES, drops fragments at a
 join or a lost PES, and adds two tests that fail on `main`. Before: 3 PES where 6 frames were
 split; the live capture stops at 8–10 s. After: on the same capture, all 926 AC-3 frames written
-before the video limit stopped it at 39 s are the source's, in order, PTS exact.
+before the video limit stopped it at 39 s are the source's, in order, PTS exact. #5414 builds both
+quests and counts audio PES headers in B (2.4.2.3), which #5306 left out. On the capture,
+`b581c27ed` stops at 31 s; #5414 runs 280 s at the source's 25 Mb/s and passes T45's criteria.
 
-**State.** #5363 merged on 2026-10-13, reworked by the maintainer to split frames before the jitter
-buffer; on `main` at `b581c27ed` the same capture gives the same 926 AC-3 frames, all the source's,
-before the video stops it. #5362 is closed into two unclaimed quests, both answers yes: the cap's slack was not a
-deliberate margin (`tstd/video-leak`: the lesser of Rx in packets and Rbx in payload, fractions
-carried between slots), and the PCR may ride in the PCR PID's adaptation field with several audio
-frames per PES up to B, for every audio codec (`tstd/mux-overhead`).
+**State.** #5363 merged on 2026-10-13, reworked by the maintainer. #5362 closed into two quests,
+the maintainer answering both questions yes. #5414 is a draft stacked on #5306, posted 2026-10-13.
 
 ---
 

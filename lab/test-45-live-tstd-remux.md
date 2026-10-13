@@ -5,9 +5,9 @@ and 5, put to upstream's merged export: across hosts two exports are byte-identi
 over 2,100 s the export stays conformant across three source joins while its clock follows a source
 25 ppm fast at its slew limit, reaching +4.6 ppm; behind a source 4 ppm fast it settles after about
 100 min. PCR_FO passes; PCR_DR fails, on the output's own 1 ms departure steps. On the live feed,
-a conformant source that fills its 25 Mb/s multiplex, current `main` stops within 10 s on audio
-whose PES begin mid-frame; with that and its video admission fixed in a scratch build it passes at
-26 Mb/s, but not at the source's own rate** (§ *Questions 4 and 5, put to the merged export*).
+a conformant source that fills its 25 Mb/s multiplex, `main` stops 31 s in on the video; with
+#5362's two quests `[unmerged]`, the export passes at the source's own rate** (§ *Questions 4 and
+5, put to the merged export*).
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
   a subscriber has — each PID's packets in order, when each arrived, and the timestamps they carry —
@@ -131,7 +131,16 @@ capture, every unit of every track):
   `data_alignment_indicator` starts on a frame sync; the output's frames are the source's, byte for
   byte and in order, none missing or repeated between its first and last frame except in the last
   second; and each PES's PTS advances on the last by the duration of the frames between them, no
-  two equal. A failure is reported per PID with its first instance.
+  two equal. A failure is reported per PID with its first instance. Fixed on 2026-10-13, before
+  the runs of #5362's two quests, each stacked on #5306: `main` at `b581c27ed` stops 31 s in on
+  *missed a decode deadline on PID 111* at the source's 25 Mb/s. With `tstd/video-leak` alone, the
+  export runs the whole 280 s at 26 Mb/s and passes as above; at 25 Mb/s it is reported only. With
+  `tstd/mux-overhead` added, it passes as above at the source's own 25 Mb/s. Criterion 4's
+  `ts-pid-complete.py` counted the output's audio a frame a PES, which `tstd/mux-overhead` packs.
+  Its first graded run reported 1,534 MP2 and 785 AC-3 PES missing, though P1-u found every frame
+  present. The script was changed after that run to count MP2 and AC-3 as frames on both sides.
+  On outputs a frame a PES its report is unchanged, and on a 150 MB cut of that output with 84
+  audio packets dropped it reports 30 frames missing.
 
 ## Instruments
 
@@ -519,32 +528,35 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   spread over every position it can drain in. Eight AC-3 units stay in B up to 1.05 s. The
   recording has 1,398 continuity gaps of its own across every PID, so its completeness grade (a
   third of the video and a tenth of each audio missing) measures the recording, not the export.
-- **The live feed (P0-l, P1-u): current `main` stops on it; fixed, it passes only above the
-  source's rate.** The capture passes as a source: T33's gate, and `ts-tstd.py` with every 2 s
-  window legal (video EB peak 2.99 of 3.75 MB, margin ≥ 510 ms; audio margins ≥ 5.8 ms). Its SPS
-  has no HRD, so the video's buffers are level 4.0's: Rx 36 Mb/s, and Rbx 24 Mb/s on payload. On
-  loopback, `90500867d` exits 8–10 s in on *missed a decode deadline on PID 123*, the AC-3, at 1 s,
-  at 2 s and with the multiplex raised to 26 Mb/s. Its AC-3 split parses sync frames from each
-  PES's first byte; this feed's PES (6,978–7,162 B, about 9.3 frames of 192 kb/s) begin mid-frame,
-  the parse fails, and the whole PES goes out as one unit larger than the receiver's 5,696-byte
-  buffer, which admission never completes. Two scratch changes, in turn:
-  - *The partial frame carried into the next PES*, the PES's PTS timing the first frame beginning
-    in it: every AC-3 frame goes out, a frame a PES. The export then stops after 38 s on the video,
-    2.4 % of its output nulls. It admits video at Rbx counted in whole packets, less a packet a slot
-    of slack and the clock packet: 396 packets a 25 ms slot, about 2.9 % below the leak in payload,
-    while this encoder fills the leak (407.6 packets a slot on average).
-  - *Video admitted at Rbx in payload bytes*, without the slack: it stops after 148 s at 1 s and
-    193 s at 2 s, on the video, whose bytes are the source's. At 26 Mb/s and 1 s it runs the capture
-    and passes criteria 1–4 (136 of 136 windows; video margin ≥ 617 ms, EB peak 3.14 MB; every PCR
-    within ±481 ns, largest interval 25.0 ms; every unit of every track) and P1-u: all 11,474 MP2
-    and 8,601 AC-3 frames are the source's, in order, a frame a PES, flagged aligned, each PTS one
-    frame on from the last.
+- **The live feed (P0-l, P1-u): `main` stops on it; with #5362's two quests `[unmerged]` it
+  passes at the source's own rate.** The capture passes as a source: T33's gate, and `ts-tstd.py`
+  with every 2 s window legal (video EB peak 2.99 of 3.75 MB, margin ≥ 510 ms; audio margins ≥
+  5.8 ms). Its SPS has no HRD, so the video's buffers are level 4.0's: Rx 36 Mb/s, and Rbx 24 Mb/s
+  on payload. On loopback at 1 s:
+  - *`main`.* `90500867d` exits 8–10 s in on *missed a decode deadline on PID 123*, the AC-3, whose
+    PES (6,978–7,162 B, about 9.3 frames of 192 kb/s) begin mid-frame, so the whole PES went out as
+    one unit larger than the receiver's 5,696-byte buffer. With that fixed by #5363, `b581c27ed`
+    stops 31 s in on the video. It admits video at Rbx counted in whole packets, less a packet a
+    slot of slack and the clock packet: 396 packets a 25 ms slot, about 2.9 % below the leak in
+    payload, while this encoder fills the leak (407.6 packets a slot on average).
+  - *`tstd/video-leak`* (`02a47615b`, on #5306). At 26 Mb/s it runs the 280 s and passes criteria
+    1–4 (136 of 136 windows; video margin ≥ 652 ms; every PCR within ±481 ns, largest interval
+    25.0 ms; every unit of every track) and P1-u, a frame a PES. At 25 Mb/s it stops 185 s in on
+    the video (derived from the output's size): a frame a PES for each audio and a clock packet a
+    slot outspend the source.
+  - *`tstd/mux-overhead` added* (`4c3fae660`). At the source's 25 Mb/s it runs the 280 s and passes
+    criteria 1–4: 136 of 136 windows, with a video margin ≥ 649 ms and an EB peak of 3.15 of
+    3.75 MB, and MP2 and AC-3 B peaks of 3,566 of 3,584 B and 5,680 of 5,696 B. All 11,098 PCRs
+    are within ±481 ns, the largest interval is 25.0 ms, and every unit of every track is present,
+    audio counted as frames. It passes P1-u too: all 11,473 MP2 and 8,600 AC-3 frames are the
+    source's, in order, six and seven a PES, flagged aligned, each PTS exact. No unit is dropped
+    late.
 
-  That output's non-null packets average 25.017 Mb/s. Against the source it spends about 35
-  packets a second more on MP2 and 24 on AC-3 (a frame a PES, against about twelve and nine), 40
-  on clock packets (the source carries PCR in video packets), and 25 fewer on tables. A source that
-  fills its multiplex cannot be re-multiplexed at its own rate this way; a longer delay only
-  postpones the stop (derived from the average).
+  That output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
+  share of the source it carries, it spends 1.0 % more packets than the source on MP2 and 2.5 %
+  more on AC-3, whose B holds seven frames and the PES header where the source packs about 9.3.
+  It sends 62 clock packets in all, and 2.4 packets a second each of PAT and PMT against the
+  source's 14.9.
 
 ## Conclusions
 
