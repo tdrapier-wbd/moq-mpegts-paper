@@ -432,12 +432,12 @@ A capture with a PCR discontinuity is cut after it first, for example with
 - **The approximate `tstd` flag on the media-aware lane was attributed to the source content.**
   [T2](test-2-media-aware-transparency.md) read the harness's fixed-leak flag as "a property of the
   input content". Calibrated, the source passes every buffer on its own PCR. The
-  overflows belong to the lane's packet order. Rule ([method notes](method-notes.md#a-p1p2-pass-is-not-a-conformant-transport-stream)):
+  overflows belong to the lane's packet order. Rule ([method notes](method-notes.md#6-claims-and-their-scope)):
   a buffer-model flag is attributed only with a calibrated model, the source graded as the control,
   and a transparent transport through the same groomer.
 - **The SRT control was reported as passing every buffer.** It passes every transport buffer and
   every decoder buffer in every 2 s window. Over the whole capture, the arrival-clocked groomer's PCR
   fails its decoder buffers at every offset, as it fails the lane's. The overstatement had reached
-  the paper, where it has been corrected. Rule ([method notes](method-notes.md#a-transparent-control-through-an-arrival-clocked-groomer-attributes-the-transport-buffers-not-the-decoder-buffers)):
+  the paper, where it has been corrected. Rule ([method notes](method-notes.md#1-controls)):
   an arrival-clocked control attributes the transport buffers only. A whole-capture decoder grade
   needs a stream-clocked control.

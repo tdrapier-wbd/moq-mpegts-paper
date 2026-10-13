@@ -270,7 +270,7 @@ the exporter and the groomed egress, all of it into one `results.csv`.
 passes and the subjects proceed. Run with a deliberately damaged clip as the control, the harness
 aborts before any subject starts — one row in `results.csv`, the failed control, and a non-zero exit.
 A gate that has only ever returned "clean" has not been shown to work
-([method-notes](method-notes.md) §1).
+([method-notes](method-notes.md) §2).
 
 **The rehearsal found a defect in the harness, which is what a rehearsal is for.** The first pass
 scored the `discontinuity` subject FAIL at the exporter on a PCR interval past the 40 ms repetition

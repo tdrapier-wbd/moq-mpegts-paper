@@ -207,4 +207,4 @@ generator, group 25 frame 2 with the corrected one.
 
 **Method rule:** *before a looped soak, scan every timestamp-bearing PID across the joins*
 ([`ts-join-scan.py`](scripts/ts-join-scan.py);
-[method notes](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)).
+[method notes](method-notes.md#1-controls)).

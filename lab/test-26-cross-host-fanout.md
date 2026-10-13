@@ -221,7 +221,7 @@ regression test, and it is the strongest evidence available here that #3515 hold
 **The source generator's one join per arm moves no result.** These runs used the continuous
 generator before its correction, which stepped AC-3 and teletext timestamps back one clip length at
 each join
-([method notes](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)). No
+([method notes](method-notes.md#1-controls)). No
 metric here reads PES timestamps. Each run outlasted the 600 s clip once, and the join falls about
 596 s after the publisher starts. Placed on each arm's schedule:
 

@@ -1928,11 +1928,11 @@ planned TS export restart (quest `broadcast-epoch/export-ts`, from
 `--stitch` asks for a fresh export with a full program switch; `Export::resume()` goes. Identity
 across a republish is left to the passthrough export, unmerged. E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
-([method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
+([method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
 
 **Content join on the `dev` line** (`9a80e875`): [T40](test-40-continuous-join-through-srt.md) clip
 100 s, generator rebasing every PES ([method
-note](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)): full rate
+note](method-notes.md#1-controls)): full rate
 both paths (123.6–123.7 MB vs 123.9 MB `main` pipe); MP2 loses sync twice per join then recovers.
 With the uncorrected generator the `dev` line ends at the first join (AC-3/teletext stepped back ~30
 s); `main` re-anchored survived.
@@ -1962,7 +1962,7 @@ packet; `transport_error_indicator` drops are already correct.
 SRT parse storms traced to **`srt-live-transmit` zero-padding short reads**
 ([srt#3388](https://github.com/Haivision/srt/issues/3388)/[#3389](https://github.com/Haivision/srt/pull/3389),
 merged unreleased —
-[method-notes](method-notes.md#srt-live-transmit-fed-from-a-pipe-pads-every-short-read-with-zeros)).
+[method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
 Pipe arms isolate the importer defect.
 
 **The fix, measured on #4733 PR head `aae930a23`** (before the last review fixes on merged

@@ -1112,7 +1112,7 @@ consumer's skip budget and so turns into skipped content. **True:** a hold on it
 track one wait. The collapse needs `rewind()` to renew the hold at every source skip. A reading of
 the diff never reached that, because the renewal sits in another function, reached only through the
 consumer's discontinuity counter. **Rule:** see
-[method notes § a mechanism read from a diff names the component, not the loop](method-notes.md#a-mechanism-read-from-a-diff-names-the-component-not-the-loop).
+[method notes § a mechanism read from a diff names the component, not the loop](method-notes.md#4-attribution-naming-a-mechanism-from-the-evidence).
 
 **Believed** (C7): a build delivering at least 90 % of its 0 % egress rate at 10 % loss delivers the
 programme. **True:** the export pads to the mux rate, and graded on content `84b34f54`'s 7.21 Mb/s at

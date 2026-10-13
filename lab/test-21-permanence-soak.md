@@ -372,7 +372,7 @@ and teletext (private stream 1) stepped back one pass span, 600 s, at every join
 other PID stayed continuous. `d518b61b` re-anchors each stream on its own and carried both. None of this soak's metrics reads those two PIDs' timestamps. It does, however, mean the source
 was not "what a continuous encoder emits" on every PID. The script has since been corrected, and
 [`ts-join-scan.py`](scripts/ts-join-scan.py) now checks each PID's timestamps across the joins
-([method notes](method-notes.md#a-looped-source-is-continuous-only-if-every-pids-timestamps-are)).
+([method notes](method-notes.md#1-controls)).
 
 The join is a hard content cut at an IDR, which is an ordinary scene change and not a timing event.
 What the source does **not** reproduce is stated in the script and bounds the result: TDT/TOT and
