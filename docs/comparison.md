@@ -12,7 +12,7 @@ Every measurement cited here is stated with its measurement point, domain and bu
 
 **The conclusion, first.** For most primary-distribution routes there are *two* viable Internet-native
 data planes. They differ most on latency, and the margin depends on the conformance the comparison is
-held at: **at the only configuration each has been measured TR 101 290 P1-conformant in, MoQ delivers a
+held at: **at the only configuration each has been measured TR 101 290 P1/P2-conformant in, MoQ delivers a
 picture over one internet path in 2,447 ms and segmented HTTP in 9,286 ms** ([Evidence](evidence.md)
 §3.11). That settles the latency question for a route in the two-to-nine-second band, and nothing else.
 **Neither plane is an unconditional choice.** Segmented HTTP leads on most of the remaining axes —
@@ -110,7 +110,7 @@ head-to-head under one shaper ([Evidence](evidence.md) §3.3):
 Past 7.7–12.2 % applied loss the segmented lane's HTTP/1.1 client re-anchors and leaves holes of 7.2 s,
 24 s and 82 s, silently past ~20 % ([T5](../lab/test-5-network-impairment.md)). **Against SRT, matched on
 measured latency and graded on content, the media-aware lane loses more programme under every shape
-measured**, by a margin its build and QUIC stack set.
+measured but 5 % reorder**, by a margin its build and QUIC stack set.
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
 
@@ -221,7 +221,7 @@ wire fails and the segmented one is ungraded (§8).
 ## 5. Latency (R4)
 
 **This is the axis on which the two data planes differ most, and the size of the difference depends
-on the conformance it is held at.** Where no plane is P1-conformant, MoQ delivers a picture over one
+on the conformance it is held at.** Where no plane is P1/P2-conformant, MoQ delivers a picture over one
 internet path in **109 ms** against segmented HTTP's **4,067 ms**; at the only configuration each
 has been measured conformant in, MoQ delivers in **2,447 ms** and segmented HTTP in **9,286 ms**
 ([Evidence](evidence.md) §3.11). The gap between the Internet-native planes survives conformance at
@@ -363,7 +363,7 @@ half is an architectural reading.
 | TDT/TOT, CAT | **preserved** | TDT/TOT **~14 s late** on moq 0.9.11, a merged fix unmeasured; CAT not carried | preserved | **preserved**; CAT not exercised |
 | Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | **preserved** — the source's bytes, released on its PCR | **preserved; the source mux rate exactly** |
 | PSI cadence, packets added | source cadence plus **one PAT/PMT pair per segment** | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap | unchanged; nothing added | **identical; nothing added** |
-| PCR repetition (P1) and accuracy (P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | the source's PCRs, file domain; each released within 2 ms of schedule, wire accuracy not graded | **0 violations at 481 ns**, ungroomed — measured over the wire |
+| PCR repetition and accuracy (P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | the source's PCRs, file domain; each released within 2 ms of schedule, wire accuracy not graded | **0 violations at 481 ns**, ungroomed — measured over the wire |
 | Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips and one live feed | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
 | TS-level scrambling | carried as bytes; reasoned | **cannot be carried** — the publisher parses PES headers scrambling hides; specified | carried by construction | carried by construction |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | **yes**, from the first released group | every field, count and cadence measured identical, not diffed byte-for-byte |
@@ -535,13 +535,13 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme under every shape measured, by a margin its build and QUIC stack set (§3.1) |
+| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme under every shape measured but 5 % reorder, by a margin its build and QUIC stack set (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, where a shared `--epoch` resumes without a seam only on the opt-in moq-lite 07 and the export then survives only where the two importers' group numbering allows; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
-| Grooming *outcome* — a P1-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
+| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
 | Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~2 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path; not established on the receive path** | M+S | decisive through caches and general clients, for a single programme; the low-latency receive path is unmet or unmeasured (§6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |

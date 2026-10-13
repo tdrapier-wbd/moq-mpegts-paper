@@ -82,9 +82,9 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | | Established | Not established | Where |
 |---|---|---|---|
 | **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing; the opaque lane, on `moq-dev`, is the source's bytes. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond one run per arm | §3.1 |
-| **Timing** | Grooming restores P1 PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; beyond a day; a real encoder's timeline | §3.2 |
+| **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer on every join tried at 500 ms–1 s, eight spread across a GOP included, on loopback, across hosts and up to 2 % loss at 1 s, and over 35 min at 1 s on loopback and across hosts, where its clock follows a drifting source at its slew limit and settles on it within 2 h, its 1 ms departure steps taking the drift rate past 0.075 Hz/s; but not over a whole capture at 500 ms, nor, by a residue of 88 in 943,296 video packets, where the multiplex outruns the video's Rx | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
-| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane under every shape run**, by a margin the build and QUIC stack set | The trunking knee; a real CDN edge; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
+| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane under every shape run** but 5 % reorder, which costs neither, by a margin the build and QUIC stack set | The trunking knee; a real CDN edge; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
 | **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. Multi-track legs merge only behind the fixed-delay export merged on October 2026 `main`, and only as a co-started pair, on one host or two. Relay source failover is not hitless on any build measured, a shared publisher epoch included. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late-joining multi-track leg; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on | A third source; wide-area fan-out | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
@@ -195,13 +195,12 @@ lane reaches the same wire standard** — 0 intervals above 40 ms and 0 PCR viol
 2,496 PCRs ([T16](../lab/test-16-grooming-segmented-http.md)) — but there depth binds: at 1 s against
 2 s segments it posts 311 continuity errors, and at 8 s none.
 
-### 3.3 How does the transport behave under loss? — The controller decides it on every lane; once the lanes are substrate-matched, reordering does not separate them either; and matched with SRT on measured latency, the media-aware lane loses more under every shape measured, by a margin the build and QUIC stack set
+### 3.3 How does the transport behave under loss? — The controller decides it on every lane; once the lanes are substrate-matched, reordering does not separate them either; and matched with SRT on measured latency, the media-aware lane loses more under every shape measured but 5 % reorder, by a margin the build and QUIC stack set
 
 **For an operator:** on a lossy route the congestion controller and the QUIC stack decide what the
 media-aware lane delivers. Pin the controller, because the default is backend-specific, and choose it
 against the route's own conditions ([Architecture](architecture.md) §8.5); provisioning margin, queue
-discipline and the receiver's latency budget then govern the feed. Matched on measured latency, SRT
-loses less programme than the media-aware lane under every shape run.
+discipline and the receiver's latency budget then govern the feed.
 
 **The controller, not the protocol** ([T8](../lab/test-8-srt-vs-moq.md); one run per condition on an
 over-provisioned EC2-to-home path, so non-congestive impairment; the ordering is the result). Under
@@ -247,7 +246,7 @@ each subscriber discards groups past its own deadline: widening `--latency-max` 
 takes two flows from 4.29 to 10.35 Mb/s. **A trunk must be provisioned in latency as well as rate.**
 
 **Matched against SRT, graded on content** ([T28](../lab/test-28-failure-injection-matrix.md); P1, one
-namespace path at 20 Mb/s and 100 ms RTT, so not cross-host; two replicates per matched cell; latency to
+namespace path at 20 Mb/s and 100 ms RTT, so not cross-host; two to five replicates a cell; latency to
 a file sink). **`--max-age` is a recovery allowance, not a latency setting**: a twelve-fold change
 leaves delivered latency between 1.845 and 2.125 s with no trend, where SRT delivers its commanded
 `--latency` to about a millisecond, so SRT was set to the MoQ lane's measured median. Under a 5 s
@@ -255,22 +254,25 @@ outage on moq 0.11.2 (noq), the MoQ lane loses 15.1–20.2 s of video across bud
 SRT's 5.0–5.4 s, and its delivery latency steps up with the allowance, beyond it, and does not come
 back (±0.24 s over the following ~75 s) — a bounded-latency concern for [R4](problem.md) as much as
 R5. The cost is the build's: the oldest build measured, moq 0.11.0, loses 4.8–8.5 s where every later
-one, on either stack, loses 17–23 s at the same budget, and the step is not attributed. **Behind the
-fixed-delay export merged on October 2026 `main`, the same outage costs 7.04–7.10 s at a 2 s delay in
-five of five replicates, and the latency does not step**: 70–80 % of the excess over SRT falls between
-the link's return and the first delivered datagram, 2.4–2.5 s later, so SRT's remaining lead is the
-QUIC transport's recovery, not the lane (noq; backoff and controller not separated). **Under
-sustained 5–10 % loss the stack decides**: SRT lost nothing in twelve cells, the noq builds 23.4–33.6 s
-of 40, and the quinn builds 0.00–0.64 s at 5 %, because BBRv1 does not treat loss as congestion
-(*reasoned*). **Under 20 % reorder every build and both stacks lose 30.8–38.3 s of 60**, while SRT
-delivers every picture with 430–692 continuity errors in four of six cells. On noq that is the stack's
-loss detection — every packet it declared lost was acknowledged later, and relaxing both QUIC loss
-thresholds cuts the loss to 2.12–3.0 s. On quinn the default thresholds' cost is the same detection,
-since no queue on the path drops a packet, and relaxing them lets the window overrun the bottleneck,
-which then drops a third to two-fifths of what the relay declares lost; the programme is not saved.
+`--max-age` build, on either stack, loses 17–23 s at the same budget, and the step is not attributed.
+**Behind the fixed-delay export merged on October 2026 `main`, matched at 2.2–5.9 s across delays of
+1–3 s, SRT keeps its lead on every shape but 5 % reorder, and the MoQ lane's latency is back within
+100 ms after every outage**. SRT loses 0.18–3.74 s of the outage, less as its latency rises, against
+7.0–7.6 s; at 2 s, 70–80 % of the excess falls
+between the link's return and the first delivered datagram, 2.4–2.5 s later, so SRT's lead there is
+the QUIC transport's recovery, not the lane (noq; backoff and controller not separated). Under 5–10 %
+loss and 20 % reorder SRT loses nothing against 31–40 s of 40. SRT's arm at 11.9 s failed and is not
+ranked. **On the `--max-age` builds, under sustained 5–10 % loss the stack decides**: SRT lost nothing
+in twelve cells, the noq builds 23.4–33.6 s of 40, and the quinn builds 0.00–0.64 s at 5 %, because
+BBRv1 does not treat loss as congestion (*reasoned*). **Under 20 % reorder every one, on both stacks,
+loses 30.8–38.3 s of 60**, while SRT delivers every picture with 430–692 continuity errors in four of
+six cells. On noq that is the stack's loss detection — every packet it declared lost was acknowledged
+later, and relaxing both QUIC loss thresholds cuts the loss to 2.12–3.0 s. On quinn the default
+thresholds' cost is the same detection, since no queue on the path drops a packet, and relaxing them
+lets the window overrun the bottleneck, which then drops a third to two-fifths of what the relay
+declares lost; the programme is not saved.
 **An impairment figure on this lane must name its shape, build and
-QUIC stack**, and the MoQ lane is graded on its content timeline, not on its egress PCR timeline, which
-the exporter writes across pictures it never received.
+QUIC stack.**
 
 **The segmented lane on the same shapes** ([T28](../lab/test-28-failure-injection-matrix.md),
 [T31](../lab/test-31-congestion-capacity-ladders.md); P1, content-graded, one host). At loopback RTT it
@@ -368,8 +370,8 @@ hop, and **stream-clocked groomers — placing each packet from the source PCR g
 on every datagram, continuity counters included (46,778 of 46,778), on single-track content with
 publisher, relay, exporter and host all independent across two availability zones.** A multi-track mux
 over independent chains does not merge on the merged builds graded: each leg's exporter places a few
-packets of its own, which shifts every later slot. What T12 establishes is P2 accuracy and
-mergeability, not P1 repetition: 1.4–1.6 % of intervals exceed 40 ms in every cell, control included.
+packets of its own, which shifts every later slot. What T12 establishes is PCR accuracy and
+mergeability, not PCR repetition: 1.4–1.6 % of intervals exceed 40 ms in every cell, control included.
 
 **Behind the fixed-delay export merged on October 2026 `main`, a co-started multi-track pair merges
 at the byte** (P1, file domain, one host, one clip; one 146.9 s run as merged, two of 150 s behind
@@ -550,7 +552,7 @@ segmented HTTP but not the tunnels, and its far lower non-conformant figure is n
 Measured source to groomed egress on each picture's PTS, **every figure paired with the conformance of
 the same bytes** ([T18](../lab/test-18-delivery-latency.md), P2; 90 s cells, an EC2 origin over a 12.8 ms
 round trip). At each plane's shallowest runnable cushion **MoQ delivers in 109 ms, against SRT's
-1,618 ms, RIST's 1,348 ms (unsettled) and segmented HTTP's 4,067 ms** — and no cell is P1-conformant,
+1,618 ms, RIST's 1,348 ms (unsettled) and segmented HTTP's 4,067 ms** — and no cell is P1/P2-conformant,
 MoQ's posting 504 of 3,310 intervals above 40 ms. At the only configurations measured conformant:
 
 | Plane | Conformant configuration | Delivery latency | Conformance measured |

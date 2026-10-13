@@ -98,6 +98,7 @@ the problem, the structure should show which part is which.
 | [Evidence](docs/evidence.md) | Cross-cutting | Method, instruments, results by question, and the limits of the evidence |
 | [Economics](docs/economics.md) | Cross-cutting | Cost framework, the always-on model at published rates, and the ownership questions that follow |
 | [Glossary](docs/glossary.md) | — | The two vocabularies side by side, in broadcast terms |
+| [Primer](docs/primer.md) | Background | How MPEG-TS, SRT, segmented HTTP and MoQ work, for readers new to one of them |
 
 **The engineering record** is the laboratory notebook in [`lab/`](lab/README.md): the campaign plan with
 pass criteria fixed before the numbers, and per-experiment procedures, commands and measured results.

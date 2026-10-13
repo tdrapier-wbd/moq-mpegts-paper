@@ -78,8 +78,8 @@ no number without the conditions its file states. The rung and gate are from
 | T15 | RIST and SRT on T14's cadence instrument | 7 · extends T14 | complete on a healthy path | RIST and SRT are transparent to their source's cadence, where MoQ sets its own granularity | [test-15](test-15-point-to-point-cadence.md) |
 | T16 | Grooming a segmented-HTTP egress | 4 · Gate 2, alternative plane | complete on a healthy path | The same groomer, unchanged, takes a segmented egress to the MoQ lane's conformance; cushion depth is the operative variable | [test-16](test-16-grooming-segmented-http.md) |
 | T17 | Standalone SI on snapshot tracks | 2–3 · closes the EIT residual | complete; design merged | Neither plane loses an EPG; carriage is bitrate-neutral and the join costs 1 ms | [test-17](test-17-si-snapshot-tracks.md) |
-| T18 | Delivery latency at equal conformance, four data planes | 1 · supports Gate 2 | complete, loopback and internet | **It refuted its premise**: on the media-aware lane latency and PCR conformance are independent, and the fastest cushions are not P1-conformant on any lane | [test-18](test-18-delivery-latency.md) |
-| T19 | The PCR grid, and a CBR wire from a media-aware source | supports Gate 2 | complete; criteria 1–3 met, 4 not | **The lane passes P1 on the wire** after three upstream fixes and three groomer fixes, and **fails its own latency criterion** at that configuration | [test-19](test-19-pcr-grid-verification.md) |
+| T18 | Delivery latency at equal conformance, four data planes | 1 · supports Gate 2 | complete, loopback and internet | **It refuted its premise**: on the media-aware lane latency and PCR conformance are independent, and the fastest cushions are not P1/P2-conformant on any lane | [test-18](test-18-delivery-latency.md) |
+| T19 | The PCR grid, and a CBR wire from a media-aware source | supports Gate 2 | complete; criteria 1–3 met, 4 not | **The lane passes PCR repetition on the wire** after three upstream fixes and three groomer fixes, and **fails its own latency criterion** at that configuration | [test-19](test-19-pcr-grid-verification.md) |
 | T20 | The segmented lane over HTTP/3 | Gate 1 · substrate matching | complete | T5's reordering separation was a packet-size artefact; through a byte-faithful receiver the HLS wire is PCR-conformant and the impairment cells are re-measured | [test-20](test-20-segmented-http3.md) |
 | T21 | Permanence soak of the complete media-aware lane | Gate 2 over time | complete | **The media plane passes 24 h** on `d518b61b`; resources fail in the importer there and pass in every role on `main` at `9d2a4f6e` | [test-21](test-21-permanence-soak.md) |
 | T22 | Silent media-plane failure | R8 | complete, both lanes | **Neither lane's transport detects a stalled source**; only the segmented lane's playlist moves | [test-22](test-22-silent-media-plane-failure.md) |
@@ -145,7 +145,7 @@ at the top of their own files.
   latency is within a stated margin of SRT at matched buffer; loss recovery competitive if recovery
   and delivered-rate curves are within a stated margin and the failure mode is no worse; egress
   quality at least matches (P1); overhead/CPU recorded as economic inputs. **The latency criterion is
-  met at a matched buffer only at cushions where neither arm is P1-conformant**
+  met at a matched buffer only at cushions where neither arm is P1/P2-conformant**
   ([T18](test-18-delivery-latency.md)); the configuration that makes the MoQ lane conformant costs
   far more ([T19](test-19-pcr-grid-verification.md)). The P1 criterion is met in software, not on
   hardware.

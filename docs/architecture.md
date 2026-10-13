@@ -284,7 +284,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors; buffer model not graded | **wire** |
 | Any lane | — | **hardware IRD: not run** |
 
-**P1 PCR repetition failed as delivered because the edge stage placed PCR opportunistically** — only in
+**PCR repetition failed as delivered because the edge stage placed PCR opportunistically** — only in
 slots it was already stuffing, so frame bursts contained zero null slots and an eightfold cushion ladder
 moved nothing. **The edge gateway must reserve the slot** (0.34 % of the carrier at a 40 ms limit and
 11 Mb/s), independently of buffer depth, exporter cadence and content
@@ -314,7 +314,7 @@ fixed-delay export, at about 2.3 s with a 1 s delay (§4.3).
 > **The gate that decides this architecture.** A conformant transport stream on real hardware
 > decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model — including the
 > ST 2022-7 determinism of §5.1 under loss. Until that evidence exists, the grooming design is
-> **structurally sound, file-validated, and P1-conformant on PCR repetition on the wire in software
+> **structurally sound, file-validated, and conformant on PCR repetition on the wire in software
 > on both lanes — over 300 s and, on the media-aware lane, over 24.01 h**
 > ([T21](../lab/test-21-permanence-soak.md)). That is still not "proven broadcast-acceptable":
 > nothing in this campaign has been fed to a hardware decoder or graded by a hardware analyser. This
@@ -532,7 +532,7 @@ pair is therefore a design constraint, not a convenience.
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
 control** — an unexplained floor that the experiment attributes provisionally to running a 4 Mb/s
 carrier for a 1.9 Mb/s feed, and which it explicitly declines to draw absolute PCR conclusions from.
-So P1 PCR repetition is **not** established by these runs; what they establish is P2 accuracy and
+So PCR repetition is **not** established by these runs; what they establish is PCR accuracy and
 mergeability. Second, the receiver is a reference implementation of the ST 2022-7 selection rules,
 not a hardware IRD's merge engine, so these results can disprove mergeability but cannot substitute
 for the hardware gate in §4.2.
@@ -954,7 +954,7 @@ Neither session state nor wire conformance alone suffices.
 **Per-PID access-unit liveness, with programme clock progression beneath it.** Two detectors are needed
 and only one of them is sufficient.
 
-*Clock progression* — alarm when no PCR has advanced for longer than the P1 repetition limit plus the
+*Clock progression* — alarm when no PCR has advanced for longer than the PCR repetition limit plus the
 edge stage's cushion — is the cheap layer, needs nothing from the transport, the edge stage or the
 sender, and every broadcast monitoring product already implements it. It catches a *total* stall in
 about one cushion where session state never fires at all, and it catches a frozen relay faster than
@@ -1130,8 +1130,8 @@ slips.
 Ranked by how much a negative answer would change the architecture.
 
 1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate, and the highest-leverage
-   item outright. Grooming is file-validated, structurally sound and **P1-conformant on the wire in
-   software on both lanes — on the media-aware lane over 24.01 h and 632 M packets, crossing the 33-bit
+   item outright. Grooming is file-validated, structurally sound and **conformant on PCR repetition on
+   the wire in software on both lanes — on the media-aware lane over 24.01 h and 632 M packets, crossing the 33-bit
    rollover in flight** ([T21](../lab/test-21-permanence-soak.md)). **Nothing has been near an IRD**, so
    the gate is not complete. Two qualifications travel with the software result. It is bounded by build
    rather than by duration: the soak's source replays a clip with its clocks advanced across joins, and
