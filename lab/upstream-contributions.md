@@ -1381,8 +1381,9 @@ forward jump and a random access point keeps its break marker, and `randomAccess
 layout has allowed none. CI passed on the merge; we have not re-measured it. The export half, graded in
 [T48](test-48-passthrough-export.md), merged as [#5349](https://github.com/moq-dev/moq/pull/5349)
 on 2026-10-13, the mode alone, after two review fixes: an object read past its release deadline is
-dropped and counted rather than sent late, and an MSF-only broadcast is refused. On `b581c27ed` the
-live feed gives T48's verdicts again. `ts-passthrough-export` stays open under the acceptance the
+dropped and counted rather than sent late, and an MSF-only broadcast is refused. On `b581c27ed` both
+clips, the 10 % loss arm and the live feed give T48's verdicts again; under loss the drop count still
+reads 0 across 99 gaps, the groups the relay evicts never reaching the deadline check. `ts-passthrough-export` stays open under the acceptance the
 maintainer's [#5327](https://github.com/moq-dev/moq/pull/5327) merged: the T-STD verdict and
 release schedule checked in CI, a wider fixture set, counted group omissions, and TSDuck and FFmpeg
 runs. A

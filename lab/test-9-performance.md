@@ -1031,11 +1031,10 @@ are recorded because each carries a method lesson that changed how the rest of t
   leave no room for anything republishing at rate, but nothing here distinguishes the catalog and
   verbatim side tracks from each other. Low value now that the totals close to 0.03 points, worth doing
   only if a future measurement stops closing.
-- **A second source profile for the carriage figure.** Both the advantage over SRT and its size depend
-  on the source's stuffing ratio, and every carriage measurement here is one 9.95 Mbps clip with 4.57 %
-  nulls. A loosely filled carrier should widen the gap sharply — the T12 profile implies roughly 2x —
-  and a tightly packed one should narrow it towards the ~1.2-point AEAD floor. Until that is measured,
-  the 5.3 % is specific to this clip.
+- **A third source profile for the carriage figure.** On the stuffing-free live feed the advantage
+  over SRT falls to 0.2 %, below this floor's prediction, because the lane carries no TS packet headers
+  either ([T14](test-14-data-plane-comparison.md) § *On the live feed's profile*). A loosely filled
+  carrier should widen it sharply — the T12 profile implies roughly 2x.
 - **Per-role envelope for the groomer/pacer**, which the objective asks for and none of these runs
   covers.
 - **The segmented lane's resource envelope and fan-out knee.** Its carriage overhead is now measured;

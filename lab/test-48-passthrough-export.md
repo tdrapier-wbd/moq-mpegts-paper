@@ -1,7 +1,7 @@
 # Test 48 — The passthrough TS export on real captures
 
-**State: complete.** On a dedicated host criteria 1–4 pass on both clips, and on the live feed across
-hosts: each leg is the source's bytes, a leg joining 8 s late is the same stream, a leg over the
+**State: complete**, on the implementation branch and again as merged. On a dedicated host criteria 1–4
+pass on both clips, and on the live feed across hosts: each leg is the source's bytes, a leg joining 8 s late is the same stream, a leg over the
 internet is too, and every PCR goes out within 2 ms of its value's schedule. Criterion 5 fails on its accounting clause, and under 10 % loss this lane delivers as
 little video as every other MoQ export graded on content in the same rig.
 
@@ -20,7 +20,7 @@ claim neither.
 ## Environment
 
 - **Build:** the implementation branch at `0da3a7736` (on upstream `main` `90500867d`), release,
-  default features; the live arm again on upstream `main` at `b581c27ed`, with the export merged.
+  default features; every EC2 arm again on upstream `main` at `b581c27ed`, with the export merged.
 - **Loopback arms**, on the EC2 secondary (Linux, dedicated) and on this workstation (macOS, shared):
   relay, publisher and two subscribers on one host. Clips:
   `CNNiEMEA2.ts` (1080i25 H.264, MP2 and AC-3, 11 Mb/s; passes the T-STD in
@@ -83,14 +83,18 @@ because it is the quest's own test. Criterion 4 is the one the file-domain check
 | TNT4, EC2 | 1,710,040 / 1,788,056 | 0, 0, 0 on both | identical, 302.3 MB | fail / fail, identical | 0 of 4,179; worst 1.9 ms | +0.16 ppm |
 | CNN, workstation | 707,433 / 739,368 | 0, 0, 0 on both | identical, 125.4 MB | pass / pass | **1** of 4,378; 10.045 ms, p99 3.1 ms | −2.12 ppm |
 | TNT4, workstation | 1,708,526 / 1,788,056 | 0, 0, 0 on both | identical, 302.0 MB | fail / fail, identical | **9** of 4,174; worst 62.3 ms, p99 3.6 ms | +0.53 ppm |
+| CNN, EC2, `b581c27ed` | 707,717 / 739,858 | 0, 0, 0 on both | identical, 125.5 MB | pass / pass | 0 of 4,380; worst 1.8 ms | +0.54 ppm |
+| TNT4, EC2, `b581c27ed` | 1,710,040 / 1,787,639 | 0, 0, 0 on both | identical, 302.3 MB | fail / fail, identical | 0 of 4,179; worst 1.9 ms | +0.69 ppm |
 
-*Measured, P1, wire domain (each leg's stdout), build `0da3a7736`, `--delay 1s`, 120 s, one run per
-clip and host. Leg A's capture ends when the grader's 110 s window does.*
+*Measured, P1, wire domain (each leg's stdout), build `0da3a7736` unless named, `--delay 1s`, 120 s,
+one run per clip, host and build. Leg A's capture ends when the grader's 110 s window does.*
 
 TNT4's verdict is the source's own: the span A covers carries 1,425 continuity errors, six PCR
 intervals over 100 ms (worst 200 ms) and four audio PIDs the strict model refuses, having no sync at
 the offset where the span starts; its video PID stays inside its buffers. A carries all of it byte for
-byte, and so does B over the overlap.
+byte, and so does B over the overlap. The merged export repeats the dedicated host's verdicts on
+both clips; its release clock logged nothing on CNN, and on TNT4 14 and 10 steps out of tolerance in
+the first 65 s, dropping nothing.
 
 The workstation's release-timing outliers belong to the host (*inferred*: the same build, clips and
 grader on the dedicated host put every PCR within 1.9 ms). Graded the same way there, the input pacer
@@ -133,6 +137,8 @@ the leg is −0.10 ppm. On a live join that counter is a startup alarm, not an o
 | passthrough, `0da3a7736`, 2 s, **0 % loss** | 9.75 Mb/s | 4.6 % | 100 % (4,270 units) | 0 s | 0 gaps, 0 foreign |
 | passthrough, `0da3a7736`, 2 s | 0.58 Mb/s | 4.6 % | **6.0 %** (185) | 32.1 s | 90 gaps, 0 foreign |
 | passthrough, `0da3a7736`, 6 s | 0.59 Mb/s | 4.7 % | **6.0 %** (145) | 48.5 s | 79 gaps, 0 foreign |
+| passthrough, `b581c27ed`, 2 s, **0 % loss** | 9.75 Mb/s | 4.6 % | 100 % (4,270) | 0 s | 0 gaps, 0 foreign |
+| passthrough, `b581c27ed`, 2 s | 0.70 Mb/s | 4.7 % | **7.1 %** (186) | 25.9 s | 99 gaps, 0 foreign |
 | demultiplexed, `0da3a7736`, 2 s | 9.65 Mb/s | 90.6 % | **8.2 %** (327) | 0.7 s | — |
 | demultiplexed, `0da3a7736`, 6 s | 9.20 Mb/s | 95.0 % | **3.5 %** (91) | 0 s | — |
 | demultiplexed, `84b34f54` (`--max-age`), 2 s, **0 % loss** | 9.89 Mb/s | 5.5 % | 100 % (4,232) | 0 s | — |
@@ -149,7 +155,7 @@ fragments for the frame period.*
 
 Neither process died and no packet of the passthrough egress is foreign: what arrives is the
 source's bytes, and each gap is whole groups. The exporter's log names each one, 187 groups the relay
-ended as `Old` merging into the 90 gaps, but its drop count stays at 0. That count is of objects that
+ended as `Old` merging into the 90 gaps (190 into 99 on `b581c27ed`), but its drop count stays at 0. That count is of objects that
 arrive past their deadline, and these never arrive: the relay ends a group's stream once the track's
 newest content is a budget past the start of the group after it, while the stream waits on the
 transport. **So criterion 5 fails on its accounting clause.**

@@ -41,8 +41,8 @@ disclosed or needed.
 | Bitrate profiles | 10 Mbps and 25 Mbps TS | arbitrary but representative; 10 Mbps now, 25 Mbps aspirational |
 | Redundancy | active/active 1+1, both legs always live | [architecture](../docs/architecture.md) §5; two full-rate copies at all times |
 | Regions | EU (Ireland), US East (N. Virginia), US West (Oregon) | egress rates are identical across all three |
-| MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge groomer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)) |
-| SRT carriage multiplier | **1.037x** | T9 measured on the same path with the same clip; matches its framing arithmetic (7 × 188 B TS + 16 B SRT + 8 B UDP + 20 B IPv4 = 1,360 / 1,316 = 1.0334) |
+| MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge groomer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)). **1.033x on the stuffing-free live feed** ([T14](test-14-data-plane-comparison.md) § *On the live feed's profile*) |
+| SRT carriage multiplier | **1.037x** | T9 measured on the same path with the same clip; matches its framing arithmetic (7 × 188 B TS + 16 B SRT + 8 B UDP + 20 B IPv4 = 1,360 / 1,316 = 1.0334); 1.035x on the live feed |
 | MoQ ingest CPU | 0.34 core per 10 Mbps feed | T8, `moq import ts` on 2-vCPU EC2 |
 | SRT ingest CPU | ~0.01 core per feed | T8, `tsp regulate` + SRT carriage |
 | Relay CPU per session | 0.865 % core at 10 Mbps; 1.175 % at 25 Mbps | T9 bitrate sweep (25 Mbps uses the 27 Mbps point) |
@@ -362,10 +362,11 @@ refuse. At AWS list (negative = MoQ cheaper):
 | 8 channels, 16 destinations, 10 Mbps | −25,846 | −4.8 % |
 
 Percentages fall below 5.3 % only because the avoided volume comes off the cheaper tiers. Two
-qualifications keep this from being over-read: the saving **travels with the source's stuffing
-ratio** — a tightly packed carrier converges the two multipliers to within the ~1.2-point AEAD floor,
-a loosely filled one widens the gap considerably — and MoQ's return path is eight times SRT's, which
-takes the all-in advantage to 4.3 % ([T9](test-9-performance.md)).
+qualifications keep this from being over-read: the saving **is the source's stuffing** — on the
+stuffing-free live feed the two multipliers measured level, 1.033x against 1.035x, and a loosely filled
+carrier would widen the gap — and MoQ's return path is four to eight times SRT's, which takes the
+all-in advantage to 4.3 % on the clip and reverses it on the feed ([T9](test-9-performance.md),
+[T14](test-14-data-plane-comparison.md)).
 
 Either way it is not decisive, which is the same conclusion this section reached when the input
 pointed the other way. It is roughly the size of the difference between two providers' list prices,
@@ -462,20 +463,18 @@ anywhere in this model.
 - **The self-hosted all-in build-up in §10.1 is illustrative.** Colocation, power and hardware
   lines carry no published source, and no control-plane, provisioning or software-licensing cost is
   included on the self-hosted path — which is not free and cannot be assumed away.
-- **Both carriage multipliers are one source clip on one clean path.** They are measured
-  back-to-back, which the earlier derived SRT figure was not, but the *size* of MoQ's advantage is a
-  property of the source rather than of the protocol: it is the 4.57 % of null stuffing this clip
-  carries. A tightly packed carrier converges the two to within the ~1.2-point AEAD floor and a
-  loosely filled one widens the gap well past 5 %. Read the input as "carriage does not count against
-  MoQ", not as 5 % of banked egress.
+- **Both carriage multipliers are two sources on clean paths.** They are measured back-to-back, but
+  the *size* of MoQ's advantage is a property of the source rather than of the protocol: 5.3 % on a
+  clip with 4.57 % null stuffing, none on a stuffing-free feed, and a loosely filled carrier would
+  widen it. Read the input as "carriage does not count against MoQ", not as 5 % of banked egress.
 - **Carriage is modelled clean-path.** Measured at 1 % forward loss both multipliers rose by about
   the loss rate and the ranking held, so loss is not a hidden reversal — but nothing above 1 % is
   measured, and the sender-side retransmission cost is inferred from shaper counters rather than
   captured directly ([T9](test-9-performance.md)).
-- **MoQ's multiplier is the media-aware lane.** The opaque lane carries different byte volumes,
-  because the media-aware lane strips stuffing while the opaque lane can carry it verbatim, and it has
-  never been measured. A deployment that needs byte-verbatim carriage should expect the SRT-like
-  figure, not this one.
+- **MoQ's multiplier is the media-aware lane.** The opaque lane carries the source verbatim,
+  stuffing included, and measured 1.054x per leg on the live feed, two points above SRT; a deployment
+  that needs byte-verbatim carriage should price that, not this one
+  ([T14](test-14-data-plane-comparison.md)).
 - **The GiB/GB convention shifts AWS figures by 7.4 %.** AWS's binary tier boundaries imply GiB
   billing and that is what is modelled; a decimal-GB reading raises every AWS number by 7.4 %.
 - **The 100 GB/month AWS free tier is applied per scenario**, whereas it is per account. Worth up
@@ -491,10 +490,9 @@ anywhere in this model.
 
 ## 12. What to measure or obtain next
 
-1. **A second source profile for the carriage multipliers.** Both are now measured back-to-back on
-   one path, so no constant in the model is derived any more — but MoQ's advantage *is* one clip's
-   4.57 % stuffing ratio, and a loosely filled and a tightly packed carrier would turn the model's
-   largest carriage caveat into a range ([T9](test-9-performance.md)).
+1. **A third source profile for the carriage multipliers.** MoQ's advantage *is* the source's
+   stuffing, 5.3 % on the clip and none on the stuffing-free feed; a loosely filled carrier would
+   bound the range ([T9](test-9-performance.md), [T14](test-14-data-plane-comparison.md)).
 2. **Whether reserved-bandwidth-equivalent terms exist for raw egress.** The model's most
    surprising within-hyperscaler finding — the managed service undercutting the platform by 5× —
    turns entirely on this being a MediaConnect-only construct. If a committed-egress agreement can

@@ -148,9 +148,24 @@ minute, and every 15 min the bytes a 10 s export of the standing build delivers.
 apart. The class of each is unknown. This build logs nothing before the error and the monitor grades
 continuity, not PCR, so a flagged splice or source switch cannot be told from an unflagged audio
 resync at a hard cut. On any build from moq 0.14.0 the outcome is the same; the class decides
-whether an upstream fix could keep the import across them. The export's half, P0-j's grade, needs a
-subscriber's `moq export ts` analysed live with TSDuck across one step, and the hand-off around it
-kept by a capture the exit triggers, not by recording continuously.
+whether an upstream fix could keep the import across them.
+
+**The export's half (P0-j), fixed before running.** [`p0j-step-watch.sh`](scripts/p0j-step-watch.sh)
+runs two roles for 48 h. On the primary, a 60 s ring of the hand-off in RAM, copied to disk 20 s
+after each exit of the standing import with the journal around it. On the secondary, a standing
+`84b34f54` export of the standing broadcast (`--max-age 2s`), restarted whenever it ends, piped into
+[`ts-liveness.py`](scripts/ts-liveness.py) (`--warmup 10 --learn 40`) with its output dropped. A step
+is graded when both roles were up across it, on two readings:
+
+1. **The step's class**, from the ring: the PCR and each PID's PTS across the exit, whether a
+   `discontinuity_indicator` marks the step (flagged) or nothing does (unflagged), and which PIDs
+   step back and by how much.
+2. **What the subscriber lost**, per PID: the media gap the liveness detector reports, or, where the
+   export ended, the wall time from its last byte to the next export's first. The reference is §3.13
+   of the evidence: about 3 s of programme per republish, here on top of the publisher's absence of
+   about 6 s.
+
+Neither reading has a pass mark; one graded step answers P0-j, and each further step is a replicate.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 
