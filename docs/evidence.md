@@ -252,7 +252,11 @@ outage on moq 0.11.2 (noq), the MoQ lane loses 15.1–20.2 s of video across bud
 SRT's 5.0–5.4 s, and its delivery latency steps up with the allowance, beyond it, and does not come
 back (±0.24 s over the following ~75 s) — a bounded-latency concern for [R4](problem.md) as much as
 R5. The cost is the build's: the oldest build measured, moq 0.11.0, loses 4.8–8.5 s where every later
-one, on either stack, loses 17–23 s at the same budget, and the step is not attributed. **Under
+one, on either stack, loses 17–23 s at the same budget, and the step is not attributed. **Behind the
+fixed-delay export merged on October 2026 `main`, the same outage costs 7.04–7.10 s at a 2 s delay in
+five of five replicates, and the latency does not step**: 70–80 % of the excess over SRT falls between
+the link's return and the first delivered datagram, 2.4–2.5 s later, so SRT's remaining lead is the
+QUIC transport's recovery, not the lane (noq; backoff and controller not separated). **Under
 sustained 5–10 % loss the stack decides**: SRT lost nothing in twelve cells, the noq builds 23.4–33.6 s
 of 40, and the quinn builds 0.00–0.64 s at 5 %, because BBRv1 does not treat loss as congestion
 (*reasoned*). **Under 20 % reorder every build and both stacks lose 30.8–38.3 s of 60**, while SRT
@@ -868,6 +872,4 @@ rebuild.
 | 14 | **Does the quinn relay's memory plateau at year scale, and what is the exporter's daily +11.8 MB step?** (§3.6) | Longer soaks, with memory pressure and allocation traced | Whether either is a slow leak with a long period |
 | 15 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin and a soak | Its per-role CPU, memory and fan-out knee; the origin measured is `python3 -m http.server` |
 | 16 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Upstream `main` now counts TR 101 290 errors at `moq import ts`, equal per PID to TSDuck's on a 72 s excerpt at P0 and P1, but signals nothing downstream and does not grade PCR accuracy ([upstream contributions](../lab/upstream-contributions.md)) |
-| 17 | **Why does the media-aware lane lose more programme than SRT, and why does the figure move with the build?** (§3.3) | A trace of one outage on a current build, naming the groups it loses | Whether SRT's lead belongs to the lane or to one QUIC stack's configuration |
-
 Protocols for the runnable ones are in [planned-experiments](../lab/planned-experiments.md).

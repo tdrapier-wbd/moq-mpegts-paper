@@ -414,9 +414,8 @@ graded by [`t28-outage-trace.py`](scripts/t28-outage-trace.py). One control, fiv
   and SRT's 5.0–5.4 s on the same rig.
 - **No re-timing.** The late-window latency stays within 13 ms of the early one (158 ms lower after
   the skip), where the `--max-age` builds stepped to 6.6–9.6 s. The standing latency at `--delay 2s`
-  is 3.87–3.91 s, about twice the delay as [T47](test-47-fixed-delay-export.md) found, so criterion 6
-  would report every cell of this build unmatched; whether criteria 6–9 match on the measured
-  latency instead, as the matched ladder did, must be fixed before they run.
+  is 3.87–3.91 s, about twice the delay as [T47](test-47-fixed-delay-export.md) found, which is why
+  criterion 6 matches on the measured latency rather than the setting.
 
 It does not separate QUIC's probe-timeout backoff from the controller's restart; both are *stack*,
 and a relay qlog of one replicate would split them. On this build `--mux-rate 0` is rejected with a
@@ -1152,11 +1151,12 @@ run.** `--delay` is a release delay: a frame goes out at its timestamp plus the 
 arrives later is dropped and counted. Unlike `--max-age`, it is meant to set delivered latency, so the
 lanes can be matched on the setting itself and the scoring gains the latency axis it lacked.
 
-6. **Matched by setting, and checked.** MoQ at `--delay D` against SRT at `--latency D`, D ∈ {1, 2,
-   3, 6 s}; 500 ms is excluded because the export does not last a whole capture there
-   ([T47](test-47-fixed-delay-export.md)). A cell is matched only if each lane's median delivery latency
-   in the unimpaired window is within 100 ms of D plus the path's one-way delay; otherwise it is reported
-   as unmatched and not ranked.
+6. **Matched on measured latency.** MoQ at `--delay D`, D ∈ {1, 2, 3, 6 s}; 500 ms is excluded
+   because the export does not last a whole capture there ([T47](test-47-fixed-delay-export.md)). SRT's
+   `--latency` is set to the MoQ lane's median delivery latency in that D's unimpaired cell, as the
+   matched ladder did, and a cell is matched only if SRT's median is within 100 ms of it; otherwise it
+   is reported as unmatched and not ranked. Re-fixed before any cell ran: matched by setting, every
+   cell of the merged build would be unmatched, because it stands at about twice D.
 7. **Graded as before, three replicates.** Content lost, conserved, on the MoQ lane; the PCR timeline
    on SRT's byte-faithful output. The exporter's late-drop count is read beside it.
 8. **Two-axis verdict.** At a matched D a lane is superior for a shape if its median media lost is lower

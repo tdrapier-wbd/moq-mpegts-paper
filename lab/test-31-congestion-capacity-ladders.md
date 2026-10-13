@@ -530,9 +530,12 @@ a release delay: each frame goes out at its timestamp plus the delay, and one ar
 dropped and counted, so it sets delivered latency where `--latency-max` bounded staleness. Criterion 5
 is replaced on those builds by:
 
-6. **Delivered latency is the delay.** In each subscriber's unimpaired window its median delivery
-   latency is within 100 ms of the delay plus the path's one-way delay. A subscriber that fails this is
-   reported, and its cell is not used for criterion 7.
+6. **Delivered latency is measured, not assumed.** Each subscriber's median delivery latency in its
+   unimpaired window is quoted beside its `--delay`, and criterion 7 is read against both. A subscriber
+   whose latency moves by more than 100 ms across that window (first third against last third) is
+   reported, and its cell is not used for criterion 7. Re-fixed before any cell ran: the merged build
+   stands at about twice the delay ([T28](test-28-failure-injection-matrix.md) § *The outage traced
+   on the merged build*), so a test against the setting would exclude every subscriber.
 7. **Delay × contention × RTT (MoQ).** T8b C3's shared bottleneck with n ∈ {2, 3} subscribers,
    `--delay` ∈ {1, 2, 4, 6 s}, base RTT ∈ {20, 100, 200 ms}, through the permanent 0.8× rung. Each
    subscriber is graded on content, with its late-drop count. For each (n, RTT) the result is video lost

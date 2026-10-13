@@ -121,8 +121,9 @@ segmented HTTP in the protocol, and the tooling does not deliver it**: no off-th
 an origin restart ([T6](../lab/test-6-relay-resilience.md)), and Content Steering is specification-only.
 An origin killed for ten seconds costs the segmented lane no content, where the media-aware exporter
 skips to the live edge. Across a *transport* outage, graded on content, the media-aware lane loses
-more of the programme than SRT and also pays in a latency step that does not reverse, where SRT holds
-its latency ([Evidence](evidence.md) §3.3).
+more of the programme than SRT: behind the fixed-delay export the margin is its transport's recovery,
+and earlier builds also paid in a latency step that did not reverse, where SRT holds its latency
+([Evidence](evidence.md) §3.3).
 
 **Neither lane's transport reports a stalled source, and only the segmented one offers a substitute**: its
 playlist media sequence stops advancing, which a poller can alarm on without parsing media
