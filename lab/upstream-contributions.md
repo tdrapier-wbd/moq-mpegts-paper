@@ -1995,7 +1995,7 @@ sets rather than the content. The P0 frame counts were not repeated on the merge
 
 **Open.** Loopback SRT loss rate unexplained (to 6 % at 10 Mb/s); libsrt-to-libsrt comparison not yet usable.
 
-### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest unmerged ([#5414](https://github.com/moq-dev/moq/pull/5414))
+### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest in draft [#5516](https://github.com/moq-dev/moq/pull/5516)
 
 **Report.** [T45](test-45-live-tstd-remux.md)'s live-feed arm: a hardware encoder's 25 Mb/s CBR
 multiplex with no nulls, conformant as a source, stops `main`'s export within 10 s on AC-3 whose
@@ -2014,7 +2014,7 @@ quests. On the capture,
 
 **State.** #5363 merged, reworked by the maintainer. #5362 closed into two quests, the maintainer
 answering both questions yes. #5414 closed unmerged with #5306's branch; `main` (`0d9e9ff78`)
-still stops on the capture after 27 s, on video; #5414 re-landed on it passes at 25 Mb/s, unposted.
+still stops on the capture after 27 s, on video; re-landed on it as #5516, #5414 passes at 25 Mb/s.
 
 ---
 
