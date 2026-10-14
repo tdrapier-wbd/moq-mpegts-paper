@@ -2009,12 +2009,12 @@ audio frames share a PES.
 join or a lost PES, and adds two tests that fail on `main`. Before: 3 PES where 6 frames were
 split; the live capture stops at 8–10 s. After: on the same capture, all 926 AC-3 frames written
 before the video limit stopped it at 39 s are the source's, in order, PTS exact. #5414 builds both
-quests and counts audio PES headers in B (2.4.2.3), as #5306 now does too. On the capture,
+quests. On the capture,
 `b581c27ed` stops at 31 s; #5414 runs 280 s at the source's 25 Mb/s and passes T45's criteria.
 
 **State.** #5363 merged, reworked by the maintainer. #5362 closed into two quests, the maintainer
-answering both questions yes. #5414 closed unmerged with #5306's branch; `main` with #5306
-(`0d9e9ff78`) still stops on the capture after 27 s, on video.
+answering both questions yes. #5414 closed unmerged with #5306's branch; `main` (`0d9e9ff78`)
+still stops on the capture after 27 s, on video; #5414 re-landed on it passes at 25 Mb/s, unposted.
 
 ---
 

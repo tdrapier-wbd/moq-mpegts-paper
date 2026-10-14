@@ -555,7 +555,8 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     are within ±481 ns, the largest interval is 25.0 ms, and every unit of every track is present,
     audio counted as frames. It passes P1-u too: all 11,473 MP2 and 8,600 AC-3 frames are the
     source's, in order, six and seven a PES, flagged aligned, each PTS exact. No unit is dropped
-    late.
+    late. Re-landed on `0d9e9ff78` as `0e4bfd809` it grades the same: margins and peaks identical,
+    11,108 PCRs, all 11,474 MP2 and 8,601 AC-3 frames, `compliance.py` passing.
 
   That output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
   share of the source it carries, it spends 1.0 % more packets than the source on MP2 and 2.5 %
