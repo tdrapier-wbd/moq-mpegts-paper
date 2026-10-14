@@ -29,26 +29,26 @@ hand-off — a stage neither specification mentions and which the taker must own
 no longer supply its clients' receivers. Most of the engineering, and most of the risk, sits *above*
 the transport ([Comparison](docs/comparison.md), [Architecture](docs/architecture.md)).
 
-**Segmented HTTP has a mature cache-delivery model, not an out-of-box broadcast receiver path.**
-Named segments can be served through commodity CDN infrastructure and retried from another edge
-while they remain within their availability window. But the target IRD estate does not consume HLS
-directly: it still needs distributor-owned reassembly, grooming and TS-egress stage. This evaluation
-did not demonstrate an interoperable, low-latency TS-in-HLS receiving path: free receivers fell back
-to whole segments, while the commercial ABR-to-TS path remains untested. The measured recovery
-advantage is therefore conditional and does not establish end-to-end receiver interoperability
+**Segmented HTTP has a mature cache-delivery model, and a receiver path only at classic segment
+durations.** Named segments can be served through commodity CDN infrastructure and retried from
+another edge while they remain within their availability window. But the target IRD estate does not
+consume HLS directly: a distributor-owned stage must reassemble and groom it into a transport stream.
+Free tools build that stage at classic segment durations; below them nothing free receives TS-in-HLS,
+and the commercial ABR-to-TS path remains untested. The measured recovery advantage is therefore
+conditional and does not establish end-to-end receiver interoperability
 ([Comparison](docs/comparison.md) §3.2, §4, §5.1).
 
 **MoQ beats the other Internet-native plane decisively on latency at the configurations measured TR
 101 290-conformant in software.** That makes the case for MoQ on routes with a roughly
 two-to-nine-second delivery budget. But at conformance it does not necessarily beat the
 point-to-point incumbents it would displace, which carry their source’s own conformant timing and
-buy their latency with a jitter buffer the operator sets. No conformant sub-second configuration was
-produced on any lane, so MoQ’s strategic sub-second case is architecturally credible but not yet
-evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
+buy their latency with a jitter buffer the operator sets. Nothing below about two seconds was
+conformant over a whole capture on any lane, so MoQ’s strategic sub-second case is architecturally
+credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
 
 **Two things separate a credible evaluation from a deployable one, and neither is a transport property.**
 The make-or-break conformance gate has never been attempted — nothing here has been fed to a hardware
-receiver or graded by a hardware analyser, so every conformance result is software. And a MoQ feed
+receiver or graded by a hardware analyser. And a MoQ feed
 carries no media through any third-party relay tested, which matters commercially rather than
 technically, because the economic case for MoQ depends on relay capacity being a market the buyer can
 shop ([Evidence](docs/evidence.md) §3.7, [Economics](docs/economics.md) §4.6).
@@ -63,15 +63,15 @@ commodity delivery, while the entire measured difference between the transports 
 MoQ was measured on two lanes: a media-aware one, which splits the transport stream into per-track
 media, and an opaque one, which carries its bytes unchanged.
 
-- **The TR 101 290 P1/P2 gate was met and sustained in software on both planes**, on the media-aware lane
-  over a full day. It closed downstream in the edge stage, after three upstream fixes that were each
-  necessary and none sufficient ([Evidence](docs/evidence.md) §3.2). That is not full conformance on the
-  media-aware lane: as a transmux it discards the source's packet schedule, and its wire fails the
-  13818-1 buffer model, which only a re-multiplexer repairs. One now runs live. Upstream's fixed-delay
-  export, now merged, builds that stage into the subscriber and keeps every track on every join tried,
-  at about the re-multiplexer's latency ([Evidence](docs/evidence.md) §3.16).
-- **Conformance is not free of latency there, though buffer depth is not the price.** Part of the cost is
-  an identified upstream regression that could be recovered; the rest is structural, because a demuxed
+- **The TR 101 290 P1/P2 gate was met in software on both planes, and held for a day on the
+  media-aware lane.** It closed downstream, in an edge stage that no off-the-shelf tool provides behind
+  MoQ ([Evidence](docs/evidence.md) §3.2). That is not full conformance on the media-aware lane: as a
+  transmux it discards the source's packet schedule, and its wire fails the 13818-1 buffer model, which
+  only a re-multiplexer repairs. Upstream's fixed-delay export, now merged, builds that stage into the
+  subscriber and, at a 1 s delay, keeps every track and buffer on every join tried, at about a lab
+  re-multiplexer's latency ([Evidence](docs/evidence.md) §3.16).
+- **Conformance costs that lane latency, though not as cushion depth.** Part of the cost is an
+  identified upstream regression that could be recovered; the rest is structural, because a demuxed
   lane moves the contribution encoder's buffer budget downstream into the edge gateway
   ([Comparison](docs/comparison.md) §5.1).
 - **A fully Internet-native path is not the only answer to the same pressure.** Satellite-hybrid
@@ -91,6 +91,7 @@ the problem, the structure should show which part is which.
 
 | Document | Layer | What it is |
 |---|---|---|
+| [Primer](docs/primer.md) | Background | How MPEG-TS, SRT, segmented HTTP and MoQ work, for readers new to one of them |
 | [Problem](docs/problem.md) | Requirement | Why primary distribution is changing, and the requirement set (R1–R8) everything else is scored against |
 | [Comparison](docs/comparison.md) | **Data plane** | The head-to-head, with the evidence type marked on every verdict row |
 | [Architecture](docs/architecture.md) | **Above the transport** | The reference architecture; the edge gateway and 1+1 redundancy come first as the measured part |
@@ -98,7 +99,6 @@ the problem, the structure should show which part is which.
 | [Evidence](docs/evidence.md) | Cross-cutting | Method, instruments, results by question, and the limits of the evidence |
 | [Economics](docs/economics.md) | Cross-cutting | Cost framework, the always-on model at published rates, and the ownership questions that follow |
 | [Glossary](docs/glossary.md) | — | The two vocabularies side by side, in broadcast terms |
-| [Primer](docs/primer.md) | Background | How MPEG-TS, SRT, segmented HTTP and MoQ work, for readers new to one of them |
 
 **The engineering record** is the laboratory notebook in [`lab/`](lab/README.md): the campaign plan with
 pass criteria fixed before the numbers, and per-experiment procedures, commands and measured results.

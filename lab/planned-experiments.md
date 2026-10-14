@@ -25,7 +25,7 @@ defined [below](#blocked-on-apparatus).
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
-| P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | On current `main` nothing fails over in the mesh, because a standby refused before its PMT is never asked again; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: importers that answer for their tracks before the PMT and align group numbering | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
+| P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | On current `main` nothing fails over in the mesh, because a standby refused before its PMT is never asked again; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: `import-announce-tracks` and `hop-aligned-import` ([below](#upstream-quests-worth-building)) | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
 | P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | On the opaque lane, a stream-clocked pacer that stays silent rather than send a datagram it cannot fill (the join is clean; loss and return are not); the live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export, whose identity across a republish is declined | On the opaque lane, T12's cells 2b and 3 hitless with the fixed pacer; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
 | P1-w | A 1+1 ingest pair's double switch at a backward step, on the default `moq-lite-06` and again on `moq-lite-07`, at the build under test | [Evidence](../docs/evidence.md) §3.13's "keeps both legs, but each export follows whichever leg announced last" is measured on `moq-lite-07` at an older build only, and the maintainer was offered it | P0-j's end (a quiet host; the rig is one host, pipe-fed) | T41's pair cells (three aligned, two at `SKEW2=2`, one single-importer control) graded on its criteria 1–3 for each protocol | [T41](test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose importers each mint an epoch* |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig; the infrastructure axis on both lanes; the SRT arm at an 11.87 s latency with buffers sized to it | [T28](test-28-failure-injection-matrix.md) |
@@ -68,6 +68,31 @@ P0-m → [T47](test-47-fixed-delay-export.md), P1-m and P1-q → [T28](test-28-f
 P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r and P1-s → [T41](test-41-import-reanchor-coverage.md), P1-u → [T45](test-45-live-tstd-remux.md),
 P2-b → [T25](test-25-isolation-under-abuse.md).
 
+## Upstream quests worth building
+
+Untaken quests on upstream `main` whose result would move an entry above, ranked by weight for primary
+distribution. A row leaves when a pull request takes it or it lands; ours in flight are in the
+[upstream ledger](upstream-contributions.md).
+
+| Quest | What it does | Gate | Weight |
+|---|---|---|---|
+| `import-announce-tracks` [S] | An importer announces only once it knows its tracks, so a standby joining a live partner no longer answers `not found` and aborts its subscribers ([#4352](https://github.com/moq-dev/moq/issues/4352)) | — (built locally, unposted) | **High**, R6: half of P1-p's gate |
+| `epoch-anchor` [M] | Importers sharing an epoch derive one clock and timestamp era from the epoch and their source alone | — (plan merged) | **High**, R6: gates the next two |
+| `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
+| `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the three above | **High**, R6: P1-p's other half |
+| `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD, two quests away |
+| `tstd/psi-runs` [M] | Padded export keeps PSI within TBsys and Bsys, and `compliance.py` grades both | after [#5516](https://github.com/moq-dev/moq/pull/5516) (same planner) | **Medium**, R3: ungraded here; bites on multi-service tables |
+| `ts-reliability/pes` [M] | TS import assembles PES headers that span packets, with bounded staging | — | **Medium**, R1/R5: legal sources and damaged input |
+| `ts-export-backlog` [S] | TS export reads a track only until a frame falls due, leaving a stalled sink's backlog in the source | — | **Medium**, R5: bounds a slow subscriber's memory |
+| `restart-followers` [L] | Consumers follow an epochless `Restart` (a drain, a replacement) by resolving again | — | **Medium**, R6: a relay drain under a long-lived export |
+| `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats | `stats/schema` [M] | **Medium**, R8: what P1-l reads back |
+
+Set aside: `ts-live-clock` and `ts-same-instance-resume` (the maintainer's investigations on his
+validation draft), `stats-traffic-resume` (taken, [#5492](https://github.com/moq-dev/moq/pull/5492)),
+`open-gop-leading-pictures` (open-GOP contribution only, in three languages), `ts-eac3` and
+`tstd-controls` (profiles the live feed lacks), and the QoS line's lag histogram (behind
+`stats-prefix-tracks`, R8 only).
+
 ## Blocked on apparatus
 
 | Gate | State | Unblocks |
@@ -75,7 +100,6 @@ P2-b → [T25](test-25-isolation-under-abuse.md).
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d, P1-i, P2-k |
 | **B-7** A live contribution feed of a real service over SRT to both EC2 hosts | **on the primary** (25 Mb/s, graded at the source in [T33](test-33-gate2-preparation.md) Part C); the secondary's pending | now: P0-j; with the secondary's: P0-g's live arm, P1-o's two-ingest arm |
 | **B-2** A `moq2ts` subscriber published by its authors | not published | P1-h (T11c) |
-| **B-3** A true CBR hardware source | **in hand**: the live feed, from a hardware encoder at 25.000 Mb/s CBR with no nulls, reaching us over SRT | the residual in [T15](test-15-point-to-point-cadence.md) |
 | **B-4** A commercial ABR-to-TS gateway | none | the segmented lane's low-latency arm at equal conformance (§5 row 5); P1-i |
 | **B-5** The commercial packaging edge itself | none (a plain byte cache only re-measures nginx) | multi-programme carriage through a media-aware edge; P1-i |
 

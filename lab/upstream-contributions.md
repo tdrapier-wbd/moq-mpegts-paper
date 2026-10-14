@@ -735,15 +735,12 @@ dead publisher's relay, bounded by the later of detection and the standby's grou
 failover*).
 
 - **A shared-hop standby that arrives after the subscribers ends every one of them with `not found`
-  — reported as [#4352](https://github.com/moq-dev/moq/issues/4352).** Measured as the race the mesh
-  drill once found as `Unroutable`: two of two runs on one relay on `ffa5b81b`, two of two on `main`
-  at `2b689c24`, and on the standby's relay in the mesh ten of ten on `ffa5b81b` and twelve of
-  twelve on `main` (T6). In the one run where the publishers arrived together it did not occur.
-  Upstream diagnoses it as a standby refusing every track until it has parsed its PMT. **Closed into
-  a quest, not fixed**: [#5438](https://github.com/moq-dev/moq/pull/5438) split the fix out of
-  `hop-aligned-import` as
-  [`quest/m1/import-announce-tracks.md`](https://github.com/moq-dev/moq/blob/main/quest/m1/import-announce-tracks.md)
-  (announce once the tracks are known), ready and unbuilt; our counts are its before-measurement, and
+  — reported as [#4352](https://github.com/moq-dev/moq/issues/4352).** Two of two runs on one relay
+  on `ffa5b81b` and on `main` at `2b689c24`; ten of ten and twelve of twelve on the standby's relay
+  in the mesh; not when the publishers arrived together (T6). Upstream diagnoses it as a standby
+  refusing every track until it has parsed its PMT. **Closed into a quest**:
+  [#5438](https://github.com/moq-dev/moq/pull/5438) split it out of `hop-aligned-import` as
+  [`import-announce-tracks`](https://github.com/moq-dev/moq/blob/main/quest/m1/import-announce-tracks.md);
   #4354 stays with `hop-aligned-import`. With a shared `--epoch` on
   `main` at `82c3f2fe4` the standby's arrival ends no subscriber, on either protocol; on
   `moq-lite-07` subscribers present before it arrived instead end `not found` at the failover, 3 of
@@ -752,6 +749,11 @@ failover*).
   again, so after the failover nothing reaches any subscriber on either relay and none gets an
   error, 6 of 6 hard kills and 4 of 4 clean ends (T6 § *Mesh source failover*);
   [posted on the issue](https://github.com/moq-dev/moq/issues/4352#issuecomment-6080454156).
+  **A fix is built here, unposted.** On `0d9e9ff78` a standby with no input yet is asked for all
+  three tracks within 3 ms of connecting on `moq-lite-07` and refuses each (on `moq-lite-06` it is
+  not asked). With the importers announcing once their catalog lists the tracks (every one that takes
+  `--epoch`, and `--program all`), it is never asked, two exports run on through it on both
+  protocols, and input declaring no track exits 1, unannounced.
 - **A fast switch to a same-hop standby ends `export ts` with `TimestampRewind`.** On `ffa5b81b` a
   SIGINT made the relay move to the standby and the exporter abort. On `main` at `2b689c24`, where the CLI closes
   the session on SIGTERM as well, every clean exit (SIGINT, SIGTERM, end of input) is switched at
@@ -762,16 +764,12 @@ failover*).
   [#4354](https://github.com/moq-dev/moq/issues/4354)**, with the mesh splice floor included as the
   converse case. On `main` every splice that waited for the standby's numbering to reach the floor
   ended relay A's exporters on the live-edge error, 8 of 8, and only the two runs whose standby was
-  already past the floor resumed (T6 § *Mesh source failover*). Upstream's same quest diagnoses
-  #4354 as each importer numbering groups from its own per-process counter, so after a failover
-  `export ts` sees a timestamp rewind. Its plan derives a group's sequence from its keyframe's PTS
-  and announces only once tracks are known. Its prerequisites have landed on `main`, in no release
-  yet: hop removal
-  ([`quest/m0/broadcast-epoch/hop-removal.md`](https://github.com/moq-dev/moq/blob/main/quest/m0/broadcast-epoch/hop-removal.md)),
-  where `--epoch` replaces `--hop` and a redundant pair shares an explicit epoch, and
-  [#4741](https://github.com/moq-dev/moq/pull/4741), which makes the path the only broadcast
-  identity — *restarting group numbering requires a new broadcast name*. **Open**; the aligned
-  numbering is planned, not shipped. `main` replaced the consumer's live-edge floor with a rule that
+  already past the floor resumed (T6 § *Mesh source failover*). Upstream's `hop-aligned-import`
+  diagnoses #4354 as each importer numbering groups from its own per-process counter, so after a
+  failover `export ts` sees a timestamp rewind, and numbers groups on the epoch timeline instead,
+  behind `epoch-anchor` (planned, unbuilt). Its prerequisites have landed: `--epoch` replaced
+  `--hop`, and [#4741](https://github.com/moq-dev/moq/pull/4741) made the path the only broadcast
+  identity. **Open**; the aligned numbering is planned, not shipped. `main` replaced the consumer's live-edge floor with a rule that
   group starts must not fall, which cuts the
   [#4733](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) failure
   class and still refuses this one. **The before-measurement is posted on the issue**
