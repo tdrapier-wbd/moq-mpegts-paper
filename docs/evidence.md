@@ -244,6 +244,13 @@ receiver's budget. Two or three contended MoQ feeds at a 2 s budget deliver less
 (9.44 Mb/s against 5.39 and 4.48 under CUBIC), not because of the controller or bufferbloat but because
 each subscriber discards groups past its own deadline: widening `--latency-max` from 500 ms to 30 s
 takes two flows from 4.29 to 10.35 Mb/s. **A trunk must be provisioned in latency as well as rate.**
+A release delay does not substitute for the rate margin: with two or three feeds sharing a class at
+0.8× their combined rate for 80 s, no `--delay` from 1 to 6 s brings any subscriber within 1 s of its
+control at RTTs of 20 to 200 ms; each loses 14.0–21.9 s of video, and each second of delay buys back
+about 0.6 s of picture for about 2 s of latency. Against a 5 s dip to 0.8×, a 6 s delay absorbs the
+video at 200 ms RTT and none up to 6 s does at 20 ms; the bottleneck drops nothing and audio is lost
+too ([T31](../lab/test-31-congestion-capacity-ladders.md); P1, `netns`/`cake`, three replicates, an
+October 2026 build).
 
 **Matched against SRT, graded on content** ([T28](../lab/test-28-failure-injection-matrix.md); P1, one
 namespace path at 20 Mb/s and 100 ms RTT, so not cross-host; two to five replicates a cell; latency to
@@ -623,8 +630,8 @@ restart, even for the flagged case. A source whose timeline steps back must then
 each step, by a supervisor under a new epoch, or the build pinned. Each republish costs about 3 s of
 programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. On a real feed
 the standing import ended three times in about 19 h over a clean hand-off, two exits 3 min apart,
-but the one captured with its source was no step: the import had mis-stamped a SCTE-35 cue, which
-current builds do not. **Whether a real feed steps back is not yet measured**
+but none of the four since captured with their source was a step: each was the import mis-stamping
+a SCTE-35 cue, which current builds do not. **Whether a real feed steps back is not yet measured**
 ([T34](../lab/test-34-real-encoder-severity.md); P1, the import's log and the hand-off ring, one
 feed, an October 2026 build).
 
@@ -880,7 +887,7 @@ rebuild.
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
 | 8 | **Can a late-joining multi-track 1+1 leg merge at the byte?** A co-started pair already does behind the merged export, on one host or two (§3.4); on the opaque lane a leg 8 s late is already identical (§3.1) | TDT revisions placed by media time; a counter rewrite outside upstream; a merge run on the opaque lane | [Architecture](architecture.md) §5.1's scope: single-track content, and legs that have run continuously |
-| 9 | **Where does the trunking knee sit, and does it track RTT, group duration or relay buffering?** (§3.3) | A latency-budget ladder at several RTTs | Sizing N contended feeds in latency as well as rate |
+| 9 | **Where does a contended feed lose what a release delay does not cover?** Not at the bottleneck, and not as a function of RTT under a sustained shortfall (§3.3) | The relay's per-subscriber queue instrumented | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Does fixing the announce convention clear the relays it blocks, and what are the three undiagnosed failures?** (§3.7) | Upstream adoption; diagnosis | Relay portability, which underwrites the economic argument |
 | 12 | **What does a CDN edge, or an origin whose sender ignores random loss, deliver under loss at 100 ms RTT?** (§3.3) | A tuned edge, or the origin on BBR | The segmented lane's loss curve off loopback |
