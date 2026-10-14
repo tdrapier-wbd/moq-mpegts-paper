@@ -749,7 +749,7 @@ failover*).
   again, so after the failover nothing reaches any subscriber on either relay and none gets an
   error, 6 of 6 hard kills and 4 of 4 clean ends (T6 § *Mesh source failover*);
   [posted on the issue](https://github.com/moq-dev/moq/issues/4352#issuecomment-6080454156).
-  **A fix is built here, unposted.** On `0d9e9ff78` a standby with no input yet is asked for all
+  **Fixed in our draft [#5517](https://github.com/moq-dev/moq/pull/5517).** On `0d9e9ff78` a standby with no input yet is asked for all
   three tracks within 3 ms of connecting on `moq-lite-07` and refuses each (on `moq-lite-06` it is
   not asked). With the importers announcing once their catalog lists the tracks (every one that takes
   `--epoch`, and `--program all`), it is never asked, two exports run on through it on both

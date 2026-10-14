@@ -3,8 +3,7 @@
 The campaign's forward roadmap: what is outstanding, why it matters, what gates it, and when it is
 done. Protocols, pass criteria and results live in the `test-*.md` file each entry names; nothing here
 records what has already been learned. **When nothing of an entry is outstanding, delete it.** An
-entry earns its place only if it could change a named claim in `docs/`. Placeholders such as
-`<EC2_IP>` stand for values in `INSTRUCTIONS.local.md`.
+entry earns its place only if it could change a named claim in `docs/`.
 
 **Priority** is by what a result could change. **P0** could change a viability conclusion, and
 nothing else competes for a run window while a P0 is runnable. **P1** sharpens or reverses a verdict
@@ -18,22 +17,22 @@ defined [below](#blocked-on-apparatus).
 |---|---|---|---|---|---|
 | P0-k | Hardware TR 101 290 P1/P2 soak of groomed output, ≥ 72 h, including ST 2022-7 under loss, with the source-clock-drift and mid-stream PID-change fixtures | The top open question ([Evidence](../docs/evidence.md) §5, rows 1 and 7): the grooming design is software-validated, not broadcast-acceptable | B-6 | A `hardware:` domain P1/P2 result on both lanes over the full window, 2022-7 graded under loss, both fixtures graded | [T7](test-7-timing-integrity.md) |
 | P0-d | The analyser-specific rows of the Gate 2 acceptance harness | Completes the acceptance test the harness was built for | B-6 | Every analyser row of T33's fixed pass table taken | [T33](test-33-gate2-preparation.md) |
-| P0-j | A subscriber's export across a real encoder's backward step | The standing import ends three times in 19 h ([T34](test-34-real-encoder-severity.md)), but each of the four exits captured was a mis-stamped SCTE-35 cue, so whether the feed steps back at all is open; a step's cost and class are measured on synthetic steps only ([Evidence](../docs/evidence.md) §3.13) | — (running) | One step: a standing export analysed live with TSDuck across it, the programme lost measured, and the step's class read from the hand-off around it | [T34](test-34-real-encoder-severity.md) |
-| P0-g | Permanence: the seven-day MoQ soak on the live feed, which never wraps, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 14, 15) | the secondary's feed (the primary has about one core spare); nginx for the segmented arm | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
-| P0-l | The live T-STD export on a source of another profile or rate | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | Upstream: the AC-3 half is merged; the video leak and the mux overhead are unmerged (re-landed as draft [#5516](https://github.com/moq-dev/moq/pull/5516)), and `main` still stops on the feed ([T45](test-45-live-tstd-remux.md)) | The live-feed capture through the merged export at the source's multiplex rate, graded on T47's criteria 1–4 | [T45](test-45-live-tstd-remux.md) |
+| P0-j | A subscriber's export across a real encoder's backward step | Whether the real feed steps back at all is open (every exit captured was a mis-stamped SCTE-35 cue); a step's cost and class are measured on synthetic steps only ([Evidence](../docs/evidence.md) §3.13) | — (running) | One step: a standing export analysed live with TSDuck across it, the programme lost measured, and the step's class read from the hand-off around it | [T34](test-34-real-encoder-severity.md) |
+| P0-g | Permanence: the seven-day MoQ soak on the live feed, which never wraps, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 14, 15) | the secondary's feed (the primary lacks the cores); nginx for the segmented arm | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
+| P0-l | The live T-STD export on a source of another profile or rate | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | Upstream: the video leak and mux overhead, draft [#5516](https://github.com/moq-dev/moq/pull/5516); `main` stops on the feed | The live-feed capture through the merged export at the source's multiplex rate, graded on T47's criteria 1–4 | [T45](test-45-live-tstd-remux.md) |
 ## P1 — establishes where one architecture is superior
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
-| P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | On current `main` nothing fails over in the mesh, because a standby refused before its PMT is never asked again; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: `import-announce-tracks` and `hop-aligned-import` ([below](#upstream-quests-worth-building)) | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
-| P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | On the opaque lane, a stream-clocked pacer that stays silent rather than send a datagram it cannot fill (the join is clean; loss and return are not); the live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export, whose identity across a republish is declined | On the opaque lane, T12's cells 2b and 3 hitless with the fixed pacer; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
-| P1-w | A 1+1 ingest pair's double switch at a backward step, on the default `moq-lite-06` and again on `moq-lite-07`, at the build under test | [Evidence](../docs/evidence.md) §3.13's "keeps both legs, but each export follows whichever leg announced last" is measured on `moq-lite-07` at an older build only, and the maintainer was offered it | P0-j's end (a quiet host; the rig is one host, pipe-fed) | T41's pair cells (three aligned, two at `SKEW2=2`, one single-importer control) graded on its criteria 1–3 for each protocol | [T41](test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose importers each mint an epoch* |
+| P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | On current `main` nothing fails over in the mesh, because a standby refused before its PMT is never asked again; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: our draft [#5517](https://github.com/moq-dev/moq/pull/5517) and `hop-aligned-import` ([below](#upstream-quests-worth-building)) | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
+| P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | On the opaque lane, a stream-clocked pacer that stays silent rather than send a datagram it cannot fill; the live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export | On the opaque lane, T12's cells 2b and 3 hitless with the fixed pacer; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
+| P1-w | A 1+1 ingest pair's double switch at a backward step, on the default `moq-lite-06` and again on `moq-lite-07`, at the build under test | [Evidence](../docs/evidence.md) §3.13's "keeps both legs, but each export follows whichever leg announced last" is measured on `moq-lite-07` at an older build only | P0-j's end (a quiet host) | T41's pair cells (three aligned, two at `SKEW2=2`, one single-importer control) graded on its criteria 1–3 for each protocol | [T41](test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose importers each mint an epoch* |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig; the infrastructure axis on both lanes; the SRT arm at an 11.87 s latency with buffers sized to it | [T28](test-28-failure-injection-matrix.md) |
-| P1-d | Congestion: where a contended feed's loss happens, in the relay's per-subscriber queue | Where a contended feed loses what a delay does not cover (§5 row 9): no delay up to 6 s absorbs a sustained shortfall, a 5 s dip is absorbed only at 6 s and 200 ms RTT, and the bottleneck drops nothing, so the loss is upstream of it and unplaced | — | The relay's per-subscriber queue instrumented across T31's 5 s dip at 20 ms RTT (criterion 8) | [T31](test-31-congestion-capacity-ladders.md) |
+| P1-d | Congestion: where a contended feed's loss happens, in the relay's per-subscriber queue | Where a contended feed loses what a delay does not cover (§5 row 9): the bottleneck drops nothing, so the loss is upstream of it and unplaced | — | The relay's per-subscriber queue instrumented across T31's 5 s dip at 20 ms RTT (criterion 8) | [T31](test-31-congestion-capacity-ladders.md) |
 | P1-f | The scaling model's remaining points, and the segmented fan-out | The scaling model is measured to N = 100, with the origin co-resident | a subscriber host that holds 100 exporters; a second subscriber host | The ceiling with GSO on past N = 100; the origin on its own host; an hour at N = 100; the segmented fan-out measured | [T26](test-26-cross-host-fanout.md), [T43](test-43-fanout-current-build.md) |
 | P1-g | Capped-stream relay memory under pressure | Whether the relay's memory plateaus under pressure (§5 row 14), which no soak exercises | — | T9's capped-stream arm run | [T9](test-9-performance.md) |
 | P1-b | Distributed resilience above the egress 1+1 pair | Fabric-level failure for the media-aware lane | — | T29 run against its criteria | [T29](test-29-moq-distributed-resilience.md) |
-| P1-c | Distributed resilience on the segmented lane: a two-host segment store, edge and origin failure, then a standby packager joining a running feed (formerly P2-c) | The segmented lane's equivalent of P1-b | — | T30 run against its criteria, the standby arm last | [T30](test-30-segmented-distributed-resilience.md) |
+| P1-c | Distributed resilience on the segmented lane: a two-host segment store, edge and origin failure, then a standby packager joining a running feed | The segmented lane's equivalent of P1-b | — | T30 run against its criteria, the standby arm last | [T30](test-30-segmented-distributed-resilience.md) |
 | P1-e | MPTS: per-programme SI on the T10 rig, and the opaque-lane arm | Whether a selected programme is carried with its own SI | — for SI; an opaque-lane build for the second arm | Per-programme SI verified on T10's fixtures; the opaque arm run | [T10](test-10-mpts-multiservice.md) |
 | P1-h | Interoperability, the remaining legs | Relay portability, which underwrites the economic argument (§5 row 11) | B-2 for T11c; upstream adoption of the announce convention | The full suite against a `moq2ts` subscriber; the three undiagnosed relay failures diagnosed | [T11](test-11-interop.md) |
 | P1-i | The three remaining data-plane comparison cells | Three empty cells in the comparison's head-to-head | B-4, B-5, B-6 | Each cell scored | [T14](test-14-data-plane-comparison.md) |
@@ -56,8 +55,7 @@ defined [below](#blocked-on-apparatus).
 latency ordering on a lossy or long path), 6 (a CDN carrying a multi-programme TS segment), 10 (a
 third source profile), 12 (a tuned CDN edge, or an origin on BBR, under loss at
 100 ms RTT) and 13 (RIST against SRT on a real path) have no entry yet, and neither have the control
-strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions). Each
-needs an entry and a protocol before it can be run; until then the paper carries them as open.
+strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions).
 
 **Remainders inside completed experiments** are kept in their own files' open-items sections (T3, T4,
 T9, T11, T12, T13, T15, T16, T17, T18, T20) and are not restated here. **Completed entries leave
@@ -71,25 +69,24 @@ P2-b → [T25](test-25-isolation-under-abuse.md).
 ## Upstream quests worth building
 
 Untaken quests on upstream `main` whose result would move an entry above, ranked by weight for primary
-distribution. A row leaves when a pull request takes it or it lands; ours in flight are in the
+distribution. A row leaves when a pull request takes it; ours are in the
 [upstream ledger](upstream-contributions.md).
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
-| `import-announce-tracks` [S] | An importer announces only once it knows its tracks, so a standby joining a live partner no longer answers `not found` and aborts its subscribers ([#4352](https://github.com/moq-dev/moq/issues/4352)) | — (built locally, unposted) | **High**, R6: half of P1-p's gate |
 | `epoch-anchor` [M] | Importers sharing an epoch derive one clock and timestamp era from the epoch and their source alone | — (plan merged) | **High**, R6: gates the next two |
 | `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
-| `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the three above | **High**, R6: P1-p's other half |
+| `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above; #5517 | **High**, R6: P1-p's other half |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD, two quests away |
-| `tstd/psi-runs` [M] | Padded export keeps PSI within TBsys and Bsys, and `compliance.py` grades both | after [#5516](https://github.com/moq-dev/moq/pull/5516) (same planner) | **Medium**, R3: ungraded here; bites on multi-service tables |
+| `tstd/psi-runs` [M] | Padded export keeps PSI within TBsys and Bsys, and `compliance.py` grades both | after [#5516](https://github.com/moq-dev/moq/pull/5516) (same planner) | **Medium**, R3: bites on multi-service tables |
 | `ts-reliability/pes` [M] | TS import assembles PES headers that span packets, with bounded staging | — | **Medium**, R1/R5: legal sources and damaged input |
 | `ts-export-backlog` [S] | TS export reads a track only until a frame falls due, leaving a stalled sink's backlog in the source | — | **Medium**, R5: bounds a slow subscriber's memory |
 | `restart-followers` [L] | Consumers follow an epochless `Restart` (a drain, a replacement) by resolving again | — | **Medium**, R6: a relay drain under a long-lived export |
 | `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats | `stats/schema` [M] | **Medium**, R8: what P1-l reads back |
 
-Set aside: `ts-live-clock` and `ts-same-instance-resume` (the maintainer's investigations on his
-validation draft), `stats-traffic-resume` (taken, [#5492](https://github.com/moq-dev/moq/pull/5492)),
-`open-gop-leading-pictures` (open-GOP contribution only, in three languages), `ts-eac3` and
+Set aside: `ts-live-clock` and `ts-same-instance-resume` (the maintainer's own investigations),
+`stats-traffic-resume` (taken, [#5492](https://github.com/moq-dev/moq/pull/5492)),
+`open-gop-leading-pictures` (open-GOP sources only), `ts-eac3` and
 `tstd-controls` (profiles the live feed lacks), and the QoS line's lag histogram (behind
 `stats-prefix-tracks`, R8 only).
 
@@ -98,24 +95,19 @@ validation draft), `stats-traffic-resume` (taken, [#5492](https://github.com/moq
 | Gate | State | Unblocks |
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d, P1-i, P2-k |
-| **B-7** A live contribution feed of a real service over SRT to both EC2 hosts | **on the primary** (25 Mb/s, graded at the source in [T33](test-33-gate2-preparation.md) Part C); the secondary's pending | now: P0-j; with the secondary's: P0-g's live arm, P1-o's two-ingest arm |
+| **B-7** A live contribution feed of a real service over SRT to both EC2 hosts | **on the primary** (graded in [T33](test-33-gate2-preparation.md) Part C); the secondary's pending | now: P0-j; with the secondary's: P0-g's live arm, P1-o's two-ingest arm |
 | **B-2** A `moq2ts` subscriber published by its authors | not published | P1-h (T11c) |
 | **B-4** A commercial ABR-to-TS gateway | none | the segmented lane's low-latency arm at equal conformance (§5 row 5); P1-i |
 | **B-5** The commercial packaging edge itself | none (a plain byte cache only re-measures nginx) | multi-programme carriage through a media-aware edge; P1-i |
 
-**Inside the hardware window.** The analyser and IRDs are expected to arrive and leave together, and
-the live feed is permanent, so the window is for measurement against the feed, not for debugging a
-harness or for cells the feed can run without the hardware. The order of work before and in it is [T33](test-33-gate2-preparation.md)'s.
+**Inside the hardware window**, which the analyser and IRDs share, measure against the live feed; debug
+no harness and run no cell that needs no hardware. [T33](test-33-gate2-preparation.md) orders the work.
 
 ## Scheduling constraints
 
 - Run the segmented fan-out last in any session, because it deliberately saturates a box, and keep a
   segmented origin off any box carrying a MoQ relay.
-- The byte-faithful HLS receiver is validated for byte fidelity, not timing: characterise its per-cycle
-  `curl` overhead before any latency arm, and sweep its per-fetch timeout on impaired cells
-  ([method-notes](method-notes.md) § *A receiver's per-fetch timeout is a measurement parameter*).
-- Soaks and memory arms run for days and measure the machine they run on, so neither shares a window
-  with anything else.
+- Soaks and memory arms measure the machine they run on, so neither shares a window.
 - The cheap namespace ladder cells (P1-a, P1-d, P2-e) are the right filler for a window whose main
   item is posting, reviewing or building.
 
@@ -125,22 +117,15 @@ Recorded so they are not proposed again; where a result exists, it is in the fil
 
 - **The lab re-multiplexer's 550–600 ms floor**: the merged export superseded it as the live stage,
   and the export's own floor is [T47](test-47-fixed-delay-export.md)'s.
-- **The arrival oracle on a bigger host**: run, and the caveat it existed to retire is retired
-  ([T19](test-19-pcr-grid-verification.md)).
-- **Another clean two-host 1+1 arm or two-publisher two-relay topology**: both run; what remains of
-  multi-track identity is P1-o ([T12](test-12-dual-path-handoff.md)).
-- **The congestion cells under an AQM, again**: run, and it falsified the prediction it tested; do not
-  re-run it as a rescue ([T8b](test-8b-congestion-control.md)).
-- **A lower-layer mechanism for the shed**: the sweep discriminated, and nothing is left for a
-  shared-lane mechanism to explain ([T8b](test-8b-congestion-control.md)).
-- **More transparency clips through lanes already characterised** across a 2.75× bitrate spread.
-- **The wire-cost leg on the EC2 path**, whose HTTP-layer term is path-independent and whose framing
-  multiplier is measured elsewhere; and per-track wire-byte attribution.
-- **Another segmented HTTP/3 arm**: run, and its questions answered ([T20](test-20-segmented-http3.md),
-  [T42](test-42-h3-receiver-fidelity.md)).
-- **An in-process UDP sink for `export ts`**: upstream closed it as not planned, and `tsp` does the
-  socket work in the deployed chain ([upstream contributions](upstream-contributions.md) § *A UDP sink
-  for `export ts`*).
+- **Re-runs of answered arms**: the arrival oracle on a bigger host ([T19](test-19-pcr-grid-verification.md));
+  another clean two-host 1+1 arm or two-relay topology (what remains is P1-o); the congestion cells
+  under an AQM, or a lower-layer mechanism for the shed ([T8b](test-8b-congestion-control.md)); another
+  segmented HTTP/3 arm ([T20](test-20-segmented-http3.md)); more transparency clips across lanes
+  already characterised.
+- **The wire-cost leg on the EC2 path** (its HTTP-layer term is path-independent), and per-track
+  wire-byte attribution.
+- **An in-process UDP sink for `export ts`**: upstream declined it, and `tsp` does the socket work
+  ([upstream contributions](upstream-contributions.md) § *A UDP sink for `export ts`*).
 - **Conditional-access carriage through the opaque lane, and its apparatus**: it needs a BISS-CA
   scrambler and an entitled receiver, the requirement is unestablished, and
-  [Control](../docs/control-plane.md) §9 already records the commercial half as the deciding one.
+  [Control](../docs/control-plane.md) §9 records the commercial half as deciding.
