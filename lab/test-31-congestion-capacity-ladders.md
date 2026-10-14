@@ -4,7 +4,8 @@
 rig — three replicates per MoQ rung, two to three per segmented rung — with each lane's absorption
 boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ
 arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release
-delay up to 6 s absorbs a sustained 0.8× share. Every MoQ figure in this file is graded by
+delay up to 6 s absorbs a sustained 0.8× share, and against a 5 s dip to 0.8× only 6 s at 200 ms RTT
+absorbs the video, with the shaper dropping nothing. Every MoQ figure in this file is graded by
 [`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to
 carry were an artefact of the exporter and are withdrawn (see *Corrections*).**
 [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
@@ -334,8 +335,49 @@ RTT. The curve falls with the delay, by 2.7–3.2 s of median from 1 s to 6 s, s
 buys back about 0.6 s of picture for about 2 s of latency. Neither n nor RTT moves a median by more
 than 1.1 s at a given delay. The picture goes in holes of 0.48–1.36 s; audio loses 0–0.16 s; the
 export's late drops are 0–5 per subscriber, so the loss is not the release deadline's. The window's
-20 % shortfall is 16 s at the stream's rate; whether that is the lane's deficit turns on its wire
-rate, which is not measured (*What remains*).
+20 % shortfall is 16 s at the stream's rate, and 15.4–15.5 s at the lane's own wire rate, 0.99× of
+it (criterion 10's controls, below).
+
+### A 6 s delay absorbs a 5 s dip's video at 200 ms RTT, and no delay up to 6 s does at 20 ms
+
+Criterion 10 on the same build and rig, on the secondary: 72 cells (n ∈ {2, 3} × `--delay` {1, 2,
+6 s} × RTT {20, 200 ms} × dip or control × three replicates), 180 subscriber captures, none void,
+each graded on content. All 90 control subscribers lose 0.00 s of video and audio, with no frame
+late.
+
+Video lost in the dip cells, median and range over three replicates × n subscribers, then the
+subscribers that absorb the dip:
+
+| n | RTT | `--delay` 1 s | 2 s | 6 s |
+|---|---|---|---|---|
+| 2 | 20 ms | 1.10 (0.84–1.20); 0 of 6 | 0.78 (0.72–1.00); 0 of 6 | 0.40 (0.20–0.48); 0 of 6 |
+| 2 | 200 ms | 0.72 (0.56–0.88); 0 of 6 | 0.34 (0.00–0.76); 1 of 6 | 0.00; **6 of 6** |
+| 3 | 20 ms | 1.00 (0.72–1.16); 0 of 9 | 0.72 (0.48–1.16); 0 of 9 | 0.28 (0.24–0.36); 0 of 9 |
+| 3 | 200 ms | 0.64 (0.12–1.12); 0 of 9 | 0.36 (0.00–0.64); 1 of 9 | 0.00; **9 of 9** |
+
+**The smallest delay that absorbs the dip for every subscriber is 6 s at 200 ms RTT, at both n; at
+20 ms none in the ladder does**, though 6 s cuts the loss to 0.20–0.48 s. The largest hole per
+subscriber is 0.12–0.40 s, but 0.60 and 0.80 s in two, and no video frame is late in any cell, so the
+loss is not the release deadline's.
+Delivered latency in the dip cells is the controls' to within 0.14 s at the median: what is lost is
+not carried as lag.
+
+**Audio is lost too, as it was not under the sustained shortfall.** In each dip cell 5–11 of 15
+subscribers lose more than 0.1 s of audio, up to 2.11 s at a 1 s delay and up to 0.86 s at 6 s and
+200 ms RTT, where every subscriber's video is absorbed. Criterion 10 grades video, so "absorbs" is
+video's alone.
+
+**The bottleneck drops nothing.** The shaper's drop counter stays at 0 in every cell, dip included;
+its backlog peaks at 0.17–0.35 MB at 20 ms RTT and 0.90–2.18 MB at 200 ms. During the dip the class
+runs full (15.67–15.92 and 23.75–23.88 Mb/s), and after it runs above its pre-dip rate (19.98–23.13
+against 19.51–19.70 Mb/s at n = 2, 29.75–34.45 against 29.18–29.52 at n = 3). What is lost is lost
+before the shaper's queue, at the relay or its sender, which only criterion 8's instrumentation can
+place. That the longer path absorbs more is consistent with it holding more of the backlog in flight
+and in the shaper's queue, by reasoning rather than measurement.
+
+**The lane's wire rate.** Unimpaired, each subscriber's flow averages 9.86–9.87 Mb/s at the shaper
+(19.71–19.73 Mb/s for two, 29.57–29.60 for three), 0.99× the stream's 9.95 Mb/s, so the dip withholds
+about 0.97 s of each subscriber's media, where the criterion assumed 1 s.
 
 ## Measured — the segmented step-capacity ladder
 
@@ -583,6 +625,17 @@ is replaced on those builds by:
 9. **Error bars (P2-e).** Every aggregate quoted from criterion 7, and every ladder rung on either lane,
    rests on at least three replicates and is quoted as a range; rungs with fewer are re-run to three
    before they are quoted again.
+10. **A release delay against a transient shortfall (P1-d).** Criterion 7's rig, subscribers and
+    grading, with the shared class at 2 × n × the stream's rate except for 5 s at 0.8 × n, from 30 s
+    into the 80 s window; the control is the same cell with no dip. n ∈ {2, 3}, `--delay` ∈ {1, 2,
+    6 s}, base RTT ∈ {20, 200 ms}, three replicates, interleaved. The dip withholds at least 1 s of
+    each subscriber's media, so 1 s is the shortest delay that could cover it. A subscriber
+    **absorbs** the transient if it loses no video (no hole above 100 ms) and no video frame misses
+    its deadline, in a cell whose control loses none. For each (n, RTT) the result is the smallest
+    delay at which every subscriber absorbs it, or the record that none in the ladder does. The
+    shaper's queue is sampled every 0.5 s (bytes sent, drops, backlog), so a loss can be placed at
+    the bottleneck or behind it; that is the bottleneck's queue, not the relay's per-subscriber queue
+    criterion 8 needs.
 
 ## Limits, stated in advance
 
@@ -612,7 +665,8 @@ is replaced on those builds by:
 | 6 | Delivered latency on `--delay` builds | **Met.** About twice the delay; no subscriber drifts more than 100 ms, none excluded |
 | 7 | Delay × contention × RTT | **No delay in {1, 2, 4, 6 s} suffices** at n ∈ {2, 3} or any RTT: 14.0–21.9 s of video lost against 0.00 s controls, falling 2.7–3.2 s in median from 1 s to 6 s |
 | 8 | Recovery on `--delay` builds | **Not run**; the relay's per-subscriber queue is not instrumented |
-| 9 | Error bars | **Met for criterion 7** (three replicates per cell, quoted as ranges); the segmented rungs with two replicates are not yet at three |
+| 9 | Error bars | **Met for criteria 7 and 10** (three replicates per cell, quoted as ranges); the segmented rungs with two replicates are not yet at three |
+| 10 | A delay against a transient shortfall | **6 s at 200 ms RTT; none in {1, 2, 6 s} at 20 ms**, at n ∈ {2, 3}, on video. The shaper drops nothing; audio loses up to 2.11 s, which the criterion does not grade |
 
 Criterion 5 deserves a note rather than a bare "not run": it asks for the *smallest* budget that keeps
 aggregate delivery above 95 %, which presumes delivery improves monotonically with the budget. T28
@@ -624,13 +678,12 @@ and at contention against a capacity step that curve falls with the delay.
 The rig tears down and rebuilds from `t8b-netns.sh` on the EC2 secondary, and nothing here waits on
 a third party.
 
-- **Whether the MoQ boundary is the lane's or the wire's.** The rungs are multiples of the TS rate
-  and the bottleneck shapes packets; measuring the lane's wire rate at 1.2× would say how much of
-  the 1.0×–1.1× boundary is framing overhead.
-- **A delay against a shortfall shorter than itself.** Criterion 7 holds the shortfall for the
-  whole window, which no delay in the ladder can cover; whether a delay absorbs the 5 s 0.8×
-  transient is the operational question it leaves.
+- **Whether the MoQ boundary is the lane's or the wire's.** On `b581c27e` the lane's mean wire rate
+  is 0.99× the TS rate (criterion 10's controls), so mean framing overhead does not set the
+  1.0×–1.1× boundary measured on `ffa5b81b`; its rate over a keyframe's span is not measured.
 - **Buffer and RSS instrumentation** for criteria 2 and 8, which the current rig does not collect.
+  Criterion 10 puts the transient's loss upstream of the shaper's queue, video and audio alike, so
+  the relay's per-subscriber queue is where criterion 8 has to look.
 - **The segmented lane under loss with a sender that does not yield to it** — the same origin with
   BBR — which would say whether the collapse at 100 ms RTT is the lane's or its origin's controller.
 - **Durations beyond 60 s** on either lane's boundary rungs; the segmented lane's margin is set by

@@ -525,11 +525,12 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   padding the slot back at its end, clears the system TB and leaves the video overrun (65 packets,
   same peak), since the padding sits outside the count too; charging the tables to the null lane's
   share instead made it worse (479 packets, peak 746 B). A fix has to keep a capped video lane
-  spread over every position it can drain in. **Upstream's padded planner does** (#5306 at
-  `f944b8320` `[unmerged]`, tables, nulls and media placed at absolute positions; same cut and rig):
-  neither video TB (peak 349 B) nor the system TB (peak 504 B) overruns, and one video frame is
-  still dropped late. On both builds audio units stay in B past 1 s, up to 1.05 s: 12 AC-3 units
-  and 4–5 on each MPEG audio PID, where the source has none above 0.05 s. The
+  spread over every position it can drain in. **Upstream's padded planner does** (#5306, tables,
+  nulls and media placed at absolute positions; same cut and rig): at its head `f944b8320` and as
+  merged, on `main` at `0d9e9ff78`, neither video TB (peak 349 B) nor the system TB (peak 504 B)
+  overruns, and one video frame is still dropped late. On all three builds audio units stay in B
+  past 1 s, up to 1.05 s: 12 AC-3 units and 4–5 on each MPEG audio PID, where the source has none
+  above 0.05 s. The
   recording has 1,398 continuity gaps of its own across every PID, so its completeness grade (a
   third of the video and a tenth of each audio missing) measures the recording, not the export.
 - **The live feed (P0-l, P1-u): `main` stops on it; with #5362's two quests `[unmerged]` it
@@ -540,7 +541,7 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   - *`main`.* `90500867d` exits 8–10 s in on *missed a decode deadline on PID 123*, the AC-3, whose
     PES (6,978–7,162 B, about 9.3 frames of 192 kb/s) begin mid-frame, so the whole PES went out as
     one unit larger than the receiver's 5,696-byte buffer. With that fixed by #5363, `b581c27ed`
-    stops 31 s in on the video. It admits video at Rbx counted in whole packets, less a packet a
+    stops 31 s in on the video, and `0d9e9ff78`, with #5306 merged, 27 s in. It admits video at Rbx counted in whole packets, less a packet a
     slot of slack and the clock packet: 396 packets a 25 ms slot, about 2.9 % below the leak in
     payload, while this encoder fills the leak (407.6 packets a slot on average).
   - *`tstd/video-leak`* (`02a47615b`, on #5306). At 26 Mb/s it runs the 280 s and passes criteria

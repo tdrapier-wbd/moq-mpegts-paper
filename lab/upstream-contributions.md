@@ -961,7 +961,8 @@ rules in [method-notes](method-notes.md) §1 and §5.
 A quest-only PR replacing `plan-ts-alignment`: `--epoch` refused for capture, `avc3`,
 `rtc --connect` and `transcode`; passthrough cuts on the epoch's grid; `--sync` legs whose counters
 restart per group, released by clock recovery rather than wall time (a 1 s delay lasts about 9 h at
-30 ppm); and RTP legs that stay silent rather than send a datagram they cannot fill. **Merged.** Its
+30 ppm); and RTP legs that stay silent rather than send a datagram they cannot fill. **Merged**, its
+refusals built as [#5480](https://github.com/moq-dev/moq/pull/5480), merged. Its
 coordinate, one anchor and era per epoch that a later importer adopts, was replaced by the
 maintainer's [#5438](https://github.com/moq-dev/moq/pull/5438): importers sharing an epoch each
 derive the catalog clock and era from the epoch and their own source, all stay live, and none reads
@@ -1797,10 +1798,9 @@ the same recording and rig. **Closed.**
 [posted on #5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371).** The CLI test
 the quest names passed 40 of 40 on `main` at `90500867d` with the exporter's stderr kept in its
 assertion, alone and with its file's tests in parallel under CPU load, so the validation branch's
-failure is not yet tied to `main`. Live, a fresh importer under a reused epoch is resumed into and
+failure was not `main`'s. Live, a fresh importer under a reused epoch is resumed into and
 carries nothing, exit 0 ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*), offered as
-the quest's invalid-replay control. **Waived**: the maintainer recorded in the quest that the
-finding no longer holds #5328, which merges once Interop is green.
+the quest's invalid-replay control. **Waived** in the quest by the maintainer; #5328 merged.
 
 **Video overruns its transport buffer where the multiplex runs faster than the video's Rx — reported
 as [#5142](https://github.com/moq-dev/moq/issues/5142).** The export holds video to its HRD's Rx, but
@@ -1814,12 +1814,11 @@ no PID overruns its transport buffer, our test as the regression. On `main` (`9f
 before: the layout cause is gone. The residue is the slot's edges: after a slot the paused video
 left empty, program tables written twice go ahead of a capped video lane, outside the interleave's
 count ([reported on #5304](https://github.com/moq-dev/moq/pull/5304#issuecomment-6125008012), T45).
-The maintainer dropped #5304's duplicate-run rule for
-[#5306](https://github.com/moq-dev/moq/pull/5306)'s planner and merged #5304 as the remaining
-PSI-pacing quest. **On #5306 at `f944b8320` the cut overruns neither video nor system TB**
+#5304 merged as a quest, [#5306](https://github.com/moq-dev/moq/pull/5306)'s planner replacing its
+duplicate-run rule. **On #5306 at `f944b8320` the cut overruns neither video nor system TB**
 (peaks 349 and 504 B,
-[reported](https://github.com/moq-dev/moq/pull/5304#issuecomment-6155009194)). **Fixed**; the
-residue clears on #5306, open.
+[reported](https://github.com/moq-dev/moq/pull/5304#issuecomment-6155009194)). **Fixed**, and
+the same on `main` with #5306 (`0d9e9ff78`).
 
 `--linger` also carries the exporter across a relay restart, which `--linger 0s` does not survive
 (one run each, [T13](test-13-downstream-grooming.md) § *Liveness*).
@@ -1996,7 +1995,7 @@ sets rather than the content. The P0 frame counts were not repeated on the merge
 
 **Open.** Loopback SRT loss rate unexplained (to 6 % at 10 Mb/s); libsrt-to-libsrt comparison not yet usable.
 
-### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest in draft [#5414](https://github.com/moq-dev/moq/pull/5414)
+### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), the AC-3 half merged as [#5363](https://github.com/moq-dev/moq/pull/5363), the rest unmerged ([#5414](https://github.com/moq-dev/moq/pull/5414))
 
 **Report.** [T45](test-45-live-tstd-remux.md)'s live-feed arm: a hardware encoder's 25 Mb/s CBR
 multiplex with no nulls, conformant as a source, stops `main`'s export within 10 s on AC-3 whose
@@ -2014,7 +2013,8 @@ quests and counts audio PES headers in B (2.4.2.3), as #5306 now does too. On th
 `b581c27ed` stops at 31 s; #5414 runs 280 s at the source's 25 Mb/s and passes T45's criteria.
 
 **State.** #5363 merged, reworked by the maintainer. #5362 closed into two quests, the maintainer
-answering both questions yes. #5414 is a draft stacked on #5306.
+answering both questions yes. #5414 closed unmerged with #5306's branch; `main` with #5306
+(`0d9e9ff78`) still stops on the capture after 27 s, on video.
 
 ---
 

@@ -437,10 +437,12 @@ retired by measurement eliminates a class of cause; one retired by argument elim
 hand.** *(T8b C6.)* A coincidence of ratios is not a mechanism.
 
 **When a stage reports bad input, write down the stage's own contract, and refuse to integrate a sample
-there is no reason to believe.** *(T19, T21.)* A groomer that read one PCR interval as both duration and
+there is no reason to believe.** *(T19, T21, T34.)* A groomer that read one PCR interval as both duration and
 length exited zero after discarding 67.2 % of a legal fixture; a pacer computed 431 Mb/s inside an
-11 Mb/s carrier and drained its cushion. Make assumptions measured quantities, check recovered values
-against conservation, and raise a counter rather than clamp silently.
+11 Mb/s carrier and drained its cushion; an importer's *below the live edge*, read as the feed stepping
+back, was its own stamp on a SCTE-35 section. Make assumptions measured quantities, check recovered values
+against conservation, and raise a counter rather than clamp silently. Before blaming the source for a
+refusal, reproduce it on the captured bytes through the same build, cut either side of the suspect packet.
 
 **Where a stage derives a quantity from its input, capture both ends of one run.** *(T21.)* The input
 showed a clean grid and a signalled break, the output a stopped clock: the estimator was faithful to input
