@@ -1793,12 +1793,14 @@ all 926 AC-3 frames written before the video limit stopped it at 39 s are the so
 PTS exact. #5516 builds both quests: `b581c27ed` stops at 31 s, #5516 runs 280 s at the source's
 25 Mb/s and passes T45's criteria.
 
-**State.** Both merged, #5363 reworked by the maintainer and #5516 with two additions of his: the
-PCR rides a one-packet slot's only packet, and a PSI repetition first flushes each program-config
-AAC PID's open PES. #5362 closed into two quests, both questions answered yes. `main`
-(`a7b421617`) passes on the capture. Sending ahead within the delay (#5417, closed with #5414's
-branch) is redone with #5516's packing as draft [#5553](https://github.com/moq-dev/moq/pull/5553):
-one delay off the trail on the capture; open is its rate estimate, which then follows the video.
+**State.** Both merged, #5363 reworked and #5516 extended by the maintainer. #5362 closed into two
+quests, both questions answered yes. `main` (`a7b421617`) passes on the capture. Sending ahead
+within the delay is draft [#5553](https://github.com/moq-dev/moq/pull/5553): one delay off the
+trail; its rate estimate, steered by the video, stays out of tolerance for an hour without moving
+the timing. Its CI met two flakes on `main`, reported as
+[#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates)
+and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm loses an evicted first
+group).
 
 ---
 
