@@ -5,9 +5,9 @@ and 5, put to upstream's merged export: across hosts two exports are byte-identi
 over 2,100 s the export stays conformant across three source joins while its clock follows a source
 25 ppm fast at its slew limit, reaching +4.6 ppm; behind a source 4 ppm fast it settles after about
 100 min. PCR_FO passes; PCR_DR fails, on the output's own 1 ms departure steps. On the live feed,
-a conformant source that fills its 25 Mb/s multiplex, `main` stops 31 s in on the video; with
-#5362's two quests `[unmerged]`, the export passes at the source's own rate** (§ *Questions 4 and
-5, put to the merged export*).
+a conformant source that fills its 25 Mb/s multiplex, `main` passes at the source's own rate,
+about twice the delay behind it; sending ahead within the delay `[unmerged]` takes one delay off**
+(§ *Questions 4 and 5, put to the merged export*).
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
   a subscriber has — each PID's packets in order, when each arrived, and the timestamps they carry —
@@ -533,12 +533,13 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   above 0.05 s. The
   recording has 1,398 continuity gaps of its own across every PID, so its completeness grade (a
   third of the video and a tenth of each audio missing) measures the recording, not the export.
-- **The live feed (P0-l, P1-u): `main` stops on it; with #5362's two quests `[unmerged]` it
-  passes at the source's own rate.** The capture passes as a source: T33's gate, and `ts-tstd.py`
+- **The live feed (P0-l, P1-u): `main` passes at the source's own rate since #5362's two quests
+  merged, about twice the delay behind it; sending ahead within the delay `[unmerged]` takes one
+  delay off.** The capture passes as a source: T33's gate, and `ts-tstd.py`
   with every 2 s window legal (video EB peak 2.99 of 3.75 MB, margin ≥ 510 ms; audio margins ≥
   5.8 ms). Its SPS has no HRD, so the video's buffers are level 4.0's: Rx 36 Mb/s, and Rbx 24 Mb/s
-  on payload. On loopback at 1 s:
-  - *`main`.* `90500867d` exits 8–10 s in on *missed a decode deadline on PID 123*, the AC-3, whose
+  on payload. On loopback, at 1 s unless stated:
+  - *`main` before them.* `90500867d` exits 8–10 s in on *missed a decode deadline on PID 123*, the AC-3, whose
     PES (6,978–7,162 B, about 9.3 frames of 192 kb/s) begin mid-frame, so the whole PES went out as
     one unit larger than the receiver's 5,696-byte buffer. With that fixed by #5363, `b581c27ed`
     stops 31 s in on the video, and `0d9e9ff78`, with #5306 merged, 27 s in. It admits video at Rbx counted in whole packets, less a packet a
@@ -555,10 +556,22 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     are within ±481 ns, the largest interval is 25.0 ms, and every unit of every track is present,
     audio counted as frames. It passes P1-u too: all 11,473 MP2 and 8,600 AC-3 frames are the
     source's, in order, six and seven a PES, flagged aligned, each PTS exact. No unit is dropped
-    late. Re-landed on `0d9e9ff78` as `4c34f2953` (#5516) it grades the same: margins and peaks identical,
-    11,108 PCRs, all 11,474 MP2 and 8,601 AC-3 frames, `compliance.py` passing.
+    late. Merged (`a7b421617`) it grades the same at 1 s and at 2 s, with all 11,474 MP2 and
+    8,601 AC-3 frames, trailing the source by 2,124 and 3,688 ms (median over video PES starts;
+    p95 2,192 and 3,759). At its 500 ms default it trails by 1,623 ms and loses 345 MP2 frames: a
+    stalled group is skipped half the delay behind the newest content, and the source's audio PES
+    span 288 ms.
+  - *Send-ahead within the delay* (#5553, `cdf2001f5` on `a7b421617`). The same grades at 1 s and
+    2 s, with the same PES and audio packet counts, trailing by 1,137 and 2,177 ms (p95 1,205 and
+    2,248). Audio leaves in its due slot, so its least B margin is 23–24 ms, where `main`'s is
+    120 ms (MP2) and 221 ms (AC-3). Without its packing (`175c807a4`) every audio frame is a PES:
+    15,321 more packets cut the video's least margin from 649 to 222 ms, and the latency climbs
+    from 1,141 to 1,525 ms over the run, though it passes. Its clock steers on the video, whose
+    best slack per 2 s ranges over 726–957 ms in this capture against the audio's 20 ms, so its
+    rate estimate reads +284 to +1,141 ppm after the first minute where `main`'s reads −37 to
+    +121; output timing matched `main`'s over the run.
 
-  That output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
+  The `tstd/mux-overhead` output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
   share of the source it carries, it spends 1.0 % more packets than the source on MP2 and 2.5 %
   more on AC-3, whose B holds seven frames and the PES header where the source packs about 9.3.
   It sends 62 clock packets in all, and 2.4 packets a second each of PAT and PMT against the

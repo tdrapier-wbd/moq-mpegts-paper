@@ -523,10 +523,12 @@ before reading "no media" as a publisher fault, and hold one keepalive subscribe
 matrix.
 
 **Know which bytes ran: hash every artefact the arms share, both sides of a patched-against-stock pair,
-and the binary itself.** *(T11b, T12, T40.)* An uncommitted patch survived `git switch` and both binaries
-hashed alike; binaries report no `-<sha>` since #3912. Commit the variant, rebuild from clean status,
-compare SHA-256 before the first run, print the `bin-<sha>.sha` sidecar, and where a defect has a sharp
-signature, use it as the identity test.
+and the binary itself.** *(T11b, T12, T40, T45.)* An uncommitted patch survived `git switch` and both binaries
+hashed alike; binaries report no `-<sha>` since #3912. Worktrees sharing a cargo target reuse each
+other's crates, so a `main` build linked the branch's export. Commit the variant, rebuild from clean status
+with the build log showing the changed crate compiled from that worktree, compare SHA-256 before the
+first run, print the `bin-<sha>.sha` sidecar, and where a defect or change has a sharp signature (a
+message only one side has), use it as the identity test.
 
 **A pinned binary takes its config from its own tree.** *(T44.)* [`t18-arm.sh`](scripts/t18-arm.sh) once
 copied the live checkout's schema. Pass `git show <build>:demo/relay/localhost.toml` explicitly and strip

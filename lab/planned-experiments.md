@@ -19,7 +19,6 @@ defined [below](#blocked-on-apparatus).
 | P0-d | The analyser-specific rows of the Gate 2 acceptance harness | Completes the acceptance test the harness was built for | B-6 | Every analyser row of T33's fixed pass table taken | [T33](test-33-gate2-preparation.md) |
 | P0-j | A subscriber's export across a real encoder's backward step | Whether the real feed steps back at all is open (every exit captured was a mis-stamped SCTE-35 cue); a step's cost and class are measured on synthetic steps only ([Evidence](../docs/evidence.md) §3.13) | — (running) | One step: a standing export analysed live with TSDuck across it, the programme lost measured, and the step's class read from the hand-off around it | [T34](test-34-real-encoder-severity.md) |
 | P0-g | Permanence: the seven-day MoQ soak on the live feed, which never wraps, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 14, 15) | the secondary's feed (the primary lacks the cores); nginx for the segmented arm | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
-| P0-l | The live T-STD export on a source of another profile or rate | Whether the lane serves TS-out to an IRD at conformance in a deployment (§5 row 2) | Upstream: the video leak and mux overhead, draft [#5516](https://github.com/moq-dev/moq/pull/5516); `main` stops on the feed | The live-feed capture through the merged export at the source's multiplex rate, graded on T47's criteria 1–4 | [T45](test-45-live-tstd-remux.md) |
 ## P1 — establishes where one architecture is superior
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
@@ -63,7 +62,7 @@ this file and their IDs are not reused**; a citation of a retired ID resolves to
 discharged it: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
 and [T24](test-24-partial-media-plane-stall.md), P0-i → [T8b](test-8b-congestion-control.md),
 P0-m → [T47](test-47-fixed-delay-export.md), P1-m and P1-q → [T28](test-28-failure-injection-matrix.md),
-P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r and P1-s → [T41](test-41-import-reanchor-coverage.md), P1-u → [T45](test-45-live-tstd-remux.md),
+P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r and P1-s → [T41](test-41-import-reanchor-coverage.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md),
 P2-b → [T25](test-25-isolation-under-abuse.md).
 
 ## Upstream quests worth building
@@ -78,7 +77,7 @@ distribution. A row leaves when a pull request takes it; ours are in the
 | `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above; #5517 | **High**, R6: P1-p's other half |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD, two quests away |
-| `tstd/psi-runs` [M] | Padded export keeps PSI within TBsys and Bsys, and `compliance.py` grades both | after [#5516](https://github.com/moq-dev/moq/pull/5516) (same planner) | **Medium**, R3: bites on multi-service tables |
+| `tstd/psi-runs` [M] | Padded export keeps PSI within TBsys and Bsys, and `compliance.py` grades both | — (#5516 merged) | **Medium**, R3: bites on multi-service tables |
 | `ts-reliability/pes` [M] | TS import assembles PES headers that span packets, with bounded staging | — | **Medium**, R1/R5: legal sources and damaged input |
 | `ts-export-backlog` [S] | TS export reads a track only until a frame falls due, leaving a stalled sink's backlog in the source | — | **Medium**, R5: bounds a slow subscriber's memory |
 | `restart-followers` [L] | Consumers follow an epochless `Restart` (a drain, a replacement) by resolving again | — | **Medium**, R6: a relay drain under a long-lived export |
