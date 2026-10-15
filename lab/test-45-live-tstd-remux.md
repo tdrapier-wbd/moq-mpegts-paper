@@ -148,7 +148,10 @@ capture, every unit of every track):
   (`cdf2001f5`) in turn, on loopback at 1 s, 3,700 s each. Each passes on criteria 1–4 and runs the whole span.
   Reported against `main`: the out-of-tolerance count per 10 min (the export logs its estimate
   only when that count moves), the estimates logged after the first 600 s, and the latency's
-  median per 10 min. The bias lasts if #5553's count still rises in the last 30 min.
+  median per 10 min. The bias lasts if #5553's count still rises in the last 30 min. Fixed before
+  #5553 took the rate from the steadiest track's own envelope, the phase still from the floors':
+  the same hour through `main` (`3abf0161c`) and #5553 with it, and the live feed at 1 s and 2 s,
+  each passing as above. The rate is settled if the count does not rise after the first 10 min.
 
 ## Instruments
 
@@ -564,12 +567,13 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     are within ±481 ns, the largest interval is 25.0 ms, and every unit of every track is present,
     audio counted as frames. It passes P1-u too: all 11,473 MP2 and 8,600 AC-3 frames are the
     source's, in order, six and seven a PES, flagged aligned, each PTS exact. No unit is dropped
-    late. Merged (`a7b421617`) it grades the same at 1 s and at 2 s, with all 11,474 MP2 and
+    late. Merged (`a7b421617`, and again on `3abf0161c`) it grades the same at 1 s and at 2 s, with all 11,474 MP2 and
     8,601 AC-3 frames, trailing the source by 2,124 and 3,688 ms (median over video PES starts;
     p95 2,192 and 3,759). At its 500 ms default it trails by 1,623 ms and loses 345 MP2 frames: a
     stalled group is skipped half the delay behind the newest content, and the source's audio PES
     span 288 ms.
-  - *Send-ahead within the delay* (#5553, `cdf2001f5` on `a7b421617`). The same grades at 1 s and
+  - *Send-ahead within the delay* (#5553, `cdf2001f5` on `a7b421617`; rebased as `df8f2503c` on
+    `3abf0161c`, every figure below within 3 ms or the same). The same grades at 1 s and
     2 s, with the same PES and audio packet counts, trailing by 1,137 and 2,177 ms (p95 1,205 and
     2,248). Audio leaves in its due slot, so its least B margin is 23–24 ms, where `main`'s is
     120 ms (MP2) and 221 ms (AC-3). Without its packing (`175c807a4`) every audio frame is a PES:
@@ -577,23 +581,32 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     from 1,141 to 1,525 ms over the run, though it passes. Its clock steers on the video, whose
     best slack per 2 s ranges over 726–957 ms in this capture against the audio's 20 ms, so its
     rate estimate reads +284 to +1,141 ppm after the first minute where `main`'s reads −37 to
-    +121; output timing matched `main`'s over the run.
+    +121; output timing matched `main`'s over the run. Taking the rate from the steadiest track
+    (`31917be3c`) leaves the output the same to the byte count, margins and latency, and the
+    estimate after the first minute reads −50 to +251 ppm (mean +5) at 1 s and −120 to +216 at
+    2 s; its count still rises until about 4 min in, while the 600 s window fills, where `main`'s
+    stops by 90 s at 1 s and 140 s at 2 s. Pushed rebased onto `acbb0f03b` (`a757ae4ea`),
+    whose commits since touch neither `moq-mux`, `moq-cli` nor `test/ts`.
 
   The `tstd/mux-overhead` output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
   share of the source it carries, it spends 1.0 % more packets than the source on MP2 and 2.5 %
   more on AC-3, whose B holds seven frames and the PES header where the source packs about 9.3.
   It sends 62 clock packets in all, and 2.4 packets a second each of PAT and PMT against the
   source's 14.9.
-- **Send-ahead over an hour: #5553's rate estimate stays out of tolerance, and moves neither
-  conformance nor timing.** Both builds run the 3,700 s and pass criteria 1–4, the T-STD checks applied to 555 s
-  segments one every 540 s, since both read a whole capture into memory: every 2 s window legal, least
-  margins 398.5 ms video, 23.2 ms MP2 and 22.6 ms AC-3 for #5553 against `main`'s 401.8, 119.0 and
-  220.3; every PCR within ±481 ns, the largest interval 25.1 ms; every unit of every track; none
-  dropped late. #5553 trails by 1,108 ms (p95 1,240) and `main` by 1,856 (1,988), each median per
-  10 min falling by 6–7 ms over the hour. `main`'s out-of-tolerance count stops at 50 within the
-  first 10 min. #5553's rises by 188, then 175, 159, 158, 158 and 159 per 10 min, out of tolerance
-  on about half its 2 s steps to the end, its estimates after 600 s within −83 to +102 ppm and
-  settling near −79. The export stops only in upstream's harness, in its `--full` arm (debug
+- **Send-ahead over an hour: with the rate from the steadiest track, #5553's estimate settles as
+  `main`'s does, and neither moves conformance or timing.** Every build runs the 3,700 s and passes
+  criteria 1–4, the T-STD checks applied to 555 s segments one every 540 s, since both read a whole
+  capture into memory: every 2 s window legal, least margins 398.5 ms video, 23.2 ms MP2 and 22.6 ms
+  AC-3 for #5553 against `main`'s 401.8, 119.0 and 220.3; every PCR within ±481 ns, the largest
+  interval 25.1 ms; every unit of every track; none dropped late. On `3abf0161c`, #5553 with the
+  per-track rate (`31917be3c`) trails by 1,105 ms (p95 1,237) and `main` by 1,856 (1,988), each
+  median per 10 min falling by 15 and 9 ms over the hour; their out-of-tolerance counts stop at 68
+  by 4 min 10 s and at 67 within 10 min, and the last estimates read +5.1 and +1.1 ppm. #5553's
+  first estimate, from one or two steps, reads −21,262 ppm and the next ten −512 to +484; the
+  applied drift is clamped at 30 ppm. Without the per-track rate (`cdf2001f5` on `a7b421617`) the
+  margins and latency were the same within 3 ms, but its count rose by 188, then 175, 159, 158, 158
+  and 159 per 10 min, out of tolerance on about half its 2 s steps to the end and settling near
+  −79 ppm, while `main`'s stopped at 50. The export stops only in upstream's harness, in its `--full` arm (debug
   build, 30 s), and on both builds, #5553 rebased (`e7da63493`) in 3 of 6 runs and its base
   `323fda277` in 2 of 5: it exits on the source's clock running past the 30 ppm its output may
   follow, each time after a first logged estimate of −92,000 to −2,170,000 ppm, while runs that

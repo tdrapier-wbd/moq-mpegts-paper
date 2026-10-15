@@ -12,15 +12,17 @@
 #
 # usage: t9-netem-lane.sh set "<netem spec>" | verify | clear
 set -uo pipefail
-ORIGIN=${ORIGIN:?set ORIGIN to user@host of the origin box}
-PEM=${PEM:?set PEM to the ssh key}
+ORIGIN=${ORIGIN:?set ORIGIN to user@host of the origin box, or its ssh alias}
+PEM=${PEM:-}
 IFACE=${IFACE:-ens5}
-SSH=(ssh -i "$PEM" -o ConnectTimeout=15 "$ORIGIN")
+SSH=(ssh ${PEM:+-i "$PEM"} -o ConnectTimeout=15 "$ORIGIN")
 
 case ${1:?set|verify|clear} in
 set)
 	SPEC=${2:?netem spec, e.g. "loss 1%"}
 	DST=$("${SSH[@]}" 'echo $SSH_CLIENT' | awk '{print $1}')
+	# Through SSM Session Manager the origin sees its own agent's loopback, not this host.
+	[[ "$DST" == 127.* ]] && DST=$(curl -s -m 10 https://checkip.amazonaws.com)
 	[ -z "$DST" ] && { echo "could not resolve this host as seen by the origin"; exit 1; }
 	echo "shaping towards $DST: $SPEC"
 	"${SSH[@]}" 'bash -s' <<-EOF

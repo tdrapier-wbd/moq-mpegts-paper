@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # T18 WAN — delivery latency over a real path: source on the origin, receiver here.
 #
-#   ORIGIN_IP=<host> PEM=<ssh-key> PACER=<mpegts-pacer> \
+#   ORIGIN_IP=<host> [HOST=<ssh target>] [PEM=<ssh-key>] PACER=<mpegts-pacer> \
 #     t18-wan.sh <out-dir> <capture-seconds> <arm> [cushion-ms]
 #
-# ORIGIN_IP, PEM and PACER are required and have no defaults, so this script
-# carries no site-specific address. HOST defaults to ubuntu@$ORIGIN_IP and
-# RELAY_URL to https://$ORIGIN_IP:443/anon; override either for a different origin.
+# ORIGIN_IP and PACER are required and have no defaults, so this script carries no
+# site-specific address. HOST defaults to ubuntu@$ORIGIN_IP (set it to the ssh alias
+# for a host reached through SSM) and RELAY_URL to https://$ORIGIN_IP:443/anon.
 #
 # **The loopback sweep prices the buffers; this prices the path.** On loopback SRT
 # and RIST cost exactly their configured jitter buffer and nothing else, which is a
@@ -40,7 +40,7 @@ CUSHION=${4:-1000}
 
 ORIGIN_IP=${ORIGIN_IP:?set ORIGIN_IP to the origin host address}
 HOST=${HOST:-ubuntu@$ORIGIN_IP}
-PEM=${PEM:?set PEM to the SSH private key for the origin}
+PEM=${PEM:-}
 REMOTE_DIR=${REMOTE_DIR:-/home/ubuntu/t18}
 REMOTE_SRC=${REMOTE_SRC:-/home/ubuntu/CNNiEMEA2.ts}
 RELAY_URL=${RELAY_URL:-https://$ORIGIN_IP:443/anon}
@@ -94,7 +94,7 @@ clock-up | clock-down) PORT=0 ;;
 	;;
 esac
 
-SSH=(ssh -n -o ConnectTimeout=10 -o BatchMode=yes -i "$PEM" "$HOST")
+SSH=(ssh -n -o ConnectTimeout=10 -o BatchMode=yes ${PEM:+-i "$PEM"} "$HOST")
 SCRIPTS_REMOTE="$REMOTE_DIR"
 
 if [ "$ARM" = clock-down ]; then
@@ -104,7 +104,7 @@ if [ "$ARM" = clock-down ]; then
 fi
 
 if [ "$ARM" = clock-up ]; then
-	scp -q -o BatchMode=yes -i "$PEM" "$SCRIPTS/t18-latency.py" "$HOST:$SCRIPTS_REMOTE/"
+	scp -q -o BatchMode=yes ${PEM:+-i "$PEM"} "$SCRIPTS/t18-latency.py" "$HOST:$SCRIPTS_REMOTE/"
 	if clock_up; then
 		echo "clock reference already answering on $ORIGIN_IP:$CLOCKPORT"
 		clock_offset
@@ -156,7 +156,7 @@ echo "==> $ARM, cushion ${CUSHION} ms, ${SECS}s, over the WAN from $ORIGIN_IP"
 
 # Sync the rig to the origin every run: a stale copy there is indistinguishable from
 # a rig change here, and only one of the two is under version control.
-scp -q -o BatchMode=yes -i "$PEM" \
+scp -q -o BatchMode=yes ${PEM:+-i "$PEM"} \
 	"$SCRIPTS/t18-latency.py" "$SCRIPTS/t18-wan-source.sh" "$HOST:$REMOTE_DIR/"
 
 echo "--- clock, before ---"
@@ -223,7 +223,7 @@ DRIFT=$(python3 -c "print(f'{abs(($OFF2)-($OFF1))*1000:.2f}')")
 echo "    offset used ${OFFSET}s, drift across the cell ${DRIFT} ms, probe uncertainty $(python3 -c "print(f'{($UNC1)*1000:.2f}')") ms"
 
 echo "--- fetching the origin's source timestamps ---"
-scp -q -o BatchMode=yes -i "$PEM" "$HOST:$REMOTE_DIR/$ARM-source.csv" "$SRCCSV"
+scp -q -o BatchMode=yes ${PEM:+-i "$PEM"} "$HOST:$REMOTE_DIR/$ARM-source.csv" "$SRCCSV"
 
 echo
 echo "=== wire conformance of the same bytes ==="

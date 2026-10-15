@@ -180,9 +180,9 @@ eightfold ladder moved repetition not at all. T19's fourth criterion, no latency
 met: the passing arm delivers at 2,447 ms (§3.11). **Any "0 %" must name its domain** — file analysis
 confirms arithmetic, and the same stage once passed on file and failed live.
 
-**Over a day** ([T21](../lab/test-21-permanence-soak.md), moq 0.11.2): 24.01 h on a continuous
-timeline, 632,199,204 packets, 0 continuity errors, 0 intervals above 40 ms (worst 30.08 ms), 0
-underruns, 0 respawns, and the 33-bit rollover crossed in flight. The source replays a clip with clocks
+**Over a day** ([T21](../lab/test-21-permanence-soak.md), moq 0.11.2 before its development line
+merged): 24.01 h on a continuous timeline, 632,199,204 packets, 0 continuity errors, 0 intervals
+above 40 ms (worst 30.08 ms), 0 underruns, 0 respawns, and the 33-bit rollover crossed in flight. The source replays a clip with clocks
 advanced across joins, so the claim is a synthetic clock over repeating programme; resource behaviour
 across builds is §3.6, and on an October 2026 build this source cannot run at all (§3.13).
 
@@ -649,8 +649,9 @@ scale. **The rollover, the one event a permanent feed cannot avoid, is discharge
 **A continuous source is the other half** ([T40](../lab/test-40-continuous-join-through-srt.md),
 [T41](../lab/test-41-import-reanchor-coverage.md); P1, wire, one host, one run per arm). A looping source
 whose AC-3 and teletext timestamps step back at each content join stops the importer at the first join on
-moq 0.11.2 and 0.12.1 (*frame timestamp is below the live edge*), is published through five joins on moq
-0.12.8, and ends at the first unflagged wrap from moq 0.14.0, by design. **No build measured carries both
+moq 0.11.2 once its development line merged, and on 0.12.1 (*frame timestamp is below the live edge*),
+is published through five joins on moq 0.12.8, and ends at the first unflagged wrap from moq 0.14.0,
+by design. **No build measured carries both
 a continuous restarting source and the current design**, so §3.2's day is not reproducible on an October
 2026 build.
 
@@ -799,13 +800,11 @@ against 512 B; P1, wire, loopback, one 110 s cut). With each slot interleaved, o
 `main`, the same cut overruns on 88 of 943,296 video packets (peak 646 B), all in slots where the
 video is at its admission cap and four program-table packets lead it, which the interleave does not
 spread ([T45](../lab/test-45-live-tstd-remux.md)). **It presents at twice the delay plus about 275
-ms** at 750 ms and 1 s (2,272–2,274 ms at 1 s, also over 540 s). At 500 ms it presents at 991–1,276
-ms over eight joins, and **which track anchors its clock sets the figure**: on this source AC-3
-reads about 250 ms further behind its decode time than MP2, the next track, so a join that hears it
-within the 1 s acquisition window presents about 250 ms later, though joins that anchored elsewhere
-delivered every AC-3 unit at the same margins. Why AC-3 can go unheard for that window is not
-located. At 1 s it is within about 75 ms of the laboratory re-multiplexer, but different builds on
-one clip do not rank them.
+ms** at 750 ms and 1 s (§3.11). At 500 ms **which track anchors its clock sets the figure**: on this
+source AC-3 reads about 250 ms further behind its decode time than MP2, the next track, so a join
+that hears it within the 1 s acquisition window presents about 250 ms later, though joins that
+anchored elsewhere delivered every AC-3 unit at the same margins. Why AC-3 can go unheard for that
+window is not located.
 
 **The graders cannot see a missing track**, nor a system clock far off the source: both T-STD checks
 and `pcrverify` passed outputs with either, and only counting each PID's units and fitting the output

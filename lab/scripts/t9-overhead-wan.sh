@@ -27,8 +27,8 @@ set -uo pipefail
 # shellcheck source=moq-cli-flags.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 
-ORIGIN=${ORIGIN:?set ORIGIN to user@host of the origin box}
-PEM=${PEM:?set PEM to the ssh key}
+ORIGIN=${ORIGIN:?set ORIGIN to user@host of the origin box, or its ssh alias}
+PEM=${PEM:-}
 PORT=${PORT:-443}
 RELAY_BIN=${RELAY_BIN:?set RELAY_BIN to the moq-relay binary on the origin}
 REMOTE_MOQ=${REMOTE_MOQ:-$(dirname "$RELAY_BIN")/moq}
@@ -43,7 +43,7 @@ SRC_VID=${SRC_VID:?set SRC_VID to the video-only source clip on the origin}
 WINDOW=${WINDOW:-40}
 SETTLE=${SETTLE:-20}
 OUT=${OUT:-$HOME/t9wan}
-SSH=(ssh -i "$PEM" -o ConnectTimeout=15 "$ORIGIN")
+SSH=(ssh ${PEM:+-i "$PEM"} -o ConnectTimeout=15 "$ORIGIN")
 
 mkdir -p "$OUT"
 SUB_PID=""
@@ -67,6 +67,8 @@ trap cleanup EXIT INT TERM
 # The origin sees this host at its NAT address; capture must filter on that, not on
 # anything this host believes about itself.
 SUB_IP=$("${SSH[@]}" 'echo $SSH_CLIENT' | awk '{print $1}')
+# Through SSM Session Manager the origin sees its own agent's loopback, not this host.
+[[ "$SUB_IP" == 127.* ]] && SUB_IP=$(curl -s -m 10 https://checkip.amazonaws.com)
 [ -z "$SUB_IP" ] && { echo "could not resolve this host's address as seen by the origin"; exit 1; }
 echo "subscriber address as seen by origin: $SUB_IP"
 

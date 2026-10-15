@@ -259,7 +259,7 @@ buffer** — content-dependent, sizeable from a published encoder parameter, and
 The stages that repair it present at **2,196.7 ms** (a laboratory re-multiplexer, moq 0.12.1) and
 **2,272–2,274 ms** at a 1 s delay, also over 540 s (upstream's fixed-delay export, merged on October
 2026 `main`, which at 500 ms stops about 157 s into a 540 s run), both on loopback and both presentation
-latency, which does not subtract from delivery latency ([Evidence](evidence.md) §3.16).
+latency, which does not subtract from delivery latency ([Evidence](evidence.md) §3.11, §3.16).
 
 **At equal P1/P2 conformance MoQ keeps a decisive margin over segmented HTTP and none over the
 tunnels.** Byte-faithful SRT carries the source's own PCR grid over the public internet with 0 P2
@@ -273,15 +273,10 @@ and the ~650 ms defect bounds that in MoQ's favour. Both paths were healthy, so 
 the recovery the tunnels exist for, and **neither lane has been graded on a hardware IRD**
 ([Evidence](evidence.md) §4).
 
-**A deployment constraint separate from latency.** On the September 2026 builds measured, every
-placed PCR-timeline class crosses the lane at the control's content gap. From moq 0.14.0 a backward
-timestamp step ends the import by design, flagged or not, and upstream has declined an in-process
-restart, so a supervisor must republish under a new epoch at each step, at about 3 s of programme a
-step and with a 1+1 pair not hitless across it, which upstream leaves to the export of the whole
-multiplex, merged but not measured across a republish. moq 0.12.8 publishes a continuous source
-whose content restarts but has not had its placed classes re-measured, so no build is *measured* to
-carry both cases, and a deployment must pin the build or republish at each backward step
-([Evidence](evidence.md) §3.13).
+**A deployment constraint separate from latency.** From moq 0.14.0 a backward timestamp step ends
+the import by design, so a source whose timeline steps back is republished at each step, at about
+3 s of programme a step and not hitlessly for a 1+1 pair, or the build is pinned; no build is
+measured to carry every timeline case ([Evidence](evidence.md) §3.13).
 
 ### 5.2 The decision rule, restated
 

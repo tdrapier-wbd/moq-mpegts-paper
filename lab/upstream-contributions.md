@@ -1795,8 +1795,8 @@ video limit at 39 s are the source's, in order, PTS exact. #5516 builds both que
 **State.** Both merged, #5363 reworked and #5516 extended by the maintainer. #5362 closed into two
 quests, both questions answered yes. `main` (`a7b421617`) passes on the capture. Sending ahead
 within the delay is draft [#5553](https://github.com/moq-dev/moq/pull/5553): one delay off the
-trail; its rate estimate, steered by the video, stays out of tolerance for an hour without moving
-the timing. Its CI met two `main` flakes, reported as
+trail; taking its rate from the steadiest track settles its estimate within 5 min over an hour.
+Its CI met two `main` flakes, reported as
 [#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates)
 and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted first group,
 narrowing the earlier `ts-video-content` quest's first hypothesis).

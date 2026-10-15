@@ -65,9 +65,14 @@ fi
 
 # Dial the address on the relay's certificate. A `localhost` dial against a relay advertising its
 # Elastic IP is answered with a redirect the client loops on, which reads here as a dead relay.
+# The fixed-delay export replaced `--max-age` with `--delay`; each build rejects the other's flag.
+HOLD=--max-age
+"$MOQ_BIN" export ts --help 2>/dev/null | grep -q -- '--delay ' && HOLD=--delay
 SUB=$(mktemp /tmp/feedegress.XXXXXX.ts)
+T0=$(date +%s.%N)
 timeout "$((SECS + 10))" "$MOQ_BIN" --connect-tls-insecure --connect "https://$ORIGIN:443/anon" \
-	--broadcast "$BCAST" export ts --max-age 2s >"$SUB" 2>/dev/null || true
+	--broadcast "$BCAST" export ts "$HOLD" 2s >"$SUB" 2>/dev/null || true
+T1=$(date +%s.%N)
 EBYTES=$(stat -c%s "$SUB" 2>/dev/null || echo 0)
 rm -f "$SUB"
 
@@ -80,4 +85,4 @@ if [ "$EBYTES" -lt 100000 ]; then
 	echo "                      # must be the relay's own advertised address, never localhost"
 	exit 1
 fi
-echo "$EBYTES bytes in ~${SECS}s => $(awk -v b="$EBYTES" -v s="$SECS" 'BEGIN{printf "%.2f Mb/s", (b*8)/(s*1000000)}')"
+echo "$EBYTES bytes => $(awk -v b="$EBYTES" -v t0="$T0" -v t1="$T1" 'BEGIN{printf "%.2f Mb/s over the client'"'"'s %.0f s, connect and hold included", (b*8)/((t1-t0)*1000000), t1-t0}')"

@@ -28,7 +28,7 @@
 # NPKT packets, which is what makes the three columns commensurable.
 #
 # Environment (real values in INSTRUCTIONS.local.md §7 — never hardcode them here):
-#   ORIGIN=user@host  PEM=<ssh key>  [REMOTE_MOQ] [REMOTE_CLIP] [LOCAL_MOQ]
+#   ORIGIN=<user@host or ssh alias>  [HOST=<address>]  [PEM=<ssh key>]  [REMOTE_MOQ] [REMOTE_CLIP] [LOCAL_MOQ]
 #   [LOCAL_CLIP] [HLS_PORT] [SRT_PORT] [SEGSECS] [SETTLE]
 #
 # The remote sender is torn down by process GROUP, using the pid this script
@@ -41,9 +41,10 @@ LANE=${1:?lane: moq | srt | hls}
 OUT=${2:?output dir}
 SECS=${3:-30}
 
-ORIGIN=${ORIGIN:?set ORIGIN=user@host (INSTRUCTIONS.local.md §7)}
-PEM=${PEM:?set PEM=path to the ssh key}
-HOST=${ORIGIN#*@}
+ORIGIN=${ORIGIN:?set ORIGIN=user@host or the ssh alias (INSTRUCTIONS.local.md §7)}
+PEM=${PEM:-}
+# The address the lanes dial; set it when ORIGIN is an alias rather than user@address.
+HOST=${HOST:-${ORIGIN#*@}}
 REMOTE_MOQ=${REMOTE_MOQ:-/home/ubuntu/bin-main-eab96019/moq}
 REMOTE_CLIP=${REMOTE_CLIP:-/home/ubuntu/CNNiEMEA2.ts}
 LOCAL_MOQ=${LOCAL_MOQ:-$HOME/bin-main/moq}
@@ -72,7 +73,7 @@ command -v tsp >/dev/null || {
 	exit 1
 }
 
-SSH=(ssh -o ConnectTimeout=10 -o BatchMode=yes -i "$PEM" "$ORIGIN")
+SSH=(ssh -o ConnectTimeout=10 -o BatchMode=yes ${PEM:+-i "$PEM"} "$ORIGIN")
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
@@ -136,14 +137,14 @@ cleanup() {
 		# Negative pid = the process group setsid created, so the paced reader,
 		# the importer/segmenter and the origin all go together.
 		"${SSH[@]}" "kill -TERM -$RPID 2>/dev/null || kill -TERM $RPID 2>/dev/null || true" || true
-		scp -q -o ConnectTimeout=10 -i "$PEM" "$ORIGIN:$RTMP/send.log" "$OUT/send.log" 2>/dev/null || true
+		scp -q -o ConnectTimeout=10 ${PEM:+-i "$PEM"} "$ORIGIN:$RTMP/send.log" "$OUT/send.log" 2>/dev/null || true
 		"${SSH[@]}" "rm -rf $RTMP" 2>/dev/null || true
 	fi
 }
 trap cleanup EXIT
 
 "${SSH[@]}" "mkdir -p $RTMP"
-scp -q -o ConnectTimeout=10 -i "$PEM" "$OUT/remote.sh" "$ORIGIN:$RTMP/remote.sh"
+scp -q -o ConnectTimeout=10 ${PEM:+-i "$PEM"} "$OUT/remote.sh" "$ORIGIN:$RTMP/remote.sh"
 RPID=$("${SSH[@]}" "chmod +x $RTMP/remote.sh; setsid nohup timeout $RMAX $RTMP/remote.sh \
 	>$RTMP/send.log 2>&1 </dev/null & echo \$!")
 [ -n "$RPID" ] || {
