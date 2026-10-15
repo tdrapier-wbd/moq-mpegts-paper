@@ -141,6 +141,14 @@ capture, every unit of every track):
   present. The script was changed after that run to count MP2 and AC-3 as frames on both sides.
   On outputs a frame a PES its report is unchanged, and on a 150 MB cut of that output with 84
   audio packets dropped it reports 30 frames missing.
+- **Send-ahead over an hour**, fixed after #5553's 280 s runs left its rate estimate far off with
+  the 600 s window still filling. The conformant run's clip, the same service at 9.95 Mb/s with a
+  video lead of 640–844 ms (p5–p95), looped seven times by `ts-seamless-loop.py` (a 578.9 s pass,
+  so a 600 s window seldom holds one moment twice), through `main` (`a7b421617`) and #5553
+  (`cdf2001f5`) in turn, on loopback at 1 s, 3,700 s each. Each passes on criteria 1–4 and runs the whole span.
+  Reported against `main`: the out-of-tolerance count per 10 min (the export logs its estimate
+  only when that count moves), the estimates logged after the first 600 s, and the latency's
+  median per 10 min. The bias lasts if #5553's count still rises in the last 30 min.
 
 ## Instruments
 
