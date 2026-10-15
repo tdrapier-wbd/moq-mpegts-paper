@@ -150,6 +150,7 @@ is a published rate except the one marked *assumed*.
 | | CloudFront / Cloud CDN / Front Door, list, first tier, NA-EU | 0.080–0.085 |
 | | AWS Elemental MediaConnect, reserved bandwidth, smallest (50 Mbps) tier | 0.052 |
 | | Cloudflare MoQ relay, announced general-availability rate | 0.050 |
+| | moq.pro MoQ relay, first paid tier | 0.040 |
 | | **MediaConnect, reserved bandwidth, largest (1500 Mbps) tier** | **0.017** |
 | | **bunny.net CDN, standard network, NA-EU list** | **0.010** |
 | | **bunny.net CDN, volume network, first 500 TB** | **0.005** |
@@ -203,8 +204,8 @@ Like-for-like against a 36 MHz transponder (~8 HD services at 10 Mbps, 1+1, comm
 delivery cost), each further destination costs, at scale, about **$10,500 a year** on MediaConnect
 reserved *(published)*, **$8,700** on tiered cloud list less 70 % *(hypothetical)*, and **$6,200** and
 **$3,100** on a CDN relay at $0.010 and $0.005/GB *(assumed)* ([cost model](../lab/cost-model.md) §6).
-Only MediaConnect is buyable at the price shown; the one announced MoQ relay rate, Cloudflare's, is
-$0.050/GB. **Parity** is the
+Only MediaConnect is buyable at the price shown; the published MoQ relay rates are moq.pro's
+$0.040/GB and Cloudflare's announced $0.050/GB. **Parity** is the
 incumbent's space-segment cost divided by the per-destination figure. Per $1M a year of that cost it
 falls at **~95** destinations on committed cloud, **115** at the *hypothetical* 70 % discount, **162** at
 an *assumed* $0.010 CDN rate and **323** at an *assumed* $0.005. Self-hosting, at ~970 per destination on
@@ -238,7 +239,7 @@ camera-to-display.*
 
 **No option breaks last-mile linearity.** A relay is a cache (§4.6): upstream traffic collapses to one
 copy, and the last mile stays N unicast copies. A CDN brings a **price**, not a topology: commodity
-delivery at $0.005–0.010/GB against $0.09 for cloud egress, and a MoQ relay from one supplier at five to
+delivery at $0.005–0.010/GB against $0.09 for cloud egress, and a MoQ relay from two suppliers at four to
 ten times commodity today.
 
 ### 4.5 Where relay fan-out changes the bill, and where it does not
@@ -260,7 +261,7 @@ sub-second band the commodity pricing segmented HTTP already enjoys at longer la
 | Data plane | Who runs the fan-out | Market it is priced in |
 |---|---|---|
 | Segmented HTTP | the commodity delivery market, a dozen suppliers, today | $0.005–0.010/GB commodity CDN list |
-| MoQ | one CDN today; otherwise you | $0.050/GB published, or hyperscaler egress if self-run |
+| MoQ | two CDNs today; otherwise you | $0.040–0.050/GB published, or hyperscaler egress if self-run |
 | SRT / Zixi / RIST | **you, or a managed media service** | own transit, or ~$0.09/GB metered egress, or per-flow premium |
 
 Hyperscalers sell elasticity, so always-on primary distribution should buy committed or commodity
@@ -281,8 +282,8 @@ plane (§7.2).
 claim**: parity at ~95 destinations on published cloud rates against ~323 at an *assumed* commodity
 relay rate (§4.4). The whole of that gap is the assumption.
 
-**Four things would falsify it, and none is settled.** Only one CDN has announced a MoQ relay, at
-five to ten times commodity delivery. Professional contribution carries SLA, monitoring and support
+**Four things would falsify it, and none is settled.** Only two CDNs publish a MoQ relay rate, at
+four to ten times commodity delivery. Professional contribution carries SLA, monitoring and support
 obligations that consumer CDN pricing does not, so some of the gap is real cost rather than margin.
 Relay portability between implementations is currently absent in practice
 ([Evidence](evidence.md) §3.7) — a market cannot commoditise a product buyers cannot switch between.
@@ -405,11 +406,11 @@ Data-plane choice largely sets the options, for the relay-as-cache reason in §4
 | Data plane | Can you rent the fan-out? | From how many suppliers |
 |---|---|---|
 | Segmented HTTP | yes, and it is a commodity | a dozen, at published rates |
-| MoQ | yes | **one**, at 5–10× commodity |
+| MoQ | yes | **two**, at 4–10× commodity |
 | SRT / RIST | not to the destination — CDNs take it at the door as contribution ingest | you, or a managed media service at per-flow premium |
 
 So SRT means owning the replication, segmented HTTP means it *can* be rented cheaply, and MoQ today means
-building it or depending on a single supplier (§4.6).
+building it or renting from one of two premium suppliers (§4.6).
 
 ### 7.2 What renting transfers (§1)
 
@@ -450,7 +451,7 @@ Refining "capability, direction, appetite for engineering" into things a broadca
 | **Do you already own transit and PoPs where the destinations are?** | on-prem is the cheapest base per byte | the meet-me-point cost and lead time is the hidden line that decides it (§2) |
 | **Are there more than tens of destinations, clustered by region?** | rented fan-out starts to pay, because that is the topology where a relay economises backhaul (§4.5) | it buys little; the linearity is in the last mile either way |
 | **Are you willing to own a conformance stage no vendor sells?** | MoQ is available to you | segmented HTTP or SRT, where the hand-off is bought or unnecessary |
-| **Can you tolerate a single supplier for the replication tier?** | MoQ on a CDN is available today | segmented HTTP, or self-operate |
+| **Can you tolerate two suppliers, both at a premium, for the replication tier?** | MoQ on a CDN is available today | segmented HTTP, or self-operate |
 | **Is the receive estate vendor-specific?** | it may decide the question on its own, independent of transport (§2) | the transport decision is actually free |
 
 Capability and appetite are **positions**, not preferences. A broadcaster with its own transit, a NOC
@@ -512,8 +513,8 @@ staffed from the same place.
 
 - **Infrastructure providers — CDNs and hyperscalers — capture the durable value.** They sell fungible
   capacity per unit, the one input nobody self-supplies past a certain reach, and §4 puts it at roughly
-  90 % of a self-built transport bill. The caveat is §4.6's: for MoQ specifically there is one supplier
-  at five to ten times commodity, so the market premise the buyer is relying on is not yet met.
+  90 % of a self-built transport bill. The caveat is §4.6's: for MoQ specifically there are two suppliers
+  at four to ten times commodity, so the market premise the buyer is relying on is not yet met.
 - **Control-plane vendors have a real market, and it is not the giants.** A smaller organisation has
   fewer systems to integrate and often no codified process for the work at all, so the vendor's
   opinionated model *is* the product — bought as a way of acquiring a process rather than automating
@@ -556,7 +557,7 @@ the thesis rather than a detail of it.**
 - **What will a CDN actually charge to operate a MoQ relay at committed volume?** §4.4 models a modest
   premium over commodity delivery, and **that assumption carries more of the reclamation case than any
   measurement in this repository** — the difference between parity at 95 destinations and at 323. The
-  one announced rate is five to ten times higher. **The largest unvalidated input in the model.**
+  two published rates are four to ten times higher. **The largest unvalidated input in the model.**
 - **Can committed-egress terms be bought for general compute, or only inside a managed product?** §4.2's
   inversion holds only because reserved bandwidth is product-specific.
 

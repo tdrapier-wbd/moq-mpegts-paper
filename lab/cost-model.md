@@ -65,6 +65,7 @@ Internet egress, per GB/GiB, monthly tiers (all $USD, EMEA/NA):
 | GCP premium tier (to NA/EU) | 1 GiB | 0.12 (→1 TiB) | 0.11 (→10 TiB) | 0.08 (>10 TiB) | — |
 | GCP standard tier | 200 GiB | 0.085 (→10 TiB) | 0.065 (→150 TiB) | 0.045 (>150 TiB) | — |
 | Cloudflare MoQ relay | tech preview is free | 0.05 announced GA self-serve, inbound free | — | — | — |
+| moq.pro MoQ relay (upstream's `moq-relay`) | 400 GB/month | 0.04, inbound free | — | — | — |
 
 AWS tier boundaries are binary (`10 TB` = 10,240 GB in the price list), so AWS volumes are billed in
 GiB here. Azure states 1 TB = 1,000 GB.
@@ -92,9 +93,10 @@ them would imply a rate is obtainable when no one has published it. Every rate i
 either on a public price page or derived in the open from one that is; where a rate is assumed, it
 is labelled.
 
-**No MoQ relay rate is published by any CDN except Cloudflare.** Where this model prices a
-CDN-operated MoQ relay it does so as an explicit assumption — a modest premium over the commodity
-delivery rates above at committed volume — and labels it as such.
+**Two CDNs publish a MoQ relay rate: moq.pro's $0.04/GB is in force, Cloudflare's $0.05/GB is
+announced.** Where this model prices a CDN-operated MoQ relay below them it does so as an explicit
+assumption — a modest premium over the commodity delivery rates above at committed volume — and
+labels it as such.
 
 Other published rates:
 
@@ -456,8 +458,8 @@ anywhere in this model.
   and the ranking between them can invert under real contracts.
 - **Cloudflare's $0.05/GB is announced, not in force.** It is free in tech preview, with commercial
   pricing signposted for 2026 H2. Modelling it as a firm rate is a forward assumption.
-- **No MoQ relay is priced near commodity delivery.** The one rate in force is moq.pro's, $0.04/GB
-  outbound (inbound free), on upstream's own relay. The $0.010 and $0.005/GB relay columns apply
+- **No MoQ relay is priced near commodity delivery.** Both published rates (§3) sit four to ten
+  times above it. The $0.010 and $0.005/GB relay columns apply
   commodity CDN *delivery* rates to a MoQ relay, assuming one would price near them rather than at a
   large premium: an argument from market structure, not an observed price.
 - **The self-hosted all-in build-up in §10.1 is illustrative.** Colocation, power and hardware
@@ -498,10 +500,9 @@ anywhere in this model.
    turns entirely on this being a MediaConnect-only construct. If a committed-egress agreement can
    reach $0.017/GB on plain EC2, the DIY case on cloud is restored.
 3. **Whether a CDN will operate MoQ relays at delivery-rate pricing.** The several-hundred-
-   destination case in §6 rests on it. Cloudflare's announced $0.05/GB is the only published MoQ
-   relay rate and sits 10× above that provider's own commodity delivery pricing, so whether relay
-   service converges toward delivery rates or holds a premium is the single largest open commercial
-   question in the model.
+   destination case in §6 rests on it. The two published MoQ relay rates, $0.04 and $0.05/GB, sit
+   four to ten times above commodity delivery, so whether relay service converges toward delivery
+   rates or holds a premium is the single largest open commercial question in the model.
 4. **A control-plane cost for the self-hosted path.** §10.1 prices bandwidth and iron but not
    provisioning, monitoring or orchestration, which is where vendors price and where the
    self-hosted case is most likely to be overstated.
@@ -515,6 +516,7 @@ anywhere in this model.
 - AWS price list bulk API: `pricing.us-east-1.amazonaws.com/offers/v1.0/aws/{AmazonEC2,AWSDataTransfer,AWSMediaConnect}/current/`
 - Azure bandwidth pricing; Google Cloud VPC network pricing
 - Cloudflare, *MoQ: Refactoring the Internet's real-time media stack* (announced GA rate)
+- moq.pro, *the Media over QUIC CDN*, public first-tier prices (October 2026)
 - CDN list pricing: bunny.net pricing page (standard and volume networks); AWS CloudFront,
   Fastly, Google Cloud CDN and Azure Front Door pricing pages
 - AWS Marketplace listings: Zixi Broadcaster, Zixi ZEN Master

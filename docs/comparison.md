@@ -66,7 +66,7 @@ point (§10).
 |---|---|---|---|
 | Unit of fan-out | a cacheable object, fetched by idempotent GET | a subscription the relay holds state for | a session per destination |
 | Replication state | none — any edge can serve any object | per-subscriber, per-track, live | per-destination, live |
-| Who operates it | the commodity delivery market, a dozen suppliers, today | one CDN today, at five to ten times commodity delivery; otherwise you | you, or a managed media service |
+| Who operates it | the commodity delivery market, a dozen suppliers, today | two CDNs today, at four to ten times commodity delivery; otherwise you | you, or a managed media service |
 | Known hard ceiling | none at this scale | **relay CPU**, linear up to it and a collapse past it: 124–139 subscribers per core on `moq-relay` 0.14.15 (quinn), about 100 on a 2-vCPU `moq-relay` 0.15.1 (noq) with GSO off; cross-host, in one region ([Evidence](evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow |
 | Marginal cost of a destination | a cache fill: shared upstream, one egress copy | **1.258 % of a relay core, 2.62 MB and one full stream copy** on `moq-relay` 0.15.1 with GSO on, linear | a session's worth of gateway CPU and one egress copy |
 | Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network — consumer, not affiliate, distribution | none | none |
@@ -318,7 +318,7 @@ received was intact** ([Architecture](architecture.md) §9.4).
 
 | Layer | Segmented HTTP | MoQ |
 |---|---|---|
-| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | one CDN operates a relay; no feed traversed anyone else's |
+| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; no feed traversed anyone else's |
 | **General-purpose client reception** | clears, and is why the format is ubiquitous | within one implementation |
 | **Low-latency TS-in-HLS reception** | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](evidence.md) §3.9) | not applicable; no segment period |
 | **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation |
@@ -403,8 +403,8 @@ costs 1.03–1.06×; the off-the-shelf packager retains stuffing. HTTP overhead 
 HTTP/3 costs ~2.6 points more than HTTP/2 on TCP.
 
 **Destination count decides the bill, not the transport** ([Economics](economics.md) §4.4). **The
-delivery market decides the level:** commodity CDN at $0.005–0.010/GB against one MoQ supplier at
-$0.050/GB ([Economics](economics.md) §4.6).
+delivery market decides the level:** commodity CDN at $0.005–0.010/GB against two MoQ suppliers at
+$0.040–0.050/GB ([Economics](economics.md) §4.6).
 
 ---
 
