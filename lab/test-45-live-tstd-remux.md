@@ -584,6 +584,20 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   more on AC-3, whose B holds seven frames and the PES header where the source packs about 9.3.
   It sends 62 clock packets in all, and 2.4 packets a second each of PAT and PMT against the
   source's 14.9.
+- **Send-ahead over an hour: #5553's rate estimate stays out of tolerance, and moves neither
+  conformance nor timing.** Both builds run the 3,700 s and pass criteria 1–4, the T-STD checks applied to 555 s
+  segments one every 540 s, since both read a whole capture into memory: every 2 s window legal, least
+  margins 398.5 ms video, 23.2 ms MP2 and 22.6 ms AC-3 for #5553 against `main`'s 401.8, 119.0 and
+  220.3; every PCR within ±481 ns, the largest interval 25.1 ms; every unit of every track; none
+  dropped late. #5553 trails by 1,108 ms (p95 1,240) and `main` by 1,856 (1,988), each median per
+  10 min falling by 6–7 ms over the hour. `main`'s out-of-tolerance count stops at 50 within the
+  first 10 min. #5553's rises by 188, then 175, 159, 158, 158 and 159 per 10 min, out of tolerance
+  on about half its 2 s steps to the end, its estimates after 600 s within −83 to +102 ppm and
+  settling near −79. The export stops only in upstream's harness, in its `--full` arm (debug
+  build, 30 s), and on both builds, #5553 rebased (`e7da63493`) in 3 of 6 runs and its base
+  `323fda277` in 2 of 5: it exits on the source's clock running past the 30 ppm its output may
+  follow, each time after a first logged estimate of −92,000 to −2,170,000 ppm, while runs that
+  pass log none out of tolerance.
 
 ## Conclusions
 
