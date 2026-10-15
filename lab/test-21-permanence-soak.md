@@ -589,6 +589,32 @@ shape at all — its tail slope slightly *exceeds* its overall slope and the two
 conclusion. The 24 h per-PID re-soak on `main` reads the exporter's step again, and reads its relay
 as flat.
 
+## The seven-day live arm (P0-g), fixed before running
+
+- **Subject:** the standing live chain on the primary (the SRT hand-off's `tsp`, the publisher's `tsp`
+  and `moq import ts`, `moq-relay`), on the build under test, fed by the real 25 Mb/s contribution
+  feed, which never wraps; and a standing `moq export ts --delay 1s` of its broadcast on the
+  secondary, across the public path between the two hosts.
+- **Rig:** [`p0j-step-watch.sh`](scripts/p0j-step-watch.sh) `watch` with `GRADE_RATE=25000000`
+  (continuity and absolute PCR accuracy at ±500 ns on the export's padded output, in flight), its
+  `ring` on the primary shared with [T34](test-34-real-encoder-severity.md)'s P0-j, and
+  [`live-unit-sample.sh`](scripts/live-unit-sample.sh) at 60 s on both hosts (RSS, `smaps_rollup`,
+  threads, descriptors, CPU, per process). Nothing touches the standing units. An export that ends
+  or falls silent for 10 s is restarted. 168 h.
+- **Criteria:**
+  1. *Media plane:* zero continuity errors and zero PCR failures in every export's output, and every
+     export end and liveness gap attributed from the hosts' journals to a publisher start (with its
+     cause), a hand-off outage, or the subscriber. One attributed to the subscriber or to nothing
+     fails. Publisher starts are reported with the programme each cost.
+  2. *Resources:* F2 as fixed for the 24 h soak, per role: no RSS, Pss, anonymous-memory, thread or
+     descriptor series still rising over the last 72 h at a rate that would exhaust its host within a
+     year. A restart splits a series; an invocation under 72 h is judged on its last half.
+  3. *Unattended:* no intervention for the 168 h.
+- **Also answers** the two items below: the relay's shape on the build under test, and whether the
+  exporter's step is anonymous or mapped memory and whether it accumulates.
+- **Limits:** one subscriber; the hand-off is in-region, so no contribution-path failure is
+  exercised; the hosts' unattended upgrades restart the publisher when a library it links changes.
+
 ## Open
 
 **Whether the relay converges on the build under test.** On `d518b61b` the relay is logarithmic at

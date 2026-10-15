@@ -78,7 +78,6 @@ distribution. A row leaves when a pull request takes it; ours are in the
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above | **High**, R6: P1-p's other half |
 | `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | the T-STD line (`tstd/send-ahead`, `tstd/psi-runs`), by its plan | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
-| `ts-reliability/pes` [M] | TS import assembles PES headers that span packets, with bounded staging | — | **Medium**, R1/R5: legal sources and damaged input |
 | `restart-followers` [L] | Consumers follow an epochless `Restart` (a drain, a replacement) by resolving again | — | **Medium**, R6: a relay drain under a long-lived export |
 | `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats | `stats/schema` [M] | **Medium**, R8: what P1-l reads back |
 

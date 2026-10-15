@@ -456,10 +456,10 @@ anywhere in this model.
   and the ranking between them can invert under real contracts.
 - **Cloudflare's $0.05/GB is announced, not in force.** It is free in tech preview, with commercial
   pricing signposted for 2026 H2. Modelling it as a firm rate is a forward assumption.
-- **No CDN publishes a MoQ relay rate.** The $0.010 and $0.005/GB relay columns apply commodity CDN
-  *delivery* rates to a MoQ relay service that does not yet exist as a product. They assume such a
-  service would price near commodity delivery rather than at a large premium, which is an argument
-  from market structure, not an observed price.
+- **No MoQ relay is priced near commodity delivery.** The one rate in force is moq.pro's, $0.04/GB
+  outbound (inbound free), on upstream's own relay. The $0.010 and $0.005/GB relay columns apply
+  commodity CDN *delivery* rates to a MoQ relay, assuming one would price near them rather than at a
+  large premium: an argument from market structure, not an observed price.
 - **The self-hosted all-in build-up in §10.1 is illustrative.** Colocation, power and hardware
   lines carry no published source, and no control-plane, provisioning or software-licensing cost is
   included on the self-hosted path — which is not free and cannot be assumed away.

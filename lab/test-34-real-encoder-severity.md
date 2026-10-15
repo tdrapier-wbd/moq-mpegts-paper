@@ -180,8 +180,9 @@ other five).*
 
 The ring stopped after 44.4 h of its 48: an unattended package upgrade restarted the publisher and
 `srt-ingest` cleanly, which reset the restart counter the ring stops on. The watch ran all 48 h; one
-exit after the ring stopped is not graded. A re-run needs a ring that survives a counter reset, and
-an export restarted on silence as well as on exit.
+exit after the ring stopped is not graded. The rig now keys the ring on the unit's invocation, which
+every start changes, and restarts an export silent for 10 s as well as one that ends; the re-run
+shares [T21](test-21-permanence-soak.md)'s seven-day live arm.
 
 **Reading 1, the class: none of the nine.** No ring has a `discontinuity_indicator`, a continuity
 error, a PCR step backward or an interval above 25.1 ms, or a PID whose timestamps step back; in the first, every
