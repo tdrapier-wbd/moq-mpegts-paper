@@ -545,9 +545,9 @@ floor, **the best achievable worst case is about 1.7 s measured and 2.11 s as do
 [Control](control-plane.md) §8's sub-second target cannot be met. **The revocable unit is the key**:
 withdrawing one of two channels sharing a key took the kept channel down for 2.78 s, and under a key per
 channel it was untouched. Authorization adds nothing to the per-subscriber CPU slope at a ten-second
-cadence and 27 % at one second. **A warning**: with client-certificate authentication configured, a valid
-certificate and no token was served every channel, another broadcaster's included, which is why
-[Control](control-plane.md) §3 keeps mTLS for peers. **Unmeasured**: a second implementation, a mesh, a
+cadence and 27 % at one second. **A warning**: on the build measured, with client-certificate authentication
+configured, a valid certificate and no token was served every channel, another broadcaster's included
+(upstream's redesign since: [Control](control-plane.md) §3). **Unmeasured**: a second implementation, a mesh, a
 real rights system in place of the stub, and rights windows.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are

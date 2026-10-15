@@ -1368,12 +1368,10 @@ in `test/ts/compliance.py`, PCRs on the mux-rate byte grid) and its implementati
   teletext frame as late. Our late-track test and fix (anchor and steer on the track sent latest,
   waiting for every catalog track) were cherry-picked into `fe7cec106` with authorship.
 - **Mocked-time export tests** on the t0ms fork (join skip, mid-stream skip, a drifting source
-  clock, 1+1 identity). Writing them found why a 1+1 pair diverged: each receiver carried the
-  fractional packet per slot from its own start, a skip rewound the slot grid at a point that
-  differed per receiver, and equal decode times had no tie-break, which the merged head now breaks
-  by PID.
-- **A `--linger` misread** on `559a35244`, which ended the export within 7 s of joining a broadcast
-  as it started; gone on `fe7cec106`. The CLI half is #4947 (§ *The liveness exit, implemented*).
+  clock, 1+1 identity), which found why a 1+1 pair diverged: slot fractions and skips counted per
+  receiver, and no tie-break on equal decode times, which the merged head breaks by PID.
+- **A `--linger` misread** that ended the export within 7 s of a join, gone before the merge; the
+  CLI half is #4947 (§ *The liveness exit, implemented*).
 
 **Verified on the merged export** (T47, loopback, across hosts, 0 % and 1 % loss, 500 ms to 1 s):
 every track on every join tried, and a co-started 1+1 pair byte-identical through the groomer, the
@@ -1395,13 +1393,16 @@ wider fixtures and counted group omissions. A catalog `burst` field for encoder 
 ([#4649](https://github.com/moq-dev/moq/pull/4649)) was abandoned, `--delay` covering both the hold
 and the send-ahead.
 
+**The system buffers.** `tstd/psi-runs` is ours, draft [#5606](https://github.com/moq-dev/moq/pull/5606):
+padded export paces its tables against Bsys too, and `compliance.py` grades both system buffers, hard.
+Before, eight aligned video PIDs' tune-in tables peak at 2,767 B in Bsys's 1,536; after, every TS
+arm passes, and a DVB replay matches `main`'s video lead and buffer peaks.
+
 **Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair; release-clock
 statistics that count neither a skipped group nor an absent track, and an `out_of_tolerance` count
-that climbs through every start; the join-dependent latency at 500 ms, which on `f8215bc47` is
+that climbs through every start; and the join-dependent latency at 500 ms, which on `f8215bc47` is
 whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusion 20;
-[reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)); and the
-delay the send-ahead planned in [#4681](https://github.com/moq-dev/moq/pull/4681) would take off
-the latency, drafted as #5553 (§ *A full-rate live feed stops the export*). Detail lives in T44–T48,
+[reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)). Detail lives in T44–T48,
 measurement points in [`docs/evidence.md`](../docs/evidence.md) §3.16.
 
 ### The liveness exit — filed as a question, deliberately
@@ -1798,8 +1799,7 @@ within the delay is draft [#5553](https://github.com/moq-dev/moq/pull/5553): one
 trail; taking its rate from the steadiest track settles its estimate within 5 min over an hour.
 Its CI met two `main` flakes, reported as
 [#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates)
-and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted first group,
-narrowing the earlier `ts-video-content` quest's first hypothesis).
+and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted first group).
 
 ---
 

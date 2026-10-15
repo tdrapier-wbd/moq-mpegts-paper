@@ -159,13 +159,16 @@ stable even as the wire format churns, and the entitlement *service* is transpor
 > the client and no entry in the relay log**. The enforcement is correct and silent, so an audit that
 > reads logs to prove refusals happened will find nothing to read.
 
-**The role split above is load-bearing, and violating it is worse than it looks.** Configuring
-client-certificate authentication for *subscribers* does not scope them: a peer presenting a valid
-certificate and no token at all was served every channel in the estate, including another
-broadcaster's. The relay treats a verified certificate as unrestricted for the path dialled, and the
-authorization endpoint is told only that *some* certificate was presented, never which — so
-certificate-scoped entitlement is not expressible, and enabling both credentials together bypasses
-the token matrix silently ([T38](../lab/test-38-entitlement-estate.md) Part 5).
+**The role split above is load-bearing.** On the build measured, client-certificate authentication
+for *subscribers* did not scope them: a peer presenting a valid certificate and no token at all was
+served every channel in the estate, including another broadcaster's, because the relay treated a
+verified certificate as unrestricted for the path dialled and told the authorization endpoint only
+that *some* certificate was presented ([T38](../lab/test-38-entitlement-estate.md) Part 5). Upstream's
+relay has since been redesigned, read from its code and not re-measured here: a certificate admits
+nothing on its own, its identity reaches the authorization endpoint as one more fact to decide on,
+and a relay that pairs a client CA with anonymous public access refuses to start. Certificate-scoped
+entitlement is therefore expressible; until Part 5 is re-run on such a build, treat a certificate as
+authenticating a subscriber, not as scoping one.
 
 ---
 
@@ -571,7 +574,8 @@ Behavioural criteria, which matter more than the numbers:
   zero payload bytes on every refusing arm, counted at the receiver.** Add to this criterion that it
   must be verified at the *receiver*, not from relay logs, because one refusal mechanism logs nothing.
 - **Isolation correctness.** No cross-tenant access under any tested path. **Measured for tokens.
-  Fails for client certificates**, which admit their holder to every tenant (§3).
+  Failed for client certificates** on the build measured, which admitted their holder to every
+  tenant; upstream's redesign is unmeasured (§3).
 - **Operational usability.** Provisioning and revocation are simple enough that a NOC can perform an
   emergency disable under time pressure without error. **This criterion is currently failed by the
   mechanism, not by the operator**: the intuitive "revoke now" setting is one of the three that makes
@@ -622,9 +626,6 @@ windows.
   distributor actually needs and the one nothing has exercised: every grant measured is on or off.
   Whether scheduled grant and expiry land cleanly against a poll, or produce a window at each edge, is
   open.
-- **Should a peer's certificate identity reach the authorization decision?** It currently does not:
-  the endpoint learns only that some certificate was presented, which is why certificate-scoped
-  entitlement is not expressible (§3). This is an upstream question as much as a design one.
 - **Can content be protected from the *operator*, publisher-to-egress, without breaking relay fan-out
   and caching** — and is that required for the target contracts? The second half is the one that
   decides it, and it is a commercial question rather than a technical one: BISS-CA already answers the
