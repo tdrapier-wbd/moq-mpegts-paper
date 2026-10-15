@@ -767,9 +767,8 @@ failover*).
   already past the floor resumed (T6 § *Mesh source failover*). Upstream's `hop-aligned-import`
   diagnoses #4354 as each importer numbering groups from its own per-process counter, so after a
   failover `export ts` sees a timestamp rewind, and numbers groups on the epoch timeline instead,
-  behind `epoch-anchor` (planned, unbuilt). Its prerequisites have landed: `--epoch` replaced
-  `--hop`, and [#4741](https://github.com/moq-dev/moq/pull/4741) made the path the only broadcast
-  identity. **Open**; the aligned numbering is planned, not shipped. `main` replaced the consumer's live-edge floor with a rule that
+  behind `epoch-anchor`, whose clock and era are ours, draft
+  [#5625](https://github.com/moq-dev/moq/pull/5625). **Open**; the aligned numbering is planned, not shipped. `main` replaced the consumer's live-edge floor with a rule that
   group starts must not fall, which cuts the
   [#4733](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) failure
   class and still refuses this one. **The before-measurement is posted on the issue**

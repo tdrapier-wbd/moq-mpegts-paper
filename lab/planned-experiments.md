@@ -73,7 +73,7 @@ distribution. A row leaves when a pull request takes it; ours are in the
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
-| `epoch-anchor` [M] | Importers sharing an epoch derive one clock and timestamp era from the epoch and their source alone | — (plan merged) | **High**, R6: gates the next two |
+| `epoch-anchor` [M] | Its clock and era are our draft [#5625](https://github.com/moq-dev/moq/pull/5625); left: co-start across two relays, history-derived catalog estimates, the successor epoch | #5625 merged | **High**, R6: gates the next two |
 | `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above | **High**, R6: P1-p's other half |
 | `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | the T-STD line (`tstd/send-ahead`, `tstd/psi-runs`), by its plan | **High**, R6: P1-o's demultiplexed route; gates the next |
