@@ -585,8 +585,10 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     (`31917be3c`) leaves the output the same to the byte count, margins and latency, and the
     estimate after the first minute reads −50 to +251 ppm (mean +5) at 1 s and −120 to +216 at
     2 s; its count still rises until about 4 min in, while the 600 s window fills, where `main`'s
-    stops by 90 s at 1 s and 140 s at 2 s. Pushed rebased onto `acbb0f03b` (`a757ae4ea`),
-    whose commits since touch neither `moq-mux`, `moq-cli` nor `test/ts`.
+    stops by 90 s at 1 s and 140 s at 2 s. Judging the steadiest track by its median depth
+    rather than the mean (`2dfa32f34` on `1b5fba232`) re-measures at 1 s within 4 ms, at the same
+    margins and counts; its estimate reads −182 to +228 ppm after the first minute and its count
+    stops by 3 min.
 
   The `tstd/mux-overhead` output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
   share of the source it carries, it spends 1.0 % more packets than the source on MP2 and 2.5 %

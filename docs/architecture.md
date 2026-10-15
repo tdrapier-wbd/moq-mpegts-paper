@@ -513,12 +513,9 @@ pipe ([Evidence](evidence.md) §3.2) — gives the stage no consistent rate and 
 both domains on any new upstream build before promoting it. **Upstream's fixed-delay export, merged in
 October 2026, lays packets on a PCR grid at the mux rate and satisfies it**: on an `[unmerged]` build of
 it the stream-clocked stage carried the programme at 3.4 % stuffing, and behind it two legs started
-together are byte-identical, continuity counters included — the first mergeable multi-track pair this
-campaign has measured, and as merged the two exports are identical before any groomer too. A leg
-joining later is not. Part of the residue is per-process continuity counters; the rest was, behind the
-export's last draft, the placement of each TDT revision by the snapshot's arrival rather than its media
-time, and is not yet attributed on the merged build ([Evidence](evidence.md) §3.4). Co-starting the
-pair is therefore a design constraint, not a convenience.
+together are byte-identical, continuity counters included. A leg joining later is not
+([Evidence](evidence.md) §3.4). Co-starting the pair is therefore a design constraint, not a
+convenience.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
