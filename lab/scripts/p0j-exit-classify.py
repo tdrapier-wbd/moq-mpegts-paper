@@ -45,6 +45,7 @@ disc = []
 cc_err = {}
 last_cc = {}
 total = synced = 0
+sec_pkt = []         # packet index, in the concatenated ring, at which each section completes
 
 last_pts = None      # 84b34f54's media clock: the latest video PES header's PTS
 unwrap_base = 0
@@ -64,6 +65,7 @@ def unwrap(raw):
 def emit(pid, sec, w):
     cmd = sec[13] if len(sec) > 13 else -1
     sections.append((w, pid, last_pts, cmd))
+    sec_pkt.append(total - 1)
 
 
 def section_bytes(pid, payload, pusi, w):
@@ -174,7 +176,8 @@ print('cc errors:', {k: len(v) for k, v in cc_err.items()} or 0)
 for pid, s in sorted(pcr.items()):
     steps = [(hms(s[k][0]), round(s[k][1] - s[k - 1][1], 4)) for k in range(1, len(s))
              if s[k][1] - s[k - 1][1] < -0.001 or s[k][1] - s[k - 1][1] > 0.025]
-    print(f'PCR pid {pid}: {len(s)} samples; backward or > 25 ms: {steps[:8]}')
+    worst = max((d for _, d in steps), default=None)
+    print(f'PCR pid {pid}: {len(s)} samples; {len(steps)} backward or > 25 ms, largest {worst}: {steps[:8]}')
 for pid, s in sorted(series.items()):
     steps, mx = [], s[0][1]
     for k in range(1, len(s)):
@@ -200,6 +203,9 @@ for w, pid, stamp, cmd in sections:
                       names.get(prev[pid][2], hex(prev[pid][2]))))
     prev[pid] = (w, stamp, cmd)
 print(f'sections stamped below their predecessor: {len(below)}')
+if below:
+    k = next(j for j, x in enumerate(sections) if x[0] == below[0][0] and x[1] == below[0][1])
+    print(f'   the first completes at packet {sec_pkt[k]} of the concatenated ring (cut with head -c N*188)')
 for w, pid, ds, dw, cmd, pcmd in below:
     print(f'   {hms(w)} PID {pid} {cmd}: {ds * 1000:+.0f} ms below the {pcmd} {dw * 1000:.0f} ms before '
           f'(exit {w - exit_w:+.2f} s)')

@@ -1,12 +1,13 @@
 # Test 34 — A real encoder against the continuous-source fence
 
-**State: partial — no real backward step is captured yet.** On the live feed the standing import
-ended three times in about 19 h on *frame timestamp is below the live edge*, with the hand-off clean
-each time (§ *The live feed*). None of the four exits since captured with the hand-off around them
-was a step in the feed: each time the standing build stamped a SCTE-35 section below the one before
-it, which `main` no longer does. The `OLD`/`NEW` fence comparison below is moot, since from moq 0.14.0 a
+**State: partial — P0-j's 48 h captured no real backward step.** On the live feed the standing import
+ends every few hours on *frame timestamp is below the live edge*, with the hand-off clean each time
+(§ *The live feed*). None of the nine exits P0-j captured with the hand-off around them was a step
+in the feed: each time the standing build stamped a SCTE-35 section below the one before it, which
+`main` no longer does. The `OLD`/`NEW` fence comparison below is moot, since from moq 0.14.0 a
 backward step ends the import by design ([Evidence](../docs/evidence.md) §3.13); what remains is a
-subscriber's export graded across a real step, if the feed has one.
+subscriber's export graded across a real step, on standing units past #3997: there an exit of the
+import is itself a candidate step, while this build, older than moq 0.14.0, need not exit on one.
 
 Specified as [P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion). Rig sketch:
 [`t27-realfeed-severity.sh`](scripts/t27-realfeed-severity.sh).
@@ -147,7 +148,7 @@ minute, and every 15 min the bytes a 10 s export of the standing build delivers.
 
 **The exits are not the hop's**, and they are not rare: three in 19 h, two of them 3 min apart.
 Whether they are the feed's is not shown: this build logs nothing before the error, the monitor
-grades continuity, not PCR, and none of the four exits since captured with the hand-off around them
+grades continuity, not PCR, and none of the nine exits since captured with the hand-off around them
 was a step at all (below). On any build from moq 0.14.0 a real step ends the import alike; its class
 decides whether an upstream fix could keep the import across one.
 
@@ -167,15 +168,23 @@ is graded when both roles were up across it, on two readings:
    about 6 s.
 
 Neither reading has a pass mark; one graded step answers P0-j, and each further step is a replicate.
+A flagged step goes to [#4582](https://github.com/moq-dev/moq/issues/4582), an unflagged one to the
+contribution's engineer, and one confined to a single PID to a new issue.
 
-### None of P0-j's four exits is a step in the feed
+### None of P0-j's nine exits is a step in the feed
 
-*Measured, P1, four hand-off rings of about 80–93 s and the import's journal, standing build
-`84b34f54`, every import exit in P0-j's first 22.6 h on the live feed; the rings replayed offline
-through `84b34f54` and `main` at `0d9e9ff78`.*
+*Measured, P1, nine hand-off rings of about 80–95 s and the import's journal, standing build
+`84b34f54`, every import exit in the 44.4 h the ring ran on the live feed; the rings replayed
+offline through `84b34f54` and through `main` at `0d9e9ff78` (the first four) and `a7b421617` (the
+other five).*
 
-**Reading 1, the class: none of the four.** No ring has a `discontinuity_indicator`, a continuity
-error, a PCR step backward or above 25 ms, or a PID whose timestamps step back; in the first, every
+The ring stopped after 44.4 h of its 48: an unattended package upgrade restarted the publisher and
+`srt-ingest` cleanly, which reset the restart counter the ring stops on. The watch ran all 48 h; one
+exit after the ring stopped is not graded. A re-run needs a ring that survives a counter reset, and
+an export restarted on silence as well as on exit.
+
+**Reading 1, the class: none of the nine.** No ring has a `discontinuity_indicator`, a continuity
+error, a PCR step backward or an interval above 25.1 ms, or a PID whose timestamps step back; in the first, every
 packet is synced and audio PTS advances by 0.288–0.320 s a PES, teletext by 0.04 s, video DTS by
 0.02–0.04 s, and the host's UDP receive-buffer errors did not move. Each ring holds SCTE-35 traffic
 on PIDs 141–143: a `splice_null` every second and cues (`splice_insert`, `time_signal`) each sent
@@ -183,8 +192,9 @@ three times about 2.3 s apart. This build stamps each section with the PTS of th
 header and writes each as its own group. The video is field-coded, a PES every 20 ms with PTS ahead
 of DTS by 40–360 ms, so that stamp steps back whenever a reordered picture's header precedes a
 section. Replayed through that rule
-([`p0j-exit-classify.py`](scripts/p0j-exit-classify.py)), each ring has exactly one send stamped
-below the section before it on its PID, at the exit within the ±1 s the ring's file names resolve:
+([`p0j-exit-classify.py`](scripts/p0j-exit-classify.py)), each ring has one send stamped below the
+section before it on its PID (in exits 7–9 a second, on PID 143, 2 ms after the first on 141), at
+the exit within the second or so that the ring's file names resolve:
 
 | Exit | The send stamped below | Below its predecessor by | Sent after it by | PIDs |
 |---|---|---|---|---|
@@ -192,24 +202,37 @@ below the section before it on its PID, at the exit within the ±1 s the ring's 
 | 2 | a `splice_null`, after a `time_signal` | 0.10 s | 327 ms | 141, 142 |
 | 3 | a `splice_null`, after a `splice_insert` | 0.02 s | 326 ms | 143 |
 | 4 | a `splice_insert`, after a `splice_null` | 0.08 s | 329 ms | 141 |
+| 5 | a `time_signal`, after a `splice_null` | 0.04 s | 327 ms | 141 |
+| 6 | a `time_signal`, after a `splice_null` | 0.08 s | 329 ms | 141 |
+| 7 | a `splice_null` after a `splice_insert`, and on 143 the reverse | 0.04 s | 326 ms | 141, 143 |
+| 8 | a `splice_insert` after a `splice_null`, and on 143 the reverse | 0.08 s | 329 ms | 141, 143 |
+| 9 | a `splice_null`, after a `splice_insert` | 0.10 s | 329 ms | 141, 143 |
 
-Every other section in the four rings stamps forward. **The replay reproduces each exit at that
-section**: fed to `84b34f54`'s own import, each ring ends it with the same error; cut 7 packets
-before its flagged section the ring reads to the end, cut 3 packets after it the import exits, and
-that section is the only packet between the cuts that starts anything. `main`, which has clamped a
-section to the live edge since [#3997](https://github.com/moq-dev/moq/pull/3997), reads all four
+Every other section in the nine rings stamps forward. **The replay reproduces each exit at the first
+such section**: fed to `84b34f54`'s own import, each ring ends it with the same error; cut 7 packets
+before that section the ring reads to the end, cut 3 packets after it the import exits, and that
+section is the only packet between the cuts that starts anything. `main`, which has clamped a
+section to the live edge since [#3997](https://github.com/moq-dev/moq/pull/3997), reads all nine
 rings to the end. Whether the three exits before P0-j were cues is not recorded.
 
 **Reading 2, what the subscriber lost.** At each exit the export ended with the publisher, with no
 liveness alarm, and its successor started within 1 s and waited for the publisher, which systemd
-restarted 5.1–5.2 s after the exit. At the first the export resubscribed 5.8 s after the exit; its
+restarted 5.1–5.3 s after the exit. At the first the export resubscribed 5.8 s after the exit; its
 first byte is not logged, so each exit cost at least 5 s plus the export's start. This build's
 export carries none of the SCTE-35 PIDs; the detector reports all three silent.
 
-**The export also ends on its own.** In the same 22.6 h it ended eight more times with no import
-exit, seven on *no route can serve the rest of this group* (`old`) then `json: old` and one on
-`json: dropped`; three of the restarts failed at once. That is the subscriber's build,
-and is not graded here.
+**The export's own failures, on a build `main` has moved past.** The watch started 46 exports in
+48 h. Nine ended with the publisher at an exit. 26 ended on their own after 6 min to 4.5 h (median
+54 min), each on *no route can serve the rest of this group* (`old`) then `json: old`: the catalog
+defect [#3897](https://github.com/moq-dev/moq/issues/3897), fixed after this build. Ten restarts
+failed at once on the same error. Between ends the export skipped 77 evicted groups and failed 268
+group resumes; the detector reported 21 gaps of 1.0–2.2 s, 16 of them beside such a warning, and
+the export's own PCR stepped back 223 times, by 25 ms to 3 s, where the hand-off's never did. The last export never ended: the upgrade's restart did not close the
+publisher's session, the relay moved the export's subscriptions to the replacement when the old
+session timed out 31 s later, and the export then received nothing for 3.6 h and logged no error.
+That is this build re-splicing onto whatever instance serves the path; on `main` an epochless track
+ends at a replacement instead ([upstream ledger](upstream-contributions.md) § *A re-request onto a
+live route*). None of this is graded here, and none of it is a new defect.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 
@@ -283,8 +306,8 @@ is one production actually meets.
 
 - **The import's exits were read as the feed stepping back.** This file read three exits on *frame
   timestamp is below the live edge* over a clean hand-off as the feed's timeline stepping back. The
-  four exits since captured with the hand-off around them had no step on any PID: each was the
-  import stamping a SCTE-35 section below its predecessor (§ *None of P0-j's four exits is a step in
+  nine exits since captured with the hand-off around them had no step on any PID: each was the
+  import stamping a SCTE-35 section below its predecessor (§ *None of P0-j's nine exits is a step in
   the feed*). Method rule: an importer's refusal names what it wrote, not what the source sent;
   classify from the source's bytes, and replay them through the same build cut either side of the
   suspect packet, before attributing a refusal to the source.

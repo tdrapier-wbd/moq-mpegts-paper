@@ -630,7 +630,7 @@ restart, even for the flagged case. A source whose timeline steps back must then
 each step, by a supervisor under a new epoch, or the build pinned. Each republish costs about 3 s of
 programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. On a real feed
 the standing import ended three times in about 19 h over a clean hand-off, two exits 3 min apart,
-but none of the four since captured with their source was a step: each was the import mis-stamping
+but none of the exits since captured with their source was a step: each was the import mis-stamping
 a SCTE-35 cue, which current builds do not. **Whether a real feed steps back is not yet measured**
 ([T34](../lab/test-34-real-encoder-severity.md); P1, the import's log and the hand-off ring, one
 feed, an October 2026 build).
