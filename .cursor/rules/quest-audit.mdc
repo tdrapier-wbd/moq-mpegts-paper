@@ -1,0 +1,34 @@
+---
+description: Re-check the planned-experiments quest table against upstream's quest/ tree every session
+alwaysApply: true
+---
+
+# Quest audit
+
+`lab/planned-experiments.md` § *Upstream quests worth building* describes upstream's `quest/` tree,
+which the maintainer rewrites daily. A row whose quest is done, taken, resized or re-gated
+misdirects what gets built next, so the table is checked, not trusted.
+
+**When.** In every session's tail, before the editorial rotation's group, and before building,
+claiming or citing a quest. Run
+
+```bash
+bash lab/scripts/quest-audit.sh <sha>    # <sha>: STATUS.md's "quests audited at main <sha>"
+```
+
+It changes nothing; it prints one line per quest the section names, `ok` or `CHECK` with flags,
+then the TS-related quests added since `<sha>`.
+
+**Each flag, fixed in place:**
+
+- `GONE`: read the commit that deleted the file. Done or retired, the row or set-aside mention goes.
+- `size`: correct the tag.
+- `named-by #N`: read the pull request. One that takes the quest removes the row (ours move to the
+  upstream ledger); one that only mentions it is a gate to state, or nothing.
+- `changed`: re-read the quest's Goal and Plan, and correct the row's description, gate and weight.
+- A new TS quest gets a row only if its result would move an entry in the file; otherwise it joins
+  the set-aside line with its reason, or nothing if it bears on no claim.
+
+Then replace STATUS.md's line with the sha the script printed. The audit adds no prose anywhere
+else and keeps `planned-experiments.md` within its budget (`documentation-gate`). Report the flags
+and what changed, "no change" included.

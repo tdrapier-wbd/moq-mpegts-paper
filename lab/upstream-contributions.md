@@ -1603,11 +1603,11 @@ before its close arrives; a relay-backed CLI test with an AV1 publisher kept up 
 exits after 23.3 s on `main` and passes on the fix. On the merge (`1ec21ac23`) the `moq-lite-06`
 crash-replace runs ended 1.04 s after the export failed, against 60.04 s before.
 
-**The same-instance resume — measured for `quest/m1/ts-same-instance-resume.md`,
-[posted on #5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371), waived.** The
-CLI test the quest names passed 40 of 40 on `main` at `90500867d`, so the validation branch's
-failure was not `main`'s; live, a fresh importer under a reused epoch is resumed into and carries
-nothing, offered as the quest's invalid-replay control.
+**The same-instance resume — measured for its quest,
+[posted on #5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371); the quest
+closed with [#5545](https://github.com/moq-dev/moq/pull/5545)'s tests.** The CLI test it named
+passed 40 of 40 on `main` at `90500867d`, so the validation branch's failure was not `main`'s;
+live, a fresh importer under a reused epoch is resumed into and carries nothing.
 
 **Still open:** a crash replaced under a fresh epoch is followed only under `--stitch`, where #5347
 can still end the export; the fMP4 and MKV exporters have no linger; and only the exit code, not the
@@ -1788,19 +1788,18 @@ packets. The issue asks whether the cap is a deliberate margin and whether the P
 video's adaptation field or several audio frames share a PES.
 
 **Contributed.** #5363 carries an unfinished AC-3 frame into the next PES and drops fragments at a
-join or a lost PES. Before: the capture stops at 8–10 s. After:
-all 926 AC-3 frames written before the video limit stopped it at 39 s are the source's, in order,
-PTS exact. #5516 builds both quests: `b581c27ed` stops at 31 s, #5516 runs 280 s at the source's
+join or a lost PES. Before: the capture stops at 8–10 s. After: all 926 AC-3 frames before the
+video limit at 39 s are the source's, in order, PTS exact. #5516 builds both quests: `b581c27ed` stops at 31 s, #5516 runs 280 s at the source's
 25 Mb/s and passes T45's criteria.
 
 **State.** Both merged, #5363 reworked and #5516 extended by the maintainer. #5362 closed into two
 quests, both questions answered yes. `main` (`a7b421617`) passes on the capture. Sending ahead
 within the delay is draft [#5553](https://github.com/moq-dev/moq/pull/5553): one delay off the
 trail; its rate estimate, steered by the video, stays out of tolerance for an hour without moving
-the timing. Its CI met two flakes on `main`, reported as
+the timing. Its CI met two `main` flakes, reported as
 [#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates)
-and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm loses an evicted first
-group).
+and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted first group,
+narrowing the earlier `ts-video-content` quest's first hypothesis).
 
 ---
 

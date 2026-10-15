@@ -76,18 +76,17 @@ distribution. A row leaves when a pull request takes it; ours are in the
 | `epoch-anchor` [M] | Importers sharing an epoch derive one clock and timestamp era from the epoch and their source alone | — (plan merged) | **High**, R6: gates the next two |
 | `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above; #5517 | **High**, R6: P1-p's other half |
-| `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD, two quests away |
+| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | the T-STD line (`tstd/send-ahead`, `tstd/psi-runs`), by its plan | **High**, R6: P1-o's demultiplexed route; gates the next |
+| `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
 | `tstd/psi-runs` [M] | Padded export keeps PSI within TBsys and Bsys, and `compliance.py` grades both | — (#5516 merged) | **Medium**, R3: bites on multi-service tables |
 | `ts-reliability/pes` [M] | TS import assembles PES headers that span packets, with bounded staging | — | **Medium**, R1/R5: legal sources and damaged input |
-| `ts-export-backlog` [S] | TS export reads a track only until a frame falls due, leaving a stalled sink's backlog in the source | — | **Medium**, R5: bounds a slow subscriber's memory |
 | `restart-followers` [L] | Consumers follow an epochless `Restart` (a drain, a replacement) by resolving again | — | **Medium**, R6: a relay drain under a long-lived export |
 | `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats | `stats/schema` [M] | **Medium**, R8: what P1-l reads back |
 
-Set aside: `ts-live-clock` and `ts-same-instance-resume` (the maintainer's own investigations),
-`stats-traffic-resume` (taken, [#5492](https://github.com/moq-dev/moq/pull/5492)),
-`open-gop-leading-pictures` (open-GOP sources only), `ts-eac3` and
-`tstd-controls` (profiles the live feed lacks), and the QoS line's lag histogram (behind
-`stats-prefix-tracks`, R8 only).
+Set aside: `ts-live-clock` (the maintainer's own investigation), `open-gop-leading-pictures`
+(open-GOP sources only), `ts-eac3`, `tstd-controls` and `plan-ts-pes-untimed` (profiles the live
+feed lacks), `refuse-rewinds` (the model refusing what the import already ends on), and the QoS
+line's lag histogram (behind `stats-prefix-tracks`, R8 only).
 
 ## Blocked on apparatus
 
