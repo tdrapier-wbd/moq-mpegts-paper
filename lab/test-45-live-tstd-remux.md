@@ -6,7 +6,7 @@ over 2,100 s the export stays conformant across three source joins while its clo
 25 ppm fast at its slew limit, reaching +4.6 ppm; behind a source 4 ppm fast it settles after about
 100 min. PCR_FO passes; PCR_DR fails, on the output's own 1 ms departure steps. On the live feed,
 a conformant source that fills its 25 Mb/s multiplex, `main` passes at the source's own rate,
-about twice the delay behind it; sending ahead within the delay `[unmerged]` takes one delay off**
+about twice the delay behind it; sending ahead within the delay, merged since, takes one delay off**
 (§ *Questions 4 and 5, put to the merged export*).
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what
@@ -505,7 +505,7 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   is one 391-byte section over three packets (eleven AC-3 services with their descriptors, SCTE-35,
   captions), is imported whole. The export subscribes to its fifteen tracks and exits 2 s later with
   nothing written, on *failed to write whole buffer* in `mpeg2ts`'s PSI writer, which writes a
-  section into a single packet. The PMT-split fix (`d7dc586e7`, unmerged) writes the section whole,
+  section into a single packet. The PMT-split fix (`d7dc586e7`, merged since as #5220) writes the section whole,
   with no continuity error, but the export then stops after 6 pictures on *missed a decode deadline on
   PID 201*, the first AC-3, at both 1 s and 2 s. That PID's audio is on time in the source (no
   underflow, margin ≥ 38.7 ms over the first 13 s) while the source's video overruns TB, so this
@@ -545,7 +545,7 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
   recording has 1,398 continuity gaps of its own across every PID, so its completeness grade (a
   third of the video and a tenth of each audio missing) measures the recording, not the export.
 - **The live feed (P0-l, P1-u): `main` passes at the source's own rate since #5362's two quests
-  merged, about twice the delay behind it; sending ahead within the delay `[unmerged]` takes one
+  merged, about twice the delay behind it; sending ahead within the delay, merged since, takes one
   delay off.** The capture passes as a source: T33's gate, and `ts-tstd.py`
   with every 2 s window legal (video EB peak 2.99 of 3.75 MB, margin ≥ 510 ms; audio margins ≥
   5.8 ms). Its SPS has no HRD, so the video's buffers are level 4.0's: Rx 36 Mb/s, and Rbx 24 Mb/s
@@ -588,7 +588,9 @@ region, BBRv3 (`delay`), [`t47-xhost.sh`](scripts/t47-xhost.sh).
     stops by 90 s at 1 s and 140 s at 2 s. Judging the steadiest track by its median depth
     rather than the mean (`2dfa32f34` on `1b5fba232`) re-measures at 1 s within 4 ms, at the same
     margins and counts; its estimate reads −182 to +228 ppm after the first minute and its count
-    stops by 3 min.
+    stops by 3 min. Merged (`b4eab0db1`, with the maintainer's fix releasing a packed PES against
+    its first frame's deadline) it grades the same at 1 s and 2 s, trailing by 1,137 and 2,176 ms
+    (p95 1,205 and 2,247); at 1 s its egress is the same 868,047,512 bytes at the same margins.
 
   The `tstd/mux-overhead` output's non-null packets average 24.88 Mb/s, about 80 null packets a second. Scaled to the
   share of the source it carries, it spends 1.0 % more packets than the source on MP2 and 2.5 %

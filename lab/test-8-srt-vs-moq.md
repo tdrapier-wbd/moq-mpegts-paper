@@ -5,8 +5,8 @@
 Characterise MoQ against the incumbent it would replace — **SRT**, the de-facto IP contribution
 transport — carrying the *same* MPEG-TS from the *same* EC2 origin to the *same* local receiver, over
 the *same* controlled impairment, measured head-to-head. Report delivered quality under impairment
-(throughput, continuity, TR 101 290 P1), loss recovery, transparency, CPU, and — still owed —
-glass-to-glass latency. This is a *comparison*, not a pass/fail gate: MoQ need not beat SRT on every
+(throughput, continuity, TR 101 290 P1), loss recovery, transparency and CPU; latency is
+[T18](test-18-delivery-latency.md)'s. This is a *comparison*, not a pass/fail gate: MoQ need not beat SRT on every
 axis, only be within a defensible margin while offering the architectural properties (relay fan-out,
 single-transport CDN) SRT lacks.
 
@@ -22,11 +22,8 @@ single-transport CDN) SRT lacks.
 - **Local receiver:** `moq-dev` `moq` client + [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)
   0.1.0 (`moq_egress` example) for the MoQ path; `~/FFmpeg` (SRT-enabled) for the SRT path; TSDuck
   3.44-4676.
-- **Matched buffers.** Latency is only comparable at equal end-to-end buffering. Clean-path/impairment
-  runs used **B = 2 s** (MoQ `--latency-max 2s`, SRT `--latency 2000`); a buffer ladder
-  B ∈ {250 ms, 500 ms, 1 s, 2 s} is defined for the (still-owed) latency runs.
-- **Clock discipline:** for absolute glass-to-glass latency, both ends NTP-synced (`chrony`); the
-  relative MoQ − SRT delta does not need NTP (same burnt-in timecode, same local clock).
+- **Matched buffers.** Clean-path/impairment runs used **B = 2 s** (MoQ `--latency-max 2s`, SRT
+  `--latency 2000`).
 - The EC2 build predates PR #2440, so the MoQ egress strips DVB SI throughout.
 
 **Two deliberate asymmetries** (recorded, not hidden): the MoQ path traverses a relay hop (the point
@@ -225,14 +222,13 @@ backend delivers full clean-path rate (noq 9.63, quiche 9.28, quinn 9.6 Mbps).
   weakest** (fades at 10 % loss to 47–70 %, and handles bounded reordering about as badly as CUBIC,
   25–31 %).
 - **The reordering residual is CC-version-independent** (CUBIC 2 %, BBRv1 7–13 %, BBR2 2 %, BBR3
-  unstable), while in-order jitter is ~100 % for every controller — a QUIC HOL/loss-detection item,
-  **not fixed by picking a CC**.
+  unstable): **not fixed by picking a CC**.
 - **Maturity vs generation trade-off.** quinn (mature, BBRv1) is the best all-rounder and the
   default/production backend; noq-BBR3's instability here is explained by a BBRv3 panic
   ([noq #768](https://github.com/n0-computer/noq/issues/768)) — a subtract-overflow in
   `inflight_at_loss` that aborts the process under high loss and has driven noq/iroh back to CUBIC by
   default. Under the *non-congestive* impairment this matrix applies, **quinn + `delay` (BBRv1)** is
-  the pragmatic choice, and upstream has since made **BBRv1 the default on quinn**
+  the pragmatic choice, and upstream then made **BBRv1 quinn's default**
   ([#2468](https://github.com/moq-dev/moq/pull/2468)). Note this recommendation does not carry over to
   a congested path: under a shaped bottleneck quinn-BBRv1 is bimodal, and
   [T8b](test-8b-congestion-control.md) found quinn-BBRv1 bimodal and quiche-BBRv2 stable — on **one
@@ -243,7 +239,7 @@ backend delivers full clean-path rate (noq 9.63, quiche 9.28, quinn 9.6 Mbps).
 
 ### Congestion-control defaults & methodology (bounding how these numbers read)
 
-- **The default CC is now backend-specific** (#2468): quinn CUBIC → **BBRv1**; quiche CUBIC → **BBRv2
+- **When these ran, the default CC was backend-specific** (#2468): quinn CUBIC → **BBRv1**; quiche CUBIC → **BBRv2
   (gcongestion)**; noq/iroh BBRv3 → **CUBIC** (because BBRv3 panics, #768). Pin
   `--*-quic-congestion-control` explicitly on every run, or the backend default confounds an A/B.
 - **Upstream methodology guidance (#2432), adopted:** (1) the one meaningful CC test is **bufferbloat
@@ -292,8 +288,7 @@ After the CBR pacer: exact CBR **10.955 Mbps** (12.8 % stuffing), PCR mean 18.94
 - **Scope caveat:** the loss/reorder/jitter/dup matrix ran on an **over-provisioned path** (~292 Mbps
   raw TCP, ~30× the stream), so it measures resilience to *non-congestive* impairment, **not**
   congestion control. A "100 %" cell means "the source fit in the spare capacity," not "the
-  controller behaved well." The only genuinely CC-dependent result is CUBIC misreading random loss —
-  loss-signal interpretation, not a CC-quality verdict. Table 4 caps the pipe but only with a bare
+  controller behaved well." Table 4 caps the pipe but only with a bare
   `netem rate` token bucket, CUBIC vs SRT only. The congestion-control test proper (shaped bottleneck,
   all controllers, scored on completeness) has an [under-provisioned failure-mode result in
   T8b](test-8b-congestion-control.md), whose C1–C6 conditions have since run, provisioned path
@@ -304,7 +299,8 @@ After the CBR pacer: exact CBR **10.955 Mbps** (12.8 % stuffing), PCR mean 18.94
 Delivered-quality and resilience are measured; the CUBIC→BBR delta is the headline: a one-flag,
 non-breaking change moves QUIC from "loss-fragile" to "SRT-comparable" on degraded paths, while
 keeping MoQ's architectural wins. Residual gaps: pathological *reordering* (a QUIC loss-detection/HOL
-item, not CC) and media-aware SI transparency (opaque lane / #2440 closes it). Lowering latency was
+item, not CC) and media-aware SI transparency, since closed by #2440, which carries the service
+layer as opaque SI sections. Lowering latency was
 explicitly not the objective here — robust delivery under degradation was — and *delivery* latency has
 since been measured in [T18](test-18-delivery-latency.md) at 109 ms across the public internet;
 glass-to-glass remains unmeasured. **The back-to-back wire-byte comparison has since been run, in
@@ -320,6 +316,6 @@ controller recommendation for a permanent fixed-rate trunk.
 ## References
 
 - Impairment method reused from: [test-5-network-impairment.md](test-5-network-impairment.md).
-- Congestion control for a permanent fixed-rate trunk (C1 run): [test-8b-congestion-control.md](test-8b-congestion-control.md).
+- Congestion control for a permanent fixed-rate trunk (C1–C6): [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Upstream: [#2432](https://github.com/moq-dev/moq/pull/2432), [#2468](https://github.com/moq-dev/moq/pull/2468), [#1706](https://github.com/moq-dev/moq/pull/1706), [noq #768](https://github.com/n0-computer/noq/issues/768).
 - Findings: [`docs/evidence.md`](../docs/evidence.md) §3.3; feeds [`docs/economics.md`](../docs/economics.md) §4 and §9.

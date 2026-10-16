@@ -1267,19 +1267,17 @@ message can now open with the measured MoQ-versus-SRT table and its qualificatio
 Every fix below that is described as on `main` is in no release yet: moq-cli 0.14.3 and moq-relay
 0.17.3 (2026-10-11) were cut from the `release` branch without them.
 
-### The determinism measurement, posted to #2829 — and the correction it needed first
+### The determinism measurement, posted to #2829
 
 The head-to-head pair comparison was posted on [#2829](https://github.com/moq-dev/moq/issues/2829): two
 `moq export ts` processes of one broadcast share **4.97 %** of packets over 50,000; 94.02 % differ in
 continuity counter and 27.93 % in the interleave ([T13](test-13-downstream-grooming.md) § *The
 head-to-head*).
 
-**The first draft of that comment was wrong and was not sent.** It claimed
-[#2779](https://github.com/moq-dev/moq/issues/2779) had been closed by accident in
-[#3868](https://github.com/moq-dev/moq/pull/3868); #3868's body abandons #2779 as won't-fix. The
-posted version accepts closure: with the counter out of scope upstream, renumbering must happen
-downstream, and a downstream filter is capped by the interleave — 100.00 % on single-track with the
-counter masked against 94.09 % on the real multi-track feed. #4001 has since fixed the interleave;
+It accepts [#2779](https://github.com/moq-dev/moq/issues/2779)'s closure as won't-fix in
+[#3868](https://github.com/moq-dev/moq/pull/3868): with the counter out of scope upstream,
+renumbering must happen downstream, and a downstream filter is capped by the interleave — 100.00 %
+on single-track with the counter masked against 94.09 % on the real multi-track feed. #4001 has since fixed the interleave;
 the byte schedule remains ([method-notes](method-notes.md) §6).
 
 ### The byte schedule — a successor to #3334, not a reopen of it
@@ -1393,7 +1391,8 @@ wider fixtures and counted group omissions. A catalog `burst` field for encoder 
 and the send-ahead.
 
 **The system buffers.** `tstd/psi-runs` is ours, draft [#5606](https://github.com/moq-dev/moq/pull/5606):
-padded export paces its tables against Bsys too, and `compliance.py` grades both system buffers, hard.
+padded export paces its tables against Bsys too, and `compliance.py` grades both system buffers,
+hard, along each program's PAT and PMT timeline.
 Before, eight aligned video PIDs' tune-in tables peak at 2,767 B in Bsys's 1,536; after, every TS
 arm passes, and a DVB replay matches `main`'s video lead and buffer peaks.
 
@@ -1792,11 +1791,12 @@ join or a lost PES. Before: the capture stops at 8–10 s. After: all 926 AC-3 f
 video limit at 39 s are the source's, in order, PTS exact. #5516 builds both quests: `b581c27ed` stops at 31 s, #5516 runs 280 s at the source's
 25 Mb/s and passes T45's criteria.
 
-**State.** Both merged, #5363 reworked and #5516 extended by the maintainer. #5362 closed into two
-quests, both questions answered yes. `main` (`a7b421617`) passes on the capture. Sending ahead
-within the delay is draft [#5553](https://github.com/moq-dev/moq/pull/5553): one delay off the
-trail; taking its rate from the steadiest track settles its estimate within 5 min over an hour.
-Its CI met two `main` flakes, reported as
+**State.** Both merged, #5363 reworked and #5516 extended by the maintainer; #5362 closed into two
+quests, both questions answered yes. `main` (`a7b421617`) passes on the capture.
+[#5553](https://github.com/moq-dev/moq/pull/5553) merged sending ahead within the delay, with the
+maintainer's fix releasing a packed PES against its first frame's deadline. Its own commits took
+one delay off the trail, and its rate from the steadiest track settled within 5 min over an hour;
+the merged build grades the same on the feed (T45). Its CI met two `main` flakes, now quests:
 [#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates)
 and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted first group).
 

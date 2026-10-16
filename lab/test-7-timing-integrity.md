@@ -61,7 +61,7 @@ bitrate, chroma format, GOP structure and native PCR cadence are for.
 > delivered result: measured on the socket at the cushion this lane runs,
 > [T13](test-13-downstream-grooming.md) puts the same tool at **131 intervals above 40 ms in 25 s on
 > the laptop rig and 159 on the EC2 rig, with a 227.4 ms maximum**. Quote 0 % only with "on file"
-> attached. The P2 accuracy caveat below was always stated; the P1 repetition caveat is now measured.
+> attached.
 
 ### Media-aware lane
 
@@ -84,11 +84,9 @@ tightest floor ≤ 74 ns (≤ 2 units) on `testloop_clean`, ≤ 37 ns (≤ 1 uni
 Because the pacer byte-locks PCR to output position, file jitter is near-zero by construction — the
 wire (P2) test is the one that decides PCR_accuracy. ² 0 CC errors and 0 PCR discontinuities in
 steady state; boundary cases (drift, 33-bit wrap, mid-stream PID change) are not exercised by these
-clips and remain TBM. ⁴ These are the rows the wire disagrees with, and the disagreement is measured
-rather than anticipated: on the socket at this lane's cushion the same tool posts 131–159 intervals
-above 40 ms in 25 s, up to 227.4 ms, which is a P1 failure as delivered
-([T13](test-13-downstream-grooming.md)). The hardware column stays TBM because a socket capture on a
-general-purpose OS is not an IRD either.
+clips and remain TBM. ⁴ The rows the wire disagrees with: on the socket they fail P1 as delivered
+(the note above). The hardware column stays TBM because a socket capture on a general-purpose OS is
+not an IRD either.
 
 ### File-based (P1) per clip — media-aware lane + `mpegts-pacer`
 
@@ -152,16 +150,9 @@ declared CBR for the tool to measure jitter from.
 
 ## Observations
 
-- P1 on file is a pass on the media-aware lane across a synthetic CBR reference, a 27.5 Mbps 4:2:2
-  mux, and two real CNN contribution captures.
-- **P1 file analysis is optimistic by construction:** it cannot see the software CBR pacer's
-  scheduling jitter on a general-purpose OS/NIC, which is exactly what PCR_accuracy (±500 ns) tests on
-  the wire. Only P2 decides it.
-- **The same construction flatters PCR *repetition*, and that half is no longer hypothetical.**
-  Reading a file, the stage places PCRs wherever the arithmetic wants them; delivering live it can
-  only place one when it has a packet ready at the deadline, which at this lane's cushion it often
-  does not. The 0 % above is therefore a statement about the re-stamp and not about what an IRD would
-  receive.
+- **File analysis flatters PCR repetition as it flatters accuracy (footnote ¹).** Reading a file, the
+  stage places PCRs wherever the arithmetic wants them; delivering live it can only place one when it
+  has a packet ready at the deadline, which at this lane's cushion it often does not.
 - A single IRD model is not the installed base; a credible pass needs a defined IRD test matrix
   (models, analyser settings).
 - **On the segmented lane the two domains do not diverge, because there is no offline stage to
@@ -178,12 +169,13 @@ The media-aware lane + `mpegts-pacer` is CBR/PCR-conformant **at P1 on file** ac
 (0 % > 40 ms, exact CBR, 0 `pcrverify` violations @ ±500 ns, 0 CC), and the opaque-lane P1 is shown in
 [T3](test-3-opaque-transparency.md). *Necessary but not sufficient* is not a formality here: on the
 one axis where a wire measurement has since been taken, the file result did not carry over
-([T13](test-13-downstream-grooming.md), 131–159 intervals above 40 ms in 25 s). So the grooming
-design is "structurally sound and file-validated", and on P1 PCR repetition as delivered it is
-"measurably not conformant at the depth currently run" — not "proven broadcast-acceptable". **The
-hardware (P2) pass remains the open, load-bearing test**, and a cushion sweep on the MoQ lane is the
-cheaper one that would settle the P1 half ([planned-experiments.md](planned-experiments.md)).
-Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §3.2.
+([T13](test-13-downstream-grooming.md), 131–159 intervals above 40 ms in 25 s). So this build's
+grooming design is "structurally sound and file-validated", and on P1 PCR repetition as delivered
+"measurably not conformant" — not "proven broadcast-acceptable". The delivered half was settled by
+the groomer's design and not its depth: the reworked groomer passes repetition on the wire, and a
+cushion ladder moved it not at all ([T19](test-19-pcr-grid-verification.md)). **The hardware (P2)
+pass remains the open, load-bearing test.** Recorded as a permanent finding in
+[`docs/evidence.md`](../docs/evidence.md) §3.2.
 
 **On the segmented lane the same four clips are conformant as delivered at ~10 Mbps** — 0 intervals
 above 40 ms, 0 `pcrverify` violations at ±500 ns, 0 continuity errors, and declared rate agreeing with
@@ -193,7 +185,7 @@ source's spacing; grooming there buys cadence and CBR, not conformance. And the 
 valuable number on this lane is now bounded rather than open: it holds up to ~11.5 Mbps, and above
 that the pacing stage on this laptop runs out before the lane does, so **27.5 Mbps is untested rather
 than failing**. Establishing it needs a host that can pace 30 Mbps without underrunning, which is a
-rig upgrade and not an experiment ([planned-experiments.md](planned-experiments.md)).
+rig upgrade and not an experiment; no entry plans it.
 
 ## Corrections
 
@@ -230,6 +222,7 @@ rig upgrade and not an experiment ([planned-experiments.md](planned-experiments.
   [T16](test-16-grooming-segmented-http.md).
 - Wire-domain PCR repetition on the same tool: [T13](test-13-downstream-grooming.md).
 - P1 vs wire caveat, boundary cases: [`docs/architecture.md`](../docs/architecture.md) §4.2.
-- Hardware-soak protocol (not yet run), and the cushion sweep that would settle the P1 half:
-  [planned-experiments.md](planned-experiments.md).
+- Hardware-soak protocol (not yet run): [planned-experiments.md](planned-experiments.md), P0-k.
+- The groomer that passes repetition on the wire, and its cushion ladder:
+  [T19](test-19-pcr-grid-verification.md).
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §3.2.
