@@ -1192,9 +1192,9 @@ liveness flattened into the publisher's snapshot. Its export side is this campai
 affiliate's edge decodes and the origin cannot see it ([T39](test-39-cross-boundary-observability.md)).
 **[#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and for MSF carriage, and the plan
 changed**: the export side stays, through `.echo`, so `moq export ts --echo <name>` folds the TS
-counters in under `mpegts`; MSF is parked: a viewer's `--echo` under an MSF catalog is refused, the
-import's MSF catalog omits `stats` and `echo`, and `echo` as a `publishTracks` entry with an optional
-CMCD encoding is a later-milestone quest. Planned, not implemented.
+counters in under `mpegts`; MSF is parked (`echo` as a `publishTracks` entry with optional CMCD is a
+later-milestone quest). Unimplemented; [we offered](https://github.com/moq-dev/moq/pull/5643#issuecomment-6218255912)
+to build it and `stats/rust` once the schemas (#5643) merge.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
@@ -1205,7 +1205,9 @@ Event Mode reports over Event Timeline tracks named there. CMCD's vocabulary is 
 bitrate, play state, starvation and errors, per media type — with no key for container health, and the
 draft enables only the keys it lists, so CMCD's custom keys are unavailable as written.
 [wilaw/CMCD-over-MSF-event-timeline#4](https://github.com/wilaw/CMCD-over-MSF-event-timeline/issues/4)
-asks for container health as its own Event Timeline type beside the CMCD track (or custom keys), and a
+asks for container health as its own Event Timeline type beside the CMCD track (or custom keys), with
+[a concrete type](https://github.com/wilaw/CMCD-over-MSF-event-timeline/issues/4#issuecomment-6218256377)
+whose fields are `ts::stats`'s (unanswered), and a
 [comment on its #3](https://github.com/wilaw/CMCD-over-MSF-event-timeline/issues/3#issuecomment-6127631320)
 supports reports tied to a track. MSFTS is the wrong home for almost all of it: subscriber
 health applies identically to LOC, CMAF and `m2ts`, and MSFTS §4's disciplined scope list is the reason
@@ -1832,11 +1834,11 @@ detectable from the received bytes alone, and the client demonstrates sensitivit
 modes rather than asserting it. The whole oracle reduces to one command. The client is public in
 [`interop/`](../interop/README.md).
 
-Two harness-level suggestions went with the proposal. The runner should include a control-plane test for
-zero-field namespace-subscription handling, which would generate data for moq-wg#1457. It should also
-record the transport actually negotiated alongside the draft version, because the client abandons QUIC for
-a WebSocket fallback on a fixed 200 ms timer. Any relay much farther away than that is silently carried
-over TCP, and the transport under test is not the one you think.
+Two harness suggestions went with it: a control-plane test of zero-field namespace subscription (data
+for moq-wg#1457), and recording the transport negotiated beside the draft, since the client falls back
+from QUIC to WebSocket on a fixed 200 ms timer. **State:** another contributor took it up as a `media` area (reference publisher, relay under test, checker; CMSF first). [Our
+reply](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6218255528) backs it,
+offers MPEG-TS as a second format with two cases, and keeps T-STD out of pass/fail.
 
 ### A flag-alias regression — reported, fixed, verified, closed
 
