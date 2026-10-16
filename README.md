@@ -42,7 +42,7 @@ conditional and does not establish end-to-end receiver interoperability
 101 290-conformant in software.** That makes the case for MoQ on routes with a roughly
 two-to-nine-second delivery budget. But at conformance it does not necessarily beat the
 point-to-point incumbents it would displace, which carry their source’s own conformant timing and
-buy their latency with a jitter buffer the operator sets. Nothing below about two seconds was
+buy their latency with a jitter buffer the operator sets. Nothing below about one second was
 conformant over a whole capture on any lane, so MoQ’s strategic sub-second case is architecturally
 credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
 

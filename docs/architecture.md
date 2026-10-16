@@ -279,7 +279,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | Groomed, MoQ lane, **against the T-STD buffer model** | **fails on the configuration above**, and on every build graded from moq 0.10.0 to 0.13.0, in either clock mode: video, audio and PSI transport buffers overflow throughout, and no PCR offset makes the audio decoder buffers legal in any 2 s window. The same groomer fed by SRT passes every transport buffer and every 2 s window | **wire**, loopback |
 | The same groomed MoQ wire, **re-multiplexed offline** against the T-STD | **passes every buffer** over the whole capture, on its own PCR, from three builds' egress, at 0.9–1.4 s of decoder delay against that egress's clock | **file** |
 | The MoQ lane's TS-out, **re-multiplexed live** in this gateway's place, a laboratory stage | **passes every buffer and P1/P2** over 270 s with nothing sent late, at **2,196.7 ms of presentation latency** on moq 0.12.1; two clips of one service, one run each, at the lowest lead that passes | **wire**, loopback |
-| The MoQ lane's TS-out from upstream's **fixed-delay export**, merged on October 2026 `main`, which re-multiplexes in the subscriber | **passes every buffer and P1/P2 with every track carried on every join tried**, at 500 ms to 1 s, on loopback, across hosts and at 1–2 % loss; 2,272–2,274 ms at a 1 s delay. 500 ms does not last a 540 s capture, and 2–3 % loss ends it at 1 s | **wire**, one clip |
+| The MoQ lane's TS-out from upstream's **fixed-delay export**, merged on October 2026 `main`, which re-multiplexes in the subscriber | **passes every buffer and P1/P2 with every track carried on every join tried**, at 500 ms to 1 s, on loopback, across hosts and at 1–2 % loss; sending ahead within the delay, 1,137 ms at a 1 s delay on a live feed. 500 ms does not last a 540 s capture, and 2–3 % loss ends it at 1 s | **wire**, two sources |
 | Byte-faithful SRT or UDP, **stream-clocked** groomer, against the T-STD | **passes every buffer** over the whole capture, at the source's own legal offsets, with every source null stripped. Arrival-clocked, the decoder buffers drift out | **wire**, loopback |
 | Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors; buffer model not graded | **wire** |
 | Any lane | — | **hardware IRD: not run** |
@@ -309,7 +309,7 @@ conformant grid at whatever jitter buffer the operator sets. At the buffer model
 conformant configuration behind the media-aware lane at all. A re-multiplexing stage supplies one:
 offline; live, as a laboratory stage in this gateway's place, at 2.2 s behind the source on moq
 0.12.1, most of it the lane's own delivery schedule; and in the subscriber, as upstream's merged
-fixed-delay export, at about 2.3 s with a 1 s delay (§4.3).
+fixed-delay export, at about 1.1 s with a 1 s delay (§4.3).
 
 > **The gate that decides this architecture.** A conformant transport stream on real hardware
 > decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model — including the
