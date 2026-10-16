@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """T11b oracle: compare a TS received through a relay against the source, per PID.
 
-usage: t11b-grade.py <source.ts> <received.ts> [--rewritten 0,100] [--dropped 16,17,20]
+usage: t11b-grade.py <source.ts> <received.ts> [--rewritten 0,100] [--dropped 16,17,20] [--suffix]
 
 A PID listed as rewritten is compared with its continuity counters masked and
 may repeat (a publisher re-sending PSI); a dropped PID must be absent; every
-other PID must arrive as exactly the source's packet sequence.
+other PID must arrive as exactly the source's packet sequence. With --suffix
+(a subscriber that joins at a group, or a publisher that drops bytes before its
+first group), a PID passes as one contiguous run of the source's packets that
+covers at least 95 % of them (any run, for a PID under 100 packets); nulls are
+reported, not graded.
 """
 import argparse
 import collections
@@ -40,6 +44,7 @@ def main():
     ap.add_argument("received")
     ap.add_argument("--rewritten", default="0,100")
     ap.add_argument("--dropped", default="16,17,20")
+    ap.add_argument("--suffix", action="store_true")
     a = ap.parse_args()
     rewritten = {int(x) for x in a.rewritten.split(",") if x}
     dropped = {int(x) for x in a.dropped.split(",") if x}
@@ -56,7 +61,13 @@ def main():
             verdict = f"{len(r)} vs {len(s)} source, {len(foreign)} not in source (CC masked)"
         elif pid == 0x1FFF:
             verdict = f"{len(r)} vs {len(s)} null"
-            ok &= len(r) == len(s)
+            ok &= a.suffix or len(r) == len(s)
+        elif a.suffix:
+            starts = [i for i, p in enumerate(s) if r and p == r[0]]
+            start = next((i for i in starts if s[i : i + len(r)] == r), -1)
+            share = len(r) / len(s) if s else 0
+            verdict = f"{'contiguous' if start >= 0 else 'NOT CONTIGUOUS'} from source packet {start}, {share:.1%} of source"
+            ok &= start >= 0 and (share >= 0.95 or len(s) < 100)
         elif s == r:
             verdict = "identical"
         else:

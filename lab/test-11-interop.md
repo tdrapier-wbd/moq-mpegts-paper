@@ -18,8 +18,9 @@ one-line publisher fix it crosses the relay **byte-exact on every elementary-str
 draft 18 over raw QUIC to an IETF subscriber, and only for about 27 s at 10 Mb/s before the relay
 aborts its single unbounded group. Every other combination fails on a publisher-side defect, bar
 WebTransport, which fails on a relay transport parameter `moq-dev` already plans to add. No relay
-defect was found in the passing arm. T11c, unrunnable on `moqxr`, which has no subscriber, is planned on
-OpenMOQ's moq5 (P1-h).
+defect was found in the passing arm. **T11c on OpenMOQ's moq5 (P1-h):** `moq-dev`'s TS does not
+cross `moq5-relay` on draft 18 or 22; it stops at the announce and at the catalog subscription
+respectively, before any media. Diagnosis open; three directions not yet run.
 
 **The same fixture and oracle put through segmented HTTP pass against every third party tried** —
 FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
@@ -417,6 +418,46 @@ assumption at the byte level, not for interoperability as deployed. The arm that
 the same matrix against the MSFTS -02 publisher in `moq2ts`, once it can run headless, or against
 OpenMOQ's own relay.
 
+## T11c — moq5 against `moq-dev`, both ways (criteria fixed before the first run)
+
+OpenMOQ's [moq5](https://github.com/openmoq/moq5) has a sender, a receiver and a relay, so it closes
+what `moqxr` left open. Four directions, each on every draft both builds speak (16, 18, 22; raw QUIC):
+
+| # | Publisher | Relay | Subscriber | Tests |
+|---|---|---|---|---|
+| 1 | `moq import ts`, `--passthrough` and demultiplexed | `moq5-relay` | `moq export ts` | relay portability, theirs |
+| 2 | moq5 sender (MSFTS) | `moq-relay` | moq5 receiver | relay portability, ours |
+| 3 | `moq import ts`, both modes | `moq-relay` | moq5 receiver | catalog, ours to theirs |
+| 4 | moq5 sender | `moq-relay` | `moq export ts` | catalog, theirs to ours |
+
+**An arm passes** when, held for at least 120 s at the clip's rate (four times T11b's 27 s ceiling)
+with no session or group abort:
+
+1. the subscriber finds the TS track through the publisher's own catalog, with no track name or
+   packaging given out of band (a failure records the field it lacked);
+2. a passthrough arm delivers the source's packet sequence on every elementary-stream PID
+   (`t11b-grade.py`, PSI continuity masked), and a demultiplexed arm passes the campaign's content
+   grader per PID;
+3. TSDuck reports zero continuity errors;
+4. the negotiated draft and ALPN, and both builds' commits, are recorded.
+
+Measurement P1: co-resident on loopback, from file, paced by PCR. **Predicted:** directions 1 and 2
+pass on bytes; 3 and 4 fail at discovery (MSF `mpeg2ts` packaging against the hang catalog's `m2ts`
+section).
+
+**First runs: direction 1 fails before any media, on both drafts it negotiated.** `moq-dev`
+`3c0daa21b` against moq5 `0729c49` (`moq5-relay` on MsQuic), passthrough import, rig
+[`t11c-d1.sh`](scripts/t11c-d1.sh); the export received 0 bytes in each.
+
+| Draft | Where it stops |
+|---|---|
+| 18 | `moq5-relay` answers the publisher's `PUBLISH_NAMESPACE` with `REQUEST_OK` but keeps no announce (its route dump is empty while the publisher is connected), so the export's catalog `SUBSCRIBE` is refused *not found* |
+| 22 | The announce is kept. The export subscribes to the catalog with `NextObject` and a fill of the current group; the relay subscribes upstream with `NextObject` and no fill. The publisher answers largest 2/0 and sends group 2 anyway; the relay retains nothing, the fill stream it opens downstream dies before its type, and the export cancels as idle. A static catalog never gets a later group, so nothing ever arrives |
+| 16 | Rerun needed: the relay's log reports `moqt-22`, so the rig's version pin did not take |
+
+Which side's reading of `NextObject` and fills the draft supports is not yet established; a
+wire-level trace decides it before anything is reported. Directions 2 to 4 wait on the harness.
+
 ## Status and next steps
 
 - [x] Fixture generator, oracle, and oracle sensitivity tests
@@ -452,11 +493,4 @@ OpenMOQ's own relay.
       and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
 - [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
       [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
-- [ ] T11c and T11b's extension on OpenMOQ's [moq5](https://github.com/openmoq/moq5) (MSFTS format
-      version 3; drafts 16, 18 and 22; a sender, a receiver and `moq5-relay`), which `moq2ts` and
-      `moqxr` could not give headless: moq5's receiver fed by `moq import ts`, demultiplexed and
-      `--passthrough`, through a `moq-dev` relay; moq5's sender through a `moq-dev` relay into
-      `moq export ts` and into moq5's receiver; `moq-dev`'s TS through `moq5-relay`. moq5 claims no
-      cross-implementation result of its own. Predicted before running: the bytes cross, and the
-      opaque catalogs do not meet (MSF `mpeg2ts` packaging against the hang catalog's `m2ts`
-      section). Pass criteria to be fixed here before the first run
+- [ ] T11c, the four moq5 directions (§ T11c); moq5 claims no cross-implementation result of its own
