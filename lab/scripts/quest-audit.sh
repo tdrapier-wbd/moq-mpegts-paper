@@ -47,7 +47,7 @@ NAMES=$(grep -o '`[a-z0-9][a-z0-9/-]*`' <<<"$SECTION" | tr -d '`' | grep -E '[-/
 
 echo "quest table against upstream main ${MAIN}${SINCE:+, changes since ${SINCE}}"
 for name in $NAMES; do
-	path=$(grep -E "^quest/[^/]+/${name}(\.md|/README\.md)$" <<<"$TREE" | head -1 || true)
+	path=$(grep -E "^quest/([^/]+/)+${name}(\.md|/README\.md)$" <<<"$TREE" | head -1 || true)
 	if [[ -z "$path" ]]; then
 		gone=$(git -C "$DIR" log origin/main --format='%h %s' --diff-filter=D -1 -- "quest/*${name}.md" "quest/*${name}/README.md")
 		printf '%-6s %s: %s\n' GONE "$name" "${gone:-never on main}"

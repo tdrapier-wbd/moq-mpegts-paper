@@ -1180,21 +1180,22 @@ carrying, per rendition, what it received, decoded, played late and stalled on, 
 counters. A shared model classifies either report as unknown, healthy, degraded or unhealthy and names
 its observer; a preflight run reports which media layer is broken. Reporting is opt-in, trust is the
 token prefix, and **self-reports are never billing, authorization or route-selection input**; the relay
-keeps aggregated histograms only, and encoder feedback moved to a later milestone. **Nothing is
-implemented or claimed**, and the campaign position — not via `mpegts-pacer` — is unchanged.
+keeps aggregated histograms only, and encoder feedback moved to a later milestone. The campaign
+position — not via `mpegts-pacer` — is unchanged.
 **Contributed, [#5367](https://github.com/moq-dev/moq/pull/5367), merged**: a catalog entry names
 its track apart from its key, so the snapshots can key by rendition and two broadcasts' same-named
 tracks share one catalog; rebinding an export when a key's track changes is deferred to
 [#5406](https://github.com/moq-dev/moq/pull/5406).
 
 **The TS half is `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
-liveness flattened into the publisher's snapshot. Its export side is this campaign's case, where the
-affiliate's edge decodes and the origin cannot see it ([T39](test-39-cross-boundary-observability.md)).
-**[#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and for MSF carriage, and the plan
-changed**: the export side stays, through `.echo`, so `moq export ts --echo <name>` folds the TS
-counters in under `mpegts`; MSF is parked (`echo` as a `publishTracks` entry with optional CMCD is a
-later-milestone quest). Unimplemented; [we offered](https://github.com/moq-dev/moq/pull/5643#issuecomment-6218255912)
-to build it and `stats/rust` once the schemas (#5643) merge.
+liveness in both reports. Its export side is this campaign's case: the affiliate's edge decodes where
+the origin cannot see ([T39](test-39-cross-boundary-observability.md)).
+[#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and MSF carriage; MSF is parked.
+**The maintainer [gave us](https://github.com/moq-dev/moq/pull/5643#issuecomment-6222787706) it and
+`stats/rust`**, with the export's re-timing in its own section. **Built on #5643, unposted until it
+merges**: CLI flags and sinks, `mpegts` at both edges, and `release` (drops, trims, gaps, margin,
+offset, drift). A clean clip reads zero on each check; one video PID silenced behind legal PCR and
+continuity grows only its `quiet`.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
