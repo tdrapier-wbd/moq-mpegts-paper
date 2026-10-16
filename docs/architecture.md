@@ -1156,7 +1156,7 @@ Ranked by how much a negative answer would change the architecture.
    ends the import at the first backward step by design, flagged or not
    ([T40](../lab/test-40-continuous-join-through-srt.md),
    [T41](../lab/test-41-import-reanchor-coverage.md); [Evidence](evidence.md) §3.13). A deployment
-   whose source timeline steps back must republish at each step, at about 3 s of programme a step,
+   whose source timeline steps back must republish at each step, at 3–4 s of programme a step,
    or pin the build.
    **T-STD occupancy is tested in software**: behind the media-aware lane it is beyond this gateway's
    reach, and upstream's merged fixed-delay export meets it in the subscriber (§4.3). What remains

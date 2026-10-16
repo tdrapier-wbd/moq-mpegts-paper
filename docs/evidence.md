@@ -90,7 +90,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design; a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair of exports stays identical across it in 8 of 13 runs, and a pair of republishing importers keeps both legs but follows the last to announce | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
+| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design; a supervisor's republish under a new epoch costs 3–4 s of programme per step; a co-started 1+1 pair of exports stays identical across it in 8 of 13 runs, and a pair of republishing importers keeps both legs but follows the last to announce | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
 | **Interop** | Media flows within one implementation and through none of eight other relays; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays fail | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -626,7 +626,7 @@ a rewind and an encoder restart each cross the lane with no programme hole and n
 **From moq 0.14.0 a backward timestamp step ends the import instead, flagged or not, on every stream
 kind measured**, while a flagged forward jump still publishes; upstream has declined an in-process
 restart, even for the flagged case. A source whose timeline steps back must then be republished at
-each step, by a supervisor under a new epoch, or the build pinned. Each republish costs about 3 s of
+each step, by a supervisor under a new epoch, or the build pinned. Each republish costs 3–4 s of
 programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. On a real feed
 the standing import ended three times in about 19 h over a clean hand-off, two exits 3 min apart,
 but none of the exits since captured with their source was a step: each was the import mis-stamping
@@ -648,32 +648,32 @@ scale. **The rollover, the one event a permanent feed cannot avoid, is discharge
 **A continuous source is the other half** ([T40](../lab/test-40-continuous-join-through-srt.md),
 [T41](../lab/test-41-import-reanchor-coverage.md); P1, wire, one host, one run per arm). A looping source
 whose AC-3 and teletext timestamps step back at each content join stops the importer at the first join on
-moq 0.11.2 once its development line merged, and on 0.12.1 (*frame timestamp is below the live edge*),
-is published through five joins on moq 0.12.8, and ends at the first unflagged wrap from moq 0.14.0,
-by design. **No build measured carries both
+moq 0.11.2 and 0.12.1, is published through five joins on 0.12.8, and ends at the first unflagged wrap
+from 0.14.0, by design. **No build measured carries both
 a continuous restarting source and the current design**, so §3.2's day is not reproducible on an October
 2026 build.
 
-**Republishing at each backward step costs about 3 s of programme, set by the export, not the step**
+**Republishing at each backward step costs 3–4 s of programme, set by the export and the restarted importer's catalog, not the step**
 ([T41](../lab/test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*;
 P1, wire; moq 0.14.2, `moq-lite-07`, one host, one clip, a flagged 1 s or 600 s step, thirteen
-runs). A supervisor restarted the import at the step, under a fresh epoch, and two co-started
-exports at a 1 s delay followed the new broadcast with no unit missing on either side of the break.
-Pipe-fed, 2.9–3.0 s of programme never reached the output, for either step size; the export carried
-the first post-step picture about 0.6 s beyond its steady latency. Through an SRT gateway it lost
+runs). A supervisor restarted the import at the step under a fresh epoch; two co-started exports at
+a 1 s delay followed with no unit missing either side of the break.
+Pipe-fed, 2.9–3.0 s of programme was lost, for either step size; the export carried
+the first post-step picture about 0.6 s beyond its steady latency. Later October 2026 builds hold a
+restarted importer's catalog for its first mux-rate window and lose 3.8 s, 1.2 s of it to that hold
+([T41](../lab/test-41-import-reanchor-coverage.md) § *Where the step's cost grew*; P1, wire, one
+host, seven runs). Through an SRT gateway the first build lost
 3.2–7.7 s, mostly latency the gateway path had built up before the step and the restart discarded.
-**The two exports stayed byte-identical across the break in 8 of 13 runs.** In four only the video
-PID later differs, on the one examined as the same content packetised differently, and in one the
-legs left the old broadcast one picture apart. Either breaks the packet identity an ST 2022-7 merge
-needs. The cause is not located, and upstream holds the outcome by design: after a replacement each
-export starts a fresh stream, its byte identity promised within one epoch only, and identity across
-a republish is left to the export of the whole multiplex, merged (§3.1) but not measured across one.
+**The two exports stayed byte-identical across the break in 8 of 13 runs.** The other five part
+after it, by packetisation or one picture, breaking the packet identity an ST 2022-7 merge needs. The cause is not located; upstream holds the outcome by design, each export starting a fresh stream
+after a replacement, with byte identity promised within one epoch only and identity across a
+republish left to the whole-multiplex export, merged (§3.1) but not measured across one.
 
 **A 1+1 ingest pair republished this way keeps both legs, but each export follows whichever leg
 announced last** ([T41](../lab/test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose
 importers each mint an epoch*; P1, wire, later October 2026 `main` with `--stitch`, `moq-lite-07`, one
 host, a flagged 1 s step, five runs and a single-importer control). Fed from one source, the legs
-restart together and the step costs the single importer's 2.9 s, with one flagged break; with one leg
+restart together and the step costs what the single importer's does, with one flagged break; with one leg
 2 s behind, the export ends on the lagging leg and the step costs up to the skew more. Losing the leg
 followed is a further switch, with about 1.1 s missing. Such a pair is two supervised feeds under one
 name, not a hitless pair.

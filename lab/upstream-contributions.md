@@ -26,8 +26,8 @@ this campaign's own measurements (§8), where the ratio is the point.
 - **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352) and the rewind at the switch (#4354)](#activeactive-source-failover--shipped-bounded) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
 - **Congestion and memory** (§4, §5): [subscriber death under contention](#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) · [the qlog loss trigger](#the-qlog-loss-trigger-is-computed-backwards--fixed-in-quinn-and-in-noq-released-in-neither) · [relay memory](#5-relay-memory) and [the publisher's leak](#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)
 - **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-unbuilt) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
-- **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--asked-once-declined-withdrawn-re-asked-narrowly-and-deferred) · [closures by a planning document](#four-of-these-were-closed-as-completed-by-a-planning-document-that-changed-no-code) · [a multi-packet PMT (#5110)](#a-pmt-longer-than-one-packet-ended-the-export--reported-as-5110-fixed-by-5220) · [video TB overrun (#5142)](#video-overran-its-transport-buffer-where-the-multiplex-outran-its-rx--reported-as-5142-fixed-by-5207-and-5306) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363, #5516)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-fixed-by-5363-and-5516)
-- **Interoperability** (§6, §6b): [the announce convention](#the-announce-convention--reported-as-a-hazard-not-a-bug) · [the empty namespace prefix](#the-empty-namespace-prefix--a-specification-inconsistency) · [the media-level interop profile](#a-media-level-interop-profile--contributed) · [a flag-alias regression](#a-flag-alias-regression--reported-fixed-verified-closed) · [an independent stack](#corroboration-from-an-independent-stack) · [OpenMOQ's MSFTS publisher (moqxr#57)](#openmoqs-msfts-publisher-through-moq-relay--reported-as-openmoqmoqxr57) · [FFmpeg's HLS client](#6b-ffmpeg-an-hls-client-that-asks-for-http3-and-carries-the-media-over-http11)
+- **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--asked-once-declined-withdrawn-re-asked-narrowly-and-deferred) · [closures by a planning document](#four-closed-as-completed-by-a-planning-document-that-changed-no-code) · [a multi-packet PMT (#5110)](#a-pmt-longer-than-one-packet-ended-the-export--reported-as-5110-fixed-by-5220) · [video TB overrun (#5142)](#video-overran-its-transport-buffer-where-the-multiplex-outran-its-rx--reported-as-5142-fixed-by-5207-and-5306) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363, #5516)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-fixed-by-5363-and-5516)
+- **Interoperability** (§6, §6b): [the announce convention](#the-announce-convention--reported-as-a-hazard-not-a-bug) · [the empty namespace prefix](#the-empty-namespace-prefix--a-specification-inconsistency) · [the media-level interop profile](#a-media-level-interop-profile--contributed) · [a flag-alias regression](#a-flag-alias-regression--reported-fixed-verified-closed) · [an independent stack](#corroboration-from-an-independent-stack) · [OpenMOQ's MSFTS publisher (moqxr#57)](#openmoqs-msfts-publisher-through-moq-relay--reported-as-openmoqmoqxr57) · [moq5's relay (moq5#51)](#moq5s-relay-and-a-late-subscriber--reported-as-openmoqmoq551) · [FFmpeg's HLS client](#6b-ffmpeg-an-hls-client-that-asks-for-http3-and-carries-the-media-over-http11)
 - **The MSFTS specification** (§7): [the named modes and output timing](#the-three-named-modes-are-published-and-the-gap-they-leave-is-output-timing) · [the September 2026 round](#the-2026-09-17-round-eleven-issues-filed-plus-one-comment-and-one-cross-venue-pair) · [the output contract (#37)](#the-output-contract-what-a-rebuilding-subscriber-emits-filed-as-37-and-merged) · [the CAT and the retain list](#the-retain-list-drops-the-cat-so-conditional-access-cannot-survive-program-level-filtering) · [mode 3 and the reference implementation](#mode-3-and-the-reference-implementation-are-not-the-same-thing-and-that-is-the-convergence-problem) · [the -02 revision](#the--02-revision-verbatim-only-carriage-41)
 - **Asked for, then retracted** (§8): [the ledger and its evidence](#8-what-was-asked-for-at-the-start-what-was-retracted-and-on-what-evidence)
 
@@ -1443,32 +1443,17 @@ head-to-head*) — so a socket would emit a stream an IRD still cannot clock off
 closed not planned on 2026-09-24** after agreeing `tsp` already does the socket work; the maintainer
 noted a sink adds little until the schedule lands ([planned-experiments](planned-experiments.md#deliberately-not-doing)).
 
-### Four of these were closed as completed, by a planning document that changed no code
+### Four closed as completed by a planning document that changed no code
 
-On 2026-09-23 [#3798](https://github.com/moq-dev/moq/issues/3798),
-[#3925](https://github.com/moq-dev/moq/issues/3925),
-[#3926](https://github.com/moq-dev/moq/issues/3926) and
-[#3731](https://github.com/moq-dev/moq/issues/3731) were closed as *completed via*
-[#3987](https://github.com/moq-dev/moq/pull/3987). **#3987 is eight Markdown files under `quest/`
-and no code**; each ends with *"close this issue when the quest finishes"*. Closures moved the
-tracker, not the defects — #3798's quest still records *"Known triggers, none yet reproduced
-in-tree"*, and #3925's says the average rate is right (#3831) but the bytes clump.
-
-**A closed issue is the campaign's usual signal to re-test**, and re-testing on `ffa5b81b` found
-every defect intact (source and wire):
-
-| Issue | Re-verified on `ffa5b81b` | How |
-|---|---|---|
-| [#3798](https://github.com/moq-dev/moq/issues/3798) | **live** — import exits *frame timestamp is below the live edge* at the first content join | [T40](test-40-continuous-join-through-srt.md) rig; `reanchor` still only in `impl LegacyStream` |
-| [#3925](https://github.com/moq-dev/moq/issues/3925) | **live** — median PCR byte gap **1,316 B** against a 31,124 B nominal, 3.8 % of intervals within 1 % | [T13](test-13-downstream-grooming.md) § *The residual measured*, `pcr-residual.py` |
-| [#3926](https://github.com/moq-dev/moq/issues/3926) | **live** — no `--linger` flag exists; export exits 1 on a clean publisher exit 0; 0 B recovered after restart | [T13](test-13-downstream-grooming.md) § *Liveness* |
-| [#3731](https://github.com/moq-dev/moq/issues/3731) | **not actionable either way** — quest defers to msfts#33, since answered and closed | `quest/m4/msfts-convergence.md` |
-
-On `ffa5b81b` **nothing blocked was unblocked**; #3798 has since been fixed on `main` and #3926
-closed by #4504 (both below), and the maintainer reopened #3925 and #3731 on 2026-09-28; #3925 is
-now closed, answered by #4645 (above). Method
-rule: [`method-notes.md`](method-notes.md) § *A closed issue is a claim about a tracker, not about a
-binary*.
+[#3987](https://github.com/moq-dev/moq/pull/3987), eight quest files and no code, closed
+[#3798](https://github.com/moq-dev/moq/issues/3798), [#3925](https://github.com/moq-dev/moq/issues/3925),
+[#3926](https://github.com/moq-dev/moq/issues/3926) and [#3731](https://github.com/moq-dev/moq/issues/3731);
+re-tested on `ffa5b81b`, each defect was intact. Each has since moved on its own: #3798 fixed and
+#3926 closed by #4504 (both below), #3925 answered by #4645 (above). #3731, reopened, is now
+`quest/m3/msfts-convergence.md`, and T11c's discovery result is
+[posted to it](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800): neither side
+finds the other's TS track through its catalog. Method rule: [`method-notes.md`](method-notes.md)
+§ *A closed issue is a claim about a tracker, not about a binary*.
 
 ### #2829 and #3948, closed by #4001 — real code, and verified
 
@@ -1879,6 +1864,15 @@ as one issue.
 With the fix to A, the byte-level result stands on draft 18. The WebTransport failure belongs to
 `moq-dev`, whose `reliable-reset` quest already plans the missing `reset_stream_at` parameter, so it
 went into the issue only as a note. **Open, no reply yet.**
+
+### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
+
+[T11c](test-11-interop.md#t11c--moq5-against-moq-dev-both-ways-criteria-fixed-before-the-first-run)
+direction 1: a passthrough import's catalog, published once before `moq5-relay` subscribed upstream,
+never reaches a late `moq export ts`, on drafts 16, 18 and 22. On 16 and 18 the relay forwards the
+Joining FETCH, receives the whole response (FETCH_OK, the object, FIN) and answers nothing; on 22 it
+serves the fill only from its retained log, which never held the group. A demultiplexed import passes
+on the same requests. **Open, no reply yet.**
 
 ---
 

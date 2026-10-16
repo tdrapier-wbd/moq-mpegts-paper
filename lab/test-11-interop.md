@@ -535,3 +535,5 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
       [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 - [x] T11c, the four moq5 directions on drafts 16, 18 and 22 (§ T11c); moq5 claims no
       cross-implementation result of its own
+- [x] T11c's passthrough join reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51);
+      its discovery result posted to [moq-dev/moq#3731](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800)
