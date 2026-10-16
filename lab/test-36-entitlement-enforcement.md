@@ -1,6 +1,7 @@
 # Test 36 — Entitlement enforcement: what the relay refuses, and whether it leaks before it refuses
 
-**State: run, 2026-09-11. All six pass criteria met.** The first of three experiments that put
+**State: run, 2026-09-11. All six pass criteria met. On the build under test, a standalone FETCH and
+a TRACK_STATUS outside the grant are refused (§ FETCH and TRACK_STATUS).** The first of three experiments that put
 measurement behind [Control](../docs/control-plane.md). This one asks the static question: presented
 with a credential, does the relay admit exactly the paths the credential names, refuse everything
 else, and refuse it *before* any media byte reaches the caller.
@@ -240,6 +241,55 @@ answer could take: not "small", not "one packet", but zero on every arm.
 [Control](../docs/control-plane.md) §3's claim that there is "no window in which an unauthorised
 subscription is accepted and then torn down" is **supported by measurement** for this relay, on
 loopback, under the arms specified here.
+
+## FETCH and TRACK_STATUS (criteria fixed before the first run)
+
+Every arm above subscribed or published. A standalone FETCH and a TRACK_STATUS name a track
+directly, with no announcement first, and upstream found both answered outside the grant until
+moq-dev/moq#4039. These arms check the fix on the wire, in the current authorization form
+(`moq auth serve --key-dir` behind the relay's `--auth-url`), on an estate of their own: broadcaster
+`bc` publishing `news` and `news-intl`, a second broadcaster `rival` publishing `news`, and affiliate
+A licensed `bc/news` only. moq-net's client resolves only announced paths, so the requests come
+from a raw client; draft 16 over raw QUIC; payload counted at the client after decryption.
+
+| Arm | Request | Target | Expected |
+|---|---|---|---|
+| A11 | standalone FETCH of the newest group | `bc/news-intl` | refused, zero object bytes |
+| A12 | TRACK_STATUS | `bc/news-intl` | refused, no Largest Location |
+| A11c, A12c | the same requests | `bc/news` | answered: objects, a Largest Location |
+| A13 | both requests | `bc/absent`, `rival/news` | refused |
+
+**Pass:** (1) A11 and A12 refused on the build under test; one object byte or one location fails it.
+(2) A11c and A12c answered, or the run is void: a client that cannot fetch shows nothing by being
+refused. (3) A11 and A12 answered with the same message, code and reason as A13's absent path; a
+difference is reported as disclosure (that an unlicensed channel exists) and does not void (1). (4)
+The parent of #4039's merge commit, run with the same estate and requests in whatever
+authorization form it accepts, answers A11 or A12; if it refuses both, the arms cannot tell the fix
+from its absence, and the report says so.
+
+**Results, on `3c0daa21b`: criteria 1–3 pass; by criterion 4, the arms cannot tell the fix from its
+absence.** Rig [`t36-fetch-status.sh`](scripts/t36-fetch-status.sh),
+probe [`t36-probe.c`](scripts/t36-probe.c) on moq5's service tier; publishers loop a 120 s clip as
+passthrough imports; each request made on the catalog (`catalog.json`) and on the TS track
+(`0.m2ts`), each from its own session.
+
+| Arm | Target | TRACK_STATUS | FETCH of group 0 |
+|---|---|---|---|
+| A12c, A11c | `bc/news` | answered | answered: 1 object, 233 B (catalog); 41 objects, 1,258,612 B (TS) |
+| A12, A11 | `bc/news-intl` | refused, code 1, *unauthorized* | refused, code 1, *not granted*, 0 B |
+| A13 | `bc/absent`, `bc/rival/news` | refused, code 1, *unauthorized* | refused, code 1, *not granted*, 0 B |
+
+The unlicensed channel and an absent path draw the same code and reason, so a refusal does not
+disclose that a channel exists. `rival/news` is reached as `bc/rival/news`: a session is rooted at
+its credential's root, so the other broadcaster's paths are not addressable from it at all. The
+FETCH is of group 0, not the newest, because `moq-dev`'s TRACK_STATUS_OK carries no Largest
+Location, even to the operator's credential; group 0 was still cached when the probes ran.
+
+The parent of #4039's merge, `6559065b`, already serves this authorization form. On the same rig, it
+refuses A11, A12 and A13 alike and answers A11c and A12c identically, with one difference: its FETCH
+refusal reads *unauthorized*, not *not granted*. #4039 lists both holes among review findings on its
+own branch, so `main` likely never shipped them. The arms confirm the refusal on the build under test,
+but no build at hand fails them.
 
 ## Limits, stated in advance
 

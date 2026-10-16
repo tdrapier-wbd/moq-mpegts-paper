@@ -1798,9 +1798,10 @@ quests, both questions answered yes. `main` (`a7b421617`) passes on the capture.
 [#5553](https://github.com/moq-dev/moq/pull/5553) merged sending ahead within the delay, with the
 maintainer's fix releasing a packed PES against its first frame's deadline. Its own commits took
 one delay off the trail, and its rate from the steadiest track settled within 5 min over an hour;
-the merged build grades the same on the feed (T45). Its CI met two `main` flakes, now quests:
-[#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates)
-and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted first group).
+the merged build grades the same on the feed (T45). Its CI met two `main` flakes:
+[#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates;
+fixed, #5714) and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted
+first group).
 
 ---
 

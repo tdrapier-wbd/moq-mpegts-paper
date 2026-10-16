@@ -1,7 +1,8 @@
 # Test 38 — The estate: many channels, many affiliates, and a licensing matrix with holes
 
 **State: run, 2026-09-11. Six of seven pass criteria met; criterion 4 met on CPU and not gradeable on
-memory.** The third of three experiments behind
+memory. The estate behind an auth server, on the build under test: all four of its criteria met.**
+The third of three experiments behind
 [Control](../docs/control-plane.md). [T36](test-36-entitlement-enforcement.md) grades one credential
 against one path and [T37](test-37-entitlement-revocation.md) grades one revocation against the
 clock. This one asks whether the model survives the shape a real distributor actually has: several
@@ -22,7 +23,8 @@ by the relay's configured root, carrying **no token at all**, was served every c
 estate — including the channel no affiliate licenses and **the other broadcaster's channel**. mTLS
 confers unrestricted access at whatever path is dialled. It cannot express a licensing matrix, and
 an operator who issues per-affiliate certificates expecting them to scope access gets the opposite
-of what they intended.
+of what they intended. That was `fd4f5d82e`; the build under test hands a certificate's scope to
+the auth server, unmeasured (§ Open).
 
 ## Objective
 
@@ -373,7 +375,7 @@ done to it at all. **Method rule: a gap in a delivery trace is only evidence of 
 with the intervention removed does not show the same gap; with zero continuity errors, a pause is
 delivery burstiness and no media was lost.**
 
-## The key estate costs the relay nothing, and deleting a key revokes immediately
+## The key estate costs the relay nothing
 
 **P1-k, measured 2026-09-11 on the campaign workstation.** § Open recorded the practical objection to
 the recommended topology: if de-provisioning needs a key per unit of entitlement, the estate is
@@ -407,23 +409,17 @@ token's `kid` names, on demand:
 - The same token, after its key file was **deleted with no relay restart**, was refused. So there is
   no post-first-use cache either.
 
-Two consequences follow, and the second is the more valuable:
+Two consequences follow:
 
 1. **Provisioning a new affiliate or channel needs no relay restart.** Writing the `.jwk` is the whole
    operation.
-2. **Deleting a key file is a revocation path that takes effect immediately and needs no restart.**
-   That matters against [T37](test-37-entitlement-revocation.md), where the binding finding is that
-   `max-age=0`, a sub-second `max-age` and an omitted `Cache-Control` each disable the `--auth-api`
-   re-check permanently, so a withdrawn grant never takes effect. Key deletion is not subject to that
-   defect at all: it is filesystem state the relay consults per request. **The two findings compose
-   into a working design** — size the estate by the licensing matrix, as this experiment already
-   recommends, and revoke by removing the key, which gets grant-level revocation with none of the
-   cache-header hazard. The cost of the estate that makes this possible is, measured, negligible.
+2. **Deleting a key file refuses the next session at once, with no restart.** It does not stop a
+   session already admitted: on the build under test that takes a re-check
+   (§ The estate behind an auth server, criterion 3).
 
-**What this does not show, and it is half the original objection.** § Open said "each a key the
-endpoint must serve *and* the relay must cache". Only the relay half was measured. An `--auth-api`
-endpoint serving a 9,000-entry matrix — its lookup cost, its own caching, and its behaviour when the
-matrix changes under it — is untested, and every run in T36–T38 drove a stub. Nor is this a
+**What this does not show.** § Open said "each a key the endpoint must serve *and* the relay must
+cache". Only the relay half was measured here; the endpoint half is § The estate behind an auth
+server. Nor is this a
 multi-tenancy claim: `--server-tls-root` remains the cross-tenant master key described below, and a
 large key estate does nothing about it. The rungs are single samples; the figures are flat enough and
 the mechanism direct enough that repetition would not change the conclusion, but none was run. Keys
@@ -431,20 +427,75 @@ here are HS256 and minted programmatically rather than through `moq token genera
 cell requiring the relay to accept a minted key before any rung was believed; an asymmetric estate
 was not measured.
 
+## The estate behind an auth server (criteria fixed before the first run)
+
+The ladder above ran on a relay that read keys itself (`--auth-key-dir`). The build under test has no
+key option: the relay asks an auth server once per session event (`--auth-url`), and upstream's
+reference server, `moq auth serve --key-dir`, verifies each token against the `{kid}.jwk` it names.
+Both halves of § Open's objection now sit in that server. The topology is the outside fan-out's:
+publisher → origin relay → edge relay with `--auth-url` → affiliates, on one host.
+
+The same ladder (10 to 20,000 keys, one per affiliate-channel pair, the token signed with the last
+key, a control cell first), then three arms on the 9,000-key estate:
+
+- **Provision:** a key written while both processes serve admits a new session.
+- **Withdraw:** a key deleted under a live subscription, three ways: no re-check configured;
+  `--revalidate 5s --expires 1h`; and `moq auth revalidate --path` sent at the deletion. Measured
+  from the deletion to the subscriber's last payload byte.
+- **Isolation:** affiliates holding different subsets on the same edge each receive exactly theirs
+  (T36 criterion 3, through the edge).
+
+**Pass:** (1) the edge's time to first media byte, and the auth server's resident memory, within twice
+the 10-key rung's at every rung; (2) provisioning restarts nothing; (3) with a re-check configured, a
+withdrawn grant stops delivery within the interval plus 1 s, and `revalidate` within 1 s; with none,
+the report states how long a deleted key leaves a live session delivering; (4) isolation holds
+exactly. A refused control token voids the ladder.
+
+**Results, on `3c0daa21b`: all four criteria pass.** Rig [`t38-auth-estate.sh`](scripts/t38-auth-estate.sh),
+one sample per rung; the publishers loop a 120 s clip as passthrough imports, restarted before each
+rung and arm because the importer exits where the loop sends PCR back.
+
+| Estate | Matrix | Key dir | Auth server launch → listening | Auth server RSS | Edge time to first media byte |
+|---|---|---|---|---|---|
+| 10 | 10 × 1 | 44 kB | 0.01 s | 15,080 kB | 1.00 s |
+| 100 | 20 × 5 | 404 kB | 0.01 s | 15,040 kB | 1.00 s |
+| 500 | 50 × 10 | 2.0 MB | 0.01 s | 15,352 kB | 1.00 s |
+| 2,000 | 100 × 20 | 8.1 MB | 0.01 s | 15,152 kB | 1.00 s |
+| 9,000 | 300 × 30 | 36 MB | 0.01 s | 15,376 kB | 1.00 s |
+| 20,000 | 800 × 25 | 81 MB | 0.01 s | 14,932 kB | 1.00 s |
+
+- **Criterion 1.** Time to first byte is identical to the 50 ms poll at every rung, so any admission
+  cost the estate adds is under 50 ms; the auth server's memory varies by 444 kB without a trend. The
+  server reads the key a token names when asked, so the endpoint half of § Open's objection fails
+  too: the estate costs the auth server nothing.
+- **Criterion 2.** A key written to the 9,000-key directory admitted a new session, first byte in
+  1.00 s, with the edge and the auth server on the same process IDs.
+- **Criterion 3.** Withdrawn under a live subscription: with `--revalidate 5s`, the last payload byte
+  came 0.88 s after the deletion, because the rig deletes about 4.1 s after admission and the first
+  re-check falls at 5 s; a deletion just after a re-check would wait up to 5 s. With
+  `moq auth revalidate --path`, delivery stopped before the first 0.1 s poll. With no re-check, the session
+  was still delivering 25 s later, when observation ended: **deleting a key refuses the next session,
+  not the current one.**
+- **Criterion 4.** On one edge, an affiliate licensed `ch000` received 8.7 MB of it and nothing of
+  `ch001`; one licensed `ch001`, the reverse; one licensed both, both.
+
 ## Open
 
 - **Per-subscriber RSS under authorization is unmeasured**, for the instrument reason in Part 4. It
   needs a relay restarted between arms.
-- **`--server-tls-root` is a cross-tenant master key and the relay says nothing about it.** A valid
+- **`--server-tls-root` is a cross-tenant master key and the relay says nothing about it** on
+  `fd4f5d82e`. On the build under test, a verified certificate admits what the auth server's
+  `--mtls-publish` and `--mtls-subscribe` patterns allow; that form is not measured. A valid
   client certificate admits the peer to every path on the relay, including other tenants', and the
   authorization endpoint is not told which certificate was presented, so it cannot object. An
   operator who configures client-certificate authentication alongside a token-based licensing matrix
   has silently bypassed the matrix. This is worth an upstream report: at minimum the peer's
   certificate subject should reach `AuthApiRequest`, so the endpoint can scope what a certificate
   admits.
-- **De-provisioning at the grant level rather than the key level does not exist.** Narrowing an
-  affiliate's entitlement requires a key per unit of entitlement, so the key estate has to be sized
-  by the licensing matrix rather than by the affiliate count. **The relay's half of that objection is
-  now measured and does not hold — see § The key estate costs the relay nothing.** The endpoint's
-  half is still untested.
+- **De-provisioning at the grant level rather than the key level does not exist** on `fd4f5d82e`.
+  Narrowing an affiliate's entitlement requires a key per unit of entitlement, so the key estate has
+  to be sized by the licensing matrix rather than by the affiliate count. Neither the relay's cost
+  nor the auth server's grows with that estate (§ The key estate costs the relay nothing; § The
+  estate behind an auth server). The build under test re-authorizes a live session in place on revalidation, which
+  may make the grant the revocable unit; not measured.
 - **Rights windows**, per the limits above.

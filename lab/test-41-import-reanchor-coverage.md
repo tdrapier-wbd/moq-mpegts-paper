@@ -18,9 +18,9 @@ verbatim and treats any backward step as the end of the stream, flagged or not. 
 restarting the import under a new epoch (`f8215bc47`, `moq-lite-07`), a flagged step costs 2.9–3.0 s
 of programme pipe-fed, whether 1 s or 600 s back, and a co-started 1+1 pair of exports stays
 byte-identical across it in 8 of 13 runs (§ *A flagged rewind carried as a new broadcast*). On
-`90500867d`, a 1+1 ingest pair carried that way keeps both legs, but each export follows whichever
-leg announced last, so a step costs the single importer's 2.9 s when the legs are aligned and up to
-the legs' skew more when they are not (§ *A 1+1 ingest pair whose importers each mint an epoch*).
+`3c0daa21b`, on `moq-lite-06` and `moq-lite-07`, a 1+1 ingest pair carried that way keeps both legs
+and costs the single importer's step when aligned, now 3.8 s, and up to the legs' skew more when not
+(§ *A 1+1 ingest pair whose importers each mint an epoch*).
 
 ## Objective
 
@@ -285,8 +285,8 @@ only under `--stitch`, as a programme switch. A 1+1 ingest pair supervised this 
 at one step, one per importer, so the export may switch twice and the later epoch may end the other
 leg. **Procedure.** The same rig with `PAIR=1`: the regulated stimulus teed into two importers of
 one broadcast, each under its own supervisor; both exports at `--delay 1s --linger 30s --stitch`;
-`moq-lite-07`; arm A, pipe-fed, 90 s; three runs, and one single-importer run with `--stitch` as the
-control. **Measured, fixed before running:**
+arm A, pipe-fed, 90 s; three runs, and one single-importer run with `--stitch` as the control, on
+each of `moq-lite-06` and `moq-lite-07`. **Measured, fixed before running:**
 
 1. Per leg, whether its importer exits once at the step and its supervisor's next importer
    publishes to the source's end, or is ended by the other leg's epoch (its exit and error).
@@ -302,28 +302,36 @@ Added after the three runs, whose legs share one tee and so restart within a mil
 with the second leg's feed delayed 2 s (`SKEW2=2`), as unequal ingest paths would, graded on the
 same criteria plus whether either export repeats or skips content across its breaks.
 
-**Results, on `90500867d`.** The double switch happens and both legs are kept; what it costs is
-set by the legs' skew.
+**Results, on `3c0daa21b` (thin LTO), on `moq-lite-06` and `moq-lite-07`:** per protocol three
+aligned runs, two skewed and the control, twelve in all. Both legs are kept and the aligned pair
+costs what the single importer does, on both protocols; the single importer's step costs more than
+on `90500867d`.
 
-- **Criterion 1 holds on both legs in all five runs.** Each importer exits once at its step and its
-  successor, 23–26 ms later under a fresh epoch, publishes to the source's end; neither leg's epoch
-  ended the other.
-- **Each export switches twice at the step, 150 ms apart, against the control's one resume**, in
-  all three aligned runs: onto the first leg's new instance, then onto the second's newer epoch.
-  The first instance is left before anything is written from it, so the output carries one flagged
-  break, as the control's does, and the same cost: 2,880 ms of programme lost and a 2.6 s gap.
-  Every export exits 0 with no late drop and no missing unit after the break; the two exports are
-  byte-identical in two of three runs.
-- **Skewed 2 s, each export ends on the lagging leg**, which restarts last and so holds the newest
-  epoch, after two or three switches at the step that still leave one flagged break. Coming from
-  the leading leg, the programme lost is unchanged but the gap grows by the skew, to 4.6 s, and the
-  latency after it by 2 s. Already on the lagging leg, the export spends 1.7 s on the leading leg's
-  restart without writing it and so abandons the lagging leg's last 1.7 s before the step: 4,600 ms
-  lost.
-- **Losing the leg followed is a second switch.** In one aligned run and both skewed runs the newer
-  leg's importer ended first at the source's end, and the export switched back to the older leg:
-  a flagged break and 28–29 pictures missing.
+- **Criterion 1 holds on both legs in all ten pair runs.** Each importer exits once at its step and
+  its successor, 21–29 ms later under a fresh epoch, publishes to the source's end; neither leg's
+  epoch ended the other.
+- **Aligned, each export resumes once at the step and, in five of six runs, is then switched again**
+  onto the other leg's new instance, 0.55–0.63 s after the old one ended. The output carries one
+  flagged break, as the control's does, at the control's cost: 3,800 ms of programme lost and a
+  3.84–3.85 s gap on both protocols. Every export exits 0 with no late drop and no missing unit after
+  the break. The two exports are byte-identical in five of six runs; in the sixth (`moq-lite-07`)
+  they part before the break by packet order alone, every PID's content identical.
+- **The step itself costs more than on `90500867d`,** whose control lost 2,880 ms with a 2.6 s gap
+  under the same grader: both controls here lose 3,800 ms, and carry the first post-step picture
+  2.2 s beyond the steady latency, against 0.6 s on `f8215bc47` (table above). Where the time goes
+  is not located.
+- **Skewed 2 s, `moq-lite-07` behaves as on `90500867d`, on top of that cost.** Coming from the
+  leading leg, the export switches at each leg's restart and ends on the lagging leg: 3,800 ms lost,
+  the gap grown by the skew to 5.86 s. Already on the lagging leg, it is switched at the leading
+  leg's restart and abandons the lagging leg's last 1.96 s: 5,760 ms lost. On `moq-lite-06`, an
+  export on the lagging leg is not moved by the leading leg's restart and resumes once, at its own
+  leg's: 3,800 ms lost, a 1.6 s gap. One on the leading leg resumes at each restart, 2 s apart, and
+  loses nothing at the break but skips 54 post-step pictures (2.2 s) after it, and carries 25 that
+  match neither side of the stimulus.
+- **No export switched back at the source's end,** where on `90500867d` losing the leg followed was
+  a second switch with 28–29 pictures missing. Here the other leg outlived the one followed by at
+  most 32 ms before the rig stopped it, too short to show the switch-back gone.
 
-So a 1+1 ingest pair that mints an epoch per importer works as two supervised feeds under one name
-rather than as a hitless pair: each export follows whichever leg announced last, and every leg event
-is a programme switch whose cost grows with the skew.
+So a 1+1 ingest pair that mints an epoch per importer still works as two supervised feeds under one
+name rather than as a hitless pair, on both protocols: aligned it costs one step, skewed it costs up
+to the skew more, and on `moq-lite-06` it can skip programme after the break instead.

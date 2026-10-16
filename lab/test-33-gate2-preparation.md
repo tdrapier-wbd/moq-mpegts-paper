@@ -15,7 +15,7 @@ repository created any of those** — they were made by hand in the first rehear
 `/tmp` that no longer exists, so the harness was unrunnable by anybody, including us. It is now
 driven by [`t33-gate2.sh`](scripts/t33-gate2.sh), which builds the fixtures from a clip, starts the
 relay, derives the fingerprint and hands over. See *What the one-command rehearsal found* below;
-it passes on `d518b61b` and on upstream `main` at `9d2a4f6e`.
+it passes on `d518b61b`, `9d2a4f6e` and `3c0daa21b`.
 
 **The preparation found its first untested precondition immediately, which is what it was for.** The
 boundary fixtures could not reach the pipeline at all: they carry no PAT or PMT, so `moq import ts`
@@ -546,13 +546,13 @@ still scoring `pcr_over40 = 0`, because the signalled-discontinuity discount rem
 corrected gate behaving as designed, and it is also a live demonstration of the limitation recorded
 below: it discounts by count, not by pairing each interval to its own flag.
 
-**It passes unchanged on upstream `main` at `9d2a4f6e` (noq),** the build chosen for the hardware
-window, run from a fresh private copy of `lab/scripts/`. All thirteen graded rows are `PASS`. The
-300 s soak arm exported 2,053,739 packets and groomed 2,074,618, with 0 continuity errors and no PCR
-interval above 40 ms in either. As on `d518b61b`, the raw export fails the 481 ns accuracy check on
-every interval (12,415 bad from 12,416 PCRs on the soak) and the groomer clears it to 0. The rig needed
-no change for `main`'s stricter CLI. It ran alongside the 2 h importer re-soak on the same 8-vCPU
-host, and one run was made.
+**It passes unchanged on `3c0daa21b`, the build under test,** on a host that had never run it, from
+a fresh private copy of `lab/scripts/`, with a 120 s clip. All thirteen graded rows are `PASS`, with
+0 continuity errors and no PCR interval above 40 ms. The clip is shorter than the 300 s soak, so the
+soak arm carried it once (806,954 packets exported, 801,941 groomed): a soak needs a source longer
+than the arm. The raw export now meets the 481 ns accuracy check on the wrap, PMT-version and soak
+arms, 0 bad where `d518b61b` and `9d2a4f6e` failed every interval; on the discontinuity arm it fails
+1,157 of 1,158 PCRs, and the groomer leaves 1. One run was made.
 
 ## Predicted at the IRD and the analyser, fixed before the window
 

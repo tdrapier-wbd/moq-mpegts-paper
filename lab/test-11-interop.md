@@ -18,9 +18,10 @@ one-line publisher fix it crosses the relay **byte-exact on every elementary-str
 draft 18 over raw QUIC to an IETF subscriber, and only for about 27 s at 10 Mb/s before the relay
 aborts its single unbounded group. Every other combination fails on a publisher-side defect, bar
 WebTransport, which fails on a relay transport parameter `moq-dev` already plans to add. No relay
-defect was found in the passing arm. **T11c on OpenMOQ's moq5 (P1-h):** `moq-dev`'s TS does not
-cross `moq5-relay` on draft 18 or 22; it stops at the announce and at the catalog subscription
-respectively, before any media. Diagnosis open; three directions not yet run.
+defect was found in the passing arm. **T11c on OpenMOQ's moq5 (P1-h), on drafts 16, 18 and 22:**
+moq5's TS crosses a `moq-dev` relay byte-exact on every PID, and `moq-dev`'s demultiplexed TS
+crosses `moq5-relay` with no content lost. Its passthrough TS does not, because `moq5-relay` never
+delivers that catalog, and neither side's TS track is visible to the other's catalog parser.
 
 **The same fixture and oracle put through segmented HTTP pass against every third party tried** —
 FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
@@ -316,7 +317,7 @@ argument for the media-level profile proposed in #32.
 ## T11b — OpenMOQ's MSFTS publisher through a `moq-dev` relay
 
 The question is whether an outside implementation's opaque TS crosses a `moq-dev` relay intact.
-`moqxr` has no subscriber, so a `moq-dev` broadcast into an OpenMOQ receiver (T11c) waits for moq5.
+`moqxr` has no subscriber, so a `moq-dev` broadcast into an OpenMOQ receiver is T11c's, on moq5.
 
 **What was run.**
 
@@ -445,18 +446,56 @@ Measurement P1: co-resident on loopback, from file, paced by PCR. **Predicted:**
 pass on bytes; 3 and 4 fail at discovery (MSF `mpeg2ts` packaging against the hang catalog's `m2ts`
 section).
 
-**First runs: direction 1 fails before any media, on both drafts it negotiated.** `moq-dev`
-`3c0daa21b` against moq5 `0729c49` (`moq5-relay` on MsQuic), passthrough import, rig
-[`t11c-d1.sh`](scripts/t11c-d1.sh); the export received 0 bytes in each.
+**Results: directions 2 and demultiplexed 1 pass; passthrough 1 fails in `moq5-relay`; 3 and 4 fail
+at discovery, as predicted.**
+`moq-dev` `3c0daa21b` against moq5 `0729c49` (`moq5-relay` on MsQuic), raw QUIC, where the ALPN
+(`moqt-16`, `moqt-18`, `moqt-22`) is the negotiated draft and both sides logged the one offered.
+moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its service tier; rigs
+[`t11c-d1.sh`](scripts/t11c-d1.sh) and [`t11c-arm.sh`](scripts/t11c-arm.sh); a 120 s clip at
+9.9 Mb/s. The harness's own loop through `moq5-relay` delivers every PID byte-exact.
 
-| Draft | Where it stops |
-|---|---|
-| 18 | `moq5-relay` answers the publisher's `PUBLISH_NAMESPACE` with `REQUEST_OK` but keeps no announce (its route dump is empty while the publisher is connected), so the export's catalog `SUBSCRIBE` is refused *not found* |
-| 22 | The announce is kept. The export subscribes to the catalog with `NextObject` and a fill of the current group; the relay subscribes upstream with `NextObject` and no fill. The publisher answers largest 2/0 and sends group 2 anyway; the relay retains nothing, the fill stream it opens downstream dies before its type, and the export cancels as idle. A static catalog never gets a later group, so nothing ever arrives |
-| 16 | Rerun needed: the relay's log reports `moqt-22`, so the rig's version pin did not take |
+| # | 16 | 18 | 22 | Where it stops |
+|---|---|---|---|---|
+| 1, passthrough | fail | fail | fail | the catalog's join, in `moq5-relay` |
+| 1, demultiplexed | pass | pass | pass | — |
+| 2 | pass | pass | pass | — |
+| 3 | fail | fail | fail | discovery: no track moq5 can deliver |
+| 4 | fail | fail | fail | discovery: `moq-dev` reads no `mpeg2ts` packaging |
 
-Which side's reading of `NextObject` and fills the draft supports is not yet established; a
-wire-level trace decides it before anything is reported. Directions 2 to 4 wait on the harness.
+- **Direction 1, passthrough, never delivers the catalog, so no media follows.** The export
+  subscribes to `catalog.json` and gets `SUBSCRIBE_OK` with largest 2/0; the importer published the
+  catalog once, in group 2. On drafts 16 and 18 the export joins with a Joining FETCH, which
+  `moq5-relay` forwards upstream as a standalone FETCH of group 2; `moq-dev` answers it with
+  `FETCH_OK` and the object (its End Location the request's, as draft 16 §9.17 has it), and
+  `moq5-relay` never answers downstream. Its design collects the whole upstream response before its
+  own `FETCH_OK`, and the stall is inside that. On draft 22 the export joins at the current group, a
+  Next Object filter with a fill from StartGroup 1 (§3.5). `moq5-relay` serves fills only from what
+  it has retained, its upstream `SUBSCRIBE` asks for no fill, and group 2 was never retained; draft
+  22's relay "retrieves any missing objects upstream using a SUBSCRIBE with FILL_PARAMETERS or
+  FETCHes". Both are on `moq5-relay`'s side. The first run's draft-18 announce that was acknowledged
+  but not kept did not recur.
+- **Direction 1, demultiplexed, passes on all three drafts:** the export has the catalog within
+  4 ms of subscribing and subscribes to every track, with no continuity error and, on the content
+  grader ([`t28-content-lost.py`](scripts/t28-content-lost.py)), no video or audio lost or repeated.
+  On each draft the requests are the passthrough arm's, and `moq-dev` serves group 2 on the relay's
+  subscription the same way in both modes. What in the two catalogs decides whether `moq5-relay`
+  delivers one is not located.
+- **Direction 2 passes on all three drafts:** 144,753,420 bytes, every elementary-stream PID a
+  contiguous byte-exact suffix of the source from the join at group 2, no continuity error, and no
+  gap in the receiver's own loss report across 100 groups. That holds with the sender dropping
+  media written before any subscriber, as a live source does. Under moq5's default, which queues
+  that media until demand appears, the receiver got group 0 only to object 36 and then group 1 with
+  the rest of group 0 reported lost: seven continuity errors on draft 18. Which side drops the tail
+  is not established.
+- **Directions 3 and 4: each side's TS track is invisible to the other's catalog parser.**
+  `moq-dev`'s MSF catalog lists only video, audio and text renditions, so for a passthrough import
+  it is empty, the track named only in the hang catalog's `m2ts` member, and moq5 enumerates no
+  track. Demultiplexed, it lists `0.avc3` and `6.mp2` as `legacy` packaging, which moq5 does not
+  parse, so moq5 subscribes to neither. The other
+  way, `moq export ts` reads moq5's catalog only under a `.msf` broadcast name (otherwise
+  `catalog.json` is refused *not found*), then skips the track: its MSF parser has no `mpeg2ts`
+  packaging. The export then waits for the broadcast to end, about 2 minutes, and exits 1, with no
+  error saying it found no track.
 
 ## Status and next steps
 
@@ -493,4 +532,5 @@ wire-level trace decides it before anything is reported. Directions 2 to 4 wait 
       and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
 - [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
       [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
-- [ ] T11c, the four moq5 directions (§ T11c); moq5 claims no cross-implementation result of its own
+- [x] T11c, the four moq5 directions on drafts 16, 18 and 22 (§ T11c); moq5 claims no
+      cross-implementation result of its own

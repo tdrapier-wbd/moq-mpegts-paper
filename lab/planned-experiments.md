@@ -25,7 +25,6 @@ defined [below](#blocked-on-apparatus).
 |---|---|---|---|---|---|
 | P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | Before [#5517](https://github.com/moq-dev/moq/pull/5517) nothing failed over in the mesh, because a standby refused before its PMT was never asked again; #5517 (merged) announces an import only once it knows its tracks, unmeasured in the mesh; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: `hop-aligned-import` ([below](#upstream-quests-worth-building)) | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
 | P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | On the opaque lane, a stream-clocked pacer that stays silent rather than send a datagram it cannot fill; the live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export | On the opaque lane, T12's cells 2b and 3 hitless with the fixed pacer; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
-| P1-w | A 1+1 ingest pair's double switch at a backward step, on the default `moq-lite-06` and again on `moq-lite-07`, at the build under test | [Evidence](../docs/evidence.md) §3.13's "keeps both legs, but each export follows whichever leg announced last" is measured on `moq-lite-07` at an older build only | — | T41's pair cells (three aligned, two at `SKEW2=2`, one single-importer control) graded on its criteria 1–3 for each protocol | [T41](test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose importers each mint an epoch* |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig; the infrastructure axis on both lanes; the SRT arm at an 11.87 s latency with buffers sized to it | [T28](test-28-failure-injection-matrix.md) |
 | P1-d | Congestion: where a contended feed's loss happens, in the relay's per-subscriber queue | Where a contended feed loses what a delay does not cover (§5 row 9): the bottleneck drops nothing, so the loss is upstream of it and unplaced | — | The relay's per-subscriber queue instrumented across T31's 5 s dip at 20 ms RTT (criterion 8) | [T31](test-31-congestion-capacity-ladders.md) |
 | P1-f | The scaling model's remaining points, and the segmented fan-out | The scaling model is measured to N = 100, with the origin co-resident | a subscriber host that holds 100 exporters; a second subscriber host | The ceiling with GSO on past N = 100; the origin on its own host; an hour at N = 100; the segmented fan-out measured | [T26](test-26-cross-host-fanout.md), [T43](test-43-fanout-current-build.md) |
@@ -33,9 +32,8 @@ defined [below](#blocked-on-apparatus).
 | P1-b | Distributed resilience above the egress 1+1 pair | Fabric-level failure for the media-aware lane | — | T29 run against its criteria | [T29](test-29-moq-distributed-resilience.md) |
 | P1-c | Distributed resilience on the segmented lane: a two-host segment store, edge and origin failure, then a standby packager joining a running feed | The segmented lane's equivalent of P1-b | — | T30 run against its criteria, the standby arm last | [T30](test-30-segmented-distributed-resilience.md) |
 | P1-e | MPTS: per-programme SI on the T10 rig, and the opaque-lane arm | Whether a selected programme is carried with its own SI | — for SI; an opaque-lane build for the second arm | Per-programme SI verified on T10's fixtures; the opaque arm run | [T10](test-10-mpts-multiservice.md) |
-| P1-h | Interoperability, the remaining legs: a second, independent TS implementation, OpenMOQ's moq5 (MSFTS), against `moq-dev` both ways | Relay portability, which underwrites the economic argument (§5 row 11), tested with an outside TS sender and receiver | — (a TS file harness on moq5's service tier to write; on the tertiary) | moq5's receiver fed by `moq import ts` through a `moq-dev` relay; moq5's sender through a `moq-dev` relay into `moq export ts` and into moq5's receiver; `moq-dev`'s TS through moq5's relay; on each IETF draft both speak; the three undiagnosed relay failures diagnosed | [T11](test-11-interop.md) |
+| P1-h | Interoperability, the last leg: the three registered public relays that fail at the connection or SETUP layer | Relay portability, which underwrites the economic argument (§5 row 11): an undiagnosed failure cannot be told from a `moq-dev` defect | — | each of the three failures located and attributed | [T11](test-11-interop.md) |
 | P1-i | The three remaining data-plane comparison cells | Three empty cells in the comparison's head-to-head | B-4, B-5, B-6 | Each cell scored | [T14](test-14-data-plane-comparison.md) |
-| P1-k | The `--auth-api` half of the entitlement estate: a real endpoint serving a licensing matrix | Every entitlement run so far used a stub | — (a component to write) | T38's matrix run against the endpoint | [T38](test-38-entitlement-estate.md) § *Open* |
 | P1-l | The telemetry return path end to end | Closes T39 Part B; the same client gives the only way to dump a parsed catalog | — (a small `moq-net` client outside `mpegts-pacer`, on the live feed) | A CMCD Event Timeline track and the TS health counters read back over the same relay; T32's faults graded against each | [T39](test-39-cross-boundary-observability.md) § *Open* |
 
 ## P2 — completeness
@@ -62,7 +60,7 @@ this file and their IDs are not reused**; a citation of a retired ID resolves to
 discharged it: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
 and [T24](test-24-partial-media-plane-stall.md), P0-i → [T8b](test-8b-congestion-control.md),
 P0-m → [T47](test-47-fixed-delay-export.md), P1-m and P1-q → [T28](test-28-failure-injection-matrix.md),
-P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r and P1-s → [T41](test-41-import-reanchor-coverage.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md),
+P1-k → [T38](test-38-entitlement-estate.md), P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r, P1-s and P1-w → [T41](test-41-import-reanchor-coverage.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md),
 P2-b → [T25](test-25-isolation-under-abuse.md).
 
 ## Upstream quests worth building
@@ -73,15 +71,14 @@ distribution. A row leaves when a pull request takes it; ours are in the
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
-| `epoch-anchor` [M] | Its clock and era are our draft [#5625](https://github.com/moq-dev/moq/pull/5625); left: co-start across two relays, history-derived catalog estimates, the successor epoch | #5625 merged | **High**, R6: gates the next two |
+| `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), in review; left: co-start across two relays, history-derived catalog estimates, the successor epoch | #5625 merged | **High**, R6: gates the next two |
 | `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above | **High**, R6: P1-p's other half |
-| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | `tstd/psi-runs` (our draft [#5606](https://github.com/moq-dev/moq/pull/5606)), by its plan | **High**, R6: P1-o's demultiplexed route; gates the next |
+| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | `tstd/psi-runs` (our [#5606](https://github.com/moq-dev/moq/pull/5606), in review), by its plan | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
 | `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats | `stats/schema`, open as [#5643](https://github.com/moq-dev/moq/pull/5643) | **Medium**, R8: what P1-l reads back |
 
-Set aside: `ts-live-clock` (the maintainer's own investigation), `ts-drift-startup` (our #5564's
-start-up exit, seen only in upstream's `--full` harness), `ts-eac3` and `plan-ts-pes-untimed`
+Set aside: `ts-live-clock` (the maintainer's own investigation), `ts-eac3` and `plan-ts-pes-untimed`
 (profiles the live feed lacks), `refuse-rewinds` (the model refusing what the import already ends
 on), and the QoS line's lag histogram (behind `stats-prefix-tracks`, R8 only).
 
