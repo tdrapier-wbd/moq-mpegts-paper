@@ -1,6 +1,6 @@
 # T21 — the permanence soak of the complete media-aware lane
 
-> **State: complete. The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
+> **State: 24 h complete; the seven-day live arm (P0-g) running. The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
 > resources, in one role, on `d518b61b`; the 24 h resource re-soak on upstream `main` at `9d2a4f6e`
 > passes F2 in every role.** On `d518b61b`: 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
 > zero PCR intervals over 40 ms, zero absolute PCR failures at ±500 ns, zero drops, **zero underruns**,

@@ -81,7 +81,7 @@ no number without the conditions its file states. The rung and gate are from
 | T18 | Delivery latency at equal conformance, four data planes | 1 · supports Gate 2 | complete, loopback and internet | **It refuted its premise**: on the media-aware lane latency and PCR conformance are independent, and the fastest cushions are not P1/P2-conformant on any lane | [test-18](test-18-delivery-latency.md) |
 | T19 | The PCR grid, and a CBR wire from a media-aware source | supports Gate 2 | complete; criteria 1–3 met, 4 not | **The lane passes PCR repetition on the wire** after three upstream fixes and three groomer fixes, and **fails its own latency criterion** at that configuration | [test-19](test-19-pcr-grid-verification.md) |
 | T20 | The segmented lane over HTTP/3 | Gate 1 · substrate matching | complete | T5's reordering separation was a packet-size artefact; through a byte-faithful receiver the HLS wire is PCR-conformant and the impairment cells are re-measured | [test-20](test-20-segmented-http3.md) |
-| T21 | Permanence soak of the complete media-aware lane | Gate 2 over time | complete | **The media plane passes 24 h** on `d518b61b`; resources fail in the importer there and pass in every role on `main` at `9d2a4f6e` | [test-21](test-21-permanence-soak.md) |
+| T21 | Permanence soak of the complete media-aware lane | Gate 2 over time | 24 h complete; the seven-day live arm running | **The media plane passes 24 h** on `d518b61b`; resources fail in the importer there and pass in every role on `main` at `9d2a4f6e` | [test-21](test-21-permanence-soak.md) |
 | T22 | Silent media-plane failure | R8 | complete, both lanes | **Neither lane's transport detects a stalled source**; only the segmented lane's playlist moves | [test-22](test-22-silent-media-plane-failure.md) |
 | T23 | Which PCR timeline events the lane survives | Gate 2 | complete, re-graded against both fixes | The 33-bit rollover always carried; since #3375 and #3529 every placed class sits at the control's content gap | [test-23](test-23-pcr-discontinuity-classes.md) |
 | T24 | A partial media-plane stall | R8 · corrects T22 | complete | The lane contains the failure, but **TR 101 290 P1 cannot see it**; only per-PID access-unit liveness caught every arm | [test-24](test-24-partial-media-plane-stall.md) |
@@ -105,7 +105,7 @@ no number without the conditions its file states. The rung and gate are from
 | T42 | A byte-faithful HTTP/3 HLS receiver | 3 · closes P0-e | built and validated | The old receiver reported clean carriage unconditionally; the new one matches `tsp -I hls` hash for hash | [test-42](test-42-h3-receiver-fidelity.md) |
 | T43 | Fan-out on the current build | R2 | S1–S3 run; the hour deferred | **T26's model does not transfer to the current build**, and each carried channel is a cost of its own | [test-43](test-43-fanout-current-build.md) |
 | T44 | The transmux lane against a calibrated T-STD model | 3 · R3 | complete, conclusive | **The lane's P1/P2-conformant wire is not a conformant transport stream**; a T-STD re-multiplexer repairs it offline | [test-44](test-44-tstd-grading.md) |
-| T45 | A live T-STD re-multiplexer behind the lane | 3 · R3, P0-l | questions 1–3 answered; on the merged export, 1+1 across hosts identical; its clock follows a source at its slew limit and did not settle in 75 min, in 1 ms wire steps; a PMT longer than one packet stops it; `main` passes the live feed at its own rate | **A live re-multiplexer makes the wire T-STD-conformant**, at 2.20 s presentation latency on `ffa5b81b` (loopback, one clip, one run) | [test-45](test-45-live-tstd-remux.md) |
+| T45 | A live T-STD re-multiplexer behind the lane | 3 · R3, P0-l | questions 1–3 answered; on the merged export, 1+1 across hosts identical; its clock follows a source 25 ppm fast at its slew limit and settles on one 4 ppm fast in about 100 min, in 1 ms wire steps; `main` passes the live feed at its own rate, about a delay behind it | **A live re-multiplexer makes the wire T-STD-conformant**, at 2.20 s presentation latency on `ffa5b81b` (loopback, one clip, one run) | [test-45](test-45-live-tstd-remux.md) |
 | T46 | Two T-STD checks cross-validated | instrument validation · R3 | complete, offline | The two agree on all 35 files on upstream `main`'s merged check; every earlier disagreement traced to upstream's check, since fixed, and `ts-tstd.py`'s own defects are fixed with no verdict moved | [test-46](test-46-tstd-check-cross-validation.md) |
 | T47 | The upstream fixed-delay TS export (#4645, merged) | 3 · R3, P0-m | merged build graded on loopback, across hosts and under loss, and for 35 min across source joins | **Every track and buffer at joins across a whole GOP**; it stops between 2 and 3 % loss at 1 s; 500 ms does not last a whole capture; on later `main` no re-request dies on a late unit, and a replacement is followed only under `--stitch` | [test-47](test-47-fixed-delay-export.md) |
 | T48 | The passthrough TS export on real captures (our quest implementation, merged) | 3 · R3, P1-o | complete; criteria 1–4 pass on a dedicated host and on the live feed across hosts, 5 fails on its accounting | **Each leg is the source's bytes and a leg 8 s late is the same stream**, on the live feed over the internet too, with every PCR within 2 ms; at 10 % loss it delivers 6–7 % of the video, as little as every MoQ export graded on content there | [test-48](test-48-passthrough-export.md) |
@@ -134,8 +134,7 @@ at the top of their own files.
 - **T6 — Serving-node resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under
   single-path loss (the two egress legs byte-identical and sequence-aligned); relay-failover recovery
   is bounded and documented, re-establishing without operator intervention; subscriber-reconnect join
-  latency is bounded with defined catch-up behaviour. T6 met the second and third; the first was met
-  at a receiver by [T12](test-12-dual-path-handoff.md), for a pair the receiver can merge.
+  latency is bounded with defined catch-up behaviour.
 - **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real
   hardware IRD, on the live wire (P2), sustained** (≥ 72 h, set by the PCR base's 26.51 h wrap period
   rather than chosen), including ST 2022-7 behaviour under loss, with the T-STD buffer model confirmed
@@ -144,11 +143,7 @@ at the top of their own files.
 - **T8 — SRT against MoQ (comparative, not pass/fail).** Latency competitive if MoQ + pacer delivery
   latency is within a stated margin of SRT at matched buffer; loss recovery competitive if recovery
   and delivered-rate curves are within a stated margin and the failure mode is no worse; egress
-  quality at least matches (P1); overhead/CPU recorded as economic inputs. **The latency criterion is
-  met at a matched buffer only at cushions where neither arm is P1/P2-conformant**
-  ([T18](test-18-delivery-latency.md)); the configuration that makes the MoQ lane conformant costs
-  far more ([T19](test-19-pcr-grid-verification.md)). The P1 criterion is met in software, not on
-  hardware.
+  quality at least matches (P1); overhead/CPU recorded as economic inputs.
 
 ### Desk analyses
 
