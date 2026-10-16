@@ -34,7 +34,6 @@ defined [below](#blocked-on-apparatus).
 | P1-e | MPTS: per-programme SI on the T10 rig, and the opaque-lane arm | Whether a selected programme is carried with its own SI | — for SI; an opaque-lane build for the second arm | Per-programme SI verified on T10's fixtures; the opaque arm run | [T10](test-10-mpts-multiservice.md) |
 | P1-h | Interoperability, the last leg: the three registered public relays that fail at the connection or SETUP layer | Relay portability, which underwrites the economic argument (§5 row 11): an undiagnosed failure cannot be told from a `moq-dev` defect | — | each of the three failures located and attributed | [T11](test-11-interop.md) |
 | P1-i | The three remaining data-plane comparison cells | Three empty cells in the comparison's head-to-head | B-4, B-5, B-6 | Each cell scored | [T14](test-14-data-plane-comparison.md) |
-| P1-x | Where T41's step cost grew: its control on the merge of [#5287](https://github.com/moq-dev/moq/pull/5287) (which holds a new importer's catalog until a rate window is measured) and on its parent | [Evidence](../docs/evidence.md) §3.13 sets the ~3 s per step by the export; on the build under test it is 3.8 s, the first post-step picture 2.2 s late (0.6 s before) | — (tertiary) | Both builds' control loss and first-picture delay, the difference attributed | [T41](test-41-import-reanchor-coverage.md) |
 | P1-l | The telemetry return path end to end | Closes T39 Part B; the same client gives the only way to dump a parsed catalog | — (a small `moq-net` client outside `mpegts-pacer`, on the live feed) | A CMCD Event Timeline track and the TS health counters read back over the same relay; T32's faults graded against each | [T39](test-39-cross-boundary-observability.md) § *Open* |
 
 ## P2 — completeness
@@ -61,7 +60,7 @@ this file and their IDs are not reused**; a citation of a retired ID resolves to
 discharged it: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
 and [T24](test-24-partial-media-plane-stall.md), P0-i → [T8b](test-8b-congestion-control.md),
 P0-m → [T47](test-47-fixed-delay-export.md), P1-m and P1-q → [T28](test-28-failure-injection-matrix.md),
-P1-k → [T38](test-38-entitlement-estate.md), P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r, P1-s and P1-w → [T41](test-41-import-reanchor-coverage.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md),
+P1-k → [T38](test-38-entitlement-estate.md), P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r, P1-s, P1-w and P1-x → [T41](test-41-import-reanchor-coverage.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md),
 P2-b → [T25](test-25-isolation-under-abuse.md).
 
 ## Upstream quests worth building

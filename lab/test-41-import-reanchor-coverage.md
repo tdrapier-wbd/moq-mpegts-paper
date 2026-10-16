@@ -318,8 +318,8 @@ on `90500867d`.
   they part before the break by packet order alone, every PID's content identical.
 - **The step itself costs more than on `90500867d`,** whose control lost 2,880 ms with a 2.6 s gap
   under the same grader: both controls here lose 3,800 ms, and carry the first post-step picture
-  2.2 s beyond the steady latency, against 0.6 s on `f8215bc47` (table above). Where the time goes
-  is not located.
+  2.2 s beyond the steady latency, against 0.6 s on `f8215bc47` (table above). #5287's catalog hold
+  accounts for it (§ *Where the step's cost grew*).
 - **Skewed 2 s, `moq-lite-07` behaves as on `90500867d`, on top of that cost.** Coming from the
   leading leg, the export switches at each leg's restart and ends on the lagging leg: 3,800 ms lost,
   the gap grown by the skew to 5.86 s. Already on the lagging leg, it is switched at the leading
@@ -335,3 +335,35 @@ on `90500867d`.
 So a 1+1 ingest pair that mints an epoch per importer still works as two supervised feeds under one
 name rather than as a hitless pair, on both protocols: aligned it costs one step, skewed it costs up
 to the skew more, and on `moq-lite-06` it can skip programme after the break instead.
+
+### Where the step's cost grew
+
+Between `90500867d` and `3c0daa21b` the control's step grew from 2,880 to 3,800 ms of programme lost.
+The candidate is [#5287](https://github.com/moq-dev/moq/pull/5287), merged between them as
+`833493500`: a new importer holds its catalog until its first mux-rate window is measured, so a
+supervisor's restarted importer is announced later. **Procedure.** The control above (single
+importer, `--stitch`, arm A, pipe-fed, 90 s, `moq-lite-07`) on the workstation that measured both
+figures: three runs each on `833493500` and its parent `7f8f2592c`, built alike, and one on
+`3c0daa21b` as the day's control. **Fixed before running:**
+
+1. A run counts if criteria 1 and 2 of the rewind section hold and the day's control reproduces
+   3,800 ms; otherwise it is reported, not graded.
+2. #5287 accounts for the growth if every run on its merge loses at least 3,700 ms and every run on
+   its parent at most 3,000 ms. Both near 3,800 ms puts the cause before it, both near 2,900 ms
+   after it; anything else is reported as found.
+
+**Results: #5287 accounts for it.** All seven runs count: each importer exits once at the step and
+its successor publishes, and both exports exit 0 with no late drop and no unit missing after the
+break. Each figure held in every run and on both legs to within 10 ms:
+
+| Build | Runs | Programme lost (ms) | Longest arrival gap (ms) | First post-step picture beyond the latency (ms) | Latency before the step (ms) |
+|---|---:|---|---|---|---|
+| `7f8f2592c`, the parent | 3 | 2,880 | 2,600–2,604 | 716–722 | 2,106–2,112 |
+| `833493500`, #5287's merge | 3 | 4,080 | 3,839–3,847 | 1,956–1,965 | 2,107–2,111 |
+| `3c0daa21b`, the day's control | 1 | 3,800 | 3,847–3,848 | 2,236–2,237 | 1,834–1,835 |
+
+The parent reproduces `90500867d`'s control. The merge adds 1.24 s to the export's first post-step
+picture and to its gap, and 1,200 ms of programme, as a restarted importer's catalog waiting for its
+first rate window would. Later commits, to `3c0daa21b`, keep the gap and lose 3,800 ms at a steady
+latency 0.28 s lower. 1+1 is identical in five of the seven runs; the other two part after the
+break.

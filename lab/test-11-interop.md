@@ -490,12 +490,13 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
 - **Directions 3 and 4: each side's TS track is invisible to the other's catalog parser.**
   `moq-dev`'s MSF catalog lists only video, audio and text renditions, so for a passthrough import
   it is empty, the track named only in the hang catalog's `m2ts` member, and moq5 enumerates no
-  track. Demultiplexed, it lists `0.avc3` and `6.mp2` as `legacy` packaging, which moq5 does not
+  track. That is upstream's TS draft as written: its frames carry timestamps, so an MSFTS
+  subscriber needs a converter that republishes them. Demultiplexed, it lists `0.avc3` and `6.mp2` as `legacy` packaging, which moq5 does not
   parse, so moq5 subscribes to neither. The other
   way, `moq export ts` reads moq5's catalog only under a `.msf` broadcast name (otherwise
-  `catalog.json` is refused *not found*), then skips the track: its MSF parser has no `mpeg2ts`
-  packaging. The export then waits for the broadcast to end, about 2 minutes, and exits 1, with no
-  error saying it found no track.
+  `catalog.json` is refused *not found*), then skips the track with a warning: its MSF parser has
+  no `mpeg2ts` packaging. The export then waits on the catalog until the broadcast ends, about
+  2 minutes later, and exits 1 on the relay's PUBLISH_DONE, with no error naming the missing track.
 
 ## Status and next steps
 
