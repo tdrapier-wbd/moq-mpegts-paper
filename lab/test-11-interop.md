@@ -18,7 +18,8 @@ one-line publisher fix it crosses the relay **byte-exact on every elementary-str
 draft 18 over raw QUIC to an IETF subscriber, and only for about 27 s at 10 Mb/s before the relay
 aborts its single unbounded group. Every other combination fails on a publisher-side defect, bar
 WebTransport, which fails on a relay transport parameter `moq-dev` already plans to add. No relay
-defect was found in the passing arm. T11c is still blocked on a published OpenMOQ subscriber.
+defect was found in the passing arm. T11c, unrunnable on `moqxr`, which has no subscriber, is planned on
+OpenMOQ's moq5 (P1-h).
 
 **The same fixture and oracle put through segmented HTTP pass against every third party tried** —
 FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
@@ -313,9 +314,8 @@ argument for the media-level profile proposed in #32.
 
 ## T11b — OpenMOQ's MSFTS publisher through a `moq-dev` relay
 
-The question is whether an outside implementation's opaque TS crosses a `moq-dev` relay intact. It is
-the only direction available: OpenMOQ has published no subscriber, so a `moq-dev` broadcast into an
-OpenMOQ receiver (T11c) cannot be run.
+The question is whether an outside implementation's opaque TS crosses a `moq-dev` relay intact.
+`moqxr` has no subscriber, so a `moq-dev` broadcast into an OpenMOQ receiver (T11c) waits for moq5.
 
 **What was run.**
 
@@ -452,6 +452,11 @@ OpenMOQ's own relay.
       and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
 - [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
       [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
-- [ ] T11b against the MSFTS -02 publisher (`moq2ts`) once it can run headless, and through OpenMOQ's
-      relay
-- [ ] T11c (the full suite against an OpenMOQ subscriber), blocked on one being published
+- [ ] T11c and T11b's extension on OpenMOQ's [moq5](https://github.com/openmoq/moq5) (MSFTS format
+      version 3; drafts 16, 18 and 22; a sender, a receiver and `moq5-relay`), which `moq2ts` and
+      `moqxr` could not give headless: moq5's receiver fed by `moq import ts`, demultiplexed and
+      `--passthrough`, through a `moq-dev` relay; moq5's sender through a `moq-dev` relay into
+      `moq export ts` and into moq5's receiver; `moq-dev`'s TS through `moq5-relay`. moq5 claims no
+      cross-implementation result of its own. Predicted before running: the bytes cross, and the
+      opaque catalogs do not meet (MSF `mpeg2ts` packaging against the hang catalog's `m2ts`
+      section). Pass criteria to be fixed here before the first run
