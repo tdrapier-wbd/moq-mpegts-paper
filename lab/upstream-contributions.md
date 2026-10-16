@@ -1838,7 +1838,7 @@ Two harness suggestions went with it: a control-plane test of zero-field namespa
 for moq-wg#1457), and recording the transport negotiated beside the draft, since the client falls back
 from QUIC to WebSocket on a fixed 200 ms timer. **State:** another contributor took it up as a `media` area (reference publisher, relay under test, checker; CMSF first). [Our
 reply](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6218255528) backs it,
-offers MPEG-TS as a second format with two cases, and keeps T-STD out of pass/fail.
+offers MPEG-TS as a second format (two cases) and keeps T-STD out of pass/fail.
 
 ### A flag-alias regression — reported, fixed, verified, closed
 
