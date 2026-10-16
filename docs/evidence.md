@@ -93,7 +93,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design; a supervisor's republish under a new epoch costs about 3 s of programme per step; a co-started 1+1 pair of exports stays identical across it in 8 of 13 runs, and a pair of republishing importers keeps both legs but follows the last to announce | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
 | **Interop** | Media flows within one implementation and through none of eight other relays; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays fail | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
-| **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 2,272–2,274 ms at a 1 s delay, also over 540 s, through the merged fixed-delay export | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
+| **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
 
 ---
 
@@ -579,10 +579,9 @@ is their source's and their latency the operator's choice, the two agreeing with
 **At the buffer model**, the 2,447 ms is a P1/P2 figure on a wire that fails 13818-1 (§3.16). The
 lane's live configurations that pass it present **2,196.7 ms** behind the source through the
 laboratory re-multiplexer (moq 0.12.1, loopback, two clips of one service), about 1.6 s of that the
-lane's own transit and ordering, and **2,272–2,274 ms at a 1 s delay, also over 540 s,** through the
-fixed-delay export merged on October 2026 `main`, which at 500 ms presented at 991–1,276 ms over
-eight 60 s joins, set by which track anchors its clock, but stops about 157 s into a 540 s run.
-Builds and metrics differ, so these do not rank against each other, and segmented HTTP's wire is
+lane's own transit and ordering, and **1,137 ms at a 1 s delay** and 2,176 ms at 2 s through
+`main`'s export, which sends ahead within the delay, on a live 25 Mb/s feed (wire, loopback, one
+280 s run each; its limits are §3.16's). Builds and metrics differ, so these do not rank against each other, and segmented HTTP's wire is
 ungraded. **No configuration below one second has passed a whole capture on any lane**: the source's
 own bytes over UDP through the stream-clocked groomer pass at 113.7 ms only after a damaged first 5
 s, and over SRT at 234.0 ms one burst in 288 s went unrecovered
@@ -728,8 +727,8 @@ air.
 transport stream, and the pacing groomer cannot close the remainder. For TS-out to an IRD the lane needs
 a stage that re-multiplexes against the decoder model. A laboratory re-multiplexer does this live at
 2.2 s of presentation latency, most of it set by the lane; upstream's fixed-delay export, merged in
-October 2026, builds it into the subscriber and keeps every track and buffer on every join tried at
-about 2.3 s at a 1 s delay. Byte-faithful carriage keeps the model behind an edge stage that places
+October 2026, builds it into the subscriber and keeps every track and buffer on every join tried;
+sending ahead within the delay, it presents about 1.1 s behind at a 1 s delay. Byte-faithful carriage keeps the model behind an edge stage that places
 each packet on the source's PCR.
 
 **The problem.** ISO/IEC 13818-1 defines conformance through the T-STD: every PID's bytes must fit a
@@ -799,8 +798,8 @@ video's transport buffer on 36 % of the video packets of a 25 Mb/s broadcast rec
 against 512 B; P1, wire, loopback, one 110 s cut). With each slot interleaved, on later October 2026
 `main`, the same cut overruns on 88 of 943,296 video packets (peak 646 B), all in slots where the
 video is at its admission cap and four program-table packets lead it, which the interleave does not
-spread ([T45](../lab/test-45-live-tstd-remux.md)). **It presents at twice the delay plus about 275
-ms** at 750 ms and 1 s (§3.11). At 500 ms **which track anchors its clock sets the figure**: on this
+spread ([T45](../lab/test-45-live-tstd-remux.md)). **Sending ahead within the delay, it presents
+about 140–180 ms past it** at 1 s and 2 s (§3.11). At 500 ms **which track anchors its clock sets the figure**: on this
 source AC-3 reads about 250 ms further behind its decode time than MP2, the next track, so a join
 that hears it within the 1 s acquisition window presents about 250 ms later, though joins that
 anchored elsewhere delivered every AC-3 unit at the same margins. Why AC-3 can go unheard for that

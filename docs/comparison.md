@@ -19,7 +19,7 @@ picture over one internet path in 2,447 ms and segmented HTTP in 9,286 ms** ([Ev
 maturity, delivery economics and the delivery path's interoperability — but those advantages are
 upstream of the receiver, and this evaluation did not establish a receiver path from segmented HTTP back
 to an IRD-ready transport stream (§4.6, §6.1). Everything that makes either plane *broadcast-grade* sits
-above the transport and is common to both ([Problem](problem.md) §1). **Below about two seconds no plane
+above the transport and is common to both ([Problem](problem.md) §1). **Below about one second no plane
 here is demonstrated conformant over a whole capture**, so MoQ's sub-second case is architecturally
 credible and not yet evidenced (§5.1).
 
@@ -257,9 +257,8 @@ buffer** — content-dependent, sizeable from a published encoder parameter, and
 
 **Both the conformance and the 2,447 ms are P1/P2's**; the same wire fails the 13818-1 buffer model (§8).
 The stages that repair it present at **2,196.7 ms** (a laboratory re-multiplexer, moq 0.12.1) and
-**2,272–2,274 ms** at a 1 s delay, also over 540 s (upstream's fixed-delay export, merged on October
-2026 `main`, which at 500 ms stops about 157 s into a 540 s run), both on loopback and both presentation
-latency, which does not subtract from delivery latency ([Evidence](evidence.md) §3.11, §3.16).
+**1,137 ms** at a 1 s delay (upstream's export, which sends ahead within the delay), both on loopback
+and both presentation latency, which does not subtract from delivery latency ([Evidence](evidence.md) §3.11, §3.16).
 
 **At equal P1/P2 conformance MoQ keeps a decisive margin over segmented HTTP and none over the
 tunnels.** Byte-faithful SRT carries the source's own PCR grid over the public internet with 0 P2
@@ -286,10 +285,10 @@ the receive path to an IRD-ready transport stream is supplied separately. Then i
 delivery economics and delivery-path interoperability, and narrowly on the hand-off. **Otherwise,
 between roughly 2.5 and 9 seconds, MoQ is the better choice**, measured at P1/P2 conformance; at the
 buffer model the band is not yet compared, since segmented HTTP's wire is ungraded. **Below about
-two seconds no plane here is demonstrated conformant**, and a sub-second route is choosing MoQ on a
+one second no plane here is demonstrated conformant**, and a sub-second route is choosing MoQ on a
 projection — that the ~650 ms regression is recovered, that the VBV-derived bound is smaller for its
-own content, and that the lane delivers frames ahead of their decode time, where its own transit and
-ordering take about 1.6 s before any rebuild. **MoQ's distinguishing claim is architecturally
+own content, and that the export, presenting about 140 ms past a 1 s delay, holds a shorter delay
+over a whole capture. **MoQ's distinguishing claim is architecturally
 credible and not yet evidenced.**
 
 **Whether that claim matters is a condition of MoQ's case specifically: does the sub-second requirement
@@ -537,7 +536,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
-| Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~2 s over a whole capture** (§5.1) |
+| Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path; not established on the receive path** | M+S | decisive through caches and general clients, for a single programme; the low-latency receive path is unmet or unmeasured (§6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (S) (§8) |
