@@ -282,8 +282,8 @@ passthrough imports; each request made on the catalog (`catalog.json`) and on th
 The unlicensed channel and an absent path draw the same code and reason, so a refusal does not
 disclose that a channel exists. `rival/news` is reached as `bc/rival/news`: a session is rooted at
 its credential's root, so the other broadcaster's paths are not addressable from it at all. The
-FETCH is of group 0, not the newest, because `moq-dev`'s TRACK_STATUS_OK carries no Largest
-Location, even to the operator's credential; group 0 was still cached when the probes ran.
+FETCH is of group 0, not the newest, because the relay's TRACK_STATUS_OK carried no Largest Location
+on these requests, even to the operator's credential; group 0 was still cached when the probes ran.
 
 The parent of #4039's merge, `6559065b`, already serves this authorization form. On the same rig, it
 refuses A11, A12 and A13 alike and answers A11c and A12c identically, with one difference: its FETCH

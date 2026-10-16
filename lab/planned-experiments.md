@@ -34,6 +34,7 @@ defined [below](#blocked-on-apparatus).
 | P1-e | MPTS: per-programme SI on the T10 rig, and the opaque-lane arm | Whether a selected programme is carried with its own SI | — for SI; an opaque-lane build for the second arm | Per-programme SI verified on T10's fixtures; the opaque arm run | [T10](test-10-mpts-multiservice.md) |
 | P1-h | Interoperability, the last leg: the three registered public relays that fail at the connection or SETUP layer | Relay portability, which underwrites the economic argument (§5 row 11): an undiagnosed failure cannot be told from a `moq-dev` defect | — | each of the three failures located and attributed | [T11](test-11-interop.md) |
 | P1-i | The three remaining data-plane comparison cells | Three empty cells in the comparison's head-to-head | B-4, B-5, B-6 | Each cell scored | [T14](test-14-data-plane-comparison.md) |
+| P1-x | Where T41's step cost grew: its control on the merge of [#5287](https://github.com/moq-dev/moq/pull/5287) (which holds a new importer's catalog until a rate window is measured) and on its parent | [Evidence](../docs/evidence.md) §3.13 sets the ~3 s per step by the export; on the build under test it is 3.8 s, the first post-step picture 2.2 s late (0.6 s before) | — (tertiary) | Both builds' control loss and first-picture delay, the difference attributed | [T41](test-41-import-reanchor-coverage.md) |
 | P1-l | The telemetry return path end to end | Closes T39 Part B; the same client gives the only way to dump a parsed catalog | — (a small `moq-net` client outside `mpegts-pacer`, on the live feed) | A CMCD Event Timeline track and the TS health counters read back over the same relay; T32's faults graded against each | [T39](test-39-cross-boundary-observability.md) § *Open* |
 
 ## P2 — completeness
@@ -67,20 +68,23 @@ P2-b → [T25](test-25-isolation-under-abuse.md).
 
 Untaken quests on upstream `main` whose result would move an entry above, ranked by weight for primary
 distribution. A row leaves when a pull request takes it; ours are in the
-[upstream ledger](upstream-contributions.md).
+[upstream ledger](upstream-contributions.md). Every row is upstream's m2 (after its next release), the
+three epoch quests once #5679 moves them, so review waits on that release; m1 keeps the T-STD epic.
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
-| `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), in review; left: co-start across two relays, history-derived catalog estimates, the successor epoch | #5625 merged | **High**, R6: gates the next two |
-| `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs | `epoch-anchor` | **High**, R6 on the opaque lane |
+| `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), in the merge queue; left: a co-start across two relays, other importers' history-derived catalog fields, the successor epoch | #5625 merged | **High**, R6: its timeline gates the next two |
+| `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs: fallback cuts on the epoch's grid, the M2ts section from windows on it. **Ours, built, unposted** | #5625 | **High**, R6 on the opaque lane |
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above | **High**, R6: P1-p's other half |
-| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | `tstd/psi-runs` (our [#5606](https://github.com/moq-dev/moq/pull/5606), in review), by its plan | **High**, R6: P1-o's demultiplexed route; gates the next |
+| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | the T-STD epic's end-to-end netem proof | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
 | `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats | `stats/schema`, open as [#5643](https://github.com/moq-dev/moq/pull/5643) | **Medium**, R8: what P1-l reads back |
 
-Set aside: `ts-live-clock` (the maintainer's own investigation), `ts-eac3` and `plan-ts-pes-untimed`
-(profiles the live feed lacks), `refuse-rewinds` (the model refusing what the import already ends
-on), and the QoS line's lag histogram (behind `stats-prefix-tracks`, R8 only).
+Set aside: `ts-live-clock` (the maintainer's own investigation), `ts-reliability`'s `fidelity` plan
+and its children `pes-import`, `pes-export`, `section-placement` and `stream-type` (verbatim private
+data, which no entry above waits on), its `recovery` quest (upstream CI for the content loss T28 measures),
+`refuse-rewinds` (the model refusing what the import already ends on), and the QoS line's lag
+histogram (behind `stats-prefix-tracks`, R8 only).
 
 ## Blocked on apparatus
 

@@ -1392,7 +1392,7 @@ wider fixtures and counted group omissions. A catalog `burst` field for encoder 
 ([#4649](https://github.com/moq-dev/moq/pull/4649)) was abandoned, `--delay` covering both the hold
 and the send-ahead.
 
-**The system buffers.** `tstd/psi-runs` is ours, draft [#5606](https://github.com/moq-dev/moq/pull/5606):
+**The system buffers.** `tstd/psi-runs` is our merged [#5606](https://github.com/moq-dev/moq/pull/5606):
 padded export paces its tables against Bsys too, and `compliance.py` grades both system buffers,
 hard, along each program's PAT and PMT timeline.
 Before, eight aligned video PIDs' tune-in tables peak at 2,767 B in Bsys's 1,536; after, every TS
