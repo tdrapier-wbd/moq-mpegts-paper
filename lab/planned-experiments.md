@@ -77,8 +77,6 @@ review waits on that release; m1 keeps the T-STD epic.
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above | **High**, R6: P1-p's other half |
 | `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | the T-STD epic's end-to-end netem proof | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
-| `ts-health-stats` [S] | Import and export publish the TR 101 290 counters over stats, the export its release clock. **Ours, built, unposted** | [#5643](https://github.com/moq-dev/moq/pull/5643) merged | **Medium**, R8: what P1-l reads back |
-
 Set aside: `ts-live-clock` (the maintainer's own investigation), `ts-reliability`'s `fidelity` plan
 and its children `pes-import`, `pes-export`, `section-placement`, `stream-type` and `data-break`
 (verbatim private data, which no entry above waits on), its `recovery` quest (upstream CI for the content loss T28 measures),

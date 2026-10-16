@@ -1192,8 +1192,9 @@ liveness in both reports. Its export side is this campaign's case: the affiliate
 the origin cannot see ([T39](test-39-cross-boundary-observability.md)).
 [#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and MSF carriage; MSF is parked.
 **The maintainer [gave us](https://github.com/moq-dev/moq/pull/5643#issuecomment-6222787706) it and
-`stats/rust`**, with the export's re-timing in its own section. **Built on #5643, unposted until it
-merges**: CLI flags and sinks, `mpegts` at both edges, and `release` (drops, trims, gaps, margin,
+`stats/rust`**, with the export's re-timing in its own section. **Drafts
+[#5783](https://github.com/moq-dev/moq/pull/5783) and [#5784](https://github.com/moq-dev/moq/pull/5784)
+stack on #5643**: CLI flags and sinks, `mpegts` at both edges, and `release` (drops, trims, gaps, margin,
 offset, drift). A clean clip reads zero on each check; one video PID silenced behind legal PCR and
 continuity grows only its `quiet`.
 
