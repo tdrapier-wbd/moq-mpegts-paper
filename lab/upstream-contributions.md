@@ -283,19 +283,14 @@ turns a qualitative defect into a budget. Recovery is a **single 18.3 MB burst**
 groomer's 8 s cushion, so a consumer that survives the outage can still be broken by the re-entry.
 Forward jumps recover in **238 ms**; only the backwards case needed handling. **33-bit PCR base
 rollover is carried correctly end to end** — 30.080 ms across the boundary in modulo arithmetic,
-6,259 PCRs within ±500 ns, zero continuity errors — so the `due` comparison never sees one. On
-`2a6d9ebdf`, `discontinuity_indicator: false` is hardcoded at
-`rs/moq-mux/src/container/ts/export.rs:1102`, and it shows on the forward case too, where the
-exporter reproduces its own +29.05 s timebase change with the flag clear.
+6,259 PCRs within ±500 ns, zero continuity errors — so the `due` comparison never sees one.
 
 **Outcome.** [#3375](https://github.com/moq-dev/moq/pull/3375) opened citing the comment — *"Still
 needed after #3351… rewinds stop the entire program output until timestamps catch up"* — and merged
 as `0e61e3520`, closing #2833. It restarts the exporter on rewind: uncommitted media discarded,
 timing and table state reset, **the first new PCR flagged**, continuity counters of discarded bytes
 rolled back, plus `moq_mux::container::ts::Export::discontinuity()` so a consumer can see the event.
-**We supplied the verification the fix shipped without:** the maintainer's validation is the
-repository harness, not a rerun of the external stimulus campaign, so nothing had graded a placed
-timeline event through a full lane. Re-running all six arms unchanged against `d88c2ee99` puts every
+**We supplied the verification the fix shipped without:** re-running all six arms unchanged against `d88c2ee99` puts every
 one at the control's content gap; the before/after table, three-point timeline evidence and collapse
 of the downstream buffer requirement went back in a [#3375
 comment](https://github.com/moq-dev/moq/pull/3375#issuecomment-5557693602). Detail is in [T23 §
@@ -308,8 +303,7 @@ end-to-end shape the campaign graded ([T23 § against
 #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)). #3529 also fixes policy:
 the exporter reports what the source **declared** and will not infer a break from a timestamp step;
 unsignalled jumps remain unflagged by design, and signalled forward conformance no longer depends on
-`mpegts-pacer`. An earlier draft from T21's looping stimulus claimed permanent PCR latch; no T23 arm
-reproduces that — see [method notes](method-notes.md) §6.
+`mpegts-pacer`.
 
 ### #3375 regressed the complement: a *non*-rewinding source now stalls video and primary audio — reported as [#3533](https://github.com/moq-dev/moq/issues/3533)
 
@@ -814,6 +808,13 @@ across clustered relays and a tie-breaker for groups starting together are open 
 twice SRT's loss, because each relay process draws a random stateless-reset key, so its resets for
 its predecessor's connections fail validation and clients wait out the idle timeout. The issue
 proposes a configured or cluster-shared reset key and offers to build it. **Open, no reply yet.**
+
+### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
+
+[T50](test-50-deterministic-ts-legs.md), on our `ts-hitless` build (not yet a PR): a leg that lost
+the group before one that overran its lane lays that group apart, and the video lane's Rx cap leaves
+no headroom to prevent it. The issue asks the maintainer to choose between a packet plan carried with
+the objects and identity scoped to groups that do not overrun. **Open.**
 
 ---
 
