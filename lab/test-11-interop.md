@@ -5,9 +5,9 @@
 assumption in [architecture](../docs/architecture.md). **State:** T11a run at `main` (P1-h)
 against every relay in the interop runner's registry, `moq-dev` publishing and subscribing over raw
 QUIC. **Of nine third-party relay implementations reached, seven carry the TS intact from the
-subscriber's join, and two lose packets after it**: imquic drops a group's final object at about
-half the group boundaries, and red5 drops the rest of the group being written when a subscription
-joins. The join itself splits them. libquicr and moqx start a subscriber at the current group and
+subscriber's join, and two lose packets after it**, in each of two runs: imquic at group ends, at
+half the boundaries in one run and at one near the end in the other, and red5 within the group being
+written when a subscription joins. The join itself splits them. libquicr and moqx start a subscriber at the current group and
 pass both of the runner proposal's cases. moxygen and Cloudflare start at the next group and still
 serve a late subscriber. aiomoqt, moqtail and Nokia (draft 22) also start at the next group, and
 never deliver the catalog to a late subscriber, so `moq export ts` joining mid-stream receives
@@ -23,9 +23,10 @@ draft 18 over raw QUIC to an IETF subscriber, and only for about 27 s at 10 Mb/s
 aborts its single unbounded group. Every other combination fails on a publisher-side defect, bar
 WebTransport, which fails on a relay transport parameter `moq-dev` already plans to add. No relay
 defect was found in the passing arm. **T11c on OpenMOQ's moq5 (P1-h), on drafts 16, 18 and 22:**
-moq5's TS crosses a `moq-dev` relay byte-exact on every PID, and `moq-dev`'s demultiplexed TS
-crosses `moq5-relay` with no content lost. Its passthrough TS does not, because `moq5-relay` never
-delivers that catalog, and neither side's TS track is visible to the other's catalog parser.
+moq5's TS crosses a `moq-dev` relay byte-exact on every PID, and `moq-dev`'s TS crosses
+`moq5-relay` in both modes: demultiplexed with no content lost, and passthrough byte-exact on every
+PID on moq5 `main`, which fixed the draft-22 join we reported. Neither side's TS track is visible to
+the other's catalog parser.
 
 **The same fixture and oracle put through segmented HTTP pass against every third party tried** —
 FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
@@ -123,7 +124,12 @@ client, fixture and grading.
   observed. On draft 18, moqtail answers the same request with the broadcast's first group.
 - **Losses after the join.** Every packet imquic lost is the PCR-only packet (adaptation field only,
   PID 256) that ends a group, its final object. red5, joining the subscriber at object 36 of group 0,
-  delivered the start of that group and dropped the rest.
+  delivered the start of that group and dropped the rest. A second run of both, same build and rig,
+  reproduced loss with a different pattern: imquic lost 4 video packets and the PAT and PMT after
+  them once, about 18.7 s in, and never announced the late broadcast to the late subscriber, whose
+  namespace subscription it acknowledged 8 s after accepting the publisher's; red5 lost 13 video
+  packets, the PAT and PMT and one SDT packet within the first 1.2 s, and passed the late case.
+  Neither is reported upstream until replicates map each loss to its group and object.
 
 The sessions themselves now set up everywhere but Nokia's draft-18 endpoint and quiche-moq: moqtail
 and libquicr, which the first sweep could not reach, accept PUBLISH_NAMESPACE and the empty-prefix
@@ -362,7 +368,7 @@ Measurement P1: co-resident on loopback, from file, paced by PCR. **Predicted:**
 pass on bytes; 3 and 4 fail at discovery (MSF `mpeg2ts` packaging against the hang catalog's `m2ts`
 section).
 
-**Results: directions 2 and demultiplexed 1 pass; passthrough 1 fails in `moq5-relay`; 3 and 4 fail
+**Results: directions 1 and 2 pass, passthrough 1 on draft 22 only from moq5 `main`; 3 and 4 fail
 at discovery, as predicted.**
 `moq-dev` `3c0daa21b` against moq5 `0729c49` (`moq5-relay` on MsQuic), raw QUIC, where the ALPN
 (`moqt-16`, `moqt-18`, `moqt-22`) is the negotiated draft and both sides logged the one offered.
@@ -372,24 +378,20 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
 
 | # | 16 | 18 | 22 | Where it stops |
 |---|---|---|---|---|
-| 1, passthrough | fail | fail | fail | the catalog's join, in `moq5-relay` |
+| 1, passthrough | pass | pass | pass from moq5 `main` | on `0729c49`, draft 22's catalog join, in `moq5-relay` |
 | 1, demultiplexed | pass | pass | pass | — |
 | 2 | pass | pass | pass | — |
 | 3 | fail | fail | fail | discovery: no track moq5 can deliver |
 | 4 | fail | fail | fail | discovery: `moq-dev` reads no `mpeg2ts` packaging |
 
-- **Direction 1, passthrough, never delivers the catalog, so no media follows.** The export
-  subscribes to `catalog.json` and gets `SUBSCRIBE_OK` with largest 2/0; the importer published the
-  catalog once, in group 2. On drafts 16 and 18 the export joins with a Joining FETCH, which
-  `moq5-relay` forwards upstream as a standalone FETCH of group 2; `moq-dev` answers it with
-  `FETCH_OK` and the object (its End Location the request's, as draft 16 §9.17 has it), and
-  `moq5-relay` never answers downstream. Its design collects the whole upstream response before its
-  own `FETCH_OK`, and the stall is inside that. On draft 22 the export joins at the current group, a
-  Next Object filter with a fill from StartGroup 1 (§3.5). `moq5-relay` serves fills only from what
-  it has retained, its upstream `SUBSCRIBE` asks for no fill, and group 2 was never retained; draft
-  22's relay "retrieves any missing objects upstream using a SUBSCRIBE with FILL_PARAMETERS or
-  FETCHes". Both are on `moq5-relay`'s side. The first run's draft-18 announce that was acknowledged
-  but not kept did not recur.
+- **Direction 1, passthrough, passes with the passthrough lane's own subscriber** (see
+  Corrections). With `export ts --passthrough`, the arm is the source's packets on every PID with
+  no continuity error on drafts 16, 18 and 22 against moq5 `main` (`56dd342`), and on draft 16
+  against `0729c49`. On draft 22 `0729c49` delivered nothing: the export joins at the current
+  group, a Next Object filter with a fill from StartGroup 1 (§3.5), and `moq5-relay` served fills
+  only from what it had retained, which never held the catalog's one group; draft 22's relay
+  "retrieves any missing objects upstream". That half of
+  [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51) was the relay's, and `main` fixes it.
 - **Direction 1, demultiplexed, passes on all three drafts:** the export has the catalog within
   4 ms of subscribing and subscribes to every track, with no continuity error and, on the content
   grader ([`t28-content-lost.py`](scripts/t28-content-lost.py)), no video or audio lost or repeated.
@@ -475,6 +477,15 @@ any TS object reaches `moq-relay`, and the two TS descriptions (MSF `mpeg2ts` an
 close discovery. So T11d says nothing yet about `moq-relay` carrying their TS; arm A reruns once either
 side adopts #2015's framing.
 
+## Corrections
+
+> **T11c's passthrough arm ran the wrong subscriber.** Believed: `moq5-relay` never delivered a
+> passthrough import's catalog on drafts 16, 18 and 22, reported as openmoq/moq5#51. True: the
+> subscriber was the demultiplexing `export ts`, which delivers nothing for a passthrough import
+> through `moq-dev`'s own relay either (draft 16, 0 bytes); with `export ts --passthrough` drafts 16
+> and 18 pass, and only draft 22's failure was the relay's, fixed on moq5 `main` (§ T11c). Rule:
+> [method-notes](method-notes.md) §1, run the control before believing a striking result.
+
 ## Status and next steps
 
 - [x] Fixture generator, oracle, and oracle sensitivity tests
@@ -500,8 +511,8 @@ side adopts #2015's framing.
       it: it shows the objects are cacheable, not that a distribution network will behave.
 - [ ] Raise the 200 ms QUIC→WebSocket fallback timer separately
 - [x] P1-h and the sweep at `main` across the registry's relays (§ Results at `main`)
-- [ ] Report imquic's lost final objects, red5's loss at the join, and the late subscriber that
-      aiomoqt, moqtail and Nokia never start (not drafted)
+- [ ] Report imquic's and red5's losses once replicates map each to its group and object; the late
+      subscriber aiomoqt, moqtail and Nokia never start waits on moq-transport#2015's framing
 - [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
       `moq-dev`'s `--passthrough` lane through its relay
 - [ ] The two TS cases, fixture and checker proposed to the runner as
@@ -513,8 +524,10 @@ side adopts #2015's framing.
       [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 - [x] T11c, the four moq5 directions on drafts 16, 18 and 22 (§ T11c); moq5 claims no
       cross-implementation result of its own
-- [x] T11c's passthrough join reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51);
+- [x] T11c's passthrough join reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51),
+      closed: draft 22's half fixed on moq5 `main`, the rest our subscriber (Corrections);
       its discovery result posted to [moq-dev/moq#3731](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800)
 - [x] T11d, `moq2ts`'s headless publisher and receiver against `moq-dev` on draft 22
 - [ ] Rerun T11d arm A once `moqxr` or `moq-net` adopts moq-transport#2015's FILL_PARAMETERS framing
-- [ ] Report T11d's pacing defect and repeated final group to `moq2ts` (drafted, not posted)
+- [x] T11d's pacing defect and repeated final group reported as
+      [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)

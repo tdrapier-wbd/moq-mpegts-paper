@@ -65,9 +65,11 @@ CUBIC; matched, both lanes held full rate. Record both settings on the result li
 `--quic-congestion-control` and `net.ipv4.tcp_congestion_control`), and confirm from connections carrying
 the run, sampling repeatedly where connections are short-lived.
 
-**Run the control before believing a striking result, not after.** *(T17; the #2913 merge-base control.)*
-A round trip that captured nothing matched a predicted failure until the merge-base build did the same: a
-renamed flag whose alias warned and did nothing.
+**Run the control before believing a striking result, not after.** *(T17; the #2913 merge-base control;
+T11c.)* A round trip that captured nothing matched a predicted failure until the merge-base build did the
+same: a renamed flag whose alias warned and did nothing. A failure through another implementation is
+theirs only once the same arm, subscriber included, passes through the reference one: T11c's
+passthrough arm ran a subscriber that delivers nothing through `moq-dev`'s own relay.
 
 **Grade beyond one full failure-detection interval, and record the idle timeout on both ends of the
 session.** *(T6, T13.)* A failover graded 21 s into a 30 s QUIC idle timeout could not pass on any build.

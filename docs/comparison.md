@@ -91,8 +91,8 @@ isolation and RFC 9218 priorities; MoQ differs in the object and subscription mo
 head-to-head under one shaper ([Evidence](evidence.md) §3.3):
 
 - **Loss is a controller result, not a lane result.** At 10 % loss both lanes hold full rate on BBR
-  (1.04 segmented, 0.96 media-aware) and both collapse on CUBIC (0.17 and 0.13), so "segment
-  fetching degrades under loss" compares TCP's default controller with QUIC's tuned one. On HTTP/3,
+  and both collapse on CUBIC, so "segment fetching degrades under loss" compares TCP's default
+  controller with QUIC's tuned one. On HTTP/3,
   through a byte-faithful receiver, the segmented lane loses nothing up to ~20 % applied loss.
 - **Reordering ranks controllers, not lanes**: equalised for packet size, the segmented lane on
   HTTP/3 keeps a quarter of the stream whatever the controller, and the media-aware figure moves
@@ -107,8 +107,8 @@ head-to-head under one shaper ([Evidence](evidence.md) §3.3):
   invisible to an integrity monitor, until the origin evicts the segment it asks for — a cliff where
   the media-aware lane has a slope.
 
-Past 7.7–12.2 % applied loss the segmented lane's HTTP/1.1 client re-anchors and leaves holes of 7.2 s,
-24 s and 82 s, silently past ~20 % ([T5](../lab/test-5-network-impairment.md)). **Against SRT, matched on
+Past 7.7–12.2 % applied loss the segmented lane's HTTP/1.1 client re-anchors and leaves holes,
+silently past ~20 % ([T5](../lab/test-5-network-impairment.md)). **Against SRT, matched on
 measured latency and graded on content, the media-aware lane loses more programme under every shape
 measured but 5 % reorder**, by a margin its build and QUIC stack set.
 
@@ -123,7 +123,9 @@ Content Steering is specification-only. An origin killed for ten seconds costs t
 content, where the media-aware exporter skips to the live edge. Across a *transport* outage, graded
 on content, the media-aware lane loses more of the programme than SRT: behind the fixed-delay export
 the margin is its transport's recovery, and earlier builds also paid in a latency step that did not
-reverse, where SRT holds its latency ([Evidence](evidence.md) §3.3).
+reverse, where SRT holds its latency ([Evidence](evidence.md) §3.3). A killed relay or publisher
+costs the media-aware lane about twice SRT's loss, as both ends wait out QUIC's idle timeout, and a
+killed exporter less than half.
 
 **Neither lane's transport reports a stalled source, and only the segmented one offers a
 substitute**: its playlist media sequence stops advancing, which a poller can alarm on without
@@ -304,8 +306,8 @@ to be answered per route by the destination.
 
 **Segmented HTTP wins the delivery path decisively, and "interoperable" has to say which layer it
 means.** HTTP bytes pass through every CDN and cache, where MoQ's relay is a protocol implementation
-and a MoQ feed carries no media through any of the eight other registered public relays, for at
-least four distinct causes ([Evidence](evidence.md) §3.7). **Delivery-path interop and
+and a MoQ feed crosses seven of nine other implementations' public relays intact after the join, but
+only five for a subscriber joining mid-stream ([Evidence](evidence.md) §3.7). **Delivery-path interop and
 multi-programme carriage are mutually exclusive on segmented HTTP**: "Transport Stream Segments MUST
 contain a single MPEG-2 Program." HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and
 TDT/TOT through its catalog. SCTE-35 has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give
@@ -317,7 +319,7 @@ received was intact** ([Architecture](architecture.md) §9.4).
 
 | Layer | Segmented HTTP | MoQ |
 |---|---|---|
-| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; no feed traversed anyone else's |
+| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; five of nine other implementations' relays serve a late subscriber |
 | **General-purpose client reception** | clears, and is why the format is ubiquitous | within one implementation |
 | **Low-latency TS-in-HLS reception** | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](evidence.md) §3.9) | not applicable; no segment period |
 | **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation |
@@ -530,7 +532,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
 | Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme under every shape measured but 5 % reorder, by a margin its build and QUIC stack set (§3.1) |
-| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes (§3.2) |
+| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, a killed relay costs the media-aware lane about twice as much (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, where a shared `--epoch` resumes without a seam only on the opt-in moq-lite 07 and the export then survives only where the two importers' group numbering allows; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |

@@ -285,8 +285,9 @@ relay rate (§4.4). The whole of that gap is the assumption.
 **Four things would falsify it, and none is settled.** Only two CDNs publish a MoQ relay rate, at
 four to ten times commodity delivery. Professional contribution carries SLA, monitoring and support
 obligations that consumer CDN pricing does not, so some of the gap is real cost rather than margin.
-Relay portability between implementations is currently absent in practice
-([Evidence](evidence.md) §3.7) — a market cannot commoditise a product buyers cannot switch between.
+Relay portability between implementations is partial: five of nine other relays serve a subscriber
+joining mid-stream ([Evidence](evidence.md) §3.7), and a market cannot commoditise a product buyers
+cannot reliably switch between.
 **And the band itself is not yet evidenced for MoQ: no conformant sub-second configuration has been
 measured on it, and none has passed a whole capture on any lane** ([Comparison](comparison.md) §5.1), so
 the segment this argument addresses is at present a projection. **The strongest economic case for MoQ
@@ -531,7 +532,7 @@ staffed from the same place.
 
 If the largest operators build in-house and vendors serve the small end, then **the interoperability
 work has no commercial sponsor at the end of the market that could fund it.** This is not speculative:
-relay portability between implementations is absent in practice today, and §4.6 identifies it as one of
+relay portability between implementations is still partial, and §4.6 identifies it as one of
 four things that would falsify the strongest economic case for MoQ. The broadcasters with the resources
 to fix interop are precisely the ones whose in-house builds make it a lower priority for them
 individually, and the vendors who would otherwise carry it serve customers too small to pay for it.

@@ -786,22 +786,14 @@ existence.**
 
 ### A drill offered, and the coverage that landed instead
 
-The two method rules the redundancy work produced — grade beyond one full idle timeout, and never start
-redundancy test sources independently — were baked into an end-to-end drill offered upstream as
-[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`): two real relays, lazy track
-creation, QUIC idle timeout in the loop, and a load-bearing third subscriber that forces one relay to
-carry the broadcast via the other. It generates its own source clip and depends on no private capture.
-
-**It was declined, and correctly**: upstream had by then covered the same behaviour with model unit
-tests. The drill still reproduced our out-of-band numbers (resumption ~14 s after killing the active
-publisher at a 10 s idle timeout, against ~11 s measured here). What did land is
-[#2713](https://github.com/moq-dev/moq/pull/2713), which takes the drill's load-bearing insight into
-those tests: every takeover test subscribed to a *single* track, so nothing pinned that reselect is
-decided **per track** — a partial recovery a single-track test cannot tell from a whole one. Two tests,
-no production changes, with deliberately unequal group counts so resume boundaries differ.
-
-**Two of our four reports from that work were artefacts of our own harness**, recorded with their method
-rules in [method-notes](method-notes.md) §1 and §5.
+The redundancy work's two method rules — grade beyond one full idle timeout, and never start
+redundancy test sources independently — went upstream as the drill
+[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`: two relays, the idle timeout
+in the loop, and a third subscriber that forces one relay to carry the broadcast via the other).
+**Declined**, since model unit tests already covered the behaviour; its insight landed as
+[#2713](https://github.com/moq-dev/moq/pull/2713): every takeover test subscribed to one track, so
+nothing pinned that reselection is decided **per track**. Two of our four reports from that work were
+artefacts of our own harness ([method-notes](method-notes.md) §1 and §5).
 
 ### What a redundant pair must share — merged as [#5412](https://github.com/moq-dev/moq/pull/5412), its coordinate since revised
 
@@ -815,6 +807,13 @@ maintainer's [#5438](https://github.com/moq-dev/moq/pull/5438): importers sharin
 derive the catalog clock and era from the epoch and their own source, all stay live, and none reads
 the relay. A rewind stays fatal and needs a successor epoch; that epoch's anchor, a cold co-start
 across clustered relays and a tie-breaker for groups starting together are open in the quests.
+
+### A restarted relay cannot reset its predecessor's connections — reported as [#5861](https://github.com/moq-dev/moq/issues/5861)
+
+[T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay costs the MoQ lane about
+twice SRT's loss, because each relay process draws a random stateless-reset key, so its resets for
+its predecessor's connections fail validation and clients wait out the idle timeout. The issue
+proposes a configured or cluster-shared reset key and offers to build it. **Open, no reply yet.**
 
 ---
 
@@ -1614,16 +1613,12 @@ fixture generated at build time, a TSDuck-backed checker with 13 sensitivity tes
 
 ### A flag-alias regression — reported, fixed, verified, closed
 
-Dial-side flags renamed on the development branch warned and then did not take effect: isolated one at a
-time, connect and QUIC tuning flags failed independently while warnings named the correct replacement —
-alias parsed, propagation missing ([#2913](https://github.com/moq-dev/moq/issues/2913)), found via a
-merge-base control ([method-notes](method-notes.md) §1). **Fixed on the development branch, verified
-here, and closed:** client and relay reject renamed settings outright and print the mapping. The report
-argued hard error is strictly better than a compatibility shim: the replaced failure was invisible — GSO
-stayed on, macOS loopback stalled, nothing logged — so scripts kept running and silently misconfigured.
-**Still open operationally:** relay `--server-quic-gso` moved to `--quic-gso` in the same rename; rigs
-updating only the client half still fail, and named branches disagree on spelling. Detect the surface from
-`moq --connect … --help` rather than assuming either.
+Dial-side flags renamed on the development branch warned and then did not take effect: the alias
+parsed and was never propagated ([#2913](https://github.com/moq-dev/moq/issues/2913), found by a
+merge-base control, [method-notes](method-notes.md) §1). **Fixed, verified here, and closed:** client
+and relay reject renamed settings outright and print the mapping, as the report argued, since the
+silent failure left GSO on with nothing logged. Operationally, relay `--server-quic-gso` became
+`--quic-gso` in the same rename; detect the surface from `moq --connect … --help` rather than assuming.
 
 ### Corroboration from an independent stack
 
@@ -1649,16 +1644,26 @@ as one issue.
 
 With the fix to A, the byte-level result stands on draft 18. The WebTransport failure belongs to
 `moq-dev`, whose `reliable-reset` quest already plans the missing `reset_stream_at` parameter, so it
-went into the issue only as a note. **Open, no reply yet.**
+went into the issue only as a note. **Open**; the maintainer pointed to `moq2ts` as the maintained
+successor, below.
+
+### `moq2ts`'s paced publisher and its final group — reported as [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
+
+[T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run):
+`moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate,
+and its receiver gets the final group twice; otherwise the loop is byte-exact. Interop with
+`moq-dev` on draft 22 waits on the FILL_PARAMETERS framing moq-wg/moq-transport#2015 proposes to
+settle, so the issue raises only those two. **Open, no reply yet.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
 [T11c](test-11-interop.md#t11c--moq5-against-moq-dev-both-ways-criteria-fixed-before-the-first-run)
 direction 1: a passthrough import's catalog, published once before `moq5-relay` subscribed upstream,
-never reaches a late `moq export ts`, on drafts 16, 18 and 22. On 16 and 18 the relay forwards the
-Joining FETCH, receives the whole response (FETCH_OK, the object, FIN) and answers nothing; on 22 it
-serves the fill only from its retained log, which never held the group. A demultiplexed import passes
-on the same requests. **Open, no reply yet.**
+never reached a late `moq export ts`, on drafts 16, 18 and 22. **Closed by the maintainer**: draft
+22's fill, served only from the relay's retained log, is fixed on moq5 `main`, and on 16 and 18 the
+repro needed `export ts --passthrough`. Verified: with it, all three drafts pass on `main`, and draft
+16 already passed on the build reported; our subscriber delivers nothing through `moq-dev`'s relay
+either (T11 § *Corrections*).
 
 ---
 

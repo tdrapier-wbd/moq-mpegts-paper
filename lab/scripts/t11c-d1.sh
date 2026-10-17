@@ -2,7 +2,7 @@
 # T11c direction 1: `moq import ts` through moq5-relay into `moq export ts`, on loopback.
 # usage: t11c-d1.sh <out-dir> <draft: 16|18|22> <passthrough|demux>
 # env: MOQ (moq-dev bin dir), RELAY (moq5-relay binary), CLIP (source TS), PORT (default 4433),
-#      LOG (moq-dev's RUST_LOG, default info)
+#      LOG (moq-dev's RUST_LOG, default info), EXPORT_FLAGS (extra export flags, e.g. --passthrough)
 set -u
 OUT=$1 DRAFT=$2 MODE=$3
 PORT=${PORT:-4433} LOG=${LOG:-info}
@@ -36,7 +36,7 @@ tsp -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>tsp.log |
 	RUST_LOG=$LOG "$MOQ/moq" "${dial[@]}" --broadcast t11c import ts "${flags[@]}" >import.log 2>&1 &
 import=$!
 sleep 3
-RUST_LOG=$LOG "$MOQ/moq" "${dial[@]}" --broadcast t11c export ts >out.ts 2>export.log &
+RUST_LOG=$LOG "$MOQ/moq" "${dial[@]}" --broadcast t11c export ts ${EXPORT_FLAGS:-} >out.ts 2>export.log &
 export=$!
 
 wait "$import"
