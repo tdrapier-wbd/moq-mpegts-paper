@@ -25,7 +25,7 @@ defined [below](#blocked-on-apparatus).
 |---|---|---|---|---|---|
 | P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | Before [#5517](https://github.com/moq-dev/moq/pull/5517) nothing failed over in the mesh, because a standby refused before its PMT was never asked again; #5517 (merged) announces an import only once it knows its tracks, unmeasured in the mesh; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: `hop-aligned-import` ([below](#upstream-quests-worth-building)) | The single-relay matrix and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
 | P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | The live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export | On the opaque lane, the live-feed cell hitless; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
-| P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig; the infrastructure axis on both lanes | [T28](test-28-failure-injection-matrix.md) |
+| P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig | [T28](test-28-failure-injection-matrix.md) |
 | P1-f | The scaling model's remaining points, and the segmented fan-out | The scaling model is measured to N = 100, with the origin co-resident | a subscriber host that holds 100 exporters; a second subscriber host | The ceiling with GSO on past N = 100; the origin on its own host; an hour at N = 100; the segmented fan-out measured | [T26](test-26-cross-host-fanout.md), [T43](test-43-fanout-current-build.md) |
 | P1-g | Capped-stream relay memory under pressure | Whether the relay's memory plateaus under pressure (§5 row 14), which no soak exercises | — | T9's capped-stream arm run | [T9](test-9-performance.md) |
 | P1-b | Distributed resilience above the egress 1+1 pair | Fabric-level failure for the media-aware lane | — | T29 run against its criteria | [T29](test-29-moq-distributed-resilience.md) |
@@ -98,7 +98,7 @@ no harness and run no cell that needs no hardware. [T33](test-33-gate2-preparati
 - Run the segmented fan-out last in any session, because it deliberately saturates a box, and keep a
   segmented origin off any box carrying a MoQ relay.
 - Soaks and memory arms measure the machine they run on, so neither shares a window.
-- The cheap namespace ladder cells (P1-a, P1-d, P2-e) are the right filler for a window whose main
+- The cheap namespace ladder cells (P1-a, P2-e) are the right filler for a window whose main
   item is posting, reviewing or building.
 
 ## Deliberately not doing

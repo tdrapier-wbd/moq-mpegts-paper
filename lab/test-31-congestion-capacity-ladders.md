@@ -5,8 +5,8 @@ rig — three replicates per MoQ rung, two to three per segmented rung — with 
 boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ
 arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release
 delay up to 6 s absorbs a sustained 0.8× share, and against a 5 s dip to 0.8× only 6 s at 200 ms RTT
-absorbs the video, with the shaper dropping nothing; at 20 ms the relay's qlog places that loss in
-its own abandonment of groups (criterion 8). Every MoQ figure in this file is graded by
+absorbs the video, with the shaper dropping nothing; at 20 ms the relay's qlog finds that loss in
+its own abandonment of groups, all of it at 6 s and most at 2 s (criterion 8). Every MoQ figure in this file is graded by
 [`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to
 carry were an artefact of the exporter and are withdrawn (see *Corrections*).**
 [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
@@ -372,7 +372,8 @@ video's alone.
 its backlog peaks at 0.17–0.35 MB at 20 ms RTT and 0.90–2.18 MB at 200 ms. During the dip the class
 runs full (15.67–15.92 and 23.75–23.88 Mb/s), and after it runs above its pre-dip rate (19.98–23.13
 against 19.51–19.70 Mb/s at n = 2, 29.75–34.45 against 29.18–29.52 at n = 3). What is lost is lost
-before the shaper's queue; criterion 8 (next section) places it in the relay's abandonment of groups.
+before the shaper's queue; at 20 ms RTT criterion 8 (next section) finds most of it in the relay's
+abandonment of groups.
 
 **The lane's wire rate.** Unimpaired, each subscriber's flow averages 9.86–9.87 Mb/s at the shaper
 (19.71–19.73 Mb/s for two, 29.57–29.60 for three), 0.99× the stream's 9.95 Mb/s, so the dip withholds
