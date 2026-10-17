@@ -79,6 +79,26 @@ The unit tests on the branch carry what this rig cannot reach (two importers sta
 offsets, across a wrap, across a flagged jump, after a restart, publish the same group sequences and
 frames), and one of them fails without the change.
 
+### Arm 2: a switch inside the export's delay (fixed before its first run)
+
+The hard kill resumes after the export's delay, where a misaligned resume is dropped as late
+([Results](#results)). Arm 2 sends `SIG=TERM`: the importer closes its session, and on `moq-lite-07`
+the relay resumes on the survivor at the signal ([T6](test-6-relay-resilience.md)). Same rig and
+inputs, `KILL_WHICH=newest` only (the case where a misaligned resume lands on older media), six runs
+per lane and build; the rig records the signal's time. Validity as above, and a serving run *counts*
+only if the survivor's first media fetch follows the signal by less than the export's 1 s delay.
+
+1. **The fix survives the switch.** Every counted run on the fix keeps both exporters alive at 60 s
+   with no `Error:` line, each capture growing after the signal; at least two per lane.
+2. **The passthrough lane continues the source.** 0 foreign packets in every fix passthrough capture.
+3. **Twins** as criterion 3 above.
+4. **The attribution control fails.** At least one counted run per lane ends an exporter or, on
+   passthrough, leaves foreign packets. A build and lane with fewer than two counted runs after six
+   gets six more, once; a lane still short, or whose attribution control does not fail, is
+   inconclusive. Main is graded the same way and reported.
+
+A lane meeting 1–4 credits the change with preventing #4354's rewind end to end.
+
 ## Results
 
 All 36 runs valid: every session on `moq-lite-07-wip`, every capture 19 MB at the kill, both inputs
