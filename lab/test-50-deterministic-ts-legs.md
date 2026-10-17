@@ -1,8 +1,9 @@
 # Test 50 — Deterministic TS legs (`moq export ts --sync`)
 
-**State: run; fails. Identity holds under join skew (arm A) and the grader fails when it should
-(arm C), but complementary loss on broadcast content diverges for 22 s (arm B): the decode clock
-the DTS comes from depends on the leg's history.**
+**State: run; fails criterion 1 in arm B. Legs that joined apart write the same packets (arm A), and
+the decode clock no longer diverges under loss. But when a leg resumes into a group that overran
+the video lane on another leg, it lays that group elsewhere for up to 0.6 s. The video lane is
+capped at the stream's Rx, so no multiplex rate removes this.**
 
 ## Objective
 
@@ -35,6 +36,12 @@ one leg lacks keeps its position there as stuffing.
 - **A unit is planned when it is read**, so a frame dropped late still advances its group; an open
   GOP's leading pictures, which a joiner cannot decode, are planned and decode-clocked like any
   other, then dropped.
+- **The decode clock settles by count.** A video track whose SPS declares `max_num_reorder_frames`
+  gives a frame its decode slot once more frames are held than can precede one in decode order and
+  follow it in output: that depth N, or 2N+1 when the SPS allows field pictures. The DTS is the slot
+  less N frame periods, capped at the PTS. A cut drops the frames still held from the cut group.
+  Without a declared depth the export warns and keeps the timing rule, whose settling and growing
+  delay depend on what the leg read before.
 - **Two counters mark where legs can differ:** `overruns` (a group that starts behind the one
   before it on a lane too narrow to absorb it) and `late` (packets placed after their slot went
   out), in the export's stats and its release log line.
@@ -55,8 +62,10 @@ one leg lacks keeps its position there as stuffing.
 - **B, complementary loss.** Three legs start together; leg A's process is stopped for 3 s at +20 s
   and leg B's for 3 s at +35 s, so each misses content the other has; leg R is never stopped.
 - **C, known-bad control.** Arm A without `--sync`, and arm A's leg B with one byte flipped.
+- **B at 16 and 24 Mb/s**, added after arm B's second run failed, to test whether a wider lane
+  removes the failure. The criteria are unchanged.
 
-All arms: `--mux-rate 12000000 --delay 1s`.
+All arms: `--mux-rate 12000000 --delay 1s` unless stated.
 
 ## Pass criteria (fixed before the first run)
 
@@ -78,59 +87,79 @@ All arms: `--mux-rate 12000000 --delay 1s`.
 
 ## Results
 
-Build: `quest/m2/ts-hitless` at 7e7ef8eb4, release; the rig grades `pcrverify` with `--bitrate` at
-the multiplex rate. A first arm A ran on 9651fa412, before the open-GOP fix below.
+Build: `quest/m2/ts-hitless` at e0f4d21c8, release; pushed as f92d2d5e0 after `just fix` rewrapped
+three lines. Arm B ran twice at 12 Mb/s, then once each at 16 and 24 Mb/s.
 
 | Criterion | A, join skew | B, complementary loss | C, control | Verdict |
 |---|---|---|---|---|
-| 1 Identity | 470,752 positions equal, 0 conflicts, 0 alone over 59.1 s | A vs R 0 conflicts; B vs R and A vs B 103,158 conflicts, all video, 33.6–55.4 s | — | **fail** (B) |
+| 1 Identity | 470,752 positions equal, 0 conflicts over 59.1 s; positions only one leg carries fall in the joiner's first 1.3 s and its first slot's tables | A vs R 0 conflicts in every run. B vs R and A vs B: 0 in the first run; 3,821, 2,218 and 2,218 in the others, all video, within 0.6 s of B's resume | — | **fail** (B) |
 | 2 Grader fails | — | — | no `--sync`: 373,098 conflicts; flipped byte: exactly 1 | pass |
-| 3 Continuity | 0, 0 | A 0, R 0; B 1 (14 packets missing at its own stall); merge 83 | — | **fail** (B) |
-| 4 PCR | max interval 25.07 ms; every PCR within 13 ticks | same, all three legs | — | pass |
+| 3 Continuity | 0, 0 | R and the merge 0 in every run; A 1 in every run, B 1 in the first, each at its own loss | — | **fail** as written (B) |
+| 4 PCR | max interval 25.07 ms; every PCR within 13 ticks | same, every leg and merge | — | pass |
 | 5 Constant rate | every slot at the rate | every slot at the rate | — | pass |
-| 6 Merge | — | 436,090 equal, 6,330 differ, 0 lost in both | — | **fail** |
-| 7 Upstream tests | 515 TS unit tests pass (2 ignored); the five identity tests fail with `--sync` off | | | partial |
+| 6 Merge | — | equals R in every run (first: 442,420 equal, 0 differ, 0 lost in both) | — | pass |
+| 7 Upstream tests | 1,483 `moq-mux` library tests pass (2 ignored); the five identity tests fail with `--sync` off; the reordering join and loss tests fail with the timing rule in place of the count, the stop test without the discard | | | partial |
 
-**Arm A before the open-GOP fix** had 5,282 conflicts, all video and all in the joiner's first
-0.95 s. A joiner dropped its first open GOP's leading pictures before the decode clock, so that
-group's DTS and positions differed from the other leg's. Under `--sync` they are now planned and
-decode-clocked, then dropped (Design). The mocked-time tests could not see this: their source has
-closed, unreordered GOPs.
+**The decode clock no longer diverges.** In every arm-B run each picture carries the same DTS on
+every leg, and A and R, whose losses fell apart, agree in every packet. Both halves of the fix are
+needed. A build that counted without dropping the frames held at a cut gave 1,064 (A vs R) and
+10,790 (B vs R) conflicts around each leg's stall in one run, and its merge differed from R in 1,856
+packets: the frames a cut leaves in the clock took slots from a set missing their group's tail.
 
-**Arm B's divergence is the decode clock.** For the same PTS, leg B's DTS is one field (1,800
-ticks) earlier than R's on 517 pictures, from 25,661.16 s to 25,683.08 s of media time. Leg A, whose
-stall fell at 20 s, matches R on every picture. The clock's reorder delay is a running maximum that
-never shrinks, above a floor taken from the SPS. That floor is `max_num_reorder_frames` (3) times the
-frame period (40 ms). Leg B's stall cut a group, losing one or two fields, and the 15 field pictures
-still inside the clock's lookahead were given slots from a set missing them. That raised B's delay by
-a field. R's delay rose by the same field at 25,683 s on its own content, which is when the legs
-reconverge. So this field-coded source reorders past the floor, and above it a leg's DTS depends on
-what it has seen: a skip that truncates the lookahead, or a join after the deepest reorder so far.
-A shifted DTS moves the release instant, so every later group lands elsewhere. The mocked-time source
-never reorders, so no unit test reaches this.
+**What fails is a group that began behind the one before it.** In the three failing runs every
+conflict lies in the group leg B resumed into. R and A hold the group before it, so they found the
+video lane still busy with it and opened 14 to 19 packets after the anchor. B had lost that group and
+opened at the anchor. Each frame's payload and DTS are the same on all legs; the positions realign
+at the first frame released after the lane caught up. These are the `overruns` the export counts and
+logs: about 12 a minute at 12 Mb/s and 8 at 16 or 24, of some 50 groups, at the same instants on
+every leg that holds the previous group. A leg that lacks a group cannot know how far it spilled, so
+a loss or join whose first group overran elsewhere diverges there. Arm A and arm B's first run
+passed because theirs had not. Leg B's stop falls near the same group in every run, and that group
+overran in the last three.
 
-Two counts that did not cause the failure:
-- **Overruns.** Every leg logged 10 to 16 a minute. The video lane is 9.9 Mb/s against 9.0 Mb/s of
-  video, and about three slots in four are full. Arm A held identity through them, and arm B's A
-  and R legs did too.
-- **Leg B's continuity gap.** Its single error falls at its stall. TSDuck accepts every group's
-  flagged restart (legs A and R report none), so this one is inside a group. The quest keeps a loss
-  inside a group detectable, so criterion 3 as written cannot hold on a leg that loses mid-group.
+**No multiplex rate removes it.** Video takes what the fixed lanes leave, at most its Rx. At 12 Mb/s
+that is 9.93 Mb/s, full in 79% of slots. At 16 and 24 Mb/s the lane stops at the stream's Rx,
+10.59 Mb/s, against 9.0 Mb/s of video, and both runs gave the same 2,218 conflicts. This clip's
+four-frame mini-GOPs peak near 13 Mb/s. On such content the quest's re-anchoring "with headroom"
+has no headroom a conformant lane can give.
+
+**Stopped legs finish behind, more often with the discard.** After its 3 s stop a leg's release
+clock may re-anchor, as for a timeline jump: the frames after the skip look more than a delay ahead
+of everything queued. On this build all eight stopped legs finished 0.58 to 1.93 s behind R. On the
+build without the discard one of four did; there leg A never re-anchored, here it always did.
+Grading by PCR slot keeps this out of criteria 1 to 6, but a receiver merging the legs would have to
+buffer that skew. The mechanism is not established.
+
+**Continuity on a losing leg.** TSDuck accepts each group's flagged restart, so a loss that ends at a
+group boundary leaves no error; each error here is a loss inside a group, which the quest keeps
+detectable. Criterion 3 as written cannot hold on a leg that loses mid-group.
 
 **Criterion 7's premise does not hold.** On `main`, the ignored `two_legs_render_a_skip_the_same_way`
 passes with `--ignored` at both lags: the PES header byte difference the quest describes no longer
-reproduces. The evidence that the new tests fail without the fix is the run with `--sync` off.
+reproduces. The evidence that the identity tests fail without the fix is the run with `--sync` off.
+For the decode clock, the mocked source now reorders (a b-pyramid of depth 2) and can evict a
+leg's group as the relay does a slow subscriber's: with the timing rule in place of the count, its
+join and loss tests fail, and without the discard, so does its test of legs stopped in turn.
 
 ## Conclusions
 
 - Under `--sync`, two legs of a real broadcast mux (H.264, MP2, AC-3, teletext, SCTE-35, SI) that
   joined 20 s apart write the same packets, continuity counters included, from their first common
   slot, at a constant rate and with a conformant PCR.
-- Complementary loss is not yet safe. The fix needs two things. Frames still unsettled in the decode
-  clock when a skip cuts their group must be discarded, not decode-clocked from an incomplete set.
-  And the reorder delay must be one every leg derives from the catalog and SPS alone, which
-  `max_num_reorder_frames` times the frame period is not on field-coded content. Its test needs a
-  mocked-time source that reorders, with a field-coded stretch deeper than its declared depth.
-- The quest's mocked-time tests pass and fail without the fix, but they cannot stand in for this
-  test. Their source neither reorders nor opens a GOP, and each defect this test found needs one
-  of the two.
+- Settled by count at the depth the SPS declares, a frame's DTS no longer depends on what the leg
+  read before it.
+- Complementary loss is safe only where the first group after the loss did not overrun on another
+  leg, and on this clip groups overrun at any rate. Agreeing after a loss needs the previous group's
+  spill, which a leg that lost the group cannot compute: it would have to travel with the objects
+  (the quest's packet plan), or the placement rule would have to change. That choice is the
+  maintainer's.
+- The mocked-time tests now reorder, but none fills its lane, so none reaches an overrun.
+
+## Corrections
+
+- **Arm B's first divergence was blamed on the content.** We believed this field-coded source
+  reorders past the depth its SPS declares, so a DTS floor of that depth times the frame period
+  could not hold. It holds: settled by count at that floor, every picture gets the encoder's own DTS
+  (slot less 10,800 ticks) on every leg. The divergence came from the timing rule, whose settling
+  and growing delay depend on what the leg read, and from the frames held at a cut. Rule: check a
+  stream's declared parameters against its own timestamps before blaming them.
