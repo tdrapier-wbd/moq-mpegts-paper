@@ -22,7 +22,9 @@
 #
 # Env: NS ("2 3"), DELAYS ("1 2 4 6" s), RTTS ("20 100 200" ms), CAP_XS ("2 0.8"), REPS (3), REP_FROM (1),
 #      SECS (80), STREAM_MBIT (9.95), DIP_S (0), DIP_AT (30 s), BASE_X (2), CLIP, VPID, NETNS, CONTENT,
-#      LATENCY, OUT, MOQ_CC (relay controller, `delay` = BBRv3 | `loss` = CUBIC), KEEP_TS=1 (keep captures).
+#      LATENCY, OUT, MOQ_CC (relay controller, `delay` = BBRv3 | `loss` = CUBIC), KEEP_TS=1 (keep captures),
+#      RELAY_QLOG=1 (a qlog per relay connection in <cell>/qlog; the relay must be built with `qlog`),
+#      RELAY_RUST_LOG, SUB_RUST_LOG (a `RUST_LOG` for the relay or every subscriber; unset keeps the levels).
 # Output: <OUT>/<label>/summary.csv, one row per subscriber per cell.
 set -uo pipefail
 
@@ -131,8 +133,15 @@ run_cell() {
 	fi
 	echo "cell_start_ns $(date +%s%N)" >"$d/events.txt"
 
-	pub "$BIN/moq-relay" "${RELAY_BIND[@]}" "$PUBIP:$PORT" "${RELAY_TLS[@]}" "$PUBIP" \
-		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$MOQ_CC" --log-level warn >"$d/relay.log" 2>&1 &
+	local renv=(env) rextra=() senv=
+	[ -z "${RELAY_RUST_LOG:-}" ] || renv+=("RUST_LOG=$RELAY_RUST_LOG")
+	[ -z "${SUB_RUST_LOG:-}" ] || senv="RUST_LOG='$SUB_RUST_LOG'"
+	if [ "${RELAY_QLOG:-0}" = 1 ]; then
+		mkdir -p "$d/qlog"
+		rextra=(--quic-qlog "$d/qlog")
+	fi
+	pub "${renv[@]}" "$BIN/moq-relay" "${RELAY_BIND[@]}" "$PUBIP:$PORT" "${RELAY_TLS[@]}" "$PUBIP" \
+		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}" "$RELAY_CC_FLAG" "$MOQ_CC" "${rextra[@]}" --log-level warn >"$d/relay.log" 2>&1 &
 	sleep 3
 	pgrep -f "[m]oq-relay.*$PUBIP:$PORT" >/dev/null || {
 		echo "   VOID: relay did not start ($(tail -1 "$d/relay.log"))"
@@ -142,7 +151,7 @@ run_cell() {
 	# announce from an earlier cell.
 	local bc="t31dm.$name.$$"
 	for i in $(seq 1 "$n"); do
-		sub bash -c "timeout $((SECS + 3)) '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
+		sub bash -c "$senv timeout $((SECS + 3)) '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' \
                 --broadcast '$bc.$i' export ts ${MOQ_LAT[*]} ${delay}s \
               | python3 '$LATENCY' tap $VPID '$d/eg.$i.csv' --pipe --seconds $((SECS + 5)) --save '$d/out.$i.ts' > /dev/null" \
 			>"$d/sub.$i.log" 2>&1 &

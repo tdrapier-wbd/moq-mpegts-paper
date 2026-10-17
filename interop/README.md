@@ -76,42 +76,18 @@ fixture and corrupting it three ways, all are caught with no reference stream:
 The generator applies the same oracle to its own output, so a fixture that would not pass the test is
 never produced.
 
-## Results so far (2026-08-10, `moq` 0.9.8-9698cd93)
+## Results
 
-| Relay | Transport | Media round trip |
-|---|---|---|
-| `moq-dev` local (`localhost:4443`) | moq-lite-05 | **pass** — 13/13 checks, continuity clean |
-| `moq-dev` public (`cdn.moq.dev/anon`) | — | **pass** — 13/13 checks, byte-for-byte the same egress as local |
-| moxygen (Meta), quiche-moq (Google), moqtail, imquic, moqx, Nokia Research, Cloudflare draft-18, libquicr | see below | **no data received** |
-
-Five of the eight establish a session and fail for **one shared reason**: `moq-dev`'s IETF publisher
-is demand-driven. It withholds `PUBLISH_NAMESPACE` until the peer sends it a `SUBSCRIBE_NAMESPACE`.
-Its own relay does exactly that, so the chain completes locally; no third-party MOQT relay does,
-because in MOQT a publisher announces proactively. The result is a publisher that connects, negotiates,
-and then **encodes not one control message**:
-
-| Relay | Publisher control messages |
-|---|---|
-| local `moq-dev`, MOQT-14 | `SubscribeNamespaceOk`, `PublishNamespace`, 3× `SubscribeOk` — **3.49 MB flows** |
-| imquic / moqx / Cloudflare / moxygen | **none** |
-
-Behind it sits a second issue: the subscriber opens discovery with `SUBSCRIBE_NAMESPACE` on the
-**empty prefix** (`Path("")`), which moxygen rejects with error 16 (`UnexpectedMessage`) and imquic,
-moqx and Cloudflare simply never answer. Fixing that alone would not help, since the publisher would
-still be waiting to be asked.
-
-Forcing `--client-version moq-transport-14` against a local relay passes (3.49 MB, continuity clean),
-so the IETF path carries media perfectly well. Raw QUIC instead of WebTransport behaves identically,
-so the transport is not the variable. The remaining three relays fail earlier, at connection or SETUP.
-See [`lab/test-11-interop.md`](../lab/test-11-interop.md) for the per-relay signatures and full
-isolation.
-
-That is exactly the argument for the profile. **`setup-only` passes against moxygen, no media flows,
-and nothing in the matrix today would tell you.**
+With `moq` 0.9.8 this client carried media through `moq-dev`'s relays only, because the publisher
+then announced only when asked, which is fixed upstream. At `main`, `moq-dev`'s TS crosses seven of
+nine third-party relays intact from the subscriber's join; imquic and red5 lose packets, and on three
+relays a late subscriber never starts ([`lab/test-11-interop.md`](../lab/test-11-interop.md)
+§ *Results at `main`*). Every control-plane cell succeeds on those five, which is the argument for
+the profile.
 
 ## Status
 
-Proof of concept, not yet proposed as a PR. The sequencing agreed in #32 is that media-level tests
-layer on the generic data-flow tests sketched under "Future Test Cases" and discussed in
-[#74](https://github.com/englishm/moq-interop-runner/issues/74), so those should land first. Still to
-do: a Dockerfile, `implementations.json` wiring, and isolating the cross-implementation failure above.
+Superseded by the proposal to the runner,
+[englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159): the two
+cases, the fixture generated at image build time and a TSDuck-based checker. This folder retires
+once it merges.

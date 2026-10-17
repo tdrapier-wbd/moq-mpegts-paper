@@ -268,6 +268,12 @@ test the label.
 from a sender that emits whole packets (`tsp -O srt`), or check the receiver's bytes for zero-filled slots
 before attributing parse errors.
 
+**An SRT latency longer than libsrt's buffers hold fails without an error.** *(T28's 11.87 s column.)*
+The default 8,192-packet buffers hold about 8.7 s at 10 Mb/s; at 11.87 s even the unimpaired control lost
+picture and ran 3.3 s late, and impaired cells logged `RCV-DROPPED` and ended 10–16 s behind. With both
+ends' `--rcvbuf`/`--sndbuf` at (latency + RTT) × link rate every cell was clean. Size them so before
+running any SRT arm above about 8 s, and count `RCV-DROPPED` in the receiver's log.
+
 **Time a picture where a decoder presents it, on a clock averaged over many packets.** *(T45, T46.)* DTS
 spread 521 ms where presentation was flat, because the exporter authors DTS up to 280 ms early, and
 single-header offsets scattered ±37 ms through `tsp -P regulate`. Reference latency to the PTS, take each

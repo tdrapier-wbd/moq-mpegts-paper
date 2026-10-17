@@ -2,15 +2,19 @@
 
 **Pyramid rung 7** (comparative lab). **Feeds:**
 [comparison](../docs/comparison.md) §12 and the "a MoQ relay is a neutral transport fabric"
-assumption in [architecture](../docs/architecture.md). **State:** T11a partly run. A
-media-level test client exists and passes against `moq-dev` locally and over the public internet;
-**eight other registered public relays return no data**. Root cause isolated for the five that
-establish a session: **`moq-dev`'s IETF publisher withholds `PUBLISH_NAMESPACE` until the peer sends it
-a `SUBSCRIBE_NAMESPACE`**. Its own relay does that; no third-party MOQT relay does, because in MOQT a
-publisher announces proactively. So `moq import ts` connects and then never sends a single control
-message. The IETF path itself carries media cleanly (MOQT-14 passes on a local relay), so this is a
-client-side convention, not a relay defect. Three relays fail earlier, at the connection or SETUP
-layer, and are not yet diagnosed.
+assumption in [architecture](../docs/architecture.md). **State:** T11a run at `main` (P1-h)
+against every relay in the interop runner's registry, `moq-dev` publishing and subscribing over raw
+QUIC. **Of nine third-party relay implementations reached, seven carry the TS intact from the
+subscriber's join, and two lose packets after it**: imquic drops a group's final object at about
+half the group boundaries, and red5 drops the rest of the group being written when a subscription
+joins. The join itself splits them. libquicr and moqx start a subscriber at the current group and
+pass both of the runner proposal's cases. moxygen and Cloudflare start at the next group and still
+serve a late subscriber. aiomoqt, moqtail and Nokia (draft 22) also start at the next group, and
+never deliver the catalog to a late subscriber, so `moq export ts` joining mid-stream receives
+nothing; on draft 18 moqtail hands it the broadcast's first group before the live one. Nokia's
+draft-18 endpoint refuses the TLS handshake at ALPN, and quiche-moq's host does not answer.
+The first sweep, with `moq` 0.9.8, carried nothing through any of eight relays; its main cause, a
+publisher that announced only when asked, is fixed upstream.
 
 **T11b run: an outside opaque-TS publisher through a `moq-dev` relay.** OpenMOQ's MSFTS example
 publisher, as released, delivers at most one object on each of the three combinations tried. With a
@@ -27,8 +31,9 @@ delivers that catalog, and neither side's TS track is visible to the other's cat
 FFmpeg, VLC, a bare `curl` loop, an off-the-shelf nginx cache, and Apple's `mediastreamvalidator` with
 0 errors and 0 warnings. Two clients through the cache cost the origin nine segment fetches rather
 than eighteen, which is the CDN scaling argument measured rather than asserted. **Six third parties,
-six passes, against nine relays and eight failures.** One correction falls out of it: the HLS packager
-is *not* byte-transparent — it re-muxes, and it silently truncated 5.0 % of a finite input.
+six passes; on MoQ, two of nine third-party relays pass both cases.** One correction falls out of
+it: the HLS packager is *not* byte-transparent — it re-muxes, and it silently truncated 5.0 % of a
+finite input.
 
 ## Objective
 
@@ -67,175 +72,85 @@ client, because **the `moq` CLI has no opaque byte-carriage mode** — every `Im
 `ExportSink` is media-aware. That is a finding in itself and is the main gap between this proof of
 concept and a transparent-carriage test.
 
-## Results — `moq` 0.9.8
+## Results at `main`: the registry's relays (P1-h)
 
-| Relay | Endpoint | Result |
-|---|---|---|
-| `moq-dev` (local) | `localhost:4443`, moq-lite-05 | **pass** — 13/13 checks |
-| `moq-dev` (public) | `cdn.moq.dev/anon` | **pass** — 13/13, egress byte-identical to the local run |
-| moxygen (Meta) | `fb.mvfst.net:9448` | no data — but **SETUP succeeds, `moq-transport-14`** |
-| quiche-moq (Google) | `quichemoq.dev:443` | no data |
-| moqtail (OzU) | `relay.moqtail.dev` | no data — `Setup failed` reported |
-| imquic (Meetecho) | `lminiero.it:9000` | no data |
-| moqx (openmoq) | `moqx-main.ci.openmoq.org:4433` | no data |
-| Nokia Research | `moqt.nokiaresearch.com:4443` | no data — `closed` |
-| Cloudflare draft-18 | `draft-18-interop.cloudflare...` | no data (anonymous publish; expected to need a provisioned scope) |
-| libquicr (Cisco) | `us-west-2.relay.quicr.org:33437` | no data |
+**What was run.** `moq-dev` at `3c0daa21` at both ends, from an EC2 host over the public internet;
+fixture against received file (P1); one run per relay. [`t11-relay-sweep.sh`](scripts/t11-relay-sweep.sh)
+takes each raw-QUIC endpoint in the runner's registry at its highest registered draft, and runs the
+runner proposal's two cases with the synthetic fixture: a carriage subscriber up 2 s before the
+publisher, and a late subscriber joining 8.5 s in, both `export ts --passthrough`, against
+publishers running `import ts --passthrough` paced by `tsp regulate`. The proposal's `check-ts.py`
+grades carriage as the whole fixture and as a tail, and the late capture as a tail. First,
+[`p1h-relay-probe.sh`](scripts/p1h-relay-probe.sh) dialled the relays the first sweep never reached,
+on both transports, with each session logged to its first request.
 
-`ts-late-subscriber` also passes locally: a subscriber joining 8 s into the 20 s fixture receives
-2.59 MB, continuity clean from the join, PSI present without waiting for a new session.
+| Relay | Draft | Carriage (subscriber first) | Late subscriber |
+|---|---|---|---|
+| `moq-dev` (`cdn.moq.dev`) | 20 | **whole** | **pass** |
+| stitcher-moq (a `moq-relay`) | 22 | **whole** | **pass** |
+| libquicr (Cisco) | 18 | **whole** | **pass** |
+| moqx (OpenMOQ) | 18 | **whole** | **pass** |
+| moxygen (Meta) | 22 | intact from group 1 | **pass** |
+| Cloudflare draft-18 | 18 | intact from group 1 | **pass** |
+| moqtail (OzU) | 18 | **whole** | the broadcast's first group, then the live one: 3 continuity errors |
+| moqtail | 22 | intact from group 2 | nothing: the catalog never arrives |
+| aiomoqt | 22 | intact from group 3 | nothing: the catalog never arrives |
+| Nokia Research | 22 | intact from group 3 | nothing: the catalog never arrives |
+| red5 | 22 | the rest of group 0 lost at the join (284 packets), intact after | **pass** |
+| imquic (Meetecho) | 22 | one packet lost at 10 of the 19 group boundaries | the same losses |
+| Nokia Research | 18, 19 | TLS handshake refused with alert 120 (no application protocol) at both drafts; its WebTransport CONNECT answers 500 | — |
+| quiche-moq (Google) | 18, WebTransport only | the host answers neither UDP nor TCP on 443, from EC2 or a home line | — |
 
-### Failure signatures: at least four distinct causes
+*Whole*: every check passes against the whole fixture. *Intact from group N*, and *pass* for a late
+subscriber: every check passes on the capture as a tail starting at a group's first packet, nothing
+lost after it.
 
-Per-relay signatures from the sweep, which show the eight failures are **not** a single cause:
+**Three behaviours, none of them `moq-dev`'s.** The controls are the relays that pass, with the same
+client, fixture and grading.
 
-| Relay | Negotiated | Signature |
-|---|---|---|
-| moxygen | `moq-transport-14` | `subscribe_namespace error error_code=16` — **isolated, see below** |
-| imquic | `moq-transport-19` | connects cleanly, no error, no data |
-| moqx | `moq-transport-16` | connects cleanly, no error, no data |
-| Cloudflare draft-18 | `moq-transport-18` | connects cleanly, no error, no data (anonymous publish; scope expected) |
-| Nokia Research | `moq-transport-19` | connects, then `error: closed` |
-| moqtail | — | `closed by peer: Setup`, then timeout — SETUP rejected |
-| quiche-moq | — | no version negotiated; connection never established |
-| libquicr | — | no version negotiated; connection never established |
+- **Where a new subscription starts.** The importer writes its catalog only once the first group
+  holds objects, so even the carriage subscriber reaches the TS track after group 0 has begun.
+  moqx, at object 30 of group 0 when its SUBSCRIBE_OK went out, delivered that group from its first
+  object; moxygen at object 24, moqtail at object 50 of group 1 and aiomoqt at object 11 of group 2
+  each started at the next group, and delivered a clean tail from there. Both are legitimate joins.
+  The proposal's carriage case orders the subscription before the first object, which a test
+  client built on the `moq` CLI cannot do until the importer writes its catalog earlier.
+- **A late subscriber and a catalog written once.** `moq-dev`'s subscriber asks for the current
+  group (draft 22's location filter in FILL_PARAMETERS). aiomoqt, moqtail and Nokia answer the
+  catalog's SUBSCRIBE with SUBSCRIBE_OK and send nothing, because the catalog's only group predates
+  the subscription; moxygen and red5 deliver it on the same draft. The FILL_PARAMETERS framing split
+  (§ T11d) would produce exactly this in a relay that reads the filter as absent; their side was not
+  observed. On draft 18, moqtail answers the same request with the broadcast's first group.
+- **Losses after the join.** Every packet imquic lost is the PCR-only packet (adaptation field only,
+  PID 256) that ends a group, its final object. red5, joining the subscriber at object 36 of group 0,
+  delivered the start of that group and dropped the rest.
 
-Only moxygen's signature is self-explaining at this point in the sweep; the group below it —
-**imquic, moqx and Cloudflare all negotiate a modern draft (16/18/19) with no error at any layer and
-still deliver no media** — is the interesting one, and the next section identifies the cause it shares
-with moxygen. The bottom three, which never establish a session or have SETUP refused, remain
-undiagnosed.
+The sessions themselves now set up everywhere but Nokia's draft-18 endpoint and quiche-moq: moqtail
+and libquicr, which the first sweep could not reach, accept PUBLISH_NAMESPACE and the empty-prefix
+SUBSCRIBE_NAMESPACE on both transports. Cloudflare's draft-18 relay takes an anonymous publish.
 
-**The arithmetic behind "at least four distinct causes"**, since it is quoted downstream:
-(1) the demand-driven announce convention, covering the five relays that establish a session;
-(2) the empty-prefix namespace subscription sitting behind it, which is what moxygen rejects
-outright; (3) one SETUP refusal (moqtail); and (4) two connections that never establish
-(quiche-moq, libquicr). Causes 3 and 4 are undiagnosed, so the count is a floor rather than a
-finding.
+**What this establishes.** Relay portability holds for carriage after the join on seven of nine
+third-party relays, and for both of the proposal's cases on libquicr and moqx; moxygen and Cloudflare
+join if a start at the next group is accepted. It is not yet the neutral fabric the architecture
+assumes: two relays lose media, and on three a subscriber joining mid-stream never starts.
 
-Version negotiation is clearly working broadly — `moq-transport-19` was negotiated twice, above the
-`moq-transport-17` ceiling the CLI's own help text advertises.
+### The first sweep, with `moq` 0.9.8
 
-### Root cause: the publisher only announces when asked, and no third-party relay asks
+The client's first sweep carried media through `moq-dev`'s relays alone and through none of eight
+others. The main cause was the publisher's: it withheld `PUBLISH_NAMESPACE` until a peer sent it a
+`SUBSCRIBE_NAMESPACE`, which only `moq-dev`'s relay does. Proactive announcement is a MAY in the
+drafts, so it was reported as an interop hazard rather than a bug, and it is fixed upstream. Behind
+it, moxygen then rejected the subscriber's empty-prefix `SUBSCRIBE_NAMESPACE` (error 16), a draft
+inconsistency the working group resolved in favour of the empty tuple. moqtail refused SETUP, and
+quiche-moq and libquicr never established a session; at `main` those three resolve as above.
 
-Instrumenting the control messages on both ends, against a relay that works and the ones that do not,
-gives one cause covering **every** "connects but no data" case.
+### A 200 ms QUIC/WebSocket race
 
-On a local `moq-dev` relay forced to `moq-transport-14`, where media does flow, the publisher's
-sequence is:
-
-```
-received subscribe_namespace          <- the relay asks the publisher what it has
-encoding self=SubscribeNamespaceOk
-encoding self=PublishNamespace        <- only THEN does the publisher announce
-received subscribe
-encoding self=SubscribeOk
-```
-
-**`moq-dev`'s IETF publisher is demand-driven: it withholds `PUBLISH_NAMESPACE` until the peer sends
-it a `SUBSCRIBE_NAMESPACE`.** Its own relay does exactly that, so the chain completes. No third-party
-MOQT relay does — in MOQT a publisher is expected to announce proactively on connect, and a relay has
-no reason to interrogate a session that has claimed nothing. So `moq import ts` connects, negotiates,
-and then **encodes not one control message for the rest of its life**, which is precisely what the logs
-show against imquic, moqx and Cloudflare.
-
-Two checks rule out the obvious alternative explanations:
-
-- **Is it downstream demand propagating?** No. With **no subscriber connected at all**, `moq-relay`
-  still sends `SUBSCRIBE_NAMESPACE` and the publisher still announces (3 protocol lines, same order).
-  The relay interrogates every publisher session unconditionally, so the announce is gated purely on
-  being asked.
-- **Is the silence a logging artefact?** No. With `RUST_LOG=moq_net=trace` the publisher log against
-  imquic contains exactly one `moq_net::client` line, while the *subscriber* in the same run logs
-  `moq_net::ietf::message` and `moq_net::ietf::subscriber` normally. Same environment, same process
-  tree — the publisher genuinely emits nothing.
-
-| Relay | Publisher control messages sent | Subscriber |
-|---|---|---|
-| local `moq-dev`, MOQT-14 | `SubscribeNamespaceOk`, `PublishNamespace`, 3× `SubscribeOk` | `SubscribeNamespaceLegacy`, 3× `Subscribe` — **3.49 MB flows** |
-| imquic (draft-19) | **none** | `SubscribeNamespace` sent, never answered |
-| moqx (draft-16) | **none** | `SubscribeNamespaceLegacy` sent, never answered |
-| Cloudflare (draft-18) | **none** | `SubscribeNamespace` sent, never answered |
-| moxygen (draft-14) | **none** | `SubscribeNamespaceLegacy` sent, **rejected with error 16** |
-
-This is the preannounce/demand-driven split flagged for T11b from `moqxr` PR #21, observed directly:
-`moq-dev` is firmly in the demand-driven camp, and that is incompatible with relays expecting a
-proactive announce.
-
-#### The secondary symptom: discovery on an empty prefix
-
-**`moq export ts` opens discovery by sending `SUBSCRIBE_NAMESPACE` on the empty prefix**:
-
-```
-TRACE moq_net::ietf::message: encoding self=SubscribeNamespaceLegacy {
-        request_id: RequestId(0), namespace: Path(""), subscribe_options: 1 }
-DEBUG moq_net::ietf::subscriber: subscribe_namespace sent prefix=
- WARN moq_net::ietf::subscriber: subscribe_namespace error error_code=16 reason=empty
- WARN moq_net::ietf::session: subscribe_namespace failed, continuing without err=cancelled
-```
-
-`moq-dev`'s own relay accepts a subscription to `Path("")` and answers it with the full announce feed.
-moxygen rejects it — error code 16 is `UnexpectedMessage` in `moq-net`'s own mapping. `moq-dev` then
-logs *"continuing without"* and proceeds with **no announce feed at all**, so it never learns the
-broadcast exists, never subscribes to it, and the demand-driven publisher is never asked to produce
-anything. Hence a publisher that connects, negotiates cleanly, and then sits silent.
-
-Two controls isolate this from the transport:
-
-| Control | Result |
-|---|---|
-| Local `moq-dev` relay, **forced `--client-version moq-transport-14`** | **passes** — announce propagates, 3.49 MB received, continuity clean, PSI intact |
-| moxygen over raw QUIC (`moqt://`) instead of WebTransport | identical failure, so the transport is not the variable |
-
-So the IETF path itself is sound: **the media-level test passes over `moq-transport-14` as well as
-`moq-lite-05`**. But the empty prefix is the *lesser* of the two problems — even if moxygen accepted
-it, the publisher would still be sitting waiting to be asked. **The demand-driven announce is the
-blocking defect; the empty-prefix rejection is a second one behind it.**
-
-Separate from both, and still unexplained: quiche-moq and libquicr never establish a session at all,
-and moqtail's SETUP is refused. Those are connection-level failures, not announce-level, and need
-their own diagnosis.
-
-### Is any of this a spec violation? Mostly no — and that matters
-
-Checked against draft-17 and draft-19, because "interop hazard" and "protocol violation" warrant very
-different reports.
-
-**The demand-driven publisher is legal.** draft-17 §6.2: *"A publisher **MAY** send PUBLISH_NAMESPACE
-messages to any subscriber… If a publisher is authoritative for a given namespace… it **MUST** send a
-PUBLISH_NAMESPACE to any subscriber that has subscribed via SUBSCRIBE_NAMESPACE for that namespace."*
-Announcing proactively is permitted, not required; the obligation only bites once someone has
-subscribed. So `moq-dev` withholding the announce is **spec-conformant and still unable to interoperate
-with any relay that does not interrogate publishers** — which is the normal case, since
-PUBLISH_NAMESPACE is the message that flows *from* client publishers *towards* relays and carries the
-authorisation. This is an interop-hazard report, not a bug report.
-
-**The empty prefix is a known spec inconsistency, not a `moq-dev` error.** The draft says a namespace
-of zero fields is a `PROTOCOL_VIOLATION`, while the working group has stated it intends to allow an
-empty tuple for exactly this "give me everything" discovery case —
-[moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457): *"I think we also
-allow SUBSCRIBE_NAMESPACE with an empty tuple… the draft is inconsistent and we intended to allow empty
-everywhere."* moxygen rejecting it is defensible under the letter; `moq-dev` sending it is defensible
-under the intent. **Neither implementation is wrong** — the specification is, and it is already
-tracked. Our contribution here is a concrete interop data point for that issue.
-
-No existing `moq-dev` issue covers the announce behaviour. The nearest are
-[#2708](https://github.com/moq-dev/moq/issues/2708) (open announce interest lazily, on first consumer)
-and [#2695](https://github.com/moq-dev/moq/issues/2695) (linger keeps broadcasts announced), both
-adjacent but neither this.
-
-### Incidental finding: a 200 ms QUIC/WebSocket race
-
-On the transatlantic path to moxygen the client silently abandoned QUIC and fell back to WebSocket:
-
-```
-DEBUG moq_native::websocket: QUIC not yet connected, attempting WebSocket fallback delay_ms=200
-```
-
-Not causal here — raw QUIC behaves identically — but a fixed 200 ms timer will systematically choose
-WebSocket for any relay more than ~100 ms away. That is a confound for interop measurement (the
-transport under test is not the one you think) and a concern for broadcast carriage, since WebSocket
-means TCP and head-of-line blocking. Worth raising separately.
+The client still starts a WebSocket attempt 200 ms after dialling QUIC (`QUIC not yet connected,
+attempting WebSocket fallback delay_ms=200`, in the probe's logs at `main` too). Wherever QUIC
+answered on the probe's paths it won, but a fixed 200 ms timer will tend to choose WebSocket for any relay more than about
+100 ms away: a confound for interop measurement, since the transport under test is not the one
+named, and a concern for broadcast carriage, since WebSocket means TCP and head-of-line blocking.
 
 ## The same question, asked of segmented HTTP — every third party carries it
 
@@ -255,14 +170,14 @@ playlist so every client has the whole 20 s available and the comparison against
 | **nginx `proxy_cache`** | an intermediary we did not write | **pass** — and see below |
 | **Apple `mediastreamvalidator`** | the reference conformance judge | **pass** — 9/9 segments, **0 errors, 0 warnings**, 0 parse errors, 0 load failures |
 
-**Six third parties, six passes, against nine MoQ relays and eight failures.** Every capture cleared
+**Six third parties, six passes; two of nine third-party MoQ relays pass both cases.** Every capture cleared
 the same twelve hard checks the MoQ arm clears — continuity, sync, TEI, PAT, PMT, service count and
 stream inventory all matching the source.
 
 Three of those rows carry more weight than the raw count.
 
 **The cache row is the one that matters architecturally**, because it is the segmented lane's answer
-to the eight relays that would not forward our media. An off-the-shelf nginx in front of the origin,
+to the relays that lose or never start our media. An off-the-shelf nginx in front of the origin,
 configured with nothing but `proxy_cache`, forwarded the stream intact — and **two client passes cost
 the origin nine segment fetches, not eighteen**: nine misses and nine hits, the second client served
 entirely from cache. That is the CDN scaling argument reduced to a measurement rather than an
@@ -310,9 +225,10 @@ the packager emits is delivered unaltered (the `curl` and `tsp` arms agree to th
 
 ### Why this matters beyond our own question
 
-The interop matrix today is control-plane only. Against moxygen, `setup-only` would report green
-while no media flows at all. **That gap is invisible in the current matrix**, and it is the strongest
-argument for the media-level profile proposed in #32.
+The interop matrix today is control-plane only. Against imquic, red5, aiomoqt, moqtail and Nokia,
+every control-plane cell this sweep exercised succeeds while media is lost or a late subscriber never
+starts. **That gap is invisible in the current matrix**, and it is the strongest argument for the
+media-level profile proposed in #32.
 
 ## T11b — OpenMOQ's MSFTS publisher through a `moq-dev` relay
 
@@ -322,8 +238,9 @@ The question is whether an outside implementation's opaque TS crosses a `moq-dev
 **What was run.**
 
 - **Publisher:** the headless `examples/msfts-publisher` in [`moqxr`](https://github.com/openmoq/moqxr)
-  0.4.4. The plan named `moq2ts`, but that is a Qt GUI with no headless mode; the example is the same
-  project's headless MSFTS publisher, on the MSFTS -01 catalog field names. It keeps the selected
+  0.4.4. The plan named `moq2ts`, which then had no headless mode (T11d runs the one it has since
+  gained); the example is the same project's headless MSFTS publisher, on the MSFTS -01 catalog
+  field names. It keeps the selected
   programme's PIDs and the nulls and drops NIT, SDT and TDT. It rewrites the PAT and the PAT/PMT
   continuity counters and inserts PAT and PMT copies periodically. It puts every object in group 0, one
   every 10 ms, and publishes only while subscribed.
@@ -415,9 +332,8 @@ bitrate. As released, the publisher delivered at most one object on the three co
 draft 18 to an IETF and to a moq-lite subscriber, and draft 14. All of A to D are on the
 publisher side, and the relay contributed no defect to the passing arm. The result is one relay
 against one outside publisher, co-resident and from file. It is evidence for the neutral-fabric
-assumption at the byte level, not for interoperability as deployed. The arm that would extend it is
-the same matrix against the MSFTS -02 publisher in `moq2ts`, once it can run headless, or against
-OpenMOQ's own relay.
+assumption at the byte level, not for interoperability as deployed. T11d ran the MSFTS -02 publisher
+in `moq2ts` against the same relay on draft 22, where it does not get as far as the data path.
 
 ## T11c — moq5 against `moq-dev`, both ways (criteria fixed before the first run)
 
@@ -498,6 +414,67 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
   no `mpeg2ts` packaging. The export then waits on the catalog until the broadcast ends, about
   2 minutes later, and exits 1 on the relay's PUBLISH_DONE, with no error naming the missing track.
 
+## T11d — `moq2ts` headless, publisher and receiver (criteria fixed before the first run)
+
+`moq2ts` now ships a headless MSFTS -02 publisher (`moq2ts-cli`, on `moqxr`) and a console receiver
+(`moq2ts-receiver`, on moq5's service tier, draft 22 only), so T11b's arm can run against the
+project's own publisher, and a second MSFTS subscriber joins T11c's. Raw QUIC, draft 22, loopback,
+the same 120 s clip at 9.9 Mb/s, the publisher in `--unmodified --paced` mode (every source packet
+forwarded unchanged, paced at media rate):
+
+| # | Publisher | Relay | Subscriber | Tests |
+|---|---|---|---|---|
+| A | `moq2ts-cli` | `moq-relay` | `moq2ts-receiver` | our relay carries their TS, both ends theirs |
+| B | `moq2ts-cli` | `moq5-relay` | `moq2ts-receiver` | the same on their relay (control) |
+| C | `moq import ts`, both modes | `moq-relay` | `moq2ts-receiver` | catalog, ours to theirs |
+| D | `moq2ts-cli` | `moq-relay` | `moq export ts` | catalog, theirs to ours |
+
+**An arm passes** when, over the whole clip with no session or group abort: (1) the subscriber finds
+the TS track through the publisher's catalog, with nothing given out of band; (2) the capture is the
+source's own bytes from the join, every PID ([`ts-passthrough-identity.py`](scripts/ts-passthrough-identity.py):
+nothing foreign, no gap); (3) TSDuck reports zero continuity errors; (4) the PCR value checks
+([`ts-pcr-timing.py`](scripts/ts-pcr-timing.py)) give the source's verdict. The receiver writes
+objects as they arrive, so its release timing is reported, not graded: a receiver that does not pace
+needs a pacer before an IRD. **Predicted:** A and B pass; C and D fail at discovery, as T11c's
+directions 3 and 4 did, since neither side's catalog parser reads the other's TS track.
+
+**What was run.** `moq-dev` at `3c0daa21` (relay and CLI), `moq2ts` 1.0.4 on `moqxr` 0.4.4, and the
+msquic build of `moq5-relay`; the 120 s clip (793,000 packets, 9.95 Mb/s); loopback on one host,
+source file against received file (P1). Rig: [`t11d-arm.sh`](scripts/t11d-arm.sh).
+
+| Arm | Result |
+|---|---|
+| A | **Fails at the first SUBSCRIBE.** The relay subscribes upstream for the receiver's catalog; `moqxr` answers REQUEST_ERROR code 1, "invalid SUBSCRIBE", and closes the session. Nothing is delivered |
+| B | **The source byte for byte, then its last group again.** All 793,000 packets arrive in order from packet 0, nulls included, followed by the final group's 6,172 packets (0.93 s) a second time. On the first 793,000 packets every check gives the source's verdict; the repeat accounts for all six continuity errors and the one non-positive PCR interval, so criteria 2 to 4 fail as written |
+| C, both modes | **Fails at discovery**, as predicted: "catalog has 0 matching TS tracks". Naming the track (`--track 0.m2ts`) does not get round it, because the receiver chooses only among catalog tracks with MSF `mpeg2ts` packaging |
+| D | **Fails at the first SUBSCRIBE**, as A does. `moq export ts` prints "unauthorized", which is how `moq-net` names REQUEST_ERROR code 1 |
+
+**Why A and D fail: one draft-22 ambiguity, not a carriage defect.** The relay's upstream SUBSCRIBE
+carries FILL_PARAMETERS (0x23) holding a Location Filter: draft 22's current-group join. Draft 22
+length-prefixes the value and calls it "a sequence of Parameters … encoded as if they were Parameters
+for a separate message". `moq-net` writes a parameter count first, as a message does. `moqxr`'s
+decoder reads parameters straight away, takes the count as parameter type 0x01 and rejects the
+message. [moq-wg/moq-transport#1991](https://github.com/moq-wg/moq-transport/issues/1991) records the
+same split (moq-net and Meta send the count, moqtail does not), and the open
+[#2015](https://github.com/moq-wg/moq-transport/pull/2015) settles it as a count with no length
+prefix, which both sides would have to adopt. The locus rests on the relay's trace of the SUBSCRIBE's
+fields and on the decoder's code; the bytes were not captured.
+
+**Two publisher behaviours the arms had to work around.** `--paced` releases one object per
+`--fragment-ms` whatever it holds, so at the default 64 KiB every 250 ms it sends 2.09 Mb/s whatever
+the source rate. The arms set `--segment-bytes 310764`, 250 ms of this clip. A first arm B without it
+had to be stopped, and the publisher then aborted in shutdown ("double free or corruption") after a
+10 s close-drain timeout. The receiver writes each 250 ms object as it lands: 91.5 % of PCRs are
+released more than 10 ms early (p95 216 ms), reported and not graded.
+
+**What this establishes.** `moq2ts`'s publisher and receiver carry a transport stream byte-exact over
+OpenMOQ's relay, apart from a repeated final group. The run cannot say whether the publisher or the
+relay repeats it: the relay counts 481 objects in and out, the receiver 484. Against `moq-dev` they
+interoperate in neither direction on draft 22. The FILL_PARAMETERS split closes the data path before
+any TS object reaches `moq-relay`, and the two TS descriptions (MSF `mpeg2ts` and `moq-dev`'s `m2ts`)
+close discovery. So T11d says nothing yet about `moq-relay` carrying their TS; arm A reruns once either
+side adopts #2015's framing.
+
 ## Status and next steps
 
 - [x] Fixture generator, oracle, and oracle sensitivity tests
@@ -506,7 +483,7 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
 - [x] Sweep across all registered public relays
 - [x] Proposal posted to [#32](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-5239364972)
 - [x] Root cause reported upstream as [moq-dev/moq#2730](https://github.com/moq-dev/moq/issues/2730),
-      framed as an interop hazard rather than a bug since the behaviour is conformant
+      framed as an interop hazard rather than a bug since the behaviour is conformant; fixed
 - [x] Findings posted back to [#32](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-5240521275),
       including two harness-level suggestions: a control-plane test for zero-field
       `SUBSCRIBE_NAMESPACE` handling (data for moq-wg#1457), and recording the transport actually used
@@ -521,14 +498,15 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
 - [ ] Put the segmented arm through a real CDN rather than a local nginx. The cache result is the
       architecturally load-bearing one and a single-node `proxy_cache` is the weakest possible form of
       it: it shows the objects are cacheable, not that a distribution network will behave.
-- [ ] Contribute the empty-prefix data point to [moq-wg/moq-transport#1457](https://github.com/moq-wg/moq-transport/issues/1457),
-      which is where it belongs: the draft is internally inconsistent, so neither `moq-dev` (sending)
-      nor moxygen (rejecting) is the party to report against
 - [ ] Raise the 200 ms QUIC→WebSocket fallback timer separately
-- [ ] Cloudflare leg properly: provision a scope, obtain publish/subscribe tokens, rerun
-- [ ] Dockerfile and `implementations.json` wiring, once #32 settles the format-axis question
-- [ ] Transparent-carriage variant (`--require-identical`), which needs a purpose-built client since
-      the `moq` CLI has no opaque mode
+- [x] P1-h and the sweep at `main` across the registry's relays (§ Results at `main`)
+- [ ] Report imquic's lost final objects, red5's loss at the join, and the late subscriber that
+      aiomoqt, moqtail and Nokia never start (not drafted)
+- [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
+      `moq-dev`'s `--passthrough` lane through its relay
+- [ ] The two TS cases, fixture and checker proposed to the runner as
+      [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159); once
+      it merges, [`interop/`](../interop/README.md) retires and this file's method cites the runner
 - [x] T11b: OpenMOQ's MSFTS example publisher through a `moq-dev` relay, across drafts 14, 16, 17
       and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
 - [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
@@ -537,3 +515,6 @@ moq5's side is the harness [`t11c-moq5-ts.c`](scripts/t11c-moq5-ts.c) on its ser
       cross-implementation result of its own
 - [x] T11c's passthrough join reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51);
       its discovery result posted to [moq-dev/moq#3731](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800)
+- [x] T11d, `moq2ts`'s headless publisher and receiver against `moq-dev` on draft 22
+- [ ] Rerun T11d arm A once `moqxr` or `moq-net` adopts moq-transport#2015's FILL_PARAMETERS framing
+- [ ] Report T11d's pacing defect and repeated final group to `moq2ts` (drafted, not posted)

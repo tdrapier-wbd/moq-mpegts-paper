@@ -438,11 +438,13 @@ replicates, MoQ / SRT, with the matched latency in each column's head:
 
 | Shape | D = 1 s (2.18 s) | D = 2 s (3.93 s) | D = 3 s (5.91 s) | D = 6 s (11.87 s) |
 |---|---|---|---|---|
-| 5 s outage | 7.56 / 3.74 s | 7.04 / 2.08 s | 7.04 / 0.18 s | 6.12 s / not graded |
-| 5 % loss | 34.16 / 0 s | 33.96 / 0 s | 31.28 / 0 s | 29.52 s / not graded |
-| 10 % loss | 40.04 / 0 s | 39.16 / 0 s | 37.76 / 0 s | 37.24 s / not graded |
-| 5 % reorder | 0 / 0 s | 0 / 0 s | 0 / 0 s | 0 s / not graded |
-| 20 % reorder | 40.20 / 0 s | 38.52 / 0 s | 36.76 / 0 s | 37.24 s / not graded |
+| 5 s outage | 7.56 / 3.74 s | 7.04 / 2.08 s | 7.04 / 0.18 s | 6.12 / 0 s* |
+| 5 % loss | 34.16 / 0 s | 33.96 / 0 s | 31.28 / 0 s | 29.52 / 0 s* |
+| 10 % loss | 40.04 / 0 s | 39.16 / 0 s | 37.76 / 0 s | 37.24 / 0 s* |
+| 5 % reorder | 0 / 0 s | 0 / 0 s | 0 / 0 s | 0 / 0 s* |
+| 20 % reorder | 40.20 / 0 s | 38.52 / 0 s | 36.76 / 0 s | 37.24 / 0 s* |
+
+\* SRT with its buffers sized to the latency, on the EC2 tertiary (the same instance type); see below.
 
 - **Matched (6).** SRT's unimpaired median is within 20 ms of its setting at every D. The MoQ lane's
   own cells at D = 1 s stood at 1,897–1,943 ms in 15 of 16 (2,195 in one), so that column compares SRT
@@ -453,18 +455,50 @@ replicates, MoQ / SRT, with the matched latency in each column's head:
   cell, at most about a second of frames, so the delay's deadline is not where the programme goes.
   SRT's loss falls as its latency rises, 3.74, 2.08 and 0.18 s of the outage at 2.18, 3.93 and
   5.91 s, as retransmission with longer to repair it would; that is not traced.
-- **Two-axis verdict (8).** At D = 1–3 s SRT is superior on the outage, on both loss rates and on
-  20 % reorder: it loses 3.8–40 s less and is back in all 35 of those valid cells. Under 5 % reorder
+- **Two-axis verdict (8).** At D = 1–6 s SRT is superior on the outage, on both loss rates and on
+  20 % reorder: it loses 3.8–40 s less and is back in every valid cell. Under 5 % reorder
   the two are tied at 0 and both come back. The MoQ lane is back after every outage (−82 to +72 ms),
   where the `--max-age` builds stepped 7.3–11.9 s behind and held. After loss or 20 % reorder its
   latency settles 114–227 ms *below* its pre-fault level in 33 of 36 cells: outside the 100 ms band,
   but on the low side.
-- **Not graded: SRT at 11.87 s, and one cell.** Two of three outage captures end when the outage does,
-  with the source tap stopping too, and the third stalls at half the bytes. All six loss cells and two
-  of six reorder cells log 41–47 `RCV-DROPPED` warnings (no cell at ≤ 5.91 s logs more than 9) and
-  return 11.8–12.9 s behind. The cause is not established; libsrt's default 8,192-packet buffers hold
-  about 8.7 s of this 9.95 Mb/s stream, below the latency set, and are the first candidate. SRT's
-  D = 1 s outage replicate 2 is void (a 24.7 MB capture).
+- **SRT at 11.87 s needed its buffers sized.** With libsrt's defaults, two of three outage captures
+  ended with the outage and the third stalled at half the bytes, and the loss and 20 % reorder cells
+  logged 41–47 `RCV-DROPPED` warnings (no cell at ≤ 5.91 s logged more than 9) and ended 11.8–12.9 s
+  behind. The column above is the sized re-run below. SRT's D = 1 s outage replicate 2 is void (a
+  24.7 MB capture).
+
+### SRT at 11.87 s with buffers sized to it (fixed before it runs)
+
+The 6 s column's SRT arm, re-run on the EC2 tertiary in the same `netns`/`cake` rig, clip and
+graders ([`t28-t31-srt-ladder.sh`](scripts/t28-t31-srt-ladder.sh), `SRT_EXTRA`), at `--latency
+11870`. Both ends' receive and send buffers are set to (latency + RTT) × the link's 20 Mb/s,
+30,000,000 bytes, inside libsrt's default 25,600-packet flight window. Two passes on the one host:
+libsrt's defaults, one replicate per shape, to reproduce the failure there; then the sized buffers,
+three replicates per shape. Shapes and windows as the matched ladder: a control, the 5 s outage
+(60 s cells), and 5 % and 10 % loss and 5 % and 20 % reorder from 21 s to 61 s (95 s cells).
+
+- **Valid** if the sized control grades 0 lost and its delivered latency is within 20 ms of 11.87 s.
+- **The buffers were the cause** if the sized pass has no truncated capture and no cell more than
+  9 `RCV-DROPPED` warnings (the most any cell at ≤ 5.91 s logged) and returns within 100 ms of its
+  pre-fault latency, while the default pass reproduces the failure. Then the column is graded by
+  criteria 7 and 8 against the MoQ figures above, and the table says the two lanes ran on different
+  hosts of one instance type.
+- Otherwise SRT's behaviour at long latency is the finding, and the column stays unranked.
+
+**Results: the buffers were the cause.** Graded by the rig's own graders and
+[`t28-latency-return.py`](scripts/t28-latency-return.py):
+
+| Pass | Cells | Video lost | Continuity errors | `RCV-DROPPED` | Delivered latency | Back |
+|---|---|---|---|---|---|---|
+| Defaults | control | 0.96 s | 8,113 | 27 | 15,180 ms median | — |
+| Defaults | outage | 0 s in a capture cut at 16 of 60 MB | 0 | 0 | 11,920 ms | no picture after |
+| Defaults | 5 %, 10 % loss; 20 % reorder | 0.88–3.92 s | 8,343–24,113 | 31–47 | 9.7–15.7 s behind after | no |
+| Defaults | 5 % reorder | 0 s | 0 | 0 | 11,869 ms | yes |
+| Sized | control, 3 outage, 12 sustained | 0 s in all 16 | 0 | 0 | 11,848–11,883 ms | all 15, by 73–90 ms |
+
+The sized control is 13 ms from its setting and every capture is full length. On this host the
+defaults broke even the unimpaired control, which on the secondary had matched its setting; why the
+two hosts differ there is not traced. The 6 s column is graded above.
 
 ### The budget ladder, and the nominal budget is not a latency setting
 
@@ -1233,6 +1267,28 @@ publisher tap holds and the egress tap lacks; its group is its GOP.
     skipped 1 s behind the newest, so *E* ≤ 2 s. If *E* ≤ 1 s in ≥ 4 of 5, the 15–23 s figures belong
     to the `--max-age` builds, and the outage row of criterion 3 is re-measured, not explained.
 
+**For the infrastructure axis (criterion 9, P1-a), fixed before it runs.** On `main` (`3c0daa21`),
+in the `netns` rig at 20 Mb/s and 20 ms RTT with no impairment, one feed per lane. A paced source
+writes the clip to UDP inside the publisher's namespace and is never killed. The MoQ lane is a
+gateway (`moq import ts` fed from that UDP), the relay, and an exporter (`moq export ts --delay
+2s`). The SRT lane is a gateway (`tsp -I ip -O srt`, caller), a TSDuck relay (SRT listener in and
+out, both `--multiple`), and a receiver (`tsp -I srt`, caller). Each component runs under a loop
+that restarts it 1 s after it exits, as a process manager would. One component per run takes
+SIGKILL 30 s after the gateway starts. The capture runs on across an exporter's restart, through a
+filter that resynchronises on packet boundaries, since a killed writer can cut a packet. Cells: lane
+× {none, publisher, relay, exporter} × three replicates, interleaved, 90 s each. The SRT lane's
+latency is set from the MoQ lane's first control and matched by criterion 6's 100 ms.
+
+14. **Validity.** Every control loses ≤ 0.1 s of video and is stable from 8 s on.
+15. **Graded per cell:** video lost (content, from 8 s); the time from the kill to the first byte
+    after it; the time to stable operation as defined above, in 4 s bins sliding by 0.5 s against
+    the median rate before the kill, or "not within 60 s" (amended from 1 s bins after the smoke,
+    before any graded cell: both lanes' receivers write on cadences that put shorter bins of an
+    unimpaired control up to 10 % below its median, so no control met criterion 14; on the MoQ
+    lane the exporter writes its own continuity counters, so only the rate half informs); and
+    whether latency is back 30 s after the restart (criterion 8's test).
+16. **Verdict:** criterion 8's two-axis rule for each component, on medians over three replicates.
+
 ## Limits, stated in advance
 
 - **P1 file egress only in v1.** Wire timing (P2) and hardware IRD merge are out of scope; outage
@@ -1258,8 +1314,8 @@ publisher tap holds and the egress tap lacks; its group is its GOP.
 | 4 | Comparability | **Pass within each table.** One host, one rig, one clip, one grader and one domain per table, with an unimpaired control through the same path; the build and backend are named on each, because the MoQ figures differ between builds by more than between budgets. On the matched ladder the SRT arm's `--latency` is set from the MoQ lane's measured median rather than its nominal budget |
 | 5 | Segmented receiver axis | **Not run.** The apparatus is on the same host (T20's HTTP/3 and HLS lane), so this is now a session's work rather than a blocker |
 | 6 | Matched on measured latency | **Met at D = 1, 2, 3 and 6 s** (SRT within 20 ms of its setting). The MoQ lane's own D = 1 s cells stood about 0.25 s below their calibration, which moves no verdict: § *The `--delay` ladder* |
-| 7 | Graded, three replicates | **Met, except SRT at 11.87 s**, which fails in a way no cell at ≤ 5.91 s does (truncated outage captures, late drops, 12 s behind after loss), and one SRT outage replicate at 2.18 s, void |
-| 8 | Two-axis verdict | **SRT superior at 1–3 s on the outage, both loss rates and 20 % reorder** (3.8–40 s less lost, back in every valid cell); **tied at 5 % reorder**; 6 s not ranked. The MoQ lane is back after every outage, and after loss or 20 % reorder settles 114–227 ms below its pre-fault latency |
+| 7 | Graded, three replicates | **Met**, SRT at 11.87 s with its buffers sized to the latency (libsrt's defaults fail there, § *SRT at 11.87 s*); one SRT outage replicate at 2.18 s, void |
+| 8 | Two-axis verdict | **SRT superior at 1–6 s on the outage, both loss rates and 20 % reorder** (3.8–40 s less lost, back in every valid cell); **tied at 5 % reorder**. The MoQ lane is back after every outage, and after loss or 20 % reorder settles 114–227 ms below its pre-fault latency |
 | 9 | Infrastructure axis | **Not run** |
 | 10–13 | Outage trace | **Valid; *stack* in five of five; the prediction fails narrowly** (*E* 2.14–2.20 s against 2 s): § *The outage traced on the merged build* |
 
@@ -1278,9 +1334,6 @@ and the grader are all on the EC2 secondary.
 - **Replicate the idle-timeout bracketing, graded on content with its controls kept.** One replicate
   per cell, and the missing-at-close figures in § *The 30 s cell* are estimated from another run's
   join offsets.
-- **SRT at an 11.87 s latency.** Re-run the 6 s column's SRT arm with its receive and send buffers
-  and flow-control window sized to latency × rate. If it then grades clean, the column ranks; if
-  not, SRT's behaviour at long latency is a finding of its own.
 - **Conservation for cells of different lengths.** `t2831-conservation.py` takes its reference window
   from the lane and budget's unimpaired cell, so it misreads any cell whose window differs; the
   `--delay` ladder's sustained figures are hole counts until it takes the window from the cell.

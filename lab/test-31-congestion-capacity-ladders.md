@@ -5,7 +5,8 @@ rig — three replicates per MoQ rung, two to three per segmented rung — with 
 boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ
 arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release
 delay up to 6 s absorbs a sustained 0.8× share, and against a 5 s dip to 0.8× only 6 s at 200 ms RTT
-absorbs the video, with the shaper dropping nothing. Every MoQ figure in this file is graded by
+absorbs the video, with the shaper dropping nothing; at 20 ms the relay's qlog places that loss in
+its own abandonment of groups (criterion 8). Every MoQ figure in this file is graded by
 [`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to
 carry were an artefact of the exporter and are withdrawn (see *Corrections*).**
 [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue
@@ -371,13 +372,55 @@ video's alone.
 its backlog peaks at 0.17–0.35 MB at 20 ms RTT and 0.90–2.18 MB at 200 ms. During the dip the class
 runs full (15.67–15.92 and 23.75–23.88 Mb/s), and after it runs above its pre-dip rate (19.98–23.13
 against 19.51–19.70 Mb/s at n = 2, 29.75–34.45 against 29.18–29.52 at n = 3). What is lost is lost
-before the shaper's queue, at the relay or its sender, which only criterion 8's instrumentation can
-place. That the longer path absorbs more is consistent with it holding more of the backlog in flight
-and in the shaper's queue, by reasoning rather than measurement.
+before the shaper's queue; criterion 8 (next section) places it in the relay's abandonment of groups.
 
 **The lane's wire rate.** Unimpaired, each subscriber's flow averages 9.86–9.87 Mb/s at the shaper
 (19.71–19.73 Mb/s for two, 29.57–29.60 for three), 0.99× the stream's 9.95 Mb/s, so the dip withholds
 about 0.97 s of each subscriber's media, where the criterion assumed 1 s.
+
+### At 20 ms RTT the relay abandons the transient's video; at 200 ms its queue holds it
+
+Criterion 8 on `main` (`3c0daa21`, the relay built with qlog), on the tertiary:
+[`t31-delay-matrix.sh`](scripts/t31-delay-matrix.sh) with `RELAY_QLOG=1`, graded by
+[`t31-relay-queue.py`](scripts/t31-relay-queue.py). 24 cells (n = 2, `--delay` {2, 6 s} × RTT
+{20, 200 ms} × dip or control × three replicates; 2 s at 200 ms is outside the criterion and is
+reported, not graded), 48 subscribers, none void. Every control loses 0.00 s of video and audio.
+Every dip cell also loses 0.00 s of audio, where criterion 10 on `b581c27e` and the secondary lost
+up to 2.11 s; whether the build or the host changed that is not tested.
+
+**Validity (8a).** Video lost is 0.72–1.20 s at 2 s and 20 ms (band 0.52–1.20) and 0.24–0.48 s at
+6 s and 20 ms (band 0–0.68). At 6 s and 200 ms five subscribers lose 0.00 s and one loses 0.32 s
+against a band of 0–0.20, so that replicate is invalid. Every subscriber's connection pairs with
+its publisher's within 0.11 % of bytes.
+
+| `--delay`, RTT | Video lost | Abandoned by the relay | Relay queue peak | Placed in the relay's queue |
+|---|---|---|---|---|
+| 6 s, 20 ms | 0.24–0.48 s | 0.19–0.43 s | 0.78–0.87 s | 6 of 6 |
+| 2 s, 20 ms | 0.72–1.20 s | 0.54–1.01 s (71–84 %) | 0.46–0.70 s | 4 of 6 |
+| 6 s, 200 ms, valid replicates | 0.00 s | 0.00–0.05 s | 0.40–0.96 s | nothing to place |
+| 2 s, 200 ms, not graded | 0.00–0.64 s | 0.05–0.73 s | 0.48–0.71 s | 6 of 6 |
+
+Controls peak at 0.14–0.22 s of queue with 0.00–0.03 s abandoned.
+
+**Placement (8c).** At 6 s and 20 ms the loss is the relay's abandonment of groups, for both
+subscribers in all three replicates. At 2 s and 20 ms abandoned media is 71–84 % of each
+subscriber's loss: within tolerance for flow 1 in three replicates but flow 2 in one, so by the rule
+the cell is unplaced. The subscriber skips no group during a dip at 20 ms, so the rest is not the
+subscriber's. Abandoned media counts a reset group's unsent bytes as its share of the group's
+duration, which reads low when a keyframe front-loads the bytes; whether that bias is the gap is
+not measured. At 200 ms and 2 s the subscriber also skips a group 5–6 s into the dip in four of
+six.
+
+**Prediction (8d): not falsified.** At 20 ms what the relay abandons accounts for the loss at 6 s and
+for most of it at 2 s. At 200 ms and 6 s the queue rises to 0.40–0.96 s and drains with at most
+0.05 s abandoned. The relay expires a group against the subscription's delay budget: its first
+reset falls 2.45 s into the dip at a 2 s delay and 4.45 s at 6 s, at either RTT. The controller's
+window falls to 9–29 kB in the dip at 20 ms, against 96–241 kB at 200 ms.
+
+**Recovery (criterion 2's tests).** After every dip the class runs at or above its pre-dip rate
+(19.69–23.53 against 19.53–19.76 Mb/s), and each subscriber's queue ends the window at
+0.001–0.023 s, its pre-dip level. The 10 % buffer test cannot be applied: the pre-dip queue is
+0.0001–0.004 s, so 10 % of it is below the 0.14–0.22 s the queue reaches in an unimpaired control.
 
 ## Measured — the segmented step-capacity ladder
 
@@ -637,6 +680,29 @@ is replaced on those builds by:
     the bottleneck or behind it; that is the bottleneck's queue, not the relay's per-subscriber queue
     criterion 8 needs.
 
+**Criterion 8 on the relay's queue (P1-d), fixed before it runs.** Criterion 10's transient on `main`
+(`3c0daa21`, the relay built with qlog), n = 2, at `--delay` 6 s and 2 s with 20 ms RTT and at 6 s
+with 200 ms, dip and control, three replicates, interleaved. The relay writes a qlog per connection.
+Each subscriber logs, at debug, the reason the relay gave for each group it reset (`group error`)
+and each group it skipped itself (`skipping slow groups`).
+
+- **8a. Validity.** Every control loses ≤ 0.1 s of video. Each dip cell's video lost lies within
+  criterion 10's range for its delay and RTT, widened by 0.2 s, so the instrumentation has not moved
+  the result. Each subscriber's connection pairs with its publisher's by bytes, within 2 %.
+- **8b. The queue.** A subscriber's relay queue at time t is what its publisher has delivered to the
+  relay, less what the relay has sent it (first transmissions of stream data) and what it has
+  abandoned (the unsent rest of each group it reset, and each group it never opened). It is sampled
+  every 0.1 s and quoted in seconds at the stream's rate. Reported: its pre-dip median, its peak, and
+  when it returns within 10 % of the pre-dip median (criterion 2's buffer test), or that it does not
+  within 30 s; the relay controller's congestion window and the shaper's backlog beside it.
+- **8c. Placement.** A subscriber's lost video is placed in the relay's queue when the media the
+  relay abandoned for it is within 0.2 s or 20 % of its video lost, whichever is larger; at the
+  subscriber when its own skips account for it instead; otherwise it is unplaced. A cell takes a
+  placement when both subscribers have it in at least two of three replicates.
+- **8d. The prediction it can falsify.** The relay abandons a group only once the transport has held
+  it past its drift budget. So at 20 ms the abandoned media accounts for the loss, and at 200 ms,
+  where the dip is absorbed, the queue rises and drains with nothing abandoned.
+
 ## Limits, stated in advance
 
 - **Namespace primary; wide-area corroboration optional.** Results bound behaviour at a controlled
@@ -664,7 +730,7 @@ is replaced on those builds by:
 | 5 | Latency-max ladder at n ∈ {2, 3} | **Not run at contention; superseded by 6–7 on `--delay` builds.** The budget axis was exercised only at n = 1, and only against an outage rather than a capacity step — recorded in [T28](test-28-failure-injection-matrix.md), where it produced a non-monotonic result that this criterion's phrasing assumes cannot happen |
 | 6 | Delivered latency on `--delay` builds | **Met.** About twice the delay; no subscriber drifts more than 100 ms, none excluded |
 | 7 | Delay × contention × RTT | **No delay in {1, 2, 4, 6 s} suffices** at n ∈ {2, 3} or any RTT: 14.0–21.9 s of video lost against 0.00 s controls, falling 2.7–3.2 s in median from 1 s to 6 s |
-| 8 | Recovery on `--delay` builds | **Not run**; the relay's per-subscriber queue is not instrumented |
+| 8 | Recovery on `--delay` builds | **Measured on the 5 s transient, n = 2.** At 20 ms RTT the loss is the relay's abandonment of groups (all of it at 6 s, 71–84 % at 2 s, where the rule leaves the cell unplaced); at 200 ms and 6 s the relay's queue rises to 0.40–0.96 s and drains with at most 0.05 s abandoned. No rate or queue regression after any dip; the 10 % buffer test cannot be applied to a near-empty queue. One replicate at 200 ms fails validity |
 | 9 | Error bars | **Met for criteria 7 and 10** (three replicates per cell, quoted as ranges); the segmented rungs with two replicates are not yet at three |
 | 10 | A delay against a transient shortfall | **6 s at 200 ms RTT; none in {1, 2, 6 s} at 20 ms**, at n ∈ {2, 3}, on video. The shaper drops nothing; audio loses up to 2.11 s, which the criterion does not grade |
 
@@ -681,9 +747,8 @@ a third party.
 - **Whether the MoQ boundary is the lane's or the wire's.** On `b581c27e` the lane's mean wire rate
   is 0.99× the TS rate (criterion 10's controls), so mean framing overhead does not set the
   1.0×–1.1× boundary measured on `ffa5b81b`; its rate over a keyframe's span is not measured.
-- **Buffer and RSS instrumentation** for criteria 2 and 8, which the current rig does not collect.
-  Criterion 10 puts the transient's loss upstream of the shaper's queue, video and audio alike, so
-  the relay's per-subscriber queue is where criterion 8 has to look.
+- **Buffer and RSS instrumentation on the sustained rungs** for criterion 2. Criterion 8 reads the
+  relay's queue from qlog on the transient only.
 - **The segmented lane under loss with a sender that does not yield to it** — the same origin with
   BBR — which would say whether the collapse at 100 ms RTT is the lane's or its origin's controller.
 - **Durations beyond 60 s** on either lane's boundary rungs; the segmented lane's margin is set by

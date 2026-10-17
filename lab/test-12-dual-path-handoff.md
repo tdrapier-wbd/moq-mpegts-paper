@@ -904,7 +904,7 @@ elementary stream as its own 1+1 pair, merging above the transport rather than a
 the interleave upstream. Nothing here is a groomer defect: the groomer places by stream position and
 carries faithfully whatever order it was handed.
 
-## Arm D on the opaque lane, one leg joining late (P1-o): the join is clean, a leg's loss and return are not
+## Arm D on the opaque lane, one leg joining late (P1-o): the join is clean, and with the pacer fixed so are a leg's loss and return
 
 **Question.** Arm D merges co-started legs of the demultiplexed export, and across independent
 upstreams only single-track content. The opaque lane's export writes the source's own packets, and a
@@ -981,10 +981,50 @@ defect is the resumed leg's, not the late join's.
   which is a late join.
 - Input-select at k = 50 ms switches once per silence.
 
-**Verdict.** Not passed, so Architecture §5.1's co-start condition stands on the opaque lane. What
-the run moves is where the condition belongs: the join it guards against is clean, and what is not
+**Verdict with the pacer at `5ab84cd`.** Not passed. What the run moved is where the co-start
+condition belongs: the join it guards against is clean, and what is not
 hitless is a leg's loss and return, in the groomer. A stream-clocked leg must stay silent rather than send a
 datagram it cannot fill exactly; with that fixed in the pacer, cells 2b and 3 decide it.
+
+### Cells 2b and 3 with the pacer fixed (fixed before they run)
+
+The pacer at `ea88793` sends a datagram only when every slot in it lies inside the stretch the leg
+received unbroken, before the run still awaiting its closing PCR, and after a content PCR has gone
+out in its own slot since the leg last passed a slot it could not fill. A PCR interval twice the
+longest of the last eight counts as missed PCRs, runs with no closing PCR are discarded, and a
+resumed leg flags no discontinuity. Its unit tests show a leg that misses a stretch or loses its
+source mid-run sending nothing its partner contradicts; they fail on `5ab84cd`.
+
+Same rig, clip, `main` build (`3c0daa21b`) and grading as above, moved to the EC2 tertiary because
+the secondary carries the seven-day soak: the control, cell 2b and cell 3, one run each. Criteria 1
+to 3 as written. Reported beside them: each leg's `withheld` and `cut_runs` counts, which should be
+non-zero on the impaired leg only. If criterion 2 still fails, the first mismatched datagram is
+located in the capture before anything is concluded.
+
+**Results: all three criteria pass.**
+
+| Cell | Legs aligned (mismatched datagrams) | Seq-merge lost | Continuity errors | Identity: gaps, foreign | Numbering deficit after an outage |
+|---|---|---|---|---|---|
+| 1, control | 100 % (0) | 0 | 0 | 0, 0 | no outage |
+| 2b, 5 s blackouts | 100 % (0) | 0 | 0 | 0, 0 | A 0 after 4.9 s; B 0 after 4.7 s |
+| 3, A's export killed | 100 % (0) | 0 | 0 | 0, 0 | no outage; B carries on alone |
+
+- **Hitless (2) holds in every cell.** No datagram either leg sent contradicts its partner's at the
+  same sequence number, so the seq-merge from B's first aligned datagram is the source's packets in
+  order. In cell 2b, B covered 4,595 of A's datagrams and A covered B's blackout in turn; in cell 3,
+  B covered all 102,406 after the kill.
+- **Each returning leg rejoins the numbering (3).** A's sequence advanced 4,596 across its silence,
+  as its partner did, and every one of its 96,062 later datagrams carries programme; B's advanced
+  4,465 with the same result.
+- **The pacer's new counts.** The rig stops the pacers before they report, so only cell 3's leg A,
+  whose input ended, printed them: 161 packets withheld and 155 in discarded runs.
+- Skew B−A is 17.2–18.6 ms at the median and at most 21.0 ms; input-select at k = 50 ms switches once
+  per silence.
+
+**Verdict.** Passed, for one clip on one host. The opaque lane's late join was already clean, and
+with a groomer that stays silent rather than send a datagram it cannot fill exactly, a leg's loss and
+return are hitless too. This is the evidence for lifting Architecture §5.1's co-start condition on
+the opaque lane; that edit awaits the author.
 
 ## Corrections
 

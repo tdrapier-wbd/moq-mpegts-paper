@@ -54,6 +54,8 @@
 #      MOQ_CC (relay controller, `delay` = BBRv3 default | `loss` = CUBIC),
 #      MOQ_MUX_RATE (`export ts --mux-rate`; `0` suppresses padding), KEEP_TS=1 (keep captures),
 #      RELAY_EXTRA / SUB_EXTRA (further relay / subscriber flags, e.g. `--quic-send-window 1048576`),
+#      SRT_EXTRA (further `tsp` SRT plugin options on both ends, e.g. `--rcvbuf` / `--sndbuf` / `--ffs`
+#      sized to latency × rate, which libsrt's defaults are not at long latencies),
 #      EXPORT_BUDGET (the subscriber's `--max-age`, when it must differ from the cell's budget),
 #      SUB_ENV (environment for the MoQ subscriber, e.g. `RUST_LOG=...`),
 #      WIRE_CAP=1 (UDP headers arriving in the subscriber's namespace, `wire.pcap`, for the
@@ -79,6 +81,7 @@ OUT=${OUT:-/home/ubuntu/p1m}/$LABEL
 MOQ_CC=${MOQ_CC:-delay}
 read -r -a RELAY_X <<<"${RELAY_EXTRA:-}"
 SUB_X=${SUB_EXTRA:-}
+SRT_X=${SRT_EXTRA:-}
 MUX=""
 [ -n "${MOQ_MUX_RATE:-}" ] && MUX="--mux-rate $MOQ_MUX_RATE"
 
@@ -156,6 +159,7 @@ echo "=== $(date -u) p1m $LABEL ==="
 	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
 	echo "relay controller: $MOQ_CC; export mux-rate: ${MOQ_MUX_RATE:-build default}"
 	echo "relay extra: ${RELAY_EXTRA:-none}; subscriber extra: ${SUB_EXTRA:-none}; export budget: ${EXPORT_BUDGET:-per cell}; cap: ${CAP_MBIT} Mb/s"
+	echo "srt extra: ${SRT_EXTRA:-none}"
 	tsp --version 2>&1 | head -1
 } | tee "$OUT/build.txt"
 
@@ -277,11 +281,11 @@ run_cell() {
 			pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous \
                 -O file - 2>/dev/null $SRC_INLINE \
               | tsp -I file - -O srt --listener '0.0.0.0:$SRT_PORT' \
-                --transtype live --latency $srt_ms" >"$d/pub.log" 2>&1 &
+                --transtype live --latency $srt_ms $SRT_X" >"$d/pub.log" 2>&1 &
 		else
 			pub bash -c "tsp -I file '$CLIP' --infinite -P regulate --pcr-synchronous $TAP_SRC \
                 -O srt --listener '0.0.0.0:$SRT_PORT' \
-                --transtype live --latency $srt_ms" >"$d/pub.log" 2>&1 &
+                --transtype live --latency $srt_ms $SRT_X" >"$d/pub.log" 2>&1 &
 		fi
 		# Wait for the port, not for a guessed interval. `tsp` does not start its output
 		# plugin until the `regulate` input stage has filled, which takes ~8 s with this
@@ -302,7 +306,7 @@ run_cell() {
 			return 0
 		fi
 		sub bash -c "timeout $((window + 3)) tsp -I srt --caller '$PUBIP:$SRT_PORT' \
-                --transtype live --latency $srt_ms $TAP_EG $EG_SRT_SINK" \
+                --transtype live --latency $srt_ms $SRT_X $TAP_EG $EG_SRT_SINK" \
 			>"$d/sub.log" 2>&1 &
 		;;
 	esac
