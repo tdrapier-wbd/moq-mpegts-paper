@@ -73,10 +73,10 @@ review waits on that release; m1 keeps the T-STD epic.
 | `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), open; left: a co-start across two relays, other importers' history-derived catalog fields, the successor epoch | #5625 merged | **High**, R6: its timeline gates the next two |
 | `ts-passthrough-epoch-cuts` [S] | Opaque-lane importers sharing an epoch cut identical groups and catalogs: fallback cuts on the epoch's grid, the M2ts section from windows on it. **Ours, built, unposted** | #5625 | **High**, R6 on the opaque lane |
 | `hop-aligned-import` [M] | Same-epoch importers number groups on the epoch timeline, so a relay fails over between them ([#4354](https://github.com/moq-dev/moq/issues/4354)) | the two above | **High**, R6: P1-p's other half |
-| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | the T-STD epic's end-to-end loss proof, in review as [#5805](https://github.com/moq-dev/moq/pull/5805) | **High**, R6: P1-o's demultiplexed route; gates the next |
+| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release | none: the T-STD epic it required is finished | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
 Set aside: `ts-live-clock` (the maintainer's own investigation), `ts-reliability`'s `fidelity` plan
-and its children `pes-import`, `pes-export` and `section-placement`
+and its children `pes-import` and `section-placement`
 (verbatim private data, which no entry above waits on), its `recovery` quest (upstream CI for the content loss T28 measures),
 and the QoS line's lag
 histogram (behind `stats-prefix-tracks`, R8 only).
