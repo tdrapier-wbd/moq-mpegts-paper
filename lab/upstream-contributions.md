@@ -621,13 +621,14 @@ does not fail over, deliberately.
   catalog lists the tracks, so the standby is never asked early, and on `0d9e9ff78` two exports run
   on through it on both protocols. Unmeasured in the mesh.
 - **[#4354](https://github.com/moq-dev/moq/issues/4354): a switch to a same-hop standby ends
-  `export ts` on a timestamp rewind.** The relay moves the subscription with no error, and the two
-  importers' per-process group counters decide the outcome: on `82c3f2fe4`, 3 of 3 survive where the
-  standby started later and 2 of 3 exit where it started earlier, and every clean exit still ends the
-  export ([comment](https://github.com/moq-dev/moq/issues/4354#issuecomment-6058577700)). In the mesh
-  the standby's group lag (#2534's floor, covered by the maintainer's position on #2545) is the
-  converse case. Upstream's `hop-aligned-import` numbers groups on the epoch timeline, behind
-  `epoch-anchor`, which is ours as [#5625](https://github.com/moq-dev/moq/pull/5625). **In review.**
+  `export ts` on a timestamp rewind.** The relay moves the subscription without error; the
+  importers' per-process group counters decide the outcome: on `82c3f2fe4` 2 of 3 exports exit where
+  the standby started earlier, and every clean exit ends them
+  ([comment](https://github.com/moq-dev/moq/issues/4354#issuecomment-6058577700)); that rig's standby
+  read a lagging copy, and with identical inputs main exits in one of two
+  ([T51](test-51-same-epoch-groups.md)). In the mesh the standby's group lag (#2534's floor, covered
+  by the maintainer's position on #2545) is the converse case. **Ours, built, unposted:**
+  `hop-aligned-import`, on [#5625](https://github.com/moq-dev/moq/pull/5625) and the cuts branch.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 

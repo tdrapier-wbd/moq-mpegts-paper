@@ -27,6 +27,13 @@
 #   SUPERVISE=1     Restart each exporter whenever it exits, appending to the same capture: what a
 #                   standing egress under a process supervisor would deliver.
 #   EXPORT_ARGS     Extra `export ts` flags, word-split (e.g. `--delay 1s`).
+#   IMPORT_ARGS     Extra `import ts` flags for the standby pair, word-split (e.g. `--passthrough`).
+#   TAP=1           Also write each live publisher's input as received to in-pub.ts, in-pub2.ts, so
+#                   a grader can tell input loss from a publisher's own divergence.
+#   FEED=file       Standby only. One receiver writes the live stream to live.ts and each publisher
+#                   follows it from its own start, so both read the same bytes. The default `fork`
+#                   copy reaches the standby from the clip's start, behind live, and loses datagrams
+#                   catching up (T51).
 #
 # The report at END s says whether each exporter is alive, how much it wrote after the restart, and
 # when its output first grew again. The client idle timeout is 6 s with a 2 s keep-alive, so the
@@ -46,6 +53,7 @@ KILL_WHICH=${KILL_WHICH:-oldest}
 STAGGER=${STAGGER:-2}
 HOP=${HOP:-${ORIGIN:-}}
 SIG=${SIG:-KILL}
+FEED=${FEED:-fork}
 KILL=${KILL:-12}
 case $MODE in
 publisher | standby) RESTART=${RESTART:-$((KILL + 1))} ;;
@@ -84,8 +92,16 @@ start_relay() {
 start_pub() { # [udp-port] [log]
 	if [ "$MODE" = publisher ] || [ "$MODE" = standby ]; then
 		(
-			tsp -I ip "${1:-$UDP}" -O file - 2>>"$OUT/tsp-in.log" |
-				"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" "${ORIG[@]+"${ORIG[@]}"}" import ts >>"$OUT/${2:-pub.log}" 2>&1
+			log=${2:-pub.log}
+			tap=/dev/null
+			[ "${TAP:-0}" = 1 ] && tap=$OUT/in-${log%.log}.ts
+			# shellcheck disable=SC2086
+			if [ "$FEED" = file ]; then
+				tail -c 0 -f "$OUT/live.ts"
+			else
+				tsp -I ip "${1:-$UDP}" -O file - 2>>"$OUT/tsp-in.log"
+			fi | tee "$tap" |
+				"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" "${ORIG[@]+"${ORIG[@]}"}" import ts ${IMPORT_ARGS:-} >>"$OUT/${2:-pub.log}" 2>&1
 		) &
 	else
 		(
@@ -110,7 +126,7 @@ sub() { # <i>
 	fi
 }
 moq_record_build "$MOQ" "$RELAY" | tee "$OUT/build.txt"
-echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER shared=${ORIG[*]:-fresh} sig=$SIG kill=$KILL restart=$RESTART" | tee -a "$OUT/build.txt"
+echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER shared=${ORIG[*]:-fresh} sig=$SIG feed=$FEED kill=$KILL restart=$RESTART import=${IMPORT_ARGS:-} export=${EXPORT_ARGS:-}" | tee -a "$OUT/build.txt"
 start_relay
 sleep 3
 kill -0 "$RLY" 2>/dev/null || { echo "RELAY DID NOT START: $(tail -3 "$OUT/relay.log")"; exit 1; }
@@ -125,6 +141,12 @@ start_subs() {
 [ "$LATE_SUBS" = 1 ] || start_subs
 SOURCE=""
 if [ "$MODE" = publisher ]; then
+	tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O ip "127.0.0.1:$UDP" 2>"$OUT/tsp.log" &
+	SOURCE=$!
+elif [ "$MODE" = standby ] && [ "$FEED" = file ]; then
+	: >"$OUT/live.ts"
+	tsp --max-flushed-packets 7 -I ip "$UDP" -O file "$OUT/live.ts" 2>>"$OUT/tsp-in.log" &
+	RECEIVER=$!
 	tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O ip "127.0.0.1:$UDP" 2>"$OUT/tsp.log" &
 	SOURCE=$!
 elif [ "$MODE" = standby ]; then
@@ -155,7 +177,7 @@ for t in $(seq 0 "$END"); do
 		publisher) pkill -KILL -P "$PUB" 2>/dev/null; ev=KILL_publisher ;;
 		# The active publisher's moq process only, so a TERM exercises its own clean exit.
 		standby)
-			if [ "$SIG" = EOF ]; then pkill -TERM -P "$PUB" -f "tsp -I ip" 2>/dev/null
+			if [ "$SIG" = EOF ]; then pkill -TERM -P "$PUB" -f "tsp -I ip|tail -c 0" 2>/dev/null
 			else pkill -"$SIG" -P "$PUB" -f "import ts" 2>/dev/null; fi
 			ev=${SIG}_active ;;
 		*) kill -KILL "$RLY" 2>/dev/null; ev=KILL_relay ;;
@@ -189,6 +211,8 @@ done | tee "$OUT/verdict.txt"
 kill -STOP "${SUBS[@]}" 2>/dev/null
 for pid in "${SUBS[@]}" "$PUB" ${STANDBY:+"$STANDBY"}; do pkill -P "$pid" 2>/dev/null; done
 kill -KILL "${SUBS[@]}" 2>/dev/null
-kill "$PUB" ${STANDBY:+"$STANDBY"} "$RLY" ${SOURCE:+"$SOURCE"} 2>/dev/null
+kill "$PUB" ${STANDBY:+"$STANDBY"} "$RLY" ${SOURCE:+"$SOURCE"} ${RECEIVER:+"$RECEIVER"} 2>/dev/null
 [ -n "$SOURCE" ] && pkill -f "[t]sp -I file - -O ip 127.0.0.1:$((UDP + 1))" 2>/dev/null
+# A follower of a file that stopped growing never writes again, so no broken pipe ends it.
+[ "$FEED" = file ] && pkill -f "[t]ail -c 0 -f $OUT/live.ts" 2>/dev/null
 wait 2>/dev/null

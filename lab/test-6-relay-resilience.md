@@ -580,7 +580,8 @@ each arm reported the same group except where noted.
 - **The hard kill that survives fits the same picture.** Its switch comes after a 7 s stall, by
   which time the standby's media is past the old edge again.
 - **Not established:** why two co-started importers are that far apart in numbering, and why the
-  relay hands over the standby's media from before the edge rather than its newest group.
+  relay hands over the standby's media from before the edge rather than its newest group. With a
+  stagger, the standby's input began behind live ([Corrections](#corrections)).
 - With the publishers started together, which one the rig treats as newest is a race, so a
   co-started arm can signal the idle publisher; this one did.
 
@@ -639,7 +640,7 @@ early-subscriber hard kill fails the same way on both protocols, 2 runs each.
   the relay continues it on the other route. Each importer still numbers its groups from its own
   start, so the continuation lands on different media. With the standby started 2 s later, all
   three resumed, after a 3–6 s stall. With the standby started earlier, two of three aborted on a
-  timestamp below the previous group's start: the [#4354](https://github.com/moq-dev/moq/issues/4354)
+  timestamp below the previous group's start (its input lagging live: [Corrections](#corrections)): the [#4354](https://github.com/moq-dev/moq/issues/4354)
   mechanism, reached by resume instead of reselection. Why the third survived with no stall is not
   established. Upstream's plan for the alignment, groups and timestamps derived from the input, is
   `quest/m1/hop-aligned-import.md`; these arms are its before-measurement.
@@ -1138,6 +1139,14 @@ not "same stream"*).
 origin, posting a plausible hitless result; and the rewind metric differenced an unsigned column, which
 wrapped on the event it exists for (6.8 × 10¹¹ s; the PCR value column gives 12–24 s). Both rules are in
 method-notes §2 and §5.
+
+**Rig: the standby arm's `fork` copy was not the live stream either.** Tapped in
+[T51](test-51-same-epoch-groups.md) with a 2 s stagger, the standby's input began at the clip's first
+packet, behind live, and lost 107–186 datagrams a run catching up; the first publisher's lost none.
+Every arm in § *Single-relay standby* ran on that feed, so its figures overstate how far the two
+importers diverge, the diagnostic table's 5–309 groups and 0.17–5.6 s included. With both inputs
+byte-identical, main still ended both passthrough exports on the rewind in its one run with the newest
+serving (T51): #4354's mechanism stands, its magnitudes are this rig's.
 
 **Two of the four issues reported upstream from this work were real defects**, the shared-`--origin`
 `Unroutable` teardown and the exporter's fatal `json: dropped` (#2469); the record is in

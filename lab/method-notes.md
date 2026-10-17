@@ -139,11 +139,12 @@ content-PID packets or eviction logs on impaired captures.
 
 **Verify the stimulus before the run: the fault is present in the bytes you will publish, it is the only
 fault, and a stimulus meant to be invisible to a detector passes that detector first.** *(T19, T23, T24,
-T39.)* A source slice failed silently and the clip kept its audio; a "600 s backward jump" built by
+T39, T51.)* A source slice failed silently and the clip kept its audio; a "600 s backward jump" built by
 subtracting from zero was legal rollover; naive packet suppression breaks continuity counters any P1 check
-catches. Count what you removed in the published file and abort if it is still there; have each fixture
+catches; a `tsp -P fork` copy meant to feed a second publisher "the same stream" arrived behind live and
+lossy. Count what you removed in the published file and abort if it is still there; have each fixture
 assert a field proving its condition; size holes from the clock, since loss of a multiple of 16 packets is
-invisible to the counter.
+invisible to the counter; tap the inputs of consumers fed one stream and compare them.
 
 **A conformance grader written once is one reading of the standard.** *(T19, T46.)* Five of eight PCR
 analyser defects rejected legal streams, and `ts-tstd.py` had six defects against an independent check

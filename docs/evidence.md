@@ -90,7 +90,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All six placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs 3–4 s of programme per step and is not hitless for a 1+1 pair | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
+| **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs 3–4 s of programme per step and is not hitless for a 1+1 pair | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
 | **Interop** | The opaque lane crosses seven of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays never start a late subscriber | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -400,10 +400,8 @@ before any groomer as well, and so are two on two hosts in one region, through a
 of a 120 s run ([T45](../lab/test-45-live-tstd-remux.md); P1, wire, moq 0.14.2). That run ends
 before either export's clock steers, so whether two hosts' steering keeps their PCR values equal
 over hours is not measured. A pair 8 s apart does not merge: after rewriting each PID's continuity
-counter by one constant offset the raw exports are 97.64 % identical as merged and were 98.52 %
-behind the last draft, where every remaining difference was one TDT placed on arrival rather than
-media time, which placing it by media time would remove (*reasoned*); the merged build's residue is
-not yet attributed. Upstream declined the counter rewrite, so a late or restarted leg needs one
+counter by one constant offset the raw exports are 97.64 % identical, and the residue is not
+attributed. Upstream declined the counter rewrite, so a late or restarted leg needs one
 outside upstream. **On the opaque lane a pair with one leg 8 s late merges hitlessly**, through the
 join, 5 s blackouts of each leg in turn and one leg's export killed, once each leg's stream-clocked
 groomer stays silent rather than send a datagram it cannot fill exactly; with the earlier groomer
@@ -635,7 +633,7 @@ silent downstream**: under `continue` it emits valid CBR with no programme indef
 carrier stops 0.1 s after the programme. Recovery resumes at the live edge, the programme clock skipping
 exactly the outage, so what was lost is gone and only redundancy mitigates it.
 
-### 3.13 Which PCR timeline events does the lane survive? — All six placed classes on the September 2026 builds measured; from moq 0.14.0 a backward step ends the import by design
+### 3.13 Which PCR timeline events does the lane survive? — All five placed classes on the September 2026 builds measured; from moq 0.14.0 a backward step ends the import by design
 
 **For an operator:** on the builds measured in September 2026, a PCR base rollover, a forward jump,
 a rewind and an encoder restart each cross the lane with no programme hole and no deep buffer.
@@ -898,7 +896,7 @@ rebuild.
 | 5 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's edge stage?** | MEG- or TITAN-class hardware | The only route to a low-latency TS-in-HLS receiver ([Comparison](comparison.md) §6.1) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
-| 8 | **Can a late-joining multi-track 1+1 leg merge at the byte on the media-aware lane?** A co-started pair already does behind the merged export, on one host or two, and on the opaque lane a leg 8 s late merges (§3.4) | TDT revisions placed by media time; a counter rewrite outside upstream | [Architecture](architecture.md) §5.1's scope: single-track content, and legs that have run continuously |
+| 8 | **Can a late-joining multi-track 1+1 leg merge at the byte on the media-aware lane?** A co-started pair already does behind the merged export, on one host or two, and on the opaque lane a leg 8 s late merges (§3.4) | Attributing the merged export's residue; a counter rewrite outside upstream | [Architecture](architecture.md) §5.1's scope: single-track content, and legs that have run continuously |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
