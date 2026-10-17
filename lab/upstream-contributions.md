@@ -625,7 +625,7 @@ does not fail over, deliberately.
   importers' per-process group counters decide the outcome: on `82c3f2fe4` 2 of 3 exports exit where
   the standby started earlier, and every clean exit ends them
   ([comment](https://github.com/moq-dev/moq/issues/4354#issuecomment-6058577700)); that rig's standby
-  read a lagging copy, and with identical inputs main exits in one of two
+  read a lagging copy, and with identical inputs main still exits
   ([T51](test-51-same-epoch-groups.md)). In the mesh the standby's group lag (#2534's floor, covered
   by the maintainer's position on #2545) is the converse case. **Ours, built, unposted:**
   `hop-aligned-import`, on [#5625](https://github.com/moq-dev/moq/pull/5625) and the cuts branch.

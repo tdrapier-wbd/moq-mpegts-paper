@@ -177,6 +177,7 @@ for t in $(seq 0 "$END"); do
 		publisher) pkill -KILL -P "$PUB" 2>/dev/null; ev=KILL_publisher ;;
 		# The active publisher's moq process only, so a TERM exercises its own clean exit.
 		standby)
+			echo "$EPOCHREALTIME" >"$OUT/signal.txt"
 			if [ "$SIG" = EOF ]; then pkill -TERM -P "$PUB" -f "tsp -I ip|tail -c 0" 2>/dev/null
 			else pkill -"$SIG" -P "$PUB" -f "import ts" 2>/dev/null; fi
 			ev=${SIG}_active ;;

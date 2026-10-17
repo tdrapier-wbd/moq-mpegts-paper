@@ -355,7 +355,9 @@ exporter re-requesting. On 07 a hard kill moves a subscription to the standby wi
 subscriber, but each importer still numbers its groups from its own start, so the continuation lands on
 different media: the export survived every such failover where the standby had started later (3 of 3,
 and all 8 exports on later `main`), after a 3–6 s stall, and aborted on a timestamp rewind in two of
-three where it had started earlier. A subscription made before the standby announced is not resumed
+three where it had started earlier. That standby read a lagging, lossy copy of the feed; with both
+inputs byte-identical the rewind still ended a passthrough export, in one of two such runs
+([T51](../lab/test-51-same-epoch-groups.md)). A subscription made before the standby announced is not resumed
 (3 of 3), and a clean exit is switched at the signal and still ends the export (2 of 2). On 06, later
 `main` ends the export at the re-request unless it runs with `--stitch --linger`; with both, all four
 exports took over the kill of the instance they followed after a 4–6 s stall, one flag each, though a
