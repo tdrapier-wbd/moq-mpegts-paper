@@ -1,10 +1,10 @@
 # Test 51 — Same-epoch importers that number groups alike
 
 **State: run. After a hard kill the fix passes, but so does the attribution control, so that arm
-credits nothing end to end. A clean exit switches inside the export's delay (arm 2): on passthrough
-the fix meets every criterion where the stack without it repeats 0.6 s at the switch; on the
-demultiplexed lane it never rewinds where the attribution control always does, but one run in four
-ends on the graceful-exit gap, so criterion 1 is not met.**
+credits nothing end to end. A clean exit switches inside the export's delay (arm 2): on both lanes
+the fix meets every criterion, where the stack without it rewinds (demultiplexed) or repeats 0.6 s
+at the switch (passthrough). The graceful-exit gap, which the change does not address, still ends
+two of the fix's five demultiplexed serving runs before any switch.**
 
 ## Objective
 
@@ -23,10 +23,11 @@ where main fails, and P1-p ([planned experiments](planned-experiments.md)) has t
 
 ## Environment
 
-- **Builds:** the fix, `hop-aligned-import` (ours, unposted), stacked on `epoch-anchor`
-  ([#5625](https://github.com/moq-dev/moq/pull/5625)) and our unposted `ts-passthrough-epoch-cuts`;
-  the **main control**, upstream `main` at the stack's merge-base; and the **attribution control**,
-  the stack without this change. Release, built on the host below.
+- **Builds:** the fix, `hop-aligned-import` ([#5895](https://github.com/moq-dev/moq/pull/5895)),
+  stacked on `ts-passthrough-epoch-cuts` ([#5894](https://github.com/moq-dev/moq/pull/5894)) and, for
+  arm 1, on `epoch-anchor` ([#5625](https://github.com/moq-dev/moq/pull/5625)) before it merged; the
+  **main control**, upstream `main` at the stack's merge-base; and the **attribution control**, the
+  stack without this change. Each arm's results name its commits. Release, built on the host below.
 - **Host:** the EC2 tertiary (8 vCPU), everything on loopback. No build runs during a batch; the
   load average is recorded at each batch's start.
 - **Rig:** [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=standby`, T6's single-relay standby
@@ -137,33 +138,36 @@ withdrawal, or an idle timeout shorter than the delay.
 
 ### Arm 2: a clean exit
 
-All 42 runs valid: the 36 planned and the fix's six more on the demultiplexed lane, which had one
-counted run in its first six. In every serving run the survivor was subscribed 8–14 ms after the
-signal, from its newest group (`start_group: None`): a clean exit takes the relay's re-subscription,
-not a hard kill's same-frame resume. The criteria named a fetch; they are applied to this first media
-request.
+Builds, on `main` after #5625 merged: the fix `477278148`, the attribution control `79772dcb2`, main
+`50da59e67`. The fix is #5895's head before its review fixes, none of which this rig reaches (they
+change the loss path, a clock break before a video track's first keyframe, and fMP4). All 48 runs
+valid: the 36 planned and six more each on the fix's demultiplexed lane and main's passthrough lane,
+which had one counted run in their first six. In every counted run the survivor was subscribed
+8–13 ms after the signal, from its newest group (`start_group: None`): a clean exit takes the relay's
+re-subscription, not a hard kill's same-frame resume. The criteria named a fetch; they are applied to
+this first media request.
 
 | Lane | Build | Counted runs | Exporters ended | Passthrough captures at the switch |
 |---|---|---|---|---|
-| demultiplexed | fix | 4 | both, in 1: `moq: unroutable` | — |
-| demultiplexed | attribution | 2 | both, in both: *frame timestamp … below the previous group's start* | — |
-| demultiplexed | main | 4 | both, in all 4: the rewind (1), `not found` or `unroutable` (3) | — |
-| passthrough | fix | 3 | 0 | 0 foreign packets in all 12 |
-| passthrough | attribution | 2 | 0 | both repeat 4,081 packets (0.6 s) |
-| passthrough | main | 6 | both, in 3: the rewind | the other 3 repeat the same 4,081 |
+| demultiplexed | fix | 3 | 0 | — |
+| demultiplexed | attribution | 4 | both, in all 4: *frame timestamp … below the previous group's start* | — |
+| demultiplexed | main | 4 | both, in all 4: the rewind (3), `not found` or `unroutable` (1) | — |
+| passthrough | fix | 4 | 0 | 0 foreign packets in all 12 |
+| passthrough | attribution | 4 | 0 | all 8 repeat: 4,081 packets (0.6 s) in six, about 6,350 with a skip forward in one run's two |
+| passthrough | main | 4 | both in 3, one in 1: the rewind | the fourth's other capture repeats the same 4,081 |
 
-The 21 twins kept both exporters alive with no error. The `not found` and `unroutable` exits are the
-graceful-exit gap ([upstream ledger](upstream-contributions.md), *A graceful exit is not failed
-over*), not the rewind: at the signal the importer drops its tracks, and a track whose `not found`
-reaches the relay before the broadcast's withdrawal ends at the subscriber instead of moving. In the
-fix's failing run four of ten tracks ended so and the exporters' re-requests found no route; in
-another three ended and the re-requests reached the survivor. Main lost tracks so in three of its four
-runs; the attribution control moved all ten in both, then rewound.
+The 23 twins kept both exporters alive with no error. In two more of the fix's demultiplexed runs the
+signalled publisher was serving, no track moved to the survivor, and both exporters ended on
+`moq: not found`. That, and main's `not found` or `unroutable` run, is the graceful-exit gap
+([upstream ledger](upstream-contributions.md), *A graceful exit is not failed over*), not the rewind:
+at the signal the importer drops its tracks, and a track whose `not found` reaches the relay before
+the broadcast's withdrawal ends at the subscriber instead of moving. The walk only searches forward,
+so it counts a repeat as foreign packets from the switch on; the repeats were located by matching
+each captured packet in the clip.
 
-On passthrough criteria 1–4 are met: that lane credits the change with preventing #4354's rewind end
-to end. On the demultiplexed lane 2 does not apply and 3 and 4 are met, but 1 is not: the fix never
-rewound (0 of 4, against 2 of 2 on the attribution control), and one run ended on the graceful-exit
-gap, which the change does not address.
+Criteria 1–4 are met on both lanes: on this base the change prevents #4354's rewind end to end. The
+graceful-exit gap still ends a clean exit before any switch in two of the fix's five demultiplexed
+serving runs; closing it is upstream's, not this change's.
 
 ## Corrections
 

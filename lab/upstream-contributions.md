@@ -627,8 +627,10 @@ does not fail over, deliberately.
   ([comment](https://github.com/moq-dev/moq/issues/4354#issuecomment-6058577700)); that rig's standby
   read a lagging copy, and with identical inputs main still exits
   ([T51](test-51-same-epoch-groups.md)). In the mesh the standby's group lag (#2534's floor, covered
-  by the maintainer's position on #2545) is the converse case. **Ours, built, unposted:**
-  `hop-aligned-import`, on [#5625](https://github.com/moq-dev/moq/pull/5625) and the cuts branch.
+  by the maintainer's position on #2545) is the converse case. **Ours:** the shared clock and era
+  ([#5625](https://github.com/moq-dev/moq/pull/5625), merged), then passthrough cuts on the epoch's
+  grid ([#5894](https://github.com/moq-dev/moq/pull/5894)) and groups numbered by the catalog
+  clock's second ([#5895](https://github.com/moq-dev/moq/pull/5895)), both open.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 
@@ -1381,9 +1383,10 @@ which closed #3926 ([T13](test-13-downstream-grooming.md) § *Liveness*).
 | [#4947](https://github.com/moq-dev/moq/pull/4947), ours | a failed export lingered as though its broadcast had ended | merged (`1ec21ac23`): it lingers only if the broadcast closes within 1 s; crash-replace runs end 1.04 s after the failure, against 60.04 s |
 | [#5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371)'s same-instance resume | measured for its quest | closed with [#5545](https://github.com/moq-dev/moq/pull/5545)'s tests; the named CLI test passes 40 of 40 on `90500867d` |
 
-**Open.** [#5347](https://github.com/moq-dev/moq/issues/5347): in 1 of 4 `moq-lite-06` crash runs
-under `--stitch`, the relay's `Error::Dropped` went out as `Internal` and the follower took it for a
-refusal; the unclaimed `quest/m1/dropped-sources.md` plans the mapping. A crash under a fresh epoch
+[#5347](https://github.com/moq-dev/moq/issues/5347): in 1 of 4 `moq-lite-06` crash runs under
+`--stitch`, the relay's `Error::Dropped` went out as `Internal` and the follower took it for a
+refusal. **Closed** by the maintainer's [#5729](https://github.com/moq-dev/moq/pull/5729): a lost
+route now ends `Unroutable` and the follower no longer matches errors; not re-run. A crash under a fresh epoch
 is followed only under `--stitch`; the fMP4 and MKV exporters have no linger; only the exit code,
 not the error text, tells a crash from a clean end.
 
@@ -2030,19 +2033,15 @@ the -02 text: the 2-second Group bound against the random access rule, a multipl
 program having nothing to pace on, where a timing method would go, `es-packets` without arrival times,
 whether a baseline subscriber can take `per-program`, and the two meanings of
 `mpeg2tsProgramNumber`. It offers neither the test vectors the co-author asked for nor a companion
-draft on TS-output health. **[#46](https://github.com/mondain/msfts/pull/46) answered it (merged
-2026-10-09, `14022fae`):** a multiplex paces on the first program in the PAT by default; every
-TS-output subscriber MUST also support 188-octet `per-program`; the CAT rule, the peak-rate window
-and the version rewrite after a switch are in; a source discontinuity in the unmodified modes reaches
-the subscriber unchanged. The Group bound, the timing method and `es-packets` timing were not taken up.
-**Round three posted as [#47](https://github.com/mondain/msfts/issues/47)** (2026-10-11, the author's
-go-ahead): one testable output rule in every mode, following the source clock within 2.4.2.1's
+draft on TS-output health. **[#46](https://github.com/mondain/msfts/pull/46) answered it
+(merged):** a multiplex paces on the first program in the PAT by default, plus subscriber rules that
+#48 later removed; the Group bound, the timing method and `es-packets` timing were not taken up.
+**Round three posted as [#47](https://github.com/mondain/msfts/issues/47)**: one testable output rule in every mode, following the source clock within 2.4.2.1's
 limits, no waiting for a late Object, a replacement track or an unflagged PCR step treated as a
 switch, and the Group bound against random access as the one open question. **Answered by
-[#48](https://github.com/mondain/msfts/pull/48)** (open, approved by the co-author): MSFTS now
-specifies only the Objects, the Groups and the catalog, and leaves subscriber output to the
-receiver's standards, removing points 1–4 and every output rule above and deleting the Group bound.
-Our review of #48 is posted (2026-10-13).
+[#48](https://github.com/mondain/msfts/pull/48)**, merged after our review: MSFTS now specifies
+only the Objects, the Groups and the catalog, and leaves subscriber output to the receiver's
+standards, removing points 1–4 and every output rule above and deleting the Group bound.
 
 ---
 
