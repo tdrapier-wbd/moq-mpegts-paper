@@ -1648,9 +1648,9 @@ as one issue.
 - **D:** drafts 14, 16 and 17 fail on the relay's SUBSCRIBE_NAMESPACE.
 
 With the fix to A, the byte-level result stands on draft 18. The WebTransport failure belongs to
-`moq-dev`, whose `reliable-reset` quest already plans the missing `reset_stream_at` parameter, so it
-went into the issue only as a note. **Open**; the maintainer pointed to `moq2ts` as the maintained
-successor, below.
+`moq-dev`, whose `reliable-reset` quest plans the missing `reset_stream_at` parameter, so the issue
+only notes it. **Closed by us** once the maintainer pointed to its successor,
+`moq2ts`, below.
 
 ### `moq2ts`'s paced publisher and its final group — reported as [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
 
@@ -2041,7 +2041,8 @@ limits, no waiting for a late Object, a replacement track or an unflagged PCR st
 switch, and the Group bound against random access as the one open question. **Answered by
 [#48](https://github.com/mondain/msfts/pull/48)**, merged after our review: MSFTS now specifies
 only the Objects, the Groups and the catalog, and leaves subscriber output to the receiver's
-standards, removing points 1–4 and every output rule above and deleting the Group bound.
+standards, removing points 1–4, every output rule above and the Group bound. Closed by us on that
+answer.
 
 ---
 

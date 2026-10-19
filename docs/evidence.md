@@ -314,17 +314,17 @@ publisher redials and re-announces, and two relays cluster. On builds from moq 0
 exits when its broadcast's last session drops, by upstream design, so a standing egress needs a
 supervisor; with one, a 30 s outage costs 34.72 s of programme (P1, noq, one host;
 [T6](../lab/test-6-relay-resilience.md), [T28](../lab/test-28-failure-injection-matrix.md)). On moq
-0.14.0, **`--linger` lets it wait instead**: across a relay restart it resumed in-process with 0
-continuity jumps after a 12.13 s gap for a 3 s outage, and across 24 resumes over a publisher's
-clean end or crash no PID's counter jumped; at the default `--max-age 500ms` each resume flags the
-PCR discontinuity one to four times rather than once (P1, file domain, loopback, one relay, one run
+0.14.0, **`--linger` lets it wait instead**: it resumed in-process, continuity-clean, across a relay
+restart (a 12.13 s gap for a 3 s outage) and across 24 resumes over a publisher's clean end or
+crash, each resume flagging the PCR discontinuity one to four times at the default `--max-age 500ms`
+(P1, file domain, loopback, one relay, one run
 per arm; [T13](../lab/test-13-downstream-grooming.md) § *Liveness*). **On later October 2026 `main`
 the linger covers one publisher instance, and following any other is an explicit programme switch**
 (`--stitch`: a new PMT, the break flagged on every PID). Without it a replacement ends the export at
 once (7 of 7 runs, either protocol). With it the export resumed at every replacement in 6 of 7,
 continuity-clean with one flag each and no late unit, in 3–6 s (10–13 s where it waited out a dead
-moq-lite 06 session); in the seventh a request dropped by a just-killed replacement reached it as
-`internal error`, which it took for a refusal and exited on (P1, file domain, loopback, one relay,
+moq-lite 06 session); in the seventh it exited on an `internal error` from a just-killed
+replacement, taken for a refusal (P1, file domain, loopback, one relay,
 one to four runs per arm; [T47](../lab/test-47-fixed-delay-export.md) § *Re-requests on `main`*). So
 a standing egress keeps its supervisor as a backstop. A fresh importer reusing its predecessor's
 epoch is taken for the same instance and carries nothing, since each importer numbers its groups
@@ -336,9 +336,8 @@ host). A shared publisher identity declares two feeds interchangeable — `--hop
 shared `--epoch` on October 2026 `main`, with which nothing fails over in the mesh: the standby's relay
 asks it for its tracks once, before its PMT, and never again, so every subscriber on both relays is
 silent from the failover on, without an error (10 of 10 runs, `moq-lite-07` on every process).
-Nothing downstream learns of a hard failure until the QUIC idle timeout, so the resume is at least one
-timeout after the kill: ~30 s at the 30 s default of the builds measured, ~11 s at 10 s, the default
-from moq 0.14.0. **The precondition is a common source**, and on moq 0.12.1 a standby that joined
+Nothing downstream learns of a hard failure before the QUIC idle timeout, so the resume is at least
+one timeout late: ~30 s at the builds' 30 s default, ~11 s at moq 0.14.0's 10 s. **The precondition is a common source**, and on moq 0.12.1 a standby that joined
 mid-stream adds its group-numbering lag to the outage. On the `--hop` builds the standby relay's own
 subscribers are lost at its arrival or at the failover, so on no build measured is mesh failover
 reliable for every subscriber. **Continuity-clean is not hitless**: the outage is a
@@ -355,16 +354,20 @@ exporter re-requesting. On 07 a hard kill moves a subscription to the standby wi
 subscriber, but each importer still numbers its groups from its own start, so the continuation lands on
 different media: the export survived every such failover where the standby had started later (3 of 3,
 and all 8 exports on later `main`), after a 3–6 s stall, and aborted on a timestamp rewind in two of
-three where it had started earlier. That standby read a lagging, lossy copy of the feed; with both
-inputs byte-identical the rewind still ended a passthrough export, in one of two such runs
-([T51](../lab/test-51-same-epoch-groups.md)). A subscription made before the standby announced is not resumed
-(3 of 3), and a clean exit is switched at the signal and still ends the export (2 of 2). On 06, later
-`main` ends the export at the re-request unless it runs with `--stitch --linger`; with both, all four
-exports took over the kill of the instance they followed after a 4–6 s stall, one flag each, though a
-request racing the standby's arrival can move the export onto the standby as it arrives. Upstream
-documents the pairing as requiring identical tracks with aligned groups, which no importer yet
-guarantees, so no configuration of two `moq import ts` publishers on one relay survives every case
-until one does.
+three where it had started earlier, and in one of two with byte-identical inputs. A subscription made
+before the standby announced is not resumed (3 of 3). On later `main` a clean exit is switched 8–13 ms
+after the signal, inside the export's 1 s delay, and ended an export in all 8 counted runs, 7 on the
+rewind. **Importers that number every group by the second of the shared catalog clock survive it**
+`[unmerged]`: all 7 counted runs kept both exporters, 0 foreign packets in 12 passthrough captures;
+without that numbering the same stack ended every demultiplexed export on the rewind and repeated
+media in all 8 passthrough captures ([T51](../lab/test-51-same-epoch-groups.md); P1, loopback, one
+relay, 3–4 counted runs per lane and build). In two more demultiplexed runs on that build both
+exports ended before any switch, on the exiting importer's `not found` for its withdrawn tracks,
+which the numbering does not address. On 06, later `main` ends the export at the re-request unless it runs with `--stitch --linger`; with both, all four exports took over the kill
+of the instance they followed after a 4–6 s stall, one flag each, though a request racing the
+standby's arrival can move the export onto the standby. Upstream requires such a pair to publish
+identical tracks with aligned groups; no merged importer guarantees them, and no configuration
+measured survives every case.
 
 **The segmented lane answers the other way, because its serving node holds no state**
 ([T6](../lab/test-6-relay-resilience.md); P0/P1, same clip and host):
@@ -377,8 +380,8 @@ until one does.
 | A misconfigured pair | refused, both torn down | **accepted silently** — ±20 s of repeated and skipped time, at 0 continuity errors |
 
 The hitless result needs one source **and** one set of segment names, and its standby was always
-co-started onto one filesystem. It is a protocol result, not a tooling one: **neither TSDuck's HLS input
-nor FFmpeg's demuxer survives an origin restart**, so it took a purpose-written client to show.
+co-started onto one filesystem. It is a protocol result: **neither TSDuck's HLS input nor FFmpeg's
+demuxer survives an origin restart**; a purpose-written client showed it.
 
 **On the media-aware lane the redundancy belongs at the receiver, and it is hitless**
 ([T12](../lab/test-12-dual-path-handoff.md), 42 cells, one run each). Two live legs into a reference
@@ -396,9 +399,9 @@ mergeability, not PCR repetition: 1.4–1.6 % of intervals exceed 40 ms in every
 **Behind the fixed-delay export merged on October 2026 `main`, a co-started multi-track pair merges
 at the byte** (P1, file domain, one host, one clip, one 146.9 s run;
 [T13](../lab/test-13-downstream-grooming.md), [T47](../lab/test-47-fixed-delay-export.md)). That
-export hands the groomer advancing PCR values and positions, and two groomers behind two exporters
-started together emit the same bytes — a mergeable seven-track pair. As merged, the two exports are byte-identical
-before any groomer as well, and so are two on two hosts in one region, through all 782,483 packets
+export hands the groomer advancing PCR values and positions, so groomers behind two co-started
+exporters emit the same seven-track bytes. The two exports are byte-identical before any groomer as
+well, and so are two on two hosts in one region, through all 782,483 packets
 of a 120 s run ([T45](../lab/test-45-live-tstd-remux.md); P1, wire, moq 0.14.2). That run ends
 before either export's clock steers, so whether two hosts' steering keeps their PCR values equal
 over hours is not measured. A pair 8 s apart does not merge: after rewriting each PID's continuity

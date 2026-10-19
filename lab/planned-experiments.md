@@ -74,10 +74,10 @@ review waits on that release; m1 keeps the T-STD epic.
 | `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release. **Ours, building ([T50](test-50-deterministic-ts-legs.md)): join skew passes; complementary loss fails at groups that overran the video lane** | the maintainer's placement after a loss: a packet plan with the objects, or identity scoped to groups that do not overrun (T50) | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
 Set aside: `ts-reliability`'s `fidelity` plan
-and its children `pes-import` and `section-placement`
+and its child `section-placement`
 (verbatim private data, which no entry above waits on), its `recovery` quest (upstream CI for the content loss T28 measures),
-its `hole-budget` and `grader-determinism`, `ts-mp2-join-hole` and `ts-path-filter` (upstream's own
-TS validation), and the QoS line's lag histogram (R8 only).
+its `hole-budget` and `grader-determinism` (upstream's own TS validation), and the QoS line's lag
+histogram (R8 only).
 
 ## Blocked on apparatus
 

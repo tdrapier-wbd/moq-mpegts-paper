@@ -21,4 +21,10 @@ alwaysApply: true
   `just fix`, then `just check`, from the worktree (`INSTRUCTIONS.local.md` §1). Its conventions
   differ from ours (its `.editorconfig` indents shell with spaces; `lab/scripts/` uses tabs); re-run
   any script its formatter rewrote before pushing it.
-- Post nothing upstream (issues, comments, pull requests) without the author's go-ahead.
+- **An upstream pull request goes round one loop until it is clear** (commands in
+ `INSTRUCTIONS.local.md` §1, *The PR loop*): fetch the maintainer's pushes; fix, with a test that
+ fails without the fix; pass the gate; push; wait for CI; mark ready; wait for the automated
+ reviews; fix and push, or reply to, each finding; repeat until CI is green and nothing on the head
+ is unanswered. Never request a review.
+- Post nothing upstream (issues, comments, pull requests) without the author's go-ahead. A go-ahead
+ to open or iterate a pull request covers its loop; anything else needs its own.
