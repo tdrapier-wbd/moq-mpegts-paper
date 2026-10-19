@@ -85,7 +85,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s on every join tried, across hosts, up to 2 % loss at 1 s and over 35 min at 1 s, its clock following a drifting source; but not over a whole capture at 500 ms, nor, by a small residue, where the multiplex outruns the video's Rx, and its 1 ms departure steps take the drift rate past 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
 | **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane under every shape run** but 5 % reorder, which costs neither, by a margin the build and QUIC stack set | The trunking knee; a real CDN edge; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
-| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. Multi-track legs merge only behind the fixed-delay export merged on October 2026 `main`, and only as a co-started pair, on one host or two; on the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured, a shared publisher epoch included. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late-joining leg on the media-aware lane; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
+| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs merge only behind the fixed-delay export merged on October 2026 `main`, and only as a co-started pair, on one host or two; on the opaque lane a leg joining 8 s late merges. An `[unmerged]` export laying groups by the encoder's HRD merges a late leg and legs with complementary loss. Relay source failover is not hitless on any build measured, a shared publisher epoch included. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late-joining leg on a merged build; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on | A third source; wide-area fan-out | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
@@ -407,7 +407,23 @@ before either export's clock steers, so whether two hosts' steering keeps their 
 over hours is not measured. A pair 8 s apart does not merge: after rewriting each PID's continuity
 counter by one constant offset the raw exports are 97.64 % identical, and the residue is not
 attributed. Upstream declined the counter rewrite, so a late or restarted leg needs one
-outside upstream. **On the opaque lane a pair with one leg 8 s late merges hitlessly**, through the
+outside upstream.
+
+**An `[unmerged]` export that lays each group from what every leg shares merges a late leg, and
+legs that lost complementary content** ([T50](../lab/test-50-deterministic-ts-legs.md); P1, file
+domain, loopback, one host, one clip). It implements upstream's `--sync` quest: every PID owns fixed
+positions on the mux rate's packet grid, and continuity counters restart, flagged, at each group.
+Two legs joined 20 s apart wrote the same packets, continuity counters included, over 59.1 s from
+their first common slot (one run, on the build before the anchor below). Under complementary loss,
+three co-started legs two of which were each stopped for 3 s, a group laid at its first release
+split the legs wherever the group before had overrun the video lane on a leg that held it, at 12,
+16 and 24 Mb/s alike. Opened instead where the encoder's HRD says the group before has arrived,
+read from an H.264 buffering period SEI, no group overran: every pair agreed on every common
+position, and the merge of the two stopped legs equalled the third, in four runs at 12–24 Mb/s.
+That needs a NAL HRD and a buffering period on each group's first picture. Each stopped leg shows
+one continuity error, at its own loss.
+
+**On the opaque lane a pair with one leg 8 s late merges hitlessly**, through the
 join, 5 s blackouts of each leg in turn and one leg's export killed, once each leg's stream-clocked
 groomer stays silent rather than send a datagram it cannot fill exactly; with the earlier groomer
 every impaired cell lost packets ([T12](../lab/test-12-dual-path-handoff.md); P1, wire, one clip,
@@ -901,7 +917,7 @@ rebuild.
 | 5 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's edge stage?** | MEG- or TITAN-class hardware | The only route to a low-latency TS-in-HLS receiver ([Comparison](comparison.md) §6.1) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
-| 8 | **Can a late-joining multi-track 1+1 leg merge at the byte on the media-aware lane?** A co-started pair already does behind the merged export, on one host or two, and on the opaque lane a leg 8 s late merges (§3.4) | Attributing the merged export's residue; a counter rewrite outside upstream | [Architecture](architecture.md) §5.1's scope: single-track content, and legs that have run continuously |
+| 8 | **Can a late-joining multi-track 1+1 leg merge at the byte on the media-aware lane?** A co-started pair already does behind the merged export, on one host or two, and on the opaque lane a leg 8 s late merges; an `[unmerged]` export laying groups by the encoder's HRD merges one (§3.4) | Upstream adopting that placement; sources without an H.264 HRD | [Architecture](architecture.md) §5.1's scope: single-track content, and legs that have run continuously |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |

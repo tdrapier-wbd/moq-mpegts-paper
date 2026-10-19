@@ -557,7 +557,9 @@ continuity counters from its own process state. So **which receiver a deployment
 whether a single leg can be restarted alone**: input-select protection returns immediately, while a
 sequence-merge receiver needs the pair restarted together. Upstream has declined to change the
 default counters and plans, but has not built, an opt-in mode that numbers them from the media, so
-that holds unless a filter outside upstream renumbers them ([Evidence](evidence.md) §3.4). This is
+that holds unless a filter outside upstream renumbers them ([Evidence](evidence.md) §3.4). An
+`[unmerged]` build of that mode merges legs that joined apart or lost complementary content (same
+section). This is
 an operational constraint on planned maintenance, and it is the reason §9's runbook says what it
 says.
 
