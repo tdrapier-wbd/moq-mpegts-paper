@@ -1,9 +1,10 @@
 # Test 50 — Deterministic TS legs (`moq export ts --sync`)
 
-**State: run; fails criterion 1 in arm B. Legs that joined apart write the same packets (arm A), and
-the decode clock no longer diverges under loss. But when a leg resumes into a group that overran
-the video lane on another leg, it lays that group elsewhere for up to 0.6 s. The video lane is
-capped at the stream's Rx, so no multiplex rate removes this.**
+**State: run; passes criteria 1, 2 and 4 to 6; 7 is partial. Legs that joined apart write the
+same packets (arm A). Under complementary loss the first build split the legs wherever a group had
+overrun the video lane on another leg, at any multiplex rate; the second, which opens each group
+where the encoder's HRD says the one before has arrived, gives no conflict and no overrun at 12, 16
+and 24 Mb/s. Criterion 3 cannot hold on a leg that loses mid-group.**
 
 ## Objective
 
@@ -28,6 +29,11 @@ one leg lacks keeps its position there as stuffing.
   go out (its decode time less its drain and the send-ahead), and its units follow one another in
   its lane, none before its own release. Nothing outside the group moves a packet, so a leg that
   lacks a group, or joined after it, lays the next one where every other leg does.
+- **The second build anchors at the HRD's buffering period.** A release assumes a full CPB. When a
+  group's first picture carries an H.264 buffering period SEI, the CPB room it leaves
+  (`CpbSize − BitRate × initial_cpb_removal_delay`) delays that picture by its lane time, never
+  past the picture's deadline. The HRD received the group before by then (H.264 C.3), so a lane faster
+  than BitRate has carried it on any leg that holds it. Other streams keep the first anchor.
 - **Continuity counters restart at each group**, with the discontinuity indicator on the group's
   first packet. The PCR rides a PID of its own at each slot's first position. PAT and PMT have
   positions reserved in every slot and go out on the absolute 500 ms grid and in a leg's first
@@ -48,7 +54,7 @@ one leg lacks keeps its position there as stuffing.
 
 ## Environment
 
-- **Build:** branch `quest/m2/ts-hitless` (commit recorded in the results), release.
+- **Build:** branch `quest/m2/ts-hitless` (commits recorded in the results), release.
 - **Host:** the EC2 tertiary, everything on loopback: one relay, one publisher (`import ts`) reading
   the CNN clip paced on its PCR, two or three `export ts` subscribers.
 - **Source:** the CNN clip (9.95 Mb/s; H.264, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI).
@@ -63,7 +69,8 @@ one leg lacks keeps its position there as stuffing.
   and leg B's for 3 s at +35 s, so each misses content the other has; leg R is never stopped.
 - **C, known-bad control.** Arm A without `--sync`, and arm A's leg B with one byte flipped.
 - **B at 16 and 24 Mb/s**, added after arm B's second run failed, to test whether a wider lane
-  removes the failure. The criteria are unchanged.
+  removes the failure. Arm B's four runs were repeated on the second build. The criteria are
+  unchanged.
 
 All arms: `--mux-rate 12000000 --delay 1s` unless stated.
 
@@ -87,18 +94,19 @@ All arms: `--mux-rate 12000000 --delay 1s` unless stated.
 
 ## Results
 
-Build: `quest/m2/ts-hitless` at e0f4d21c8, release; pushed as f92d2d5e0 after `just fix` rewrapped
-three lines. Arm B ran twice at 12 Mb/s, then once each at 16 and 24 Mb/s.
+First build: `quest/m2/ts-hitless` at e0f4d21c8, pushed as f92d2d5e0 after `just fix` rewrapped
+three lines. Second build: e2cfc7e40, the first plus the HRD anchor. Both release. On each, arm B
+ran twice at 12 Mb/s, then once each at 16 and 24 Mb/s; arms A and C ran on the first build only.
 
-| Criterion | A, join skew | B, complementary loss | C, control | Verdict |
-|---|---|---|---|---|
-| 1 Identity | 470,752 positions equal, 0 conflicts over 59.1 s; positions only one leg carries fall in the joiner's first 1.3 s and its first slot's tables | A vs R 0 conflicts in every run. B vs R and A vs B: 0 in the first run; 3,821, 2,218 and 2,218 in the others, all video, within 0.6 s of B's resume | — | **fail** (B) |
-| 2 Grader fails | — | — | no `--sync`: 373,098 conflicts; flipped byte: exactly 1 | pass |
-| 3 Continuity | 0, 0 | R and the merge 0 in every run; A 1 in every run, B 1 in the first, each at its own loss | — | **fail** as written (B) |
-| 4 PCR | max interval 25.07 ms; every PCR within 13 ticks | same, every leg and merge | — | pass |
-| 5 Constant rate | every slot at the rate | every slot at the rate | — | pass |
-| 6 Merge | — | equals R in every run (first: 442,420 equal, 0 differ, 0 lost in both) | — | pass |
-| 7 Upstream tests | 1,483 `moq-mux` library tests pass (2 ignored); the five identity tests fail with `--sync` off; the reordering join and loss tests fail with the timing rule in place of the count, the stop test without the discard | | | partial |
+| Criterion | A, join skew | B, first build | B, second build | C, control | Verdict |
+|---|---|---|---|---|---|
+| 1 Identity | 470,752 positions equal, 0 conflicts over 59.1 s; positions only one leg carries fall in the joiner's first 1.3 s and its first slot's tables | A vs R 0 conflicts in every run. B vs R and A vs B: 0 in the first run; 3,821, 2,218 and 2,218 in the others, all video, within 0.6 s of B's resume | 0 conflicts for every pair in every run | — | **pass** on the second build |
+| 2 Grader fails | — | — | — | no `--sync`: 373,098 conflicts; flipped byte: exactly 1 | pass |
+| 3 Continuity | 0, 0 | R and the merge 0 in every run; A 1 in every run, B 1 in the first, each at its own loss | R and the merge 0 in every run; each stopped leg 1 at its own loss, but A in the second run 0 | — | **fail** as written (B) |
+| 4 PCR | max interval 25.07 ms; every PCR within 13 ticks | same, every leg and merge | same | — | pass |
+| 5 Constant rate | every slot at the rate | every slot at the rate | every slot at the rate | — | pass |
+| 6 Merge | — | equals R in every run (first: 442,420 equal, 0 differ, 0 lost in both) | equals R in every run: 441,223 to 882,048 positions equal, 0 differ, 0 lost in both | — | pass |
+| 7 Upstream tests | 1,483 `moq-mux` library tests pass (2 ignored); the five identity tests fail with `--sync` off; the reordering join and loss tests fail with the timing rule in place of the count, the stop test without the discard | | 1,486 pass; a mocked burst overruns once without the anchor | | partial |
 
 **The decode clock no longer diverges.** In every arm-B run each picture carries the same DTS on
 every leg, and A and R, whose losses fell apart, agree in every packet. Both halves of the fix are
@@ -106,16 +114,16 @@ needed. A build that counted without dropping the frames held at a cut gave 1,06
 10,790 (B vs R) conflicts around each leg's stall in one run, and its merge differed from R in 1,856
 packets: the frames a cut leaves in the clock took slots from a set missing their group's tail.
 
-**What fails is a group that began behind the one before it.** In the three failing runs every
-conflict lies in the group leg B resumed into. R and A hold the group before it, so they found the
-video lane still busy with it and opened 14 to 19 packets after the anchor. B had lost that group and
-opened at the anchor. Each frame's payload and DTS are the same on all legs; the positions realign
-at the first frame released after the lane caught up. These are the `overruns` the export counts and
-logs: about 12 a minute at 12 Mb/s and 8 at 16 or 24, of some 50 groups, at the same instants on
-every leg that holds the previous group. A leg that lacks a group cannot know how far it spilled, so
-a loss or join whose first group overran elsewhere diverges there. Arm A and arm B's first run
-passed because theirs had not. Leg B's stop falls near the same group in every run, and that group
-overran in the last three.
+**On the first build, what fails is a group that began behind the one before it.** In the three
+failing runs every conflict lies in the group leg B resumed into. R and A hold the group before it,
+so they found the video lane still busy with it and opened 14 to 19 packets after the anchor. B had
+lost that group and opened at the anchor. Each frame's payload and DTS are the same on all legs;
+the positions realign at the first frame released after the lane caught up. These are the
+`overruns` the export counts and logs: about 12 a minute at 12 Mb/s and 8 at 16 or 24, of some 50
+groups, at the same instants on every leg that holds the previous group. A leg that lacks a group
+cannot know how far it spilled, so a loss or join whose first group overran elsewhere diverges
+there. Arm A and arm B's first run passed because theirs had not. Leg B's stop falls near the same
+group in every run, and that group overran in the last three.
 
 **No multiplex rate removes it.** Video takes what the fixed lanes leave, at most its Rx. At 12 Mb/s
 that is 9.93 Mb/s, full in 79% of slots. At 16 and 24 Mb/s the lane stops at the stream's Rx,
@@ -123,12 +131,20 @@ that is 9.93 Mb/s, full in 79% of slots. At 16 and 24 Mb/s the lane stops at the
 four-frame mini-GOPs peak near 13 Mb/s. On such content the quest's re-anchoring "with headroom"
 has no headroom a conformant lane can give.
 
+**Anchoring at the HRD's buffering period removes it.** Every group on this source opens on a
+picture with a buffering period SEI (102 of 102 random access points over two minutes; NAL HRD,
+CBR, BitRate and CpbSize 8,797,568, a 1.0 s buffer; `initial_cpb_removal_delay` 0.51 to 0.92 s).
+The headroom that matters is over BitRate, not over the content's peaks, which the CPB absorbs. On
+the second build no leg counted an overrun or a late unit in any of the four runs, against the first
+build's 12 overruns a minute: the later anchor cost no deadline. A mocked source whose group ends in
+a burst overruns once without the anchor and not with it.
+
 **Stopped legs finish behind, more often with the discard.** After its 3 s stop a leg's release
 clock may re-anchor, as for a timeline jump: the frames after the skip look more than a delay ahead
-of everything queued. On this build all eight stopped legs finished 0.58 to 1.93 s behind R. On the
-build without the discard one of four did; there leg A never re-anchored, here it always did.
-Grading by PCR slot keeps this out of criteria 1 to 6, but a receiver merging the legs would have to
-buffer that skew. The mechanism is not established.
+of everything queued. On the first build all eight stopped legs finished 0.58 to 1.93 s behind R
+and leg A always re-anchored; without the discard one of four did and leg A never re-anchored. The
+second build was not measured for it. Grading by PCR slot keeps this out of criteria 1 to 6, but a
+receiver merging the legs would have to buffer that skew. The mechanism is not established.
 
 **Continuity on a losing leg.** TSDuck accepts each group's flagged restart, so a loss that ends at a
 group boundary leaves no error; each error here is a loss inside a group, which the quest keeps
@@ -148,12 +164,13 @@ join and loss tests fail, and without the discard, so does its test of legs stop
   slot, at a constant rate and with a conformant PCR.
 - Settled by count at the depth the SPS declares, a frame's DTS no longer depends on what the leg
   read before it.
-- Complementary loss is safe only where the first group after the loss did not overrun on another
-  leg, and on this clip groups overrun at any rate. Agreeing after a loss needs the previous group's
-  spill, which a leg that lost the group cannot compute: it would have to travel with the objects
-  (the quest's packet plan), or the placement rule would have to change. That choice is the
-  maintainer's.
-- The mocked-time tests now reorder, but none fills its lane, so none reaches an overrun.
+- Anchored at each group's first release, legs split after a loss wherever the group before
+  overran on another leg, at any rate on this clip. Anchored where the encoder's HRD says that
+  group has arrived, legs that lose complementary content write the same packets and their merge
+  is a clean leg, at 12, 16 and 24 Mb/s. That needs a NAL HRD and a buffering period SEI on each
+  group's first picture, read for H.264 only; other streams keep the first anchor and its
+  overruns. Whether it replaces the quest's placement is the maintainer's choice.
+- The mocked-time tests now reorder, and one fills its lane with a burst at a group's end.
 
 ## Corrections
 

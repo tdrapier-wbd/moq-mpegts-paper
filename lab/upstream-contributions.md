@@ -814,10 +814,10 @@ proposes a configured or cluster-shared reset key and offers to build it. **Open
 
 ### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
 
-[T50](test-50-deterministic-ts-legs.md), on our `ts-hitless` build (not yet a PR): a leg that lost
-the group before one that overran its lane lays that group apart, and the video lane's Rx cap leaves
-no headroom to prevent it. The issue asks the maintainer to choose between a packet plan carried with
-the objects and identity scoped to groups that do not overrun. **Open.**
+[T50](test-50-deterministic-ts-legs.md), our `ts-hitless` build (not yet a PR): a leg that lost the
+group before one that overran its lane laid it apart, with no Rx headroom. The issue offered a
+packet plan or identity scoped to groups that do not overrun; our follow-up measured a third, each
+group anchored at its HRD's buffering period: no overrun, no divergence. **Open.**
 
 ---
 

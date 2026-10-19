@@ -497,15 +497,13 @@ and host all independent per leg in two availability zones, sharing nothing but 
 single-track content is byte-identical on every shared datagram (46,778/46,778, zero residue),
 continuity counters and RTP headers included. A seven-stream mux over the same topology reaches
 **75.56 %**: every media PID carries an identical packet count, **99.95 %** of packets are common as a
-multiset, but the legs disagree on *order* because the exporter picks the earliest *available* frame
-rather than the earliest frame — reordering, not damage. Upstream then made that order a function
-of media time and the legs agreed on it, but each still placed a few packets of its own, which
-shifted every later slot ([Evidence](evidence.md) §3.4). **The groomer constraint is necessary but not
-sufficient:** the stage above it must place packets deterministically. Behind the fixed-delay export
-below it does so for a co-started multi-track pair, and not for a leg that joins later; where a pair
-cannot be co-started, carry multi-track 1+1 as one pair per elementary stream, merge above the
-transport, or carry it on the opaque lane. There a pair with one leg joining 8 s late merges hitlessly
-through the join, each leg's loss and return, and one leg's export killed, provided each groomer
+multiset, but the legs disagree on *order*, which the exporter took from arrival — reordering, not
+damage. Ordering by media time is not enough either: a leg that places even a few packets of its
+own shifts every later slot ([Evidence](evidence.md) §3.4). **The groomer constraint is necessary
+but not sufficient:** the stage above it must place packets deterministically. Where a multi-track
+pair cannot be co-started (below), carry 1+1 as one pair per elementary stream, merge above the
+transport, or carry it on the opaque lane. There a pair with one leg joining 8 s late merges
+hitlessly through the join, each leg's loss and return, and one leg's export killed, provided each groomer
 stays silent rather than send a datagram it cannot fill exactly; a groomer that pads or re-primes
 under a number its partner fills with programme loses packets at the merge (one clip, one host;
 [Evidence](evidence.md) §3.4).
@@ -527,7 +525,7 @@ constraint, not a convenience.
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
 | One *stream-clocked* groomer per leg, **opaque lane** (the whole multiplex) | **yes** — hitless through a leg joining 8 s late, each leg's loss and return, and one export killed, for one clip on one host | as above | **the whole chain** |
-| One *stream-clocked* groomer per leg, **multi-track** mux on the media-aware lane | **no** — 75.56 % over independent chains; the same packets in a different order, decided by the exporter's arrival-ordered interleave, and with that since fixed, slots still shifted by each leg's own packets. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical; a late-joining leg is not ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
+| One *stream-clocked* groomer per leg, **multi-track** mux on the media-aware lane | **no** — 75.56 % over independent chains: the same packets, in an order and slots each leg's own arrivals decide. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical; a late-joining leg is not ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -642,11 +640,11 @@ this away in exchange for verbatim carriage.
 coarser.** Under congestion it sheds **whole groups** that missed the subscriber's release deadline,
 which is not selective by track and does not preferentially preserve the primary programme; the
 degradation is in *time*, uniformly across the mux ([Evidence](evidence.md) §3.3). Two measured
-consequences bound how much comfort to take from this section. The process doing the shedding did
-not reliably survive doing it — `moq export ts` exited on an evicted group until upstream gave both
-its media and its catalog consumers a skip, which a re-run is consistent with but at too low an
-event rate to establish ([Evidence](evidence.md) §3.15) — and without `--linger` it exits when its
-session drops (§8.4). A subscriber that exits is off air rather than degraded. And where the
+consequences bound how much comfort to take from this section. That the process doing the shedding
+survives it is not established: with its media and catalog consumers both skipping a superseded
+group none of ten exited, consistent with survival at too low an event rate to establish it
+([Evidence](evidence.md) §3.15), and without `--linger` it exits when its session drops (§8.4). A
+subscriber that exits is off air rather than degraded. And where the
 subscriber's budget is widened so that groups are recovered instead of shed, the lane absorbs the
 impairment as a **permanent step in delivery latency** rather than as lost media, which is a
 different failure and not obviously the better one for a route with a fixed playout schedule. **No
@@ -854,18 +852,14 @@ linear in subscribers and is the line that dominates a real bill** ([Economics](
 ### 8.4 Resilience, and its limits
 
 Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill — recovery
-**automatic and bounded, not hitless**. The subscriber's exporter survived it too on builds before
-moq 0.12.1; from there it exits at the session drop and needs a supervisor to restart it, which brings
-a 30 s outage back to about what the older builds lost ([Evidence](evidence.md) §3.4). The edge stage
-should treat that supervisor as part of the egress, not as operations tooling. From moq 0.14.0,
-`export ts --linger` carries the exporter across a relay restart and a publisher's clean restart in the
-same process, flagging each resume on the PCR PID, up to four times per resume at the default
-`--max-age` and once at 2 s ([Evidence](evidence.md) §3.4); there a supervisor is a backstop rather
-than the recovery path. On later October 2026 `main` the linger covers only the same publisher
-instance; a replacement, whether a crash's or a clean restart's, is followed only under `--stitch`, as
-a programme switch with a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out
-a dead session. One replacement in seven still ended the export, so the supervisor stays as a
-backstop.
+**automatic and bounded, not hitless**. The subscriber's exporter exits at the session drop unless
+run with `--linger`, which from moq 0.14.0 carries it across a relay restart in the same process,
+flagging each resume on the PCR PID, up to four times per resume at the default `--max-age` and once
+at 2 s ([Evidence](evidence.md) §3.4). The linger covers one publisher instance: a replacement,
+whether a crash's or a clean restart's, is followed only under `--stitch`, as a programme switch with
+a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out a dead session. One
+replacement in seven still ended the export, so a supervisor stays as a backstop, and the edge stage
+should treat it as part of the egress, not as operations tooling.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.

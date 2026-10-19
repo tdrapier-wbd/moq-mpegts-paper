@@ -71,7 +71,7 @@ review waits on that release; m1 keeps the T-STD epic.
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
 | `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), merged; left: a co-start across two relays, other importers' history-derived catalog fields, the successor epoch | none | **High**, R6 |
-| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release. **Ours, building ([T50](test-50-deterministic-ts-legs.md)): join skew passes; complementary loss fails at groups that overran the video lane** | the maintainer's placement after a loss: a packet plan with the objects, or identity scoped to groups that do not overrun (T50) | **High**, R6: P1-o's demultiplexed route; gates the next |
+| `ts-hitless` [L] | Two `--sync` export legs of one broadcast emit identical TS for every slot both release. **Ours, building ([T50](test-50-deterministic-ts-legs.md)): join skew passes, and complementary loss with groups anchored at the HRD's buffering period** | the maintainer's choice of placement: that anchor, or the quest's packet plan (T50) | **High**, R6: P1-o's demultiplexed route; gates the next |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` | **High**, R6 at the IRD |
 Set aside: `ts-reliability`'s `fidelity` plan
 and its child `section-placement`
