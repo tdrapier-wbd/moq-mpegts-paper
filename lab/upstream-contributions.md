@@ -783,14 +783,12 @@ existence.**
 
 ### A drill offered, and the coverage that landed instead
 
-The redundancy work's two method rules — grade beyond one full idle timeout, and never start
-redundancy test sources independently — went upstream as the drill
-[#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`: two relays, the idle timeout
-in the loop, and a third subscriber that forces one relay to carry the broadcast via the other).
-**Declined**, since model unit tests already covered the behaviour; its insight landed as
-[#2713](https://github.com/moq-dev/moq/pull/2713): every takeover test subscribed to one track, so
-nothing pinned that reselection is decided **per track**. Two of our four reports from that work were
-artefacts of our own harness ([method-notes](method-notes.md) §1 and §5).
+The drill [#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`: two relays, the
+idle timeout in the loop, a third subscriber forcing one relay through the other) was **declined**,
+since model unit tests covered the behaviour; its insight landed as
+[#2713](https://github.com/moq-dev/moq/pull/2713), which pins that reselection is decided **per
+track**. Two of our four reports from that work were artefacts of our own harness
+([method-notes](method-notes.md) §1 and §5).
 
 ### What a redundant pair must share — merged as [#5412](https://github.com/moq-dev/moq/pull/5412), its coordinate since revised
 
@@ -809,15 +807,17 @@ across clustered relays and a tie-breaker for groups starting together are open 
 
 [T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay costs the MoQ lane about
 twice SRT's loss, because each relay process draws a random stateless-reset key, so its resets for
-its predecessor's connections fail validation and clients wait out the idle timeout. The issue
-proposes a configured or cluster-shared reset key and offers to build it. **Open, no reply yet.**
+its predecessor's connections fail validation and clients wait out the idle timeout. Another
+contributor's draft, [#5910](https://github.com/moq-dev/moq/pull/5910), derives the key from a file:
+on loopback a restart then cost 3.5 s of video, not 13.5 s. [Our review](https://github.com/moq-dev/moq/pull/5910#issuecomment-6268205598)
+asks it to share a key only behind one address (RFC 9000 §21.11) and to lift the 50-a-second reset
+limit. **Open.**
 
 ### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
 
-[T50](test-50-deterministic-ts-legs.md), our `ts-hitless` build (not yet a PR): a leg that lost the
-group before one that overran its lane laid it apart, with no Rx headroom. The issue offered a
-packet plan or identity scoped to groups that do not overrun; our follow-up measured a third, each
-group anchored at its HRD's buffering period: no overrun, no divergence. **Open.**
+[T50](test-50-deterministic-ts-legs.md): a leg that lost the group before one that overran its lane
+laid it apart. Anchoring each group at its HRD's buffering period removed that, and is our draft
+[#5949](https://github.com/moq-dev/moq/pull/5949). **Open, unanswered.**
 
 ---
 

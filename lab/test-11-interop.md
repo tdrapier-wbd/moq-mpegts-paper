@@ -140,6 +140,33 @@ third-party relays, and for both of the proposal's cases on libquicr and moqx; m
 join if a start at the next group is accepted. It is not yet the neutral fabric the architecture
 assumes: two relays lose media, and on three a subscriber joining mid-stream never starts.
 
+### A CDN-hosted moqx deployment, both lanes
+
+A private moqx endpoint run by a CDN, offered for draft 16 and 18 over WebTransport or raw QUIC.
+`moq-dev` at `3abf0161` at both ends from a home line, the synthetic fixture paced by `tsp regulate`,
+one subscriber up before the publisher; raw QUIC on draft 18 and WebTransport on draft 16, each
+with the passthrough lane (`import`/`export ts --passthrough`) and the demultiplexed one (`export ts
+--delay 1s`). Anonymous publish is accepted under one prefix.
+
+- **Passthrough: intact from the first random access point after the join.** From fixture packet
+  2,395 to the end the capture is the fixture's bytes (`check-ts.py --suffix`); continuity 0, PCR
+  intervals at most 21.06 ms, 2 Mb/s, no T-STD overflow. Group 0 never arrives: the relay starts a
+  subscription after the largest object, so `moq-net` drops the current group's tail. One of the
+  two raw-QUIC runs delivered nothing: the subscriber's session closed with code 0xFFFFFFFF as the
+  publisher connected; its rerun passed.
+- **Demultiplexed: media intact, the SDT lost.** 450 of the fixture's 500 video frames, the first
+  at its third group; every non-key frame byte-identical, and every audio frame from fixture frame
+  95 on; PCR intervals at most 25.57 ms, continuity 0, no T-STD overflow or video underflow. Each
+  keyframe differs from its source in NAL order alone (the export writes the AUD after the SPS and PPS) and
+  one start code, as it does through a local `moq-relay`, so that is the export's. **The output
+  carries no SDT:** the SI track's one object predates the subscription, and a relay that starts
+  after the largest object never delivers it. Through the local `moq-relay`, which delivers the
+  current group whole, the SDT arrives and video starts a group earlier.
+
+Both transports and both drafts give the same results. Both losses are the join semantics this
+section's table already shows on aiomoqt, moqtail and Nokia, now on a passthrough track and a sparse
+SI track: on such a relay, a track written once is lost to a subscriber that joins after it.
+
 ### The first sweep, with `moq` 0.9.8
 
 The client's first sweep carried media through `moq-dev`'s relays alone and through none of eight
@@ -513,6 +540,10 @@ side adopts #2015's framing.
 - [x] P1-h and the sweep at `main` across the registry's relays (§ Results at `main`)
 - [ ] Report imquic's and red5's losses once replicates map each to its group and object; the late
       subscriber aiomoqt, moqtail and Nokia never start waits on moq-transport#2015's framing
+- [ ] Report to `moq-dev`, with the author's go-ahead: a track written once (SI, a passthrough
+      group in progress) is lost to a subscriber joining through a relay that starts after the
+      largest object (§ *A CDN-hosted moqx deployment*), which a joining FETCH would recover; and
+      the export's AUD after the SPS and PPS
 - [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
       `moq-dev`'s `--passthrough` lane through its relay
 - [ ] The two TS cases, fixture and checker proposed to the runner as
