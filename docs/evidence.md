@@ -270,7 +270,7 @@ R5. The cost is the build's: the oldest build measured, moq 0.11.0, loses 4.8–
 100 ms after every outage**. SRT loses 0–3.74 s of the outage, less as its latency rises, against
 6.1–7.6 s; at 2 s, 70–80 % of the excess falls
 between the link's return and the first delivered datagram, 2.4–2.5 s later, so SRT's lead there is
-the QUIC transport's recovery, not the lane (noq; backoff and controller not separated). Under 5–10 %
+the QUIC transport's recovery, not the lane (noq). Under 5–10 %
 loss and 20 % reorder SRT loses nothing against 30–40 s of 40. At 11.9 s SRT needs both ends' buffers
 sized to its latency times the link rate, without which it fails even unimpaired; that column ran on
 a second host of the same type. **A killed component costs each lane its liveness timer** (October

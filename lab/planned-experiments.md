@@ -25,6 +25,7 @@ defined [below](#blocked-on-apparatus).
 |---|---|---|---|---|---|
 | P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | Before [#5517](https://github.com/moq-dev/moq/pull/5517) nothing failed over in the mesh, because a standby refused before its PMT was never asked again; #5517 (merged) announces an import only once it knows its tracks, unmeasured in the mesh; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: `hop-aligned-import`, our [#5895](https://github.com/moq-dev/moq/pull/5895), open | The single-relay matrix (`FEED=file`) and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
 | P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | The live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export | On the opaque lane, the live-feed cell hitless; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
+| P1-z | The provisioned-path QUIC settings on `moq-quic`, together | Whether the lane can match SRT on the transport axis ([Comparison](../docs/comparison.md)): a capped probe backoff matched SRT's outage loss; relaxed reorder thresholds helped on noq but overran the bottleneck on quinn, whose fork `moq-quic` is; a rate-holding sender is unbuilt | a rate-holding sender (a lab patch, or [#5953](https://github.com/moq-dev/moq/issues/5953)'s settings) | T28's outage, 5 % loss and 20 % reorder cells on `moq-quic`, with the settings and without | [T28](test-28-failure-injection-matrix.md) |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig | [T28](test-28-failure-injection-matrix.md) |
 | P1-f | The scaling model's remaining points, and the segmented fan-out | The scaling model is measured to N = 100, with the origin co-resident | a subscriber host that holds 100 exporters; a second subscriber host | The ceiling with GSO on past N = 100; the origin on its own host; an hour at N = 100; the segmented fan-out measured | [T26](test-26-cross-host-fanout.md), [T43](test-43-fanout-current-build.md) |
 | P1-g | Capped-stream relay memory under pressure | Whether the relay's memory plateaus under pressure (§5 row 14), which no soak exercises | — | T9's capped-stream arm run | [T9](test-9-performance.md) |
@@ -50,14 +51,17 @@ defined [below](#blocked-on-apparatus).
 latency ordering on a lossy or long path), 6 (a CDN carrying a multi-programme TS segment), 10 (a
 third source profile), 12 (a tuned CDN edge, or an origin on BBR, under loss at
 100 ms RTT) and 13 (RIST against SRT on a real path) have no entry yet, and neither have the control
-strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions).
+strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions). Of the
+deployment milestones ([lab README](README.md)), operations has P1-l and P2-a but nothing for NOC
+tooling or an SLA, and dependency risk has nothing: what following a draft-version upstream costs
+per release, and a pinning policy that bounds it.
 
 **Remainders inside completed experiments** are kept in their own files' open-items sections (T3, T4,
 T9, T11, T12, T13, T15, T16, T17, T18, T20) and are not restated here. **Completed entries leave
 this file and their IDs are not reused**; a citation of a retired ID resolves to the experiment that
 discharged it: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
 and [T24](test-24-partial-media-plane-stall.md), P0-i → [T8b](test-8b-congestion-control.md),
-P0-m → [T47](test-47-fixed-delay-export.md), P1-m and P1-q → [T28](test-28-failure-injection-matrix.md),
+P0-m → [T47](test-47-fixed-delay-export.md), P1-m, P1-q and P1-y → [T28](test-28-failure-injection-matrix.md),
 P1-h → [T11](test-11-interop.md), P1-k → [T38](test-38-entitlement-estate.md), P1-n → [T13](test-13-downstream-grooming.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-h and P1-t → [T48](test-48-passthrough-export.md), P1-r, P1-s, P1-w and P1-x → [T41](test-41-import-reanchor-coverage.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md),
 P2-b → [T25](test-25-isolation-under-abuse.md), P1-d → [T31](test-31-congestion-capacity-ladders.md).
 
@@ -70,7 +74,7 @@ review waits on that release; m1 keeps the T-STD epic.
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
-| `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), merged; left: a co-start across two relays, history-derived catalog fields (on every importer, the estimator's jitter, peak-held bitrate and top framerate), the successor epoch | none | **High**, R6 |
+| `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), merged; its co-start across two relays is our draft [#5955](https://github.com/moq-dev/moq/pull/5955); left: history-derived catalog fields (on every importer, the estimator's jitter, peak-held bitrate and top framerate), the successor epoch | none | **High**, R6 |
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` (our draft [#5949](https://github.com/moq-dev/moq/pull/5949)) | **High**, R6 at the IRD |
 Set aside: `ts-reliability`'s `fidelity` plan
 and its child `section-placement`
@@ -113,6 +117,10 @@ Recorded so they are not proposed again; where a result exists, it is in the fil
   wire-byte attribution.
 - **An in-process UDP sink for `export ts`**: upstream declined it, and `tsp` does the socket work
   ([upstream contributions](upstream-contributions.md) § *A UDP sink for `export ts`*).
+- **FEC on the MoQ lane**: SRT's lead in [T28](test-28-failure-injection-matrix.md)'s matched ladder
+  is retransmission alone (no packet filter ran), QUIC already retransmits, and FEC pays only on a
+  budget of a few round trips. The gap is in QUIC's controller, outage recovery, reorder thresholds
+  and liveness, which T28 measures.
 - **Conditional-access carriage through the opaque lane, and its apparatus**: it needs a BISS-CA
   scrambler and an entitled receiver, the requirement is unestablished, and
   [Control](../docs/control-plane.md) §9 records the commercial half as deciding.

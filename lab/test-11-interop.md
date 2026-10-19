@@ -150,22 +150,29 @@ with the passthrough lane (`import`/`export ts --passthrough`) and the demultipl
 
 - **Passthrough: intact from the first random access point after the join.** From fixture packet
   2,395 to the end the capture is the fixture's bytes (`check-ts.py --suffix`); continuity 0, PCR
-  intervals at most 21.06 ms, 2 Mb/s, no T-STD overflow. Group 0 never arrives: the relay starts a
-  subscription after the largest object, so `moq-net` drops the current group's tail. One of the
-  two raw-QUIC runs delivered nothing: the subscriber's session closed with code 0xFFFFFFFF as the
-  publisher connected; its rerun passed.
+  intervals at most 21.06 ms, 2 Mb/s, no T-STD overflow. Group 0 never arrives (below).
 - **Demultiplexed: media intact, the SDT lost.** 450 of the fixture's 500 video frames, the first
   at its third group; every non-key frame byte-identical, and every audio frame from fixture frame
   95 on; PCR intervals at most 25.57 ms, continuity 0, no T-STD overflow or video underflow. Each
   keyframe differs from its source in NAL order alone (the export writes the AUD after the SPS and PPS) and
   one start code, as it does through a local `moq-relay`, so that is the export's. **The output
-  carries no SDT:** the SI track's one object predates the subscription, and a relay that starts
-  after the largest object never delivers it. Through the local `moq-relay`, which delivers the
-  current group whole, the SDT arrives and video starts a group earlier.
+  carries no SDT** (below). Through the local `moq-relay`, which delivers the current group whole,
+  the SDT arrives and video starts a group earlier.
 
-Both transports and both drafts give the same results. Both losses are the join semantics this
-section's table already shows on aiomoqt, moqtail and Nokia, now on a passthrough track and a sparse
-SI track: on such a relay, a track written once is lost to a subscriber that joins after it.
+Both transports and both drafts give the same results. **Why, from trace-level reruns on draft 18:**
+`moq-net` subscribes from the next object and, since each SUBSCRIBE_OK reports a largest object,
+sends a relative joining FETCH (offset 0) for the current group on every track. The relay opens no
+stream for any of them, so a group in progress loses its head: `moq-net` drops the tail it does
+receive, and the SI track's one object, which is that head, never arrives. Two intermittent failures
+deliver nothing, each the relay's answer to a legitimate request:
+
+- *Code 0xFFFFFFFF* (one of the two first raw-QUIC runs, two of three trace reruns). When the
+  catalog request races its subscription, `moq-net` learns the track by TRACK_STATUS; the relay
+  refuses it with 0xFFFFFFFF, a code no draft defines, and `moq-net`, which falls back to SUBSCRIBE
+  only on NOT_SUPPORTED, gives the catalog up.
+- *Code 0* (one passthrough rerun). Joined at object 1 of group 0, `moq-net` resets the headless
+  tail's stream; the relay then ends the subscription with PUBLISH_DONE, status 0, "Write after
+  stream complete or reset".
 
 ### The first sweep, with `moq` 0.9.8
 
@@ -540,10 +547,11 @@ side adopts #2015's framing.
 - [x] P1-h and the sweep at `main` across the registry's relays (§ Results at `main`)
 - [ ] Report imquic's and red5's losses once replicates map each to its group and object; the late
       subscriber aiomoqt, moqtail and Nokia never start waits on moq-transport#2015's framing
-- [ ] Report to `moq-dev`, with the author's go-ahead: a track written once (SI, a passthrough
-      group in progress) is lost to a subscriber joining through a relay that starts after the
-      largest object (§ *A CDN-hosted moqx deployment*), which a joining FETCH would recover; and
-      the export's AUD after the SPS and PPS
+- [x] The export's AUD after the SPS and PPS reported to `moq-dev`
+      ([moq-dev/moq#5951](https://github.com/moq-dev/moq/issues/5951))
+- [x] `moq-net` failing a subscription on any TRACK_STATUS refusal but NOT_SUPPORTED raised with moq-dev ([moq-dev/moq#5954](https://github.com/moq-dev/moq/issues/5954))
+- [ ] The CDN relay's unserved joining FETCH, undefined TRACK_STATUS refusal and subscription end
+      on a reset stream (§ *A CDN-hosted moqx deployment*) to its operator, through the author
 - [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
       `moq-dev`'s `--passthrough` lane through its relay
 - [ ] The two TS cases, fixture and checker proposed to the runner as

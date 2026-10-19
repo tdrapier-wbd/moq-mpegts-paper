@@ -68,17 +68,12 @@ failed.
 
 ### Open-GOP keyframe detection — closed
 
-A CNN International capture (open-GOP H.264 with recovery-point SEI, roughly one IDR every 15 s)
-produced **no video rendition at all** through media-aware import, because keyframe detection keyed
-only on the IDR NAL type. Open-GOP is common on contribution feeds. Reported as
-[#2050](https://github.com/moq-dev/moq/issues/2050).
-
-Closed upstream by two changes the round-trip needs **together**: catalog-reservation gating
-([#2072](https://github.com/moq-dev/moq/pull/2072)), withholding PSI until every PMT-reserved track
-resolves, and recovery-point-SEI detection ([#2066](https://github.com/moq-dev/moq/pull/2066)); with
-#2072 alone the catalog never publishes. Verified here ([T2](test-2-media-aware-transparency.md)): the
-same feed round-trips deterministically with every elementary stream, PID, `stream_type` and PMT
-descriptor intact, including all three SCTE-35 splice PIDs.
+An open-GOP H.264 capture (recovery-point SEI, one IDR every 15 s) produced **no video rendition**
+through media-aware import, because keyframe detection keyed only on the IDR NAL type. Reported as
+[#2050](https://github.com/moq-dev/moq/issues/2050); closed by catalog-reservation gating
+([#2072](https://github.com/moq-dev/moq/pull/2072)) together with recovery-point-SEI detection
+([#2066](https://github.com/moq-dev/moq/pull/2066)). Verified ([T2](test-2-media-aware-transparency.md)):
+the feed round-trips deterministically, every stream, PID, `stream_type` and descriptor intact.
 
 ### Open-GOP leading pictures at tune-in — fixture and measurement contributed as [#4501](https://github.com/moq-dev/moq/pull/4501)
 
@@ -145,9 +140,8 @@ proxying PIDs ([#2440](https://github.com/moq-dev/moq/pull/2440): service record
 SI rebuilt on export keyed by PID). Measured before and after in
 [T2](test-2-media-aware-transparency.md).
 
-**That generalisation is load-bearing later.** Carriage keyed by PID, not by table, means an intercepted
-PID carries whatever sections it holds — which is why the EIT question below is one PID carrying two
-tables rather than adding a field.
+Carriage keyed by PID, not by table, is why the EIT question below is one PID carrying two tables,
+not a new field.
 
 ### EIT, and where carried SI should live — the question we priced
 
@@ -365,6 +359,12 @@ clean. **PCR accuracy and repetition are unmoved** (P2: 0/1,807 vs 0/1,892 insid
 % vs 11.21 % above 40 ms) — the P2 gate becomes answerable on ungroomed egress but still fails
 comprehensively; a groomer remains required for both PCR criteria. The absent-rate path is untested
 on a genuinely variable source (filtering nulls from CBR still yields a stable lower rate).
+
+### `ffmpeg -c copy` drops most of a broadcast multiplex — reported as [#5950](https://github.com/moq-dev/moq/issues/5950)
+
+[T4](test-4-remote-e2e-srt.md): piped through `ffmpeg -c copy` before `import ts`, a broadcast TS
+keeps only the streams ffmpeg maps, so most PIDs never reach MoQ. The issue asks the docs to say
+so. **Open.**
 
 ---
 
@@ -775,20 +775,15 @@ of phase (*"a timer started with the exporter, not an anchor in the media"*).
 
 ### A takeover livelock — closed
 
-A relay could stay *running* and stop *serving*: cluster peer churn pinned every worker thread inside
-one poll, leaving the process alive at 100 % CPU with no logs, no health endpoint and no accepts for
-hours. Fixed by [#2701](https://github.com/moq-dev/moq/pull/2701). The operational lesson is in
-[Architecture](../docs/architecture.md) §9.1: **relay monitoring must test liveness rather than process
-existence.**
+Cluster peer churn pinned every worker inside one poll: the relay stayed alive at 100 % CPU, serving
+nothing, for hours. Fixed by [#2701](https://github.com/moq-dev/moq/pull/2701); the lesson, monitor
+liveness rather than process existence, is [Architecture](../docs/architecture.md) §9.1.
 
-### A drill offered, and the coverage that landed instead
+### A failover drill — declined
 
-The drill [#2545](https://github.com/moq-dev/moq/pull/2545) (`just test failover`: two relays, the
-idle timeout in the loop, a third subscriber forcing one relay through the other) was **declined**,
-since model unit tests covered the behaviour; its insight landed as
-[#2713](https://github.com/moq-dev/moq/pull/2713), which pins that reselection is decided **per
-track**. Two of our four reports from that work were artefacts of our own harness
-([method-notes](method-notes.md) §1 and §5).
+[#2545](https://github.com/moq-dev/moq/pull/2545) (two relays, the idle timeout in the loop) was
+**declined** as covered by unit tests; its insight landed as
+[#2713](https://github.com/moq-dev/moq/pull/2713): reselection is decided per track.
 
 ### What a redundant pair must share — merged as [#5412](https://github.com/moq-dev/moq/pull/5412), its coordinate since revised
 
@@ -796,12 +791,11 @@ A quest-only PR replacing `plan-ts-alignment`: `--epoch` refused for capture, `a
 `rtc --connect` and `transcode`; passthrough cuts on the epoch's grid; `--sync` legs whose counters
 restart per group, released by clock recovery rather than wall time (a 1 s delay lasts about 9 h at
 30 ppm); and RTP legs that stay silent rather than send a datagram they cannot fill. **Merged**, its
-refusals built as [#5480](https://github.com/moq-dev/moq/pull/5480), merged. Its
-coordinate, one anchor and era per epoch that a later importer adopts, was replaced by the
-maintainer's [#5438](https://github.com/moq-dev/moq/pull/5438): importers sharing an epoch each
-derive the catalog clock and era from the epoch and their own source, all stay live, and none reads
-the relay. A rewind stays fatal and needs a successor epoch; that epoch's anchor, a cold co-start
-across clustered relays and a tie-breaker for groups starting together are open in the quests.
+refusals built as [#5480](https://github.com/moq-dev/moq/pull/5480), merged. The maintainer's
+[#5438](https://github.com/moq-dev/moq/pull/5438) replaced its adopted coordinate: each importer
+derives clock and era from the epoch and its own source, and none reads the relay. Its co-start
+across clustered relays is tested in our draft [#5955](https://github.com/moq-dev/moq/pull/5955);
+the successor epoch stays open in the quests.
 
 ### A restarted relay cannot reset its predecessor's connections — reported as [#5861](https://github.com/moq-dev/moq/issues/5861)
 
@@ -929,6 +923,13 @@ passes the same way. noq's CI runs it, since its tests run with all features. No
 yet: `noq-proto` 1.3.0 predates the merge, so `noq-proto` 1.2.0 and 1.3.0 labels are unreliable.
 
 T28's attribution depends on neither, because it rests on the acknowledgement frames.
+
+### QUIC settings for provisioned paths — proposed as [#5953](https://github.com/moq-dev/moq/issues/5953)
+
+[T28](test-28-failure-injection-matrix.md)'s gaps to SRT trace to four QUIC defaults: a controller
+that yields to random loss, reorder thresholds that declare overtaken packets lost, a probe backoff
+that delays recovery after an outage, and the idle timeout. The issue proposes opt-in settings for
+each, citing the measured effect of relaxing it. **Open.**
 
 ---
 
@@ -1278,15 +1279,13 @@ noted a sink adds little until the schedule lands ([planned-experiments](planned
 
 ### Four closed as completed by a planning document that changed no code
 
-[#3987](https://github.com/moq-dev/moq/pull/3987), eight quest files and no code, closed
+[#3987](https://github.com/moq-dev/moq/pull/3987), quest files only, closed
 [#3798](https://github.com/moq-dev/moq/issues/3798), [#3925](https://github.com/moq-dev/moq/issues/3925),
 [#3926](https://github.com/moq-dev/moq/issues/3926) and [#3731](https://github.com/moq-dev/moq/issues/3731);
-re-tested on `ffa5b81b`, each defect was intact. Each has since moved on its own: #3798 fixed and
-#3926 closed by #4504 (both below), #3925 answered by #4645 (above). #3731, reopened, is now
-`quest/m3/msfts-convergence.md`, and T11c's discovery result is
-[posted to it](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800): neither side
-finds the other's TS track through its catalog. Method rule: [`method-notes.md`](method-notes.md)
-§ *A closed issue is a claim about a tracker, not about a binary*.
+each defect was intact on `ffa5b81b`. Since: #3798 fixed and #3926 closed by #4504, #3925 answered
+by #4645, and #3731 reopened as `quest/m3/msfts-convergence.md`, with T11c's discovery result
+[posted](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800). Method rule:
+[`method-notes.md`](method-notes.md) § *A closed issue is a claim about a tracker, not about a binary*.
 
 ### #2829 and #3948, closed by #4001 — real code, and verified
 
@@ -1579,6 +1578,11 @@ the merged build grades the same on the feed (T45). Its CI met two `main` flakes
 fixed, #5714) and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted
 first group).
 
+### Keyframe parameter sets ahead of the AUD — reported as [#5951](https://github.com/moq-dev/moq/issues/5951)
+
+[T11](test-11-interop.md): `export ts` and the elementary exporters write a keyframe's SPS and PPS
+before its access unit delimiter, which H.264 and HEVC put first. **Open.**
+
 ---
 
 ## 6. Interoperability
@@ -1628,10 +1632,8 @@ silent failure left GSO on with nothing logged. Operationally, relay `--server-q
 ### Corroboration from an independent stack
 
 `moqxr` [PR #21](https://github.com/mondain/moqxr/pull/21) reports the same preannounce split from the
-publisher side — including early publish disturbing namespace registration so later subscribes fail — and
-resolved it with preannounce opt-in, default-off. The same PR reports idle-timeout behaviour we measured:
-a publisher with no subscriber dies at ~32 s to the default QUIC idle timeout. Corroboration that idle
-timeout is a first-order operational constraint, not a single-stack artefact.
+publisher side, resolved by a default-off opt-in, and the idle timeout we measured: a publisher with
+no subscriber dies at about 32 s. The idle timeout constrains more than one stack.
 
 ### OpenMOQ's MSFTS publisher through `moq-relay` — reported as [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 
@@ -1657,8 +1659,10 @@ only notes it. **Closed by us** once the maintainer pointed to its successor,
 [T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run):
 `moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate,
 and its receiver gets the final group twice; otherwise the loop is byte-exact. Interop with
-`moq-dev` on draft 22 waits on the FILL_PARAMETERS framing moq-wg/moq-transport#2015 proposes to
-settle, so the issue raises only those two. **Open, no reply yet.**
+`moq-dev` on draft 22 waits on moq-wg/moq-transport#2015's FILL_PARAMETERS framing. Verified on
+`4717ce3`: pacing follows the PCR at both object sizes; the final group is still sent twice, and
+the receiver drops the copy; SIGINT aborts the publisher when no subscriber is attached. **Open;
+our re-run posted.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
@@ -1669,6 +1673,11 @@ never reached a late `moq export ts`, on drafts 16, 18 and 22. **Closed by the m
 repro needed `export ts --passthrough`. Verified: with it, all three drafts pass on `main`, and draft
 16 already passed on the build reported; our subscriber delivers nothing through `moq-dev`'s relay
 either (T11 § *Corrections*).
+
+### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
+
+[T11](test-11-interop.md)'s CDN-hosted moqx relay refuses TRACK_STATUS with an undefined code, and
+`moq-net` falls back to SUBSCRIBE only on NOT_SUPPORTED, so the export exits. **Open.**
 
 ---
 

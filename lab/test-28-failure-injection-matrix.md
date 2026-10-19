@@ -421,9 +421,40 @@ graded by [`t28-outage-trace.py`](scripts/t28-outage-trace.py). One control, fiv
   is 3.87–3.91 s, about twice the delay as [T47](test-47-fixed-delay-export.md) found, which is why
   criterion 6 matches on the measured latency rather than the setting.
 
-It does not separate QUIC's probe-timeout backoff from the controller's restart; both are *stack*,
-and a relay qlog of one replicate would split them. On this build `--mux-rate 0` is rejected with a
-warning and ignored; the captures carry no nulls either way.
+On this build `--mux-rate 0` is rejected with a warning and ignored; the captures carry no nulls
+either way. The next section splits the *stack* share.
+
+### The stack share is QUIC's probe-timeout backoff, not the controller (P1-y)
+
+Criteria 17–20 on `main` at `ad87ad34e` with the recovery switches, graded by
+[`t28-outage-trace.py`](scripts/t28-outage-trace.py) and the relay's qlog by
+[`t28-probe-timing.py`](scripts/t28-probe-timing.py). Each arm ran one control and three 5 s outages:
+
+| Arm | Lost, median (range) | *Stack*, per replicate | Relay's next send after the link returns | Window's low |
+|---|---|---|---|---|
+| control | 8.92 s (5.76–9.40) | 3.20, 3.52, 0.24 s | 3.61, 3.84, 0.48 s | 4,800 B, 4,800 B, 85 kB |
+| *backoff* | 5.48 s (4.92–6.12) | 0.80, 0, 0 s | 0.07–0.25 s | 4,800 B |
+| *window* | 8.52 s (8.52–9.08) | 3.20 s in each | 3.57–3.75 s | 85 kB |
+| *both* | 4.92 s (4.92–5.48) | 0 s in each | 0.04–0.12 s | 85–121 kB |
+
+- **Valid (17).** Every arm's control loses 0.000 s. The taps and the content grader agree to the
+  hundredth on every outage, and the delivered rate before it is 0.98–0.99× the source. This
+  build's control loses more than `b581c27ed`'s (7.04 s) and is graded only against itself.
+- **The control's qlog (18).** During the outage the relay's probes back off: about 0.26, 0.53, 1.05
+  and 2.1 s apart. The last one leaves 4.4–4.6 s in, so its next send is the next doubled probe,
+  3.6–3.8 s after the link returns. A packet from the subscriber reaches it 0.30–0.33 s after the
+  return and does not prompt a send. Once that probe is acknowledged, persistent congestion takes
+  the window from 413–485 kB to its 4,800-byte floor. The window regains half its size about 0.3 s
+  later. In the third replicate the relay sent 0.01 s after the subscriber's packet arrived, 0.47 s
+  after the return, and lost 5.76 s.
+- **Backoff is the cause (19).** The control's median *stack* share is 3.20 s. *Backoff* (median 0)
+  and *both* (median 0) are at most a third of it; *window* (3.20 s) is not. Kept at one doubling,
+  the probes go out every 0.26–0.28 s through the outage, and the relay sends again within 0.25 s
+  of the return. A window kept at 85 kB regains half its size no sooner than one cut to 4,800 bytes.
+- **The prediction holds (20).** *Backoff* passes and *window* does not.
+- **What it is worth.** With the backoff capped, the lane loses 4.92–6.12 s to a 5 s outage. SRT
+  loses 5.0–5.4 s on the same rig. RFC 9002 requires each probe timeout to double the next, so a
+  cap belongs to a profile for provisioned paths, not to the default.
 
 ### The `--delay` ladder: SRT loses less on every shape but light reorder, and the MoQ lane's latency comes back (P1-a)
 
@@ -1337,6 +1368,26 @@ latency is set from the MoQ lane's first control and matched by criterion 6's 10
     whether latency is back 30 s after the restart (criterion 8's test).
 16. **Verdict:** criterion 8's two-axis rule for each component, on medians over three replicates.
 
+**For splitting the outage's *stack* share (P1-y), fixed before it runs.** Criteria 10–11's cell
+(a 5 s outage, `--delay 2s`, the matched ladder's rig with `WIRE_CAP=1`, `delay` controller) on
+`main` `ad87ad34e` with [`t2831-recovery-lab.patch`](scripts/t2831-recovery-lab.patch), whose
+switches are inert when unset, and a relay qlog. Four arms, each one control and three outages:
+*control* (no switch); *backoff* (the probe timeout doubles at most once,
+`MOQ_LAB_MAX_BACKOFF_EXPONENT=1`); *window* (persistent congestion never declared, so the controller
+keeps its window, `MOQ_LAB_PERSISTENT_CONGESTION_THRESHOLD=1000000`); *both*.
+
+17. **Validity.** Criterion 10 on every arm. The control arm is this build's baseline; it is not
+    graded against `b581c27ed`'s figures.
+18. **Read from the control arm's qlog:** the relay's probe times across the outage, the wait from
+    the link's return to its next probe, and whether persistent congestion was declared and what the
+    window fell to.
+19. **Verdict.** An arm whose median *stack* share is at most a third of the control's removes that
+    cause. Backoff is the cause if *backoff* passes, the window if *window* passes, both if only
+    *both* passes; otherwise mixed, reported with criterion 18's reading.
+20. **The prediction it can falsify.** Backoff dominates: a first datagram 2.4–2.5 s after the link's
+    return fits a probe timeout near 0.25 s doubled four times, while BBRv3 keeps its bandwidth
+    estimate through a window collapse. So *backoff* passes and *window* does not.
+
 ## Limits, stated in advance
 
 - **P1 file egress only in v1.** Wire timing (P2) and hardware IRD merge are out of scope; outage
@@ -1366,14 +1417,13 @@ latency is set from the MoQ lane's first control and matched by criterion 6's 10
 | 8 | Two-axis verdict | **SRT superior at 1–6 s on the outage, both loss rates and 20 % reorder** (3.8–40 s less lost, back in every valid cell); **tied at 5 % reorder**. The MoQ lane is back after every outage, and after loss or 20 % reorder settles 114–227 ms below its pre-fault latency |
 | 9 | Infrastructure axis | **Met; SRT superior on a publisher or relay kill, MoQ on an exporter kill** (§ *Measured — the infrastructure axis*). MoQ loses 14.16 s to a publisher or relay restart against SRT's 5.38–6.34 s, and 3.84–3.88 s to an exporter restart against SRT's 8.84 s; latency back in every cell. Each lane's loss is its liveness timer: MoQ's 10 s QUIC idle timeout, SRT's 5 s peer idle |
 | 10–13 | Outage trace | **Valid; *stack* in five of five; the prediction fails narrowly** (*E* 2.14–2.20 s against 2 s): § *The outage traced on the merged build* |
+| 17–20 | Stack share split | **Valid; backoff is the cause and the prediction holds.** Capping the probe timeout's backoff takes the *stack* share's median from 3.20 s to 0, and keeping the window removes none: § *The stack share is QUIC's probe-timeout backoff* |
 
 ## What remains
 
 Nothing here is blocked on a third party, a loan or an account. The apparatus, the clips, the binaries
 and the grader are all on the EC2 secondary.
 
-- **Splitting the stack's 1.5–1.7 s** (§ *The outage traced*) between QUIC's probe-timeout backoff and
-  the controller's restart, from a relay qlog of one replicate.
 - **Why the 0.9× capacity step costs noq more on either controller** — a stack property the
   controller arm does not reach. The arm that would name it is a relay qlog of the step on both
   stacks, reading the rate each sustains against the 0.9× ceiling.

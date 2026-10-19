@@ -167,6 +167,10 @@ analyser**: "complete" means complete in software.
 
 The programme has two strands: the original asks which of two data planes can be run permanently, at
 scale, by an operations team; the second scores against [control-plane.md](../docs/control-plane.md).
+**Three milestones lie beyond the gates, and a deployment decision needs each:** *operations*, a
+platform a broadcast NOC can monitor and support under an SLA (R8); *entitlement and security*,
+whose enforcement is measured and whose remainder is design; and *dependency risk*, a lane built on
+a fast-moving upstream that speaks draft protocol versions.
 
 ## Shared test environment and conventions
 

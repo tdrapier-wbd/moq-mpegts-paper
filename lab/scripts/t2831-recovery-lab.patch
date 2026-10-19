@@ -1,0 +1,54 @@
+diff --git a/rs/moq-quic/src/connection/mod.rs b/rs/moq-quic/src/connection/mod.rs
+index e64a71175..a14e13880 100644
+--- a/rs/moq-quic/src/connection/mod.rs
++++ b/rs/moq-quic/src/connection/mod.rs
+@@ -2082,7 +2082,7 @@ impl Connection {
+     }
+ 
+     fn pto_time_and_space(&self, now: Instant) -> Option<(Instant, SpaceId)> {
+-        let backoff = 2u32.pow(self.pto_count.min(MAX_BACKOFF_EXPONENT));
++        let backoff = 2u32.pow(self.pto_count.min(lab_max_backoff_exponent()));
+         let mut duration = self.path.rtt.pto_base() * backoff;
+ 
+         if self.path.in_flight.ack_eliciting == 0 {
+@@ -4444,6 +4444,17 @@ fn get_max_ack_delay(params: &TransportParameters) -> Duration {
+ // Prevents overflow and improves behavior in extreme circumstances
+ const MAX_BACKOFF_EXPONENT: u32 = 16;
+ 
++/// Lab instrument, not for upstream: `MOQ_LAB_MAX_BACKOFF_EXPONENT` caps the PTO backoff below 16.
++fn lab_max_backoff_exponent() -> u32 {
++    static CAP: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
++    *CAP.get_or_init(|| {
++        std::env::var("MOQ_LAB_MAX_BACKOFF_EXPONENT")
++            .ok()
++            .and_then(|v| v.parse().ok())
++            .map_or(MAX_BACKOFF_EXPONENT, |n: u32| n.min(MAX_BACKOFF_EXPONENT))
++    })
++}
++
+ /// Maximum number of 1-RTT packets buffered while the handshake completes
+ const MAX_EARLY_1RTT_PACKETS: usize = 16;
+ 
+diff --git a/rs/moq-tokio/src/quic/backend.rs b/rs/moq-tokio/src/quic/backend.rs
+index 63e5fbd30..2f21d6978 100644
+--- a/rs/moq-tokio/src/quic/backend.rs
++++ b/rs/moq-tokio/src/quic/backend.rs
+@@ -71,6 +71,18 @@ fn apply_transport(transport: &mut driver::TransportConfig, quic: &Resolved) {
+ 	apply_windows(transport, quic);
+ 
+ 	transport.congestion_controller_factory(congestion_factory(quic.congestion()));
++
++	// Lab instrument, not for upstream: recovery knobs, each left at moq-quic's default when unset.
++	let lab = |name: &str| std::env::var(name).ok();
++	if let Some(n) = lab("MOQ_LAB_PERSISTENT_CONGESTION_THRESHOLD").and_then(|v| v.parse().ok()) {
++		transport.persistent_congestion_threshold(n);
++	}
++	if let Some(n) = lab("MOQ_LAB_PACKET_THRESHOLD").and_then(|v| v.parse().ok()) {
++		transport.packet_threshold(n);
++	}
++	if let Some(t) = lab("MOQ_LAB_TIME_THRESHOLD").and_then(|v| v.parse().ok()) {
++		transport.time_threshold(t);
++	}
+ }
+ 
+ /// Apply the flow-control windows `Config::resolve` settled, replacing moq-quic's own.
