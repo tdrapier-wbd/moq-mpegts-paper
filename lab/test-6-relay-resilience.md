@@ -266,6 +266,49 @@ with both relays and all clients opted in (#2424 — a standby seeds a high `rou
 drops to 0 while it carries), the mesh drill behaved exactly as before, because pricing decides
 between the routes a relay is willing to offer and does not create one.
 
+### Distinct epochs on `main` `f13283b30` (P1-p): every importer switch is marked and survived on the demultiplexed lane; a relay loss under one importer skips 7 s unflagged
+
+*P1, file domain, Linux loopback, a 6 s idle timeout and 2 s keep-alive, the procedure above; three
+runs per cell, two exporters per run, 60 runs. The source tap carries no flag, gap or continuity
+error.*
+
+**Two importers, one relay or a mesh: C1 holds on the demultiplexed lane in all 24 runs.** Every
+exporter survived every event; every switch carried a new PMT version and flagged every PID; no
+continuity error or PTS gap fell outside a switch. PID 20 is carried about every 12 s, so its flag
+lands on its next packet, up to 12 s after the switch it belongs to. Programme lost per event (C2),
+median and worst of three runs; on one relay the two exporters agree in every run:
+
+| Event | One relay, moq-lite 07 | One relay, default | Mesh, moq-lite 07 | Mesh, default |
+|---|---|---|---|---|
+| Backup's start | switch, 1.74, 1.74 s | switch in 2 of 6 runs, 1.46 s | switch on both relays, 1.74, 1.74 s | switch on the backup's relay only, 1.46 s |
+| SIGKILL of the serving importer | 9.0, 9.0 s (5.4 in one run) | 9.0, 9.0 s (5.4 in one run) | 7.8, 7.8 s | 5.4, 5.4 s, its own relay only |
+| Its SIGTERM | 0.4, 0.4 s | 1.84, 1.88 s | 0.4, 0.4 s | 1.6–1.84 s, its own relay only |
+| Its restart | switch back, 0.7–0.98 s | switch in 4 of 6 runs, 0.3–0.42 s | switch back on both relays, 0.7 s | switch on its own relay, 0.3–0.5 s |
+
+At a 6 s idle timeout a hard kill costs about one detection interval, 5.4–9.0 s, and a clean exit
+under 2 s. On moq-lite 07 the newest importer takes every open exporter, across the mesh too, so a
+standby's start and each restart are switches of their own, 0.7–1.74 s. On the default version an
+exporter follows the importer its own relay holds: in the mesh the two relays' exporters sat on
+different importers for most of every run, and on one relay a newer importer took open exporters in
+only 2 of 6 starts and 4 of 6 restarts.
+
+**Passthrough: C1 fails, as fixed in advance.** A backup's start and a restart change nothing. The
+serving importer's loss ends every exporter reading it, and the supervisor's restart splices without
+a mark: 8–9 s of stall at a SIGKILL and 1 s at a SIGTERM, with 12 and 8–9 continuity errors and one
+PTS gap, on both versions and both topologies.
+
+**One importer through two relays: C3 fails on moq-lite 07.** The SIGKILL of the middle relay serving
+E moved both exporters to the other middle relay with no error, switch or flag and no continuity
+error, but each output lost **7.02 s** of source time in all three runs, at the same packet: the
+video PTS steps forward with no discontinuity indicator, after a 4 s stall. The exporter logs
+`media skipped upstream; resuming at the next group`, 2.3–7.2 s per track. Re-run three times at
+`--delay 10s`, the output did not stall and lost the same 7.02 s, so the new route started at a later
+group, not at the first frame the subscription lacked, where upstream documents a shared epoch
+resuming. With `--passthrough` the move kept the exporter alive with no restart, but it
+dropped the late objects at its release deadline: a 6 s stall, 11 continuity errors and one PTS gap.
+On the default version the relay loss is a marked switch costing 8.2 s, passing C1, and the relay's
+restart is a second one, 0.64–0.86 s; its passthrough exits on `unroutable` and restarts as above.
+
 ### Mesh source failover: on `ffa5b81b` a hard kill fails over, bounded by the later of detection and the standby's lag; on `main` a splice that waits for the standby's numbering is fatal; on both a shared-hop standby ends its own relay's subscribers; with a shared epoch on `moq-lite-07` nothing fails over
 
 [#2473](https://github.com/moq-dev/moq/pull/2473) (*"fail over across redundant publishers via
@@ -1127,6 +1170,8 @@ placement decision is where to cut, and the picture type decides that.
 | Active/active — two publishers, **one relay**, `ffa5b81b`, hard kill of the serving one | 2–10 s at a 6 s idle timeout | resumes, same exporter process | ✅ with or without a shared `--hop`, 9 runs |
 | Shared-`--hop` standby arrives at the **serving** relay after the subscribers, `ffa5b81b` | — | every subscriber exits `not found` | ❌ open; the single-relay form of the race fixed for the mesh |
 | Active/active — two publishers, **two-relay mesh** (hard kill) | **30–33 s** (one idle timeout) on the builds after #2473; on `ffa5b81b` the later of detection and the standby's group lag: kill + 10–23 s at 6 s, kill + 33–36 s at the 30 s default; on `main` kill + 8 s and kill + 34 s where the standby was already past the floor, otherwise none | `ffa5b81b`: relay A's subscribers resume; relay B's end at a shared-hop join or freeze at the failover without one. `main`: relay A's exit on the live-edge error when the splice waits for the standby's numbering; without a shared hop nothing is reselected and both relays' subscribers exit | ✅ for the dead publisher's relay on `ffa5b81b`; ❌ for the standby's relay on `ffa5b81b`, either way; ❌ on `main` except when detection outlasts the standby's lag, 2 of 6 shared-hop runs; ❌ before #2473 |
+| Two importers, **distinct epochs**, one relay or a mesh, `f13283b30` (hard kill / clean exit) | 5.4–9.0 s / 0.4–1.9 s at a 6 s idle timeout; a backup's start or restart 0.3–1.74 s | a marked switch (new PMT, every PID flagged), 0 CC errors outside it; passthrough exits and splices unmarked | ✅ C1 on the demultiplexed lane, 24 of 24 runs; ❌ passthrough, by design; on 06 each relay's exporters follow its own importer |
+| One importer through two relays, middle relay killed, `f13283b30` | 4 s stall; none at `--delay 10s` | moq-lite 07: no switch, 7.02 s skipped unflagged, at either delay; 06: a marked switch, 8.2 s | ❌ C3 on moq-lite 07, 6 of 6 runs; ✅ C1 on 06 |
 | Active/active — **single source** into both publishers, co-started | ~31 s (one idle timeout); ~11 s at `RIDLE=10s` | resumes; 0 CC errors, PCR/PTS leap at splice | ✅ `sub1`/`sub3` identical per-second deltas pre-kill, separated by a constant 4-packet (752 B) startup offset |
 | Active/active — **single source**, standby joins **mid-stream** (offset numbering) | ~30 s (one idle timeout) on the E2 builds; on `ffa5b81b` extended by the standby's lag | resumes; 0 CC errors; exporter never re-subscribes | ✅ on the E2 builds, skipping to the live edge; 🟡 on `ffa5b81b`, where the splice waits for the standby's numbering |
 | Active/active — active source exits **gracefully** | none reliably | no reliable failover | ❌ on every build: earlier builds not reselected; `ffa5b81b` one relay, not reselected at end of input and reselected on SIGINT with a rewind abort; `ffa5b81b` mesh, 4 terminated / 2 frozen / 1 failed over / 1 partial of 8; `main` one relay, switched at once and aborted on the rewind; `main` mesh, 8 of 8 ended, on the live-edge error with a shared hop and at the event without one |
@@ -1268,9 +1313,11 @@ time, so it is break-before-make by construction; the dual-leg drill it points t
 T12, which grades two concurrently live legs at a receiver and finds the switch hitless — including
 the graceful exit that has no single-leg answer. The full validated finding — including which of our
 reports were real vs harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
-Upstream `main` has since removed the shared importer epoch (#5967): each importer mints its own,
-the relay serves the newest, and a takeover is a marked programme switch (`export ts --stitch`), not
-a resume. Every shared-hop and shared-epoch arm here records a build that had the mechanism.
+On upstream `main` each importer mints its own epoch (#5967), and the demultiplexed export survives
+every takeover as a marked programme switch: a hard kill costs about one detection interval, a clean
+exit under 2 s, and a standby's start or restart is a switch of its own. A relay lost under one
+importer is not the seamless resume upstream documents: 7.02 s of programme is skipped unflagged.
+Every shared-hop and shared-epoch arm here records a build that had the mechanism.
 
 **On the segmented lane the same three questions come out differently, and the reason is that the
 serving node holds no state.** A dead origin costs exactly its downtime and no content, because the

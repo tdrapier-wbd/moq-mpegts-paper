@@ -626,7 +626,7 @@ by the later of detection and the standby's group lag.
   reverted our shared clock and grid cuts ([#5625](https://github.com/moq-dev/moq/pull/5625),
   [#5894](https://github.com/moq-dev/moq/pull/5894), both merged), and
   [#5895](https://github.com/moq-dev/moq/pull/5895) (groups by the catalog clock) closed unmerged.
-  A shared epoch stays only for replicas of one publisher's bytes. P1-p measures the new model.
+  A shared epoch stays only for replicas of one publisher's bytes. Measured in [T6](test-6-relay-resilience.md).
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 

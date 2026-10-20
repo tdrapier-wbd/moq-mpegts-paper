@@ -9,19 +9,18 @@ is ~27–31 MB/h, identical on 0.14.8 and 0.14.9, **flat in subscriber count** (
 **neither** documented cache control (`--cache-capacity 32MiB` and `--cache-duration 5s` both left it
 unchanged). A controlled GOP pair confirmed causation: at identical bitrate and content, doubling the
 group rate doubled the slope (+31.22 → +62.30 MB/h, ratio 1.995 against 2.000). Reported as
-[#2745](https://github.com/moq-dev/moq/issues/2745) and **root-caused upstream within a day: it is
-`quinn-proto` recycling one receive-stream state, with its assembler chunk heap, per stream the
-connection has ever accepted — not moq state at all.**
+[#2745](https://github.com/moq-dev/moq/issues/2745), which upstream closed as not planned: **the
+retention is `quinn-proto`'s, one receive-stream state with its assembler chunk heap recycled per
+stream the connection has ever accepted, not moq state.** That is the quinn backend's result: on noq
+(`main` `9d2a4f6e`) [T21](test-21-permanence-soak.md)'s 24 h re-soak finds the relay flat.
 
-**That correction matters, and it is partly against us.** The growth **plateaus** once every uni slot
-is filled — `moq-relay` sets 10,000 per connection, so the *slot* ceiling is **~99 MB above baseline per
+The growth **plateaus** once every uni slot is filled — `moq-relay` sets 10,000 per connection, so the *slot* ceiling is **~99 MB above baseline per
 publisher connection**, reached after ~10,000 ingested groups (~3.1 h at 3,222 groups/h). **A later 14 h
 soak doubles the operational figure without changing that mechanism** ([T8b](test-8b-congestion-control.md)
 C6): the slot arithmetic predicts when growth slows and about half of where it lands, because a second,
 far slower term keeps adding past the knee to **2.03×** the ceiling, still not flat at 14 h. Audience is
 not a term in either — see the fan-out row below. Every leg
-here was shorter than that knee, so this file's earlier "linear, 650 MB/day, fails the stability
-criterion" reading was a measurement-window artefact. **Now confirmed on this rig:** the slope holds at
+here was shorter than that knee. On this rig the slope holds at
 ~+60 MB/h for three windows and breaks in exactly the window containing the predicted knee, to 13 % of
 its pre-knee value, at baseline + 108 MB against a predicted + 97 MB; and two independent fits put the
 per-slot cost at **9.14 and 10.54 KiB**, bracketing upstream's predicted 9.9 KiB. Capping
@@ -40,8 +39,6 @@ worth more than everything QUIC charges — segmented HTTP landing on SRT's figu
 the two confirms that stuffing, not protocol, is what this comparison measures. Datagrams are full (88.4 % exactly 1200 B), the
 stream-per-audio-access-unit pattern costs under 0.2 points, 1 % loss moves neither protocol by a
 point, and MoQ's only clear debit is a return path eight times SRT's (1.16 % of forward versus 0.13 %).
-**The previously recorded 1.12x was an artefact of the loopback rig** dividing a capture window by a
-shorter payload window; see [Corrections](#corrections).
 
 ## Objective
 
@@ -557,8 +554,8 @@ loosely filled carrier: on the T12 profile, 1.9 Mbps of content in a 4 Mbps carr
 preferred carriage for hardware IRDs — still has no measurement; its two derived rows above apply the
 per-byte carriage cost measured here to a verbatim and a null-stripped payload, and the verbatim case
 should come out marginally *cheaper* than the arithmetic suggests because a single large track packs
-datagrams better than 100 short streams per second. The platform binaries for that lane are not built
-in this environment, which is the only reason it is still outstanding.
+datagrams better than 100 short streams per second. On `main` that lane is `import ts --passthrough`,
+not yet run on this rig.
 
 ## Soak method
 
@@ -675,7 +672,7 @@ figure measured independently below.
 converging rather than a leak. But it did not visibly stop, and threads are the one resource here that
 only ever went up. A longer run, or a look at what the pool is sized against, would settle it.
 
-## Relay memory: the one failing role
+## Relay memory: the one failing role on quinn
 
 The relay retains **~9 KiB per ingested group** and does not release it. The mechanism is upstream of
 `moq` entirely, the growth plateaus at a soft ceiling, and neither documented cache control bounds it.
@@ -963,9 +960,6 @@ soak design.
 > experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
 > specific record of what this experiment got wrong.
 
-Six readings in this experiment were wrong and were corrected by later measurement or analysis. They
-are recorded because each carries a method lesson that changed how the rest of the campaign was run.
-
 - **The 1.12x carriage overhead was a rig artefact, and MoQ is in fact cheaper than SRT.** The
   loopback rig started `tcpdump` under a `timeout` of `WINDOW + 3` seconds and compared the bytes it
   captured against payload bytes sampled over `WINDOW` seconds, so the wire side was divided by a
@@ -973,18 +967,16 @@ are recorded because each carries a method lesson that changed how the rest of t
   reduced to a rate over a span it measures itself put the mismatch at **1.1646** and the overhead at
   +3.54 % rather than +14.75 %; on a real path it is +2.79 %, or 0.982x the source TS rate against
   SRT's measured 1.037x. Everything built on the 1.12x followed from this: the "unattributed
-  ~1.2 Mbps", the underfilled-datagram hypothesis (datagrams are 88.4 % exactly 1200 B), and an 8.4 %
-  carriage penalty in the cost model that is really an advantage. *Lesson: when two quantities are
-  divided, measure each over a duration its own side establishes, and never assume two windows that
-  were started separately are the same length. The analytic floor was right and the measurement was
-  wrong — which is the opposite of the usual assumption, and the reason the discrepancy survived so
-  long is that no numeric budget had been fixed in advance for the measurement to fail against.*
+  ~1.2 Mbps", the framing and underfilled-datagram hypotheses (datagrams are 88.4 % exactly 1200 B),
+  and an 8.4 % carriage penalty in the cost model that is really an advantage. The framing audit
+  stands: every MoQ and hang header combined is a quarter of a point. *Lesson: when two quantities are
+  divided, measure each over a duration its own side establishes; and re-derive a surprising
+  measurement before hypothesising its mechanism. No numeric budget had been fixed in advance for
+  the measurement to fail against.*
 
-- **The framing was suspected of the missing bytes, then underfilled datagrams were.** Both were
-  chasing an artefact. The framing audit that cleared moq-lite and hang was nevertheless correct and is
-  retained: every MoQ and hang header combined is a quarter of a point. *Lesson: before hypothesising a
-  mechanism for a surprising measurement, re-derive the measurement. Two rounds of plausible mechanism
-  were built on a number that a five-minute re-run falsified.*
+- **The relay growth read as linear, 650 MB/day, failing the stability criterion.** Every leg was
+  shorter than the ~10,000-group knee where it plateaus. *Lesson: a slope extrapolates only within
+  the window that measured it.*
 
 - **A 3.2 GB relay read as a settled "plateau."** Sampled over ~20 s it looked flat and `dmesg` showed
   no OOM kills. A 20 s window cannot distinguish a plateau from 21 MB/h, and the process was in fact
@@ -1005,23 +997,14 @@ are recorded because each carries a method lesson that changed how the rest of t
 
 ## Still outstanding
 
-- **An upstream fix for the relay growth**, the reason T9 fails its own pass criterion for the relay
-  role. The characterisation is complete — build A/B, both cache controls, the N-sweep and the GOP pair
-  all agree on ~9 KiB retained per ingested group independent of subscriber count — and it is filed as
-  [#2745](https://github.com/moq-dev/moq/issues/2745). What remains is not measurement but a fix, and
-  then a ≥ 24 h re-soak to confirm the slope reaches zero; pair that repeat with the T7 PLL-lock soak so
-  one run yields both verdicts.
 - **The publisher thread count**, which grows and decelerates without settling. Cheap to check: a
   longer run plus what the pool is sized against.
 - **Fan-out over a real path**, relay and subscribers on separate hosts. Both sweeps so far are
   loopback, and the Linux sweep showed why that matters: co-located subscribers cost 2.4x the relay,
   so the rig's knee is the host's. A cross-machine run would price the NIC and the network stack
   honestly and establish the relay's own knee, which neither sweep reached.
-- **Overhead on the opaque lane, which has never been measured.** Everything above is the media-aware
-  lane. The opaque lane is the paper's preferred carriage for hardware IRDs, and the two derived rows in
-  the comparison table above are the only figures the paper has for it. The blocker is environmental —
-  the `moq_publisher`/`moq_subscriber` platform binaries are not built here — not methodological: the
-  WAN rig takes it unchanged once they are.
+- **Overhead on the opaque lane**, never measured: `import ts --passthrough` on the WAN rig,
+  unchanged.
 - **Retransmission cost measured directly rather than recovered from shaper counters.** The current rig
   drops packets in the origin's own qdisc, downstream of the capture tap, so the sender's push rate is
   inferred from `netem`'s passed/dropped counts. Shaping between two network namespaces and capturing on
@@ -1047,10 +1030,6 @@ are recorded because each carries a method lesson that changed how the rest of t
 - **A segmented-lane soak.** The stability question that dominates this experiment for MoQ — does any
   role's RSS slope reach zero over ≥ 24 h — has not been asked of the packager, origin or client.
   Worth pairing with whichever soak comes next rather than running alone.
-- ~~**The audio-sync abort on real content.**~~ **Done, and the defect is fixed upstream.** The
-  bit-flipped MP2 header, the video-NAL control and the blast radius are all measured above; the fix
-  ([#2751](https://github.com/moq-dev/moq/pull/2751)) was verified against both builds. What it left
-  open — the recovered gap being unsignalled — is now the follow-up.
 - **Isolate the live-source `moq import` CPU cost** (~3x the file-paced case, bitrate-independent).
   Profile it and re-test with the live source staged through a file; if it holds up, it is an upstream
   report, and it affects the normal live contribution topology.

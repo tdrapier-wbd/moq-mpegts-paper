@@ -40,8 +40,8 @@ and one SDT listing all three — was carried through both data planes and grade
   fixtures, independent clocks included. Each programme's SDT still lists all three services
   (§ *On upstream `main` at `6f1a9e33`*, § *The split on the T10 rig*).
 
-The opaque lane that criterion 1 names is not in `ffa5b81b`: `moq import ts` takes no options, so the
-media-aware lane is the only MoQ lane on the build under test, and arm A ran on it.
+The opaque lane that criterion 1 names was not in `ffa5b81b`, where `moq import ts` takes no options,
+so arm A ran on the media-aware lane.
 
 ## Objective
 
@@ -71,22 +71,8 @@ sparse EIT reconstruction holds per service are all open. This run does not clos
 services are too few to fit a scaling curve, and on the MoQ lane the multiplex did not survive intact
 long enough to price.
 
-**Dual-path byte identity fails on multi-track content for a located upstream reason.**
-[T12](test-12-dual-path-handoff.md) reached 75.56 % agreement on a seven-stream mux over independent
-chains — the residue being the same packets in a different order, not damage — while single-track
-content was byte-identical with zero residue. Multi-service at the egress merge is therefore genuinely
-unmeasured even where single-service 1+1 is strong.
-
-**Fan-out scaling is measured for one broadcast, not for N services.** [T26](test-26-cross-host-fanout.md)
-established a linear relay cost curve for one publisher and one broadcast. The channel-count half —
-does relay cost follow broadcasts rather than subscribers — is answered on the current build by
-[T43](test-43-fanout-current-build.md) S2, which is why arm C was not run here.
-
-**MPTS through a real CDN is blocked on apparatus.** HLS normatively requires single-programme TS
-segments; publishing MPTS segments through a commercial CDN and grading what arrives is specified under
-[T14](test-14-data-plane-comparison.md) measurement 3 and [B-5](planned-experiments.md#blocked-on-apparatus).
-A byte cache does not parse the payload, so that cell is only interesting where the edge is
-media-aware — asking it of a plain cache re-measures nginx.
+**Arm C, fan-out under N services, was not run:** [T43](test-43-fanout-current-build.md) S2 answers
+whether relay cost follows broadcasts rather than subscribers.
 
 ## Environment
 
@@ -544,9 +530,6 @@ mechanism [T3](test-3-opaque-transparency.md) measured on one programme and
 added pair carries programme 1's PMT only: a receiver that starts at a segment head is handed
 programme 1's PMT at once, and programmes 2 and 3 at their source cadence.
 
-The receiver log carries one line, `* Error: hls: no URL specified`, which was not explained. The
-capture is complete, and it does not bear on any figure above.
-
 ## Limits
 
 - **One host, P1 only.** No cross-host, wide-area or impaired path, and no hardware IRD (P2 remains
@@ -562,31 +545,32 @@ capture is complete, and it does not bear on any figure above.
   even on b7, whose programmes sit within 40 ms of each other (median). Tighter alignment than
   b7's is not reachable with the fixture builder, so whether any cross-programme offset is safe is
   not established.
-- **The media-aware lane only.** The opaque lane of T3 is not in the build under test, so this is not
-  a statement about opaque carriage of a multiplex.
+- **The media-aware lane only.** No arm ran `import ts --passthrough`, so this is not a statement
+  about opaque carriage of a multiplex.
 - **Join cost is not measured.** Criterion 5's comparison with T17's cold-join baseline needs its
   instrument. A′'s time-to-first-byte (2.28 and 2.33 s) lies outside the controls' 0.48–1.65 s, and
   that difference cannot be attributed to SI join from this run.
 
 ## What remains open
 
-- **Opaque carriage of a multiplex on MoQ** — the arm criterion 1 was written for. It needs a build
-  with an opaque lane.
-- **Per-programme SI.** Each programme's output still carries the whole multiplex's SDT and EIT. The
-  arm that would close it is the functional check above on a build carrying upstream's
-  `ts-program-si` quest.
+- **Opaque carriage of a multiplex on MoQ** — the arm criterion 1 was written for. `main`'s
+  `import ts --passthrough` carries the multiplex whole; it has not been run on this fixture.
+- **Per-programme SI.** On `6f1a9e33` each programme's output carries the whole multiplex's SDT and
+  EIT. Upstream has since added SI for a selected programme
+  ([#4580](https://github.com/moq-dev/moq/pull/4580)); the functional check above, re-run on `main`,
+  would close it.
 - **How #4122's ratchet reaches the audio tracks.** The mechanism is located and removing it
   restores the audio, but the path from the section clock's re-anchors to audio lanes that have
-  their own offsets is not traced. It matters only while the anchor exists. Upstream now refuses a
-  multi-programme input by default (above), and its `dev` branch removes the anchor from the
-  importers.
+  their own offsets is not traced. It matters only for a flattened multiplex, which upstream now
+  refuses unless a programme is selected (above).
 - **Whether a single programme can trigger the same ratchet.** On one programme the shared lane
   sees one video PID, and it steps back only by that stream's B-frame reordering. Programme 1 alone
   never re-anchored here. A stream whose reordering spans more than 500 ms, or a programme with two
   video PIDs, would step it back that far; that is *reasoned* from the code and not run.
-- **Arm E**, blocked on a CDN account ([B-5](planned-experiments.md#blocked-on-apparatus)), and the
-  SI carriage-cost scaling of [T17](test-17-si-snapshot-tracks.md), which needs many more services
-  than three.
+- **Arm E**, MPTS segments through a commercial CDN, blocked on an account
+  ([B-5](planned-experiments.md#blocked-on-apparatus)). A byte cache does not parse the payload, so
+  the cell is only worth running where the edge is media-aware. And the SI carriage-cost scaling of
+  [T17](test-17-si-snapshot-tracks.md), which needs many more services than three.
 
 ## Corrections
 
