@@ -304,7 +304,7 @@ video PTS steps forward with no discontinuity indicator, after a 4 s stall. The 
 `media skipped upstream; resuming at the next group`, 2.3–7.2 s per track. Re-run three times at
 `--delay 10s`, the output did not stall and lost the same 7.02 s, so the new route started at a later
 group, not at the first frame the subscription lacked, where upstream documents a shared epoch
-resuming. With `--passthrough` the move kept the exporter alive with no restart, but it
+resuming ([#6062](https://github.com/moq-dev/moq/issues/6062)). With `--passthrough` the move kept the exporter alive with no restart, but it
 dropped the late objects at its release deadline: a 6 s stall, 11 continuity errors and one PTS gap.
 On the default version the relay loss is a marked switch costing 8.2 s, passing C1, and the relay's
 restart is a second one, 0.64–0.86 s; its passthrough exits on `unroutable` and restarts as above.

@@ -18,7 +18,7 @@ alwaysApply: true
  captured, `cargo clean` the worktrees whose binaries are already in `~/bin-*`, and delete graded
  captures, under the safety checks in `INSTRUCTIONS.local.md` §9; report what was freed.
 - **Before pushing to an upstream repository, pass that repository's gate, not ours.** For `moq-dev`:
-  `just fix`, then `just check`, from the worktree (`INSTRUCTIONS.local.md` §1). Its conventions
+  `just fix`, then `just ci`, from the worktree (`INSTRUCTIONS.local.md` §1). Its conventions
   differ from ours (its `.editorconfig` indents shell with spaces; `lab/scripts/` uses tabs); re-run
   any script its formatter rewrote before pushing it.
 - **An upstream pull request goes round one loop until it is clear** (commands in

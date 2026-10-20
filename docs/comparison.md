@@ -137,9 +137,9 @@ parsing media ([Evidence](evidence.md) §3.12) — a monitoring hook, not a self
 Broadcast reliability comes from **1+1 with selection at the receiver**, which is transport-independent
 ([Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4). Head-to-head the lanes diverge.
 **Serving-node failover**: media-aware relay reselection takes at least one idle timeout, 30–33 s at the
-builds' default and ~11 s at moq 0.14.0's 10 s, and is never hitless. Between importers upstream now
-makes it a marked programme switch; the shared epoch this replaced held in no configuration
-measured ([Evidence](evidence.md) §3.4). A segmented pair sharing one feed and one set of segment names fails
+builds' default and ~11 s at moq 0.14.0's 10 s, and is never hitless. Between importers on current
+`main` it is a marked programme switch, under 2 s at a clean exit; the shared epoch this replaced
+held in no configuration measured ([Evidence](evidence.md) §3.4). A segmented pair sharing one feed and one set of segment names fails
 over with no measurable interruption, 3/3 runs.
 **Misconfiguration**: a segmented pair with mismatched sources delivers ±20 s of time-travel that passes
 continuity and PCR checks, where the media-aware relay refuses. On the media-aware lane a hitless pair is
@@ -533,7 +533,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme across an outage and a killed relay or publisher, by a margin its build and QUIC's recovery set (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, a killed relay costs the media-aware lane about twice as much (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
-| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, by design a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
+| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |

@@ -23,7 +23,7 @@ this campaign's own measurements (§8), where the ratio is the point.
 
 - **Media-aware carriage** (§1): [parameter sets and DTS, the lane's origin](#the-lane-this-campaign-measures-did-not-exist-when-it-started) · [the harness](#the-harness-that-found-most-of-what-follows) · [open-GOP keyframes](#open-gop-keyframe-detection--closed) and [leading pictures (#4501)](#open-gop-leading-pictures-at-tune-in--fixture-and-measurement-contributed-as-4501) · [PSI on half a catalog](#the-exporter-locked-its-psi-on-half-a-catalog--closed-by-a-better-fix-than-the-one-proposed) · [DVB service layer](#the-dvb-service-layer--closed) · [EIT](#eit-and-where-carried-si-should-live--the-question-we-priced) · [TDT/TOT](#tdttot--carriage-closed-then-emission-timing) · [PCR clustering](#pcr-clustering-reported-fixed-upstream-in-three-steps-nothing-further-owed) · [the rewound-timeline stall](#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section) and [its regression (#3533)](#3375-regressed-the-complement-a-non-rewinding-source-now-stalls-video-and-primary-audio--reported-as-3533) · [the mux rate](#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer)
 - **Audio and per-stream liveness** (§2): [frame-sync loss](#frame-sync-loss-killed-the-whole-publisher--closed-in-two-days) · [splice substitution](#a-splice-publishes-a-substituted-frame--closed-with-two-measured-residuals) · [recovery signalling](#a-recovered-stream-is-signalled-nowhere--closed-exactly-as-asked-and-it-exposed-a-bigger-gap) · [liveness at import (#4502, #4506)](#per-stream-liveness-in-the-ts-importer--contributed-as-4502-and-4506-both-merged) and [at export (#4577)](#per-stream-liveness-at-the-ts-exporter--contributed-as-4577-merged) · [TR 101 290 counters at ingest (#4750)](#tr-101-290-counters-at-ingest--contributed-as-4750-merged)
-- **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352) and the rewind at the switch (#4354)](#activeactive-source-failover-shipped-bounded-two-refusals-reported) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
+- **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352), the rewind at the switch (#4354) and the relay-loss skip (#6062)](#activeactive-source-failover-shipped-bounded-three-defects-reported) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
 - **Congestion and memory** (§4, §5): [subscriber death under contention](#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) · [the qlog loss trigger](#the-qlog-loss-trigger-is-computed-backwards--fixed-in-quinn-and-in-noq-released-in-neither) · [relay memory](#5-relay-memory) and [the publisher's leak](#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)
 - **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-schema-merged-reporters-drafted) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
 - **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--declined-re-asked-narrowly-deferred) · [closures by a planning document](#four-closed-as-completed-by-a-planning-document-that-changed-no-code) · [a multi-packet PMT (#5110)](#a-pmt-longer-than-one-packet-ended-the-export--reported-as-5110-fixed-by-5220) · [video TB overrun (#5142)](#video-overran-its-transport-buffer-where-the-multiplex-outran-its-rx--reported-as-5142-fixed-by-5207-and-5306) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363, #5516)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-fixed-by-5363-and-5516)
@@ -592,16 +592,14 @@ WebSocket.** The fallback transport is only where this rig was slow enough to se
 gone there was nothing left to be fatal about — so the resilience half was never addressed on its own
 terms; §2's audio work is the part that did land.
 
-### Active/active source failover: shipped, bounded; two refusals reported
+### Active/active source failover: shipped, bounded; three defects reported
 
 **Report.** Two publishers announcing one broadcast to one relay tore each other down, and across a
 mesh the pair never failed over: the relay offered a peer no route but the one it serves through.
 [#2473](https://github.com/moq-dev/moq/pull/2473) (issue
 [#2461](https://github.com/moq-dev/moq/issues/2461)) added per-peer selection excluding the
 requesting peer, first-hop identity in SETUP and a declared pair, later the shared epoch;
-[#2629](https://github.com/moq-dev/moq/pull/2629) extended it to draft 17 and later. Cost routing
-alone ([#2424](https://github.com/moq-dev/moq/pull/2424)) could not: pricing chooses between offered
-routes and creates none.
+[#2629](https://github.com/moq-dev/moq/pull/2629) extended it to draft 17 and later.
 
 **Verification** ([T6](test-6-relay-resilience.md)), on builds with the shared epoch: on one relay
 a hard kill fails over within the idle timeout; in the mesh, for the dead publisher's relay, bounded
@@ -609,24 +607,27 @@ by the later of detection and the standby's group lag.
 
 **State, item by item:**
 
-- **A graceful exit is not failed over**: completion propagates and the subscriber ends, as
-  upstream's model tests intend. [#2610](https://github.com/moq-dev/moq/issues/2610) specified a
-  publisher-minted epoch plus `Ended`; importers now mint their own (#5967).
+- **A graceful exit was not failed over** before #5967: completion propagated and the subscriber
+  ended. [#2610](https://github.com/moq-dev/moq/issues/2610) specified a publisher-minted epoch plus
+  `Ended`; since importers mint their own (#5967), a clean exit is a marked switch under 2 s.
 - **[#4352](https://github.com/moq-dev/moq/issues/4352): a shared-hop standby that arrives after the
   subscribers ends them `not found`**, on one relay and in the mesh, because it refuses every track
   until it has parsed its PMT and the relay keeps the refusal. **Fixed by our
   [#5517](https://github.com/moq-dev/moq/pull/5517), merged**: an importer announces once its
   catalog lists the tracks, so the standby is never asked early, and on `0d9e9ff78` two exports run
-  on through it on both protocols. Unmeasured in the mesh.
+  on through it on both protocols, as every exporter in a mesh does on `f13283b30`.
 - **[#4354](https://github.com/moq-dev/moq/issues/4354): a switch to a same-hop standby ended
   `export ts` on a timestamp rewind**, with identical inputs too ([T51](test-51-same-epoch-groups.md)).
   **Closed by removing the shared importer epoch** ([#5967](https://github.com/moq-dev/moq/pull/5967),
-  merged): independent importers see their own loss and history, so each mints its own epoch, the
-  relay serves the newest, and a takeover is a marked programme switch (`export ts --stitch`). It
+  merged): each importer mints its own epoch, and a takeover is a marked programme switch. It
   reverted our shared clock and grid cuts ([#5625](https://github.com/moq-dev/moq/pull/5625),
   [#5894](https://github.com/moq-dev/moq/pull/5894), both merged), and
   [#5895](https://github.com/moq-dev/moq/pull/5895) (groups by the catalog clock) closed unmerged.
   A shared epoch stays only for replicas of one publisher's bytes. Measured in [T6](test-6-relay-resilience.md).
+- **[#6062](https://github.com/moq-dev/moq/issues/6062): a relay lost under one importer resumes at
+  a later group** on moq-lite 07, skipping 7.02 s of programme unflagged
+  ([T6](test-6-relay-resilience.md)), where upstream documents a resume at the first frame lacked.
+  Reported; open.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 
@@ -777,8 +778,7 @@ liveness rather than process existence, is [Architecture](../docs/architecture.m
 
 A quest-only PR replacing `plan-ts-alignment`: a shared `--epoch` (refusals built as
 [#5480](https://github.com/moq-dev/moq/pull/5480)); passthrough cuts on its grid; `--sync` legs whose
-counters restart per group, released by clock recovery rather than wall time (a 1 s delay lasts
-about 9 h at 30 ppm); and RTP legs that stay silent rather than send a datagram they cannot fill.
+counters restart per group, released by clock recovery rather than wall time; and RTP legs that stay silent rather than send a datagram they cannot fill.
 **Merged.** #5967 has since removed the shared importer epoch and its alignment (§ *Active/active
 source failover*), so we closed our co-start test
 [#5955](https://github.com/moq-dev/moq/pull/5955). `--sync` (#5949) and the RTP legs
@@ -792,8 +792,7 @@ its predecessor's connections fail validation and clients wait out the idle time
 contributor's [#5910](https://github.com/moq-dev/moq/pull/5910) derives the key from a file: on
 loopback a restart then cost 3.5 s of video, not 13.5 s. [Our review](https://github.com/moq-dev/moq/pull/5910#issuecomment-6268205598)
 asks it to share a key only behind one address (RFC 9000 §21.11) and to lift the 50-a-second reset
-limit. **Decided: #5910 is the fix** (quest `stateless-reset-key`; one file secret derives both the
-reset and connection-ID keys); open.
+limit. **Decided: #5910 is the fix** (quest `stateless-reset-key`); open.
 
 ### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
 
