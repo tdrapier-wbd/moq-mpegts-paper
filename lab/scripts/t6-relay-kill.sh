@@ -24,6 +24,10 @@
 #                   subscribers takes over at once, before it has tracks; this isolates the kill.
 #   KILL_WHICH      `oldest` (default) or `newest` publisher is the one SIG goes to. Their logs are
 #                   pub.log and pub2.log, and the one with media subscriptions was serving.
+#                   `serving` picks, at KILL s, the one that logged more `serving group` lines over
+#                   the 2 s before, which needs PLOG to enable them; the choice goes to build.txt.
+#   RESTART_STANDBY=1  Standby only: at RESTART s start the killed publisher again, on its log.
+#   PLOG            RUST_LOG for the publishers, e.g. `info,moq_net::lite::publisher=debug`.
 #   SUPERVISE=1     Restart each exporter whenever it exits, appending to the same capture: what a
 #                   standing egress under a process supervisor would deliver.
 #   EXPORT_ARGS     Extra `export ts` flags, word-split (e.g. `--delay 1s`).
@@ -101,7 +105,7 @@ start_pub() { # [udp-port] [log]
 			else
 				tsp -I ip "${1:-$UDP}" -O file - 2>>"$OUT/tsp-in.log"
 			fi | tee "$tap" |
-				"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" "${ORIG[@]+"${ORIG[@]}"}" import ts ${IMPORT_ARGS:-} >>"$OUT/${2:-pub.log}" 2>&1
+				${PLOG:+env RUST_LOG=$PLOG} "$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" "${ORIG[@]+"${ORIG[@]}"}" import ts ${IMPORT_ARGS:-} >>"$OUT/${2:-pub.log}" 2>&1
 		) &
 	else
 		(
@@ -161,10 +165,12 @@ if [ "$MODE" = standby ]; then
 	ACTIVE=$PUB
 	start_pub $((UDP + 1)) pub2.log
 	STANDBY=$PUB
-	PUB=$ACTIVE
+	FIRST=$ACTIVE SECOND=$PUB
+	PUB=$ACTIVE VLOG=pub.log VPORT=$UDP
 	# The victim: the first publisher, or the second, which serves when the hop is shared.
-	[ "$KILL_WHICH" = newest ] && PUB=$STANDBY STANDBY=$ACTIVE
+	[ "$KILL_WHICH" = newest ] && PUB=$STANDBY STANDBY=$ACTIVE VLOG=pub2.log VPORT=$((UDP + 1))
 fi
+served() { grep -c 'serving group' "$OUT/$1" 2>/dev/null || true; }
 if [ "$LATE_SUBS" = 1 ]; then
 	sleep 4
 	start_subs
@@ -172,11 +178,18 @@ fi
 echo "t,sub1,sub2,event" >"$OUT/sizes.csv"
 for t in $(seq 0 "$END"); do
 	ev=""
+	if [ "$t" -eq $((KILL - 2)) ] && [ "$KILL_WHICH" = serving ]; then S1=$(served pub.log) S2=$(served pub2.log); fi
 	if [ "$t" -eq "$KILL" ]; then
 		case $MODE in
 		publisher) pkill -KILL -P "$PUB" 2>/dev/null; ev=KILL_publisher ;;
 		# The active publisher's moq process only, so a TERM exercises its own clean exit.
 		standby)
+			if [ "$KILL_WHICH" = serving ]; then
+				d1=$(($(served pub.log) - ${S1:-0})) d2=$(($(served pub2.log) - ${S2:-0}))
+				if [ "$d2" -gt "$d1" ]; then PUB=$SECOND STANDBY=$FIRST VLOG=pub2.log VPORT=$((UDP + 1))
+				else PUB=$FIRST STANDBY=$SECOND VLOG=pub.log VPORT=$UDP; fi
+				echo "victim=$VLOG groups served over the 2 s before: pub.log $d1, pub2.log $d2" | tee -a "$OUT/build.txt"
+			fi
 			echo "$EPOCHREALTIME" >"$OUT/signal.txt"
 			if [ "$SIG" = EOF ]; then pkill -TERM -P "$PUB" -f "tsp -I ip|tail -c 0" 2>/dev/null
 			else pkill -"$SIG" -P "$PUB" -f "import ts" 2>/dev/null; fi
@@ -186,7 +199,13 @@ for t in $(seq 0 "$END"); do
 	elif [ "$t" -eq "$RESTART" ]; then
 		case $MODE in
 		publisher) start_pub; ev=RESTART_publisher ;;
-		standby) ev=none ;;
+		standby)
+			ev=none
+			if [ "${RESTART_STANDBY:-0}" = 1 ]; then
+				VICTIM=$PUB
+				start_pub "$VPORT" "$VLOG"
+				ev=RESTART_${VLOG%.log}
+			fi ;;
 		*) start_relay; ev=RESTART_relay ;;
 		esac
 	fi
@@ -210,9 +229,9 @@ for i in 1 2; do
 done | tee "$OUT/verdict.txt"
 # Stop each subscriber's shell before killing its exporter, or a supervisor restarts it.
 kill -STOP "${SUBS[@]}" 2>/dev/null
-for pid in "${SUBS[@]}" "$PUB" ${STANDBY:+"$STANDBY"}; do pkill -P "$pid" 2>/dev/null; done
+for pid in "${SUBS[@]}" "$PUB" ${STANDBY:+"$STANDBY"} ${VICTIM:+"$VICTIM"}; do pkill -P "$pid" 2>/dev/null; done
 kill -KILL "${SUBS[@]}" 2>/dev/null
-kill "$PUB" ${STANDBY:+"$STANDBY"} "$RLY" ${SOURCE:+"$SOURCE"} ${RECEIVER:+"$RECEIVER"} 2>/dev/null
+kill "$PUB" ${STANDBY:+"$STANDBY"} ${VICTIM:+"$VICTIM"} "$RLY" ${SOURCE:+"$SOURCE"} ${RECEIVER:+"$RECEIVER"} 2>/dev/null
 [ -n "$SOURCE" ] && pkill -f "[t]sp -I file - -O ip 127.0.0.1:$((UDP + 1))" 2>/dev/null
 # A follower of a file that stopped growing never writes again, so no broken pipe ends it.
 [ "$FEED" = file ] && pkill -f "[t]ail -c 0 -f $OUT/live.ts" 2>/dev/null

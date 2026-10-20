@@ -92,6 +92,43 @@ For the graceful-exit case (`graceful_exit.sh`): `pubA` publishes a **finite** c
 EOF and the importer finishes without truncation) and the standby joins at t=2 (so the timeline offset
 is negligible); `pubA` ends at t=25 with the standby announced since t=2.
 
+### Media-aware lane on the supported redundancy model (P1-p)
+
+Fixed before the first run. On `main` from #5967, independent importers carry distinct epochs, the
+relay serves the newest, an open subscription stays on its instance until that instance goes, and
+`export ts --stitch` follows a replacement as a programme switch. Only replicas of one publisher's
+bytes share an epoch, such as one publisher announced through several relays. Linux, loopback,
+the drills' clip looped live and read by every publisher from one file (`FEED=file`), a 6 s idle
+timeout, two exporters per relay with `--stitch`. Each arm runs on the demultiplexed lane, then with
+`--passthrough` on import and export, where `export ts` refuses `--stitch`: there the rig's
+supervisor restarts an exporter that exits (`SUPERVISE=1`), C1 cannot hold, and C2 is read from the
+capture's longest stall. Each runs on moq-lite 07, which carries the epoch and the restart, then on
+the default version as the epochless control; three runs per cell.
+
+1. **Two importers, one relay** (`t6-relay-kill.sh MODE=standby`, no shared identity). In one
+   window: the backup's start 8 s after the exporters have the programme; a SIGKILL (in separate
+   runs, a SIGTERM) to the importer the exporters are reading, from the publishers' logs; that
+   importer's restart 10 s later.
+2. **Two importers, two relays** (`cluster-failover.sh`, `HOP=`), exporters on both relays, the
+   same events.
+3. **One importer through two relays.** The importer on relay O, relays M1 and M2 peering with O,
+   relay E peering with both, the exporters on E. SIGKILL the middle relay serving E, from E's log.
+
+Graded per exporter and event: whether the process survived; programme lost, the source time
+absent across the event from the video PTS either side; whether the switch is marked (a new PMT
+version and a discontinuity indicator on every PID); TSDuck's continuity errors outside a marked
+switch.
+
+- **C1, the switch is clean:** in every run of arms 1 and 2, every exporter survives every event,
+  each switch is marked, and no continuity error falls outside one.
+- **C2, its cost:** programme lost per event, the median and worst of three runs, against the idle
+  timeout. A backup's start that switches the exporters is an event, not a control.
+- **C3, a relay loss is seamless:** on moq-lite 07 every exporter of arm 3 continues with no
+  programme lost, no repeated PTS, no flag and no continuity error. On the default version it is
+  expected to switch instead, graded as C1.
+
+A run whose source tap shows input loss is repeated, not graded.
+
 ### Segmented lane
 
 The same three questions, via `t6-segmented-arm.sh <drill>`. Each drill runs packager(s), origin and
