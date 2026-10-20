@@ -557,9 +557,10 @@ side adopts #2015's framing.
 - [x] The export's AUD after the SPS and PPS reported to `moq-dev`
       ([moq-dev/moq#5951](https://github.com/moq-dev/moq/issues/5951))
 - [x] `moq-net` failing a subscription on any TRACK_STATUS refusal but NOT_SUPPORTED raised with moq-dev ([moq-dev/moq#5954](https://github.com/moq-dev/moq/issues/5954))
-- [ ] The CDN relay's unserved joining FETCH and undefined TRACK_STATUS refusal (§ *A CDN-hosted
-      moqx deployment*) to openmoq/moqx, through the author; its subscription end on a reset stream
-      is openmoq/moqx#817's
+- [x] The CDN relay's unserved joining FETCH and undefined TRACK_STATUS refusal (§ *A CDN-hosted
+      moqx deployment*) reported on [openmoq/moqx#795](https://github.com/openmoq/moqx/issues/795#issuecomment-6289975173)
+      and as [openmoq/moqx#842](https://github.com/openmoq/moqx/issues/842); its subscription end
+      on a reset stream is openmoq/moqx#817's
 - [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
       `moq-dev`'s `--passthrough` lane through its relay
 - [ ] The two TS cases, fixture and checker proposed to the runner as
