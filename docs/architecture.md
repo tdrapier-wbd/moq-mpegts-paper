@@ -435,9 +435,9 @@ flowchart LR
         S1 --> SEL
         S2 --> SEL
     end
-    subgraph Ingest["Ingest (doubled publishers, same program)"]
-        P1["Publisher A"]
-        P2["Publisher B"]
+    subgraph Ingest["Ingest (one importer, one broadcast)"]
+        P1["Importer"]
+        P2["Standby importer\n(own epoch)"]
     end
     subgraph Fabric["Fabric (disjoint paths)"]
         RX["Path X"]
@@ -453,9 +453,11 @@ flowchart LR
     IRD2["IRD 2\n(ST 2022-7)"]
 
     SEL --> P1
-    SEL --> P2
+    SEL -.-> P2
     P1 --> RX
-    P2 --> RY
+    P1 --> RY
+    P2 -.->|"marked switch"| RX
+    P2 -.->|"marked switch"| RY
     RX --> SUBA
     RY --> SUBB
     RY -.->|"re-home"| SUBA
@@ -468,15 +470,17 @@ flowchart LR
 
 Redundancy is applied end to end, mirroring what broadcasters already do with ST 2022-7 but extending
 it back to the source. The hitless 1+1 lives in the *delivery* legs, which carry the **same
-program**; source redundancy is a separate, upstream concern.
+broadcast**; source and importer redundancy are switches, not merges.
 
 1. **Source** — main/backup playout with input failover *upstream of the platform* (§5.4). This
    resolves to **one** program; the switch is break-before-make and rare.
-2. **Ingest** — a doubled publisher pair carries that one program onto the fabric. Both legs must
-   carry the *same* content: that is what lets the downstream pair be merged hitlessly. Two unrelated
-   encodes cannot be.
-3. **Path** — the fabric carries each leg over a link-disjoint path. A subscriber can also re-home to
-   the other path's fan-out point (supervisor-assisted today, §8.4).
+2. **Ingest** — one importer carries that program onto the fabric as one broadcast, which both paths
+   replicate (an importer can join the relay mesh directly). Only legs of one broadcast merge: two
+   importers each mint their own epoch and see their own loss, so upstream treats them as different
+   broadcasts. A standby importer protects the importer's host; its takeover, like its start, is a
+   marked programme switch (§5.5).
+3. **Path** — the fabric carries each leg over a link-disjoint path from the importer on. A
+   subscriber can also re-home to the other path's fan-out point (supervisor-assisted today, §8.4).
 4. **Edge** — each leg's receiver feeds a groomer that produces a packet-identical, rate-coherent RTP
    egress. The groomer *enables* ST 2022-7 by producing an aligned egress; it does not itself switch.
 5. **Merge** — two IRDs, each taking **both** legs, perform the ST 2022-7 hitless switch. This is
@@ -523,8 +527,8 @@ constraint, not a convenience.
 | Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1,523 of 1,524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
-| One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **the whole chain**, including publisher, relay and exporter death |
-| One *stream-clocked* groomer per leg, **opaque lane** (the whole multiplex) | **yes** — hitless through a leg joining 8 s late, each leg's loss and return, and one export killed, for one clip on one host | as above | **the whole chain** |
+| One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **everything below the importer**, including relay and exporter death |
+| One *stream-clocked* groomer per leg, **opaque lane** (the whole multiplex) | **yes** — hitless through a leg joining 8 s late, each leg's loss and return, and one export killed, for one clip on one host | as above | **everything below the importer** |
 | One *stream-clocked* groomer per leg, **multi-track** mux on the media-aware lane | **no** — 75.56 % over independent chains: the same packets, in an order and slots each leg's own arrivals decide. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical; a late-joining leg is not ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
@@ -556,10 +560,9 @@ What stops both cases short of *byte*-identity is not the groomer but the export
 continuity counters from its own process state. So **which receiver a deployment uses decides
 whether a single leg can be restarted alone**: input-select protection returns immediately, while a
 sequence-merge receiver needs the pair restarted together. Upstream has declined to change the
-default counters and plans, but has not built, an opt-in mode that numbers them from the media, so
-that holds unless a filter outside upstream renumbers them ([Evidence](evidence.md) §3.4). An
-`[unmerged]` build of that mode merges legs that joined apart or lost complementary content (same
-section). This is
+default counters; an `[unmerged]` opt-in mode that numbers them from the media, for legs of one
+broadcast, merges legs that joined apart or lost complementary content ([Evidence](evidence.md)
+§3.4). This is
 an operational constraint on planned maintenance, and it is the reason §9's runbook says what it
 says.
 
@@ -582,21 +585,18 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
   switch, a hardware selector, a redundant encoder pair. Putting source-selection logic inside a
   publisher would re-implement that ecosystem badly and couple input policy to transport. The
   publisher's job is to take *one* good input and get it onto the fabric reliably.
-  - **The constraint the drills add:** the two publishers must be fed the *same* source, or they are
-    not a failover pair. The practical topology is **two ingest paths, one selected path fanned into
-    both publishers**, with the second path held as source-side failover for both. What must not
-    differ is the *content*. A standby that joins that shared feed mid-stream is still a valid pair,
-    but each importer numbers its groups from its own start, so a standby behind in numbering adds
-    to the failover outage and one ahead of it can rewind the export; in the mesh its arrival or the
-    failover itself can also cost subscribers ([Evidence](evidence.md) §3.4).
+  - **The constraint the drills add:** the standby importer must be fed the *same* selected source,
+    or its takeover changes the programme as well as marking it. The practical topology is **two
+    ingest paths, one selected path fanned into the importer and its standby**, with the second path
+    held as source-side failover for both. The relay serves the newest importer, so starting or
+    restarting the standby is itself a switch, to be scheduled like maintenance.
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout
   tuning, cache and fan-out, announce propagation, and route selection across the fabric.
-- **Broadcast-grade *service* redundancy is the doubled chain plus downstream hitless selection.**
-  Relay-mesh source failover exists but is bounded by failure detection (one idle timeout,
-  ungraceful loss only, plus any lag in the standby's group numbering) and does not reliably cover
-  a graceful source exit, so service continuity is
-  delivered the way broadcasters already trust: **dual publishers → dual fan-out paths → dual
-  receivers → dual groomers → ST 2022-7 selection at the receiver.**
+- **Broadcast-grade *service* redundancy is a doubled chain below the importer plus downstream
+  hitless selection.** Importer failover is a marked switch, at least one idle timeout late for a
+  lost host on every build measured, so from the importer on continuity is delivered the way
+  broadcasters already trust: **one importer → dual fan-out paths → dual receivers → dual groomers →
+  ST 2022-7 selection at the receiver.**
 - **On segmented HTTP the same protection is far cheaper** — the serving node holds no state. Two
   packagers of one feed into a shared store emit byte-identical segments (`--intra-close`) with no
   receiver-side merge; the chain is still doubled, engineering moves to store consistency, and a pair
@@ -610,7 +610,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Publisher** | The other leg keeps its path flowing and the IRD rides it with no visible transition. The fabric *can also* reselect a dead active source onto a standby, but only as a bounded reselect — at least one idle timeout of detection, ungraceful loss only, no seamless merge — and on no build measured for every subscriber. A shared publisher epoch makes the move seamless at the relay only on the opt-in moq-lite 07, and the exporter then survives only where the two publishers' group numbering allows ([Evidence](evidence.md) §3.4). Not load-bearing |
+| **Importer** | Both legs carry its broadcast, so both lose it. On current `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break; unmeasured. On the builds measured, a lost host cost at least one idle timeout, and no takeover reached every subscriber in the mesh ([Evidence](evidence.md) §3.4). Not hitless |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -742,12 +742,12 @@ The publisher is the point at which a feed enters the platform. Its job is to ac
 source, package it for the transport without discarding what the endpoints will need, publish it to
 the fabric, and expose enough of itself to the control plane to be provisioned and observed.
 
-**Publisher redundancy.** A publisher is a candidate single point of failure, so publishers must be
-deployable as redundant pairs with independent ingest paths, publishing under a scheme that lets the
-egress perform hitless selection (§5). Of the two common patterns — active/active dual publication
-and active/standby — **active/active is preferred for contracted content** because it removes
-failover-detection latency from the critical path, at the cost of roughly double ingest and first-hop
-bandwidth. This is the same trade-off broadcasters already accept for ST 2022-7, carried end to end.
+**Publisher redundancy.** A publisher is a candidate single point of failure, but only legs of one
+broadcast merge hitlessly (§5), so the importer is active/standby: a standby on its own epoch whose
+takeover is a marked programme switch. From the importer on, **active/active is preferred for
+contracted content** — two fan-out paths carrying one broadcast — because it removes
+failover-detection latency from the critical path, at the cost of roughly double first-hop bandwidth.
+This is the trade-off broadcasters already accept for ST 2022-7, carried from the importer on.
 
 **Transport independence.** The publisher's packaging layer — framing, catalog generation, and the
 reassembly contract with the egress — is specified *independently of the transport draft*: the draft
@@ -867,9 +867,9 @@ should treat it as part of the egress, not as operations tooling.
 chain or external supervisor.
 
 **Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at
-10 s, the default from moq 0.14.0)**, extended by the standby's lag in group numbering, and **is not
-reliable on a graceful exit** — the relay propagates the clean end, or switches to a standby the
-exporter cannot continue from ([Evidence](evidence.md) §3.4). Load-bearing
+10 s, the default from moq 0.14.0)** on every build measured, and was **not reliable on a graceful
+exit** there; on current `main` it is a marked programme switch to the newest live importer,
+unmeasured ([Evidence](evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).
 

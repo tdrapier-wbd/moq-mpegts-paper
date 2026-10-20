@@ -739,6 +739,13 @@ merge.
 One subscriber per arm gave a revocation "bound" of one cadence plus 0.110 s; six staggered sessions put
 the worst case at 1.54 cadences. Ask what sessions share before quoting a per-session bound.
 
+**Random loss above about 1 % and reorder deeper than three packets are stress cells, not path
+models.** *(T28; #5953, declined on this ground.)* Real paths do not lose packets independently of
+their load, and QUIC declares a packet overtaken by three lost. T28's 5–10 % loss and 20 % reorder
+cells separated SRT from the MoQ lane, and the settings proposed from them were declined. Label such
+cells as stress where a claim cites them; rank lanes or settings, and propose upstream, on outage,
+congestion and burst-loss cells or a captured path, as upstream's own grading does (#5918).
+
 **A verified hypothesis is not a working mechanism.** *(T39.)* One credential carried both scopes, yet the
 shipped tooling could not publish telemetry at all. Name what the test did and did not exercise.
 

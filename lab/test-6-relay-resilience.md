@@ -642,8 +642,8 @@ early-subscriber hard kill fails the same way on both protocols, 2 runs each.
   three resumed, after a 3–6 s stall. With the standby started earlier, two of three aborted on a
   timestamp below the previous group's start (its input lagging live: [Corrections](#corrections)): the [#4354](https://github.com/moq-dev/moq/issues/4354)
   mechanism, reached by resume instead of reselection. Why the third survived with no stall is not
-  established. Upstream's plan for the alignment, groups and timestamps derived from the input, is
-  `quest/m1/hop-aligned-import.md`; these arms are its before-measurement.
+  established. Upstream has since declined aligning such importers and removed the shared epoch
+  (§ *Conclusion*).
 - **A subscription made before the standby announced is not resumed on `moq-lite-07`.** It gets
   `not found` on most of its tracks at the failover (3 of 3). That fits the standby's refusals at
   its arrival being kept against those subscriptions, the mechanism of
@@ -1228,6 +1228,9 @@ time, so it is break-before-make by construction; the dual-leg drill it points t
 T12, which grades two concurrently live legs at a receiver and finds the switch hitless — including
 the graceful exit that has no single-leg answer. The full validated finding — including which of our
 reports were real vs harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
+Upstream `main` has since removed the shared importer epoch (#5967): each importer mints its own,
+the relay serves the newest, and a takeover is a marked programme switch (`export ts --stitch`), not
+a resume. Every shared-hop and shared-epoch arm here records a build that had the mechanism.
 
 **On the segmented lane the same three questions come out differently, and the reason is that the
 serving node holds no state.** A dead origin costs exactly its downtime and no content, because the

@@ -23,9 +23,10 @@ defined [below](#blocked-on-apparatus).
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
-| P1-p | 1+1 source failover with a shared publisher epoch on aligned importers, on one relay and in the mesh | Before [#5517](https://github.com/moq-dev/moq/pull/5517) nothing failed over in the mesh, because a standby refused before its PMT was never asked again; #5517 (merged) announces an import only once it knows its tracks, unmeasured in the mesh; the R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on one relay | Upstream: `hop-aligned-import`, our [#5895](https://github.com/moq-dev/moq/pull/5895), open | The single-relay matrix (`FEED=file`) and the mesh drill re-run on `moq-lite-07` on such a build | [T6](test-6-relay-resilience.md) § *Single-relay standby*, § *Mesh source failover* |
-| P1-o | A late-joining multi-track 1+1 leg merging at the byte | [Architecture](../docs/architecture.md) §5.1's scope: legs must be co-started (§5 row 8) | The live-feed cell once a host besides the primary is fed; upstream TDT placement and `ts-hitless --sync` for the demultiplexed export | On the opaque lane, the live-feed cell hitless; on the demultiplexed export, the merged build's residue attributed and TDT revisions placed by media time | [T12](test-12-dual-path-handoff.md) § *Arm D on the opaque lane*, [T13](test-13-downstream-grooming.md) § *On #4645's PCR grid* |
-| P1-z | The provisioned-path QUIC settings on `moq-quic`, together | Whether the lane can match SRT on the transport axis ([Comparison](../docs/comparison.md)): a capped probe backoff matched SRT's outage loss; relaxed reorder thresholds helped on noq but overran the bottleneck on quinn, whose fork `moq-quic` is; a rate-holding sender is unbuilt | a rate-holding sender (a lab patch, or [#5953](https://github.com/moq-dev/moq/issues/5953)'s settings) | T28's outage, 5 % loss and 20 % reorder cells on `moq-quic`, with the settings and without | [T28](test-28-failure-injection-matrix.md) |
+| P1-p | Source failover on the supported model: importers on distinct epochs, on one relay and in the mesh, both lanes; and one publisher's broadcast through two relays, the serving one killed | The R6 source-failover row ([Comparison](../docs/comparison.md) §13) rests on a shared epoch upstream has removed. Now a takeover is a marked programme switch, and so is a backup's start; the relay-loss resume is what upstream promises for one publisher announced through several relays | — | Kill, clean exit, and a backup's start and restart on `main`, graded on programme lost and TR 101 290 across each switch, single relay and mesh; and the relay kill under one publisher announced through two | [T6](test-6-relay-resilience.md) |
+| P1-o | Legs of one broadcast merging at the byte on a merged `--sync` export, a late-joining leg included, on the live feed across two hosts | [Architecture](../docs/architecture.md) §5.1's scope: a multi-track pair merges co-started on merged builds, a late leg only on an `[unmerged]` one (§5 row 8) | Upstream: `ts-hitless`, our [#5949](https://github.com/moq-dev/moq/pull/5949), open | T50's arms on the merged build, and a late leg on the live feed graded against its partner | [T50](test-50-deterministic-ts-legs.md) |
+| P1-z | T28's outage and relay-restart cells with the probe re-armed on the peer's return and the relay's reset key | Whether the lane matches SRT's outage loss ([Comparison](../docs/comparison.md)): a capped probe backoff matched it in the lab. Upstream takes the re-arm as a default and declined a rate-holding controller, relaxed reorder thresholds and a profile | Upstream: `quic-outage-probe` (ours, after #5949) and [#5910](https://github.com/moq-dev/moq/pull/5910) | Both cells on a build with each, against the same control | [T28](test-28-failure-injection-matrix.md) |
+| P1-j | Fan-out and permanence through a CDN-hosted relay: a subscriber ramp to the knee on the live feed, then 72 h at about half of it; later, more than one hop | Every fan-out figure is one relay in one region ([Evidence](../docs/evidence.md) §6), so the R2 row reads *indicated* ([Comparison](../docs/comparison.md) §13) | The operator's window and logging level; P0-g's end | Each step's delivered rate, continuity, PCR and join time to the first degradation; 72 h with the wire grader on, reconnects counted, the path's loss and RTT recorded | [T52](test-52-cdn-relay-fanout.md) |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig | [T28](test-28-failure-injection-matrix.md) |
 | P1-f | The scaling model's remaining points, and the segmented fan-out | The scaling model is measured to N = 100, with the origin co-resident | a subscriber host that holds 100 exporters; a second subscriber host | The ceiling with GSO on past N = 100; the origin on its own host; an hour at N = 100; the segmented fan-out measured | [T26](test-26-cross-host-fanout.md), [T43](test-43-fanout-current-build.md) |
 | P1-g | Capped-stream relay memory under pressure | Whether the relay's memory plateaus under pressure (§5 row 14), which no soak exercises | — | T9's capped-stream arm run | [T9](test-9-performance.md) |
@@ -40,7 +41,7 @@ defined [below](#blocked-on-apparatus).
 | # | What remains | Gate | Done when | Protocol |
 |---|---|---|---|---|
 | P2-a | What commercial monitoring would have caught: the vendor survey | — (outreach, not apparatus) | Survey answers mapped against the measured fault-to-telemetry table | [T32](test-32-observability-survey.md) |
-| P2-d | Differential delay on a real pair rather than `netem` | a second contribution path; the secondary's feed will share the primary's | T12's merge graded on the real pair | [T12](test-12-dual-path-handoff.md) |
+| P2-d | Differential delay on a real pair rather than `netem`: two `--sync` legs of one broadcast over two distribution paths, our relay and P1-j's | #5949 merged; P1-j | T12's merge graded on the real pair | [T12](test-12-dual-path-handoff.md) |
 | P2-e | Replicates for the segmented congestion rungs | — | Every segmented rung at three replicates (the MoQ rungs and the delay matrix are) | [T31](test-31-congestion-capacity-ladders.md) |
 | P2-f | LEO handover impairment (a candidate, not committed) | — | Committed or deleted | [T35](test-35-leo-handover-impairment.md) |
 | P2-g | The transparency and three-lane arms from an office network | — | The arms reproduced, with the network's UDP/QUIC posture recorded | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) |
@@ -74,20 +75,19 @@ review waits on that release; m1 keeps the T-STD epic.
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
-| `epoch-anchor` [M] | Its clock and era are our [#5625](https://github.com/moq-dev/moq/pull/5625), merged; its co-start across two relays is our draft [#5955](https://github.com/moq-dev/moq/pull/5955); left: history-derived catalog fields (on every importer, the estimator's jitter, peak-held bitrate and top framerate), the successor epoch | none | **High**, R6 |
-| `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` (our draft [#5949](https://github.com/moq-dev/moq/pull/5949)) | **High**, R6 at the IRD |
-Set aside: `ts-reliability`'s `fidelity` plan
-and its child `section-placement`
-(verbatim private data, which no entry above waits on), its `recovery` quest (upstream CI for the content loss T28 measures),
-its `hole-budget` and `grader-determinism` (upstream's own TS validation), and the QoS line's lag
-histogram (R8 only).
+| `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` (our [#5949](https://github.com/moq-dev/moq/pull/5949)) | **High**, R6 at the IRD |
+| `quic-outage-probe` [S] | Re-arms the probe timer when the peer is heard again, by default (from our [#5953](https://github.com/moq-dev/moq/issues/5953)) | none; ours, after #5949 | **Medium**, P1-z |
+
+Set aside: `ts-reliability`'s `fidelity` plan (verbatim private data, which no entry above waits on)
+and its `recovery` quest (upstream CI for the content loss T28 measures), `ts-hitless-h265` (our
+sources are H.264), and the QoS line's lag histogram (R8 only).
 
 ## Blocked on apparatus
 
 | Gate | State | Unblocks |
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d, P1-i, P2-k |
-| **B-7** A live contribution feed of a real service over SRT to both EC2 hosts | **on the primary** (graded in [T33](test-33-gate2-preparation.md) Part C); the secondary's pending | now: P0-j, P0-g's live arm; with the secondary's: P1-o's two-ingest arm |
+| **B-7** A live contribution feed of a real service over SRT | **on the primary** (graded in [T33](test-33-gate2-preparation.md) Part C); no entry needs the secondary's | P0-j, P0-g's live arm, P1-j, P1-o's live leg |
 | **B-4** A commercial ABR-to-TS gateway | none | the segmented lane's low-latency arm at equal conformance (§5 row 5); P1-i |
 | **B-5** The commercial packaging edge itself | none (a plain byte cache only re-measures nginx) | multi-programme carriage through a media-aware edge; P1-i |
 

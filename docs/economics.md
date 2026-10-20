@@ -23,7 +23,7 @@ results and what they do and do not support.
 > Three inputs are neither published nor measured, and each is labelled wherever it appears. The
 > negotiated-discount figure in §4.4 is a **hypothetical** percentage off published list —
 > illustrative arithmetic, not anyone's terms. The CDN relay rates are **assumptions** about where a
-> competitive market would land, since only one provider has announced a MoQ relay tariff. The
+> competitive market would land, since only two providers publish a MoQ relay tariff. The
 > self-hosted build-up is **illustrative**. Nothing here should be read as evidence that a particular
 > rate is obtainable.
 
@@ -223,7 +223,7 @@ the far end needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
-| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations — but carriage **fails against every third-party relay** ([Evidence](evidence.md) §3.7) |
+| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes seven of nine other relays after the join, five for a late subscriber ([Evidence](evidence.md) §3.7) |
 | SRT | 1.037 *(measured, same path; 1.035 on the feed)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
 | Zixi | ~1.03 *(estimated)* | sub-second *(vendor claim, not measured here)* | broadcaster fans out | proprietary, per-GB licence |
 | HLS with TS / DVB-DASH | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1/P2-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, ETSI TS 103 285 — **not standards-track, yet carried by every cache, CDN and general-purpose client; the low-latency transport-stream receive path is the exception** ([Comparison](comparison.md) §6.1) |
@@ -233,9 +233,7 @@ it carries an important non-economic condition: **a latency figure on this lane 
 the conformance of the same bytes.** Held at TR 101 290 P1/P2 conformance the ordering is MoQ
 2,447 ms, segmented HTTP 9,286 ms, and the transparent tunnels at whatever jitter buffer the operator
 sets — 1,618 ms at 1 s — since their egress carries the source's own conformant grid ungroomed.
-**No sub-second configuration has passed a whole capture on any lane in this repository, and none has
-been measured conformant on MoQ** ([Evidence](evidence.md) §3.11). These are delivery figures, not
-camera-to-display.*
+No sub-second configuration has been measured conformant on MoQ (§4.6). These are delivery figures, not camera-to-display.*
 
 **No option breaks last-mile linearity.** A relay is a cache (§4.6): upstream traffic collapses to one
 copy, and the last mile stays N unicast copies. A CDN brings a **price**, not a topology: commodity
@@ -448,7 +446,7 @@ Refining "capability, direction, appetite for engineering" into things a broadca
 
 | Question | If yes | If no |
 |---|---|---|
-| **Is the latency budget sub-second?** | own tunnels — MoQ's architecture reaches the band but **no conformant sub-second configuration has been measured on MoQ, and none has passed a whole capture on any lane** ([Comparison](comparison.md) §5.1), so this discriminator is credible rather than evidenced | segmented HTTP over a CDN leads on commodity price, a dozen suppliers and delivery-path interoperability, with an off-the-shelf path back to TS at classic segment durations — **conditional on the receive path being bought or already in the estate, since nothing free receives the low-latency variant** ([Comparison](comparison.md) §6.1). Between roughly 2.5 s and 9 s, MoQ leads at P1/P2 conformance |
+| **Is the latency budget sub-second?** | own tunnels — MoQ's architecture reaches the band, but nothing conformant has been measured in it (§4.6), so this discriminator is credible rather than evidenced | segmented HTTP over a CDN leads on commodity price, a dozen suppliers and delivery-path interoperability, with an off-the-shelf path back to TS at classic segment durations — **conditional on the receive path being bought or already in the estate, since nothing free receives the low-latency variant** ([Comparison](comparison.md) §6.1). Between roughly 2.5 s and 9 s, MoQ leads at P1/P2 conformance |
 | **Do you already own transit and PoPs where the destinations are?** | on-prem is the cheapest base per byte | the meet-me-point cost and lead time is the hidden line that decides it (§2) |
 | **Are there more than tens of destinations, clustered by region?** | rented fan-out starts to pay, because that is the topology where a relay economises backhaul (§4.5) | it buys little; the linearity is in the last mile either way |
 | **Are you willing to own a conformance stage no vendor sells?** | MoQ is available to you | segmented HTTP or SRT, where the hand-off is bought or unnecessary |
@@ -514,8 +512,8 @@ staffed from the same place.
 
 - **Infrastructure providers — CDNs and hyperscalers — capture the durable value.** They sell fungible
   capacity per unit, the one input nobody self-supplies past a certain reach, and §4 puts it at roughly
-  90 % of a self-built transport bill. The caveat is §4.6's: for MoQ specifically there are two suppliers
-  at four to ten times commodity, so the market premise the buyer is relying on is not yet met.
+  90 % of a self-built transport bill. The caveat is §4.6's: for MoQ the market premise the buyer
+  relies on is not yet met.
 - **Control-plane vendors have a real market, and it is not the giants.** A smaller organisation has
   fewer systems to integrate and often no codified process for the work at all, so the vendor's
   opinionated model *is* the product — bought as a way of acquiring a process rather than automating
@@ -568,25 +566,22 @@ the thesis rather than a detail of it.**
   stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely
   filled carrier would bound the range. The cheapest outstanding measurement on the deciding line
   ([Evidence](evidence.md) §5).
-- **What is the overhead under loss beyond 1 %?** Both protocols are measured back-to-back at 1 % and
-  neither moved by more than a point, but retransmission is charged differently by the two and the
-  sender-side cost above 1 % is inferred rather than captured.
+- **What is the overhead on a lossy real path?** Both protocols are measured back-to-back at 1 %
+  random loss and neither moved by more than a point; random loss beyond that stresses a transport
+  rather than models a route, and the sender-side cost is inferred rather than captured.
 - **What does SRT actually cost to fan out?** N origin sessions or a re-origination tier, so a
   per-datagram framing comparison flatters SRT at exactly the topology broadcast uses.
 
 **Platform maturity, which the model assumes away.**
 
 - **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity
-  procurable from more than one supplier; a feed currently traverses only relays from the same
-  implementation as the publisher ([Evidence](evidence.md) §3.7).
+  procurable from more than one supplier; relay portability is partial (§4.6).
 - **What does relay memory cost to operate around?** A sizing line rather than a restart cycle,
   since it plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot
   ceiling per publisher** — and the cost lands on multi-channel relay density, not on audience:
   growth is flat across 0–4 subscribers ([Evidence](evidence.md) §3.6). That plateau was measured on
   the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a
-  property of the design or of the QUIC stack is open. Separately, **`moq import ts` grew linearly
-  at +2.83 MB/h with no drawdown** on moq 0.11.2. A 24 h re-soak on moq 0.12.8 reads +0.23 MB/h,
-  which makes it a sizing line rather than a restart cycle ([Evidence](evidence.md) §3.2).
+  property of the design or of the QUIC stack is open.
 - **How much of the operational-saving hypothesis survives running an immature platform to a
   broadcast SLA?** One on-call engineer outweighs the entire modelled transport line at single-route
   scale.

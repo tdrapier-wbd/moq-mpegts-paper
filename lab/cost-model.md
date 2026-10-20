@@ -202,9 +202,9 @@ the wire cost of the bytes, not the cost of running the service.
 Observations:
 
 - **Egress is 86 % of the DIY bill at 10 Mbps and 94 % at 25 Mbps.** The measured compute
-  advantage sits on a line that barely registers. T9's "compute is not the constraint" now has a
+  advantage sits on a line that barely registers. T9's "compute is not the constraint" has a
   number: about a thousand dollars a year against six to sixteen thousand of egress.
-- **MoQ is now the cheaper DIY row**, by $364/yr at 10 Mbps, entirely from carriage: it puts
+- **MoQ is the cheaper DIY row**, by $364/yr at 10 Mbps, entirely from carriage: it puts
   9.82 Mbps on the wire against SRT's 10.37. That is the smallest gap in the table and it reverses
   if the source is tightly packed (§2).
 - **Reserved bandwidth is granular, and the grain matters.** At one channel 1+1 (19.6 Mbps) the
@@ -317,8 +317,11 @@ intuition that CPU is what you buy:
 | c6gn.xlarge | 4 | 6.3 Gbps | 4.40 Gbps | 6.30 Gbps | cores |
 
 Sessions per instance at 9.8 Mbps of MoQ wire rate: c7g.large 231 by CPU but **95** by network
-baseline; c6gn.large 231 by CPU and 305 by network, so 231. **On a general-purpose instance the
-sustained network allowance throws away more than half the relay's measured compute headroom.**
+baseline; c6gn.large 231 by CPU and 305 by network, so 231. That CPU column is T9's co-resident
+rate; at the cross-host rate the paper sizes on, about 80 sessions a core
+([Evidence](../docs/evidence.md) §3.6), CPU allows 159 on either and every binding stands. **On a
+general-purpose instance the sustained network allowance throws away 40–60 % of the relay's measured
+compute headroom.**
 The "up to 12.5 Gbps" headline is burst credit, irrelevant to a 24/7 feed. Network-optimised
 families cost ~20 % more per instance and remove the ceiling, which is the correct trade for an
 always-on relay.
@@ -370,8 +373,7 @@ carrier would widen the gap — and MoQ's return path is four to eight times SRT
 all-in advantage to 4.3 % on the clip and reverses it on the feed ([T9](test-9-performance.md),
 [T14](test-14-data-plane-comparison.md)).
 
-Either way it is not decisive, which is the same conclusion this section reached when the input
-pointed the other way. It is roughly the size of the difference between two providers' list prices,
+Either way it is not decisive. It is roughly the size of the difference between two providers' list prices,
 smaller than the reserved-versus-on-demand gap, and an order of magnitude smaller than the gap
 between supplier categories in §4 — which is the model's central point: **a 5 % carriage difference
 is not worth choosing a transport over against a 45× procurement decision.** It is a reason not to
@@ -469,8 +471,8 @@ anywhere in this model.
   the *size* of MoQ's advantage is a property of the source rather than of the protocol: 5.3 % on a
   clip with 4.57 % null stuffing, none on a stuffing-free feed, and a loosely filled carrier would
   widen it. Read the input as "carriage does not count against MoQ", not as 5 % of banked egress.
-- **Carriage is modelled clean-path.** Measured at 1 % forward loss both multipliers rose by about
-  the loss rate and the ranking held, so loss is not a hidden reversal — but nothing above 1 % is
+- **Carriage is modelled clean-path.** Measured at 1 % random forward loss both multipliers rose by
+  about the loss rate and the ranking held, so loss is not a hidden reversal; no real lossy path is
   measured, and the sender-side retransmission cost is inferred from shaper counters rather than
   captured directly ([T9](test-9-performance.md)).
 - **MoQ's multiplier is the media-aware lane.** The opaque lane carries the source verbatim,
@@ -492,20 +494,7 @@ anywhere in this model.
 
 ## 12. What to measure or obtain next
 
-1. **A third source profile for the carriage multipliers.** MoQ's advantage *is* the source's
-   stuffing, 5.3 % on the clip and none on the stuffing-free feed; a loosely filled carrier would
-   bound the range ([T9](test-9-performance.md), [T14](test-14-data-plane-comparison.md)).
-2. **Whether reserved-bandwidth-equivalent terms exist for raw egress.** The model's most
-   surprising within-hyperscaler finding — the managed service undercutting the platform by 5× —
-   turns entirely on this being a MediaConnect-only construct. If a committed-egress agreement can
-   reach $0.017/GB on plain EC2, the DIY case on cloud is restored.
-3. **Whether a CDN will operate MoQ relays at delivery-rate pricing.** The several-hundred-
-   destination case in §6 rests on it. The two published MoQ relay rates, $0.04 and $0.05/GB, sit
-   four to ten times above commodity delivery, so whether relay service converges toward delivery
-   rates or holds a premium is the single largest open commercial question in the model.
-4. **A control-plane cost for the self-hosted path.** §10.1 prices bandwidth and iron but not
-   provisioning, monitoring or orchestration, which is where vendors price and where the
-   self-hosted case is most likely to be overstated.
+The model's open inputs are [economics](../docs/economics.md) §9's questions.
 
 ## References
 

@@ -184,9 +184,10 @@ Relays learn where feeds are from announcements, and they can be chained into a 
 sends one copy whatever the audience. They do not inspect or alter the media. Unlike an HTTP cache, they
 hold a live session with every subscriber ([Architecture](architecture.md) §8).
 
-**Redundancy.** Two publishers that announce the same broadcast under one [epoch](glossary.md) declare
-themselves interchangeable, and a relay can switch to the second when the first fails. What that buys,
-and what it does not, is in [Architecture](architecture.md) §5.
+**Redundancy.** Each publisher announces under its own [epoch](glossary.md), and a relay serves the
+newest; when it fails, an older one still announcing takes over as a restart, which a subscriber sees
+as a programme switch. Legs of one publisher's broadcast carried over two paths are what a receiver
+can merge. What that buys, and what it does not, is in [Architecture](architecture.md) §5.
 
 **Carrying a transport stream.** There are two ways, which this paper calls lanes
 ([Architecture](architecture.md) §6). The [media-aware lane](glossary.md) demultiplexes the TS at the

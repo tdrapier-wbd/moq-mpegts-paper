@@ -109,8 +109,9 @@ head-to-head under one shaper ([Evidence](evidence.md) §3.3):
 
 Past 7.7–12.2 % applied loss the segmented lane's HTTP/1.1 client re-anchors and leaves holes,
 silently past ~20 % ([T5](../lab/test-5-network-impairment.md)). **Against SRT, matched on
-measured latency and graded on content, the media-aware lane loses more programme under every shape
-measured but 5 % reorder**, by a margin its build and QUIC stack set.
+measured latency and graded on content, the media-aware lane loses more programme across an outage
+and a killed relay or publisher**, by a margin its build and QUIC's recovery set, and in the random-loss
+and reorder stress cells but 5 % reorder.
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
 
@@ -136,9 +137,9 @@ parsing media ([Evidence](evidence.md) §3.12) — a monitoring hook, not a self
 Broadcast reliability comes from **1+1 with selection at the receiver**, which is transport-independent
 ([Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4). Head-to-head the lanes diverge.
 **Serving-node failover**: media-aware relay reselection takes at least one idle timeout, 30–33 s at the
-builds' default and ~11 s at moq 0.14.0's 10 s, and is never hitless. A shared publisher epoch removes
-the seam at the relay only on the opt-in moq-lite 07, and no configuration of two merged importers on
-one relay survived every case ([Evidence](evidence.md) §3.4). A segmented pair sharing one feed and one set of segment names fails
+builds' default and ~11 s at moq 0.14.0's 10 s, and is never hitless. Between importers upstream now
+makes it a marked programme switch; the shared epoch this replaced held in no configuration
+measured ([Evidence](evidence.md) §3.4). A segmented pair sharing one feed and one set of segment names fails
 over with no measurable interruption, 3/3 runs.
 **Misconfiguration**: a segmented pair with mismatched sources delivers ±20 s of time-travel that passes
 continuity and PCR checks, where the media-aware relay refuses. On the media-aware lane a hitless pair is
@@ -502,7 +503,7 @@ MoQ's, the commercial one segmented HTTP's.
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
 | Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
 | Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 14–22** | MOQT 16, 18 | MOQT 14, 16 and 18 | inherits `moq-dev` |
-| Source failover | route reselection; a 1+1 pair declared by a shared publisher epoch (`--epoch`), which only the opt-in moq-lite 07 carries on the wire | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
+| Source failover | route reselection; between importers, a marked switch to the newest (`export ts --stitch`) | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
 | Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
 
 **No one else does the broadcast-specific layer** — PCR egress, CBR grooming, TR 101 290 conformance.
@@ -529,10 +530,10 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme under every shape measured but 5 % reorder, by a margin its build and QUIC stack set (§3.1) |
+| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme across an outage and a killed relay or publisher, by a margin its build and QUIC's recovery set (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, a killed relay costs the media-aware lane about twice as much (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
-| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, a shared `--epoch` included; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
+| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, by design a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |

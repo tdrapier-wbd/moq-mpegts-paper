@@ -4,7 +4,9 @@
 credits nothing end to end. A clean exit switches inside the export's delay (arm 2): on both lanes
 the fix meets every criterion, where the stack without it rewinds (demultiplexed) or repeats 0.6 s
 at the switch (passthrough). The graceful-exit gap, which the change does not address, still ends
-two of the fix's five demultiplexed serving runs before any switch.**
+two of the fix's five demultiplexed serving runs before any switch.** Upstream declined the
+approach: it closed #5895 and removed `--epoch` (#5967), so independent importers never share an
+epoch and no merged build has the pair measured here. The results hold for the builds named.
 
 ## Objective
 
@@ -19,7 +21,7 @@ the epoch's catalog clock it opens in: a group opens at the first start in a sec
 keyframe, any audio frame, a data unit, a passthrough group start), later starts in that second
 join it, a second with no start gets an empty group, and a process publishes nothing from the
 second it started in. If the relay's resume then lands on the same media, the standby arm passes
-where main fails, and P1-p ([planned experiments](planned-experiments.md)) has the build it waits for.
+where main fails.
 
 ## Environment
 

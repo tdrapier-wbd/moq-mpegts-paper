@@ -143,7 +143,7 @@ assumes: two relays lose media, and on three a subscriber joining mid-stream nev
 ### A CDN-hosted moqx deployment, both lanes
 
 A private moqx endpoint run by a CDN, offered for draft 16 and 18 over WebTransport or raw QUIC.
-`moq-dev` at `3abf0161` at both ends from a home line, the synthetic fixture paced by `tsp regulate`,
+`moq-dev` at `3abf0161`, and again at `f13283b30`, at both ends from a home line, the synthetic fixture paced by `tsp regulate`,
 one subscriber up before the publisher; raw QUIC on draft 18 and WebTransport on draft 16, each
 with the passthrough lane (`import`/`export ts --passthrough`) and the demultiplexed one (`export ts
 --delay 1s`). Anonymous publish is accepted under one prefix.
@@ -154,25 +154,32 @@ with the passthrough lane (`import`/`export ts --passthrough`) and the demultipl
 - **Demultiplexed: media intact, the SDT lost.** 450 of the fixture's 500 video frames, the first
   at its third group; every non-key frame byte-identical, and every audio frame from fixture frame
   95 on; PCR intervals at most 25.57 ms, continuity 0, no T-STD overflow or video underflow. Each
-  keyframe differs from its source in NAL order alone (the export writes the AUD after the SPS and PPS) and
-  one start code, as it does through a local `moq-relay`, so that is the export's. **The output
+  keyframe differs from its source in one start code (the IDR slice's, four bytes for three) and,
+  at `3abf0161`, in NAL order (the AUD after the SPS and PPS, fixed by #6001), as it does through a
+  local `moq-relay`, so that is the export's. **The output
   carries no SDT** (below). Through the local `moq-relay`, which delivers the current group whole,
   the SDT arrives and video starts a group earlier.
 
-Both transports and both drafts give the same results. **Why, from trace-level reruns on draft 18:**
+Both transports and both drafts give the same results, on both builds; at `f13283b30` the
+demultiplexed video started one group later still (425 frames), unattributed. **Why, from trace-level reruns on draft 18:**
 `moq-net` subscribes from the next object and, since each SUBSCRIBE_OK reports a largest object,
-sends a relative joining FETCH (offset 0) for the current group on every track. The relay opens no
-stream for any of them, so a group in progress loses its head: `moq-net` drops the tail it does
-receive, and the SI track's one object, which is that head, never arrives. Two intermittent failures
-deliver nothing, each the relay's answer to a legitimate request:
+sends a relative joining FETCH (offset 0) for the current group on every track. None reaches the
+publisher, which logs every SUBSCRIBE and no FETCH, and no object comes back, though the relay holds
+the group: it has already opened the group's stream on the subscription. So a group in progress
+loses its head: `moq-net` drops the tail it does receive, and the SI track's one object, which is
+that head, never arrives. Two intermittent failures deliver nothing, each the relay's answer to a
+legitimate request:
 
-- *Code 0xFFFFFFFF* (one of the two first raw-QUIC runs, two of three trace reruns). When the
-  catalog request races its subscription, `moq-net` learns the track by TRACK_STATUS; the relay
-  refuses it with 0xFFFFFFFF, a code no draft defines, and `moq-net`, which falls back to SUBSCRIBE
-  only on NOT_SUPPORTED, gives the catalog up.
+- *Code 0xFFFFFFFF* (one of the two first raw-QUIC runs, two of three trace reruns on `3abf0161`;
+  none of six later trace reruns on it, nor seven runs at `f13283b30`). When the catalog request
+  races its subscription, `moq-net` learns the track by TRACK_STATUS; the relay refuses it with
+  0xFFFFFFFF, a code no draft defines, and `moq-net`, which then fell back to SUBSCRIBE only on
+  NOT_SUPPORTED, gives the catalog up. At `f13283b30` a subscription no longer sends TRACK_STATUS
+  (#5991).
 - *Code 0* (one passthrough rerun). Joined at object 1 of group 0, `moq-net` resets the headless
   tail's stream; the relay then ends the subscription with PUBLISH_DONE, status 0, "Write after
-  stream complete or reset".
+  stream complete or reset": openmoq/moqx#817's removal on a peer's STOP_SENDING, which its open fix
+  (openmoq/moxygen#533) covers.
 
 ### The first sweep, with `moq` 0.9.8
 
@@ -550,8 +557,9 @@ side adopts #2015's framing.
 - [x] The export's AUD after the SPS and PPS reported to `moq-dev`
       ([moq-dev/moq#5951](https://github.com/moq-dev/moq/issues/5951))
 - [x] `moq-net` failing a subscription on any TRACK_STATUS refusal but NOT_SUPPORTED raised with moq-dev ([moq-dev/moq#5954](https://github.com/moq-dev/moq/issues/5954))
-- [ ] The CDN relay's unserved joining FETCH, undefined TRACK_STATUS refusal and subscription end
-      on a reset stream (§ *A CDN-hosted moqx deployment*) to its operator, through the author
+- [ ] The CDN relay's unserved joining FETCH and undefined TRACK_STATUS refusal (§ *A CDN-hosted
+      moqx deployment*) to openmoq/moqx, through the author; its subscription end on a reset stream
+      is openmoq/moqx#817's
 - [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
       `moq-dev`'s `--passthrough` lane through its relay
 - [ ] The two TS cases, fixture and checker proposed to the runner as
