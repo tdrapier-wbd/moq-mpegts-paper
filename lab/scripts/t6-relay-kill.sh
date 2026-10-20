@@ -12,6 +12,13 @@
 #                   continue only through the relay reselecting the standby. `moq` 0.12.1 handles
 #                   only SIGINT, so TERM is a hard kill like KILL there; from 0.12.8 TERM and INT both
 #                   close the session. EOF ends the importer's input, a clean source end.
+#   MODE=diamond    One publisher on relay O; relays M1 and M2 each dial O, relay E dials both, and
+#                   the subscribers are on E. At KILL s the middle relay serving E is SIGKILLed: the
+#                   one that logged more `serving group` lines over the 2 s before (RLOG enables
+#                   them); RESTART_STANDBY=1 restarts it at RESTART s.
+#   TOPOLOGY=mesh   Standby only: the second publisher and sub2 use a second relay that dials the
+#                   first. Relays in a mesh run a 6 s idle timeout with a 2 s keep-alive.
+#   RLOG            RUST_LOG for the relays after the first, e.g. `info,moq_net::lite::publisher=debug`.
 #   STAGGER         Seconds between the two publishers' starts (default 2). They join the one live
 #                   stream at different keyframes, so their group numbers differ for the same media;
 #                   0 starts both on the same keyframe.
@@ -83,18 +90,50 @@ if [ -n "$HOP" ]; then
 	elif "$MOQ" --help 2>&1 | grep -q -- '--origin <'; then ORIG=(--origin "$HOP")
 	else echo "this build has none of --epoch, --hop and --origin"; exit 1; fi
 fi
-moq_relay_public "127.0.0.1:$PORT" localhost --log-level info
+TOPOLOGY=${TOPOLOGY:-single}
+[ "$MODE" = diamond ] && TOPOLOGY=diamond
+if [ "$RELAY_CLI_NEW" -eq 1 ]; then RINSECURE=--connect-tls-insecure; else RINSECURE=--client-tls-disable-verify; fi
+peer_argv() { # <port> <cluster-id> [peer-port...]
+	local port=$1 id=$2 p
+	shift 2
+	moq_relay_public "127.0.0.1:$port" localhost --cluster-id "$id" \
+		"$RELAY_IDLE_FLAG" 6s "${RELAY_IDLE_FLAG/idle-timeout/keep-alive}" 2s
+	for p in "$@"; do RELAY_ARGV+=(--cluster-connect "https://localhost:$p/"); done
+	[ $# -gt 0 ] && RELAY_ARGV+=("$RINSECURE")
+}
+if [ "$TOPOLOGY" = single ]; then
+	moq_relay_public "127.0.0.1:$PORT" localhost --log-level info
+else
+	peer_argv "$PORT" 11111
+	RELAY_ARGV+=(--log-level info)
+fi
+R1_ARGV=("${RELAY_ARGV[@]}")
 BC=rec.hang
 URL="https://localhost:$PORT"
+URL2=$URL SUBURL1=$URL SUBURL2=$URL
+case $TOPOLOGY in
+mesh) URL2="https://localhost:$((PORT + 1))" SUBURL2=$URL2 ;;
+diamond) SUBURL1="https://localhost:$((PORT + 3))" SUBURL2=$SUBURL1 ;;
+esac
 mkdir -p "$OUT"
 rm -f "$OUT"/*.ts "$OUT"/*.log "$OUT"/*.restarts "$OUT/sizes.csv"
 size() { stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0; }
 start_relay() {
-	"$RELAY" "${RELAY_ARGV[@]}" >>"$OUT/relay.log" 2>&1 &
+	"$RELAY" "${R1_ARGV[@]}" >>"$OUT/relay.log" 2>&1 &
 	RLY=$!
 }
-start_pub() { # [udp-port] [log]
-	if [ "$MODE" = publisher ] || [ "$MODE" = standby ]; then
+PEERS=()
+start_peer() { # <log-name> <port> <cluster-id> [peer-port...]
+	local name=$1
+	shift
+	peer_argv "$@"
+	RUST_LOG=${RLOG:-info} "$RELAY" "${RELAY_ARGV[@]}" >>"$OUT/$name.log" 2>&1 &
+	printf -v "PID_$name" %s "$!"
+	PEERS+=($!)
+}
+start_m() { start_peer "m$1" $((PORT + $1)) $((11111 * ($1 + 1))) "$PORT"; } # <1|2>
+start_pub() { # [udp-port] [log] [url]
+	if [ "$MODE" = publisher ] || [ "$MODE" = standby ] || [ "$MODE" = diamond ]; then
 		(
 			log=${2:-pub.log}
 			tap=/dev/null
@@ -105,7 +144,7 @@ start_pub() { # [udp-port] [log]
 			else
 				tsp -I ip "${1:-$UDP}" -O file - 2>>"$OUT/tsp-in.log"
 			fi | tee "$tap" |
-				${PLOG:+env RUST_LOG=$PLOG} "$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" "${ORIG[@]+"${ORIG[@]}"}" import ts ${IMPORT_ARGS:-} >>"$OUT/${2:-pub.log}" 2>&1
+				${PLOG:+env RUST_LOG=$PLOG} "$MOQ" "${MOQ_DIAL[@]}" "${3:-$URL}" "${IDLE[@]}" --broadcast "$BC" "${ORIG[@]+"${ORIG[@]}"}" import ts ${IMPORT_ARGS:-} >>"$OUT/${2:-pub.log}" 2>&1
 		) &
 	else
 		(
@@ -116,24 +155,36 @@ start_pub() { # [udp-port] [log]
 	PUB=$!
 }
 sub() { # <i>
+	local url=$SUBURL1
+	[ "$1" = 2 ] && url=$SUBURL2
 	if [ "$SUPERVISE" = 1 ]; then
 		while :; do
 			# shellcheck disable=SC2086
-			"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" export ts ${EXPORT_ARGS:-} >>"$OUT/sub$1.ts" 2>>"$OUT/sub$1.log"
+			"$MOQ" "${MOQ_DIAL[@]}" "$url" "${IDLE[@]}" --broadcast "$BC" export ts ${EXPORT_ARGS:-} >>"$OUT/sub$1.ts" 2>>"$OUT/sub$1.log"
 			rc=$?
 			echo "$(date +%s) exit $rc" >>"$OUT/sub$1.restarts"
 			sleep 1
 		done
 	else
 		# shellcheck disable=SC2086
-		"$MOQ" "${MOQ_DIAL[@]}" "$URL" "${IDLE[@]}" --broadcast "$BC" export ts ${EXPORT_ARGS:-} >"$OUT/sub$1.ts" 2>"$OUT/sub$1.log"
+		"$MOQ" "${MOQ_DIAL[@]}" "$url" "${IDLE[@]}" --broadcast "$BC" export ts ${EXPORT_ARGS:-} >"$OUT/sub$1.ts" 2>"$OUT/sub$1.log"
 	fi
 }
 moq_record_build "$MOQ" "$RELAY" | tee "$OUT/build.txt"
-echo "mode=$MODE supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER shared=${ORIG[*]:-fresh} sig=$SIG feed=$FEED kill=$KILL restart=$RESTART import=${IMPORT_ARGS:-} export=${EXPORT_ARGS:-}" | tee -a "$OUT/build.txt"
+echo "mode=$MODE topology=$TOPOLOGY supervise=$SUPERVISE late_subs=$LATE_SUBS kill_which=$KILL_WHICH stagger=$STAGGER shared=${ORIG[*]:-fresh} sig=$SIG feed=$FEED kill=$KILL restart=$RESTART import=${IMPORT_ARGS:-} export=${EXPORT_ARGS:-}" | tee -a "$OUT/build.txt"
 start_relay
+case $TOPOLOGY in
+mesh) start_peer relay2 $((PORT + 1)) 22222 "$PORT" ;;
+diamond)
+	start_m 1
+	start_m 2
+	start_peer e $((PORT + 3)) 44444 $((PORT + 1)) $((PORT + 2))
+	;;
+esac
 sleep 3
-kill -0 "$RLY" 2>/dev/null || { echo "RELAY DID NOT START: $(tail -3 "$OUT/relay.log")"; exit 1; }
+for r in "$RLY" "${PEERS[@]+"${PEERS[@]}"}"; do
+	kill -0 "$r" 2>/dev/null || { echo "RELAY DID NOT START: $(tail -n 3 "$OUT"/*.log)"; exit 1; }
+done
 SUBS=()
 start_subs() {
 	for i in 1 2; do
@@ -147,7 +198,7 @@ SOURCE=""
 if [ "$MODE" = publisher ]; then
 	tsp -I file "$SRC" --infinite -P regulate --pcr-synchronous -O ip "127.0.0.1:$UDP" 2>"$OUT/tsp.log" &
 	SOURCE=$!
-elif [ "$MODE" = standby ] && [ "$FEED" = file ]; then
+elif { [ "$MODE" = standby ] || [ "$MODE" = diamond ]; } && [ "$FEED" = file ]; then
 	: >"$OUT/live.ts"
 	tsp --max-flushed-packets 7 -I ip "$UDP" -O file "$OUT/live.ts" 2>>"$OUT/tsp-in.log" &
 	RECEIVER=$!
@@ -163,14 +214,17 @@ start_pub
 if [ "$MODE" = standby ]; then
 	sleep "$STAGGER"
 	ACTIVE=$PUB
-	start_pub $((UDP + 1)) pub2.log
+	start_pub $((UDP + 1)) pub2.log "$URL2"
 	STANDBY=$PUB
 	FIRST=$ACTIVE SECOND=$PUB
-	PUB=$ACTIVE VLOG=pub.log VPORT=$UDP
+	PUB=$ACTIVE VLOG=pub.log VPORT=$UDP VURL=$URL
 	# The victim: the first publisher, or the second, which serves when the hop is shared.
-	[ "$KILL_WHICH" = newest ] && PUB=$STANDBY STANDBY=$ACTIVE VLOG=pub2.log VPORT=$((UDP + 1))
+	[ "$KILL_WHICH" = newest ] && PUB=$STANDBY STANDBY=$ACTIVE VLOG=pub2.log VPORT=$((UDP + 1)) VURL=$URL2
 fi
 served() { grep -c 'serving group' "$OUT/$1" 2>/dev/null || true; }
+# The logs whose `serving group` lines name the victim: the publishers', or the middle relays'.
+SL1=pub.log SL2=pub2.log
+[ "$MODE" = diamond ] && SL1=m1.log SL2=m2.log
 if [ "$LATE_SUBS" = 1 ]; then
 	sleep 4
 	start_subs
@@ -178,16 +232,26 @@ fi
 echo "t,sub1,sub2,event" >"$OUT/sizes.csv"
 for t in $(seq 0 "$END"); do
 	ev=""
-	if [ "$t" -eq $((KILL - 2)) ] && [ "$KILL_WHICH" = serving ]; then S1=$(served pub.log) S2=$(served pub2.log); fi
+	if [ "$t" -eq $((KILL - 2)) ] && { [ "$KILL_WHICH" = serving ] || [ "$MODE" = diamond ]; }; then
+		S1=$(served $SL1) S2=$(served $SL2)
+	fi
 	if [ "$t" -eq "$KILL" ]; then
 		case $MODE in
 		publisher) pkill -KILL -P "$PUB" 2>/dev/null; ev=KILL_publisher ;;
+		diamond)
+			d1=$(($(served m1.log) - ${S1:-0})) d2=$(($(served m2.log) - ${S2:-0}))
+			VM=1
+			[ "$d2" -gt "$d1" ] && VM=2
+			echo "victim=m$VM groups served over the 2 s before: m1 $d1, m2 $d2" | tee -a "$OUT/build.txt"
+			vpid=PID_m$VM
+			kill -KILL "${!vpid}" 2>/dev/null
+			ev=KILL_m$VM ;;
 		# The active publisher's moq process only, so a TERM exercises its own clean exit.
 		standby)
 			if [ "$KILL_WHICH" = serving ]; then
 				d1=$(($(served pub.log) - ${S1:-0})) d2=$(($(served pub2.log) - ${S2:-0}))
-				if [ "$d2" -gt "$d1" ]; then PUB=$SECOND STANDBY=$FIRST VLOG=pub2.log VPORT=$((UDP + 1))
-				else PUB=$FIRST STANDBY=$SECOND VLOG=pub.log VPORT=$UDP; fi
+				if [ "$d2" -gt "$d1" ]; then PUB=$SECOND STANDBY=$FIRST VLOG=pub2.log VPORT=$((UDP + 1)) VURL=$URL2
+				else PUB=$FIRST STANDBY=$SECOND VLOG=pub.log VPORT=$UDP VURL=$URL; fi
 				echo "victim=$VLOG groups served over the 2 s before: pub.log $d1, pub2.log $d2" | tee -a "$OUT/build.txt"
 			fi
 			echo "$EPOCHREALTIME" >"$OUT/signal.txt"
@@ -199,11 +263,17 @@ for t in $(seq 0 "$END"); do
 	elif [ "$t" -eq "$RESTART" ]; then
 		case $MODE in
 		publisher) start_pub; ev=RESTART_publisher ;;
+		diamond)
+			ev=none
+			if [ "${RESTART_STANDBY:-0}" = 1 ]; then
+				start_m "$VM"
+				ev=RESTART_m$VM
+			fi ;;
 		standby)
 			ev=none
 			if [ "${RESTART_STANDBY:-0}" = 1 ]; then
 				VICTIM=$PUB
-				start_pub "$VPORT" "$VLOG"
+				start_pub "$VPORT" "$VLOG" "$VURL"
 				ev=RESTART_${VLOG%.log}
 			fi ;;
 		*) start_relay; ev=RESTART_relay ;;
@@ -231,7 +301,7 @@ done | tee "$OUT/verdict.txt"
 kill -STOP "${SUBS[@]}" 2>/dev/null
 for pid in "${SUBS[@]}" "$PUB" ${STANDBY:+"$STANDBY"} ${VICTIM:+"$VICTIM"}; do pkill -P "$pid" 2>/dev/null; done
 kill -KILL "${SUBS[@]}" 2>/dev/null
-kill "$PUB" ${STANDBY:+"$STANDBY"} ${VICTIM:+"$VICTIM"} "$RLY" ${SOURCE:+"$SOURCE"} ${RECEIVER:+"$RECEIVER"} 2>/dev/null
+kill "$PUB" ${STANDBY:+"$STANDBY"} ${VICTIM:+"$VICTIM"} "$RLY" "${PEERS[@]+"${PEERS[@]}"}" ${SOURCE:+"$SOURCE"} ${RECEIVER:+"$RECEIVER"} 2>/dev/null
 [ -n "$SOURCE" ] && pkill -f "[t]sp -I file - -O ip 127.0.0.1:$((UDP + 1))" 2>/dev/null
 # A follower of a file that stopped growing never writes again, so no broken pipe ends it.
 [ "$FEED" = file ] && pkill -f "[t]ail -c 0 -f $OUT/live.ts" 2>/dev/null

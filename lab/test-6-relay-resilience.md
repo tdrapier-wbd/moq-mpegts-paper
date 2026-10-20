@@ -99,7 +99,9 @@ relay serves the newest, an open subscription stays on its instance until that i
 `export ts --stitch` follows a replacement as a programme switch. Only replicas of one publisher's
 bytes share an epoch, such as one publisher announced through several relays. Linux, loopback,
 the drills' clip looped live and read by every publisher from one file (`FEED=file`), a 6 s idle
-timeout, two exporters per relay with `--stitch`. Each arm runs on the demultiplexed lane, then with
+timeout, two exporters per relay with `--stitch --linger 10s`: the linger also bounds a replacement's
+wait for its first catalog, and at the default zero an exporter exits when a backup announces before
+its catalog is served. Each arm runs on the demultiplexed lane, then with
 `--passthrough` on import and export, where `export ts` refuses `--stitch`: there the rig's
 supervisor restarts an exporter that exits (`SUPERVISE=1`), C1 cannot hold, and C2 is read from the
 capture's longest stall. Each runs on moq-lite 07, which carries the epoch and the restart, then on
@@ -109,10 +111,11 @@ the default version as the epochless control; three runs per cell.
    window: the backup's start 8 s after the exporters have the programme; a SIGKILL (in separate
    runs, a SIGTERM) to the importer the exporters are reading, from the publishers' logs; that
    importer's restart 10 s later.
-2. **Two importers, two relays** (`cluster-failover.sh`, `HOP=`), exporters on both relays, the
+2. **Two importers, two relays** (`TOPOLOGY=mesh`), one importer per relay, exporters on both, the
    same events.
-3. **One importer through two relays.** The importer on relay O, relays M1 and M2 peering with O,
-   relay E peering with both, the exporters on E. SIGKILL the middle relay serving E, from E's log.
+3. **One importer through two relays** (`MODE=diamond`). The importer on relay O, relays M1 and M2
+   peering with O, relay E peering with both, the exporters on E. SIGKILL the middle relay serving
+   E, from the middle relays' logs; its restart 10 s later.
 
 Graded per exporter and event: whether the process survived; programme lost, the source time
 absent across the event from the video PTS either side; whether the switch is marked (a new PMT

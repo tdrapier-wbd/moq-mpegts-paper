@@ -3,14 +3,14 @@
 
 usage: t6-switch-grade.py <capture.ts> [sizes.csv column]   (column: 2 for sub1, 3 for sub2)
 
-A switch is a run of packets carrying the discontinuity indicator, or a PMT version change; packets
-within 0.5 s of output of one another belong to one switch. For each switch it reports the rig
-second it fell in (from sizes.csv, the first second whose size reached its byte offset), the PMT
-version either side, the PIDs flagged against the PIDs present in the second after it, and the video
-PTS gap across it: `lost_s` is the source time absent (the PTS step less one frame), `repeat_s` the
-source time written twice when the PTS steps back. Outside switches it counts continuity errors (a
-counter step on a packet without the indicator) and video PTS gaps over two frames, which is where a
-seamless resume would lose programme without marking it.
+A switch is a PMT version change, which is how `export ts --stitch` marks one. For each it reports
+the rig second it was written in (from sizes.csv, the first second whose size covers it), the
+PMT version either side, the PIDs carrying the discontinuity indicator from 0.5 s of output before
+it to 2 s after against the PIDs present in the second after it, and the video decode-time gap
+across it: `lost_s` is the source time absent (the step less one frame), `repeat_s` the source time
+written twice when it steps back. Outside switches it counts continuity errors (a counter step on a
+packet without the indicator), video gaps over two frames, which is where a seamless resume would
+lose programme without marking it, and any other discontinuity indicators, by PID and second.
 """
 import json
 import statistics
@@ -101,33 +101,22 @@ def main():
     frame = statistics.median(deltas) if deltas else 3600
     # Packets per second of output, so 0.5 s of output can group a switch's packets.
     rate = n / max(1, (step(vpts[0][1], vpts[-1][1]) / 90000)) if len(vpts) > 1 else 5000
-    marks = sorted([i for i, _ in flagged_at] + [i for i, _, _ in pmt_changes])
-    groups = []
-    for i in marks:
-        if groups and i - groups[-1][-1] <= rate / 2:
-            groups[-1].append(i)
-        else:
-            groups.append([i])
+    windows = [(i - rate / 2, i + 2 * rate, i, a, b) for i, a, b in pmt_changes]
 
     def second(i):
         for t, sz in sizes:
-            if sz >= i * PKT:
+            if sz >= (i + 1) * PKT:
                 return t
         return None
 
-    def pmt_around(lo, hi):
-        before = [c for c in pmt_changes if lo <= c[0] <= hi]
-        return f'{before[0][1]}->{before[-1][2]}' if before else 'unchanged'
-
     switches = []
-    for g in groups:
-        lo, hi = g[0], g[-1]
+    for lo, hi, at, a, b in windows:
         flagged = sorted({pid for i, pid in flagged_at if lo <= i <= hi})
         present = sorted({pid for pid, idx in seen_after.items() if pid != 0x1FFF
-                          and any(hi < i <= hi + rate for i in idx)})
-        before = [t for i, t in vpts if i < lo]
-        after = [t for i, t in vpts if i >= lo]
-        sw = {'packet': lo, 'second': second(lo), 'pmt_version': pmt_around(lo, hi),
+                          and any(at < i <= at + rate for i in idx)})
+        before = [t for i, t in vpts if i < at]
+        after = [t for i, t in vpts if i >= at]
+        sw = {'packet': at, 'second': second(at), 'pmt_version': f'{a}->{b}',
               'flagged': flagged, 'present_after': present,
               'unflagged': [p for p in present if p not in flagged]}
         if before and after:
@@ -135,7 +124,8 @@ def main():
             sw['lost_s'] = round(max(0, d - frame) / 90000, 3)
             sw['repeat_s'] = round(max(0, -d + frame) / 90000, 3) if d <= 0 else 0.0
         switches.append(sw)
-    inside = lambda i: any(g[0] - rate / 2 <= i <= g[-1] + rate / 2 for g in groups)
+    inside = lambda i: any(lo <= i <= hi for lo, hi, *_ in windows)
+    other = sorted({(pid, second(i)) for i, pid in flagged_at if not inside(i)}, key=str)
     gaps = []
     for (ia, a), (ib, b) in zip(vpts, vpts[1:]):
         d = step(a, b)
@@ -144,7 +134,8 @@ def main():
     errs = [e for e in cc_errors if not inside(e[0])]
     out = {'capture': path, 'packets': n, 'video_pid': video_pid, 'frame_s': round(frame / 90000, 4),
            'switches': switches, 'cc_errors_outside': len(errs),
-           'cc_error_pids': sorted({p for _, p in errs}), 'pts_gaps_outside': gaps}
+           'cc_error_pids': sorted({p for _, p in errs}), 'pts_gaps_outside': gaps,
+           'other_flags': [f'{pid}@{s}' for pid, s in other]}
     print(json.dumps(out))
 
 
