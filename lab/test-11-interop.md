@@ -511,8 +511,10 @@ had to be stopped, and the publisher then aborted in shutdown ("double free or c
 released more than 10 ms early (p95 216 ms), reported and not graded.
 
 **What this establishes.** `moq2ts`'s publisher and receiver carry a transport stream byte-exact over
-OpenMOQ's relay, apart from a repeated final group. The run cannot say whether the publisher or the
-relay repeats it: the relay counts 481 objects in and out, the receiver 484. Against `moq-dev` they
+OpenMOQ's relay, apart from a repeated final group, which is the receiver's: on `a734a91` with
+moqxr v0.4.8 the publisher sends each object once, and the final group repeats at both object sizes
+with the receiver built on moq5 `main` and at neither with openmoq/moq5#54. There 10 of 10
+interrupts without a subscriber exit cleanly, which on `4717ce3` aborted. Against `moq-dev` they
 interoperate in neither direction on draft 22. The FILL_PARAMETERS split closes the data path before
 any TS object reaches `moq-relay`, and the two TS descriptions (MSF `mpeg2ts` and `moq-dev`'s `m2ts`)
 close discovery. So T11d says nothing yet about `moq-relay` carrying their TS; arm A reruns once either

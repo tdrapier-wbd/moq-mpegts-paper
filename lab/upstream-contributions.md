@@ -1646,10 +1646,9 @@ only notes it. **Closed by us** once the maintainer pointed to its successor,
 `moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate,
 and its receiver gets the final group twice; otherwise the loop is byte-exact. Interop with
 `moq-dev` on draft 22 waits on moq-wg/moq-transport#2015's FILL_PARAMETERS framing. Verified on
-`4717ce3`: pacing follows the PCR at both object sizes, which closed `--paced`; SIGINT aborts the
-publisher when no subscriber is attached. The repeated final group is moq5's receiver
-re-subscribing on Track Ended ([openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54)). **Open;
-the maintainer asks for a run against #54 and moqxr v0.4.7.**
+`4717ce3`: pacing follows the PCR, which closed `--paced`. Verified on `a734a91` with moqxr v0.4.8:
+interrupts exit cleanly, and the final group repeats with the receiver on moq5 `main` but not with
+[openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54). **Open until #54 merges.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
