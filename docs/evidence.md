@@ -370,8 +370,9 @@ runs: a hard kill of the serving importer cost 5.4–9.0 s, about one detection 
 exit under 2 s; on moq-lite 07 a standby's start and each restart are switches of their own. With
 `--passthrough`, which refuses `--stitch`, the serving importer's loss ends the exporter. One
 importer reaching the exporters through two relays, on moq-lite 07, survived the serving relay's
-loss with no error or flag, but skipped 7.02 s of programme in every run, where upstream documents a
-shared epoch resuming at the first frame the subscription lacks.
+loss with no error or flag, but skipped 7.02 s of programme in every run, at the default delay and at
+10 s alike; upstream holds the loss at the default intended (each hop applies the subscriber's
+maximum age to the backlog built while the loss is detected), and at 10 s it is unexplained.
 
 **The segmented lane answers the other way, because its serving node holds no state**
 ([T6](../lab/test-6-relay-resilience.md); P0/P1, same clip and host):
