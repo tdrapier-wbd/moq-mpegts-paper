@@ -1032,7 +1032,7 @@ its track apart from its key, so the snapshots can key by rendition and two broa
 tracks share one catalog; rebinding an export when a key's track changes is deferred to
 [#5406](https://github.com/moq-dev/moq/pull/5406).
 
-**The TS half is `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
+**The TS half was `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
 liveness in both reports. Its export side is this campaign's case: the affiliate's edge decodes where
 the origin cannot see ([T39](test-39-cross-boundary-observability.md)).
 [#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and MSF carriage; MSF is parked.
