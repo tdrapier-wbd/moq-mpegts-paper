@@ -373,6 +373,12 @@ that stopped at 29.6 s of 60 graded 2.76 s lost. Grade programme lost as expecte
 **Define a metric over the regime the experiment is about.** *(T22.)* Including the pre-first-advance
 start-up put an 8.1 s floor under the control (3.1 s without it).
 
+**A reference leg is a reference only for what it holds.** *(T50.)* Legs started together subscribe
+milliseconds apart; where each unit is its own group, the reference lacked up to 76 packets of the
+first second's teletext and AC-3 that the others held, and a merge graded against it differed there.
+Grade a merge from the first slot every leg holds on each PID, and count what the reference lacks
+apart from what the merge lost.
+
 **Where a resource result is a null, report the bound, not the number.** *(T25.)* Idle baseline spread
 (0.8 MB) exceeded the abuse excursion (0.6 MB). A discarded run's control arm is still data about the
 instrument.

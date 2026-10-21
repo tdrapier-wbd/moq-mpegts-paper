@@ -614,8 +614,8 @@ by the later of detection and the standby's group lag.
   subscribers ends them `not found`**, on one relay and in the mesh, because it refuses every track
   until it has parsed its PMT and the relay keeps the refusal. **Fixed by our
   [#5517](https://github.com/moq-dev/moq/pull/5517), merged**: an importer announces once its
-  catalog lists the tracks, so the standby is never asked early, and on `0d9e9ff78` two exports run
-  on through it on both protocols, as every exporter in a mesh does on `f13283b30`.
+  catalog lists the tracks, so the standby is never asked early; every exporter in a mesh runs on
+  through it on `f13283b30`.
 - **[#4354](https://github.com/moq-dev/moq/issues/4354): a switch to a same-hop standby ended
   `export ts` on a timestamp rewind**, with identical inputs too ([T51](test-51-same-epoch-groups.md)).
   **Closed by removing the shared importer epoch** ([#5967](https://github.com/moq-dev/moq/pull/5967),
@@ -627,7 +627,9 @@ by the later of detection and the standby's group lag.
 - **[#6062](https://github.com/moq-dev/moq/issues/6062): a relay lost under one importer resumes at
   a later group** on moq-lite 07, skipping 7.02 s of programme unflagged
   ([T6](test-6-relay-resilience.md)), where upstream documents a resume at the first frame lacked.
-  Reported; open.
+  Triaged: at the default `--delay` the loss is intended: every hop applies the subscriber's
+  max age (half the delay) to the backlog built during detection; the loss at `--delay 10s` is
+  unexplained. Quest `resume-outage` tests both and corrects the doc. Open.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 
@@ -789,10 +791,11 @@ source failover*), so we closed our co-start test
 [T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay costs the MoQ lane about
 twice SRT's loss, because each relay process draws a random stateless-reset key, so its resets for
 its predecessor's connections fail validation and clients wait out the idle timeout. Another
-contributor's [#5910](https://github.com/moq-dev/moq/pull/5910) derives the key from a file: on
-loopback a restart then cost 3.5 s of video, not 13.5 s. [Our review](https://github.com/moq-dev/moq/pull/5910#issuecomment-6268205598)
-asks it to share a key only behind one address (RFC 9000 §21.11) and to lift the 50-a-second reset
-limit. **Decided: #5910 is the fix** (quest `stateless-reset-key`); open.
+contributor's [#5910](https://github.com/moq-dev/moq/pull/5910) reads the key from a file
+(`--listen-reset-secret`): on loopback a restart then cost 3.5 s of video, not 13.5 s. After
+[our review](https://github.com/moq-dev/moq/pull/5910#issuecomment-6268205598) its docs share a key
+only across one relay's restarts or a balancer routing by connection ID (RFC 9000 §21.11), and the
+reset interval drops from 20 ms to 1 ms. **Fixed by #5910, merged**; P1-z re-runs the cell.
 
 ### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
 
@@ -1007,18 +1010,15 @@ a startup-warning precedent that does not exist, and said so in a comment.
 [#3605](https://github.com/moq-dev/moq/issues/3605) reported that `max-age=0` and an omitted
 `Cache-Control` silently disable revalidation permanently, and that the 2× revocation window is
 undocumented outside the source. Closed as completed and absorbed into
-[#3682](https://github.com/moq-dev/moq/pull/3682), *"plan the auth server line on dev"* (title quoted
-verbatim), alongside `moq auth serve` becoming the reference auth server — the planned auth-server line
-now targets **`main`**. **The ask is no longer tracked as its own quest:** the behaviour was accepted as
-wrong, and the remedy is replacement of the surface rather than a patch to it. Whether the replacement
-closes the specific hazard is not yet checkable; T37 measurements are against a component being redesigned.
+[#3682](https://github.com/moq-dev/moq/pull/3682), which makes `moq auth serve` the reference auth
+server: the behaviour was accepted as wrong, and the remedy replaces the surface rather than patching
+it. Whether that closes the hazard is not yet checkable; T37 measured a component being redesigned.
 
 ### Subscriber-reported health telemetry — accepted, re-planned as solicited viewer feedback; schema merged, reporters drafted
 
 [#3608](https://github.com/moq-dev/moq/issues/3608) was filed **as aspirational** because no control
-plane in current use gives an origin this visibility. Upstream accepted it, and after a first design on
-`moq-stats` (a `.stats` broadcast per client beside the relay's counters) closed unmerged, re-planned it
-as hang tracks ([#4510](https://github.com/moq-dev/moq/pull/4510), `quest/m1/stats/`). **A publisher
+plane in current use gives an origin this visibility. Upstream accepted it and planned it as hang
+tracks ([#4510](https://github.com/moq-dev/moq/pull/4510), `quest/m1/stats/`). **A publisher
 names one `stats` snapshot track in its catalog; a publisher that wants to hear from viewers solicits it
 with an `echo: { path }` section, and each viewer then publishes one `.echo` broadcast under that path**
 carrying, per rendition, what it received, decoded, played late and stalled on, with its transport
@@ -1037,10 +1037,10 @@ liveness in both reports. Its export side is this campaign's case: the affiliate
 the origin cannot see ([T39](test-39-cross-boundary-observability.md)).
 [#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and MSF carriage; MSF is parked.
 **The maintainer [gave us](https://github.com/moq-dev/moq/pull/5643#issuecomment-6222787706) it and
-`stats/rust`**, with the export's re-timing in its own section. **Drafts
-[#5848](https://github.com/moq-dev/moq/pull/5848) and [#5849](https://github.com/moq-dev/moq/pull/5849)
-build on #5643, merged**: CLI flags and sinks, `mpegts` at both edges, and `release` (drops, trims, gaps, margin,
-offset, drift). A clean clip reads zero on each check; one video PID silenced behind legal PCR and
+`stats/rust`**, with the export's re-timing in its own section. On #5643, merged:
+[#5848](https://github.com/moq-dev/moq/pull/5848), the CLI flags and sinks, **merged**;
+[#5849](https://github.com/moq-dev/moq/pull/5849), `mpegts` at both edges and `release` (drops,
+trims, gaps, margin, offset, drift), **merged**. A clean clip reads zero on each check; one video PID silenced behind legal PCR and
 continuity grows only its `quiet`.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
@@ -1671,7 +1671,9 @@ TRACK_STATUS.
 
 [T11](test-11-interop.md): a relative joining FETCH never reaches the publisher and no object comes
 back, so a subscriber loses the head of each group in progress, the SI track's one object
-included; added to #795 as a fresh-namespace case. The undefined TRACK_STATUS refusal is #842. The subscription ending on our STOP_SENDING is
+included; added to #795 as a fresh-namespace case. The undefined TRACK_STATUS code (#842, closed)
+reads as INTERNAL_ERROR (draft 18 §14); [#843](https://github.com/openmoq/moqx/issues/843) tracks
+emitting defined codes. The subscription ending on our STOP_SENDING is
 [#817](https://github.com/openmoq/moqx/issues/817)'s, whose open fix covers it. **Open.**
 
 ---

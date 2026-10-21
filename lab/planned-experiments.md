@@ -24,7 +24,7 @@ defined [below](#blocked-on-apparatus).
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
 | P1-o | Legs of one broadcast merging at the byte on a merged `--sync` export, a late-joining leg included, on the live feed across two hosts | [Architecture](../docs/architecture.md) §5.1's scope: a multi-track pair merges co-started on merged builds, a late leg only on an `[unmerged]` one (§5 row 8) | Upstream: `ts-hitless`, our [#5949](https://github.com/moq-dev/moq/pull/5949), open | T50's arms on the merged build, and a late leg on the live feed graded against its partner | [T50](test-50-deterministic-ts-legs.md) |
-| P1-z | T28's outage and relay-restart cells with the probe re-armed on the peer's return and the relay's reset key | Whether the lane matches SRT's outage loss ([Comparison](../docs/comparison.md)): a capped probe backoff matched it in the lab. Upstream takes the re-arm as a default and declined a rate-holding controller, relaxed reorder thresholds and a profile | Upstream: `quic-outage-probe` (ours, after #5949) and [#5910](https://github.com/moq-dev/moq/pull/5910) | Both cells on a build with each, against the same control | [T28](test-28-failure-injection-matrix.md) |
+| P1-z | T28's outage and relay-restart cells with the probe re-armed on the peer's return and the relay's reset key | Whether the lane matches SRT's outage loss ([Comparison](../docs/comparison.md)): a capped probe backoff matched it in the lab. Upstream takes the re-arm as a default and declined a rate-holding controller, relaxed reorder thresholds and a profile | Upstream: `quic-outage-probe` (ours, built) | Both cells on a build with the re-arm and `main`'s `--listen-reset-secret`, against the same control | [T28](test-28-failure-injection-matrix.md) |
 | P1-j | Fan-out and permanence through a CDN-hosted relay: a subscriber ramp to the knee on the live feed, then 72 h at about half of it; later, more than one hop | Every fan-out figure is one relay in one region ([Evidence](../docs/evidence.md) §6), so the R2 row reads *indicated* ([Comparison](../docs/comparison.md) §13) | The operator's window and logging level; P0-g's end | Each step's delivered rate, continuity, PCR and join time to the first degradation; 72 h with the wire grader on, reconnects counted, the path's loss and RTT recorded | [T52](test-52-cdn-relay-fanout.md) |
 | P1-a | Failure injection, the remaining cells | The recovery rows of the comparison | — | The segmented shapes completed inside the `netns` rig | [T28](test-28-failure-injection-matrix.md) |
 | P1-f | The scaling model's remaining points, and the segmented fan-out | The scaling model is measured to N = 100, with the origin co-resident | a subscriber host that holds 100 exporters; a second subscriber host | The ceiling with GSO on past N = 100; the origin on its own host; an hour at N = 100; the segmented fan-out measured | [T26](test-26-cross-host-fanout.md), [T43](test-43-fanout-current-build.md) |
@@ -69,17 +69,18 @@ P2-b → [T25](test-25-isolation-under-abuse.md), P1-d → [T31](test-31-congest
 
 Untaken quests on upstream `main` whose result would move an entry above, ranked by weight for primary
 distribution. A row leaves when a pull request takes it; ours are in the
-[upstream ledger](upstream-contributions.md). Every row is upstream's m2 (after its next release), so
-review waits on that release; m1 keeps the T-STD epic.
+[upstream ledger](upstream-contributions.md). Rows are upstream's m2, whose review waits on its next
+release, unless marked m1.
 
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` (our [#5949](https://github.com/moq-dev/moq/pull/5949)) | **High**, R6 at the IRD |
-| `quic-outage-probe` [S] | Re-arms the probe timer when the peer is heard again, by default (from our [#5953](https://github.com/moq-dev/moq/issues/5953)) | none; ours, after #5949 | **Medium**, P1-z |
+| `quic-outage-probe` [S] | Re-arms the probe timer when the peer is heard again, by default (from our [#5953](https://github.com/moq-dev/moq/issues/5953)) | none; ours, built | **Medium**, P1-z |
+| `ts-reliability/pmt-lifecycle` [L], m1 | Carries a live PAT or PMT change under fresh track names, the export's PMT rebuilt at the next version; today a layout change ends the export | none | **Medium**, P0-k's PID-change fixture |
 
-Set aside: `ts-reliability`'s `fidelity` plan (verbatim private data, which no entry above waits on)
-and its `recovery` quest (upstream CI for the content loss T28 measures), `ts-hitless-h265` (our
-sources are H.264), and the QoS line's lag histogram (R8 only).
+Set aside: `ts-reliability`'s `stream-routes` (counts what the media-aware lane drops; CAT stays
+uncarried) and `clockless-export` (programmes without video, which no source here carries),
+`ts-hitless-h265` (our sources are H.264), and the QoS line's lag histogram (R8 only).
 
 ## Blocked on apparatus
 
