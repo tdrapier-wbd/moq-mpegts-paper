@@ -424,9 +424,10 @@ renting moves most of the *bill*, not most of the *engineering*.
 ### 7.3 The on-prem SRT case is stronger than this paper's direction implies
 
 - **No hand-off problem.** Byte-faithful SRT is transparent on every criterion over a real path — all 13
-  PIDs, SI/splice, stuffing, source mux rate, PSI cadence, PCR grid, 0 continuity errors, **0
-  PCR-accuracy violations at 481 ns P2, measured ungroomed** ([Evidence](evidence.md) §3.1). **Removes
-  the entire edge-conformance workstream** MoQ cannot buy out of.
+  PIDs, SI/splice, stuffing, source mux rate, PSI cadence, PCR grid, 0 continuity errors, **the
+  source's PCR accuracy intact, ungroomed** ([Evidence](evidence.md) §3.1). **Removes the grooming
+  workstream** MoQ cannot buy out of; the IRD-facing RTP egress, and an identical pair of it for
+  ST 2022-7, remain on every lane.
 - **Primary distribution has little fan-out** (§4.5) — tens of destinations, N tunnels tractable; CDN
   fan-out economics barely apply.
 - **Fixed costs already sunk** — NOC, monitoring, transit, receive estate; own transit is cheapest per

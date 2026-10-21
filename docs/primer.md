@@ -28,13 +28,18 @@ network, the EIT for the schedule, and the TDT and TOT for time. A distribution 
 
 **The clock.** The encoder runs a 27 MHz system clock and writes samples of it into the stream as the
 [PCR](glossary.md), on one PID per programme: at least every 100 ms by the standard, and every 40 ms in
-the older DVB recommendation this paper grades against. A receiver recovers the encoder's clock by
-comparing the PCR values with when they arrive, through a phase-locked loop; PTS and DTS, on the same
-clock, then say when each picture and audio frame is due. So a transport stream carries its timing
-twice: in the *values* it asserts, and in *when its packets arrive*. Any transport preserves the first
-by carrying the bytes. The second survives only if the transport reproduces the sender's packet timing,
-or if something at the far end rebuilds it. The PCR's 33-bit base wraps about every 26.5 hours, which
-receivers handle and test rigs therefore have to exercise.
+the older DVB recommendation this paper grades against. Each PCR states when the byte carrying it is
+due at the decoder, so in a constant-rate stream PCR values and byte positions advance together; PTS
+and DTS, on the same clock, say when each picture and audio frame is due. A receiver recovers the
+encoder's clock by comparing the PCR values with when the packets actually arrive, through a
+phase-locked loop that filters out the jitter the path adds. So three things are easily confused: the
+PCR *values*, with their PTS and DTS; their *positions* among the bytes; and *when the packets
+arrive*. Any transport that carries the bytes in order preserves the first two. The third survives
+only if the transport reproduces the sender's packet timing, or if something at the far end re-paces
+the stream. A stage that rebuilds the multiplex writes values and positions of its own, which can be
+perfectly regular and still say nothing about how faithfully it followed the source's clock. The
+PCR's 33-bit base wraps about every 26.5 hours, which receivers handle and test rigs therefore have
+to exercise.
 
 **Constant bit rate.** A broadcast multiplex runs at a fixed rate, padded with null packets where the
 content does not fill it ([CBR, stuffing and nulls](glossary.md)). The fixed rate comes from the channel,
@@ -52,8 +57,26 @@ buffer legal, and anything that reorders or re-spaces them inherits that obligat
 **Monitoring it.** ETSI TR 101 290 ([Glossary](glossary.md)) is the industry's monitoring checklist,
 grouped in three priorities. It checks whether the stream can be decoded at all (sync, PAT and PMT
 present and repeated, continuity, referenced PIDs present); whether its clock is carried properly (PCR
-repetition, and PCR accuracy within ±500 ns); and whether its service information is present. It does
-not grade the T-STD, so a stream can pass TR 101 290 and still not be conformant.
+repetition, and PCR accuracy within ±500 ns); and whether its service information is present. PCR
+accuracy compares each PCR value with its byte position at the stream's constant rate, so it can be
+checked on a recording. Over IP an analyser adds arrival measures, the PCR's overall jitter and the
+delay factor of RFC 4445, which grade the delivery rather than the multiplex; and it times repetition
+on arrival, so a stream delivered in bursts can fail it with every PCR value in place. TR 101 290 does
+not grade the T-STD, so a stream can pass it and still not be conformant.
+
+**Carrying it on IP.** A facility hands a transport stream to an IRD over RTP on UDP, often
+multicast (RFC 2250, constrained by SMPTE ST 2022-2). RTP is an outer wrapper: each datagram carries
+a whole number of 188-byte packets, usually seven, behind a header holding a sequence number, a 90 kHz
+timestamp, a source identifier (SSRC) and payload type 33. PCR, PTS and DTS, the tables and the
+continuity counters stay inside the transport stream, where the receiver reads them; the sequence
+number lets it find loss and reordering, and ST 2022-2 forbids the sender to alter PCR values or
+positions. SMPTE ST 2022-1 adds forward error correction. **SMPTE ST 2022-7** protects a service by
+sending the same RTP datagrams down two paths, each copy with the same RTP header and payload and only
+the IP and UDP headers free to differ. The receiver rebuilds one stream by taking each datagram from
+whichever path delivers it, provided the paths' delays differ by less than its class allows: 10 ms
+for Class A, 50 ms for Class B, 450 ms for Class C at standard bit rates. Two legs are mergeable only
+if they cut the same packets into the same datagrams under the same numbers, and the protection
+covers only what lies downstream of the point where the two legs were produced separately.
 
 **What the receiver does.** An IRD locks to the sync byte and reads the PAT and PMT. It selects the
 service, recovers the clock, and descrambles if the service is scrambled (BISS, or a conditional-access

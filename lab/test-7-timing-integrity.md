@@ -79,10 +79,11 @@ P1 (file) figures are the range across four groomed clips; P2 remains the load-b
 | IRD PLL lock (sustained) | hh:mm | stable | n/a | TBM (≥ 72 h: the PCR base wraps at 26.51 h) |
 | Drift / discontinuity / wrap | pass/fail | pass | **0 disc. (steady state)²** | TBM |
 
-¹ File arithmetic, not wire timing: `pcrverify` records 0 violations at ±500 ns on all four clips;
+¹ Byte domain: `pcrverify` records 0 violations at ±500 ns on all four clips;
 tightest floor ≤ 74 ns (≤ 2 units) on `testloop_clean`, ≤ 37 ns (≤ 1 unit) on the other three.
-Because the pacer byte-locks PCR to output position, file jitter is near-zero by construction — the
-wire (P2) test is the one that decides PCR_accuracy. ² 0 CC errors and 0 PCR discontinuities in
+Because the pacer byte-locks PCR to output position, the error is near-zero by construction, and the
+same bytes grade the same on the wire. What the wire (P2) test adds is arrival — PCR overall jitter,
+delay factor, frequency offset and drift rate — and the IRD's lock. ² 0 CC errors and 0 PCR discontinuities in
 steady state; boundary cases (drift, 33-bit wrap, mid-stream PID change) are not exercised by these
 clips and remain TBM. ⁴ The rows the wire disagrees with: on the socket they fail P1 as delivered
 (the note above). The hardware column stays TBM because a socket capture on a general-purpose OS is
@@ -150,7 +151,7 @@ declared CBR for the tool to measure jitter from.
 
 ## Observations
 
-- **File analysis flatters PCR repetition as it flatters accuracy (footnote ¹).** Reading a file, the
+- **File analysis flatters PCR repetition because the stage ran offline (footnote ¹).** Reading a file, the
   stage places PCRs wherever the arithmetic wants them; delivering live it can only place one when it
   has a packet ready at the deadline, which at this lane's cushion it often does not.
 - A single IRD model is not the installed base; a credible pass needs a defined IRD test matrix
@@ -215,6 +216,12 @@ rig upgrade and not an experiment; no entry plans it.
   whichever stream happened to be serving. This is the same defect [T6](test-6-relay-resilience.md)
   found and fixed on its own rig, re-encountered on a rig written afterwards, because the fix had been
   recorded as a T6 correction rather than as a property every rig here needs.
+- **PCR accuracy was said to need the wire.** This file and the lab README held that a file's ±500 ns
+  figure was arithmetic and only P2 decides accuracy. TR 101 290 (§5.3.2) defines accuracy from PCR
+  values against byte positions at the nominal rate, valid off-line; arrival jitter is a separate
+  measure, overall jitter, not held to ±500 ns where the path adds jitter. The file figures stand as
+  byte-domain results; P2's job is arrival and the IRD. **Method rule:** name the quantity (value,
+  byte position, arrival) before the point it was taken at ([method notes](method-notes.md)).
 
 ## References
 

@@ -135,7 +135,7 @@ at the top of their own files.
   reduction, recovery observed), not catastrophic; where loss exceeds recovery capacity within the
   buffer, the redundancy path (T6 / ST 2022-7) is the mitigation, not the transport alone.
 - **T6 — Serving-node resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under
-  single-path loss (the two egress legs byte-identical and sequence-aligned); relay-failover recovery
+  single-path loss (the two egress legs' RTP datagrams identical, header and payload); relay-failover recovery
   is bounded and documented, re-establishing without operator intervention; subscriber-reconnect join
   latency is bounded with defined catch-up behaviour.
 - **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real
@@ -191,10 +191,14 @@ Source TS (file or live SRT/RTP)
 
 - **P0 — Source.** Input TS before the publisher; establishes the reference (T1).
 - **P1 — Egress (file).** Subscriber's groomed output captured to file, analysed with TSDuck.
-  Cheap; catches gross faults; **not** sufficient for hardware acceptance (file PCR accuracy is
-  arithmetic, not wire timing).
-- **P2 — Egress (live wire).** Physical output as seen by a hardware IRD / TR 101 290 analyser.
-  The only point that decides PCR_accuracy (±500 ns) and TR 101 290 P1/P2 (T7).
+  Cheap; catches gross faults; **not** sufficient for hardware acceptance: it grades the bytes of a
+  stage that may have run offline, and nothing about arrival.
+- **P2 — Egress (live wire).** The output as it leaves the gateway in real time: in software, a socket
+  capture graded from its bytes; for acceptance, the input of a hardware IRD and TR 101 290 analyser
+  (T7). PCR accuracy (±500 ns, value against byte position) grades the same bytes identically at P1
+  and P2. Only P2 with arrival timestamps grades repetition as a live analyser times it, PCR overall
+  jitter, the delay factor, frequency offset and drift, and only hardware decides IRD lock and
+  acceptance.
 
 ### Tooling
 

@@ -344,6 +344,16 @@ in four ways a lane result must account for:
   for 2 s; the rest is upstream or the inserter's clock, so TDT is not a latency reference until the
   contribution engineer says which.
 
+**A second hand-off, into the secondary host, is the same multiplex sent twice.** A 12 s sample on
+both hosts at once ([`feed-pcr-sample.py`](scripts/feed-pcr-sample.py): each PCR on the video PID,
+its packet's hash and its wall-clock arrival at the listener's output; both clocks within 2 µs of one
+NTP-locked source) found all 551 shared PCR packets byte-identical and the packet count between PCRs
+equal in 550 of 550 intervals. The secondary's copy leaves our listener 0.08–0.21 ms ahead (median
+0.135 ms). Over the first 9.6 h each hop lost SRT packets in one 5-minute interval of its own (98 and
+239), all recovered by retransmission. It gives the secondary a copy of the source within 0.21 ms of
+the primary's ingest, on the clock of any export run there; it gives no second contribution path,
+since everything upstream of the two hand-offs is shared.
+
 **Service presence is in the gate because of what Part A found.** A source with no PMT is not merely
 unconformant, it is un-importable in a way that produces no error at all: the importer resolves no
 tracks and exits zero. Catching that at the source is cheaper than debugging a silent no-op publish.
@@ -385,8 +395,8 @@ SI that changes because something happened.
 
 - **Software reference ≠ hardware IRD.** Part B proves the harness; PLL and buffer-model verdicts on
   hardware may differ — that is what Gate 2 measures.
-- **Part A is P1.** File PCR accuracy is arithmetic, not wire timing ([lab README](README.md) measurement
-  points); hardware confirms P2 only after loan.
+- **Part A is P1.** It grades the bytes, PCR accuracy included; arrival and the IRD's lock wait for
+  P2 on hardware after loan ([lab README](README.md) measurement points).
 - **PMT version fixture missing** until generator extended; pid-change alone does not close PSI mid-stream
   edits.
 - **Part C live encoder** improves fidelity but is not required to complete Parts A and B — the point of
@@ -448,8 +458,9 @@ is predicted [below](#predicted-at-the-ird-and-the-analyser-fixed-before-the-win
 
 **The gateway has to be characterised as an instrument before it is used as one.** This is the item
 most likely to be skipped and the one that decides whether the P2 figures mean anything. A virtual
-machine's scheduling jitter lands in the PCR series and an analyser cannot tell it from the lane's:
-the whole P2 gate is 481 ns, and a VM can miss that by orders of magnitude on its own. So before any
+machine's scheduling jitter lands in the arrival measures (PCR overall jitter, MDI delay factor,
+drift rate on arrivals) and an analyser cannot tell it from the lane's; it does not move PCR
+accuracy, which the analyser reads from the bytes. So before any
 MoQ measurement, **replay a known-good file from the same gateway, through the same UDP output, into
 the same analyser**, and record what the gateway contributes by itself. If that control cannot pass,
 the gateway is the wrong instrument and no MoQ result taken through it is admissible. Tin is

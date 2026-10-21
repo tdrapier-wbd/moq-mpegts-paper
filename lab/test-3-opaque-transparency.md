@@ -118,7 +118,7 @@ into the publisher's TCP ingest, or fed to `tsp -O hls`), which reproduces the s
   **not** be sound for any census row — which is why none is taken from them here.
 - Nothing was ever lost in transit on either lane, so this measures what a lane *does* to a mux, not
   what it does when the path damages one.
-- **PCR accuracy figures below are file arithmetic, not wire timing** — T1's caveat, which applies
+- **PCR accuracy figures below grade the bytes, not the clock** — T1's caveat, which applies
   with equal force here. They establish whether PCR values remain consistent with the byte positions
   the lane delivered them at; they say nothing about a real clock.
 

@@ -627,9 +627,9 @@ by the later of detection and the standby's group lag.
 - **[#6062](https://github.com/moq-dev/moq/issues/6062): a relay lost under one importer resumes at
   a later group** on moq-lite 07, skipping 7.02 s of programme unflagged
   ([T6](test-6-relay-resilience.md)), where upstream documents a resume at the first frame lacked.
-  Triaged: at the default `--delay` the loss is intended: every hop applies the subscriber's
-  max age (half the delay) to the backlog built during detection; the loss at `--delay 10s` is
-  unexplained. Quest `resume-outage` tests both and corrects the doc. Open.
+  **Fixed** by [#6183](https://github.com/moq-dev/moq/pull/6183) (merged): the dead relay's reset
+  group no longer reads as a cut, and a resumed copy keeps the cached groups its max age (half the
+  delay) holds. Not re-measured.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 

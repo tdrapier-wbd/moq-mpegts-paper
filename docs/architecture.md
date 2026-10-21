@@ -177,12 +177,14 @@ A hardware IRD or professional decoder expects, at minimum:
   SCTE-35, teletext and subtitling.
 - ST 2022-7 dual-path input for redundancy, in facilities that use it.
 
-The egress formats the platform therefore supports are MPEG-TS over RTP/UDP (payload type 33) and raw
-UDP, unicast or multicast; SMPTE 2022-1 FEC for loss protection on the egress network; ST 2022-7
-hitless dual-path; and decoder-safe start gating with de-jitter pacing. Multicast, FEC and ST 2022-7
-are treated as *egress implementation details* rather than end-to-end architecture: they are
-reconstructed at the edge to match what the local plant expects, decoupled from how the feed
-traversed the fabric.
+The egress the platform therefore specifies is MPEG-TS over RTP/UDP (payload type 33) and raw UDP,
+unicast or multicast; SMPTE 2022-1 FEC for loss protection on the egress network; ST 2022-7 hitless
+dual-path; and decoder-safe start gating with de-jitter pacing. The groomer used here sends RTP or raw
+UDP to a unicast or multicast address and, stream-clocked, numbers a pair identically; upstream's export
+writes a byte stream and leaves RTP to such a stage; nothing here implements 2022-1 FEC. Multicast and
+FEC are *egress implementation details*, reconstructed at the edge to match the local plant and
+decoupled from how the feed traversed the fabric. ST 2022-7 is not: two legs merge only if both send
+the same RTP datagrams, which constrains every stage from the importer down (§5.1).
 
 **Coexistence architecture** — receivers, plant and monitoring stay untouched ([Problem](problem.md)
 §2.4); native subscribers can bypass the edge gateway, but never as a requirement. That is a
@@ -198,7 +200,8 @@ existing workflows rather than demand replacement; and **ST 2110 essence** in th
 requires encode/mux before publication and is a heavier integration with its own PTP considerations.
 
 Ingest is a pluggable adaptation layer with no privileged input: the internal representation is a
-transport stream, and each ingest module must produce it faithfully.
+transport stream, and each ingest module must produce it faithfully. That order is design: every
+ingest measured here is SRT or plain UDP, and none is RTP with FEC or a 2022-7 merge.
 
 ---
 
@@ -236,11 +239,17 @@ egress arrives in 12.4 kB bursts with a worst-case silence of 149 ms, while clas
 ([Evidence](evidence.md) §3.8).
 
 **Three distinct things are easily conflated** ([Evidence](evidence.md) §3.8): (1) **delivery cadence**
-— burst arrival destroys PCR *intervals*, shared by every Internet-native candidate (SRT, Zixi, RIST,
-segmented HTTP all groom before hand-off); (2) **timestamp regeneration** — media-aware MoQ must
-re-mint PCR/PTS/DTS, which segmented HTTP and the opaque MoQ lane avoid; (3) **live-wire accuracy** —
-P2 ±500 ns PCR_accuracy at the physical output, invisible to file analysis. Grooming addresses (1)
-and (3); the opaque lane sidesteps (2).
+— burst arrival changes *when* PCR-bearing packets reach the edge, shared by every Internet-native
+candidate (the tunnels re-pace in their receivers' latency buffers; segmented HTTP needs a groomer),
+while a byte-faithful lane keeps the PCR values and their byte positions; (2) **timestamp
+regeneration** — media-aware MoQ must re-mint PCR/PTS/DTS and lay out a multiplex of its own, which
+segmented HTTP and the opaque MoQ lane avoid;
+(3) **delivery timing at the output** — whether packets reach the IRD steadily enough for its clock
+recovery, which TR 101 290 grades on arrival as the PCR's overall jitter and, on IP, as the delay
+factor. PCR *accuracy*, the ±500 ns check, is the PCR value against its byte position at the mux
+rate: a property of the bytes, graded the same from a file or a capture. Grooming absorbs (1) in its
+buffer, rebuilds the constant-rate layout with accurate PCRs that (2) leaves irregular, and sets (3)
+by its own pacing; it cannot restore what (2) discards, and the opaque lane sidesteps (2).
 
 **What grooming does.** It (a) **re-inserts null packets** (PID `0x1FFF`) to pad the reassembled
 stream back to the target mux rate, since nulls are commonly stripped for efficient transport — on the
@@ -264,7 +273,13 @@ jitter is only known at egress; grooming at the publisher would be undone by the
 ### 4.2 What is measured, and what is not
 
 This is the load-bearing evidence in the repository and it must be read with its domain attached.
-Full results and limits are in [Evidence](evidence.md) §3.2.
+Full results and limits are in [Evidence](evidence.md) §3.2. **A *wire* row grades a software capture
+of the live output from its bytes**: repetition from the PCR values, accuracy from the values against
+byte positions at the declared rate. It shows that the stage produced a conformant multiplex in real
+time, which a *file* row, run offline, cannot; neither grades when packets left the host, so no row
+measures delivery timing at an IRD-facing output. A live analyser times repetition on arrival; the
+groomed output's arrival gaps of a few milliseconds (§5.3) keep that close to the value intervals,
+an inference rather than a measurement.
 
 Rows are ordered as a receiver meets them: what is delivered first, what the arithmetic says second.
 
@@ -290,8 +305,10 @@ moved nothing. **The edge gateway must reserve the slot** (0.34 % of the carrier
 11 Mb/s), independently of buffer depth, exporter cadence and content
 ([T19](../lab/test-19-pcr-grid-verification.md) measurement 11).
 
-**File validation is optimistic**: it confirms re-stamp arithmetic, not wire scheduling on a
-general-purpose OS and NIC, which is why the table carries wire rows ([Evidence](evidence.md) §3.2).
+**File validation is optimistic** because the stage ran offline: the same groomer once passed on a
+file and failed live, where bursty input left it no free slot for a PCR ([Evidence](evidence.md)
+§3.2). Departure timing on a general-purpose OS and NIC is graded by neither; it is the hardware
+gate's, below.
 
 **Buffer depth fixes it on the segmented plane and does nothing on the MoQ lane**, where the
 exporter never hands the groomer a PCR-bearing packet near the deadline and only the reserved slot
@@ -312,8 +329,9 @@ offline; live, as a laboratory stage in this gateway's place, at 2.2 s behind th
 fixed-delay export, at about 1.1 s with a 1 s delay (§4.3).
 
 > **The gate that decides this architecture.** A conformant transport stream on real hardware
-> decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model — including the
-> ST 2022-7 determinism of §5.1 under loss. Until that evidence exists, the grooming design is
+> decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model, graded on the
+> RTP the decoder actually receives — including the ST 2022-7 determinism of §5.1 under loss. Until
+> that evidence exists, the grooming design is
 > **structurally sound, file-validated, and conformant on PCR repetition on the wire in software
 > on both lanes — over 300 s and, on the media-aware lane, over 24.01 h**
 > ([T21](../lab/test-21-permanence-soak.md)). That is still not "proven broadcast-acceptable":
@@ -489,8 +507,14 @@ broadcast**; source and importer redundancy are switches, not merges.
 
 ### 5.1 Making the pair mergeable is a constraint on the groomer, and it is the design decision that matters
 
-ST 2022-7 requires *packet-identical* egress with aligned RTP sequence numbers. Identity must be
-computed independently — **whose clock chooses each packet's slot decides whether merge works.**
+ST 2022-7 requires both legs to send the *same RTP datagrams*: the same packets cut at the same
+boundaries, under the same sequence number, timestamp and SSRC, with only the IP and UDP headers free to
+differ, arriving within the receiver's path-delay class. Identity must be computed independently —
+**whose clock chooses each packet's slot decides whether merge works.** The groomer used here derives
+each datagram's header from its slot on the output grid: the sequence number from the datagram's index,
+the timestamp from the slot's PCR, the SSRC set per pair, seven packets a datagram, the marker never
+set. When the OS wakes it then changes when a datagram leaves, not what it holds, so the host's
+scheduling jitter reaches the receiver's de-jitter buffer and its class budget, not the merge.
 
 **Emit-clocked** groomers fail structurally: 39.5 % PID-order disagreement, 28.2 % null-count
 disagreement — two transports, not one stamped twice. **Stream-clocked** placement keys each slot to
@@ -524,7 +548,7 @@ constraint, not a convenience.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
-| Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — 1,523 of 1,524 PCRs outside ±500 ns; not a constant-rate transport | the whole chain |
+| Ungroomed, RTP framing pinned on both legs | **yes** — 100 % alignment in 12/12 cells | **no** — not a constant-rate transport, so PCR accuracy is undefined: 1,523 of 1,524 PCRs outside ±500 ns against the nominal rate | the whole chain |
 | One *arrival-clocked* groomer per leg | **no** — 30–53 % alignment, never merges | not applicable | nothing mergeable; input-select still works on it |
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **everything below the importer**, including relay and exporter death |
@@ -535,10 +559,11 @@ constraint, not a convenience.
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
 control** — an unexplained floor that the experiment attributes provisionally to running a 4 Mb/s
 carrier for a 1.9 Mb/s feed, and which it explicitly declines to draw absolute PCR conclusions from.
-So PCR repetition is **not** established by these runs; what they establish is PCR accuracy and
-mergeability. Second, the receiver is a reference implementation of the ST 2022-7 selection rules,
-not a hardware IRD's merge engine, so these results can disprove mergeability but cannot substitute
-for the hardware gate in §4.2.
+So PCR repetition is **not** established by these runs; what they establish is PCR accuracy, from the
+bytes, and mergeability of the RTP datagrams. Second, the receiver is a reference implementation of
+the ST 2022-7 selection rules, not a hardware IRD's merge engine, so these results can disprove
+mergeability but cannot substitute for the hardware gate in §4.2, nor say which receiver class a real
+pair of paths needs.
 
 **Build two independently stream-clocked groomers.** Groom-once-and-duplicate is equally hitless but
 protects the last hop only. Where deterministic grooming cannot be guaranteed, use 1+1 hot-standby rather

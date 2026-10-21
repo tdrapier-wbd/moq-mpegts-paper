@@ -15,7 +15,7 @@ defined [below](#blocked-on-apparatus).
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
-| P0-k | Hardware TR 101 290 P1/P2 soak of groomed output, ≥ 72 h, including ST 2022-7 under loss, with the source-clock-drift and mid-stream PID-change fixtures | The top open question ([Evidence](../docs/evidence.md) §5, rows 1 and 7): the grooming design is software-validated, not broadcast-acceptable | B-6 | A `hardware:` domain P1/P2 result on both lanes over the full window, 2022-7 graded under loss, both fixtures graded | [T7](test-7-timing-integrity.md) |
+| P0-k | Hardware TR 101 290 P1/P2 soak of groomed output, ≥ 72 h, including ST 2022-7 under loss, with the source-clock-drift and mid-stream PID-change fixtures | The top open question ([Evidence](../docs/evidence.md) §5, rows 1 and 7): the grooming design is software-validated, not broadcast-acceptable | B-6 | A `hardware:` domain P1/P2 result on both lanes over the full window, accuracy from the bytes and overall jitter and delay factor on arrival at the RTP input; 2022-7 graded under loss on the RTP datagrams, at the receiver's class; both fixtures graded | [T7](test-7-timing-integrity.md) |
 | P0-d | The analyser-specific rows of the Gate 2 acceptance harness | Completes the acceptance test the harness was built for | B-6 | Every analyser row of T33's fixed pass table taken | [T33](test-33-gate2-preparation.md) |
 | P0-j | A subscriber's export across a real encoder's backward step | Whether the real feed steps back at all is open (every exit captured was a mis-stamped SCTE-35 cue); a step's cost and class are measured on synthetic steps only ([Evidence](../docs/evidence.md) §3.13) | — (running in P0-g's seven-day arm, on standing units past #3997, where an import exit is a candidate step) | One step: a standing export analysed live with TSDuck across it, the programme lost measured, and the step's class read from the hand-off around it | [T34](test-34-real-encoder-severity.md) |
 | P0-g | Permanence: the seven-day MoQ soak on the live feed, which never wraps, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 14, 15) | nginx for the segmented arm | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
@@ -33,6 +33,8 @@ defined [below](#blocked-on-apparatus).
 | P1-c | Distributed resilience on the segmented lane: a two-host segment store, edge and origin failure, then a standby packager joining a running feed | The segmented lane's equivalent of P1-b | — | T30 run against its criteria, the standby arm last | [T30](test-30-segmented-distributed-resilience.md) |
 | P1-e | MPTS: per-programme SI on the T10 rig, and the opaque-lane arm | Whether a selected programme is carried with its own SI | — (`import ts --passthrough` is the opaque lane) | Per-programme SI verified on T10's fixtures; the opaque arm run | [T10](test-10-mpts-multiservice.md) |
 | P1-i | The three remaining data-plane comparison cells | Three empty cells in the comparison's head-to-head | B-4, B-5, B-6 | Each cell scored | [T14](test-14-data-plane-comparison.md) |
+| P1-aa | Source-to-egress media timing across hosts on one clock: the secondary's own hand-off of the feed (B-7) tapped against its export of the primary's import, PTS-matched | End-to-end timing through MoQ is loopback, or 2 h across hosts on PCR arrivals; the export's regenerated PCR grades the export, not the path ([Evidence](../docs/evidence.md) §3.11, §3.16; §5 row 3) | P0-g's end | Matched-PTS latency, its drift and any steps over ≥ 72 h, with the export's rate against the hand-off's on arrivals | [T47](test-47-fixed-delay-export.md) |
+| P1-ab | T6's relay-loss cell (C3) on a build carrying upstream's resume fix | A relay lost under one importer skips 7 s unflagged ([Evidence](../docs/evidence.md) §2, §3.4); upstream has fixed the resume | — | C3 at the default and a 10 s delay, against the same control | [T6](test-6-relay-resilience.md) |
 | P1-l | The telemetry return path end to end | Closes T39 Part B; the same client gives the only way to dump a parsed catalog | — (a small `moq-net` client outside `mpegts-pacer`, on the live feed) | A CMCD Event Timeline track and the TS health counters read back over the same relay; T32's faults graded against each | [T39](test-39-cross-boundary-observability.md) § *Open* |
 
 ## P2 — completeness
@@ -40,7 +42,7 @@ defined [below](#blocked-on-apparatus).
 | # | What remains | Gate | Done when | Protocol |
 |---|---|---|---|---|
 | P2-a | What commercial monitoring would have caught: the vendor survey | — (outreach, not apparatus) | Survey answers mapped against the measured fault-to-telemetry table | [T32](test-32-observability-survey.md) |
-| P2-d | Differential delay on a real pair rather than `netem`: two `--sync` legs of one broadcast over two distribution paths, our relay and P1-j's | #5949 merged; P1-j | T12's merge graded on the real pair | [T12](test-12-dual-path-handoff.md) |
+| P2-d | Differential delay on a real pair rather than `netem`: two `--sync` legs of one broadcast over two distribution paths, our relay and P1-j's | #5949 merged; P1-j | T12's merge graded on the real pair's RTP, its skew against a named receiver class | [T12](test-12-dual-path-handoff.md) |
 | P2-e | Replicates for the segmented congestion rungs | — | Every segmented rung at three replicates (the MoQ rungs and the delay matrix are) | [T31](test-31-congestion-capacity-ladders.md) |
 | P2-f | LEO handover impairment (a candidate, not committed) | — | Committed or deleted | [T35](test-35-leo-handover-impairment.md) |
 | P2-g | The transparency and three-lane arms from an office network | — | The arms reproduced, with the network's UDP/QUIC posture recorded | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) |
@@ -79,14 +81,15 @@ release, unless marked m1.
 
 Set aside: `ts-reliability`'s `stream-routes` (counts what the media-aware lane drops; CAT stays
 uncarried) and `clockless-export` (programmes without video, which no source here carries),
-`ts-hitless-h265` (our sources are H.264), and the QoS line's lag histogram (R8 only).
+`ts-hitless-h265` (our sources are H.264), `arrival-stamps` and `release-clock-false-alarms` (the
+export's own stall and alarm handling, which no entry grades), and the QoS line's lag histogram (R8 only).
 
 ## Blocked on apparatus
 
 | Gate | State | Unblocks |
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d, P1-i, P2-k |
-| **B-7** A live contribution feed of a real service over SRT | **on the primary** (graded in [T33](test-33-gate2-preparation.md) Part C); no entry needs the secondary's | P0-j, P0-g's live arm, P1-j, P1-o's live leg |
+| **B-7** A live contribution feed of a real service over SRT | **on both hosts**, one multiplex sent twice over one contribution path (graded in [T33](test-33-gate2-preparation.md) Part C) | P0-j, P0-g's live arm, P1-j, P1-o's live leg, P1-aa |
 | **B-4** A commercial ABR-to-TS gateway | none | the segmented lane's low-latency arm at equal conformance (§5 row 5); P1-i |
 | **B-5** The commercial packaging edge itself | none (a plain byte cache only re-measures nginx) | multi-programme carriage through a media-aware edge; P1-i |
 

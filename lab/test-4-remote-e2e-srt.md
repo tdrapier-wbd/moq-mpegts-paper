@@ -276,9 +276,10 @@ record rather than inferred.** Thirteen PIDs of thirteen at their source numbers
 TDT/TOT, all three splice PIDs, stuffing, the exact source mux rate, an identical PSI cadence, a PCR
 grid indistinguishable from the file's, 0 continuity errors, and 0 PCR-accuracy violations at the
 481 ns P2 gate over a ~125 ms internet path. This is the first time the campaign has graded PCR
-*accuracy* on a lane over the wire at all: [T3](test-3-opaque-transparency.md) could not, because the
+*accuracy* on a lane's delivered capture: [T3](test-3-opaque-transparency.md) could not, because the
 opaque lane's egress delivers nothing and the media-aware lane has no mux rate for the gate to work
-against.
+against. It grades the bytes, the source's PCR-to-position relationship arriving intact, which
+byte-faithful carriage implies; when the receiver released them was not graded.
 
 **The media-aware lane's carriage result over the wire is much better than T4 first reported and its
 timing result is worse.** Service identity, TSID, ONID, both source PIDs and every elementary stream

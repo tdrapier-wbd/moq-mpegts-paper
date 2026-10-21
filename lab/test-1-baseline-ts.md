@@ -68,7 +68,7 @@ Measured reference (P0):
 ¹ File-based PCR accuracy expressed as the tightest `pcrverify` jitter bound with **zero**
 violations: `testloop_clean`/`CNNiEMEA2` pass at ≤ 37 ns (1 PCR unit); `testloop`/`CNNiEMEA` pass
 at ≤ 74 ns (2 units) with 0 violations, and show a handful only at the 37 ns bound (447 and 1
-respectively). All four are far inside the TR 101 290 P2 ±500 ns limit — as a *file arithmetic*
+respectively). All four are far inside the TR 101 290 P2 ±500 ns limit — as a *byte-domain*
 result (see Observations).
 
 ### Component / track inventory (P0)
@@ -92,9 +92,10 @@ SCTE-35 0x008D/0x008E/0x008F (**three** Splice Info streams); PSI/SI 0x0000/0x00
 
 - All four clips are valid, conformant P0 references: 0 CC/transport/discontinuity errors, 0 % of
   PCR intervals > 40 ms, file PCR accuracy < 74 ns.
-- **File-based PCR accuracy is arithmetic, not wire timing.** The < 74 ns figures confirm the source
-  PCR values are internally consistent against the estimated CBR; they do *not* characterise a live
-  source's true clock, which is only visible on the wire (P2 — same caveat as P1).
+- **File-based PCR accuracy grades the bytes, not the clock.** The < 74 ns figures confirm the source
+  PCR values are consistent with their byte positions at the estimated CBR; they do *not* characterise
+  a live source's true clock, its frequency offset and drift, which need arrival timestamps against a
+  reference (P2).
 - Two sub-millisecond minimum PCR intervals (`testloop_clean` 0.60 ms, CNN 0.15 ms) appear against
   otherwise regular ~20–25 ms spacing. With 0 reported discontinuities these are most likely
   capture-boundary artefacts; they do not affect P1 (which bounds the *maximum* interval).

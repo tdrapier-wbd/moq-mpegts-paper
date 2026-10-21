@@ -233,8 +233,12 @@ sign and needs no reference clock. A preempted reader errs early and late in bal
 flushing backlog errs early only (626 early to 136 late); cross-tabulate two failing invariants before
 calling them two defects (615 of 626 early releases were byte-adjacent).
 
-**A fix acts in one domain; test it there.** *(T19.)* A file capture measures byte position and cannot see
-the release timing #3006 changed. Name the domain (value, byte position, arrival time) before measuring.
+**A fix acts in one domain; test it there.** *(T19, T7.)* A file capture measures byte position and cannot see
+the release timing #3006 changed. Name the domain (value, byte position, arrival time) before measuring,
+and the point after it. TR 101 290's accuracy is value against byte position, the same from a file or a
+capture; overall jitter and the delay factor need arrival timestamps where the receiver sits. A PCR grid
+a stage regenerated grades that stage, not the delivery before it; source-to-egress timing is read on
+matched PTS.
 
 **Where an instrument's behaviour is a choice rather than a requirement, its tests must say which.**
 *(T12, the ST 2022-7 selection oracle.)* Label each case as standard-required, precondition violation,
