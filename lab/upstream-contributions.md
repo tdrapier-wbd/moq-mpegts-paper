@@ -1403,13 +1403,9 @@ goes through `legacy_stream`, which the tree documents as covering MP2, AC-3 and
 dividing line is the stream type, not the codec. Both points were posted to #3798 with the fixture
 recipe.
 
-**Verified fixed on `main` at `9d2a4f6e`:** every stream kind on which `ffa5b81b` aborted survives
-three unflagged wraps ([T41](test-41-import-reanchor-coverage.md)), and the SRT chain holds full
-export rate through five joins ([T40](test-40-continuous-join-through-srt.md)). The likely fix is
-[#3997](https://github.com/moq-dev/moq/pull/3997). On `main` after the branch flip the question is moot rather than reopened: from #4543 every
-unflagged wrap ends the import by design, on every stream kind (`83ce47fe`,
-[T41](test-41-import-reanchor-coverage.md)). The exit-code baseline for #3926 went to that issue the same way: its plan specifies 0 for a
-clean end and 1 for a drop, while the filing had recorded only the error text, and the build of the
+**State: moot.** Since #4543 every unflagged wrap ends the import by design, on every stream kind
+(`83ce47fe`, [T41](test-41-import-reanchor-coverage.md)). The exit-code baseline for #3926 went to
+that issue the same way: its plan specifies 0 for a clean end and 1 for a drop, and the build of the
 time exited **1 in both cases, including when the publisher itself exited 0**.
 
 ### A loop wrap moved audio against video — contributed as [#4513](https://github.com/moq-dev/moq/pull/4513), closed in favour of [#4543](https://github.com/moq-dev/moq/pull/4543)
@@ -1474,13 +1470,6 @@ planned TS export restart (quest `broadcast-epoch/export-ts`, from
 across a republish is left to the passthrough export, unmerged. E
 non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
 ([method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
-
-**Content join on the `dev` line** (`9a80e875`): [T40](test-40-continuous-join-through-srt.md) clip
-100 s, generator rebasing every PES ([method
-note](method-notes.md#1-controls)): full rate
-both paths (123.6–123.7 MB vs 123.9 MB `main` pipe); MP2 loses sync twice per join then recovers.
-With the uncorrected generator the `dev` line ends at the first join (AC-3/teletext stepped back ~30
-s); `main` re-anchored survived.
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
 
@@ -1554,12 +1543,8 @@ video limit at 39 s are the source's, in order, PTS exact. #5516 builds both que
 **State.** Both merged, #5363 reworked and #5516 extended by the maintainer; #5362 closed into two
 quests, both questions answered yes. `main` (`a7b421617`) passes on the capture.
 [#5553](https://github.com/moq-dev/moq/pull/5553) merged sending ahead within the delay, with the
-maintainer's fix releasing a packed PES against its first frame's deadline. Its own commits took
-one delay off the trail, and its rate from the steadiest track settled within 5 min over an hour;
-the merged build grades the same on the feed (T45). Its CI met two `main` flakes:
-[#5564](https://github.com/moq-dev/moq/issues/5564) (`--full` exits on its first rate estimates;
-fixed, #5714) and [#5565](https://github.com/moq-dev/moq/issues/5565) (the default arm's evicted
-first group).
+maintainer's fix releasing a packed PES against its first frame's deadline; the merged build grades
+the same on the feed (T45).
 
 ### Keyframe parameter sets ahead of the AUD — reported as [#5951](https://github.com/moq-dev/moq/issues/5951)
 
@@ -1567,6 +1552,20 @@ first group).
 before its access unit delimiter, which H.264 and HEVC put first. **Fixed by
 [#6001](https://github.com/moq-dev/moq/pull/6001), merged**; at `f13283b30` a keyframe through the
 CDN relay has its source's NAL order (T11).
+
+### A PMT revision kept stale track names — import half contributed as [#6208](https://github.com/moq-dev/moq/pull/6208)
+
+**Report.** Upstream's own fidelity audit (quest `ts-reliability/pmt-lifecycle`): a PMT that
+retypes, re-describes or drops a stream left its track, name and catalog entry in place, and the
+program descriptors and identity were read once. P0-k's PID-change fixture revises its PMT.
+
+**Contributed.** The import half as the maintainer decided it: a changed or dropped listing ends its
+track and leaves the catalog, a changed stream reopens under a new name, `programDescriptors`
+follows the PMT, an identity change refuses. Six tests fail on `main` and pass on the PR. The rest
+becomes quests `pmt-export` and `pat-lifecycle`; until the export half lands, `export ts` refuses a
+revised stream that it used to carry under a stale PMT.
+
+**State.** Open, ready; reviews awaited.
 
 ---
 

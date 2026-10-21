@@ -77,7 +77,7 @@ release, unless marked m1.
 | Quest | What it does | Gate | Weight |
 |---|---|---|---|
 | `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` (our [#5949](https://github.com/moq-dev/moq/pull/5949)) | **High**, R6 at the IRD |
-| `ts-reliability/pmt-lifecycle` [L], m1 | Carries a live PAT or PMT change under fresh track names, the export's PMT rebuilt at the next version; today a layout change ends the export | none | **Medium**, P0-k's PID-change fixture |
+| `ts-reliability/pmt-lifecycle` [L], m1 | Rebuilds the export's PMT at the next version when a live PMT changes; today a layout change ends the export. Our [#6208](https://github.com/moq-dev/moq/pull/6208) takes the import half and splits the export and PAT halves into two new quests | #6208 | **Medium**, P0-k's PID-change fixture |
 
 Set aside: `ts-reliability`'s `stream-routes` (counts what the media-aware lane drops; CAT stays
 uncarried) and `clockless-export` (programmes without video, which no source here carries),
