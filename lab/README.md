@@ -195,10 +195,10 @@ Source TS (file or live SRT/RTP)
   stage that may have run offline, and nothing about arrival.
 - **P2 — Egress (live wire).** The output as it leaves the gateway in real time: in software, a socket
   capture graded from its bytes; for acceptance, the input of a hardware IRD and TR 101 290 analyser
-  (T7). PCR accuracy (±500 ns, value against byte position) grades the same bytes identically at P1
-  and P2. Only P2 with arrival timestamps grades repetition as a live analyser times it, PCR overall
-  jitter, the delay factor, frequency offset and drift, and only hardware decides IRD lock and
-  acceptance.
+  (T7). PCR repetition (interval between PCR values) and accuracy (±500 ns, value against byte
+  position) grade the same bytes identically at P1 and P2. Only P2 with arrival timestamps grades
+  arrival regularity (PCR overall jitter, the delay factor, frequency offset and drift), and only
+  hardware decides IRD lock and acceptance.
 
 ### Tooling
 

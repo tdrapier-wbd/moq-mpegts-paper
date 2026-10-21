@@ -59,9 +59,10 @@ grouped in three priorities. It checks whether the stream can be decoded at all 
 present and repeated, continuity, referenced PIDs present); whether its clock is carried properly (PCR
 repetition, and PCR accuracy within ±500 ns); and whether its service information is present. PCR
 accuracy compares each PCR value with its byte position at the stream's constant rate, so it can be
-checked on a recording. Over IP an analyser adds arrival measures, the PCR's overall jitter and the
-delay factor of RFC 4445, which grade the delivery rather than the multiplex; and it times repetition
-on arrival, so a stream delivered in bursts can fail it with every PCR value in place. TR 101 290 does
+checked on a recording; so can repetition, the interval between consecutive PCR values. How regularly
+the packets arrive is a separate matter: it drives the receiver's clock recovery, and over IP an
+analyser grades it as the PCR's overall jitter and the delay factor of RFC 4445, measures of the
+delivery rather than the multiplex. TR 101 290 does
 not grade the T-STD, so a stream can pass it and still not be conformant.
 
 **Carrying it on IP.** A facility hands a transport stream to an IRD over RTP on UDP, often

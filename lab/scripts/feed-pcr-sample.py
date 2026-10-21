@@ -3,6 +3,9 @@
 # (27 MHz), a hash of the 188-byte packet, and the running packet index. Read-only.
 # Usage: feed-pcr-sample.py <group> <port> <pid> <seconds> <out.csv>, on two hosts at once; join the
 # two files on the PCR column to compare their packets and arrival times.
+# Arrival is time.time_ns() after recv() returns, in the application: across hosts it carries each
+# host's clock error and each reader's scheduling delay, neither calibrated, so it compares packets
+# exactly and arrival only coarsely. It joins on the loopback interface, where the listener publishes.
 import hashlib, socket, struct, sys, time
 
 group, port, pid, secs, out = sys.argv[1], int(sys.argv[2]), int(sys.argv[3], 0), float(sys.argv[4]), sys.argv[5]

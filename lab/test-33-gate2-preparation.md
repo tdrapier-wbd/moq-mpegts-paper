@@ -346,13 +346,15 @@ in four ways a lane result must account for:
 
 **A second hand-off, into the secondary host, is the same multiplex sent twice.** A 12 s sample on
 both hosts at once ([`feed-pcr-sample.py`](scripts/feed-pcr-sample.py): each PCR on the video PID,
-its packet's hash and its wall-clock arrival at the listener's output; both clocks within 2 µs of one
-NTP-locked source) found all 551 shared PCR packets byte-identical and the packet count between PCRs
-equal in 550 of 550 intervals. The secondary's copy leaves our listener 0.08–0.21 ms ahead (median
-0.135 ms). Over the first 9.6 h each hop lost SRT packets in one 5-minute interval of its own (98 and
-239), all recovered by retransmission. It gives the secondary a copy of the source within 0.21 ms of
-the primary's ingest, on the clock of any export run there; it gives no second contribution path,
-since everything upstream of the two hand-offs is shared.
+its packet's hash and the reader's wall clock when it received it) found all 551 shared PCR packets
+byte-identical and the packet count between PCRs equal in 550 of 550 intervals. On those
+application-level timestamps the secondary's copy reads 0.08–0.21 ms ahead (median 0.135 ms), with
+each host's clock error (chrony reports both within 2 µs of one source, not calibrated) and each
+reader's scheduling delay unbounded: **the copies match and arrive close together, a preliminary
+observation and not a sub-millisecond measurement.** Over the first 9.6 h each hop lost SRT packets
+in one 5-minute interval of its own (98 and 239), all recovered by retransmission. It gives the
+secondary a copy of the source close to the primary's ingest, on the clock of any export run there;
+it gives no second contribution path, since everything upstream of the two hand-offs is shared.
 
 **Service presence is in the gate because of what Part A found.** A source with no PMT is not merely
 unconformant, it is un-importable in a way that produces no error at all: the importer resolves no

@@ -227,10 +227,12 @@ egress, performs in order:
 
 ### 4.1 The grooming problem, and why it belongs to every data plane
 
-**Any Internet-native transport delivers media in bursts, and a transport stream reassembled directly
-from those bursts has a PCR that fails TR 101 290 — the conformance the installed base enforces (§3),
-though no hardware receiver's reaction to it has been observed here. Grooming is the fix, it sits at
-the edge, and it is required whichever data plane carries the bytes.**
+**Any Internet-native transport delivers media in bursts. Where the lane rebuilds or alters the
+multiplex, the reassembled stream's PCR fails TR 101 290 — the conformance the installed base
+enforces (§3); where it carries the bytes verbatim the PCR passes, but the bursts reach the IRD as
+arrival jitter its clock recovery must absorb. No hardware receiver's reaction to either has been
+observed here. Grooming is the fix, it sits at the edge, and it is required whichever data plane
+carries the bytes.**
 
 It is tempting to read this as a cost of MoQ's object model, and measurement says the opposite:
 **segmented HTTP is the harder case, by two orders of magnitude.** Carrying the same clip, MoQ's
@@ -277,9 +279,10 @@ Full results and limits are in [Evidence](evidence.md) §3.2. **A *wire* row gra
 of the live output from its bytes**: repetition from the PCR values, accuracy from the values against
 byte positions at the declared rate. It shows that the stage produced a conformant multiplex in real
 time, which a *file* row, run offline, cannot; neither grades when packets left the host, so no row
-measures delivery timing at an IRD-facing output. A live analyser times repetition on arrival; the
-groomed output's arrival gaps of a few milliseconds (§5.3) keep that close to the value intervals,
-an inference rather than a measurement.
+measures delivery timing at an IRD-facing output. How regularly PCRs *arrive* is a further measure
+outside TR 101 290's repetition check, which reads the interval between PCR values: it drives the
+IRD's clock recovery and an analyser's overall jitter and delay factor, and on the groomed output it
+is known only from arrival gaps of a few milliseconds (§5.3).
 
 Rows are ordered as a receiver meets them: what is delivered first, what the arithmetic says second.
 
