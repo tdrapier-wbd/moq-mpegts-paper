@@ -1634,9 +1634,9 @@ only notes it. **Closed by us** once the maintainer pointed to its successor,
 
 [T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run):
 `moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate,
-and its receiver gets the final group twice; otherwise the loop is byte-exact. Interop with
-`moq-dev` on draft 22 waits on moq-wg/moq-transport#2015's FILL_PARAMETERS framing. Verified on
-`4717ce3`: pacing follows the PCR, which closed `--paced`. Verified on `a734a91` with moqxr v0.4.8:
+and its receiver gets the final group twice; otherwise the loop is byte-exact. Draft-22 interop
+with `moq-dev` waits on both adopting the framing moq-wg/moq-transport#2015 merged. Verified on
+`4717ce3`: pacing follows the PCR, closing `--paced`. Verified on `a734a91` with moqxr v0.4.8:
 interrupts exit cleanly, and the final group repeats with the receiver on moq5 `main` but not with
 [openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54). **Open until #54 merges.**
 

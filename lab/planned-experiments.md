@@ -73,7 +73,9 @@ Untaken quests on upstream `main` whose result would move an entry above, ranked
 distribution. A row leaves when a pull request takes it; ours are in the
 [upstream ledger](upstream-contributions.md). **None at the last audit.**
 
-Set aside: `ts-hitless-h265` (our sources are H.264) and the QoS line's lag histogram (R8 only).
+Set aside: `ts-hitless-h265` (our sources are H.264), the QoS line's lag histogram (R8 only),
+`decode-order` (a gate for P1-o only if its late leg fails on DTS) and `state-bound` (P0-g's
+grading shows whether our feed needs it).
 
 ## Blocked on apparatus
 

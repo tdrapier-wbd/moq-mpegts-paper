@@ -498,7 +498,7 @@ length-prefixes the value and calls it "a sequence of Parameters … encoded as 
 for a separate message". `moq-net` writes a parameter count first, as a message does. `moqxr`'s
 decoder reads parameters straight away, takes the count as parameter type 0x01 and rejects the
 message. [moq-wg/moq-transport#1991](https://github.com/moq-wg/moq-transport/issues/1991) records the
-same split (moq-net and Meta send the count, moqtail does not), and the open
+same split (moq-net and Meta send the count, moqtail does not), and the merged
 [#2015](https://github.com/moq-wg/moq-transport/pull/2015) settles it as a count with no length
 prefix, which both sides would have to adopt. The locus rests on the relay's trace of the SUBSCRIBE's
 fields and on the decoder's code; the bytes were not captured.
@@ -555,7 +555,8 @@ side adopts #2015's framing.
 - [ ] Raise the 200 ms QUIC→WebSocket fallback timer separately
 - [x] P1-h and the sweep at `main` across the registry's relays (§ Results at `main`)
 - [ ] Report imquic's and red5's losses once replicates map each to its group and object; the late
-      subscriber aiomoqt, moqtail and Nokia never start waits on moq-transport#2015's framing
+      subscriber aiomoqt, moqtail and Nokia never start waits on their adopting moq-transport#2015's
+      framing
 - [x] The export's AUD after the SPS and PPS reported to `moq-dev`
       ([moq-dev/moq#5951](https://github.com/moq-dev/moq/issues/5951))
 - [x] `moq-net` failing a subscription on any TRACK_STATUS refusal but NOT_SUPPORTED raised with moq-dev ([moq-dev/moq#5954](https://github.com/moq-dev/moq/issues/5954))
