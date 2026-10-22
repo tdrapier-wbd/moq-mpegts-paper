@@ -80,9 +80,9 @@ release, unless marked m1.
 | `ts-reliability/pmt-lifecycle` [L], m1 | Rebuilds the export's PMT at the next version when a live PMT changes; today a layout change ends the export. Our [#6208](https://github.com/moq-dev/moq/pull/6208) takes the import half and splits the export and PAT halves into two new quests | #6208 | **Medium**, P0-k's PID-change fixture |
 
 Set aside: `ts-reliability`'s `stream-routes` (counts what the media-aware lane drops; CAT stays
-uncarried) and `clockless-export` (programmes without video, which no source here carries),
-`ts-hitless-h265` (our sources are H.264), `arrival-stamps` and `release-clock-false-alarms` (the
-export's own stall and alarm handling, which no entry grades), and the QoS line's lag histogram (R8 only).
+uncarried), `ts-hitless-h265` (our sources are H.264), `arrival-stamps` and
+`release-clock-false-alarms` (the export's own stall and alarm handling, which no entry grades), and
+the QoS line's lag histogram (R8 only).
 
 ## Blocked on apparatus
 
