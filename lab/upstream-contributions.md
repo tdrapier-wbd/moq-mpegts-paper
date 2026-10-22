@@ -1673,7 +1673,10 @@ back, so a subscriber loses the head of each group in progress, the SI track's o
 included; added to #795 as a fresh-namespace case. The undefined TRACK_STATUS code (#842, closed)
 reads as INTERNAL_ERROR (draft 18 §14); [#843](https://github.com/openmoq/moqx/issues/843) tracks
 emitting defined codes. The subscription ending on our STOP_SENDING is
-[#817](https://github.com/openmoq/moqx/issues/817)'s, whose open fix covers it. **Open.**
+[#817](https://github.com/openmoq/moqx/issues/817)'s, whose open fix covers it. **Open:** moxygen's
+relay fixed #795's restart case
+([`6411a441`](https://github.com/openmoq/moxygen/commit/6411a441b83329678d0e20fad0d9aed79845fe6d))
+and moqx has not taken it; whether it covers the fresh-namespace case is untested.
 
 ---
 
@@ -1696,9 +1699,6 @@ quietly.
 run logs 54 of 54 requests as `HTTP/3.0 alpn=h3` and the capture holds 109,657 UDP datagrams and zero
 TCP; media md5 matches the HTTP/1.1 arm (`7f3402ea…`). Without the patch the same command cannot
 complete against a TCP-less origin and completes over TCP against a trusted one.
-
-Any published HLS-over-HTTP/3 comparison using FFmpeg's demuxer without checking segment ALPN at the
-origin measures HTTP/1.1 — the same substrate mismatch this paper scores in the MoQ lanes.
 
 **Status:** [FFmpeg #24752](https://code.ffmpeg.org/FFmpeg/FFmpeg/issues/24752); whitelist unchanged
 on master `45f3fecca` (2026-09-22) by reading; open PR
