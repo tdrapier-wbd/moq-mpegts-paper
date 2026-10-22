@@ -112,6 +112,7 @@ no number without the conditions its file states. The rung and gate are from
 | T50 | Deterministic TS legs, `export ts --sync` (our `ts-hitless` build, #5949, open) | 6 · R6, P1-o | run; passes but 3 as written, 6 in the port's first second, 7 partial | **Legs that joined apart or lost complementary content write the same packets on a broadcast mux** once each group opens where the encoder's HRD says the one before has arrived; anchored at its first release, a group that overran the video lane splits the legs at any mux rate | [test-50](test-50-deterministic-ts-legs.md) |
 | T51 | Same-epoch importers that number groups alike (our `hop-aligned-import`, [#5895](https://github.com/moq-dev/moq/pull/5895)) | 6 · R6 | run; declined upstream | **On a clean exit the change removed #4354's rewind on both lanes**, where the stack without it rewinds or repeats 0.6 s; upstream closed it and removed the shared epoch, so no merged build has the pair | [test-51](test-51-same-epoch-groups.md) |
 | T52 | Fan-out and permanence through a CDN-hosted relay | R2, P1-j | specified | — | [test-52](test-52-cdn-relay-fanout.md) |
+| T53 | Token interoperability across relay implementations | R7, P1-ac | specified | — | [test-53](test-53-token-interop.md) |
 
 ### Pass criteria (agreed in advance)
 
