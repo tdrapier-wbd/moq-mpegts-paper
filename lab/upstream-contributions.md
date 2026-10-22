@@ -922,8 +922,8 @@ T28's attribution depends on neither, because it rests on the acknowledgement fr
 that yields to random loss, reorder thresholds that declare overtaken packets lost, a probe backoff
 that delays recovery after an outage, and the idle timeout. The issue proposes opt-in settings for
 each, citing the measured effect of relaxing it. **Decided:** the probe timer re-arms when the peer
-is heard again, by default (quest `quic-outage-probe`, ours: [#6178](https://github.com/moq-dev/moq/pull/6178)); declined on random-loss and
-`netem`-reorder evidence, a rate-holding controller, exposed reorder thresholds and a profile. Open.
+is heard again, by default (merged as our [#6178](https://github.com/moq-dev/moq/pull/6178)); declined on random-loss and
+`netem`-reorder evidence, a rate-holding controller, exposed reorder thresholds and a profile. Closed.
 
 ---
 
