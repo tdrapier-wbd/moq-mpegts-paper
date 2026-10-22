@@ -1553,19 +1553,19 @@ before its access unit delimiter, which H.264 and HEVC put first. **Fixed by
 [#6001](https://github.com/moq-dev/moq/pull/6001), merged**; at `f13283b30` a keyframe through the
 CDN relay has its source's NAL order (T11).
 
-### A PMT revision kept stale track names — import half contributed as [#6208](https://github.com/moq-dev/moq/pull/6208)
+### A PMT revision kept stale track names — contributed as [#6208](https://github.com/moq-dev/moq/pull/6208) (import) and [#6289](https://github.com/moq-dev/moq/pull/6289) (export)
 
-**Report.** Upstream's own fidelity audit (quest `ts-reliability/pmt-lifecycle`): a PMT that
-retypes, re-describes or drops a stream left its track, name and catalog entry in place, and the
-program descriptors and identity were read once. P0-k's PID-change fixture revises its PMT.
+**Report.** Upstream's fidelity audit (quest `ts-reliability/pmt-lifecycle`): a PMT that
+retypes, re-describes or drops a stream left its track and catalog entry in place, and program
+descriptors and identity were read once. P0-k's PID-change fixture revises its PMT.
 
 **Contributed.** The import half as decided: a changed or dropped listing ends its track and leaves
 the catalog, a changed stream reopens under a new name, `programDescriptors` follows the PMT, an
-identity change refuses; so do a PID listed twice and 65,536 stream revisions. The rest becomes
-quests `pmt-export` and `pat-lifecycle`; until the export half lands, `export ts` refuses a revised
-stream that it used to carry under a stale PMT.
+identity change refuses; so do a PID listed twice and 65,536 stream revisions. The export half
+revises the PMT at the next version and drops a PID once its tail is out; `pat-lifecycle` stays a
+quest.
 
-**State.** Open, ready; reviews awaited.
+**State.** #6208 queued; #6289 a draft on it and #5949.
 
 ---
 
