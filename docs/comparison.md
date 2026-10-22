@@ -109,9 +109,8 @@ head-to-head under one shaper ([Evidence](evidence.md) §3.3):
 
 Past 7.7–12.2 % applied loss the segmented lane's HTTP/1.1 client re-anchors and leaves holes,
 silently past ~20 % ([T5](../lab/test-5-network-impairment.md)). **Against SRT, matched on
-measured latency and graded on content, the media-aware lane loses more programme across an outage
-and a killed relay or publisher**, by a margin its build and QUIC's recovery set, and in the random-loss
-and reorder stress cells but 5 % reorder.
+measured latency and graded on content, the media-aware lane loses more programme in every
+random-loss and reorder stress cell but 5 % reorder**, by a margin its build and QUIC stack set.
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
 
@@ -122,11 +121,11 @@ scoped to a live subscription and a deliberately shallow relay cache ([Evidence]
 off-the-shelf TS client survives an origin restart ([T6](../lab/test-6-relay-resilience.md)), and
 Content Steering is specification-only. An origin killed for ten seconds costs the segmented lane no
 content, where the media-aware exporter skips to the live edge. Across a *transport* outage, graded
-on content, the media-aware lane loses more of the programme than SRT: behind the fixed-delay export
-the margin is its transport's recovery, and earlier builds also paid in a latency step that did not
-reverse, where SRT holds its latency ([Evidence](evidence.md) §3.3). A killed relay or publisher
-costs the media-aware lane about twice SRT's loss, as both ends wait out QUIC's idle timeout, and a
-killed exporter less than half.
+on content, the media-aware lane loses more programme than SRT: behind the fixed-delay export
+the margin is QUIC's probe-timeout backoff, which a conformant default cannot cap
+([Evidence](evidence.md) §3.3). A killed publisher, or a relay restarted without its reset key, costs
+the lane about twice SRT's loss, as both ends wait out QUIC's idle timeout; a relay keeping its key
+costs it less than SRT, and a killed exporter less than half.
 
 **Neither lane's transport reports a stalled source, and only the segmented one offers a
 substitute**: its playlist media sequence stops advancing, which a poller can alarm on without
@@ -530,8 +529,8 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme across an outage and a killed relay or publisher, by a margin its build and QUIC's recovery set (§3.1) |
-| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, a killed relay costs the media-aware lane about twice as much (§3.2) |
+| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells, by a margin its build and QUIC stack set (§3.1) |
+| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more across an outage, and about twice as much to a killed publisher or a relay restarted without its reset key (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |

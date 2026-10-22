@@ -454,7 +454,9 @@ Criteria 17–20 on `main` at `ad87ad34e` with the recovery switches, graded by
   of the return. A window kept at 85 kB regains half its size no sooner than one cut to 4,800 bytes.
 - **The prediction holds (20).** *Backoff* passes and *window* does not.
 - **What it is worth.** With the backoff capped, the lane loses 4.92–6.12 s to a 5 s outage. SRT
-  loses 5.0–5.4 s on the same rig. RFC 9002 requires each probe timeout to double the next, so a
+  loses 5.0–5.4 s on the same rig at a 2 s budget, but matched on latency on the `--delay` ladder
+  it loses 2.08–3.74 s, and this arm's latency is not in this record, so the two are not ranked
+  here. RFC 9002 requires each probe timeout to double the next, so a
   cap belongs to a profile for provisioned paths, not to the default.
 
 ### The re-arm does not shorten the outage; a kept reset key removes the relay restart's timer (P1-z)

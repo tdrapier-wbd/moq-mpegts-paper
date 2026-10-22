@@ -85,11 +85,11 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing; the opaque lane, on `moq-dev`, is the source's bytes. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond one run per arm | §3.1 |
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; arrival at an IRD-facing output; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s across hosts and at up to 2 % loss, its clock following a drifting source, but not over a whole capture at 500 ms; on arrivals its drift rate exceeds 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
-| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage and a killed relay or publisher**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither | The trunking knee; a real CDN edge or captured path; burst loss; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
+| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a real CDN edge or captured path; burst loss; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
 | **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs of one broadcast merge only behind the fixed-delay export merged on October 2026 `main`, and only as a co-started pair, on one host or two; on the opaque lane a leg joining 8 s late merges. An `[unmerged]` export laying groups by the encoder's HRD, the placement upstream adopted, merges a late leg and legs with complementary loss. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late-joining leg on a merged build; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on | A third source; wide-area fan-out | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
-| **Availability** | `moq export ts` exited silently on an evicted group on moq 0.9.15; with both upstream fixes 0 of 10 exited, consistent with the fix but not established by the count | What sets the rate | §3.15 |
+| **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
 | **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs 3–4 s of programme per step and is not hitless for a 1+1 pair | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
 | **Interop** | The opaque lane crosses seven of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays never start a late subscriber | §3.7 |
@@ -198,7 +198,7 @@ lane reaches the same wire standard** — 0 intervals above 40 ms and 0 PCR viol
 2,496 PCRs ([T16](../lab/test-16-grooming-segmented-http.md)) — but there depth binds: at 1 s against
 2 s segments it posts 311 continuity errors, and at 8 s none.
 
-### 3.3 How does the transport behave under loss? — The controller decides it on every lane; once the lanes are substrate-matched, reordering does not separate them either; and matched with SRT on measured latency, the media-aware lane loses more across an outage and a killed relay or publisher, by a margin the build and QUIC's recovery set, as in every stress cell but 5 % reorder
+### 3.3 How does the transport behave under loss? — The controller decides it on every lane; once the lanes are substrate-matched, reordering does not separate them either; and matched with SRT on measured latency, the media-aware lane loses more across an outage, a killed publisher and a relay restarted without its reset key, by a margin the build and QUIC's recovery set, as in every stress cell but 5 % reorder
 
 **For an operator:** on a lossy route the congestion controller and the QUIC stack decide what the
 media-aware lane delivers. Pin the controller, because the default is backend-specific, and choose it
@@ -273,17 +273,24 @@ R5. The cost is the build's: the oldest build measured, moq 0.11.0, loses 4.8–
 100 ms after every outage**. SRT loses 0–3.74 s of the outage, less as its latency rises, against
 6.1–7.6 s; at 2 s, 70–80 % of the excess falls
 between the link's return and the first delivered datagram, 2.4–2.5 s later, so SRT's lead there is
-the QUIC transport's recovery, not the lane (noq). Under 5–10 %
+**QUIC's probe-timeout backoff**, not the lane (noq). Capped at one doubling (a lab switch), the lane
+loses 4.9–6.1 s of a 5 s outage, but RFC 9002 requires the doubling, so a cap belongs only in a
+provisioned-path profile. The default adopted instead, an early probe once the peer is heard again,
+leaves 7.7–8.5 s (a later October 2026 `main`, three replicates): the rig drops only the relay's
+direction, so that probe is spent inside the outage. Dropping both directions costs 6.1–12.6 s: the
+first acknowledgement after it carries an RTT sample spanning the outage.
+Under 5–10 %
 random loss and 20 % reorder, stress cells rather than any route's model, SRT loses nothing against
 30–40 s of 40. At 11.9 s SRT needs both ends' buffers
 sized to its latency times the link rate, without which it fails even unimpaired; that column ran on
 a second host of the same type. **A killed component costs each lane its liveness timer** (October
 2026 `main`, matched at 3.8 s, 20 ms RTT, three replicates): a killed relay or publisher costs the
 MoQ lane 12.0–14.2 s of video against SRT's 5.4–6.3 s, because each waits out QUIC's 10 s idle
-timeout: a restarted relay cannot reset its predecessor's connections, and the relay holds a dead
-publisher's session as long; a killed exporter costs it 3.9 s against SRT's 8.8 s. A 3 s idle
-timeout cut the relay kill to 4.4–5.1 s (ungraded), but must outlast any outage the route should
-ride through. **On the `--max-age` builds, under sustained
+timeout: a relay restarted with a new key cannot reset its predecessor's connections, and the
+relay holds a dead publisher's session as long; a killed exporter costs it 3.9 s against SRT's 8.8 s.
+**A relay keeping its reset key across the restart costs 4.2 s, less than SRT's 6.3 s**, since its
+stateless resets end both clients' sessions within 3 s (the same build, at 2.3 s against SRT's 3.8 s,
+so unmatched); the exporter still exits once. **On the `--max-age` builds, under sustained
 5–10 % loss the stack decides**: SRT lost nothing
 in twelve cells, the noq builds 23.4–33.6 s of 40, and the quinn builds 0.00–0.64 s at 5 %, because
 BBRv1 does not treat loss as congestion (*reasoned*). **Under 20 % reorder every one, on both stacks,
@@ -743,28 +750,18 @@ provides (§3.4); its default is 10 s from moq 0.14.0. **A static segmented orig
 term**: twelve abusers moved its working set by at most 0.6 MB, inside its own baseline drift, with
 victim captures byte-identical (wire, P2) — a structural result scoped to a *static* origin.
 
-### 3.15 Does the subscriber survive the loss it is designed to absorb? — It did not on moq 0.9.15; with both upstream fixes none exited, consistent with the catalog-track fix though not established by the count alone
+### 3.15 Does the subscriber survive the loss it is designed to absorb? — With both upstream fixes none exited, consistent with the fix but not established by the count
 
-**For an operator:** a subscriber can exit silently on a group it was designed to discard, leaving a
-clean capture and no programme; only process supervision detects it.
+**For an operator:** a subscriber that exits on a group it was designed to discard leaves a clean
+capture and no programme; only process supervision detects it.
 
-Shedding a late group is the lane's designed response to congestion, and the process that does the
-shedding did not reliably survive it ([T8b](../lab/test-8b-congestion-control.md); P1, three flows
-through a congested bottleneck, 15 subscribers per arm over five replicates):
-
-| Build | Carries | Subscribers exited | Message |
-|---|---|---:|---|
-| moq 0.9.15 | neither fix — positive control | 4 / 15 | `hang: moq error: old` |
-| moq 0.11.2 | the container-consumer fix only | 1 / 15, 1 / 10 | `json: old`, on the catalog |
-| moq 0.11.2 | both fixes | **0 / 10** | — |
-
-On a snapshot track `Old` means the value held has been superseded, so the right response is to take the
-newer group; the catalog fix does that and logs it
-([upstream contributions](../lab/upstream-contributions.md)). **The count is consistent with the fix
-without establishing it**, since 0 of 10 is also what an unchanged build produces most of the time; the
-conclusion rests on the closed and now logged code path, upstream's regression tests, and a control that
-still provokes the failure. A subscriber that sheds groups is degraded but on air; one that exits is off
-air.
+Through a congested bottleneck, 0 of 10 subscribers exited with both upstream fixes, against 4 of 15
+on a build without them ([T8b](../lab/test-8b-congestion-control.md); P1, three flows, five
+replicates). **The count is
+consistent with the fix without establishing it**, since 0 of 10 is also what an unchanged build
+produces most of the time; the conclusion rests on the closed code path, upstream's regression tests,
+and a control that still provokes the failure
+([upstream contributions](../lab/upstream-contributions.md)).
 
 ### 3.16 Is the media-aware lane's TS-out a conformant transport stream? — Not through a pacing groomer: its P1/P2-conformant wire fails the buffer model on the lane's packet order, which only a re-multiplexing stage repairs
 
