@@ -1561,9 +1561,9 @@ program descriptors and identity were read once. P0-k's PID-change fixture revis
 
 **Contributed.** The import half as decided: a changed or dropped listing ends its track and leaves
 the catalog, a changed stream reopens under a new name, `programDescriptors` follows the PMT, an
-identity change refuses; so do a PID listed twice and 65,536 ended routes. The rest becomes quests
-`pmt-export` and `pat-lifecycle`; until the export half lands, `export ts` refuses a revised stream
-that it used to carry under a stale PMT.
+identity change refuses; so do a PID listed twice and 65,536 stream revisions. The rest becomes
+quests `pmt-export` and `pat-lifecycle`; until the export half lands, `export ts` refuses a revised
+stream that it used to carry under a stale PMT.
 
 **State.** Open, ready; reviews awaited.
 
