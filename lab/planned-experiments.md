@@ -15,7 +15,7 @@ defined [below](#blocked-on-apparatus).
 
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
-| P0-k | Hardware TR 101 290 P1/P2 soak of groomed output, ≥ 72 h, including ST 2022-7 under loss, with the source-clock-drift and mid-stream PID-change fixtures | The top open question ([Evidence](../docs/evidence.md) §5, rows 1 and 7): the grooming design is software-validated, not broadcast-acceptable | B-6 | A `hardware:` domain P1/P2 result on both lanes over the full window, accuracy from the bytes and overall jitter and delay factor on arrival at the RTP input; 2022-7 graded under loss on the RTP datagrams, at the receiver's class; both fixtures graded | [T7](test-7-timing-integrity.md) |
+| P0-k | Hardware TR 101 290 P1/P2 soak of groomed output, ≥ 72 h, including ST 2022-7 under loss, with the source-clock-drift and mid-stream PID-change fixtures | The top open question ([Evidence](../docs/evidence.md) §5, rows 1 and 7): the grooming design is software-validated, not broadcast-acceptable | B-6; the 2022-7 arm also #6304 | A `hardware:` domain P1/P2 result on both lanes over the full window, accuracy from the bytes and overall jitter and delay factor on arrival at the RTP input; 2022-7 graded under loss on the RTP datagrams, at the receiver's class; both fixtures graded | [T7](test-7-timing-integrity.md) |
 | P0-d | The analyser-specific rows of the Gate 2 acceptance harness | Completes the acceptance test the harness was built for | B-6 | Every analyser row of T33's fixed pass table taken | [T33](test-33-gate2-preparation.md) |
 | P0-j | A subscriber's export across a real encoder's backward step | Whether the real feed steps back at all is open (every exit captured was a mis-stamped SCTE-35 cue); a step's cost and class are measured on synthetic steps only ([Evidence](../docs/evidence.md) §3.13) | — (running in P0-g's seven-day arm, on standing units past #3997, where an import exit is a candidate step) | One step: a standing export analysed live with TSDuck across it, the programme lost measured, and the step's class read from the hand-off around it | [T34](test-34-real-encoder-severity.md) |
 | P0-g | Permanence: the seven-day MoQ soak on the live feed, which never wraps, and a segmented soak behind an nginx origin | Whether either lane runs unattended for a week, and what the segmented lane costs to run (§5 rows 14, 15) | nginx for the segmented arm | 7 d with the wire grader and per-PID resource sampling on; the segmented arm's per-role CPU and memory measured on nginx | [T21](test-21-permanence-soak.md) |
@@ -42,7 +42,7 @@ defined [below](#blocked-on-apparatus).
 | # | What remains | Gate | Done when | Protocol |
 |---|---|---|---|---|
 | P2-a | What commercial monitoring would have caught: the vendor survey | — (outreach, not apparatus) | Survey answers mapped against the measured fault-to-telemetry table | [T32](test-32-observability-survey.md) |
-| P2-d | Differential delay on a real pair rather than `netem`: two `--sync` legs of one broadcast over two distribution paths, our relay and P1-j's | P1-o's upstream gate; P1-j | T12's merge graded on the real pair's RTP, its skew against a named receiver class | [T12](test-12-dual-path-handoff.md) |
+| P2-d | Differential delay on a real pair rather than `netem`: two `--sync` legs of one broadcast over two distribution paths, our relay and P1-j's | P1-o's upstream gate and the RTP legs (our [#6304](https://github.com/moq-dev/moq/pull/6304), draft); P1-j | T12's merge graded on the real pair's RTP, its skew against a named receiver class | [T12](test-12-dual-path-handoff.md) |
 | P2-e | Replicates for the segmented congestion rungs | — | Every segmented rung at three replicates (the MoQ rungs and the delay matrix are) | [T31](test-31-congestion-capacity-ladders.md) |
 | P2-f | LEO handover impairment (a candidate, not committed) | — | Committed or deleted | [T35](test-35-leo-handover-impairment.md) |
 | P2-g | The transparency and three-lane arms from an office network | — | The arms reproduced, with the network's UDP/QUIC posture recorded | [T3](test-3-opaque-transparency.md), [T4](test-4-remote-e2e-srt.md) |
@@ -71,12 +71,7 @@ P2-b → [T25](test-25-isolation-under-abuse.md), P1-d → [T31](test-31-congest
 
 Untaken quests on upstream `main` whose result would move an entry above, ranked by weight for primary
 distribution. A row leaves when a pull request takes it; ours are in the
-[upstream ledger](upstream-contributions.md). Rows are upstream's m2, whose review waits on its next
-release, unless marked m1.
-
-| Quest | What it does | Gate | Weight |
-|---|---|---|---|
-| `ts-rtp-egress` [M] | RTP legs an ST 2022-7 receiver can merge | `ts-hitless` (our [#5949](https://github.com/moq-dev/moq/pull/5949)) | **High**, R6 at the IRD |
+[upstream ledger](upstream-contributions.md). **None at the last audit.**
 
 Set aside: `ts-hitless-h265` (our sources are H.264) and the QoS line's lag histogram (R8 only).
 

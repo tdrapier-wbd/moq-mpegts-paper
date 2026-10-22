@@ -784,7 +784,7 @@ counters restart per group, released by clock recovery rather than wall time; an
 **Merged.** #5967 has since removed the shared importer epoch and its alignment (§ *Active/active
 source failover*), so we closed our co-start test
 [#5955](https://github.com/moq-dev/moq/pull/5955). `--sync` (#5949) and the RTP legs
-(`ts-rtp-egress`) survive, for legs of one broadcast.
+(#6304) survive, for legs of one broadcast.
 
 ### A restarted relay cannot reset its predecessor's connections — reported as [#5861](https://github.com/moq-dev/moq/issues/5861)
 
@@ -1159,36 +1159,19 @@ fixture for the recipe gate; unpadded export start; and `pcr-value-interval` poo
 
 ### The byte schedule itself — contributed as [#4579](https://github.com/moq-dev/moq/pull/4579), overtaken by the maintainer's fixed-delay export
 
-**The defect** is #3925's: with a mux rate, export padded to the right average but heaped each keyframe
-between two PCRs, so a receiver clocking off arrival could not lock. On upstream `main` `6f1a9e33`, a 60 s
-cut of `CNNiEMEA2.ts` at `--bitrate 11000000` returned **3.27 %** of PCR intervals within ±1 %, median gap
-1,316 B against 31,087 B, T-STD TB overflows 384,910 and pcr-jitter p95 205,936 µs.
+**Report.** #3925's defect: with a mux rate, the export padded to the right average but heaped each
+keyframe between two PCRs, so a receiver clocking off arrival could not lock.
 
-**The contribution** implements the byte-schedule quest: with a rate, closed spans queue in a backlog and
-every 25 ms slot emits its PCR, media up to the rate, then nulls, so a PCR's value follows its byte
-position; output trails the media by a delay that grows to the largest burst seen, capped by `--max-age`.
-Without a rate the output is byte-identical. The harness fixture was replaced with keyframes that outgrow a
-slot, and `pcr-schedule` gates at 80 %. **Measured on the PR branch against `main` at `6f1a9e33`**, on
-the loopback harness (the PR was never merged): on the CNN cut, pcr-schedule rose from **3.27 %** to
-**75.3 %** (to **99.1 %** with `export ts --max-age 1s`), TB overflows and pcr-jitter p95 fell sharply,
-and the schedule added about 500–706 ms of delay; on the generated clip it rose from **34.5 %** to
-**93.5 %**. Open-GOP stayed 60/60 with continuity clean.
+**Contributed.** The byte-schedule quest: closed spans queue in a backlog, and every 25 ms slot emits
+its PCR, media up to the rate, then nulls, so a PCR's value follows its byte position. Verified on the
+loopback harness against `main` `6f1a9e33`, on a 60 s cut of the reference clip at 11 Mb/s: PCR
+intervals within ±1 % rose from **3.27 %** to **75.3 %** (**99.1 %** with `--max-age 1s`), T-STD TB
+overflows fell from 384,910 to 90,150, at 500–706 ms of added delay; on the generated clip, from
+34.5 % to 93.5 %.
 
-| Stream | pcr-schedule | TB overflows | pcr-jitter p95 | added delay |
-|---|---:|---:|---:|---:|
-| CNN, 60 s | 3.27 % → **75.3 %** (→ **99.1 %**) | 384,910 → 90,150 (→ 19,830) | 205,936 → 24,246 µs (→ 92 µs) | 500 ms cap (→ 706 ms) |
-| generated clip, 20 s | 34.5 % → **93.5 %** | 67,960 → 5,450 | 58,454 → 24,389 µs | ~250 ms |
-
-Figures in brackets are with `export ts --max-age 1s`.
-
-**Open:** the 500 ms default `--max-age` is too short for CNN bursts (0.7–0.9 s); media-before-nulls leaves
-TB overflows interleaving would cut; the first ~2 s stay VBR until the importer publishes `mpegts.muxRate`;
-and the `--live` release check was flaky under load on both `main` and the branch. **State:**
-[#4579](https://github.com/moq-dev/moq/pull/4579) was closed by its author in favour of
-[#4645](https://github.com/moq-dev/moq/pull/4645), which **has merged to `main`**: it
-replaces span machinery with a constant-rate schedule paced against fixed `--delay` and fails export when a
-burst does not fit the delay. The closing comment on #4579 retains the measurements above as the
-before-state #4645 must beat on a real broadcast clip.
+**State.** Closed by its author for [#4645](https://github.com/moq-dev/moq/pull/4645), merged, which
+paces a constant-rate schedule against a fixed `--delay` instead; #4579's closing comment keeps these
+figures as the before-state.
 
 ### T-STD conformance of the TS export — taken up upstream, and merged as the fixed-delay export, which carries every track of a broadcast clip with its clock in tolerance
 
@@ -1252,14 +1235,23 @@ whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusi
 [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)). Detail lives in T44–T48,
 measurement points in [`docs/evidence.md`](../docs/evidence.md) §3.16.
 
-### A UDP sink for `export ts` — declined, re-asked narrowly, deferred
+### A UDP sink for `export ts` — declined; RTP legs for ST 2022-7 contributed as [#6304](https://github.com/moq-dev/moq/pull/6304)
 
-[#1839](https://github.com/moq-dev/moq/issues/1839), a general egress layer, was closed not planned.
-[#3923](https://github.com/moq-dev/moq/issues/3923) asked only for a `--udp` sink with datagram size
-and multicast controls, and was closed not planned too: `tsp` already does the socket work, and a
-sink adds little without a byte schedule an IRD can clock off (then 3.3 % of PCR slots carried the
-declared rate's bytes, [T13](test-13-downstream-grooming.md) § *The head-to-head*). RTP legs for
-ST 2022-7 are now the quest `ts-rtp-egress` ([planned-experiments](planned-experiments.md)).
+**Report.** [#1839](https://github.com/moq-dev/moq/issues/1839), a general egress layer, and
+[#3923](https://github.com/moq-dev/moq/issues/3923), a `--udp` sink with datagram size and multicast
+controls, were closed not planned: `tsp` does the socket work, and a sink adds little without a byte
+schedule an IRD can clock off. RTP for a 2022-7 pair is the exception: a per-process packetizer
+numbers the datagrams it sent, so a late join or a jump shifts one leg's numbers.
+
+**Contributed** (quest `ts-rtp-egress`). `export ts --sync --rtp udp://HOST:PORT` cuts RFC 2250
+datagrams on the slot grid, numbers them from their timeline position, derives the SSRC from path
+and epoch, and withholds a datagram the leg cannot vouch for. Verified: legs joined apart, or losing
+complementary groups, send byte-identical datagrams and between them every datagram a clean leg
+sends; four of those tests fail with the withholding disabled; two legs through a loopback relay on
+draft 18 shared 36,465 datagrams, none differing. Every hop must carry the epoch: draft 17+ or
+lite-07.
+
+**State.** A draft on #5949.
 
 ### Four closed as completed by a planning document that changed no code
 
