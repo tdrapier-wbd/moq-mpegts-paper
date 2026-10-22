@@ -25,7 +25,7 @@
 #      RESTART_S (1), DELAY_S (2), SRT_LATENCY_MS (unset: the first MoQ control's median latency),
 #      SRT_HOP_MS (120, the first SRT hop's share of it), RTT_MS (20), RATE_MBIT (20), CLIP, VPID,
 #      NETNS, CONTENT, LATENCY, GRADE (t28-infra-grade.py, beside t28-latency-return.py), OUT, MOQ_CC,
-#      KEEP_TS=1.
+#      KEEP_TS=1, RELAY_EXTRA (more moq-relay flags, e.g. "--listen-reset-secret <file>").
 # Output: <OUT>/<label>/<cell>/, each graded into grade.json before its capture is deleted.
 set -uo pipefail
 
@@ -42,6 +42,7 @@ LATENCY=${LATENCY:-/home/ubuntu/t18-latency.py}
 GRADE=${GRADE:-/home/ubuntu/t28-infra-grade.py}
 OUT=${OUT:-/home/ubuntu/t28ia}/$LABEL
 MOQ_CC=${MOQ_CC:-delay}
+RELAY_EXTRA=${RELAY_EXTRA:-}
 LANES=${LANES:-"moq srt"}
 KILLS=${KILLS:-"none publisher relay exporter"}
 REPS=${REPS:-3}
@@ -139,6 +140,7 @@ echo "=== $(date -u) t28-infra-axis $LABEL ==="
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
 	echo "lanes: $LANES; kills: $KILLS; reps: $REPS; secs: $SECS; kill at: $KILL_AT s; restart after: $RESTART_S s"
+	echo "relay extra flags: ${RELAY_EXTRA:-none}"
 	echo "moq --delay ${DELAY_S}s, relay controller $MOQ_CC; srt latency ${SRT_LATENCY_MS:-from the first moq control}, first hop $SRT_HOP_MS ms"
 	echo "path: $RATE_MBIT Mb/s, RTT $RTT_MS ms"
 	tsp --version 2>&1 | head -1
@@ -168,7 +170,7 @@ run_cell() {
 
 	if [ "$lane" = moq ]; then
 		pub bash -c "while :; do '$BIN/moq-relay' ${RELAY_BIND[*]} '$PUBIP:$PORT' ${RELAY_TLS[*]} '$PUBIP' \
-                ${RELAY_AUTH[0]} '${RELAY_AUTH[1]}' ${RELAY_GSO[*]} $RELAY_CC_FLAG $MOQ_CC --log-level warn >>'$d/relay.log' 2>&1; \
+                ${RELAY_AUTH[0]} '${RELAY_AUTH[1]}' ${RELAY_GSO[*]} $RELAY_CC_FLAG $MOQ_CC $RELAY_EXTRA --log-level warn >>'$d/relay.log' 2>&1; \
                 echo \"exit \$(date +%s%N)\" >>'$d/relay.exits'; sleep $RESTART_S; done # $tag.relay" &
 		sleep 3
 		sub bash -c "{ while :; do '$BIN/moq' ${MOQ_DIAL[*]} 'https://$PUBIP:$PORT/anon' --broadcast '$bc' \

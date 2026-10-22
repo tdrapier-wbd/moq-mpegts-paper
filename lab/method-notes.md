@@ -606,6 +606,12 @@ armed.
 **Verify where the capture tap sits relative to the impairment.** *(T9.)* Downstream of the shaper it
 measures what reached the path, not what the sender pushed.
 
+**State which directions an outage drops.** *(T28 P1-z.)* The ladder's outage dropped only what the
+relay sent, so the subscriber's packets reached it throughout. A recovery rule keyed on hearing the
+peer then fires during the outage, not after it; dropping both directions adds an RTT sample that
+spans the outage. Record the direction with the cell, and run both when the mechanism listens to the
+peer.
+
 **An inline instrument damaged one lane and was invisible on the other.** *(T28 P1-m.)* An inline tap
 cost SRT 4.2–5.4 s and thousands of continuity errors with no impairment, and nothing on the media-aware
 lane, whose exporter re-synthesises. "On both arms" is not "cancels" when one lane passes bytes and the

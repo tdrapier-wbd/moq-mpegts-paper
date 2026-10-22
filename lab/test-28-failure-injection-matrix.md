@@ -4,8 +4,9 @@
 outage, sustained partial loss and reorder — matched on measured latency in the `netns`/`cake` rig,
 and the MoQ lane is re-measured on six builds and both QUIC backends with the controller pinned and
 graded on content, and on the merged build at four `--delay` settings; the segmented lane is measured on the same three shapes in T20's loopback rig and
-in part in the `netns` rig; on the infrastructure axis SRT recovers sooner from a relay or
-publisher restart and MoQ from an exporter restart.**
+in part in the `netns` rig; on the infrastructure axis SRT recovers sooner from a publisher
+restart, and from a relay restart unless the relay keeps its reset key, and MoQ from an exporter
+restart.**
 Infrastructure and transport failures have been probed one at a
 time in [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md), usually reported as
 recovery *time*; what a distributor buys is programme continuity, and the two are not the same number.
@@ -456,6 +457,61 @@ Criteria 17–20 on `main` at `ad87ad34e` with the recovery switches, graded by
   loses 5.0–5.4 s on the same rig. RFC 9002 requires each probe timeout to double the next, so a
   cap belongs to a profile for provisioned paths, not to the default.
 
+### The re-arm does not shorten the outage; a kept reset key removes the relay restart's timer (P1-z)
+
+Criteria 21–25 on `main` at `151fa4845` (moq-quic, `delay` controller), with no lab patch. The relay
+cells ran the shipping build; the outage cells ran a build of the same commit with the `qlog`
+feature, as P1-y's did. Graders: [`t28-outage-trace.py`](scripts/t28-outage-trace.py),
+[`t28-probe-timing.py`](scripts/t28-probe-timing.py) and
+[`t28-qlog-window.py`](scripts/t28-qlog-window.py) on the outages,
+[`t28-infra-grade.py`](scripts/t28-infra-grade.py) on the relay cells. One control and three 5 s
+outages per shape:
+
+| Outage drops | Lost, median (range) | *Stack*, per replicate | Relay hears the subscriber | Relay's next send |
+|---|---|---|---|---|
+| the relay's direction (the ladder's) | 7.72 s (7.68–8.48) | 2.00, 2.00, 2.72 s | from 3.11 s into the outage | 2.43–2.46 s after the return |
+| both directions | 10.92 s (6.12–12.64) | 7.18, 5.60, 0.54 s | 0.10–2.14 s after the return | 7.76, 5.76, 0.95 s after the return |
+
+- **Valid (21).** Each control loses 0.000 s. The taps and the content grader agree within 0.02 s,
+  and the reference rate before the outage is 9.82–9.85 Mb/s. The relay arms' controls lose 0.0 s
+  and are stable throughout (criterion 14).
+- **One-way: the re-arm fires during the outage (22 fails).** The subscriber's packets reach the
+  relay 3.11 s in. On the first one, the probe count rises and a probe goes out at once, into the
+  dead direction. The peer is heard again before the next timeout, so no second early probe is
+  allowed, and after the return the relay waits out the backed-off timer. The median *stack* share
+  is 2.00 s, against 1.07 s, and the next send comes 2.1–2.4 s after the subscriber's first packet
+  after the return, not within 0.25 s. A sender learns its own direction is back only when a probe
+  gets through, so on this shape only a capped backoff (P1-y's *backoff* arm) removes the share.
+- **Two-way: the first acknowledgement spans the outage (25 fails).** The subscriber's first packet
+  after the return yields an RTT sample that spans the outage: smoothed RTT goes from about 105 ms
+  to 0.74–0.99 s, as RFC 9002's average gives for a 5.1–7.1 s sample. So it acknowledges a packet
+  sent just before the outage, whose acknowledgement the outage dropped (inferred: the qlog logs no
+  frames). The same acknowledgement resets the backoff,
+  so the re-arm has nothing to bring forward. In two replicates the relay sends nothing more until a
+  probe timeout, timed from its last probe in the outage and lengthened by the inflated variance,
+  fires 5.76 and 7.76 s after the return. In the third it resumes after 0.95 s, on a packet the
+  qlog cannot name.
+- **The outage half of the prediction fails (24).** 7.68–8.48 s one-way and 6.12–12.64 s two-way,
+  against 4.92–6.12 s. SRT loses 5.0–5.4 s on the one-way shape at 2 s; it was not run two-way.
+  This build's export runs at 2.41 s on its control at `--delay 2s`, where `b581c27ed` ran at
+  3.87–3.91 s, so the latency-matched SRT figure is the ladder's 3.74 s at 2.18 s.
+
+| Relay restart | Video lost | Publisher, exporter learn of it after the kill | Stable |
+|---|---|---|---|
+| no reset secret | 14.16 s in each | 10.04 s, 12.97 s (idle timeout) | 17.8 s |
+| `--listen-reset-secret`, kept across the restart | 4.20 s in each | 1.72–1.73 s, 2.98–3.01 s (stateless reset) | 8.1 s |
+
+- **Relay restart: the reset works and the exporter still exits (23 in part).** With the key kept,
+  both clients learn of the restart from the new relay's stateless resets, and video lost falls by
+  9.96 s. Every exporter still exits "broadcast did not return" and its supervisor restarts it 1 s
+  later, with the secret and without. Criterion 23 read that exit as the idle timeout's; it is the
+  exporter's answer to losing its session at `--linger 0`. By criterion 8's rule MoQ, at 4.20 s, is
+  now ahead of SRT's 6.26 s by 2.06 s; SRT's cell is the `3c0daa21` run's, at 3.82 s, where this
+  build's MoQ lane runs at 2.26 s. Latency settles 144–157 ms below that in both arms, which the
+  grader reads as not back.
+- **The relay half of the prediction holds (24).** 4.20 s is the restart and a reconnect, just
+  below the 3 s idle-timer diagnostic's 4.36–5.12 s.
+
 ### The `--delay` ladder: SRT loses less on every shape but light reorder, and the MoQ lane's latency comes back (P1-a)
 
 Criteria 6–8 on the same build (noq, `delay` controller), `export ts --delay D` for D ∈ {1, 2, 3, 6 s},
@@ -544,6 +600,8 @@ controller), rig [`t28-t31-srt-ladder.sh`](scripts/t28-t31-srt-ladder.sh), and a
 PES-timestamp tap (`t18-latency.py`) on both sides of the lane so delivery latency is measured
 rather than assumed. Both namespaces are on one host, so the two taps share a clock and the offset is
 0. 5 s total outage, three replicates per budget, `cake` at 20 Mb/s, 100 ms base RTT. Point **P1**.
+The outage drops what leaves the publisher's namespace, the relay's direction; the subscriber's
+packets still reach the relay, as in every outage cell of this rig unless a cell says otherwise.
 The captures were not kept; the figures are the taps' picture count, conserved against each budget's
 clean cell.
 
@@ -1170,8 +1228,9 @@ Medians over three replicates, with the range where they differ. Audio follows v
 `MOQ_QUIC_KEEP_ALIVE=1s` on every MoQ process, two replicates each, a relay kill costs 4.36–5.12 s
 and a publisher kill 5.12 s, against 14.16 s at the default: at that timer MoQ would beat SRT on
 a relay kill and tie on a publisher. A shorter timer is not free: § *The 30 s cell was the QUIC idle timeout* sets it
-above the longest outage a route should ride through. A reset key that survives a restart would
-cut the relay's share without shortening it; that is a proposal, not a measurement.
+above the longest outage a route should ride through. A reset key kept across the restart cuts
+the relay's share without shortening it: 4.20 s on `151fa4845` (§ *The re-arm does not shorten
+the outage*).
 
 **Reading the columns.** On MoQ the first byte after a kill comes back after 3.0–5.1 s, but it is
 the exporter's tables, not media; each cell loses its video in one hole. SRT's rate is back within
@@ -1388,6 +1447,39 @@ keeps its window, `MOQ_LAB_PERSISTENT_CONGESTION_THRESHOLD=1000000`); *both*.
     return fits a probe timeout near 0.25 s doubled four times, while BBRv3 keeps its bandwidth
     estimate through a window collapse. So *backoff* passes and *window* does not.
 
+**For the re-arm and the reset key (P1-z), fixed before it runs.** On a `main` build, on the
+shipping profile, that re-arms the probe timer when the peer is heard again and takes
+`--listen-reset-secret`, with which a relay restarted on the same secret resets its predecessor's
+connections. Two cells, no lab patch:
+
+- *Outage:* P1-y's cell (a 5 s outage, `--delay 2s`, `WIRE_CAP=1`, `delay` controller, relay
+  qlog), one control and three outages.
+- *Relay restart:* criterion 9's MoQ relay cell ([`t28-infra-axis.sh`](scripts/t28-infra-axis.sh),
+  `LANES=moq`, `KILLS="none relay"`), three replicates each, once without a reset secret and once
+  with one the restarted relay reuses. The arm without it is this build's control for criterion 23.
+
+21. **Validity.** Criterion 10 on the outage's control; criterion 14 on each relay arm's control.
+22. **Outage verdict.** The re-arm removes the backoff's share if the median *stack* share is at
+    most a third of P1-y's control (1.07 s) and, in the qlog, the relay's next send follows the
+    subscriber's first packet after the link's return by at most 0.25 s. Video lost is reported
+    beside P1-y's *backoff* arm and SRT's 5.0–5.4 s on the same rig, not graded against them.
+23. **Relay-restart verdict.** With the secret, the publisher and the exporter each learn of the
+    restart from a stateless reset, not from the 10 s idle timeout: video lost falls by at least
+    5 s against the arm without it, and no exporter exits "broadcast did not return". Criterion 8's
+    rule against SRT's relay cell (6.26 s on `3c0daa21`) is reported.
+24. **The prediction it can falsify.** Each mechanism removes its timer: the outage loses within
+    P1-y's *backoff* range (4.92–6.12 s), and a relay restart with the secret costs about the
+    restart and a reconnect, near the 3 s idle-timer diagnostic's 4.36–5.12 s.
+
+**For a two-way outage (P1-z), fixed after the outage cells above and before it runs.** The ladder's
+outage drops only what the relay sends, and in those cells the subscriber's packets reached the relay
+during it. The same cell with the subscriber's direction dropped as well (`OUTAGE_DIRS=both`), one
+control and three outages:
+
+25. **Verdict and prediction.** Criteria 21 and 22 as above. With nothing heard during the outage,
+    the subscriber's first packet after it brings the relay's probe forward, so criterion 22 passes
+    and video lost falls within P1-y's *backoff* range.
+
 ## Limits, stated in advance
 
 - **P1 file egress only in v1.** Wire timing (P2) and hardware IRD merge are out of scope; outage
@@ -1415,9 +1507,10 @@ keeps its window, `MOQ_LAB_PERSISTENT_CONGESTION_THRESHOLD=1000000`); *both*.
 | 6 | Matched on measured latency | **Met at D = 1, 2, 3 and 6 s** (SRT within 20 ms of its setting). The MoQ lane's own D = 1 s cells stood about 0.25 s below their calibration, which moves no verdict: § *The `--delay` ladder* |
 | 7 | Graded, three replicates | **Met**, SRT at 11.87 s with its buffers sized to the latency (libsrt's defaults fail there, § *SRT at 11.87 s*); one SRT outage replicate at 2.18 s, void |
 | 8 | Two-axis verdict | **SRT superior at 1–6 s on the outage, both loss rates and 20 % reorder** (3.8–40 s less lost, back in every valid cell); **tied at 5 % reorder**. The MoQ lane is back after every outage, and after loss or 20 % reorder settles 114–227 ms below its pre-fault latency |
-| 9 | Infrastructure axis | **Met; SRT superior on a publisher or relay kill, MoQ on an exporter kill** (§ *Measured — the infrastructure axis*). MoQ loses 14.16 s to a publisher or relay restart against SRT's 5.38–6.34 s, and 3.84–3.88 s to an exporter restart against SRT's 8.84 s; latency back in every cell. Each lane's loss is its liveness timer: MoQ's 10 s QUIC idle timeout, SRT's 5 s peer idle |
+| 9 | Infrastructure axis | **Met; SRT superior on a publisher or relay kill, MoQ on an exporter kill** (§ *Measured — the infrastructure axis*). MoQ loses 14.16 s to a publisher or relay restart against SRT's 5.38–6.34 s, and 3.84–3.88 s to an exporter restart against SRT's 8.84 s; latency back in every cell. Each lane's loss is its liveness timer: MoQ's 10 s QUIC idle timeout, SRT's 5 s peer idle. A relay that keeps its reset key across the restart costs MoQ 4.20 s, ahead of SRT (criterion 23) |
 | 10–13 | Outage trace | **Valid; *stack* in five of five; the prediction fails narrowly** (*E* 2.14–2.20 s against 2 s): § *The outage traced on the merged build* |
 | 17–20 | Stack share split | **Valid; backoff is the cause and the prediction holds.** Capping the probe timeout's backoff takes the *stack* share's median from 3.20 s to 0, and keeping the window removes none: § *The stack share is QUIC's probe-timeout backoff* |
+| 21–25 | Re-arm and reset key | **Valid. The re-arm removes no outage share; the reset key removes the relay restart's timer.** A 5 s outage costs 7.72 s one-way (*stack* 2.00 s) and 10.92 s two-way (*stack* 5.60 s); a relay restart with the key kept costs 4.20 s against 14.16 s, though every exporter still exits once: § *The re-arm does not shorten the outage* |
 
 ## What remains
 
@@ -1436,8 +1529,9 @@ and the grader are all on the EC2 secondary.
   from the lane and budget's unimpaired cell, so it misreads any cell whose window differs; the
   `--delay` ladder's sustained figures are hole counts until it takes the window from the cell.
 - **The bandwidth step** is in [T31](test-31-congestion-capacity-ladders.md). **The
-  infrastructure axis** on the segmented lane, and on MoQ with a reset key that survives a relay
-  restart, which no build has.
+  infrastructure axis** on the segmented lane.
+- **The two-way outage on the SRT lane**, and the packet that ended one two-way replicate's wait
+  in 0.95 s, which needs a capture that shows frames.
 - **The segmented lane in the `netns` rig**: reorder is not run there, the 5 s outage is one sample,
   and the loss collapse is attributed to the origin's loss-based sender by reasoning; the arm that
   would test it runs the origin with BBR. Criterion 3's three-way ranking needs the reorder cell and

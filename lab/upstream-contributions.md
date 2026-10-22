@@ -788,14 +788,14 @@ source failover*), so we closed our co-start test
 
 ### A restarted relay cannot reset its predecessor's connections — reported as [#5861](https://github.com/moq-dev/moq/issues/5861)
 
-[T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay costs the MoQ lane about
-twice SRT's loss, because each relay process draws a random stateless-reset key, so its resets for
-its predecessor's connections fail validation and clients wait out the idle timeout. Another
+[T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay cost the MoQ lane about
+twice SRT's loss, because each relay process drew a random stateless-reset key, so its resets for
+its predecessor's connections failed validation and clients waited out the idle timeout. Another
 contributor's [#5910](https://github.com/moq-dev/moq/pull/5910) reads the key from a file
-(`--listen-reset-secret`): on loopback a restart then cost 3.5 s of video, not 13.5 s. After
-[our review](https://github.com/moq-dev/moq/pull/5910#issuecomment-6268205598) its docs share a key
-only across one relay's restarts or a balancer routing by connection ID (RFC 9000 §21.11), and the
-reset interval drops from 20 ms to 1 ms. **Fixed by #5910, merged**; P1-z re-runs the cell.
+(`--listen-reset-secret`). After [our review](https://github.com/moq-dev/moq/pull/5910#issuecomment-6268205598)
+its docs share a key only across one relay's restarts or a balancer routing by connection ID
+(RFC 9000 §21.11). **Fixed by #5910, merged.** With the key kept, a restart costs 4.20 s of video,
+not 14.16 s (P1-z).
 
 ### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
 
@@ -1553,7 +1553,7 @@ before its access unit delimiter, which H.264 and HEVC put first. **Fixed by
 [#6001](https://github.com/moq-dev/moq/pull/6001), merged**; at `f13283b30` a keyframe through the
 CDN relay has its source's NAL order (T11).
 
-### A PMT revision kept stale track names — contributed as [#6208](https://github.com/moq-dev/moq/pull/6208) (import) and [#6289](https://github.com/moq-dev/moq/pull/6289) (export)
+### A PMT revision kept stale track names — contributed as [#6208](https://github.com/moq-dev/moq/pull/6208) (import), [#6289](https://github.com/moq-dev/moq/pull/6289) (export) and [#6301](https://github.com/moq-dev/moq/pull/6301) (PAT)
 
 **Report.** Upstream's fidelity audit (quest `ts-reliability/pmt-lifecycle`): a PMT that
 retypes, re-describes or drops a stream left its track and catalog entry in place, and program
@@ -1562,10 +1562,10 @@ descriptors and identity were read once. P0-k's PID-change fixture revises its P
 **Contributed.** The import half as decided: a changed or dropped listing ends its track and leaves
 the catalog, a changed stream reopens under a new name, `programDescriptors` follows the PMT, an
 identity change refuses; so do a PID listed twice and 65,536 stream revisions. The export half
-revises the PMT at the next version and drops a PID once its tail is out; `pat-lifecycle` stays a
-quest.
+revises the PMT at the next version and drops a PID once its tail is out. The PAT half follows a
+moved PMT and programs leaving or rejoining the PAT.
 
-**State.** #6208 queued; #6289 a draft on it and #5949.
+**State.** #6208 merged; #6289 a draft on #5949, #6301 on #6289.
 
 ---
 

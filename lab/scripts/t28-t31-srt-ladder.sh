@@ -61,7 +61,9 @@
 #      WIRE_CAP=1 (UDP headers arriving in the subscriber's namespace, `wire.pcap`, for the
 #      delivered rate around an impairment; `events.txt` stamps the impairment in the taps' clock),
 #      POST_S (seconds the cell runs on after a sustained loss or reorder shape is lifted, default 0,
-#      so T28's criterion 8 can read the latency 30 s after it ends; `t28-latency-return.py`).
+#      so T28's criterion 8 can read the latency 30 s after it ends; `t28-latency-return.py`),
+#      OUTAGE_DIRS (`down`, the default: the outage drops only what leaves the publisher's
+#      namespace, so the subscriber's packets still reach the relay; `both` drops them too).
 set -uo pipefail
 
 # Post-#3793 CLI flags, detected per binary rather than assumed.
@@ -90,7 +92,8 @@ REPS=${REPS:-3}
 LANES=${LANES:-"moq srt"}
 CAP_MBIT=${CAP_MBIT:-20} # provisioned: comfortably above the ~9.95 Mb/s clip
 DELAY_MS=${DELAY_MS:-50} # 100 ms base RTT, as T8b and the MoQ ladder
-OUTAGE=${OUTAGE:-5}      # T28's 5 s total outage, the cell being replicated
+OUTAGE=${OUTAGE:-5}      # T28's 5 s outage, the cell being replicated
+OUTAGE_DIRS=${OUTAGE_DIRS:-down}
 SETTLE=${SETTLE:-20}
 RECOVER=${RECOVER:-35} # must exceed one QUIC idle/recovery cycle
 POST_S=${POST_S:-0}
@@ -130,6 +133,8 @@ set_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${PATH
 # isolates ordering from the loss and latency axes rather than confounding all three.
 set_reorder() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${DELAY_MS}ms" reorder "${1}%" 50% limit 100000 >/dev/null 2>&1; }
 clear_loss() { pub tc qdisc change dev veth-pub root handle 1: netem delay "${PATH_DELAY_MS:-$DELAY_MS}ms" limit 100000 >/dev/null 2>&1; }
+# The subscriber's direction: `t8b-netns.sh up` gives it a plain netem delay as root.
+set_return_loss() { sub tc qdisc change dev veth-sub root netem delay "${ACK_DELAY_MS:-$DELAY_MS}ms" loss "${1}%" limit 100000; }
 
 # Every pattern here has to match the worker and nothing that merely *mentions* the worker.
 # `[t]18-latency.py` looked safe — the bracket stops pkill matching its own command line — but
@@ -158,7 +163,7 @@ echo "=== $(date -u) p1m $LABEL ==="
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
 	echo "relay controller: $MOQ_CC; export mux-rate: ${MOQ_MUX_RATE:-build default}"
-	echo "relay extra: ${RELAY_EXTRA:-none}; subscriber extra: ${SUB_EXTRA:-none}; export budget: ${EXPORT_BUDGET:-per cell}; cap: ${CAP_MBIT} Mb/s"
+	echo "relay extra: ${RELAY_EXTRA:-none}; subscriber extra: ${SUB_EXTRA:-none}; export budget: ${EXPORT_BUDGET:-per cell}; cap: ${CAP_MBIT} Mb/s; outage drops: $OUTAGE_DIRS"
 	echo "srt extra: ${SRT_EXTRA:-none}"
 	tsp --version 2>&1 | head -1
 } | tee "$OUT/build.txt"
@@ -316,8 +321,10 @@ run_cell() {
 	outage)
 		echo "outage_start_ns $(date +%s%N)" >>"$d/events.txt"
 		set_loss 100
+		[ "$OUTAGE_DIRS" = both ] && set_return_loss 100
 		sleep "$OUTAGE"
 		clear_loss
+		[ "$OUTAGE_DIRS" = both ] && set_return_loss 0
 		echo "outage_end_ns $(date +%s%N)" >>"$d/events.txt"
 		sleep "$RECOVER"
 		;;
