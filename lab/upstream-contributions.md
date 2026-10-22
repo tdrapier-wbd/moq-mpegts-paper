@@ -739,7 +739,7 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   [#3868](https://github.com/moq-dev/moq/pull/3868) closed the issue as won't-fix. **Byte-identical 1+1
   from two independent exporters is not obtainable from upstream today** without the padding filter or a
   receiver that merges on something other than the whole packet. **`export ts --sync`**, which
-  restarts counters per group for legs of one broadcast, is our open [#5949](https://github.com/moq-dev/moq/pull/5949).
+  restarts counters per group for legs of one broadcast, is our [#5949](https://github.com/moq-dev/moq/pull/5949), merged.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the earliest
   frame, so legs whose bytes arrive at different moments order the same media differently. Multi-track
   content therefore stops at 94–96 % even when co-started, and at **75.56 %** once the two chains are
@@ -803,7 +803,7 @@ not 14.16 s (P1-z).
 laid it apart. Anchoring each group at its HRD's buffering period removed that, and is our
 [#5949](https://github.com/moq-dev/moq/pull/5949). **Decided and closed: that anchor is the rule**
 (quest `ts-hitless`), identity promised only where the stream carries a NAL HRD buffering period;
-a packet plan declined, H.265 is `ts-hitless-h265`. #5949, open, implements it.
+a packet plan declined, H.265 is `ts-hitless-h265`. #5949, merged, implements it.
 
 ---
 
@@ -1247,11 +1247,11 @@ numbers the datagrams it sent, so a late join or a jump shifts one leg's numbers
 datagrams on the slot grid, numbers them from their timeline position, derives the SSRC from path
 and epoch, and withholds a datagram the leg cannot vouch for. Verified: legs joined apart, or losing
 complementary groups, send byte-identical datagrams and between them every datagram a clean leg
-sends; four of those tests fail with the withholding disabled; two legs through a loopback relay on
+sends; four of those tests fail without the withholding; two legs through a loopback relay on
 draft 18 shared 36,465 datagrams, none differing. Every hop must carry the epoch: draft 17+ or
 lite-07.
 
-**State.** A draft on #5949.
+**State.** In review on `main`.
 
 ### Four closed as completed by a planning document that changed no code
 
@@ -1554,10 +1554,10 @@ descriptors and identity were read once. P0-k's PID-change fixture revises its P
 **Contributed.** The import half as decided: a changed or dropped listing ends its track and leaves
 the catalog, a changed stream reopens under a new name, `programDescriptors` follows the PMT, an
 identity change refuses; so do a PID listed twice and 65,536 stream revisions. The export half
-revises the PMT at the next version and drops a PID once its tail is out. The PAT half follows a
+revises the PMT at the next version, dropping a PID once its tail is out. The PAT half follows a
 moved PMT and programs leaving or rejoining the PAT.
 
-**State.** #6208 merged; #6289 a draft on #5949, #6301 on #6289.
+**State.** #6208 merged; #6289 in review, `--sync` revisions still open; #6301 on it.
 
 ---
 
