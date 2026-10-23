@@ -135,14 +135,14 @@ parsing media ([Evidence](evidence.md) §3.12) — a monitoring hook, not a self
 
 Broadcast reliability comes from **1+1 with selection at the receiver**, which is transport-independent
 ([Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4). Head-to-head the lanes diverge.
-**Serving-node failover**: media-aware relay reselection takes at least one idle timeout, 30–33 s at the
-builds' default and ~11 s at moq 0.14.0's 10 s, and is never hitless. Between importers on current
-`main` it is a marked programme switch, under 2 s at a clean exit; the shared epoch this replaced
-held in no configuration measured ([Evidence](evidence.md) §3.4). A segmented pair sharing one feed and one set of segment names fails
-over with no measurable interruption, 3/3 runs.
+**Serving-node failover** on MoQ is never hitless: relay reselection takes at least one idle timeout,
+and an importer takeover on current `main` is a marked programme switch ([Evidence](evidence.md)
+§3.4). A segmented pair sharing one feed and one set of segment names fails over with no measurable
+interruption, 3/3 runs.
 **Misconfiguration**: a segmented pair with mismatched sources delivers ±20 s of time-travel that passes
-continuity and PCR checks, where the media-aware relay refuses. On the media-aware lane a hitless pair is
-built at the receiver; on the segmented lane it falls out of a shared source and a naming convention.
+continuity and PCR checks, where the media-aware relay refuses. On MoQ a hitless pair is built at the
+receiver from one importer's broadcast; on the segmented lane it falls out of a shared source and a
+naming convention.
 
 ---
 
@@ -542,7 +542,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (S) (§8) |
 | Wire volume | **MoQ**, by the source's stuffing | M+derived | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9) |
 | Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
-| Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem |
+| Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem, whose cost is in following upstream: a breaking change reached a rig about weekly, two of nine silently, so each upgrade needs a rig audit ([T54](../lab/test-54-dependency-risk.md)) |
 
 **Neither column adds up to a winner.** For routes whose destinations absorb seconds (nearer six
 unless an ABR-to-TS receiver is bought), that carry a single programme, **and that have a receive
@@ -564,7 +564,7 @@ under what conditions each is preferable.
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Excluded on the media-aware lane** (specified); a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](evidence.md) §3.6) | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux behind the merged fixed-delay export, for a co-started pair on one host or two, and under `--sync` for a late leg where the source carries an H.264 HRD ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU, in one region; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** Cache offload at one node, not a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
@@ -595,8 +595,8 @@ Ranked by leverage:
    merged export keeps every track across hosts at 500 ms and 1 s, and two exports on two hosts are
    byte-identical; over 35 min across hosts it stays conformant, and over 2 h its clock settles on a
    drifting source's, though its 1 ms departure steps take the drift rate on arrivals past 0.075
-   Hz/s. Open: a laboratory stage following a remote clock, and deterministic scheduling for a
-   late-joining leg on a source without an HRD ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane serves TS-out
+   Hz/s. Open: a laboratory stage following a remote clock; for 1+1 the lane merges a co-started
+   pair only ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane serves TS-out
    to an IRD in a deployment; its comparator, segmented HTTP's wire graded against the same model,
    has not been run either.
 3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has a

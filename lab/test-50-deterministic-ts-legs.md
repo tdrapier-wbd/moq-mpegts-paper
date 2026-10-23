@@ -8,7 +8,9 @@ on another leg, at any multiplex rate; the second, which opens each group where 
 says the one before has arrived, gives no conflict and no overrun at 12, 16 and 24 Mb/s, and so does
 its port once a restarted grid runs on past a stopped leg's resume. Criterion 3 cannot hold on a leg
 that loses mid-group. On the live feed, which declares no HRD, a leg joining 20 s late on another
-host fails criterion 1: its video differed for 13.6 s and 100.2 s, then matched to the end (arm L).**
+host fails criterion 1: its video differed for 13.6 s and 100.2 s, then matched to the end (arm L).
+Upstream is removing the mode ([#6554](https://github.com/moq-dev/moq/pull/6554)), and the design
+no longer relies on it, so arm L's follow-up is retired.**
 
 ## Objective
 

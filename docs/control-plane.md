@@ -144,8 +144,9 @@ not wire-format guarantees the transport defines and enforces across implementat
 **What the transport contributes is the enforcement point, not the token format.** Authorization is
 evaluated locally at the relay at the moment of subscription, with no window in which an unauthorised
 subscription is accepted and then torn down, and no separate auth proxy in front of the transport.
-The shape the platform depends on — scoped paths plus expiry, checked at subscription — is simple and
-stable even as the wire format churns, and the entitlement *service* is transport-independent.
+The shape the platform depends on — scoped paths plus expiry, checked at subscription — is simple, and
+the entitlement *service* is transport-independent; how far the shape survives a change of relay or
+of draft is measured below.
 
 > **Measured, and it holds.** Eight refusing arms — out-of-scope channel, sibling tenant, expired
 > token, publish-only credential, parent path and three malformed tokens — delivered **exactly zero
@@ -158,6 +159,14 @@ stable even as the wire format churns, and the entitlement *service* is transpor
 > them — a credential whose key the authorization endpoint declines to serve — produces **no error to
 > the client and no entry in the relay log**. The enforcement is correct and silent, so an audit that
 > reads logs to prove refusals happened will find nothing to read.
+
+> **Across two implementations, enforcement transfers and the token does not.** `moq-relay` and moqx
+> each refused everything outside a grant before any payload byte and matched on path segments, but
+> their token formats, carriage, key scope, disclosure and withdrawal all differ, so what an operator
+> carries between relays is the entitlement record, rendered for each. Two parts of the shape above
+> do not hold everywhere: on moqx's release a live session outlives its token's expiry, and
+> `moq-relay` refuses on a later draft an exact-path grant an earlier one admits
+> ([Evidence](evidence.md) §3.10, [T53](../lab/test-53-token-interop.md)).
 
 **The role split above is load-bearing.** On the build measured, client-certificate authentication
 for *subscribers* did not scope them: a peer presenting a valid certificate and no token at all was
@@ -374,11 +383,12 @@ edge.
 - **Subscription policy** — who may subscribe, admission rules, and a strict deny-by-default posture.
 - **Routing policy** — geographic constraints pinning routes to regional clusters for sovereignty or
   rights; dynamic exclusion of links reporting elevated loss or latency.
-- **Failover policy** — for high-value contracted content, two link-disjoint paths in active/active
-  dual publication, **both fed from a common source so the legs stay interchangeable**. The hitless
-  selection between them happens at the *receiver*, not by deduplication in the fabric, because the
-  relay is content-agnostic and its own source failover is bounded by failure detection rather than
-  seamless ([Architecture](architecture.md) §5, §8.4).
+- **Failover policy** — for high-value contracted content, two link-disjoint paths active/active.
+  A hitless pair carries **one broadcast**, on the opaque lane unless it can be co-started, and is
+  merged at the *receiver*, not deduplicated in the fabric, because the relay is content-agnostic
+  and its own source failover is bounded by failure detection rather than seamless. Two publishers
+  on separate sources protect the input too, as a marked switch ([Architecture](architecture.md) §5,
+  §8.4).
 - **Compliance policy** — every routing modification and authorization grant is logged to an
   immutable ledger.
 

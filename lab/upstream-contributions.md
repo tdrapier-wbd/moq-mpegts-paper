@@ -985,11 +985,8 @@ relay shape).
 
 ## 5b. Authorization, entitlement and subscriber observability
 
-Three filings from the control-plane work were answered together, and **all three were accepted in
-substance**. The maintainer's summary was *"I agree, the auth stuff needs a rethinking"*;
-[#3619](https://github.com/moq-dev/moq/pull/3619) planned them into quests in one pass. None is a
-defect report; each says a design does not generalise. Upstream's trunk is now **`main`** (the
-former integration `dev` line, to 2026-10-02); tagged releases ship from **`release`**.
+The first three filings, each saying a design does not generalise, were **accepted in substance**
+together and planned into quests by [#3619](https://github.com/moq-dev/moq/pull/3619).
 
 ### The mTLS identity never reaches the authorization decision — open, and conceded on every point
 
@@ -1002,9 +999,7 @@ config option; on the startup warning the maintainer agreed the current approach
 security practice. **Closed by us as fixed** on `main` at `f8215bc47`, read from the code: a
 certificate admits nothing on its own, its name, fingerprint, expiry and issuer reach the auth server,
 and a client CA beside `--auth-public` is refused at startup
-([comment](https://github.com/moq-dev/moq/issues/3603#issuecomment-6084812116)). **The correction this campaign
-posted before anyone spent time on it** is why the third ask was judged on its merits: the issue had claimed
-a startup-warning precedent that does not exist, and said so in a comment.
+([comment](https://github.com/moq-dev/moq/issues/3603#issuecomment-6084812116)).
 
 ### The revalidation window — closed, and folded into a rethink of the whole auth line
 
@@ -1014,6 +1009,15 @@ undocumented outside the source. Closed as completed and absorbed into
 [#3682](https://github.com/moq-dev/moq/pull/3682), which makes `moq auth serve` the reference auth
 server: the behaviour was accepted as wrong, and the remedy replaces the surface rather than patching
 it. Whether that closes the hazard is not yet checkable; T37 measured a component being redesigned.
+
+### Token interoperability: four defects — reported as [#6566](https://github.com/moq-dev/moq/issues/6566), [#6567](https://github.com/moq-dev/moq/issues/6567), on [moqx#786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516) and as [moqxr#83](https://github.com/openmoq/moqxr/issues/83)
+
+[T53](test-53-token-interop.md), re-checked against each project's current `main` before posting:
+`moq-relay` refuses on draft 18 an exact-path grant that draft 16 admits ("grant cannot be encoded
+as one AUTH_OK"), with the token in the URL or in SETUP, and its guide does not say so; `moq`
+reports a MALFORMED_AUTH_TOKEN session close (0x16) as `unknown code=22`; SIGHUP, which moqx
+v0.3.6's docs say reloads, ends the process; `openmoq-publisher` exits when a relay refuses
+PUBLISH, so it cannot publish to `moq-relay`. **State.** Open, unanswered.
 
 ### Subscriber-reported health telemetry — accepted, re-planned as solicited viewer feedback; schema merged, reporters drafted
 
@@ -1238,18 +1242,14 @@ measurement points in [`docs/evidence.md`](../docs/evidence.md) §3.16.
 
 ### A UDP sink for `export ts` — declined; RTP legs for ST 2022-7, [#6304](https://github.com/moq-dev/moq/pull/6304), closed with `--sync`
 
-**Report.** [#1839](https://github.com/moq-dev/moq/issues/1839), a general egress layer, and
-[#3923](https://github.com/moq-dev/moq/issues/3923), a `--udp` sink with datagram size and multicast
-controls, were closed not planned: `tsp` does the socket work, and a sink adds little without a byte
-schedule an IRD can clock off. RTP for a 2022-7 pair is the exception: a per-process packetizer
-numbers the datagrams it sent, so a late join or a jump shifts one leg's numbers.
+**Report.** [#1839](https://github.com/moq-dev/moq/issues/1839) (an egress layer) and
+[#3923](https://github.com/moq-dev/moq/issues/3923) (a `--udp` sink) were closed not planned: `tsp`
+does the socket work. RTP for a 2022-7 pair was the exception argued: a per-process packetizer
+numbers the datagrams it sent, so a late join or a restart shifts one leg's numbers.
 
-**Contributed.** `export ts --sync --rtp udp://HOST:PORT` cuts RFC 2250
-datagrams on the slot grid, numbers them from their timeline position, derives the SSRC from path
-and epoch, and withholds a datagram the leg cannot vouch for. Verified: legs joined apart, or losing
-complementary groups, send byte-identical datagrams and between them every datagram a clean leg
-sends; four of those tests fail without the withholding; two legs through a loopback relay on
-draft 18 shared 36,465 datagrams, none differing.
+**Contributed.** `export ts --sync --rtp udp://HOST:PORT`: RFC 2250 datagrams on the slot grid,
+numbered by timeline position, withholding any the leg cannot vouch for. Legs joined apart or losing
+complementary groups sent byte-identical datagrams; four tests fail without the withholding.
 
 **State.** Closed unmerged: [#6554](https://github.com/moq-dev/moq/pull/6554) (open) removes
 `--sync`, which the legs need. In-process RTP would be passthrough only, numbered by source packet

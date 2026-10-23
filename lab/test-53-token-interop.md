@@ -272,11 +272,16 @@ The match is on namespace elements, not bytes.
 - **An estate issuing exact grants on `moq-relay` breaks on a wire upgrade.** A grant that works on
   draft 16 is refused on draft 18, and the signer accepts it without warning.
 
-**Defects found, reportable upstream** (none posted):
-- `moq-relay`: the draft-17 refusal of exact grants is not in its authentication guide.
-- `moq`: it prints `MALFORMED_AUTH_TOKEN` as an unknown code, and it cannot carry a binary token.
-- moqx v0.3.6: the documented `SIGHUP` reload ends the process.
-- `openmoq-publisher`: it cannot publish to a relay without PUBLISH.
+**Defects found, reported upstream** (state in the
+[ledger](upstream-contributions.md#token-interoperability-four-defects--reported-as-6566-6567-on-moqx786-and-as-moqxr83)):
+- `moq-relay`: the draft-17 refusal of exact grants is not in its authentication guide
+  ([#6566](https://github.com/moq-dev/moq/issues/6566)). It applies with the token in the URL too.
+- `moq`: it prints `MALFORMED_AUTH_TOKEN` as an unknown code
+  ([#6567](https://github.com/moq-dev/moq/issues/6567)), and it cannot carry a binary token.
+- moqx v0.3.6: the documented `SIGHUP` reload ends the process
+  ([on #786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516)).
+- `openmoq-publisher`: it exits when a relay refuses PUBLISH, so it cannot publish to `moq-relay`
+  ([moqxr#83](https://github.com/openmoq/moqxr/issues/83)).
 
 ## Limits
 

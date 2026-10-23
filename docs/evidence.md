@@ -84,7 +84,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; arrival at an IRD-facing output; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s across hosts and at up to 2 % loss, its clock following a drifting source, but not over a whole capture at 500 ms; on arrivals its drift rate exceeds 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
 | **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a real CDN edge or captured path; burst loss; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
-| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs of one broadcast merge only behind the fixed-delay export merged on October 2026 `main`: a co-started pair, on one host or two, and under its `--sync` mode a late leg and legs with complementary loss, where the source carries an H.264 HRD; on the live feed, which has none, a late leg's video differs for up to 100 s. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late leg on a source without an HRD; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
+| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs of one broadcast merge on the media-aware lane only co-started, behind the fixed-delay export merged on October 2026 `main`, on one host or two; its opt-in `--sync` mode merged a late leg only where the source carries an H.264 HRD. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late leg on a source without an HRD; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on; through a CDN-hosted relay, 32 subscribers of a 25 Mb/s feed on the media-aware lane | A third source; fan-out beyond one relay; the opaque lane through that relay | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
@@ -421,23 +421,14 @@ of a 120 s run ([T45](../lab/test-45-live-tstd-remux.md); P1, wire, moq 0.14.2).
 before either export's clock steers, so whether two hosts' steering keeps their PCR values equal
 over hours is not measured. A pair 8 s apart does not merge without the `--sync` mode below.
 
-**Under the export's `--sync` mode, merged on October 2026 `main`, legs that joined apart or lost
-complementary content merge at the byte where the source carries an H.264 HRD**
-([T50](../lab/test-50-deterministic-ts-legs.md); P1, file domain, loopback, one host, one clip).
-Every PID owns fixed positions on the mux rate's packet grid, and continuity counters restart,
-flagged, at each group. Two legs joined 20 s apart agreed on all 474,909 common positions over
-59.6 s, continuity counters included. Under complementary loss, three co-started legs two of which
-were each stopped for 3 s, a group laid at its first release split the legs wherever the group
-before had overrun the video lane on a leg that held it, at 12, 16 and 24 Mb/s alike
-(`[unmerged]`). Opened instead where the encoder's HRD says the group before has arrived, read
-from a buffering period SEI, no group overran: every pair agreed on every common position, and the
-merge of the two stopped legs equalled the third past its first second (four runs before the merge,
-two on `main`). Each stopped leg shows one continuity error, at its own loss. **On a source without
-an HRD a late leg is not yet a partner:**
-on the live feed, whose SPS declares none, a leg joining 20 s late on a second host differed from
-the first in video for 100.2 s at 30 Mb/s and 13.6 s at 40 Mb/s, then matched to the end, every
-other PID within 1.6 s of the join, both legs clean on continuity, PCR and rate (P1, file domain,
-two hosts in one region, two runs).
+**The export's opt-in `--sync` mode merged legs that joined apart or lost complementary content
+only where the source carries an H.264 HRD** ([T50](../lab/test-50-deterministic-ts-legs.md); P1,
+file domain, one clip, October 2026 `main`). Each group opened where the encoder's buffering period
+says the one before has arrived, on a fixed per-PID packet grid: two legs joined 20 s apart agreed
+on all 474,909 common positions, and two legs each stopped for 3 s merged to equal a third past its first second. On the
+live feed, which declares no HRD, a leg joining 20 s late differed in video for 100.2 s at 30 Mb/s
+and 13.6 s at 40 Mb/s (two hosts in one region, two runs). The design does not rely on the mode
+([Architecture](architecture.md) §5).
 
 **On the opaque lane a pair with one leg 8 s late merges hitlessly**, through the
 join, 5 s blackouts of each leg in turn and one leg's export killed, once each leg's stream-clocked
@@ -616,8 +607,15 @@ withdrawing one of two channels sharing a key took the kept channel down for 2.7
 channel it was untouched. Authorization adds nothing to the per-subscriber CPU slope at a ten-second
 cadence and 27 % at one second. **A warning**: on the build measured, with client-certificate authentication
 configured, a valid certificate and no token was served every channel, another broadcaster's included
-(upstream's redesign since: [Control](control-plane.md) §3). **Unmeasured**: a second implementation, a mesh, a
-real rights system in place of the stub, and rights windows.
+(upstream's redesign since: [Control](control-plane.md) §3). **Across two implementations enforcement
+transfers and the token does not** ([T53](../lab/test-53-token-interop.md), P2, loopback, one release
+of each relay, drafts 16 and 18): `moq-relay` and moqx both refused everything outside a grant before
+any payload byte and matched on path segments, but neither client carried the other relay's token
+end to end. moqx's keys verify grants on any namespace of their service, its announcements follow a
+separate discovery grant, and on v0.3.6 a live session outlives its token's expiry and a key is
+withdrawn only by a restart that ends every session. `moq-relay` refuses on draft 18 an exact-path
+grant that draft 16 admits. **Unmeasured**: a mesh, a real rights system in place of the stub, and
+rights windows.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are
 
@@ -946,7 +944,7 @@ rebuild.
 | 5 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's edge stage?** | MEG- or TITAN-class hardware | The only route to a low-latency TS-in-HLS receiver ([Comparison](comparison.md) §6.1) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
-| 8 | **Can a late-joining multi-track 1+1 leg merge at the byte on a source without an H.264 HRD?** Under the merged `--sync` export one does on a source with an HRD; on the live feed, which has none, its video differs for up to 100 s after the join (§3.4) | Upstream's placement for groups without a buffering period | [Architecture](architecture.md) §5.1's scope: on such sources, a co-started pair only |
+| 8 | **How large is a media-aware failover as a decoder sees it, and can it be brought under a second?** A hard-killed importer costs about one detection interval, a marked switch, and detection is bounded by the QUIC idle timeout; the decoder's freeze is not measured, nor the relay-loss case on the build that fixed it (§3.4) | A decoder-graded failover run across idle timeouts | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](architecture.md) §5) |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
