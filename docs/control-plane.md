@@ -465,9 +465,24 @@ control, host hardening, tenancy isolation — not literal publisher-to-egress c
 this platform meets that bar.
 
 **Where a contract instead requires the *operator itself* not to have access, transport encryption is
-insufficient**, and an additional content-encryption scheme is needed. Whether that can be offered
-without breaking relay fan-out and caching is an **open question** (§9), not something this design
-claims to have solved.
+insufficient**, and an additional content-encryption scheme is needed. **Upstream's object-level
+profile provides one without breaking fan-out, by design** (`moq-e2ee`, an individual draft that
+`moq-dev` implements in Rust and TypeScript; not measured here). The publisher encrypts each frame
+under AES-128-GCM and replaces every track name with an opaque one, deriving the keys from one secret
+per broadcast and the publisher instance's epoch. Relays forward the ciphertext unchanged, caches
+replay it, and no key enters the transport. Protection ends at the subscriber, so the
+subscriber-to-IRD segment stays as it is today. Three properties weigh on it for this design:
+
+- The application distributes the secret over its own channel, so key delivery falls to the control
+  plane; the profile does not solve it.
+- Every subscriber of a broadcast holds the same secret, and no key rotates inside an epoch.
+  Withdrawing one subscriber's content access therefore means a new secret and epoch for all the
+  others; per-subscriber revocation stays the relay's (§4.1).
+- The `moq` command line's TS import and export do not use it, so neither lane carries it without
+  application code.
+
+**This design treats it as an option a contract may call for, not a requirement**: entitlement and
+revocation are enforced at the relay whatever the payload.
 
 **BISS-CA is the industry's likely answer to that requirement, and it costs the carriage mode.** There
 is vendor appetite for it: two vendors proposed running BISS-CA (EBU Tech 3292-s1) over MoQ at IBC
@@ -479,7 +494,7 @@ both are local, and both are carried in the clear today behind SRT and Zixi on e
 basis, so within a trusted facility this is the status quo rather than a regression. **Where those
 environments are not trusted, or the operator is not, BISS-CA is the case in which it earns its
 cost.** It is the only mechanism that reaches the receiver, since transport protection ends at the
-relay and object-level encryption would end at the subscriber.
+relay and object-level encryption ends at the subscriber.
 
 **Consumer conditional access is a different thing and has no role on this leg.** A pay-TV CA system
 protects content on its way to the viewer's screen, and a downstream operator applies it, if at all,
@@ -629,7 +644,8 @@ windows.
 - **Can content be protected from the *operator*, publisher-to-egress, without breaking relay fan-out
   and caching** — and is that required for the target contracts? The second half is the one that
   decides it, and it is a commercial question rather than a technical one: BISS-CA already answers the
-  first half, at the price of opaque carriage (§7.3). **Vendor appetite is not the same as a
+  first half, at the price of opaque carriage, and upstream's object-level profile answers it on
+  either lane by design, unmeasured (§7.3). **Vendor appetite is not the same as a
   requirement**, and no rights deal has yet been shown to need operator-blind carriage.
 - **How is trust established, scoped and *revoked* across a federation boundary**, and how is a
   compromised peer contained? ([Architecture](architecture.md) §8.6.)

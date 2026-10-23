@@ -160,8 +160,7 @@ positive controls. Procedure and census in
 The first carriage attempt was [#2824](https://github.com/moq-dev/moq/pull/2824) (EIT p/f in the
 catalog), shaped by a mis-filed ask: carriage is keyed by PID, 0x0012 holds present/following *and*
 schedule, so an allowlist change that bounded only p/f could not price what it would admit. Verified
-here byte-identical across a version roll (v0 ×27 then v1 ×28, no flapping, no stale version);
-**closed unmerged** when design moved to snapshot tracks — the measurement grades a design step, not
+byte-identical across a version roll; **closed unmerged** when design moved to snapshot tracks — the measurement grades a design step, not
 shipped behaviour
 ([T2](test-2-media-aware-transparency.md#eit-pf-survives-the-round-trip-on-2824s-branch-verified-on-the-same-fixture)).
 
@@ -411,7 +410,7 @@ so the carried tail is always empty and foreign bytes join the same truncated PE
 route that works was already implemented for sections: `SectionReassembler` drops partials on
 continuity gap, discontinuity or transport error; the PES path had not read the counter. Upstream
 reproduced in-tree and **rescoped the PR to five commits**, generalising those rules to PES PIDs.
-Merged; re-verified across four arms — mixed frame gone on current `main`.
+Merged; verified across four arms: no mixed frame remains.
 
 **Two measured residuals.** (1) Counter-contiguous wraps (~one cut in sixteen per PID; **4,062 of
 30,000** positions contiguous for at least one audio PID) bypass the guard — **1 alien AC-3 frame**
@@ -803,7 +802,9 @@ not 14.16 s (P1-z).
 laid it apart. Anchoring each group at its HRD's buffering period removed that, and is our
 [#5949](https://github.com/moq-dev/moq/pull/5949). **Decided and closed: that anchor is the rule**
 (quest `ts-hitless`), identity promised only where the stream carries a NAL HRD buffering period;
-a packet plan declined, H.265 is `ts-hitless-h265`. #5949, merged, implements it.
+a packet plan declined, H.265 is `ts-hitless-h265`. #5949, merged, implements it. On a source
+without one, a late leg's video differs from its partner's for up to 100 s: reported as
+[#6546](https://github.com/moq-dev/moq/issues/6546).
 
 ---
 
@@ -1429,8 +1430,7 @@ against the pre-flip `main`.
 
 **What #4543 does instead**, P1, co-resident: the `dev` line at `9a80e875` (since become `main`)
 against the pre-flip `main` at `6a016409`; [T23](test-23-pcr-discontinuity-classes.md) arms from
-`CNNiEMEA2.ts`, event at 30 s, 60 s PCR-paced ([T23](test-23-pcr-discontinuity-classes.md)). The
-`--linger` column cherry-picks #4504, which was then on the pre-flip `main` only.
+`CNNiEMEA2.ts`, event at 30 s, 60 s PCR-paced. The `--linger` column cherry-picks #4504.
 
 | Stimulus at 30 s | Pipe `import ts` | SRT `export ts` | SRT `--linger 10s` |
 |---|---|---|---|
@@ -1557,7 +1557,7 @@ identity change refuses; so do a PID listed twice and 65,536 stream revisions. T
 revises the PMT at the next version, dropping a PID once its tail is out. The PAT half follows a
 moved PMT and programs leaving or rejoining the PAT.
 
-**State.** #6208 merged; #6289 queued to merge on the maintainer's rework. #6301 closed: the PAT half is
+**State.** #6208 and #6289 merged. #6301 closed: the PAT half is
 re-planned on #6371's shared parser.
 
 ---
@@ -1647,9 +1647,8 @@ interrupts exit cleanly, and the final group repeats with the receiver on moq5 `
 direction 1: a passthrough import's catalog, published once before `moq5-relay` subscribed upstream,
 never reached a late `moq export ts`, on drafts 16, 18 and 22. **Closed by the maintainer**: draft
 22's fill, served only from the relay's retained log, is fixed on moq5 `main`, and on 16 and 18 the
-repro needed `export ts --passthrough`. Verified: with it, all three drafts pass on `main`, and draft
-16 already passed on the build reported; our subscriber delivers nothing through `moq-dev`'s relay
-either (T11 § *Corrections*).
+repro needed `export ts --passthrough`. Verified: with it, all three drafts pass on `main` (T11
+§ *Corrections*).
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 
@@ -1661,15 +1660,17 @@ TRACK_STATUS.
 
 ### A CDN-hosted moqx relay at a join — reported on [openmoq/moqx#795](https://github.com/openmoq/moqx/issues/795#issuecomment-6289975173) and as [#842](https://github.com/openmoq/moqx/issues/842)
 
-[T11](test-11-interop.md): a relative joining FETCH never reaches the publisher and no object comes
-back, so a subscriber loses the head of each group in progress, the SI track's one object
-included; added to #795 as a fresh-namespace case. The undefined TRACK_STATUS code (#842, closed)
-reads as INTERNAL_ERROR (draft 18 §14); [#843](https://github.com/openmoq/moqx/issues/843) tracks
-emitting defined codes. The subscription ending on our STOP_SENDING is
-[#817](https://github.com/openmoq/moqx/issues/817)'s, whose open fix covers it. **Open:** moxygen's
-relay fixed #795's restart case
-([`6411a441`](https://github.com/openmoq/moxygen/commit/6411a441b83329678d0e20fad0d9aed79845fe6d))
-and moqx has not taken it; whether it covers the fresh-namespace case is untested.
+[T11](test-11-interop.md): a joining FETCH never reaches the publisher, so a subscriber loses the
+head of each group in progress, the SI track's one object included (a fresh-namespace case on
+#795). TRACK_STATUS's undefined code (#842, closed) reads as INTERNAL_ERROR;
+[#843](https://github.com/openmoq/moqx/issues/843) asks for defined codes. Our STOP_SENDING ends the
+subscription: [#817](https://github.com/openmoq/moqx/issues/817), whose open fix covers it.
+**Open:** a local moqx on draft 16, v0.3.6 or the fixed snapshot, serves the joining FETCH, fresh
+namespace and restart alike (our groups restart at 0, short of #795's precondition); the node
+refuses it on draft 18, losing a once-published catalog and a mid-group joiner's session
+([T52](test-52-cdn-relay-fanout.md);
+[reported](https://github.com/openmoq/moqx/issues/795#issuecomment-6365312157)). On draft 18 the
+snapshot's 64-bit Hop ID closes `moq-dev` sessions ([moq#6545](https://github.com/moq-dev/moq/issues/6545)).
 
 ---
 

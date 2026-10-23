@@ -105,7 +105,8 @@ class Conn:
 				elif kind == "reset_stream" and sent:
 					sid = f["stream_id"]
 					code = wt_code(f["error_code"])
-					self.resets.append((t, sid, CODES.get(code, hex(code)), f["final_size"], self.tx.get(sid, {}).get("max", 0)))
+					sent = self.tx.get(sid, {}).get("max", 0)
+					self.resets.append((t, sid, CODES.get(code, hex(code)), f["final_size"], sent))
 		self.rx_bytes = sum(s["max"] for s in self.rx.values())
 		self.tx_bytes = sum(s["max"] for s in self.tx.values())
 
@@ -170,7 +171,8 @@ def grade(d: Path, dip_at: float, dip_s: float) -> list[dict]:
 		return abs(p.rx_bytes - c.tx_bytes - sum(r[3] - r[4] for r in c.resets))
 
 	paired = list(pubs)
-	if len(pubs) == 2 and n == 2 and gap(pubs[1], subs[0]) + gap(pubs[0], subs[1]) < gap(pubs[0], subs[0]) + gap(pubs[1], subs[1]):
+	crossed = gap(pubs[1], subs[0]) + gap(pubs[0], subs[1]) if len(pubs) == 2 and n == 2 else None
+	if crossed is not None and crossed < gap(pubs[0], subs[0]) + gap(pubs[1], subs[1]):
 		paired = [pubs[1], pubs[0]]
 	rows = []
 	for k, (conn, i) in enumerate(zip(subs, order)):
@@ -217,7 +219,10 @@ def grade(d: Path, dip_at: float, dip_s: float) -> list[dict]:
 			held = "?"
 			if m and int(m.group(1)) < len(pbig):
 				g = pbig[int(m.group(1))]
-				sid = next((sid for sid, s in conn.tx.items() if s["max"] > BIG and group_of(pbig, s["first"], s["max"]) == g), None)
+				sid = next(
+					(sid for sid, s in conn.tx.items() if s["max"] > BIG and group_of(pbig, s["first"], s["max"]) == g),
+					None,
+				)
 				if sid is None:
 					held = "unopened"
 				else:
@@ -241,7 +246,11 @@ def grade(d: Path, dip_at: float, dip_s: float) -> list[dict]:
 			"cwnd_dip_min": round(min(cw_dip)) if cw_dip else "NA", "inflight_peak": round(fl_peak),
 			"pub_bytes": pub.rx_bytes if pub else 0, "sub_bytes": conn.tx_bytes,
 			"abandoned_bytes": sum(b for _, b in abandoned_ev),
-			"pairing_pct": round(100 * abs((pub.rx_bytes if pub else 0) - conn.tx_bytes - sum(b for _, b in abandoned_ev)) / max(conn.tx_bytes, 1), 3),
+			"pairing_pct": round(
+				100 * abs((pub.rx_bytes if pub else 0) - conn.tx_bytes - sum(b for _, b in abandoned_ev))
+				/ max(conn.tx_bytes, 1),
+				3,
+			),
 		})
 	return rows
 

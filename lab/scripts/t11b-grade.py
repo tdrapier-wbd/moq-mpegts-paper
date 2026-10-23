@@ -66,7 +66,8 @@ def main():
             starts = [i for i, p in enumerate(s) if r and p == r[0]]
             start = next((i for i in starts if s[i : i + len(r)] == r), -1)
             share = len(r) / len(s) if s else 0
-            verdict = f"{'contiguous' if start >= 0 else 'NOT CONTIGUOUS'} from source packet {start}, {share:.1%} of source"
+            where = "contiguous" if start >= 0 else "NOT CONTIGUOUS"
+            verdict = f"{where} from source packet {start}, {share:.1%} of source"
             ok &= start >= 0 and (share >= 0.95 or len(s) < 100)
         elif s == r:
             verdict = "identical"

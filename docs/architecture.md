@@ -532,8 +532,8 @@ multiset, but the legs disagree on *order*, which the exporter took from arrival
 damage. Ordering by media time is not enough either: a leg that places even a few packets of its
 own shifts every later slot ([Evidence](evidence.md) §3.4). **The groomer constraint is necessary
 but not sufficient:** the stage above it must place packets deterministically. Where a multi-track
-pair cannot be co-started (below), carry 1+1 as one pair per elementary stream, merge above the
-transport, or carry it on the opaque lane. There a pair with one leg joining 8 s late merges
+pair cannot be co-started and the source carries no HRD (below), carry 1+1 as one pair per
+elementary stream, merge above the transport, or carry it on the opaque lane. There a pair with one leg joining 8 s late merges
 hitlessly through the join, each leg's loss and return, and one leg's export killed, provided each groomer
 stays silent rather than send a datagram it cannot fill exactly; a groomer that pads or re-primes
 under a number its partner fills with programme loses packets at the merge (one clip, one host;
@@ -545,9 +545,12 @@ pipe ([Evidence](evidence.md) §3.2) — gives the stage no consistent rate and 
 both domains on any new upstream build before promoting it. **Upstream's fixed-delay export, merged in
 October 2026, lays packets on a PCR grid at the mux rate and satisfies it**: on an `[unmerged]` build of
 it the stream-clocked stage carried the programme at 3.4 % stuffing, and behind it two legs started
-together are byte-identical, continuity counters included. A leg joining later is not
+together are byte-identical, continuity counters included. Its `--sync` mode, which opens each
+group where the encoder's HRD says the one before has arrived, makes a leg joining later identical
+too, but only where each group starts with an H.264 buffering period: on the live feed, which
+declares no HRD, a late leg's video differed for up to 100 s after the join
 ([Evidence](evidence.md) §3.4). On the media-aware lane, co-starting the pair is therefore a design
-constraint, not a convenience.
+constraint, not a convenience, unless the source carries an HRD.
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 |---|---|---|---|
@@ -556,7 +559,7 @@ constraint, not a convenience.
 | One groomer, datagrams duplicated to both paths | **yes** — 100 %, hitless under every path injection | CBR; 0 of 2,598 PCRs outside ±500 ns. **See the PCR-interval caveat below** | **the last hop only** |
 | One *stream-clocked* groomer per leg, **single-track** feed | **yes** — byte-identical on every datagram, with publisher, relay, exporter and host all independent | as above | **everything below the importer**, including relay and exporter death |
 | One *stream-clocked* groomer per leg, **opaque lane** (the whole multiplex) | **yes** — hitless through a leg joining 8 s late, each leg's loss and return, and one export killed, for one clip on one host | as above | **everything below the importer** |
-| One *stream-clocked* groomer per leg, **multi-track** mux on the media-aware lane | **no** — 75.56 % over independent chains: the same packets, in an order and slots each leg's own arrivals decide. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical; a late-joining leg is not ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
+| One *stream-clocked* groomer per leg, **multi-track** mux on the media-aware lane | **no** — 75.56 % over independent chains: the same packets, in an order and slots each leg's own arrivals decide. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical, and under `--sync` a late-joining leg too where the source carries an H.264 HRD ([Evidence](evidence.md) §3.4) | as above | nothing mergeable at the byte; merge above the transport instead |
 
 **Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that
 produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean
@@ -581,16 +584,17 @@ arrival-clocked mode does not (§4.3).
 Stream clocking removes the constraint that a pair be co-started **on single-track content**: a leg
 that mutes and returns rejoins its partner's numbering exactly, and a leg joining late puts the same
 programme in the same slots under the same numbers, a median 10 ms from its partner. On a multi-track
-mux it does so only on the opaque lane; on the media-aware lane the pair has to be co-started, because
-the exporter orders units that tie on decode time by its own release clock (§5.1).
+mux it does so on the opaque lane, and on the media-aware lane under the export's `--sync` mode
+where the source carries an H.264 HRD; otherwise the pair has to be co-started, because the
+exporter orders units that tie on decode time by its own release clock (§5.1).
 
 What stops both cases short of *byte*-identity is not the groomer but the exporter, which renders
 continuity counters from its own process state. So **which receiver a deployment uses decides
 whether a single leg can be restarted alone**: input-select protection returns immediately, while a
-sequence-merge receiver needs the pair restarted together. Upstream has declined to change the
-default counters; an `[unmerged]` opt-in mode that numbers them from the media, for legs of one
-broadcast, merges legs that joined apart or lost complementary content ([Evidence](evidence.md)
-§3.4). This is
+sequence-merge receiver needs the pair restarted together. Upstream kept the default counters;
+the opt-in `--sync` mode, for legs of one broadcast, restarts them at each group and merges legs
+that joined apart or lost complementary content, where the source carries an H.264 HRD
+([Evidence](evidence.md) §3.4). This is
 an operational constraint on planned maintenance, and it is the reason §9's runbook says what it
 says.
 
@@ -1140,7 +1144,7 @@ slips.
 |---|---|---|
 | Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
 | Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | The stage cannot improve PCR spacing by re-ordering content, so it must **reserve** an output slot on the repetition deadline and defer the displaced packet — 0.34 % of the carrier, and the only thing that clears the gate on the MoQ lane, where neither an eightfold cushion sweep nor an exporter-side fix to PCR *values* moved it. On that lane it also requires a buffer bound set by the source's peak coded frame, which is content-dependent and costs latency (§4.2), and it cannot repair the lane's T-STD-illegal packet order, which needs exactly the re-multiplexing this row declines (§4.3) |
-| Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Single-track byte-identity settled across independent chains (§5.1); on a multi-track mux, **75.56 %** before upstream's fixed-delay export (reordering, not damage), and behind it byte-identity for a co-started pair only; on the opaque lane a late-joining leg merges too |
+| Two independently *stream-clocked* groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Single-track byte-identity settled across independent chains (§5.1); on a multi-track mux, **75.56 %** before upstream's fixed-delay export (reordering, not damage), and behind it byte-identity for a co-started pair, and under `--sync` for a late leg where the source carries an H.264 HRD; on the opaque lane a late-joining leg merges too |
 | Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in less bandwidth by the source's stuffing, which it does not carry | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent. For TS-out the default is a transmux with structural limits — packet layout lost, the subscriber as multiplexer, no scrambled feeds (§6.2) — and for TS-out its standing as default rests on the fallback's immaturity — narrow evidence, one open implementation — rather than on fit (§6.1) |
 | Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
 | Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the *operator's* to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable *between* implementations |
@@ -1192,9 +1196,9 @@ Ranked by how much a negative answer would change the architecture.
    instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled.
    Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two, and its
-   exports stay identical across a republish in 8 of 13 runs; a leg started later does not, its
-   continuity counters being per-process and the rest of its residue unattributed. On the opaque
-   lane a leg started later merges, for one clip on one host (§5.1).
+   exports stay identical across a republish in 8 of 13 runs; under its `--sync` mode a leg started
+   later merges where the source carries an H.264 HRD, and on the live feed, which has none, not for
+   up to 100 s. On the opaque lane a leg started later merges, for one clip on one host (§5.1).
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves
    most of the delivery bill.
 6. **Relay portability between implementations (§8).** This architecture treats the relay as a

@@ -79,7 +79,8 @@ for ln in diff.splitlines():
     if any(k in ln for k in ('aligned', 'compared', 'identical:', 'differing', '    ', 'VERDICT')):
         print('       ', ln.strip())
 pes = subprocess.run([sys.executable, os.path.join(os.path.dirname(pair_diff), 'ts-pes-compare.py'),
-                      os.path.join(run, 'cap/origin.ts'), os.path.join(run, 'cap/r1.ts')], capture_output=True, text=True)
+                      os.path.join(run, 'cap/origin.ts'), os.path.join(run, 'cap/r1.ts')],
+                     capture_output=True, text=True)
 print('       ', pes.stdout.strip())
 print('arm 4  edge anon bytes:', size('e_anon'), '| edge wrong-broadcast bytes:', size('e_wrong'))
 d5 = events['arm5-r2-key-deleted']

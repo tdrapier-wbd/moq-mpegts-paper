@@ -23,7 +23,10 @@ for run in sys.argv[1:]:
     start = at - skip
     n = min(len(b), len(a) - start)
     step = 1 << 16
-    differ = next((i for i in range(0, n, step) if a[start + i : start + min(i + step, n)] != b[i : min(i + step, n)]), None)
+    differ = next(
+        (i for i in range(0, n, step) if a[start + i : start + min(i + step, n)] != b[i : min(i + step, n)]),
+        None,
+    )
     rate = 793_000 * 188 / 120
     verdict = "same" if differ is None else f"differs within 64 KiB of byte {differ}"
     print(f"{run}: standby starts {start / rate:.2f} s into the first's input; overlap {n / rate:.1f} s; {verdict}")

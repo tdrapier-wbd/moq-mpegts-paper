@@ -1,12 +1,14 @@
 # Test 50 — Deterministic TS legs (`moq export ts --sync`)
 
-**State: run; passes criteria 1, 2, 4 and 5; 6 on the second build, and on its port to current
-`main` past the first second; 7 is partial. Legs that joined apart write the same packets (arm A).
+**State: run; passes criteria 1, 2, 4 and 5 on the clip; 6 on the second build, and on its port
+and on merged `main` past the first second; 7 is partial. Legs that joined apart write the same
+packets (arm A).
 Under complementary loss the first build split the legs wherever a group had overrun the video lane
 on another leg, at any multiplex rate; the second, which opens each group where the encoder's HRD
 says the one before has arrived, gives no conflict and no overrun at 12, 16 and 24 Mb/s, and so does
 its port once a restarted grid runs on past a stopped leg's resume. Criterion 3 cannot hold on a leg
-that loses mid-group.**
+that loses mid-group. On the live feed, which declares no HRD, a leg joining 20 s late on another
+host fails criterion 1: its video differed for 13.6 s and 100.2 s, then matched to the end (arm L).**
 
 ## Objective
 
@@ -60,9 +62,11 @@ one leg lacks keeps its position there as stuffing.
 
 ## Environment
 
-- **Build:** branch `quest/m2/ts-hitless` (commits recorded in the results), release.
+- **Build:** branch `quest/m2/ts-hitless` (commits recorded in the results), then merged `main` at
+  f2fca6fd2 for P1-o; release.
 - **Host:** the EC2 tertiary, everything on loopback: one relay, one publisher (`import ts`) reading
-  the CNN clip paced on its PCR, two or three `export ts` subscribers.
+  the CNN clip paced on its PCR, two or three `export ts` subscribers. Arm L: the primary and the
+  secondary.
 - **Source:** the CNN clip (9.95 Mb/s; H.264, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI).
 - **Rig and grader:** [`t50-sync-legs.sh`](scripts/t50-sync-legs.sh) runs the arms;
   [`ts-sync-identity.py`](scripts/ts-sync-identity.py) aligns the legs on their PCR slots and compares
@@ -77,6 +81,13 @@ one leg lacks keeps its position there as stuffing.
 - **B at 16 and 24 Mb/s**, added after arm B's second run failed, to test whether a wider lane
   removes the failure. Arm B's four runs were repeated on the second build, and arm A once and
   arm B six times at 12 Mb/s on its port. The criteria are unchanged.
+- **On merged `main` (P1-o):** arms A, B and C as above, then **L, a late leg on the live feed
+  across two hosts**: the 25 Mb/s feed's loopback hand-off on the primary into a relay and
+  `import ts` of that build; leg A on the primary from the start, leg B on the secondary joining
+  20 s later over the hosts' private path; 120 s of common capture at `--mux-rate 30000000` (the
+  feed carries no stuffing; 30 Mb/s keeps arm A's 20 % margin), then at 40 Mb/s, added after the
+  first run failed, as arm B's wider rates were. Criteria 1, 3, 4 and 5 apply to L unchanged. Rig:
+  [`p1o-live-sync.sh`](scripts/p1o-live-sync.sh).
 
 All arms: `--mux-rate 12000000 --delay 1s` unless stated.
 
@@ -178,6 +189,21 @@ For the decode clock, the mocked source now reorders (a b-pyramid of depth 2) an
 leg's group as the relay does a slow subscriber's: with the timing rule in place of the count, its
 join and loss tests fail, and without the discard, so does its test of legs stopped in turn.
 
+**On merged `main` the clip repeats the port.** Arm A: 474,909 positions equal and 0 conflicts over
+59.6 s, one-leg positions in the joiner's first 1.2 s. Arm B, twice: 0 conflicts for every pair,
+continuity 0 on every leg and both merges; one merge equals R, and in the other R lacks 76 AC-3 and
+6 teletext packets of its first 0.65 s. Arm C: 371,932 conflicts without `--sync`, the flipped byte
+exactly 1. No leg counted an overrun or a late unit; every PCR within 13 ticks, every slot at the rate.
+
+**On the live feed a late leg's video differs until the legs' groups realign.** The feed's SPS
+(High, level 4.0) declares no HRD, so its groups keep the first anchor, and without an HRD the video
+lane stops at the level's maximum rate. Every leg counted overruns throughout, 45 to 49 a minute at
+30 and at 40 Mb/s alike. Leg B's video conflicted with leg A's until 100.2 s of a 129.8 s common span
+at 30 Mb/s (1,629,387 positions) and until 13.6 s of 128.6 s at 40 Mb/s (219,553), then every
+position matched to the end; every other PID agreed within 1.6 s of the join. Continuity 0, PCR
+intervals at most 25.02 ms and within 13 ticks, and every slot at the rate, on both legs of both
+runs.
+
 ## Conclusions
 
 - Under `--sync`, two legs of a real broadcast mux (H.264, MP2, AC-3, teletext, SCTE-35, SI) that
@@ -191,6 +217,9 @@ join and loss tests fail, and without the discard, so does its test of legs stop
   is a clean leg, at 12, 16 and 24 Mb/s. That needs a NAL HRD and a buffering period SEI on each
   group's first picture, read for H.264 only; other streams keep the first anchor and its
   overruns. Whether it replaces the quest's placement is the maintainer's choice.
+- On a live source without an HRD, a leg that joins late is not yet a 2022-7 partner: its video
+  differed from the first leg's for 13.6 s and 100.2 s in two runs, and a wider multiplex rate did
+  not shorten it.
 - A stopped leg resumes as far behind its grid as it stopped; the grid must run on through that
   restart, or the leg's PCR steps back.
 - The mocked-time tests now reorder, and one fills its lane with a burst at a group's end.

@@ -124,7 +124,9 @@ def main():
             sw['lost_s'] = round(max(0, d - frame) / 90000, 3)
             sw['repeat_s'] = round(max(0, -d + frame) / 90000, 3) if d <= 0 else 0.0
         switches.append(sw)
-    inside = lambda i: any(lo <= i <= hi for lo, hi, *_ in windows)
+    def inside(i):
+        return any(lo <= i <= hi for lo, hi, *_ in windows)
+
     other = sorted({(pid, second(i)) for i, pid in flagged_at if not inside(i)}, key=str)
     gaps = []
     for (ia, a), (ib, b) in zip(vpts, vpts[1:]):

@@ -172,6 +172,13 @@ resolve the process rather than its wrapper, and restart or withhold contaminate
 **Errors a server logs are not an instrument for a client falling behind.** *(T5.)* A segmented client
 that lost 82 s of programme reloaded the playlist and skipped silently, and the origin logged only 200s.
 
+**A receiver that restores a constant rate cannot report delivery by what it writes.** *(T52.)*
+`moq export ts --delay` lays out its constant-rate mux in stuffing whatever arrives: its output held
+100 % at a step where each subscriber received 83 % and the exports skipped groups in common. Count
+the bytes the host received on each receiver's socket (a firewall counter on its port: `rchar` misses
+`recvmsg` and reads zero for QUIC), and grade content by the groups its log says it skipped, since
+the padded wire stays conformant.
+
 **Read the confidence an instrument reports, and re-measure a derived quantity independently before
 explaining it.** *(T12.)* A merge oracle with 15 votes in 23,175 reported twelve seconds of skew; arrival
 at equal sequence numbers, which needs no correlator, read 10.4 ms.

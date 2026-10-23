@@ -6,7 +6,10 @@
 # Arrival is time.time_ns() after recv() returns, in the application: across hosts it carries each
 # host's clock error and each reader's scheduling delay, neither calibrated, so it compares packets
 # exactly and arrival only coarsely. It joins on the loopback interface, where the listener publishes.
-import hashlib, socket, struct, sys, time
+import hashlib
+import socket
+import sys
+import time
 
 group, port, pid, secs, out = sys.argv[1], int(sys.argv[2]), int(sys.argv[3], 0), float(sys.argv[4]), sys.argv[5]
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
