@@ -782,8 +782,8 @@ A quest-only PR replacing `plan-ts-alignment`: a shared `--epoch` (refusals buil
 counters restart per group, released by clock recovery rather than wall time; and RTP legs that stay silent rather than send a datagram they cannot fill.
 **Merged.** #5967 has since removed the shared importer epoch and its alignment (§ *Active/active
 source failover*), so we closed our co-start test
-[#5955](https://github.com/moq-dev/moq/pull/5955). `--sync` (#5949) and the RTP legs
-(#6304) survive, for legs of one broadcast.
+[#5955](https://github.com/moq-dev/moq/pull/5955). #6554 (open) removes `--sync` (#5949); #6304
+is closed.
 
 ### A restarted relay cannot reset its predecessor's connections — reported as [#5861](https://github.com/moq-dev/moq/issues/5861)
 
@@ -1236,7 +1236,7 @@ whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusi
 [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)). Detail lives in T44–T48,
 measurement points in [`docs/evidence.md`](../docs/evidence.md) §3.16.
 
-### A UDP sink for `export ts` — declined; RTP legs for ST 2022-7 contributed as [#6304](https://github.com/moq-dev/moq/pull/6304)
+### A UDP sink for `export ts` — declined; RTP legs for ST 2022-7, [#6304](https://github.com/moq-dev/moq/pull/6304), closed with `--sync`
 
 **Report.** [#1839](https://github.com/moq-dev/moq/issues/1839), a general egress layer, and
 [#3923](https://github.com/moq-dev/moq/issues/3923), a `--udp` sink with datagram size and multicast
@@ -1244,15 +1244,16 @@ controls, were closed not planned: `tsp` does the socket work, and a sink adds l
 schedule an IRD can clock off. RTP for a 2022-7 pair is the exception: a per-process packetizer
 numbers the datagrams it sent, so a late join or a jump shifts one leg's numbers.
 
-**Contributed** (quest `ts-rtp-egress`). `export ts --sync --rtp udp://HOST:PORT` cuts RFC 2250
+**Contributed.** `export ts --sync --rtp udp://HOST:PORT` cuts RFC 2250
 datagrams on the slot grid, numbers them from their timeline position, derives the SSRC from path
 and epoch, and withholds a datagram the leg cannot vouch for. Verified: legs joined apart, or losing
 complementary groups, send byte-identical datagrams and between them every datagram a clean leg
 sends; four of those tests fail without the withholding; two legs through a loopback relay on
-draft 18 shared 36,465 datagrams, none differing. Every hop must carry the epoch: draft 17+ or
-lite-07.
+draft 18 shared 36,465 datagrams, none differing.
 
-**State.** The maintainer took the branch over and is finishing it.
+**State.** Closed unmerged: [#6554](https://github.com/moq-dev/moq/pull/6554) (open) removes
+`--sync`, which the legs need. In-process RTP would be passthrough only, numbered by source packet
+position, scoped against a named receiver.
 
 ### Four closed as completed by a planning document that changed no code
 
