@@ -40,7 +40,7 @@ whether it did, against the path we actually run.
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
 | Relay | The host's own standing relay, `https://localhost:443/anon` |
 | Builds | `0e61e35` (#3375, the regression), `025613d` (its parent) — the pinned T27 bisect pair — and `d518b61b`; later `5d0991b9`, `ffa5b81b` and `9d2a4f6e`, each in its own section below |
-| Source | `t40_clip.ts`, the leading 200,000 packets of `CNNiEMEA2.ts` (~30 s, 9.95 Mbps CBR, 7 elementary streams) |
+| Source | `t40_clip.ts`, the leading 200,000 packets of `contrib-10m.ts` (~30 s, 9.95 Mbps CBR, 7 elementary streams) |
 | Generator | [`ts-continuous-source.py`](scripts/ts-continuous-source.py), 40 passes |
 | Rig | [`t40-continuous-join-srt.sh`](scripts/t40-continuous-join-srt.sh) |
 | Window | 150 s, sampled every 5 s — four content joins inside the window |

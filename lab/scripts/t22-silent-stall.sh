@@ -52,7 +52,7 @@ moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-3006/moq-relay}
 PACER=${PACER:-$HOME/pacer/mpegts-pacer}
 OBSERVER=${OBSERVER:-$HOME/t22/t22-wire-observer.py}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 DIR=${DIR:-$HOME/t22}
 
 RUN=$DIR/$LABEL

@@ -33,7 +33,7 @@ tier, and an hour at N = 100.
 T26's topology: the relay under test alone on the 2-vCPU primary (standing services left running on
 their own ports and measured in `meta.txt`), publishers and subscribers on the 8-vCPU secondary, the
 two hosts in separate availability zones of one region, 0.72 ms apart. GSO on, `delay` controller
-(BBRv3 on noq). Both hosts run `ffa5b81b`. The clip is `CNNiEMEA2.ts` through the continuous source
+(BBRv3 on noq). Both hosts run `ffa5b81b`. The clip is `contrib-10m.ts` through the continuous source
 generator, as in T26.
 
 ## Procedure

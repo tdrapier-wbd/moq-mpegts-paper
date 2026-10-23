@@ -25,7 +25,7 @@ LABEL="${1:?usage: t25-segmented-abuse.sh <label> <control|churn|slow|flood> [wi
 ARM="${2:?arm: control|churn|slow|flood}"
 WINDOW="${3:-60}"
 
-SRC="${SRC:-$HOME/CNNiEMEA2.ts}"
+SRC="${SRC:-$HOME/contrib-10m.ts}"
 HLS_DIR=/srv/hls/t25seg
 URLBASE=t25seg
 RUN="$HOME/t25seg/$LABEL-$ARM"

@@ -46,9 +46,9 @@ PEM=${PEM:-}
 # The address the lanes dial; set it when ORIGIN is an alias rather than user@address.
 HOST=${HOST:-${ORIGIN#*@}}
 REMOTE_MOQ=${REMOTE_MOQ:-/home/ubuntu/bin-main-eab96019/moq}
-REMOTE_CLIP=${REMOTE_CLIP:-/home/ubuntu/CNNiEMEA2.ts}
+REMOTE_CLIP=${REMOTE_CLIP:-/home/ubuntu/contrib-10m.ts}
 LOCAL_MOQ=${LOCAL_MOQ:-$HOME/bin-main/moq}
-LOCAL_CLIP=${LOCAL_CLIP:-$HOME/CNNiEMEA2.ts}
+LOCAL_CLIP=${LOCAL_CLIP:-$HOME/contrib-10m.ts}
 HLS_PORT=${HLS_PORT:-8080}
 SRT_PORT=${SRT_PORT:-9010}
 SEGSECS=${SEGSECS:-2}

@@ -128,7 +128,7 @@ contains +0 ms, 0 continuity errors and 0 PCRs outside ±481 ns.
 ## Environment
 
 Loopback on one laptop, the [T18](test-18-delivery-latency.md) rig [`t18-arm.sh`](scripts/t18-arm.sh):
-source `CNNiEMEA2.ts` (H.264, MPEG-1 L2, AC-3, DVB teletext, three SCTE-35 PIDs; 9,945,951 b/s), the
+source `contrib-10m.ts` (H.264, MPEG-1 L2, AC-3, DVB teletext, three SCTE-35 PIDs; 9,945,951 b/s), the
 lane's `moq export ts` feeding `mpegts-pacer` at an 11 Mb/s carrier, 2,500 ms cap, 1,000 ms cushion,
 subscriber `--max-latency 500ms`. Each arm is 300 s; the first 20 s are simulated but not graded
 (`--skip 20`), because the SRT arm starts with a 6.7 s arrival backlog.

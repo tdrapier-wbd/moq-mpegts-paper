@@ -1,90 +1,90 @@
 {
  "channels": [
-  "cnn",
-  "cnn-intl",
-  "tnt",
+  "ch1",
+  "ch1-intl",
+  "ch2",
   "nobody"
  ],
  "topology_note": "affd is BROAD (one key covering both its channels); affe is NARROW (one key per channel). That difference is the de-provisioning-granularity experiment.",
  "affiliates": {
-  "wbdkey": {
+  "bcastkey": {
    "licensed": [
-    "cnn",
-    "cnn-intl",
-    "tnt",
+    "ch1",
+    "ch1-intl",
+    "ch2",
     "nobody"
    ],
-   "key": "/tmp/t36/keys/wbd.pub.jwk",
+   "key": "/tmp/t36/keys/bcast.pub.jwk",
    "role": "publisher"
   },
   "rivalkey": {
    "licensed": [
-    "cnn"
+    "ch1"
    ],
    "key": "/tmp/t36/keys/rival.pub.jwk",
    "role": "publisher"
   },
   "affakey": {
    "licensed": [
-    "cnn"
+    "ch1"
    ],
    "key": "/tmp/t36/keys/affa.pub.jwk",
    "role": "affiliate A"
   },
   "affbkey": {
    "licensed": [
-    "cnn",
-    "tnt"
+    "ch1",
+    "ch2"
    ],
    "key": "/tmp/t36/keys/affb.pub.jwk",
    "role": "affiliate B"
   },
   "affckey": {
    "licensed": [
-    "tnt"
+    "ch2"
    ],
    "key": "/tmp/t36/keys/affc.pub.jwk",
    "role": "affiliate C"
   },
   "affdkey": {
    "licensed": [
-    "cnn",
-    "tnt"
+    "ch1",
+    "ch2"
    ],
    "key": "/tmp/t36/keys/affd.pub.jwk",
    "role": "affiliate D \u2014 broad"
   },
-  "affecnnkey": {
+  "affech1key": {
    "licensed": [
-    "cnn"
+    "ch1"
    ],
-   "key": "/tmp/t36/keys/affe-cnn.pub.jwk",
-   "role": "affiliate E \u2014 narrow, cnn"
+   "key": "/tmp/t36/keys/affe-ch1.pub.jwk",
+   "role": "affiliate E \u2014 narrow, ch1"
   },
-  "affetntkey": {
+  "affech2key": {
    "licensed": [
-    "tnt"
+    "ch2"
    ],
-   "key": "/tmp/t36/keys/affe-tnt.pub.jwk",
-   "role": "affiliate E \u2014 narrow, tnt"
+   "key": "/tmp/t36/keys/affe-ch2.pub.jwk",
+   "role": "affiliate E \u2014 narrow, ch2"
   },
   "afffkey": {
    "licensed": [
-    "cnn-intl"
+    "ch1-intl"
    ],
    "key": "/tmp/t36/keys/afff.pub.jwk",
    "role": "affiliate F"
   },
-  "affdtntkey": {
+  "affdch2key": {
    "licensed": [
-    "tnt"
+    "ch2"
    ],
-   "key": "/tmp/t36/keys/affd-tnt.pub.jwk",
-   "role": "affiliate D \u2014 narrowed to tnt"
+   "key": "/tmp/t36/keys/affd-ch2.pub.jwk",
+   "role": "affiliate D \u2014 narrowed to ch2"
   },
   "affakey2": {
    "licensed": [
-    "cnn"
+    "ch1"
    ],
    "key": "/tmp/t36/keys/affa2.pub.jwk",
    "role": "affiliate A \u2014 successor key"

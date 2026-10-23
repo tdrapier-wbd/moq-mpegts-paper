@@ -69,9 +69,9 @@ its own key ID. Clocks: one host, so expiry is read against one clock.
 
 ## Procedure
 
-**The estate** is T36's, renamed. Broadcaster `bcast-a` publishes `ch1`, `ch1-intl`, `ch2` and
-`none`; broadcaster `bcast-b` publishes its own `ch1`. Affiliate A licenses `ch1`, B licenses `ch1`
-and `ch2`, C licenses `ch2`. `ch1-intl` is the shared-stem trap and `none` the control.
+**The estate** is T36's. Broadcaster `bcast` publishes `ch1`, `ch1-intl`, `ch2` and
+`nobody`; broadcaster `rival` publishes its own `ch1`. Affiliate A licenses `ch1`, B licenses `ch1`
+and `ch2`, C licenses `ch2`. `ch1-intl` is the shared-stem trap and `nobody` the control.
 
 **One entitlement record per affiliate** (principal, broadcaster, channels, actions, expiry) is
 written once, then rendered to a JWT by `moq token sign` and to a CAT by `moqx-issuer`. A record
@@ -102,7 +102,7 @@ its own rendering of the same record: licensed, unlicensed channel, other broadc
 absent, truncated, signature altered, claims widened after signing, subscribe-only publishing,
 publish-only subscribing, `ch1` reaching `ch1-intl` (H4), and the parent grant narrowing to a child.
 Each arm is graded as T36 grades it: what the client was told, what the relay logged, and the
-payload bytes the subscriber received. **Disclosure**: each affiliate subscribes to `bcast-a`'s
+payload bytes the subscriber received. **Disclosure**: each affiliate subscribes to `bcast`'s
 announcements and the channels announced are recorded.
 
 ### Part C — expiry and withdrawal

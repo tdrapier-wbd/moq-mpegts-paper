@@ -36,7 +36,7 @@ MOQ=${MOQ:-$HOME/bin-merged/moq}
 RELAY=${RELAY:-$HOME/bin-merged/moq-relay}
 moq_cli_detect "$MOQ" "$RELAY"
 PACER=${PACER:-$HOME/pacer-fixed/mpegts-pacer}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 CONTSRC=${CONTSRC:-$HOME/t21/ts-continuous-source.py}
 DIR=${DIR:-$HOME/t21}
 SOURCE_MODE=${SOURCE_MODE:-continuous}

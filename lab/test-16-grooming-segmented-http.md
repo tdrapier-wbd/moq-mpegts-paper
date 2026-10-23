@@ -46,7 +46,7 @@ setting the documented flags differently.
 
 | Component | Detail |
 |---|---|
-| Source | `CNNiEMEA2.ts` — CNN EMEA HD, 9,945,951 bps CBR, open-GOP, 3× SCTE-35, full DVB SI |
+| Source | `contrib-10m.ts` — the news channel, 9,945,951 bps CBR, open-GOP, 3× SCTE-35, full DVB SI |
 | Host | single macOS host, loopback path, all five arms in one session off one publisher |
 | Publisher | TSDuck 3.44-4676 `tsp -O hls`, 2 s target, `--intra-close --align-first-segment --live 6 --live-extra-segments 3` |
 | Origin | `python3 -m http.server`, as T14 measurement 2 |
@@ -94,7 +94,7 @@ produced it.
 
 ```bash
 # All five arms, off one publisher, 60 s each, 2 s segments
-PACER_REPO=~/mpegts-pacer lab/scripts/t16-groom-segmented.sh ~/CNNiEMEA2.ts ~/t16 60 2
+PACER_REPO=~/mpegts-pacer lab/scripts/t16-groom-segmented.sh ~/contrib-10m.ts ~/t16 60 2
 ```
 
 The rig derives the output rate from the source's PCR timeline, starts publisher and origin, captures

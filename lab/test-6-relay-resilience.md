@@ -31,7 +31,7 @@ store are already interchangeable, and the receiver never learns which one serve
 ## Environment
 
 - Media-aware lane, loopback. `moq` / `moq-relay` 0.8.7 (`feat/mux-ts-dvb-service-layer`), TSDuck
-  3.44, Darwin 25.5.0. Source `~/CNNiEMEA2.ts` looped via `tsp regulate --pcr-synchronous`. All
+  3.44, Darwin 25.5.0. Source `~/contrib-10m.ts` looped via `tsp regulate --pcr-synchronous`. All
   clients `--client-quic-gso=false`; negotiated wire **`moq-lite-05`** unless noted.
 - Each drill runs relay(s) + publisher(s) + subscriber(s) + timed kills inside a single shell
   invocation (the local background-process constraint). Scripts and relay configs under

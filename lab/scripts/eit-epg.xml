@@ -17,7 +17,7 @@
   make-eit-epg.py instead.
 
   The service triplet must match the clip: original_network_id 0, transport_stream_id 0,
-  service_id 1 (CNNI EMEA HD).
+  service_id 1.
 -->
 <tsduck>
   <EIT type="pf" actual="true" version="1" current="true"
@@ -27,7 +27,7 @@
     <event event_id="1001" start_time="2026-06-19 07:00:00" duration="01:00:00"
            running_status="running" CA_mode="false">
       <short_event_descriptor language_code="eng">
-        <event_name>CNN Newsroom</event_name>
+        <event_name>Newsroom</event_name>
         <text>International news, business and weather.</text>
       </short_event_descriptor>
     </event>
@@ -61,7 +61,7 @@
     <event event_id="1005" start_time="2026-06-19 10:00:00" duration="01:00:00"
            running_status="not-running" CA_mode="false">
       <short_event_descriptor language_code="eng">
-        <event_name>CNN This Morning</event_name>
+        <event_name>Morning Briefing</event_name>
         <text>The stories shaping the day.</text>
       </short_event_descriptor>
     </event>
@@ -75,7 +75,7 @@
     <event event_id="1007" start_time="2026-06-19 12:00:00" duration="01:00:00"
            running_status="not-running" CA_mode="false">
       <short_event_descriptor language_code="eng">
-        <event_name>CNN Newsroom</event_name>
+        <event_name>Newsroom</event_name>
         <text>International news, business and weather.</text>
       </short_event_descriptor>
     </event>
@@ -89,7 +89,7 @@
     <event event_id="1009" start_time="2026-06-19 14:00:00" duration="02:00:00"
            running_status="not-running" CA_mode="false">
       <short_event_descriptor language_code="eng">
-        <event_name>CNN Documentary</event_name>
+        <event_name>Documentary</event_name>
         <text>Long-form reporting.</text>
       </short_event_descriptor>
     </event>
@@ -110,7 +110,7 @@
     <event event_id="1012" start_time="2026-06-19 18:00:00" duration="06:00:00"
            running_status="not-running" CA_mode="false">
       <short_event_descriptor language_code="eng">
-        <event_name>CNN Overnight</event_name>
+        <event_name>Overnight</event_name>
         <text>Rolling international news.</text>
       </short_event_descriptor>
     </event>

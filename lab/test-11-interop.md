@@ -296,7 +296,7 @@ The question is whether an outside implementation's opaque TS crosses a `moq-dev
 - **Subscriber:** [`t11b-rawsub.rs`](scripts/t11b-rawsub.rs), a `moq-net` client that holds one
   SUBSCRIBE and writes each object's payload in arrival order. `moq fetch` cannot stand in for it,
   because the relay forwards the FETCH to this publisher, which answers *unsupported*.
-- **Clip:** the first 15 s (99,000 packets) of a CNN International capture. It is a single programme
+- **Clip:** the first 15 s (99,000 packets) of the news channel's capture. It is a single programme
   at 9.93 Mb/s: PMT 100, PCR and video on 111, six other elementary streams and 4,525 nulls.
 - **Oracle:** [`t11b-grade.py`](scripts/t11b-grade.py) per PID, plus TSDuck continuity.
 - **Measurement:** P1, co-resident on loopback, source file against received file. Rigs:

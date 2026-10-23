@@ -245,7 +245,7 @@ instrument was not run; criteria 3, 4 and 6 belong to arms that were not run.
 
 | Programme | PMT PID | PCR PID | Elementary streams | SDT service |
 |---|---|---|---|---|
-| 1 | 100 | 111 | AVC 111; MPEG-1 audio 121; AC-3 123; teletext 131; SCTE-35 141, 142, 143 (three CUEI registrations) | CNNI EMEA HD, type 0x19 |
+| 1 | 100 | 111 | AVC 111; MPEG-1 audio 121; AC-3 123; teletext 131; SCTE-35 141, 142, 143 (three CUEI registrations) | the news service, type 0x19 |
 | 2 | 512 | 529 | AVC 1080p 529 | T10 Video-only, type 0x01 |
 | 3 | 768 | 785 | AVC 640×360 785; MPEG-1 audio 786 | T10 AV, type 0x01 |
 

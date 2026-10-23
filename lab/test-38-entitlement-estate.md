@@ -153,19 +153,19 @@ timing.
 Seven credentials against four channels, every cell attempted. Delivery is graded on payload bytes
 reaching the subscriber, as in [T36](test-36-entitlement-enforcement.md).
 
-| Credential | Licensed | `cnn` | `cnn-intl` | `tnt` | `nobody` |
+| Credential | Licensed | `ch1` | `ch1-intl` | `ch2` | `nobody` |
 |---|---|---|---|---|---|
-| Affiliate A | `cnn` | **deliver** | refuse | refuse | refuse |
-| Affiliate B | `cnn`, `tnt` | **deliver** | refuse | **deliver** | refuse |
-| Affiliate C | `tnt` | refuse | refuse | **deliver** | refuse |
-| Affiliate D (broad) | `cnn`, `tnt` | **deliver** | refuse | **deliver** | refuse |
-| Affiliate E, `cnn` key | `cnn` | **deliver** | refuse | refuse | refuse |
-| Affiliate E, `tnt` key | `tnt` | refuse | refuse | **deliver** | refuse |
-| Affiliate F | `cnn-intl` | refuse | **deliver** | refuse | refuse |
+| Affiliate A | `ch1` | **deliver** | refuse | refuse | refuse |
+| Affiliate B | `ch1`, `ch2` | **deliver** | refuse | **deliver** | refuse |
+| Affiliate C | `ch2` | refuse | refuse | **deliver** | refuse |
+| Affiliate D (broad) | `ch1`, `ch2` | **deliver** | refuse | **deliver** | refuse |
+| Affiliate E, `ch1` key | `ch1` | **deliver** | refuse | refuse | refuse |
+| Affiliate E, `ch2` key | `ch2` | refuse | refuse | **deliver** | refuse |
+| Affiliate F | `ch1-intl` | refuse | **deliver** | refuse | refuse |
 
 Twenty-eight cells, twenty-eight correct. The `nobody` column is the control and is empty, so no
 credential reaches a channel simply because it exists. Affiliate F is the counterpart control: it
-holds the *only* grant to `cnn-intl` and gets it, which shows the empty cells elsewhere in that
+holds the *only* grant to `ch1-intl` and gets it, which shows the empty cells elsewhere in that
 column are scope decisions rather than an unreachable channel.
 
 ### Parts 2 and 3 — topology decides whether de-provisioning is surgical
@@ -255,11 +255,11 @@ token** was served:
 
 | Target | Result |
 |---|---|
-| `wbd/cnn` | 7,260,560 bytes |
-| `wbd/cnn-intl` | 6,736,040 bytes |
-| `wbd/tnt` | 7,263,380 bytes |
-| `wbd/nobody` — licensed by nobody | 2,408,656 bytes |
-| **`rival/cnn` — the other broadcaster** | **7,093,804 bytes** |
+| `bcast/ch1` | 7,260,560 bytes |
+| `bcast/ch1-intl` | 6,736,040 bytes |
+| `bcast/ch2` | 7,263,380 bytes |
+| `bcast/nobody` — licensed by nobody | 2,408,656 bytes |
+| **`rival/ch1` — the other broadcaster** | **7,093,804 bytes** |
 
 Everything. The relay treats a verified client certificate as an unrestricted credential for
 whatever path is dialled, and the authorization endpoint is told only that *some* certificate was

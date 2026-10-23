@@ -16,12 +16,12 @@ bitrate, chroma format, GOP structure and native PCR cadence are for.
 
 ## Environment
 
-- Full media-aware lane + `mpegts-pacer`: `~/CNNiEMEA2.ts` (and the three other T1 clips) →
+- Full media-aware lane + `mpegts-pacer`: `~/contrib-10m.ts` (and the three other T1 clips) →
   `tsp regulate` → `moq import ts` → `moq-relay` → `moq export ts` → `mpegts-pacer` (`cbr_file`,
   `auto regenerate`) → TSDuck.
 - Build under test: `moq-dev` `feat/mux-ts-dvb-service-layer` (`moq` 0.8.7, `moq-relay` 0.13.7,
   `moq-native` 0.18.3 — carrying #2072/#2066 and the #2440 service layer), so the exporter
-  round-trips the CNN open-GOP + triple-SCTE-35 feed deterministically and **keeps the PMT PID at
+  round-trips the open-GOP, triple-SCTE-35 news feed deterministically and **keeps the PMT PID at
   0x0064** (no longer renumbered). `mpegts-pacer` 0.1.0; TSDuck 3.44.
 - Segmented lane, same laptop, same four clips, same groomer:
   `tsp -I file --infinite -P regulate --pcr-synchronous` → `tsp -O hls` (2 s segments,
@@ -95,8 +95,8 @@ not an IRD either.
 |---|---|---|---|---|---|---|
 | `testloop_clean` (synthetic) | 25.15 % | **0 %** | 32.15 | **9.731 Mbps** | **0** | 0 |
 | `testloop` (27.5 Mbps 4:2:2) | 0 %³ | **0 %** | 30.64 | **30.085 Mbps** | **0** | 0 |
-| `CNNiEMEA` (CNN, 5 min) | 13.92 % | **0 %** | 31.84 | **11.006 Mbps** | **0** | 0 |
-| `CNNiEMEA2` (CNN, 10 min) | 9.08 % | **0 %** | 31.84 | **11.006 Mbps** | **0** | 0 |
+| `contrib-5m` (news, 5 min) | 13.92 % | **0 %** | 31.84 | **11.006 Mbps** | **0** | 0 |
+| `contrib-10m` (news, 10 min) | 9.08 % | **0 %** | 31.84 | **11.006 Mbps** | **0** | 0 |
 
 ³ `testloop`'s native 27 ms PCR cadence is already < 40 ms before grooming; pacing still converts it
 to exact CBR (`bitrate = pcrbitrate = userbitrate`) with byte-locked PCR. For every clip the pacer
@@ -115,8 +115,8 @@ window, 2 s segments, groomer told the output rate and nothing else.
 |---|---|---|---|---|---|---|---|---|
 | `testloop_clean` (synthetic) | 10.00 Mbps | 20.00 | **0** | 38.45 | **0** | **0** | 0 | 11,500,029 / 11,500,005 b/s |
 | `testloop` (27.5 Mbps 4:2:2) | 27.51 Mbps | 28.16 | **0** | 48.59 | **1** (0.058 %) | **0** | 0 | 31,633,990 / 31,633,990 b/s |
-| `CNNiEMEA` (CNN, 5 min) | 9.95 Mbps | 24.95 | **0** | 35.50 | **0** | **0** | 0 | 11,437,843 / 11,437,843 b/s |
-| `CNNiEMEA2` (CNN, 10 min) | 9.95 Mbps | 24.95 | **0** | 34.19 | **0** | **0** | 0 | 11,437,842 / 11,437,843 b/s |
+| `contrib-5m` (news, 5 min) | 9.95 Mbps | 24.95 | **0** | 35.50 | **0** | **0** | 0 | 11,437,843 / 11,437,843 b/s |
+| `contrib-10m` (news, 10 min) | 9.95 Mbps | 24.95 | **0** | 34.19 | **0** | **0** | 0 | 11,437,842 / 11,437,843 b/s |
 
 **The ungroomed column is 0 by construction and that is the finding, not a null result.** A segment
 is a byte-verbatim slice of the source, so the source's own PCR spacing arrives intact and there is

@@ -33,7 +33,7 @@
 # - Merge takes a few seconds to start inserting. The first LEAD_S seconds are cut, so the fixture
 #   opens with all three programmes present.
 #
-# The EPG is anchored to CNNiEMEA2.ts's own TDT epoch (see make-mpts-epg.py) and eitinject follows
+# The EPG is anchored to contrib-10m.ts's own TDT epoch (see make-mpts-epg.py) and eitinject follows
 # the TDT in the stream, so P1 must be that clip from its start or the p/f table is empty.
 #
 # By default the three programmes keep their own, unrelated clocks, as programmes from independent
@@ -57,7 +57,7 @@ set -euo pipefail
 
 OUT="${1:?usage: make-real-mpts.sh <out.ts> [seconds]}"
 SECS="${2:-60}"
-P1="${P1:-$HOME/CNNiEMEA2.ts}"
+P1="${P1:-$HOME/contrib-10m.ts}"
 P2="${P2:-$HOME/t12_2mbps_vidonly.ts}"
 P3="${P3:-$HOME/vbr120.ts}"
 LEAD_S="${LEAD_S:-6}"

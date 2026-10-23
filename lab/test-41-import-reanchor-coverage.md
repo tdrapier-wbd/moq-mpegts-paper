@@ -53,7 +53,7 @@ elapsed time that depends on the fixture's length.
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
 | Builds | **`ffa5b81b`** (noq), `moq 0.12.1`, built by [`ec2-build-main.sh`](scripts/ec2-build-main.sh); **`9d2a4f6e`** (noq), `moq 0.12.8`, the same feature set built in a separate worktree; **`83ce47fe`** (noq), `main` after the branch flip, carrying #4543 |
 | Relay | Dedicated, same build as the client, `127.0.0.1:4493`, `--quic-congestion-control loss` |
-| Source | `clip30.ts`, the leading ~30 s of `CNNiEMEA2.ts` |
+| Source | `clip30.ts`, the leading ~30 s of `contrib-10m.ts` |
 | Fixtures | [`t41-make-fixtures.sh`](scripts/t41-make-fixtures.sh) — one elementary stream each, own PCR |
 | Rig | [`t41-reanchor-coverage.sh`](scripts/t41-reanchor-coverage.sh) |
 | Domain | **wire**, at **P1**; one sample per arm |
@@ -136,7 +136,7 @@ stand as the record of what the fix had to cover.
 carrying a timestamp below the edge. This confirms claim 1 and it is the behaviour the campaign has
 been seeing all along: every clip in the lab is video-bearing, so every observed #3798 abort has been
 this arm, and the ten-minute figure in [T21](test-21-permanence-soak.md) is the length of
-`CNNiEMEA2.ts` rather than a property of the defect.
+`contrib-10m.ts` rather than a property of the defect.
 
 **Legacy audio re-anchors exactly once.** Both legacy arms publish through their first wrap and abort
 on the second, at a wrap index of 1.98 — just inside the second wrap, which is where the first frame
@@ -224,7 +224,7 @@ co-started 1+1 pair of exports stays byte-identical across it.
 **Procedure.** [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh) on upstream `main` at
 `f8215bc47`, `moq-lite-07` on every process, a local relay, two exports at `--delay 1s --linger 30s`
 co-started before the source, and a supervisor that restarts the import at once. The stimulus is
-`CNNiEMEA2.ts` with one flagged step back 40 s in (`t23-pcr-stimuli.py`: arm A, 1 s back; arm B,
+`contrib-10m.ts` with one flagged step back 40 s in (`t23-pcr-stimuli.py`: arm A, 1 s back; arm B,
 600 s back), played for 90 s. Pipe-fed, the importer reads `tsp -P regulate` directly; through the
 gateway, the source goes over SRT to the srt-ingest shape and multicast to a supervised
 `tsp -I ip | moq import ts`, as [T40](test-40-continuous-join-through-srt.md)'s chain does. Three

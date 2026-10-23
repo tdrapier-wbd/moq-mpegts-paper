@@ -54,7 +54,7 @@
 set -uo pipefail
 BIN=${1:?bin dir with moq and moq-relay}
 OUT=${2:-$HOME/t6-relay-kill}
-SRC=${SRC:-$HOME/CNNiEMEA2.ts}
+SRC=${SRC:-$HOME/contrib-10m.ts}
 PORT=${PORT:-4443}
 UDP=${UDP:-$((PORT + 1000))}
 MODE=${MODE:-relay}

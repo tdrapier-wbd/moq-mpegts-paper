@@ -7,7 +7,7 @@ it by naming the cell rather than by restating the estate.
 
     mkstate2.py --cache-control "max-age=5"
     mkstate2.py --disable affdkey --mark "withdraw affiliate D"
-    mkstate2.py --relicense affdkey=tnt --mark "narrow D to tnt only"
+    mkstate2.py --relicense affdkey=ch2 --mark "narrow D to ch2 only"
     mkstate2.py --keymap affakey=/path/other.pub.jwk
 """
 import argparse

@@ -47,7 +47,7 @@ SAMPLE=${SAMPLE:-60}
 MOQ=${MOQ:-/home/ubuntu/bin-main-eab96019/moq}
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-/home/ubuntu/bin-main-eab96019/moq-relay}
-CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
+CLIP=${CLIP:-/home/ubuntu/contrib-10m.ts}
 NETNS=${NETNS:-/home/ubuntu/t8b/t8b-netns.sh}
 DIR=${DIR:-/home/ubuntu/t8b/soak}
 

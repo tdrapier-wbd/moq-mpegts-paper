@@ -42,7 +42,7 @@ wrong in practice. All three are now settled, in the affirmative:
   window in which an unauthorised subscription is accepted and then torn down". That is a claim about
   bytes on a wire, and it is now checked against one: zero payload bytes on every refusing arm.
 - **Whether the path algebra matches how channels are actually named.** Grants are path prefixes and
-  matching is segment-aware, so `cnn` should not cover `cnn-intl`. Broadcast channel naming is full
+  matching is segment-aware, so `ch1` should not cover `ch1-intl`. Broadcast channel naming is full
   of shared stems, and a prefix model that got this wrong would hand affiliates feeds they had not
   licensed while every configuration file looked correct. It does not get it wrong.
 - **Whether an unlicensed channel is confidential or merely undeliverable.** [Control](../docs/control-plane.md)
@@ -72,7 +72,7 @@ publisher carrying a known clip, and a subscriber per arm.
 | Relay | `moq-relay` 0.14.16-`fd4f5d82e` |
 | Publisher / subscriber | `moq` 0.11.0-`fd4f5d82e` |
 | Credential tooling | `moq token generate` / `sign` / `verify` from the same build |
-| Source | 30 s of the reference CNN clip: 198,404 packets, 9,945,951 b/s, 0 invalid syncs, 0 transport errors, looped and paced at its own PCR rate |
+| Source | 30 s of the reference news clip: 198,404 packets, 9,945,951 b/s, 0 invalid syncs, 0 transport errors, looped and paced at its own PCR rate |
 | Capture | `lab/scripts/t36-wiretap.py`, a userspace datagram forwarder, plus the subscriber's own output |
 
 **The capture instrument is a substitution, and the reason matters.** `tcpdump` on this host needs
@@ -107,9 +107,9 @@ share a stem.
 Each arm attempts one subscribe with one credential and is graded on three things at once: what the
 relay logged, what the subscriber received, and what crossed the wire.
 
-The estate as provisioned: broadcaster `wbd` publishing `cnn`, `cnn-intl`, `tnt` and `nobody`;
-broadcaster `rival` publishing its own `cnn`. Affiliate A licenses `cnn`, affiliate B licenses `cnn`
-and `tnt`, affiliate C licenses `tnt`. `cnn-intl` and `nobody` are licensed by no one — the first is
+The estate as provisioned: broadcaster `bcast` publishing `ch1`, `ch1-intl`, `ch2` and `nobody`;
+broadcaster `rival` publishing its own `ch1`. Affiliate A licenses `ch1`, affiliate B licenses `ch1`
+and `ch2`, affiliate C licenses `ch2`. `ch1-intl` and `nobody` are licensed by no one — the first is
 the shared-stem trap, the second a control. Every channel is live and paced throughout.
 
 | Arm | Credential | Target | Expected | **Result** | **Payload bytes** |
@@ -124,12 +124,12 @@ the shared-stem trap, the second a control. Every channel is live and paced thro
 | A6c | claims widened after signing | licensed channel | refused | **refused** | **0** |
 | A7 | subscribe-only | publish to a licensed channel | refused | **refused** | **0** |
 | A8 | publish-only | subscribe to the same channel | refused | **refused** | **0** |
-| A9 | grant for `cnn` | `cnn-intl` | refused | **refused** | **0** |
+| A9 | grant for `ch1` | `ch1-intl` | refused | **refused** | **0** |
 | A10 | grant for the parent path | a child beneath it | admitted, narrowing correctly | **admitted, narrowed correctly** | **7,183,856** |
 
 Arms A9 and A10 were nominated in advance as the two most likely to surprise, because they are where
 a prefix model and an operator's mental model can diverge silently. Neither did: the segment-aware
-matching holds, `cnn` does not reach `cnn-intl`, and the parent grant confers every child without
+matching holds, `ch1` does not reach `ch1-intl`, and the parent grant confers every child without
 reaching past the tenant boundary.
 
 ### Refusal arrives by two different mechanisms, and only one of them says so
@@ -163,16 +163,16 @@ broadcast the relay announces.
 
 | Credential | Licensed | Announced |
 |---|---|---|
-| Affiliate A | `cnn` | `cnn` |
-| Affiliate B | `cnn`, `tnt` | `cnn`, `tnt` |
-| Affiliate C | `tnt` | `tnt` |
-| Broadcaster parent grant | all of `wbd` | `cnn`, `cnn-intl`, `nobody`, `tnt` |
+| Affiliate A | `ch1` | `ch1` |
+| Affiliate B | `ch1`, `ch2` | `ch1`, `ch2` |
+| Affiliate C | `ch2` | `ch2` |
+| Broadcaster parent grant | all of `bcast` | `ch1`, `ch1-intl`, `nobody`, `ch2` |
 
 Each affiliate is announced exactly its licensed set. The parent-grant row is what makes the other
 three mean something: it shows the relay knows about all four channels on the same connection path
 and is genuinely filtering the announcement per credential, rather than the unlicensed channels
 being invisible for some unrelated reason. An affiliate cannot enumerate its broadcaster's estate,
-and cannot tell that `cnn-intl` exists.
+and cannot tell that `ch1-intl` exists.
 
 ### Wire confidentiality
 
@@ -187,15 +187,15 @@ confidential on the wire, and the relay, which terminates the session, sees it.
 ### The path algebra, measured directly
 
 Criterion 5 asks whether a parent grant confers its children and stops at the tenant boundary. The
-broadcaster's grant — rooted at `wbd`, subscribing the empty prefix — was pointed at each channel in
+broadcaster's grant — rooted at `bcast`, subscribing the empty prefix — was pointed at each channel in
 turn:
 
 | Target | Bytes delivered |
 |---|---|
-| `wbd/cnn` | 4,328,136 |
-| `wbd/tnt` | 5,702,416 |
-| `wbd/cnn-intl` | 7,196,076 |
-| `rival/cnn` | **0** |
+| `bcast/ch1` | 4,328,136 |
+| `bcast/ch2` | 5,702,416 |
+| `bcast/ch1-intl` | 7,196,076 |
+| `rival/ch1` | **0** |
 
 It reaches every child of its own root, including the shared-stem channel that affiliate A's
 narrower grant could not reach, and stops dead at the other broadcaster. Grants rebase onto the

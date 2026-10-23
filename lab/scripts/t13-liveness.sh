@@ -27,7 +27,7 @@ set -uo pipefail
 
 LABEL=${1:-run}
 BIN=${BIN:?set BIN to the moq binary dir}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 PORT=${PORT:-4479}
 RUN_S=${RUN_S:-30}
 OUT=${OUT:-$HOME/t13-liveness}/$LABEL

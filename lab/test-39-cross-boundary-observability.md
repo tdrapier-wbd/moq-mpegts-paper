@@ -89,7 +89,7 @@ tests exactly that and it holds. It is not sufficient, for reasons Part B gives.
 
 Build under test `moq` 0.11.0-`fd4f5d82e` / `moq-relay` 0.14.16-`fd4f5d82e` from `~/bin-3529/`;
 groomer `mpegts-pacer` `5ab84cd`, **unmodified**. Loopback, macOS, `--server-quic-gso=false`.
-Source `CNNiEMEA.ts`: AVC video on PID 111 (also PCR), MPEG-1 audio on 121, AC-3 on 123, teletext on
+Source `contrib-5m.ts`: AVC video on PID 111 (also PCR), MPEG-1 audio on 121, AC-3 on 123, teletext on
 131, three SCTE-35 PIDs. Detector `lab/scripts/ts-liveness.py`.
 
 **The hard constraint on this experiment is that `mpegts-pacer` gets no changes.** Any client-edge
@@ -188,7 +188,7 @@ tier 3, and across this boundary that means tier 3.
 *Measured*, six cells, all passing, with an oracle control. A single token bearing `--subscribe` for
 the media prefix and `--publish` for the telemetry prefix is honoured for each on its own prefix and
 refused for the other's, and a neighbouring tenant's telemetry prefix is refused. Matching is
-segment-aware, so `cnn.telemetry` and `cnn` are distinct prefixes rather than one being a prefix of
+segment-aware, so `ch1.telemetry` and `ch1` are distinct prefixes rather than one being a prefix of
 the other by string comparison.
 
 **The starting hypothesis is confirmed at the authorization and routing layer.** The relay will let a
@@ -382,7 +382,7 @@ that the wire cannot publish at all.
 **The mechanism is scoped interest, not refusal.** The relay, acting as subscriber toward the
 publishing client, opens announce-interest narrowed to the token's publish scope — visible in its own
 log as `subscribe_namespace sent prefix=affa.telemetry` — and a conforming publisher announces only
-what matches. A client holding `tnt/<leaf>` therefore emits no `PUBLISH_NAMESPACE` at all, and the
+what matches. A client holding `ch2/<leaf>` therefore emits no `PUBLISH_NAMESPACE` at all, and the
 relay's log contains none for that path. **Nothing refuses the announcement because the announcement
 is never made.** moq-lite does the same via the prefix on its `AnnounceRequest`.
 

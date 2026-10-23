@@ -62,7 +62,7 @@ LABEL=${2:-$ARM}
 MOQ=${MOQ:-$HOME/bin-3006/moq}
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-3006/moq-relay}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 GRADER=${GRADER:-$HOME/f11/t8b-c3-span.py}
 OUT=${OUT:-$HOME/f11}/$LABEL
 

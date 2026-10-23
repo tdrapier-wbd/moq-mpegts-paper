@@ -4,7 +4,7 @@
 `ts-continuous-source.py` shifts the whole clip by its PCR span. That keeps PCR, PTS and DTS
 monotone, but each join splices the partial PES at the end of one pass onto the partial PES at
 the start of the next, and steps every track's frame grid by whatever fraction of a frame the
-span leaves over. On `CNNiEMEA2.ts` the MP2 and AC-3 buffers underflow there, and a 35 min
+span leaves over. On `contrib-10m.ts` the MP2 and AC-3 buffers underflow there, and a 35 min
 export run stopped at the first join ([T47](../test-47-fixed-delay-export.md) § Corrections).
 
 This cuts each pass from one keyframe to another whose decode time is a whole number of every

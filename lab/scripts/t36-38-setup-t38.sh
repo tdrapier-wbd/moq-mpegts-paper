@@ -15,14 +15,14 @@ exp = sys.argv[1]
 m = json.load(open(f"{W}/matrix.json"))
 priv = {  # kid -> private key file
     "affakey": "affa", "affbkey": "affb", "affckey": "affc",
-    "affdkey": "affd", "affecnnkey": "affe-cnn", "affetntkey": "affe-tnt",
+    "affdkey": "affd", "affech1key": "affe-ch1", "affech2key": "affe-ch2",
     "afffkey": "afff",
 }
 for kid, spec in m["affiliates"].items():
     if kid not in priv:
         continue
     args = [f"{os.path.expanduser('~')}/bin-3529/moq", "token", "sign",
-            "--key", f"{W}/keys/{priv[kid]}.jwk", "--root", "wbd",
+            "--key", f"{W}/keys/{priv[kid]}.jwk", "--root", "bcast",
             "--expires", exp]
     for ch in spec["licensed"]:
         args += ["--subscribe", ch]

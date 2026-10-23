@@ -77,7 +77,7 @@ once the transient it started in has decayed. Nothing in the campaign had tested
 - **Build under test:** merged upstream `main` — `moq` 0.10.0 / `moq-relay` 0.14.15, built on the host at
   `222cc72`, containing [#3351](https://github.com/moq-dev/moq/pull/3351); `mpegts-pacer` built from
   `5ab84cd`.
-- **Source:** `SOURCE_MODE=continuous` — `lab/scripts/ts-continuous-source.py` replays `~/CNNiEMEA2.ts`
+- **Source:** `SOURCE_MODE=continuous` — `lab/scripts/ts-continuous-source.py` replays `~/contrib-10m.ts`
   with the timeline advancing across the join (graded before use; see [§ The source](#the-source-and-why-one-had-to-be-built)).
 - **Chain:** continuous source → `moq import ts` → relay → `moq export ts --latency-max 500ms` →
   `mpegts-pacer - 11000000 --latency-ms 1000 --max-latency-ms 2500 --stall-ms 1000 --on-stall mute` →
@@ -92,7 +92,7 @@ once the transient it started in has decayed. Nothing in the campaign had tested
 - **Host:** EC2 primary, `c6in.large`, 2 vCPU / 3.8 GB, `eu-west-1a`. Loopback, no shaping, no netns.
 - **Build under test:** `moq 0.9.11-eab96019` / `moq-relay 0.14.11-eab96019` (`main` @ `eab960192`,
   carries [#3351](https://github.com/moq-dev/moq/pull/3351)); `mpegts-pacer` at `41e6181`.
-- **Source:** `~/CNNiEMEA2.ts`, `md5 364ce82c…`, looped by `tsp -I file --infinite -P regulate
+- **Source:** `~/contrib-10m.ts`, `md5 364ce82c…`, looped by `tsp -I file --infinite -P regulate
   --pcr-synchronous`. The loop wraps about every 665 s.
 - **Chain and rig:** as above, with `tsp --infinite` in place of the continuous source.
 
@@ -358,7 +358,7 @@ The first run used `tsp --infinite`; that stimulus is wrong for a permanence soa
 `lab/scripts/ts-continuous-source.py` replays the clip and advances the timeline across the join, so
 the output is what a continuous encoder emits. **It was graded before it was trusted**, because a
 source that only looks continuous would confound the run it is supposed to clean up. Two passes of
-`CNNiEMEA2.ts`, 49,148 PCRs:
+`contrib-10m.ts`, 49,148 PCRs:
 
 | | measured | required |
 |---|---|---|

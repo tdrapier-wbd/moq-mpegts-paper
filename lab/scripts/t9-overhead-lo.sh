@@ -19,7 +19,7 @@ set -uo pipefail
 BIN=${BIN:-/home/ubuntu/bin-0.14.9}
 moq_cli_detect "$BIN/moq" "${RELAY:-}"
 PORT=${PORT:-8043}
-SRC=${SRC:-${2:-/home/ubuntu/CNNiEMEA2.ts}}
+SRC=${SRC:-${2:-/home/ubuntu/contrib-10m.ts}}
 WINDOW=${WINDOW:-${1:-40}}
 BCAST=t9lo.$$.hang
 RELAY=""; PUB=""; SUB=""

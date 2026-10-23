@@ -47,7 +47,7 @@ that gate be met:
 | | |
 |---|---|
 | Rig | One laptop (macOS, Apple silicon), loopback |
-| Source | `~/CNNiEMEA2.ts` — 1080i25 H.264, 9,945,951 b/s CBR, 4.57 % null stuffing, video PID 111 |
+| Source | `~/contrib-10m.ts` — 1080i25 H.264, 9,945,951 b/s CBR, 4.57 % null stuffing, video PID 111 |
 | Publisher | `tsp -I file --infinite -P regulate --pcr-synchronous --wait-min 5` |
 | **Build under test** | `moq 0.9.12-61678fd32` — the #2967 merge commit, built from a detached worktree so the working checkout is untouched |
 | **Control build** | `moq 0.9.10-eab960192` — `~/bin-main`, the binaries every prior result was measured on |
@@ -77,7 +77,7 @@ is the only variable in the content-dependence arms.
 | Exporter | `moq 0.10.0-f8236680b` (`~/bin-3351`), `--latency-max 500ms`, unchanged across every arm |
 | **Groomer under test** | `mpegts-pacer` at `64595f6` |
 | **Groomer control** | `mpegts-pacer` at `71e242d`, the build measurement 10 used |
-| Sources | `~/CNNiEMEA2.ts`; `burst-moderate.ts` and `burst-high.ts` from [`t19-make-burst-sources.sh`](scripts/t19-make-burst-sources.sh) |
+| Sources | `~/contrib-10m.ts`; `burst-moderate.ts` and `burst-high.ts` from [`t19-make-burst-sources.sh`](scripts/t19-make-burst-sources.sh) |
 | Rigs | [`t18-arm.sh`](scripts/t18-arm.sh) unaltered for the wire; [`t19-cushion-sweep.sh`](scripts/t19-cushion-sweep.sh) for the file domain; [`t19-frame-burst.py`](scripts/t19-frame-burst.py) for the source burst profile |
 | Window | 90 s per wire arm, plus one 300 s arm; 20 s export capture for the file sweep |
 | Mux rate | 11,000,000 b/s on every arm |
@@ -553,7 +553,7 @@ property of our content rather than of our build. `test/ts/run.sh --live` at 120
 
 ### The exporter on a real contribution clip
 
-60 s captures, `~/CNNiEMEA2.ts`, [`t19-pcr-grid.sh`](scripts/t19-pcr-grid.sh) and
+60 s captures, `~/contrib-10m.ts`, [`t19-pcr-grid.sh`](scripts/t19-pcr-grid.sh) and
 [`t19-pcr-positions.py`](scripts/t19-pcr-positions.py). The value domain is unchanged from #2967 and
 still exact: 2,378 intervals, min = mean = max = 25.000 ms, 0 above 40 ms, 0 sub-millisecond, PCR on PID
 111 only, adaptation-only packets, reserved bits `0x3F`, 0 continuity events.

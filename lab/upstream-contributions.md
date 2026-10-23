@@ -494,7 +494,7 @@ it pads to the recorded multiplex rate and writes a PCR every 25 ms of media tim
 merged build. At P0, on H.264 plus two AAC tracks, stopping video and one audio track halfway through a
 6 s run freezes those two rows, whose `quiet` reaches 2.975 s and 3.0 s of the 3 s stall, while the
 surviving audio keeps counting and the PAT keeps repeating. At P1, live and co-resident on a local
-relay, `CNNiEMEA2.ts` with its MP2 PID dropped about 19 s in made `export ts` log `pid=121
+relay, `contrib-10m.ts` with its MP2 PID dropped about 19 s in made `export ts` log `pid=121
 track=".mp2" units=729 quiet=Some(850ms)` once, about a second after the publisher's own line, while
 the PAT, video, AC-3 and teletext held their rates. There is no *before* figure, because `main` had no
 egress rows.
@@ -529,7 +529,7 @@ maintainer's one pre-merge fix. At P0 there are 13 tests, one stimulus per check
 way, each imported both in whole packets and in 100-byte pieces; five of six mutants of the checks were
 killed and one is equivalent. Every `test_data` capture reads zero except `kyrion_mpeg2av_ac3.ts`,
 which reads two `PAT_error_2` and two `PMT_error_2` against a PAT repetition TSDuck measures at 811 ms.
-On the 72 s `t23_F` excerpt of `CNNiEMEA2.ts` the clean file reads zero, twenty packet-aligned 7-packet
+On the 72 s `t23_F` excerpt of `contrib-10m.ts` the clean file reads zero, twenty packet-aligned 7-packet
 drops read 28 continuity errors (split 20, 3, 4 and 1 over four PIDs, exactly TSDuck's `continuity`
 plugin on the same file), one TEI packet reads one transport error, and twenty unaligned 1,456-byte cuts
 read 20 sync losses and 40 sync-byte errors. At P1, PCR-paced by `tsp` into `moq import ts` on a local
@@ -1146,7 +1146,7 @@ while bytes between consecutive PCRs run 188 B to 870,628 B (median **1,316 B**,
 **The grader is [#4493](https://github.com/moq-dev/moq/pull/4493)**, merged as `18d7c2530` (`test(ts)` only).
 It adds `pcr-schedule` to `test/ts/pcr-timing.py` — bytes between consecutive PCRs on one PID, never
 pooled, against `--mux-rate`, tolerance ±1 % or one packet — report-only unless `--schedule-pct-min` is set.
-Verified on upstream `main` `9d2a4f6e9`, file domain, harness loopback: `moq export ts` of the real CNN cut
+Verified on upstream `main` `9d2a4f6e9`, file domain, harness loopback: `moq export ts` of the real news cut
 returns **3.09 %** of intervals within tolerance (exit 1 at `--schedule-pct-min 99`) and median **1,316 /
 31,081 B**, reproducing the T13 residual while the source clip grades 100 % (30,644 / 30,644 B). The
 harness's generated `ffmpeg -muxrate` clip grades 100 % (25,004 / 25,004 B) and its export 92–97 % over
@@ -1412,7 +1412,7 @@ under one 90 kHz tick.
 **[#4513](https://github.com/moq-dev/moq/pull/4513):** one shift per importer, PCR-bounded hold;
 fails on `main` at 6.7 → 138.7 ms over four passes (6.7 ms source).
 
-**Before and after** `[unmerged]`, P1, co-resident: first 100,000 packets of `CNNiEMEA.ts` looped 56
+**Before and after** `[unmerged]`, P1, co-resident: first 100,000 packets of `contrib-5m.ts` looped 56
 s, `main` at `6a016409` vs PR:
 
 | Pass | `main`, `import srt`: AC-3 | MP2 | PR both codecs |
@@ -1430,7 +1430,7 @@ against the pre-flip `main`.
 
 **What #4543 does instead**, P1, co-resident: the `dev` line at `9a80e875` (since become `main`)
 against the pre-flip `main` at `6a016409`; [T23](test-23-pcr-discontinuity-classes.md) arms from
-`CNNiEMEA2.ts`, event at 30 s, 60 s PCR-paced. The `--linger` column cherry-picks #4504.
+`contrib-10m.ts`, event at 30 s, 60 s PCR-paced. The `--linger` column cherry-picks #4504.
 
 | Stimulus at 30 s | Pipe `import ts` | SRT `export ts` | SRT `--linger 10s` |
 |---|---|---|---|
@@ -1476,7 +1476,7 @@ in `aae930a23`).
 packet; `transport_error_indicator` drops are already correct.
 
 **Measured** on the `dev` line and on the pre-flip `main`, P1, co-resident pipe, 72 s
-`CNNiEMEA2.ts`, one damage at 20 s:
+`contrib-10m.ts`, one damage at 20 s:
 
 | Damage | `dev` @ `9a80e875` | `main` @ `6a016409` |
 |---|---|---|

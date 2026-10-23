@@ -60,10 +60,10 @@ cd $W
 # a fault that had never been built. `--seconds` does not exist on this plugin at all, and the
 # first attempt suppressed that error with 2>/dev/null. Errors are not suppressed here.
 echo "building source: ${PRE}s with audio, then ${POST}s without PID $AUDIO_PID"
-tsp -I file ~/CNNiEMEA.ts -P until --pcr-based --milli-seconds $((PRE * 1000)) \
+tsp -I file ~/contrib-5m.ts -P until --pcr-based --milli-seconds $((PRE * 1000)) \
 	-O file $W/p1.ts || exit 1
 N1=$(($(stat -f%z $W/p1.ts) / 188))
-tsp -I file ~/CNNiEMEA.ts -P skip --packets "$N1" \
+tsp -I file ~/contrib-5m.ts -P skip --packets "$N1" \
 	-P until --pcr-based --milli-seconds $((POST * 1000)) \
 	-P filter --negate --pid $AUDIO_PID -O file $W/p2.ts || exit 1
 cat $W/p1.ts $W/p2.ts >$W/src.ts
@@ -110,12 +110,12 @@ C=""${MOQ_FP[@]}" $FP --quic-gso=false"
 # multiple of the worst spacing seen in it -- a detector armed at 8.4 s is not a detector. The
 # explicit values are generous against the clip's measured cadences and the point here is the
 # tier split, not the detection latency, which T27 already measured properly.
-($M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast cnn export ts 2>$W/logs/mon-sub.log |
+($M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast ch1 export ts 2>$W/logs/mon-sub.log |
 	python3 $R/ts-liveness.py - --gap "111:1000,121:1500,123:1500" --jsonl \
 		>$W/out/liveness.jsonl 2>$W/logs/mon.log) &
 
 # --- consumer 1: the groomer, unmodified ----------------------------------------------------
-($M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast cnn export ts 2>$W/logs/groom-sub.log |
+($M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast ch1 export ts 2>$W/logs/groom-sub.log |
 	$PACER - auto >$W/out/groomed.ts 2>$W/logs/pacer.log) &
 
 # --- consumer 3: the relay's own view, i.e. tier 2 ------------------------------------------
@@ -127,7 +127,7 @@ C=""${MOQ_FP[@]}" $FP --quic-gso=false"
 sleep 3
 
 tsp -I file $W/src.ts -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast cnn import ts \
+	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/" $C --broadcast ch1 import ts \
 		>$W/logs/pub.log 2>&1 &
 PUB=$!
 T0=$(python3 -c 'import time;print(repr(time.time()))')

@@ -20,19 +20,19 @@ FP=$(cat $W/fp.txt)
 LB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/t37-lastbyte.py
 ID="$1"; SETTLE="$2"; OBSERVE="$3"; shift 3
 TOKA="${TOKA:-affa.jwt}"
-CHAN="${CHAN:-cnn}"
+CHAN="${CHAN:-ch1}"
 TOTAL=$((SETTLE + OBSERVE))
 BOFF="${BOFF:-100ms}"
 
 sub() {  # sub <role> <tokenfile> <channel>
   timeout $TOTAL ~/bin-3529/moq --backoff-timeout "$BOFF" \
-      "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/$2)" \
+      "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/$2)" \
       "${MOQ_FP[@]}" "$FP" export --broadcast "$3" ts 2> $W/logs/$ID-$1.log \
     | python3 $LB --out $W/out/$ID-$1.ts --record $W/lastbyte.jsonl --mark "$ID-$1" > /dev/null &
 }
 
 sub A "$TOKA" "$CHAN"
-sub C affb.jwt cnn
+sub C affb.jwt ch1
 sleep "$SETTLE"
 # randomised sub-cadence phase, so the decision does not land at a fixed point
 # in the poll cycle (see sweep-d2.sh)

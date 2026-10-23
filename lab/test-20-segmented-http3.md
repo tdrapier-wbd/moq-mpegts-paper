@@ -65,7 +65,7 @@
 - **One host, all arms.** The EC2 secondary (`<EC2_SECONDARY>`), `c6in.2xlarge`, 8 vCPU / 15 GB,
   Ubuntu 26.04, `eu-west-1b`. Publisher, origin, impairment lane and receiver are all on loopback, so
   the arms share a clock and a shaper and differ only where the experiment intends.
-- **Source:** `~/CNNiEMEA2.ts`, 9,945,951 bps CBR, 1080i25 H.264 + MP2 + AC-3 + teletext + 3× SCTE-35.
+- **Source:** `~/contrib-10m.ts`, 9,945,951 bps CBR, 1080i25 H.264 + MP2 + AC-3 + teletext + 3× SCTE-35.
 - **Packager (identical for both HLS arms):**
   `tsp --realtime -I file <src> --infinite -P regulate --pcr-synchronous -O hls --live 6
   --live-extra-segments 3 --duration 2 --intra-close --align-first-segment`.

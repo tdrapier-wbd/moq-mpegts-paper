@@ -21,7 +21,7 @@ MOQ=${MOQ:-$HOME/bin-main-eab96019/moq}
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-main-eab96019/moq-relay}
 PACER=${PACER:-$HOME/pacer-instr/mpegts-pacer}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 RATE=${RATE:-11000000}
 PORT=${PORT:-4473}
 DIR=${DIR:-$HOME/t21attr}

@@ -6,7 +6,7 @@
 # Every clip-based source ends or loops. On builds carrying #3798, `moq import ts` exits with *frame
 # timestamp is below the live edge* at the first lap of a looped clip and at the first join of
 # `ts-continuous-source.py` (T40, T41), so no clip-fed publisher outlives one pass of the clip
-# (~600 s for CNNiEMEA2.ts). A live encoder has no lap and no join, which is what a run longer than
+# (~600 s for contrib-10m.ts). A live encoder has no lap and no join, which is what a run longer than
 # the clip needs. It is not the clip: synthetic picture and tone, one H.264 video and one MP2 audio
 # stream, a 1 s GOP with no B-frames. Set the video rate so the relay carries what the clip did.
 #

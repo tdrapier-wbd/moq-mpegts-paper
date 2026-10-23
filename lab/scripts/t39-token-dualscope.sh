@@ -22,15 +22,15 @@
 #
 # Cells, each with its verdict fixed before the run:
 #
-#   1  subscribe cnn                  MUST ADMIT   the media grant
+#   1  subscribe ch1                  MUST ADMIT   the media grant
 #   2  publish   affa.telemetry       MUST ADMIT   the telemetry grant, same token
-#   3  publish   tnt                  MUST REFUSE  a subscriber must not publish media
-#   4  subscribe tnt                  MUST REFUSE  an unlicensed channel
+#   3  publish   ch2                  MUST REFUSE  a subscriber must not publish media
+#   4  subscribe ch2                  MUST REFUSE  an unlicensed channel
 #   5  publish   affb.telemetry       MUST REFUSE  another affiliate's telemetry path
 #   6  publish   affa.telemetry/gw1   MUST ADMIT   the prefix must cover a per-gateway sub-path
 #
-# Cell 3 uses `tnt` rather than `cnn` deliberately: the estate's legitimate publisher is on
-# `cnn`, so a subscriber there reads bytes whether or not the rogue publish was admitted, and
+# Cell 3 uses `ch2` rather than `ch1` deliberately: the estate's legitimate publisher is on
+# `ch1`, so a subscriber there reads bytes whether or not the rogue publish was admitted, and
 # the cell would pass for the wrong reason.
 #
 # Usage: t39-token-dualscope.sh
@@ -49,15 +49,15 @@ EXP=$(($(date +%s) + 7200))
 # --- estate -------------------------------------------------------------------
 # Nothing below prints key or token material.
 $M token generate --algorithm HS256 --id affa --out-dir $W/keydir >/dev/null 2>&1
-$M token generate --algorithm HS256 --id wbd --out-dir $W/keydir >/dev/null 2>&1
+$M token generate --algorithm HS256 --id bcast --out-dir $W/keydir >/dev/null 2>&1
 
 # THE TOKEN UNDER TEST: one token, two unrelated grants.
-$M token sign --key $W/keydir/affa.jwk --root wbd \
-	--subscribe cnn --publish affa.telemetry --expires $EXP >$W/tok/dual.jwt
+$M token sign --key $W/keydir/affa.jwk --root bcast \
+	--subscribe ch1 --publish affa.telemetry --expires $EXP >$W/tok/dual.jwt
 # The estate's own publisher, and a privileged reader used only as the oracle.
-$M token sign --key $W/keydir/wbd.jwk --root wbd --publish "" --expires $EXP >$W/tok/pub.jwt
-$M token sign --key $W/keydir/wbd.jwk --root wbd --subscribe "" --expires $EXP >$W/tok/oracle.jwt
-echo "one token under test: root=wbd subscribe=[cnn] publish=[affa.telemetry]"
+$M token sign --key $W/keydir/bcast.jwk --root bcast --publish "" --expires $EXP >$W/tok/pub.jwt
+$M token sign --key $W/keydir/bcast.jwk --root bcast --subscribe "" --expires $EXP >$W/tok/oracle.jwt
+echo "one token under test: root=bcast subscribe=[ch1] publish=[affa.telemetry]"
 
 # --- relay --------------------------------------------------------------------
 $M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
@@ -77,12 +77,12 @@ JWT=$(cat $W/tok/dual.jwt)
 PJWT=$(cat $W/tok/pub.jwt)
 OJWT=$(cat $W/tok/oracle.jwt)
 
-url() { echo "https://127.0.0.1:$PORT/wbd?jwt=$1"; }
+url() { echo "https://127.0.0.1:$PORT/bcast?jwt=$1"; }
 
 # --- the estate's legitimate media publisher, for the subscribe cells ----------
 tsp -I file ~/t12_vidonly.ts --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
 	$M "${MOQ_DIAL[1]}" "$(url "$PJWT")" "${MOQ_FP[@]}" "$FP" \
-		--quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
+		--quic-gso=false --broadcast ch1 import ts >$W/logs/pub.log 2>&1 &
 PUB=$!
 trap 'kill $RELAY $PUB 2>/dev/null' EXIT
 sleep 5
@@ -131,10 +131,10 @@ report() {
 
 echo
 echo "cell op        path                   expected  observed      bytes"
-sub_cell 1 cnn ADMIT "the media grant"
+sub_cell 1 ch1 ADMIT "the media grant"
 pub_cell 2 affa.telemetry ADMIT "telemetry, same token"
-pub_cell 3 tnt REFUSE "subscriber must not publish media"
-sub_cell 4 tnt REFUSE "unlicensed channel"
+pub_cell 3 ch2 REFUSE "subscriber must not publish media"
+sub_cell 4 ch2 REFUSE "unlicensed channel"
 pub_cell 5 affb.telemetry REFUSE "another affiliate's telemetry"
 pub_cell 6 affa.telemetry/gw1 ADMIT "per-gateway sub-path"
 
@@ -142,7 +142,7 @@ pub_cell 6 affa.telemetry/gw1 ADMIT "per-gateway sub-path"
 # or every REFUSE above is unfalsifiable.
 echo
 timeout 8 $M "${MOQ_DIAL[1]}" "$(url "$OJWT")" "${MOQ_FP[@]}" "$FP" \
-	--quic-gso=false --broadcast cnn export ts >$W/out/oracle-control.ts 2>/dev/null
+	--quic-gso=false --broadcast ch1 export ts >$W/out/oracle-control.ts 2>/dev/null
 OB=$(stat -f%z $W/out/oracle-control.ts 2>/dev/null || echo 0)
 if [ "$OB" -gt 10000 ]; then
 	echo "oracle control: reads a live path, ${OB} B -- a REFUSE above means refused"

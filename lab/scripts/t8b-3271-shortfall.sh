@@ -37,6 +37,7 @@ SPAN=/home/ubuntu/t8b/t8b-c3-span.py
 
 PRE=${PRE:-/home/ubuntu/bin-3271pre/moq}
 POST=${POST:-/home/ubuntu/bin-3271post/moq}
+LOOP_UNIT=${LOOP_UNIT:?the loop publisher unit, stopped for the run (INSTRUCTIONS)}
 REPS=${REPS:-3}
 SECS=${SECS:-150}
 # The clip is 9.95 Mb/s CBR. 8 Mb/s is a real shortfall; 15 Mb/s is the
@@ -56,12 +57,12 @@ echo "pre:  $("$PRE" --version 2>&1 | head -1)"
 echo "post: $("$POST" --version 2>&1 | head -1)"
 
 echo "=== $(date -u +%FT%TZ) stopping loop publisher ==="
-sudo systemctl stop moq-publisher-cnn-loop
+sudo systemctl stop "$LOOP_UNIT"
 
 cleanup() {
 	sudo bash "$NETNS" down >/dev/null 2>&1
-	sudo systemctl start moq-publisher-cnn-loop
-	echo "loop: $(systemctl is-active moq-publisher-cnn-loop)"
+	sudo systemctl start "$LOOP_UNIT"
+	echo "loop: $(systemctl is-active "$LOOP_UNIT")"
 	df -h / | tail -1
 }
 trap cleanup EXIT

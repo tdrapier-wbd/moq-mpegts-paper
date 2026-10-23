@@ -67,7 +67,7 @@ operational rather than adversarial.
 | Relay | loopback, `--auth-public ""`, `--internal-listen` + `--stats-enabled=true` |
 | Publisher | `tsp -I file … --infinite -P regulate --pcr-synchronous` → `moq import ts`, one broadcast |
 | Victims | 2 × `moq export ts --latency-max 2s`, captured to file, running the whole cell |
-| Source | `~/CNNiEMEA2.ts`, 1080i25, ~9.95 Mb/s CBR |
+| Source | `~/contrib-10m.ts`, 1080i25, ~9.95 Mb/s CBR |
 
 ## Procedure
 

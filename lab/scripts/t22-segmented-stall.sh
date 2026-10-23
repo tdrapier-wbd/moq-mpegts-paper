@@ -30,7 +30,7 @@ ARM="${2:?arm: control|input|origin}"
 STALL="${3:-30}"
 WINDOW="${4:-70}"
 
-SRC="${SRC:-$HOME/CNNiEMEA2.ts}"
+SRC="${SRC:-$HOME/contrib-10m.ts}"
 HLS_DIR=/srv/hls/t22seg
 URLBASE=t22seg
 RUN="$HOME/t22seg/$LABEL-$ARM"

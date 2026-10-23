@@ -58,7 +58,7 @@ tsp -I file <name>_paced.ts -P analyze -O drop     # now exact CBR
 python3 mpegts-pacer/test/compliance.py --ts <name>_paced.ts --reference <name>_out.ts
 ```
 
-For the #1979 / #2440 metadata run, `CNNiEMEA2.ts` was fed two ways to separate the lane from the
+For the #1979 / #2440 metadata run, `contrib-10m.ts` was fed two ways to separate the lane from the
 ingest — (A) an `ffmpeg -stream_loop -re -c copy` loop (which re-muxes the container) and (B) a raw
 `tsp regulate --pcr-synchronous` control (source PSI/SI/PIDs reach the lane intact). The subscriber
 is started first so the reservation gate publishes one complete catalog snapshot.
@@ -75,15 +75,15 @@ track. PSI/SI service tables are **not** represented as tracks.
 |---|---|---|
 | `testloop_clean` | `catalog.json`, `0.avc3`, `0.aac` | video 0x0100, audio 0x0101 |
 | `testloop` | `catalog.json`, `0.avc3`, `0.mp2`, `1.mp2`, `0.ts`, `1.ts`, `2.ts` | video 0x0030, audio 0x0040/0x0041(AC-3)/0x0042(VI), teletext 0x0050, SCTE-35 0x0060 |
-| `CNNiEMEA` | `catalog.json`, `0.avc3`, `0.mp2`, `0.ts`…`4.ts` | video 0x006F, audio 0x0079/0x007B(AC-3), teletext 0x0083, SCTE-35 0x008D/8E/8F |
+| `contrib-5m` | `catalog.json`, `0.avc3`, `0.mp2`, `0.ts`…`4.ts` | video 0x006F, audio 0x0079/0x007B(AC-3), teletext 0x0083, SCTE-35 0x008D/8E/8F |
 
 All video, all audio (incl. AC-3 and the visual-impaired commentary), teletext, and **every**
 SCTE-35 splice PID were carried at their **original PID numbers** with **0 CC errors** and 0
-transport errors. The real CNN open-GOP feed produced video successfully.
+transport errors. The real open-GOP news feed produced video successfully.
 
 ### Impairments introduced by the lane (as-shipped, pre-#2440)
 
-| Metric | `testloop_clean` | `testloop` | `CNNiEMEA` | Source (P0) |
+| Metric | `testloop_clean` | `testloop` | `contrib-5m` | Source (P0) |
 |---|---|---|---|---|
 | Egress size captured | 21.0 MB | 65.2 MB | 24.3 MB | — |
 | Continuity-counter errors | 0 | 0 | 0 | 0 |
@@ -103,7 +103,7 @@ and is killed mid-group). The robust figure is the **percentage** over 40 ms. `t
 
 Raw egress → paced egress, same three clips (`regenerate` mode):
 
-| Metric (raw → paced) | `testloop_clean` | `testloop` (4:2:2) | `CNNiEMEA` |
+| Metric (raw → paced) | `testloop_clean` | `testloop` (4:2:2) | `contrib-5m` |
 |---|---|---|---|
 | Target CBR mux rate | 12 Mbps | 33 Mbps | 12 Mbps |
 | Reference bitrate | bursty → **12.000 exact** | bursty → **33.000 exact** | bursty → **12.000 exact** |
@@ -153,7 +153,7 @@ a service record through the catalog and rebuilds the SI on export:
 
 | Metadata field | Source (P0) | As-shipped egress | With PR #2440 |
 |---|---|---|---|
-| SDT (service name / provider) | "CNNI EMEA HD" / "Warner Bros. Discovery" | dropped → (unknown) | **preserved** |
+| SDT (service name / provider) | the source's own | dropped → (unknown) | **preserved** |
 | SDT service type | 0x19 (Advanced-codec HD TV) | dropped → 0x00 | **preserved** |
 | NIT (network) | present (0x0010) | dropped | **preserved** |
 | Transport-stream ID | 0x0000 | regenerated → 0x0001 | **preserved** |
@@ -171,7 +171,7 @@ TDT/TOT is proxied from the source since #2929, with TOT's descriptors byte-iden
 
 No capture held here carries EIT, so the claim that the lane drops it rested on reading the import
 gate rather than on a measurement. [`make-eit-fixture.sh`](scripts/make-eit-fixture.sh) closes that
-by injecting a twelve-event EPG onto PID 0x0012 of `CNNiEMEA2.ts` with `tsp -P eitinject`, anchored
+by injecting a twelve-event EPG onto PID 0x0012 of `contrib-10m.ts` with `tsp -P eitinject`, anchored
 to the clip's own TDT epoch so the present event is genuinely current. The EIT packets are taken
 from the clip's null stuffing, so the fixture is the same 9,945,951 bps CBR stream as the source
 with 0 CC errors, and the two variants (`pf`, `full`) differ only in whether EIT schedule is
@@ -251,7 +251,7 @@ SDT and NIT for N services and a rolling EPG onto this clip's media. That graft 
 contrivance: a real SPTS carved out of a distribution multiplex carries its whole multiplex's SDT,
 NIT and EIT p/f in full.
 
-**SDT and NIT cost nothing after acquisition.** Ten minutes of `CNNiEMEA2.ts`: 7 catalog publishes,
+**SDT and NIT cost nothing after acquisition.** Ten minutes of `contrib-10m.ts`: 7 catalog publishes,
 none caused by SI, 184 B of a 1,587 B catalog. Synthesised to 40 services the standing size grows
 but the churn is still exactly zero, because neither table turns over.
 
@@ -287,7 +287,7 @@ the coherence argument more than the cost one — while showing that the tables 
 would gain nothing from it. It was settled in favour of tracks
 ([#2909](https://github.com/moq-dev/moq/pull/2909), measured in [T17](test-17-si-snapshot-tracks.md)).
 
-Paced `CNNiEMEA2` egress (raw-fed → `auto` regenerate): **10.999 Mbps exact CBR**; PCR > 40 ms
+Paced `contrib-10m` egress (raw-fed → `auto` regenerate): **10.999 Mbps exact CBR**; PCR > 40 ms
 9.08 % → **0 %** (max 320 → 31.9 ms); `pcrverify` > 500 µs → **0/2286**, max |jitter| 6 µs; null
 stuffing 0 → **12.8 % (40,910 pkts)**, 645 PCR-only re-inserted, **0 dropped**; **0 CC**; all 7
 elementary streams + SCTE-35 type 0x86 + descriptors intact; compliance `ts: PASS` (only WARNs:
@@ -324,7 +324,7 @@ is the faithful measure.
 ## Conclusion
 
 The media-aware lane carries all elementary streams and PMT descriptors with 0 CC and rides out the
-CNN open-GOP + triple-SCTE-35 feed deterministically. With `mpegts-pacer` (timing/CBR) and PR #2440
+open-GOP, triple-SCTE-35 news feed deterministically. With `mpegts-pacer` (timing/CBR) and PR #2440
 (service layer) it was broadcast-transparent **except** the time-varying tables and the P2 hardware
 pass (T7). The tables have since been closed upstream on snapshot tracks — EIT measured in
 [T17](test-17-si-snapshot-tracks.md), TDT/TOT proxied from the source — so of those two exceptions,

@@ -9,7 +9,7 @@
 # exports for `seconds` and keeps egress.ts for grading (ts-tstd.py, compliance.py, tsp).
 #
 # env: PORT (4443, UDP, must be reachable between the hosts), CC (delay = BBRv3 on noq),
-#      CLIP (~/CNNiEMEA2.ts), LAT (1s, the export's --delay or --max-age value),
+#      CLIP (~/contrib-10m.ts), LAT (1s, the export's --delay or --max-age value),
 #      OUT (~/t47/xhost), TAP (0; 1 stamps each picture's arrival through t18-latency.py's tap,
 #      VPID 111 by default: into egress.csv on the subscriber, source.csv on the origin; pcr
 #      stamps each PCR on that PID instead, into egress-pcr.csv and source-pcr.csv, for
@@ -28,7 +28,7 @@ IP=${4:?origin public ip}
 SECS=${5:-120}
 PORT=${PORT:-4443}
 CC=${CC:-delay}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 LAT=${LAT:-1s}
 OUT=${OUT:-$HOME/t47/xhost}/$LABEL
 BCAST="t47.xhost.$LABEL.hang"

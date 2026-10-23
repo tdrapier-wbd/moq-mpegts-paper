@@ -51,7 +51,7 @@ PACER="${5:-}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="$HOME/t13_rawsend"
-BCAST="cnn.international.emea.loop.hang"
+BCAST=${BCAST:?the loop publisher broadcast name (INSTRUCTIONS)}
 RELAY="https://localhost:443/anon"
 SETTLE=6
 

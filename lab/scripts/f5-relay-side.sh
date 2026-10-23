@@ -16,7 +16,7 @@
 # the resource whose ceiling this experiment is trying to find. Sending the feed up from the other
 # host costs one 11 Mb/s ingress stream and buys a relay host whose CPU is the relay's alone.
 #
-# This host also carries standing CNN services which are deliberately left running: they cost a
+# This host also carries standing live-feed services which are deliberately left running: they cost a
 # steady ~13 % of the two cores, they are recorded in meta.txt, and per-process accounting means they
 # do not enter the relay's own CPU figure. They *do* move the box's saturation point earlier, which is
 # why the relay's own utilisation is reported alongside the box's rather than instead of it.

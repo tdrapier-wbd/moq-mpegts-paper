@@ -222,7 +222,7 @@ grader.
 ## Environment
 
 Loopback on one laptop. The [T18](test-18-delivery-latency.md) rig, with `ts-remux-live.py` in the
-groomer's place at an 11 Mb/s carrier. Source `CNNiEMEA2.ts`, as in T44. Exporter `ffa5b81b`,
+groomer's place at an 11 Mb/s carrier. Source `contrib-10m.ts`, as in T44. Exporter `ffa5b81b`,
 subscriber `--max-latency 500ms`, and the exporter's default null padding, which the re-multiplexer
 drops. Taps on one host share one clock. The comparators feed the source's own bytes over UDP or SRT
 to `mpegts-pacer` `5ab84cd --stream-clock`, with the cap one step above the cushion, because a
@@ -265,7 +265,7 @@ source's 769.0 ms. The tool's scheduling loop fell behind by up to 167.7 ms, and
 arrived with less than 374.9 ms of its 600 ms lead. Nothing was late.
 
 **The conformant lead holds on a second clip, with more room.** Run 7 repeats run 3's
-configuration on `CNNiEMEA.ts` — a different five-minute capture of the same service, the same
+configuration on `contrib-5m.ts` — a different five-minute capture of the same service, the same
 9,945,951 bps CBR mux and the same PID layout, so the rig and the 11 Mb/s carrier are unchanged. It
 passes all three criteria over 206.3 s: nothing late of 1,300,115 packets and nothing unsent; 0
 continuity errors, 8,255 PCRs all inside ±481 ns and 0 discontinuities; every transport buffer clean;

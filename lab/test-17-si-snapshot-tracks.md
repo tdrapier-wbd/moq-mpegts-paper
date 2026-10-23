@@ -55,7 +55,7 @@ separating from one that passes for the same reason.
 | Build | one worktree, one shared cargo target, each arm's binaries copied out before switching |
 | Test-suite control | the PR's own `moq-mux` suite passes on the build under test (565 tests) |
 | Relay | local, loopback, GSO disabled |
-| Source | CNN International EMEA HD, 9.95 Mbps CBR, H.264 + MP2 + AC-3 + teletext + 3× SCTE-35, NIT + SDT |
+| Source | The news channel, 9.95 Mbps CBR, H.264 + MP2 + AC-3 + teletext + 3× SCTE-35, NIT + SDT |
 | EIT fixture | synthetic — 8 days, 24 events/day, ~120 B of descriptor per event |
 | Segmented lane (§5) | [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh) unchanged: `tsp -O hls` (2 s segments, `--live 6 --live-extra-segments 3`) → `python3 -m http.server` → `tsp -I hls --live`, graded by [`eit-section-diff.py`](scripts/eit-section-diff.py) |
 
@@ -73,10 +73,10 @@ horizon:
 python3 lab/scripts/make-eit-epg.py --out /tmp/epg8d.xml --days 8 --services 1
 
 # inject p/f + schedule, reusing the clip's null stuffing so the mux rate is unchanged
-tsp -I file ~/CNNiEMEA2.ts \
+tsp -I file ~/contrib-10m.ts \
     -P sdt --service-id 1 --eit-pf 1 --eit-schedule 1 \
     -P eitinject --files /tmp/epg8d.xml --wait-first-batch --actual \
-    -O file ~/CNNiEMEA2_eit_sched.ts
+    -O file ~/contrib-10m_eit_sched.ts
 ```
 
 The result is the same 9,945,951 bps CBR stream as the source with clean continuity, carrying four
@@ -103,11 +103,11 @@ which dial-side flag surface the binary speaks (see Corrections). `TGT` selects 
 ```bash
 # fidelity: round-trip the fixture and census the SI PIDs on both sides
 TGT="$BIN/post" BUILD_DESC="PR#2909 5e29b0c87" \
-  lab/scripts/eit-roundtrip.sh ~/CNNiEMEA2_eit_sched.ts 120
+  lab/scripts/eit-roundtrip.sh ~/contrib-10m_eit_sched.ts 120
 
 # join cost: publisher already running and SI already advertised, then five cold joins
-TGT="$BIN/post" lab/scripts/si-join-cost.sh ~/CNNiEMEA2_eit_sched.ts epg8d 5 70
-TGT="$BIN/post" lab/scripts/si-join-cost.sh ~/CNNiEMEA2.ts          noeit 5 70
+TGT="$BIN/post" lab/scripts/si-join-cost.sh ~/contrib-10m_eit_sched.ts epg8d 5 70
+TGT="$BIN/post" lab/scripts/si-join-cost.sh ~/contrib-10m.ts          noeit 5 70
 ```
 
 Each figure is then re-taken with `TGT="$BIN/pre"` for the control.

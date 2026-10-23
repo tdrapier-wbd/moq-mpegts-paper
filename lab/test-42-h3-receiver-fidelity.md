@@ -35,7 +35,7 @@ receiver's work.
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
 | Origin | nginx, existing T20 `h3lab` vhosts — `:8443` TLS/TCP with **no QUIC listener**, `:8444` QUIC with **no TCP listener** |
 | Packager | `tsp -O hls`, VOD (no `--live`), `--duration 2 --intra-close --align-first-segment` |
-| Source | `clip30.ts`, the leading ~30 s of `CNNiEMEA2.ts`; 13 segments, 193,057 packets |
+| Source | `clip30.ts`, the leading ~30 s of `contrib-10m.ts`; 13 segments, 193,057 packets |
 | Transport | `curl` built against ngtcp2/nghttp3 (`~/h3/bin/curl`), `--http3-only` on the H3 arm |
 | Comparators | `tsp` 3.44-4676; `ffmpeg` built `--enable-libcurl` (`~/h3/bin/ffmpeg`) |
 | Rigs | [`p0e-validate-receiver.sh`](scripts/p0e-validate-receiver.sh), [`p0e-launder-test.sh`](scripts/p0e-launder-test.sh) |

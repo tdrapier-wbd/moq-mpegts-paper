@@ -45,7 +45,7 @@
 set -uo pipefail
 
 OUT=${1:-$HOME/t9seg-env}
-SRC=${SRC:-$HOME/CNNiEMEA2.ts}
+SRC=${SRC:-$HOME/contrib-10m.ts}
 SEGSECS=${SEGSECS:-2}
 SETTLE=${SETTLE:-25}
 WINDOW=${WINDOW:-60}

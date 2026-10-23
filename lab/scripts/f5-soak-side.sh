@@ -40,7 +40,7 @@ moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 BCAST=${BCAST:-f5.fanout.hang}
 PORT=${PORT:-4443}
 LATMAX=${LATMAX:-3s}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 SRCGEN=${SRCGEN:-$HOME/f5/ts-continuous-source.py}
 # A script whose stdout is a TS that never ends, used instead of the clip generator: on builds
 # carrying #3798 a clip-fed publisher exits at its first lap, so a soak longer than the clip needs a

@@ -116,7 +116,7 @@ runs alongside as a dead man's handle on the clock itself.
   `moq import ts` → relay (other host) → `moq export ts --latency-max 500ms` → `mpegts-pacer -
   11000000 --latency-ms 1000 --max-latency-ms 2500 --stall-ms 1000 --on-stall mute` →
   `ts-liveness.py`. `--latency-max 500ms` matches T24 so the two are comparable.
-- **Local synthetic arms:** `CNNiEMEA.ts`, 1,983,892 packets, 299.976 s of media, graded from file.
+- **Local synthetic arms:** `contrib-5m.ts`, 1,983,892 packets, 299.976 s of media, graded from file.
 - **Measurement point: after the groomer.** That is where an operator monitors, and it is not the
   same as the exporter's output — see the placement result below.
 

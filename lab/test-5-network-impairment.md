@@ -19,7 +19,7 @@ as a third table, for the reason given under Environment.
 - **Media-aware lane over the real EC2→home internet path.** Impairment applied on the EC2 `ens5`
   egress, filtered to the QUIC media flow only (UDP sport 443 → the subscriber's home IP), so the SSH
   control channel is never impaired. Media-aware lane uses the standing EC2 loop
-  (`cnn.international.emea.loop.hang`, `moq export ts --latency-max 5s`).
+  (`<loop-broadcast>`, `moq export ts --latency-max 5s`).
 - **The opaque lane is not graded here.** Its loss arm is the passthrough's in
   [T48](test-48-passthrough-export.md); an earlier opaque arm in this experiment ran a private
   implementation since retired, and its figures are not carried.
@@ -28,7 +28,7 @@ as a third table, for the reason given under Environment.
 - **Controlled head-to-head (segmented HTTP against the media-aware lane), whole chain on the origin
   host.** Rigs: [`t5-impair-arm.sh`](scripts/t5-impair-arm.sh) and
   [`t5-impair-sweep.sh`](scripts/t5-impair-sweep.sh). Publisher, origin/relay and receiver are all
-  local, so the impairment is the only variable; the fixture is `~/CNNiEMEA2.ts` (9,945,951 bps CBR) on
+  local, so the impairment is the only variable; the fixture is `~/contrib-10m.ts` (9,945,951 bps CBR) on
   both arms, in a 40 s window, with a 15 ms base delay applied to the payload direction in every cell
   including the baselines. The media-aware arm runs against a **private** relay on a high port with the
   congestion controller pinned to `delay` (BBR), never the standing `:443`.

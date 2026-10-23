@@ -94,7 +94,7 @@ run_cell() { # <estate size>
 	LASTKEY="$KD/aff$(printf '%04d' $((AFF - 1)))-ch$(printf '%03d' $((CHAN - 1))).jwk"
 	[ -r "$LASTKEY" ] || { echo "  FAIL: no last key at $LASTKEY"; return 1; }
 	local EXP=$(($(date +%s) + 3600))
-	$M token sign --key "$LASTKEY" --root wbd --publish "" --subscribe "" \
+	$M token sign --key "$LASTKEY" --root bcast --publish "" --subscribe "" \
 		--expires "$EXP" >"$W/tok$N.jwt" 2>"$W/logs/sign$N.log" || {
 		echo "  FAIL: could not sign with a minted key"
 		return 1
@@ -122,7 +122,7 @@ run_cell() { # <estate size>
 	RSS=$(ps -o rss= -p $RELAY 2>/dev/null | tr -d ' ')
 
 	local URL
-	URL="https://127.0.0.1:$PORT/wbd?jwt=$(cat "$W/tok$N.jwt")"
+	URL="https://127.0.0.1:$PORT/bcast?jwt=$(cat "$W/tok$N.jwt")"
 	local CAP="$W/out/$N.ts"
 	: >"$CAP"
 	timeout $WINDOW "$M" "${MOQ_DIAL[1]}" "$URL" "${MOQ_FP[@]}" "$FP" \

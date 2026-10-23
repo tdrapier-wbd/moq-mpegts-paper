@@ -68,8 +68,8 @@ run_ladder() {
 		local pids=()
 		for i in $(seq 1 "$n"); do
 			timeout $((DWELL + 6)) ~/bin-3529/moq --backoff-timeout 100ms \
-				"${MOQ_DIAL[1]}" "https://127.0.0.1:$port/wbd$tok" \
-				"${MOQ_FP[@]}" "$fp" export --broadcast cnn ts \
+				"${MOQ_DIAL[1]}" "https://127.0.0.1:$port/bcast$tok" \
+				"${MOQ_FP[@]}" "$fp" export --broadcast ch1 ts \
 				>/dev/null 2>/dev/null &
 			pids+=($!)
 		done

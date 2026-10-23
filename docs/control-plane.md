@@ -150,7 +150,7 @@ stable even as the wire format churns, and the entitlement *service* is transpor
 > **Measured, and it holds.** Eight refusing arms — out-of-scope channel, sibling tenant, expired
 > token, publish-only credential, parent path and three malformed tokens — delivered **exactly zero
 > payload bytes** each, counted at the receiving endpoint. Path matching is segment-aware, so a grant
-> on `cnn` does not reach `cnn-intl`. Refusal also governs *disclosure*: an affiliate is announced
+> on `ch1` does not reach `ch1-intl`. Refusal also governs *disclosure*: an affiliate is announced
 > only the channels it licenses ([Evidence](evidence.md) §3.10,
 > [T36](../lab/test-36-entitlement-enforcement.md)).
 >

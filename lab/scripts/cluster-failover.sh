@@ -58,7 +58,7 @@
 set -uo pipefail
 BIN=${1:?bin dir with moq and moq-relay}
 OUT=${2:?output directory}
-SRC=${SRC:-$HOME/CNNiEMEA2.ts}
+SRC=${SRC:-$HOME/contrib-10m.ts}
 PORT_A=${PORT_A:-4480}
 PORT_B=${PORT_B:-5480}
 FEED=${FEED:-$((PORT_B + 1))}

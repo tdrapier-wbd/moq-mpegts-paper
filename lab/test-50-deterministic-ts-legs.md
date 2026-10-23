@@ -65,9 +65,9 @@ one leg lacks keeps its position there as stuffing.
 - **Build:** branch `quest/m2/ts-hitless` (commits recorded in the results), then merged `main` at
   f2fca6fd2 for P1-o; release.
 - **Host:** the EC2 tertiary, everything on loopback: one relay, one publisher (`import ts`) reading
-  the CNN clip paced on its PCR, two or three `export ts` subscribers. Arm L: the primary and the
+  the news clip paced on its PCR, two or three `export ts` subscribers. Arm L: the primary and the
   secondary.
-- **Source:** the CNN clip (9.95 Mb/s; H.264, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI).
+- **Source:** the news clip (9.95 Mb/s; H.264, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI).
 - **Rig and grader:** [`t50-sync-legs.sh`](scripts/t50-sync-legs.sh) runs the arms;
   [`ts-sync-identity.py`](scripts/ts-sync-identity.py) aligns the legs on their PCR slots and compares
   them packet by packet, continuity counters included, and writes the position-wise merge.

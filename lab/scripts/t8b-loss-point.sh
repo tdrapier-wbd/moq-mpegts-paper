@@ -32,7 +32,7 @@ LAT=${LAT:-2s}
 KEEP_EGRESS=${KEEP_EGRESS:-0}
 read -ra IMPORT_EXTRA <<<"${IMPORT_ARGS:-}"
 read -ra EXPORT_EXTRA <<<"${EXPORT_ARGS:-}"
-CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
+CLIP=${CLIP:-/home/ubuntu/contrib-10m.ts}
 OUT=${OUT:-/home/ubuntu/t8b-loss}/$LABEL
 PORT=4443
 

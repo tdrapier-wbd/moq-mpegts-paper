@@ -42,8 +42,8 @@ cd $W
 EXP=$(($(date +%s) + 7200))
 $M token generate --algorithm HS256 --id affa --out-dir $W/keydir >/dev/null 2>&1
 $M token generate --algorithm HS256 --id affb --out-dir $W/keydir >/dev/null 2>&1
-$M token sign --key $W/keydir/affa.jwk --root wbd --subscribe cnn --expires $EXP >$W/tok/affa.jwt
-$M token sign --key $W/keydir/affb.jwk --root wbd --subscribe cnn --expires $EXP >$W/tok/affb.jwt
+$M token sign --key $W/keydir/affa.jwk --root bcast --subscribe ch1 --expires $EXP >$W/tok/affa.jwt
+$M token sign --key $W/keydir/affb.jwk --root bcast --subscribe ch1 --expires $EXP >$W/tok/affb.jwt
 
 # The stub holds the public verifying key, never a signing key.
 python3 - "$W" <<'PY'
@@ -61,15 +61,15 @@ w = sys.argv[1]
 state = {
     "mode": "up",
     "cache_control": None,   # filled in below
-    "channels": ["cnn"],
+    "channels": ["ch1"],
     "affiliates": {
-        "affa": {"enabled": True, "channels": ["cnn"], "key": f"{w}/keydir/affa.jwk"},
+        "affa": {"enabled": True, "channels": ["ch1"], "key": f"{w}/keydir/affa.jwk"},
         # affb is never revoked. It is the control: if it falls silent alongside the subjects
         # then something other than affa's revocation stopped the media, and the run says
         # nothing about revocation latency.
-        "affb": {"enabled": True, "channels": ["cnn"], "key": f"{w}/keydir/affb.jwk"},
+        "affb": {"enabled": True, "channels": ["ch1"], "key": f"{w}/keydir/affb.jwk"},
     },
-    "public": {"wbd": {"subscribe": [], "publish": ["cnn"]}},
+    "public": {"bcast": {"subscribe": [], "publish": ["ch1"]}},
     "alias": {}, "tier": None,
 }
 json.dump(state, open(f"{w}/state.json", "w"), indent=1)
@@ -101,8 +101,8 @@ AJ=$(cat $W/tok/affa.jwt)
 BJ=$(cat $W/tok/affb.jwt)
 
 tsp -I file ~/t12_vidonly.ts --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd" "${MOQ_FP[@]}" "$FP" \
-		--quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
+	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/bcast" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast ch1 import ts >$W/logs/pub.log 2>&1 &
 PUB=$!
 trap 'kill $STUB $RELAY $PUB 2>/dev/null' EXIT
 sleep 5
@@ -117,8 +117,8 @@ sleep 5
 echo "starting $N sessions, ${STAG}s apart, cadence ${CAD}s"
 SPIDS=""
 for i in $(seq 1 "$N"); do
-	(timeout $((SETTLE + CAD * 12 + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd?jwt=$AJ" \
-		"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast cnn export ts 2>$W/logs/s$i.log |
+	(timeout $((SETTLE + CAD * 12 + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/bcast?jwt=$AJ" \
+		"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast ch1 export ts 2>$W/logs/s$i.log |
 		python3 $R/t37-lastbyte.py --out $W/out/s$i.ts --record $W/out/s$i.json --mark "s$i") \
 		>>$W/logs/lb.log 2>&1 &
 	SPIDS="$SPIDS $!"
@@ -126,8 +126,8 @@ for i in $(seq 1 "$N"); do
 done
 
 # The control, started alongside the subjects on the affiliate that is never revoked.
-(timeout $((SETTLE + CAD * 12 + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd?jwt=$BJ" \
-	"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast cnn export ts 2>$W/logs/c.log |
+(timeout $((SETTLE + CAD * 12 + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/bcast?jwt=$BJ" \
+	"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast ch1 export ts 2>$W/logs/c.log |
 	python3 $R/t37-lastbyte.py --out $W/out/c.ts --record $W/out/c.json --mark "c") \
 	>>$W/logs/lb.log 2>&1 &
 CPID=$!
@@ -157,8 +157,8 @@ echo "$TKILL" >$W/tkill
 # either way because their clients had already exited on their own after revocation; the
 # control, still being served, had not.
 # pkill -f takes an extended regex, so the '?' in the query string is a quantifier, not a
-# literal: "wbd?jwt=" matches "wbjwt=" and "wbdjwt=" and never the actual command line.
-pkill -f "127\.0\.0\.1:$PORT/wbd.jwt=" 2>/dev/null
+# literal: "bcast?jwt=" matches "bcasjwt=" and "bcastjwt=" and never the actual command line.
+pkill -f "127\.0\.0\.1:$PORT/bcast.jwt=" 2>/dev/null
 sleep 4
 for p in $SPIDS; do kill "$p" 2>/dev/null; done
 kill $PUB 2>/dev/null

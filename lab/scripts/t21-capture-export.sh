@@ -20,7 +20,7 @@ SECS=${2:-960}
 MOQ=${MOQ:-$HOME/bin-3006/moq}
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-3006/moq-relay}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 PORT=${PORT:-4471}
 DIR=${DIR:-$HOME/t21cap}
 

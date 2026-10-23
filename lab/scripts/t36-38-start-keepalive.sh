@@ -16,9 +16,9 @@
 W=/tmp/t36
 cd $W
 FP=$(cat $W/fp.txt)
-for ch in cnn tnt cnn-intl; do
+for ch in ch1 ch2 ch1-intl; do
   ~/bin-3529/moq --backoff-timeout 0 \
-    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/wbd-parent.jwt)" \
+    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/bcast-parent.jwt)" \
     "${MOQ_FP[@]}" "$FP" export --broadcast "$ch" ts \
     > /dev/null 2> $W/logs/keepalive-$ch.log &
   echo "  keepalive on $ch (pid $!)"

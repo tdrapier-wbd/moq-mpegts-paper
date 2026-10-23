@@ -16,7 +16,7 @@
 # Usage: t28-grader-selftest.sh [clip] [outdir]
 set -euo pipefail
 
-CLIP="${1:-$HOME/CNNiEMEA.ts}"
+CLIP="${1:-$HOME/contrib-5m.ts}"
 OUT="${2:-/tmp/t28-selftest}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRADER="$HERE/t28-media-lost.py"

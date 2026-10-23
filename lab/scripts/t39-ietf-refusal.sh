@@ -16,7 +16,7 @@
 # Two cells per version, and the control is what makes the subject readable:
 #
 #   in-scope    publish affa.telemetry   MUST ADMIT    proves the wire works at all for publish
-#   out-of-scope publish tnt             MUST REFUSE   the subject: what is the client told?
+#   out-of-scope publish ch2             MUST REFUSE   the subject: what is the client told?
 #
 # Without the in-scope control, an error on the IETF path could equally mean "the IETF path
 # cannot publish TS at all", which would look like a refusal signal and be nothing of the kind.
@@ -65,12 +65,12 @@ CLIP=~/t12_vidonly.ts
 
 EXP=$(($(date +%s) + 7200))
 $M token generate --algorithm HS256 --id affa --out-dir $W/keydir >/dev/null 2>&1
-$M token generate --algorithm HS256 --id wbd --out-dir $W/keydir >/dev/null 2>&1
+$M token generate --algorithm HS256 --id bcast --out-dir $W/keydir >/dev/null 2>&1
 # The token under test: publish is scoped to affa.telemetry and nothing else.
-$M token sign --key $W/keydir/affa.jwk --root wbd \
+$M token sign --key $W/keydir/affa.jwk --root bcast \
 	--publish affa.telemetry --expires $EXP >$W/tok/pub.jwt
 # The oracle: read anything under the root.
-$M token sign --key $W/keydir/wbd.jwk --root wbd --subscribe "" --expires $EXP >$W/tok/oracle.jwt
+$M token sign --key $W/keydir/bcast.jwk --root bcast --subscribe "" --expires $EXP >$W/tok/oracle.jwt
 
 $M-relay "${RELAY_BIND[@]}" 127.0.0.1:$PORT "${RELAY_TLS[@]}" localhost "${RELAY_GSO[@]}" \
 	"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" \
@@ -85,12 +85,12 @@ FP=$(curl -s --max-time 5 http://127.0.0.1:$HTTP/certificate.sha256)
 	tail -5 $W/logs/relay.log
 	exit 1
 }
-echo "relay up on $PORT; token publish scope = [affa.telemetry], root wbd"
+echo "relay up on $PORT; token publish scope = [affa.telemetry], root bcast"
 echo
 
-# The root goes in the URL path and broadcast names are relative to it. Omitting `/wbd` makes
+# The root goes in the URL path and broadcast names are relative to it. Omitting `/bcast` makes
 # the relay refuse everything, including the control, which looks exactly like a refusal signal.
-url() { echo "https://127.0.0.1:$PORT/wbd?jwt=$1"; }
+url() { echo "https://127.0.0.1:$PORT/bcast?jwt=$1"; }
 PJWT=$(cat $W/tok/pub.jwt)
 OJWT=$(cat $W/tok/oracle.jwt)
 
@@ -108,7 +108,7 @@ for V in "${VERSIONS[@]}"; do
 		LEAF="p$(echo "$V" | tr -d '.-')"
 		case $CELL in
 		in-scope) BC="affa.telemetry/$LEAF" ;;
-		out-of-scope) BC="tnt/$LEAF" ;;
+		out-of-scope) BC="ch2/$LEAF" ;;
 		esac
 		PLOG=$W/logs/pub-$V-$CELL.log
 		OUT=$W/out/$V-$CELL.ts

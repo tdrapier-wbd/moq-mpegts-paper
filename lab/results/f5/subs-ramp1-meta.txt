@@ -1,4 +1,4 @@
-label=ramp1 relay=34.246.187.61:4443 schedule=1,5,10,25,50,100,150,200,250,300 settle=45 measure=45
+label=ramp1 relay=<EC2_IP>:4443 schedule=1,5,10,25,50,100,150,200,250,300 settle=45 measure=45
 moq=moq 0.10.0 latency_max=3s
 host=ip-10-1-65-205 cores=8 nic=ens5 started=2026-09-08T10:11:21+0000
 stop_if: per_sub<0.95 OR box_busy>85% OR a subscriber exits

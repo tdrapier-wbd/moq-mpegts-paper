@@ -12,14 +12,14 @@ LB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/t37-lastbyte.py
 
 echo "################ 5a — key rotation with overlapping validity ################"
 # Mint the successor key and a token under it.
-$M token generate --algorithm ES256 --id affakey2 --root wbd --subscribe "" \
+$M token generate --algorithm ES256 --id affakey2 --root bcast --subscribe "" \
    --out $W/keys/affa2.jwk --public $W/keys/affa2.pub.jwk >/dev/null
-$M token sign --key $W/keys/affa2.jwk --root wbd --subscribe cnn \
+$M token sign --key $W/keys/affa2.jwk --root bcast --subscribe ch1 \
    --expires $(($(date +%s)+7200)) > $W/tok/affa2.jwt
 python3 - <<'PY'
 import json
 m=json.load(open('/tmp/t36/matrix.json'))
-m['affiliates']['affakey2']={'licensed':['cnn'],'key':'/tmp/t36/keys/affa2.pub.jwk',
+m['affiliates']['affakey2']={'licensed':['ch1'],'key':'/tmp/t36/keys/affa2.pub.jwk',
                              'role':'affiliate A — successor key'}
 json.dump(m,open('/tmp/t36/matrix.json','w'),indent=1)
 PY
@@ -30,13 +30,13 @@ sleep 1
 
 # old credential streaming; new credential brought up alongside (make-before-break)
 timeout 26 $M --backoff-timeout 100ms \
-  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa.jwt)" \
-  "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/ROT-old.log \
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/affa.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast ch1 ts 2>$W/logs/ROT-old.log \
   | python3 $LB --out $W/out/ROT-old.ts --record $W/lastbyte.jsonl --mark "ROT-old" >/dev/null &
 sleep 6
 timeout 20 $M --backoff-timeout 100ms \
-  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa2.jwt)" \
-  "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/ROT-new.log \
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/affa2.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast ch1 ts 2>$W/logs/ROT-new.log \
   | python3 $LB --out $W/out/ROT-new.ts --record $W/lastbyte.jsonl --mark "ROT-new" >/dev/null &
 sleep 8
 # retire the predecessor

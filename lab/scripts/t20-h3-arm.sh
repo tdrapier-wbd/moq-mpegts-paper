@@ -21,7 +21,7 @@
 # arm cannot silently complete over HTTP/1.1: it would fail instead.
 #
 # Usage: t20-h3-arm.sh <label> <h1|h3|moq> [window_s]
-# Env:   SRC       source clip                  (default ~/CNNiEMEA2.ts)
+# Env:   SRC       source clip                  (default ~/contrib-10m.ts)
 #        IMPAIR    netem spec, empty = clean    (e.g. "delay 30ms reorder 25% 50%")
 #        SEGDUR    HLS target segment duration  (default 2)
 #        OUTDIR    run directory                (default ~/t20/<label>)
@@ -39,7 +39,7 @@ LABEL="${1:?usage: t20-h3-arm.sh <label> <h1|h3|moq> [window_s]}"
 ARM="${2:?arm: h1|h3|moq}"
 WINDOW="${3:-60}"
 
-SRC="${SRC:-$HOME/CNNiEMEA2.ts}"
+SRC="${SRC:-$HOME/contrib-10m.ts}"
 IMPAIR="${IMPAIR:-}"
 SEGDUR="${SEGDUR:-2}"
 OUTDIR="${OUTDIR:-$HOME/t20/$LABEL}"

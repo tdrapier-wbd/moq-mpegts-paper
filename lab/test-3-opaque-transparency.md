@@ -74,7 +74,7 @@ sixth is new, and it is the one this arm was expected to fail.
 | Rig | [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh) |
 | Analyser | [`t3-transparency.py`](scripts/t3-transparency.py) |
 | Window | 60 s of media per clip, bounded by packet count, one run each |
-| Segment durations | 2 s on all three clips; 1 s and 6 s on `CNNiEMEA` for the duration sweep |
+| Segment durations | 2 s on all three clips; 1 s and 6 s on `contrib-5m` for the duration sweep |
 
 The measurement point is the **ungroomed** egress, matching the opaque arm, whose exporter releases
 the source's bytes on the source's PCR and adds none. [T16](test-16-grooming-segmented-http.md) measures the groomed
@@ -92,7 +92,7 @@ from `moq export ts` by [`t14-a.sh`](scripts/t14-a.sh) — 45 s per clip, all th
 ### Common to both
 
 TSDuck 3.44-4676 (Darwin 25.5.0). All localhost. Three clips: `testloop_clean`, `testloop` (4:2:2),
-`CNNiEMEA`.
+`contrib-5m`.
 
 **Load-bearing methodological finding — feed the lane the raw TS, not an ffmpeg remux.** A
 convenience ingest (`ffmpeg -re -i clip.ts -c copy -f mpegts …`) regenerates the TS container
@@ -108,7 +108,7 @@ into the publisher, or fed to `tsp -O hls`), which reproduces the source exactly
   now carries the whole of MoQ's remaining carriage advantage; it is unrun
   ([planned-experiments](planned-experiments.md)).
 - One run per clip per lane.
-- The duration sweep ran on `CNNiEMEA` only, so its invariance claim leans on the bitrate spread from
+- The duration sweep ran on `contrib-5m` only, so its invariance claim leans on the bitrate spread from
   the three-clip runs for generality rather than on a second sweep.
 - The media-aware captures are bounded by wall clock, not packet count. That is sound for grading a
   stream's internal PCR consistency, which needs no second window to compare against, and it would
@@ -126,7 +126,7 @@ into the publisher, or fed to `tsp -O hls`), which reproduces the source exactly
 ### The opaque lane
 
 ```bash
-for c in testloop_clean testloop CNNiEMEA; do
+for c in testloop_clean testloop contrib-5m; do
 	TSC=<moq-dev>/test/ts RELAY_TOML=<moq-dev>/demo/relay/localhost.toml \
 		lab/scripts/t48-passthrough.sh <bin-dir> ~/$c.ts ~/t3pt/$c 120
 done
@@ -138,14 +138,14 @@ tsp -I file ~/t3pt/<clip>/a.ts -P pcrverify --absolute --jitter-max 13 -O drop
 
 ```bash
 # publisher, origin and receiver all start and stop inside one invocation
-for c in testloop_clean testloop CNNiEMEA; do
+for c in testloop_clean testloop contrib-5m; do
 	PORT=18091 lab/scripts/t3-segmented-transparency.sh ~/$c.ts ~/t3seg/$c 60 2
 done
 
 # the duration sweep: same clip, same media window, segment duration varied
 for s in 1 6; do
 	PORT=$((18100 + s)) lab/scripts/t3-segmented-transparency.sh \
-		~/CNNiEMEA.ts ~/t3seg-dur/$s 60 $s
+		~/contrib-5m.ts ~/t3seg-dur/$s 60 $s
 done
 ```
 
@@ -164,7 +164,7 @@ the analyser over the pair. Two rules it enforces, both of which cost this run a
 ### The media-aware lane, for the PCR-accuracy grade
 
 ```bash
-for c in testloop_clean testloop CNNiEMEA; do
+for c in testloop_clean testloop contrib-5m; do
 	NAME=$c lab/scripts/t14-a.sh ~/$c.ts ~/t3ma/$c 45      # ungroomed egress
 done
 # then, per capture: the tightest clean --absolute bound, both gates, and the max PCR interval
@@ -185,7 +185,7 @@ capture for the identity below to mean anything.
 **All six criteria are met on all three clips, because each leg's output is the source's bytes.**
 Every packet either leg wrote is a source packet, in source order, with none skipped:
 
-| | `testloop_clean` | `testloop` | `CNNiEMEA` |
+| | `testloop_clean` | `testloop` | `contrib-5m` |
 |---|---:|---:|---:|
 | Leg A packets, all from the source in order | 711,125 | 1,948,177 | 708,631 |
 | Leg B (8 s late) packets, likewise | 743,484 | 2,037,081 | 734,588 |
@@ -211,11 +211,11 @@ release clock read the same host jitter as source drift and dropped nothing.
 same single reason.** Service identity, the component inventory, PSI/SI, integrity and P1 timing all
 arrive unchanged:
 
-| Field (source → egress) | `testloop_clean` | `testloop` | `CNNiEMEA` |
+| Field (source → egress) | `testloop_clean` | `testloop` | `contrib-5m` |
 |---|---|---|---|
 | Transport Stream Id | 0x0001 → **0x0001** | 0x0001 → **0x0001** | 0x0000 → **0x0000** |
 | Original Network Id | 0xFF01 → **kept** | 0x0001 → **kept** | 0x0000 → **kept** |
-| Service name / provider | Service01 / FFmpeg → **kept** | Cartoonito UK HD 422 → **kept** | CNNI EMEA HD / Warner Bros. Discovery → **kept** |
+| Service name / provider | Service01 / FFmpeg → **kept** | the source's → **kept** | the source's → **kept** |
 | Service type | 0x01 → **kept** | 0x01 → **kept** | 0x19 → **kept** |
 | PMT PID | 0x1000 → **kept** | 0x0020 → **kept** | 0x0064 → **kept** |
 | PCR PID | 0x0100 → **kept** | 0x0030 → **kept** | 0x006F → **kept** |
@@ -232,9 +232,9 @@ arrive unchanged:
 | PCR violations at 500 µs | 0 → **0** | 0 → **0** | 0 → **0** |
 
 Every component survived at its original PID, including the two the media-aware lane does not
-relay and the one no HLS document mentions: **`CNNiEMEA`'s TDT/TOT** (0x0014, repetition
+relay and the one no HLS document mentions: **`contrib-5m`'s TDT/TOT** (0x0014, repetition
 15,134 → 15,130 ms) and **`testloop`'s CAT** (0x0001, 475 → 475 ms, version unchanged). All three
-SCTE-35 PIDs on `CNNiEMEA`, the single splice PID on `testloop`, `testloop`'s visual-impaired
+SCTE-35 PIDs on `contrib-5m`, the single splice PID on `testloop`, `testloop`'s visual-impaired
 commentary audio 0x0042, AC-3 with its typing, teletext and NIT/SDT are all present at source
 counts. No table was re-versioned: PMT version churn reads 0 → 0, 2 → 2 and 6 → 6 across the three
 clips.
@@ -246,7 +246,7 @@ captures rather than of one counter.
 
 #### Criterion 6 — what the lane added, exactly
 
-| | `testloop_clean` | `testloop` | `CNNiEMEA` |
+| | `testloop_clean` | `testloop` | `contrib-5m` |
 |---|---|---|---|
 | Mean segment achieved (2 s target) | 2.666 s | 2.751 s | 2.405 s |
 | Segment heads *added* in the window | 25 | 23 | 26 |
@@ -256,7 +256,7 @@ captures rather than of one counter.
 | PIDs at egress absent from source | **none** | **none** | **none** |
 
 **The lane adds exactly one PAT/PMT pair per segment and nothing else.** The detector counts
-back-to-back PAT→PMT pairs, which the source never produces — 0 in the `testloop` and `CNNiEMEA`
+back-to-back PAT→PMT pairs, which the source never produces — 0 in the `testloop` and `contrib-5m`
 references — so it fires only on an injected Media Initialization Section. The ±1 on the PAT row is
 the window boundary, where a capture opens or closes mid-segment.
 
@@ -270,7 +270,7 @@ rather than on an absolute count.
 
 **PCR *repetition* is preserved and PCR *accuracy* is not.** The P1 mean and maximum intervals are
 unchanged from source on all three clips, and 0 % exceed 40 ms — the same result the opaque lane
-posts. (The *minimum* interval moves on `CNNiEMEA`, 0.30 → 0.60 ms; T1 attributes sub-millisecond
+posts. (The *minimum* interval moves on `contrib-5m`, 0.30 → 0.60 ms; T1 attributes sub-millisecond
 minima on these clips to capture boundaries and P1 bounds the maximum, so nothing turns on it.) But
 the tightest `pcrverify --absolute` bound the egress passes cleanly degrades from tens of nanoseconds
 to hundreds of microseconds — and the magnitude is precisely the injected pair:
@@ -279,7 +279,7 @@ to hundreds of microseconds — and the magnitude is precisely the injected pair
 |---|---:|---:|---|
 | `testloop_clean` (10.000 Mbps) | 300.8 µs | 297.7 µs | 99.0 % |
 | `testloop` (27.508 Mbps) | 109.4 µs | 109.4 µs | 99.97 % |
-| `CNNiEMEA` (9.946 Mbps) | 302.4 µs | 301.9 µs | 99.8 % |
+| `contrib-5m` (9.946 Mbps) | 302.4 µs | 301.9 µs | 99.8 % |
 
 A PAT and a PMT are two packets, 376 bytes. Inserting them at a segment head displaces every later
 PCR in that segment relative to a constant-rate byte clock by the time those 376 bytes take to
@@ -288,7 +288,7 @@ scale as 1/bitrate across a 2.75× range, and it does, to within 1 % on every cl
 is not inferred from the numbers; the numbers were predicted from the mechanism and then measured.**
 
 How *many* PCRs breach the 481 ns gate is a separate quantity and a much less stable one: 3,028 of
-~3,030 on `testloop_clean`, 2,453 of ~2,457 on `CNNiEMEA`, but only 22 of ~2,163 on `testloop`. It
+~3,030 on `testloop_clean`, 2,453 of ~2,457 on `contrib-5m`, but only 22 of ~2,163 on `testloop`. It
 tracks the direction of the whole-capture rate perturbation (+0.17 %, +0.04 %, +0.004 %) rather than
 the segment count, and `testloop` is the only clip where that perturbation is small enough to
 attribute to the injection alone — the other two include a window term. Treat the *max* as the
@@ -305,7 +305,7 @@ both data planes already require.
 The mechanism above predicts something the 2 s runs cannot test: because the displacement is *one
 pair's* transmit time, the **size** of the error should not depend on segment duration, while the
 **number** of injections should scale as 1/duration. Segment duration was swept 1 s / 2 s / 6 s on
-`CNNiEMEA`, same 60 s media window, same instrument:
+`contrib-5m`, same 60 s media window, same instrument:
 
 | | 1 s | 2 s | 6 s |
 |---|---:|---:|---:|
@@ -349,7 +349,7 @@ that costs P2 accuracy improves P1 table repetition. It shows up most on the cli
 |---|---|---|---|
 | `testloop` PAT | 475 / 475 | **402** / 475 | 500 |
 | `testloop` PMT | 475 / 475 | **404** / 475 | 500 |
-| `CNNiEMEA` PAT | 125 / 291 | **118** / 291 | 500 |
+| `contrib-5m` PAT | 125 / 291 | **118** / 291 | 500 |
 | `testloop_clean` PAT | 98 / 100 | **94** / 100 | 500 |
 
 T1 warned that `testloop`'s ~475 ms PAT/PMT repetition was close enough to the 500 ms limit that a
@@ -403,7 +403,7 @@ The media-aware lane was captured ungroomed on all three clips on a named curren
 (`moq 0.9.10-eab960192`, stock `main`, via [`t14-a.sh`](scripts/t14-a.sh) — the same rig and the same
 ungroomed measurement point T14 leg A uses) and graded:
 
-| Media-aware ungroomed egress | `testloop_clean` | `testloop` | `CNNiEMEA` |
+| Media-aware ungroomed egress | `testloop_clean` | `testloop` | `contrib-5m` |
 |---|---:|---:|---:|
 | Null stuffing | **0 packets** | **0 packets** | **0 packets** |
 | `analyze`'s declared bitrate | 22.0 Gb/s | 25.4 Gb/s | 32.2 Gb/s |
@@ -458,7 +458,7 @@ byte-preservation until the lane's output could be captured; it is now measured.
 
 **Gate 1 media fidelity is met at P1 on both lanes, and only one of them is transparent in both
 directions.** The opaque lane adds nothing and preserves everything, which is what a fallback lane is
-for. Segmented HTTP preserves everything too — including `testloop`'s CAT and `CNNiEMEA`'s TDT/TOT,
+for. Segmented HTTP preserves everything too — including `testloop`'s CAT and `contrib-5m`'s TDT/TOT,
 which the media-aware MoQ lane drops — and adds one PAT/PMT pair per segment, which costs ~300 µs of
 file-domain PCR accuracy at 10 Mbps and ~110 µs at 27.5 Mbps. That is its whole departure from
 transparency, measured on three clips: two packets per segment, and nothing else.
@@ -489,7 +489,7 @@ necessary, not sufficient. Recorded as a permanent finding in
 |---|---|
 | Multi-programme carriage through both lanes | the MPTS fixture and, for HLS, a real CDN ([planned-experiments](planned-experiments.md)) |
 | A lossy segmented path | a path that drops segments. Nothing was ever missing here, only late — so this experiment says what a lane *does* to a mux, never what it does when the path damages one |
-| The duration sweep on the 27.5 Mbps clip | one rig invocation. The sweep ran on `CNNiEMEA` only; the invariance claim rests on the bitrate spread from the three-clip runs rather than on a second sweep |
+| The duration sweep on the 27.5 Mbps clip | one rig invocation. The sweep ran on `contrib-5m` only; the invariance claim rests on the bitrate spread from the three-clip runs rather than on a second sweep |
 
 ---
 
@@ -517,7 +517,7 @@ three clips. *Rule: before booking a gap as cheap, check that the instrument is 
 being compared.*
 
 **A PCR-accuracy figure is window-dependent, so it carries its window like any other count.** The
-`CNNiEMEA` source reads **37 ns** over the 60 s reference cut used throughout this experiment and
+`contrib-5m` source reads **37 ns** over the 60 s reference cut used throughout this experiment and
 **74 ns** over the whole 5-minute clip, because a maximum over more media can only grow. Both numbers
 are correct and they are not interchangeable; the tables here are the reference-cut figures, matching
 the egress windows they are compared against. *Rule: an extremum, including every "tightest clean

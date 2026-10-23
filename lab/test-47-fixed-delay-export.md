@@ -144,7 +144,7 @@ conform, with one set of margins, but it breaks four of upstream's discontinuity
 proper is a design choice upstream.**
 
 - **On a real broadcast capture the export stops within seconds, at every delay up to 3 s.** On
-  CNNiEMEA2 (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
+  contrib-10m (AVC High@4.0 1080i, MP2, AC-3, teletext, three SCTE-35 PIDs, DVB SI) the export exits
   with a schedule overrun ("needs N packets in a 25 ms slot, more than R b/s allows within the
   delay") at `--delay` 500 ms, 1 s, 2 s and 3 s, at the catalog's recorded rate. At 1 s it does so
   also at 11 Mb/s and with the export subscribed before the publisher starts, and at 500 ms and 2 s
@@ -164,13 +164,13 @@ proper is a design choice upstream.**
   export allows itself. The source carries it by sending up to 0.97 s ahead, with EB peaking at
   97 %. The export sends each unit as late as the rate allows, and it knows units only one window
   ahead. Slots it pads before a heavy stretch cannot be recovered, so a stretch where the decode
-  timeline outruns the rate for about a window cannot be met. CNN's field-coded passages are such
+  timeline outruns the rate for about a window cannot be met. The news feed's field-coded passages are such
   stretches. An offline replay of the export's rule fails the clip at every delay up to 3 s on the
   source's own DTS, and up to 5 s on the DTS the export authors. It fits at 8 s. The real export
   then did both: at 5 s it stopped with 17.60 s of decode time out, where the replay said 17.57 s,
   and at 8 s it ran the capture and passed the T-STD (video only).
 - **The export's authored DTS makes this worse.** Its decode clock holds back a fixed *number* of
-  pictures (10), not a fixed time. Each time CNN switches between frame and field coding, the
+  pictures (10), not a fixed time. Each time the news feed switches between frame and field coding, the
   authored DTS moves 0.2 s against the source's, and the leading pictures of the first GOP all
   get DTS one tick apart. With the rest of the multiplex taking its share of the rate, that alone
   puts the 500 ms default out of reach on this clip.
@@ -454,7 +454,7 @@ the remaining difference between two exporters is where each places a TDT.
 
 *Domain: P1 and P2; the export's output as it was paced, tapped on loopback and across hosts, and as
 written to file on the loss and linger rigs.
-`[unmerged]`, #4645 at `fe7cec106`, no parameter set by hand, noq; `CNNiEMEA2.ts`; one run per cell
+`[unmerged]`, #4645 at `fe7cec106`, no parameter set by hand, noq; `contrib-10m.ts`; one run per cell
 except as stated. Reported on #4645.*
 
 ### Acquiring before release, and the anchor on the most slack, `559a35244`
@@ -506,7 +506,7 @@ output is PCR and tables with almost no media. Four of its 4,719 PCRs carry jitt
 
 **Why the audio goes.** Both selections that set the clock take the most slack across all tracks.
 The acquisition anchors on the frame read least behind its decode time over every frame held, and
-each steering step's floor is the most slack any frame in the step arrived with. CNN's mux sends
+each steering step's floor is the most slack any frame in the step arrived with. The news feed's mux sends
 video up to 0.97 s ahead of its decode time and audio about just in time, so both choose the
 video. The audio is then left the delay less 0.97 s, which at 1 s or below is no time at all, and
 the steering holds it there. A third condition makes the join matter. The acquisition ends when any
@@ -570,7 +570,7 @@ track that queues for a whole steering step pulls the clock with it.
 
 The linger rig of [T13](test-13-downstream-grooming.md) § *Liveness* (`lin.sh`), unchanged, with the
 head's own `moq` and relay: `export ts --linger` starts first, then a same-name `import ts` publisher
-of `CNNiEMEA2.ts` (15 s sessions) ends cleanly or is `SIGKILL`ed and restarts. Default `--delay 1s`,
+of `contrib-10m.ts` (15 s sessions) ends cleanly or is `SIGKILL`ed and restarts. Default `--delay 1s`,
 loopback, P1, file domain; the scratch build `5e2425f` alongside.
 
 | Arm | Build | Runs | First session | Resumes | Flags on the PCR PID | CC jumps | Exit |
@@ -814,18 +814,18 @@ media; it is not built.
 
 | Clip | `--delay` | Rate | Join | Output before exit | Late drops | Overrun ("needs N packets") |
 |---|---|---|---|---|---|---|
-| CNNiEMEA2, full | 500 ms | catalog 9.946 Mb/s | mid-stream | ~2 s, no video PES | first video frame | 644 |
-| CNNiEMEA2, full | 1 s | catalog | mid-stream | ~1.4 s | 0 | 5,671 |
-| CNNiEMEA2, full | 1 s | catalog | subscriber first | ~4.3 s | 0 | 264 |
-| CNNiEMEA2, full | 2 s | catalog | mid-stream | ~7 s | 0 | 288 |
-| CNNiEMEA2, full | 3 s | catalog | mid-stream | ~11 s | 0 | 472 |
-| CNNiEMEA2, full | 1 s | 11 Mb/s | mid-stream | ~11 s | 0 | 238 |
-| CNNiEMEA2, full, upstream harness | 500 ms (default) | catalog | — | 2.7 s | 120 (MP2 72, verbatim 48) | 352 |
-| CNN video + MP2, upstream harness | 500 ms | catalog 9.70 Mb/s | — | — | 72 (MP2) | 352 |
-| CNN video only, upstream harness | 500 ms | catalog 9.50 Mb/s | — | — | 0 | 165 |
-| CNN video only | 2 s | catalog | mid-stream | ~10 s | 0 | 657 |
-| CNN video only | 5 s | catalog | mid-stream | 17.60 s of DTS | 0 | 366 |
-| CNN video only | 8 s | catalog | mid-stream | runs the capture (43 s graded) | 0 | none |
+| contrib-10m, full | 500 ms | catalog 9.946 Mb/s | mid-stream | ~2 s, no video PES | first video frame | 644 |
+| contrib-10m, full | 1 s | catalog | mid-stream | ~1.4 s | 0 | 5,671 |
+| contrib-10m, full | 1 s | catalog | subscriber first | ~4.3 s | 0 | 264 |
+| contrib-10m, full | 2 s | catalog | mid-stream | ~7 s | 0 | 288 |
+| contrib-10m, full | 3 s | catalog | mid-stream | ~11 s | 0 | 472 |
+| contrib-10m, full | 1 s | 11 Mb/s | mid-stream | ~11 s | 0 | 238 |
+| contrib-10m, full, upstream harness | 500 ms (default) | catalog | — | 2.7 s | 120 (MP2 72, verbatim 48) | 352 |
+| News video + MP2, upstream harness | 500 ms | catalog 9.70 Mb/s | — | — | 72 (MP2) | 352 |
+| News video only, upstream harness | 500 ms | catalog 9.50 Mb/s | — | — | 0 | 165 |
+| News video only | 2 s | catalog | mid-stream | ~10 s | 0 | 657 |
+| News video only | 5 s | catalog | mid-stream | 17.60 s of DTS | 0 | 366 |
+| News video only | 8 s | catalog | mid-stream | runs the capture (43 s graded) | 0 | none |
 
 On a mid-stream join, the export writes the first group's keyframe and then nothing until the next
 group's, 1.2 s of PTS later. That hole, and the window of units still queued when the export
@@ -1175,7 +1175,7 @@ now discards duplicates in both files, as a receiver does.
 
 `main` now lingers within one publisher instance only, follows a replacement only under `--stitch`
 (as a programme switch: a new PMT and the break flagged on every PID), and exits at once when it
-fails with the broadcast still up. P1, file domain, loopback, one relay, `CNNiEMEA2.ts` at
+fails with the broadcast still up. P1, file domain, loopback, one relay, `contrib-10m.ts` at
 `--delay 1s`; the T13 linger rig (`lin.sh`) and T6's standby rig with a shared `--epoch` and a 6 s
 idle timeout. **No cell of either rig died on a late unit**: 0 *missed a decode deadline* in 32 runs.
 

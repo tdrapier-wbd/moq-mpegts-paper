@@ -39,7 +39,7 @@ MOQ=${MOQ:?set MOQ to the moq binary}
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 BCAST=${BCAST:-t27join.hang}
 PORT=${PORT:-4443}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 SRCGEN=${SRCGEN:-$HOME/f5/ts-continuous-source.py}
 GSO=${GSO:-true}
 SAMPLE=${SAMPLE:-10}

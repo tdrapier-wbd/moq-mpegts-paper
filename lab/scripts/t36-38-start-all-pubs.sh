@@ -19,11 +19,11 @@ pub() {  # pub <root> <channel> <tokenfile>
   echo "  publishing $root/$ch (pid $!)"
 }
 
-pub wbd   cnn      pub-cnn.jwt
-pub wbd   cnn-intl pub-cnn-intl.jwt
-pub wbd   tnt      pub-tnt.jwt
-pub wbd   nobody   pub-nobody.jwt
-pub rival cnn      pub-rival-cnn.jwt
+pub bcast   ch1      pub-ch1.jwt
+pub bcast   ch1-intl pub-ch1-intl.jwt
+pub bcast   ch2      pub-ch2.jwt
+pub bcast   nobody   pub-nobody.jwt
+pub rival ch1      pub-rival-ch1.jwt
 
 echo "all publishers started"
 wait

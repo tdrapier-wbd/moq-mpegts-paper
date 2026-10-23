@@ -62,7 +62,7 @@ moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-main-eab96019/moq-relay}
 PACER=${PACER:-$HOME/pacer-64595f6/target/release/mpegts-pacer}
 MONITOR=${MONITOR:-$HOME/t21/t21-pcr-monitor.py}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 DIR=${DIR:-$HOME/t21}
 SOURCE_MODE=${SOURCE_MODE:-continuous}
 CONTSRC=${CONTSRC:-$HOME/t21/ts-continuous-source.py}

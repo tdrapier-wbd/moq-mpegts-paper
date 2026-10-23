@@ -13,9 +13,9 @@ SECS="${SECS:-5}"
 OUT=$W/matrix-results.tsv
 : > $OUT
 
-CHANNELS="cnn cnn-intl tnt nobody"
+CHANNELS="ch1 ch1-intl ch2 nobody"
 # affiliate label : token file : kid
-AFFS="A:affa:affakey B:affb:affbkey C:affc:affckey D:affd:affdkey E-cnn:affe-cnn:affecnnkey E-tnt:affe-tnt:affetntkey F:afff:afffkey"
+AFFS="A:affa:affakey B:affb:affbkey C:affc:affckey D:affd:affdkey E-ch1:affe-ch1:affech1key E-ch2:affe-ch2:affech2key F:afff:afffkey"
 
 printf "  %-7s" "aff\\ch"; for c in $CHANNELS; do printf "%-11s" "$c"; done; echo
 for spec in $AFFS; do
@@ -24,7 +24,7 @@ for spec in $AFFS; do
   for ch in $CHANNELS; do
     id="M-$lbl-$ch"
     timeout $SECS ~/bin-3529/moq --backoff-timeout 100ms \
-      "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/$tok.jwt)" \
+      "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/$tok.jwt)" \
       "${MOQ_FP[@]}" "$FP" export --broadcast "$ch" ts \
       > $W/out/$id.bin 2> $W/logs/$id.log
     b=$(stat -f%z $W/out/$id.bin 2>/dev/null || echo 0)

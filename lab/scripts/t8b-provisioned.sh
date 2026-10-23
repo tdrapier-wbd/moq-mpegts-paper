@@ -64,7 +64,7 @@ moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY_QUINN=${RELAY_QUINN:-/home/ubuntu/moq-relay-quinn}
 RELAY_QUICHE=${RELAY_QUICHE:-/home/ubuntu/moq-relay-quiche}
 RELAY_NOQ=${RELAY_NOQ:-/home/ubuntu/moq-relay-noq}
-CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
+CLIP=${CLIP:-/home/ubuntu/contrib-10m.ts}
 SOURCE_BPS=${SOURCE_BPS:-9945951}
 NETNS=${NETNS:-/home/ubuntu/t8b/t8b-netns.sh}
 DIR=${DIR:-/home/ubuntu/t8b/prov}

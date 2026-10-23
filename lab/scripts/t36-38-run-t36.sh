@@ -58,17 +58,17 @@ else: print('NA NA NA NA')")
 echo "T36 arm matrix — payload measured at the subscriber's OWN OUTPUT (decrypted);"
 echo "wire_s2c is the wiretap's server->client volume (ciphertext, corroboration only)."
 echo
-run_arm A1   wbd   cnn      affa.jwt           sub admitted
-run_arm A2   wbd   tnt      affa.jwt           sub refused
-run_arm A3   rival cnn      affa.jwt           sub refused
-run_arm A4   wbd   cnn      affa-expired.jwt   sub refused
-run_arm A5   wbd   cnn      none               sub refused
-run_arm A6a  wbd   cnn      mal-truncated.jwt  sub refused
-run_arm A6b  wbd   cnn      mal-badsig.jwt     sub refused
-run_arm A6c  wbd   cnn      mal-altered.jwt    sub refused
-run_arm A7   wbd   cnn      affa-subonly.jwt   pub refused
-run_arm A8   wbd   cnn      pubonly.jwt        sub refused
-run_arm A9   wbd   cnn-intl affa.jwt           sub refused
-run_arm A10  wbd   cnn      wbd-parent.jwt     sub admitted
+run_arm A1   bcast   ch1      affa.jwt           sub admitted
+run_arm A2   bcast   ch2      affa.jwt           sub refused
+run_arm A3   rival ch1      affa.jwt           sub refused
+run_arm A4   bcast   ch1      affa-expired.jwt   sub refused
+run_arm A5   bcast   ch1      none               sub refused
+run_arm A6a  bcast   ch1      mal-truncated.jwt  sub refused
+run_arm A6b  bcast   ch1      mal-badsig.jwt     sub refused
+run_arm A6c  bcast   ch1      mal-altered.jwt    sub refused
+run_arm A7   bcast   ch1      affa-subonly.jwt   pub refused
+run_arm A8   bcast   ch1      pubonly.jwt        sub refused
+run_arm A9   bcast   ch1-intl affa.jwt           sub refused
+run_arm A10  bcast   ch1      bcast-parent.jwt     sub admitted
 echo
 echo "results -> $RESULTS"

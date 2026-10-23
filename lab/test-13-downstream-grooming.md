@@ -212,7 +212,7 @@ that the mux rate is *"not recoverable from MoQ"* — as the problem it is closi
 
 Measured with [`t13-export-muxrate.sh`](scripts/t13-export-muxrate.sh) on the EC2 secondary, `moq`
 `0.11.2-615d166d` against `0.11.2-5d0991b9`, 300,000-packet slice of a live `export ts` capture of
-`CNNiEMEA2.ts` (nominal 9,945,951 b/s, 4.69 % stuffing at source). **File domain.**
+`contrib-10m.ts` (nominal 9,945,951 b/s, 4.69 % stuffing at source). **File domain.**
 
 | | source | `5d0991b9` (before) | `615d166d` CBR source | `615d166d` `--mux-rate` |
 |---|---|---|---|---|
@@ -467,7 +467,7 @@ unmerged export that corrects the byte schedule the deterministic mode runs, and
 byte-identical through the groomer (*On #4645's PCR grid*, below).
 
 *Domain: file, all arms. Build `53f8aa99d` (noq), `mpegts-pacer` `5ab84cd`, EC2 primary, loopback,
-`CNNiEMEA2.ts` at 9,945,951 b/s declared, 150 s per cell, two cells. Nothing here has been graded on
+`contrib-10m.ts` at 9,945,951 b/s declared, 150 s per cell, two cells. Nothing here has been graded on
 a hardware IRD, so these are software conformance figures.*
 
 #### On #4645's PCR grid: the deterministic mode runs, and a co-started pair merges at the byte
@@ -588,7 +588,7 @@ upstream's to change, and the **per-process continuity counters** of #2779, decl
 a receiver can rewrite by one constant per PID. Neither has been run on a merged build.
 
 *Domain: file (stdout captures), P1. Scratch build of #4645 at `559a35244` plus the one-clock release
-patch `[unmerged]`, `mpegts-pacer` `5ab84cd`, EC2 secondary, loopback, `CNNiEMEA2.ts` at
+patch `[unmerged]`, `mpegts-pacer` `5ab84cd`, EC2 secondary, loopback, `contrib-10m.ts` at
 9,945,951 b/s, 150 s per run: two staggered runs at a 200 ms and a 1,500 ms groomer cushion, one
 co-started run, and one staggered run with the push log added. Graded with `pcr-residual.py`,
 `ts-pair-diff.py`, a slip-tolerant re-alignment of the whole overlap, a per-PID and per-access-unit
@@ -641,7 +641,7 @@ consequences). On `ffa5b81b` the consequences are two, and they are separate:
 clean end from a failure.** `moq export ts --linger <duration>`
 ([#4504](https://github.com/moq-dev/moq/pull/4504), which closed #3926) keeps the exporter
 subscribed after the broadcast ends. Output stops while the broadcast is gone and resumes flagged as
-a break. Checked with a local functional rig: the macOS workstation, a loopback relay, `CNNiEMEA2.ts`
+a break. Checked with a local functional rig: the macOS workstation, a loopback relay, `contrib-10m.ts`
 through `tsp -P regulate`. *P1, file domain.*
 
 | Publisher event | `--linger 0s` (default) | `--linger 10s` / `60s` |
@@ -665,7 +665,7 @@ through `tsp -P regulate`. *P1, file domain.*
 **Continuity at the resume, graded per PID, on `main` at `83ce47fe`** (which carries #4504, #4606,
 #4733 and #4750). Same functional rig, with the egress graded per PID at every resume by a
 continuity grader validated on a 7-packet cut (one unflagged jump) and on a clean capture. *P1, file
-domain, loopback, `CNNiEMEA2.ts`, one relay.*
+domain, loopback, `contrib-10m.ts`, one relay.*
 
 | Arm | Runs | Resumes | Unflagged CC jumps, any PID | Output after each resume | Exit |
 |---|---|---|---|---|---|
@@ -681,7 +681,7 @@ runs `moq import ts` then exits with *rendition is not published*, the exporter 
 and 12.7 s after it, and it resumes only onto the session after. In the third the replacement
 survives, but the export carries nothing after about 13 s of output and ends 30 s later on *subscribe
 end below a received group track=catalog.json*, exiting 1 after its linger. Filed as
-[#4945](https://github.com/moq-dev/moq/issues/4945). *P1, file domain, loopback, `CNNiEMEA2.ts`,
+[#4945](https://github.com/moq-dev/moq/issues/4945). *P1, file domain, loopback, `contrib-10m.ts`,
 one relay.*
 
 **On upstream `main`, October 2026 (moq 0.14.2 / moq-relay 0.17.2 as reported, `82c3f2fe4`; the
@@ -752,7 +752,7 @@ for a close to arrive) and exit 1 within 40 ms of it: about 1.04 s from failure 
 `moq-lite-07` 2 of 2 runs resume 4 of 4 crashes and exit 0 with 225,570 packets; the clean-end replay
 and continue arms resume three times each and exit 0 (394,324 and 400,462 packets); a relay restart
 lingers, resumes once and exits 0. The new path fired only where the broadcast stayed up. *P1, file
-domain, loopback, `CNNiEMEA2.ts`, one relay; three kill runs, one run per other arm.* A crash on the
+domain, loopback, `contrib-10m.ts`, one relay; three kill runs, one run per other arm.* A crash on the
 default protocol therefore reaches a supervisor about a second after the export fails, rather than
 after the linger. On `main` at `f8215bc47`, which adds a replacement track continuing its
 predecessor's sequences and four relay demand fixes, every arm repeats to the packet, failure to
@@ -784,7 +784,7 @@ exit included (1.03–1.04 s).
   cursor arriving and being discarded as old. No first session walked a gap in the six runs logged,
   though it joins the same way; what differs on the resume path is not located. The cost of the
   wider budget is that the exporter may sit up to 2 s behind the live edge rather than 0.5 s, which
-  these runs do not measure. *P1, file domain, loopback, `CNNiEMEA2.ts`, `main` at `83ce47fe` with
+  these runs do not measure. *P1, file domain, loopback, `contrib-10m.ts`, `main` at `83ce47fe` with
   logging added, one run per arm at 2 s.*
 - **What a receiver sees at the default budget is a burst of timebase resets per resume rather than
   one.** Whether an IRD

@@ -49,10 +49,10 @@ much, because that is what the paper's carriage-fidelity verdict is scored on.
   `eab960192`. All three units point at it and none has restarted.
 - EC2 services (already running; relay never restarted during this test):
   - `moq-relay.service` → `moq-relay --server-bind 0.0.0.0:443 --tls-generate … --auth-public`
-  - `moq-publisher-cnn-loop.service` → `tsp -I file ~/CNNiEMEA2.ts --infinite -P regulate
-    --pcr-synchronous -O file - | moq … import ts --broadcast cnn.international.emea.loop.hang`
+  - `<loop-unit>.service` → `tsp -I file ~/contrib-10m.ts --infinite -P regulate
+    --pcr-synchronous -O file - | moq … import ts --broadcast <loop-broadcast>`
   - `moq-publisher.service` → `ffmpeg -i "srt://0.0.0.0:9000?mode=listener&latency=6000…" -c copy -f
-    mpegts - | moq … import ts --broadcast cnn.international.emea.live.hang`. **This unit is
+    mpegts - | moq … import ts --broadcast <live-broadcast>`. **This unit is
     retired**; the standing live ingest is now the two-stage chain below, and the ffmpeg leg is the
     reason why.
 - Local: `moq` client from `~/bin-main`; SRT-capable FFmpeg is the local `~/FFmpeg` build (not OS
@@ -82,7 +82,7 @@ stage 2  moq-live-publisher.service  tsp -I ip 239.255.0.1:5000 -O file -
 ```
 
 **The publisher is `tsp`, because the unit it replaces was measured discarding most of the multiplex
-before MoQ could see it.** Feeding a 20 s slice of `CNNiEMEA2.ts` through the retired unit's own
+before MoQ could see it.** Feeding a 20 s slice of `contrib-10m.ts` through the retired unit's own
 command on its own host (file domain, ffmpeg 8.0.1, no MoQ involved) reduces **13 PIDs to 5**:
 
 | | PIDs at egress | What is lost |
@@ -124,7 +124,7 @@ Measured on the secondary with a PCR-paced caller attached, the chain carries th
 
 | Measurement point | Result |
 |---|---|
-| Local group, 8 s sample | **9.98 Mb/s**, PIDs `0 16 17 100 111 121 123 131 141 142 143 8191`, **0 continuity errors**, service `CNNI EMEA HD` |
+| Local group, 8 s sample | **9.98 Mb/s**, PIDs `0 16 17 100 111 121 123 131 141 142 143 8191`, **0 continuity errors**, the source's service name |
 | MoQ subscriber, `export ts` | PIDs `0 16 17 100 111 121 123 131 141 142 143` — every source PID except null stuffing, **all three SCTE-35 PIDs, teletext and both audios preserved** |
 
 TDT/TOT (PID 20) appears in neither sample, but the window is too short to distinguish a dropped table
@@ -174,7 +174,7 @@ it if the path deserves it — a one-line change to one unit, which does not dis
   cut to match), captures generously, then trims to the packet bound. The standing relay and both
   standing publishers are left exactly as found; the rig tears its own sender down **by process group**,
   never by process name, because on that box the standing units are `tsp`/`moq`/`ffmpeg` processes too.
-- **Source:** `~/CNNiEMEA2.ts` on `<EC2_IP>` (745,917,260 B, 1080i25 H.264, ~9.95 Mbps PCR-derived, 13
+- **Source:** `~/contrib-10m.ts` on `<EC2_IP>` (745,917,260 B, 1080i25 H.264, ~9.95 Mbps PCR-derived, 13
   PIDs, 600 s). The local copy is byte-identical in length and supplies the reference cut, so no
   745 MB transfer is needed to compare against the source.
 - **One instrument, one version, both ends:** TSDuck **3.44-4676** on EC2 *and* locally — the same
@@ -224,19 +224,19 @@ bash lab/scripts/t4-three-lane.sh hls ~/t4-3lane/hls-run 30   # needs inbound TC
 # A. remote subscribe — media-aware loop (T2 over the wire), captured for TSDuck
 timeout 60 ~/bin-main/moq --client-tls-disable-verify \
   --client-connect https://<EC2_IP>:443/anon \
-  --broadcast cnn.international.emea.loop.hang export ts --latency-max 3s > loop_out.ts
+  --broadcast <loop-broadcast> export ts --latency-max 3s > loop_out.ts
 tsp -I file loop_out.ts -P analyze -O drop   # + continuity, pcrextract per lab/README.md
 
 # B. full SRT contribution chain. Local ~/FFmpeg transcodes to a rate that fits the home uplink
 #    (2 Mbps stable; 3.5 Mbps saturated it), pushes SRT to the EC2 receiver → EC2 media-aware
-#    publisher → cnn.…live.hang. Match SRT latency to the listener (6000 ms).
+#    publisher → <live-broadcast>. Match SRT latency to the listener (6000 ms).
 ~/FFmpeg/ffmpeg -re -i ~/testloop_clean.ts -map 0:v:0 -map 0:a:0 \
   -c:v h264_videotoolbox -b:v 2000k -maxrate 2000k -bufsize 2000k -profile:v high -g 50 -bf 0 -realtime 1 \
   -c:a copy -f mpegts "srt://<EC2_IP>:9000?mode=caller&latency=6000&peerlatency=6000&sndbuf=8388608"
 
 # subscribe back locally to the live SRT-fed broadcast, capture for TSDuck
 ./moq --client-tls-disable-verify --client-connect https://<EC2_IP>:443/anon \
-  --broadcast cnn.international.emea.live.hang export ts --latency-max 5s > t4_live_out.ts
+  --broadcast <live-broadcast> export ts --latency-max 5s > t4_live_out.ts
 tsp -I file t4_live_out.ts -P analyze -O drop     # + continuity, pcrextract per lab/README.md
 
 # C. opaque remote (T3 over the wire): T48's internet leg, `moq export ts --passthrough`
@@ -315,7 +315,7 @@ T4 previously reported the media-aware egress at "mean/max 33.52 / 319.98 ms, 12
 the encoder produced". **That attribution was wrong.** Profiling the source clip's own PCR spacing
 across every span of it shows no such gap anywhere:
 
-| Span of `CNNiEMEA2.ts` | n | min (ms) | mean (ms) | max (ms) | > 40 ms |
+| Span of `contrib-10m.ts` | n | min (ms) | mean (ms) | max (ms) | > 40 ms |
 |---|---:|---:|---:|---:|---:|
 | 0–30 s | 1,225 | 1.51 | 24.48 | **24.95** | **0** |
 | 5–35 s (this run's window) | 1,225 | 1.51 | 24.47 | **24.95** | **0** |
@@ -397,7 +397,7 @@ and **the whole non-transparency half of its original result has been reversed b
 | AC-3 / teletext / SCTE-35 ×3 | **all present** — 0x007B typed AC-3, 0x0083, 0x008D/8E/8F |
 | Transport Stream Id | **0x0000 — source value** |
 | Original Network Id | **0x0000 — source value** |
-| Service name / provider | **CNNI EMEA HD / Warner Bros. Discovery** |
+| Service name / provider | **the source's, unchanged** |
 | Service type | **0x19 — preserved** |
 | SDT / NIT | **both present** |
 | TDT/TOT | **still dropped** — [#2914](https://github.com/moq-dev/moq/issues/2914), fixed by #2929 on `dev`, which this build predates |
@@ -450,7 +450,7 @@ mux; this leg remains the only *contribution*-direction evidence, and it is tran
 contribution from this workstation is not measurable on this access link at all.
 
 Full-rate confirmation is in [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) (clean path): the same
-media-aware lane pulled the full ~9.93 Mbps `CNNiEMEA2.ts` loop home over QUIC at **9.48 Mbps
+media-aware lane pulled the full ~9.93 Mbps `contrib-10m.ts` loop home over QUIC at **9.48 Mbps
 sustained for 4 min, 0 CC** — the low Mbps here was the source (SRT-latency/uplink-limited), not the
 transport.
 

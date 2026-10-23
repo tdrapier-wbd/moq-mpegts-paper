@@ -11,14 +11,14 @@ already-broken source.
 
 - TSDuck 3.44-4676, macOS (Darwin 25.5.0). All commands run from the directory holding the clips.
 - Four source clips, chosen to span synthetic-CBR, a real high-bitrate 4:2:2 broadcast mux, and
-  two real CNN International contribution captures:
+  two real contribution captures of a 24-hour news channel:
 
 | File | Role | Service | Video | Duration | TS bitrate |
 |---|---|---|---|---|---|
 | `testloop_clean.ts` | Synthetic clean CBR reference (FFmpeg) | Service01 | H.264 High@L4.0 4:2:0 1080i/p | 7:57 | 10.00 Mbps (exact CBR) |
-| `testloop.ts` | Real broadcast mux reference | Cartoonito UK HD 422 | H.264 High **4:2:2**@L4.0 1080 | 7:56 | 27.51 Mbps |
-| `CNNiEMEA.ts` | Real contribution capture | CNNI EMEA HD (WBD) | H.264 High@L4.0 4:2:0 1080 | 4:59 | 9.95 Mbps |
-| `CNNiEMEA2.ts` | Real contribution capture (longer) | CNNI EMEA HD (WBD) | H.264 High@L4.0 4:2:0 1080 | 9:59 | 9.95 Mbps |
+| `testloop.ts` | Real broadcast mux reference | a 4:2:2 entertainment service | H.264 High **4:2:2**@L4.0 1080 | 7:56 | 27.51 Mbps |
+| `contrib-5m.ts` | Real contribution capture | the news channel | H.264 High@L4.0 4:2:0 1080 | 4:59 | 9.95 Mbps |
+| `contrib-10m.ts` | Real contribution capture (longer) | the news channel | H.264 High@L4.0 4:2:0 1080 | 9:59 | 9.95 Mbps |
 
 ## Procedure
 
@@ -41,7 +41,7 @@ tsp -I file <clip> -P continuity -O drop
 
 Measured reference (P0):
 
-| Metric (unit) | `testloop_clean` | `testloop` | `CNNiEMEA` | `CNNiEMEA2` |
+| Metric (unit) | `testloop_clean` | `testloop` | `contrib-5m` | `contrib-10m` |
 |---|---|---|---|---|
 | File size (bytes) | 596,847,172 | 1,638,619,656 | 372,971,696 | 745,917,260 |
 | TS packets | 3,174,719 | 8,716,062 | 1,983,892 | 3,967,645 |
@@ -66,7 +66,7 @@ Measured reference (P0):
 | Stuffing (null) bitrate (Mbps) | 1.435 | 1.447 | 0.458 | 0.456 |
 
 ¹ File-based PCR accuracy expressed as the tightest `pcrverify` jitter bound with **zero**
-violations: `testloop_clean`/`CNNiEMEA2` pass at ≤ 37 ns (1 PCR unit); `testloop`/`CNNiEMEA` pass
+violations: `testloop_clean`/`contrib-10m` pass at ≤ 37 ns (1 PCR unit); `testloop`/`contrib-5m` pass
 at ≤ 74 ns (2 units) with 0 violations, and show a handful only at the 37 ns bound (447 and 1
 respectively). All four are far inside the TR 101 290 P2 ±500 ns limit — as a *byte-domain*
 result (see Observations).
@@ -79,14 +79,14 @@ The reference against which T2/T3 check track carriage; PCR is carried on the vi
 PID**); Audio (eng) 0x0101 (MPEG-2 AAC); PSI 0x0000/0x1000/0x0011 (PAT/PMT/SDT-BAT). No teletext,
 SCTE-35, CAT, NIT, TDT/TOT.
 
-`testloop.ts` — Cartoonito UK HD 422: Video 0x0030 (H.264 **4:2:2**@L4.0, **PCR PID**); Audio 1
+`testloop.ts` — the 4:2:2 service: Video 0x0030 (H.264 **4:2:2**@L4.0, **PCR PID**); Audio 1
 0x0040 (MPEG-1 L2 256k); Audio 2 0x0041 (AC-3); Audio 3 0x0042 (MPEG-1 L2, **visual-impaired**);
 Subtitles 0x0050 (teletext); SCTE-35 0x0060; PSI 0x0000/0x0020/0x0001/0x0011 (PAT/PMT/CAT/SDT-BAT).
 
-`CNNiEMEA.ts` / `CNNiEMEA2.ts` — CNNI EMEA HD (WBD): Video 0x006F (H.264 High@L4.0 4:2:0, **PCR
+`contrib-5m.ts` / `contrib-10m.ts` — the news channel: Video 0x006F (H.264 High@L4.0 4:2:0, **PCR
 PID**); Audio 1 0x0079 (MPEG-1 L2 192k); Audio 2 0x007B (AC-3); Subtitles 0x0083 (teletext);
 SCTE-35 0x008D/0x008E/0x008F (**three** Splice Info streams); PSI/SI 0x0000/0x0064/0x0010/0x0011/
-0x0014 (PAT/PMT/NIT (WBD)/SDT-BAT/TDT-TOT).
+0x0014 (PAT/PMT/NIT/SDT-BAT/TDT-TOT).
 
 ## Observations
 
@@ -96,13 +96,13 @@ SCTE-35 0x008D/0x008E/0x008F (**three** Splice Info streams); PSI/SI 0x0000/0x00
   PCR values are consistent with their byte positions at the estimated CBR; they do *not* characterise
   a live source's true clock, its frequency offset and drift, which need arrival timestamps against a
   reference (P2).
-- Two sub-millisecond minimum PCR intervals (`testloop_clean` 0.60 ms, CNN 0.15 ms) appear against
+- Two sub-millisecond minimum PCR intervals (`testloop_clean` 0.60 ms, the news captures 0.15 ms) appear against
   otherwise regular ~20–25 ms spacing. With 0 reported discontinuities these are most likely
   capture-boundary artefacts; they do not affect P1 (which bounds the *maximum* interval).
 - `testloop` PAT/PMT repetition (~475 ms) is within TR 101 290 P1 (≤ 500 ms) but close to the limit
   — a transport that *adds* table jitter could push this clip over, whereas the other three
   (≤ 100–291 ms) have ample margin.
-- GOP structure was not separately measured. The CNN captures are treated as the open-GOP
+- GOP structure was not separately measured. The news captures are treated as the open-GOP
   contribution class (recovery-point SEI, roughly one IDR / 15 s); IDR cadence was not quantified
   in this run. It matters because the media-aware importer opens a group at each keyframe, so the
   cadence sets group duration. A per-frame keyframe listing of the video PID (`ffprobe
@@ -111,11 +111,11 @@ SCTE-35 0x008D/0x008E/0x008F (**three** Splice Info streams); PSI/SI 0x0000/0x00
 ## Conclusion
 
 The four-clip set is clean and representative (synthetic CBR + real 4:2:2 broadcast mux + two real
-CNN contribution captures), so downstream T2/T3/T7 comparisons are honest deltas against a known-good
+news contribution captures), so downstream T2/T3/T7 comparisons are honest deltas against a known-good
 baseline. Reference established.
 
 ## References
 
-- Contribution-feed class (CNN International, open-GOP): [`docs/evidence.md`](../docs/evidence.md) §3.1.
+- Contribution-feed class (a news channel, open-GOP): [`docs/evidence.md`](../docs/evidence.md) §3.1.
 - File vs wire domain, and what each gate can decide: [`docs/architecture.md`](../docs/architecture.md) §4.2.
 - Pre-groom baseline used downstream: [`docs/evidence.md`](../docs/evidence.md) §3.

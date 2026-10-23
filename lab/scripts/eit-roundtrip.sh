@@ -21,7 +21,7 @@ set -euo pipefail
 # shellcheck source=moq-cli-flags.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 
-SRC="${1:-$HOME/CNNiEMEA2_eit_full.ts}"
+SRC="${1:-$HOME/contrib-10m_eit_full.ts}"
 WINDOW="${2:-45}"
 BROADCAST="eit.hang"
 OUT="$HOME/eit_roundtrip_out.ts"

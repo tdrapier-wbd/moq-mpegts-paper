@@ -28,8 +28,8 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 clips=(
 	"$HOME/testloop_clean.ts"
 	"$HOME/testloop.ts"
-	"$HOME/CNNiEMEA.ts"
-	"$HOME/CNNiEMEA2.ts"
+	"$HOME/contrib-5m.ts"
+	"$HOME/contrib-10m.ts"
 )
 
 for src in "${clips[@]}"; do

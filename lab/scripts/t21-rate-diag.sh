@@ -21,7 +21,7 @@ MOQ=${MOQ:-$HOME/bin-3006/moq}
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY=${RELAY:-$HOME/bin-3006/moq-relay}
 PACER=${PACER:-$HOME/pacer/mpegts-pacer-instr}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 RATE=${RATE:-11000000}
 CUSHION_MS=${CUSHION_MS:-1000}
 CAP_MS=${CAP_MS:-2500}

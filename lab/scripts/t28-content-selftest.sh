@@ -27,7 +27,7 @@
 # Usage: t28-content-selftest.sh [clip] [outdir]
 set -euo pipefail
 
-CLIP="${1:-$HOME/CNNiEMEA2.ts}"
+CLIP="${1:-$HOME/contrib-10m.ts}"
 OUT="${2:-/tmp/t28-content-selftest}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTENT="$HERE/t28-content-lost.py"

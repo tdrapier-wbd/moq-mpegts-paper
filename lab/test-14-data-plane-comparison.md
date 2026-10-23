@@ -37,7 +37,7 @@ Stated as what would move the paper's conclusion, since a comparison has no pass
 
 | Component | Detail |
 |---|---|
-| Source | `CNNiEMEA2.ts` — CNN EMEA HD, 9,945,951 bps CBR, open-GOP, 3× SCTE-35, full DVB SI |
+| Source | `contrib-10m.ts` — the news channel, 9,945,951 bps CBR, open-GOP, 3× SCTE-35, full DVB SI |
 | Host | single macOS host, loopback path, both legs in the same session |
 | MoQ | `moq` / `moq-relay` 0.9.10 @ `eab960192` (stock `main`), relay `--server-quic-gso=false` |
 | Segmented HTTP, arm B1 | TSDuck 3.44-4676 `hls` output and input plugins |
@@ -84,10 +84,10 @@ comparison rather than two demonstrations.
 
 ```bash
 # Leg A — MoQ: tsp regulate -> import ts -> relay -> export ts -> instrument
-lab/scripts/t14-a.sh ~/CNNiEMEA2.ts ~/t14/a 60
+lab/scripts/t14-a.sh ~/contrib-10m.ts ~/t14/a 60
 
 # Arm B1 — classic HLS: tsp -O hls -> HTTP origin -> tsp -I hls -> instrument
-lab/scripts/t14-b1.sh ~/CNNiEMEA2.ts ~/t14/b1 60 2
+lab/scripts/t14-b1.sh ~/contrib-10m.ts ~/t14/b1 60 2
 
 # Cadence report and PID census
 python3 lab/scripts/t13-cadence.py report ~/t14/a/a-egress.csv ~/t14/b1/b1-egress.csv
@@ -95,13 +95,13 @@ tsp -I file <capture>.ts -P analyze --normalized -O drop
 
 # Measurement 5 — carriage cost through nginx, one run per segment duration
 for s in 1 2 6; do
-	PORT=$((18090 + s)) lab/scripts/t14-wirecost.sh ~/CNNiEMEA2.ts ~/t14wire-$s 60 $s
+	PORT=$((18090 + s)) lab/scripts/t14-wirecost.sh ~/contrib-10m.ts ~/t14wire-$s 60 $s
 done
 
 # Arm B2 — LL-HLS with TS parts, against both a static and a conformant origin
 for o in nginx apple; do
 	for c in tsp ffmpeg; do
-		ORIGIN=$o lab/scripts/t14-b2.sh ~/CNNiEMEA2.ts ~/t14b2-$o-$c 45 $c 300
+		ORIGIN=$o lab/scripts/t14-b2.sh ~/contrib-10m.ts ~/t14b2-$o-$c 45 $c 300
 	done
 done
 # Control: does Apple's own client-side tool fetch the parts?

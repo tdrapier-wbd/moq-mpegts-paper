@@ -23,12 +23,12 @@ claim neither.
   default features; every EC2 arm again on upstream `main` at `b581c27ed`, with the export merged.
 - **Loopback arms**, on the EC2 secondary (Linux, dedicated) and on this workstation (macOS, shared):
   relay, publisher and two subscribers on one host. Clips:
-  `CNNiEMEA2.ts` (1080i25 H.264, MP2 and AC-3, 11 Mb/s; passes the T-STD in
-  [T44](test-44-tstd-grading.md)) and the 125 s TNT Sports 4 cut (H.264 and AC-3, 21.6 Mb/s; fails
+  `contrib-10m.ts` (1080i25 H.264, MP2 and AC-3, 11 Mb/s; passes the T-STD in
+  [T44](test-44-tstd-grading.md)) and the 125 s sports cut (H.264 and AC-3, 21.6 Mb/s; fails
   it, [T45](test-45-live-tstd-remux.md)). `--delay 1s`, 120 s.
 - **Loss arm (EC2 secondary):** the #4613 rig ([`t8b-loss-point.sh`](scripts/t8b-loss-point.sh),
   `IMPORT_ARGS=--passthrough EXPORT_ARGS=--passthrough`): two network namespaces, 10 % uniform loss
-  on the relay-to-subscriber direction, 25 ms each way, `CNNiEMEA2.ts`, `--delay 2s` and 6 s, 120 s.
+  on the relay-to-subscriber direction, 25 ms each way, `contrib-10m.ts`, `--delay 2s` and 6 s, 120 s.
   Controls: the same build's demultiplexed export, and the standing `84b34f54` (`--max-age 2s`) at
   0 % and 10 %, every egress graded on content.
 - **Live arm (P1-t):** the live hand-off (25 Mb/s CBR, no nulls; [T45](test-45-live-tstd-remux.md))
@@ -57,7 +57,7 @@ cross-validates it). The loss arm keeps its egress and runs the identity check o
 2. **A late leg is the same stream.** B, joining 8 s after A, is byte-identical to A over the source
    span both cover, continuity counters included.
 3. **The source's conformance.** `compliance.py`'s `tstd` check gives the same verdict on A as on the
-   source span A covers, on both clips (expected: CNN passes, TNT4 fails).
+   source span A covers, on both clips (expected: the news cut passes, the sports cut fails).
 4. **Paced on the source's PCR.** On leg A, `pcr-timing.py`'s `pcr-release-timing` check passes (no
    PCR released more than 10 ms off the interval its value asserts) and its `pcr-rate` check passes
    (the PCR clock within 30 ppm of the release clock).
@@ -79,26 +79,26 @@ because it is the quest's own test. Criterion 4 is the one the file-domain check
 
 | Clip, host | Packets, A / B | Gaps, foreign, dropped | B against A | `tstd`, A / source span | Release timing, A | PCR rate, A |
 |---|---:|---|---|---|---|---:|
-| CNN, EC2 | 707,717 / 739,858 | 0, 0, 0 on both | identical, 125.5 MB | pass / pass | 0 of 4,380 outside ± 10 ms; worst 1.8 ms | −0.13 ppm |
-| TNT4, EC2 | 1,710,040 / 1,788,056 | 0, 0, 0 on both | identical, 302.3 MB | fail / fail, identical | 0 of 4,179; worst 1.9 ms | +0.16 ppm |
-| CNN, workstation | 707,433 / 739,368 | 0, 0, 0 on both | identical, 125.4 MB | pass / pass | **1** of 4,378; 10.045 ms, p99 3.1 ms | −2.12 ppm |
-| TNT4, workstation | 1,708,526 / 1,788,056 | 0, 0, 0 on both | identical, 302.0 MB | fail / fail, identical | **9** of 4,174; worst 62.3 ms, p99 3.6 ms | +0.53 ppm |
-| CNN, EC2, `b581c27ed` | 707,717 / 739,858 | 0, 0, 0 on both | identical, 125.5 MB | pass / pass | 0 of 4,380; worst 1.8 ms | +0.54 ppm |
-| TNT4, EC2, `b581c27ed` | 1,710,040 / 1,787,639 | 0, 0, 0 on both | identical, 302.3 MB | fail / fail, identical | 0 of 4,179; worst 1.9 ms | +0.69 ppm |
+| News, EC2 | 707,717 / 739,858 | 0, 0, 0 on both | identical, 125.5 MB | pass / pass | 0 of 4,380 outside ± 10 ms; worst 1.8 ms | −0.13 ppm |
+| Sports, EC2 | 1,710,040 / 1,788,056 | 0, 0, 0 on both | identical, 302.3 MB | fail / fail, identical | 0 of 4,179; worst 1.9 ms | +0.16 ppm |
+| News, workstation | 707,433 / 739,368 | 0, 0, 0 on both | identical, 125.4 MB | pass / pass | **1** of 4,378; 10.045 ms, p99 3.1 ms | −2.12 ppm |
+| Sports, workstation | 1,708,526 / 1,788,056 | 0, 0, 0 on both | identical, 302.0 MB | fail / fail, identical | **9** of 4,174; worst 62.3 ms, p99 3.6 ms | +0.53 ppm |
+| News, EC2, `b581c27ed` | 707,717 / 739,858 | 0, 0, 0 on both | identical, 125.5 MB | pass / pass | 0 of 4,380; worst 1.8 ms | +0.54 ppm |
+| Sports, EC2, `b581c27ed` | 1,710,040 / 1,787,639 | 0, 0, 0 on both | identical, 302.3 MB | fail / fail, identical | 0 of 4,179; worst 1.9 ms | +0.69 ppm |
 
 *Measured, P1, wire domain (each leg's stdout), build `0da3a7736` unless named, `--delay 1s`, 120 s,
 one run per clip, host and build. Leg A's capture ends when the grader's 110 s window does.*
 
-TNT4's verdict is the source's own: the span A covers carries 1,425 continuity errors, six PCR
+The sports cut's verdict is the source's own: the span A covers carries 1,425 continuity errors, six PCR
 intervals over 100 ms (worst 200 ms) and four audio PIDs the strict model refuses, having no sync at
 the offset where the span starts; its video PID stays inside its buffers. A carries all of it byte for
 byte, and so does B over the overlap. The merged export repeats the dedicated host's verdicts on
-both clips; its release clock logged nothing on CNN, and on TNT4 14 and 10 steps out of tolerance in
+both clips; its release clock logged nothing on the news cut, and on the sports cut 14 and 10 steps out of tolerance in
 the first 65 s, dropping nothing.
 
 The workstation's release-timing outliers belong to the host (*inferred*: the same build, clips and
 grader on the dedicated host put every PCR within 1.9 ms). Graded the same way there, the input pacer
-(`tsp regulate --pcr-synchronous`) puts 4,279 of 4,326 TNT4 intervals outside ± 10 ms (p95 46 ms), so
+(`tsp regulate --pcr-synchronous`) puts 4,279 of 4,326 sports-cut intervals outside ± 10 ms (p95 46 ms), so
 the export re-paces a bursty input to within a few milliseconds of the source's PCR.
 
 ### The live feed across hosts (P1-t)
@@ -114,7 +114,7 @@ hand-off capture is the reference, and the relay, publisher and capture shared t
 standing ingest.*
 
 All four criteria pass, and the internet leg holds criteria 1 and 2 as well. The `tstd` verdict is the
-source's, as with TNT4: the span A covers opens mid-frame on both audio PIDs, which the strict model
+source's, as with the sports cut: the span A covers opens mid-frame on both audio PIDs, which the strict model
 refuses, and the video stays inside its buffers (EB peak 79.9 %). On the primary the passthrough
 import took 6.4 % of a core and the relay 8.4 % serving three legs, against 74.8 % for the standing
 media-aware import of the same feed. Counted per datagram, the relay sends each leg 1.054× the

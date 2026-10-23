@@ -24,7 +24,7 @@ set -uo pipefail
 LABEL="${1:-seg}"
 SECS="${2:-60}"
 
-CLIP=${CLIP:-/home/ubuntu/CNNiEMEA2.ts}
+CLIP=${CLIP:-/home/ubuntu/contrib-10m.ts}
 PUBIP=${PUBIP:-10.99.0.1}
 DIR=${DIR:-/home/ubuntu/t8b/out}
 PORT=${PORT:-8099}

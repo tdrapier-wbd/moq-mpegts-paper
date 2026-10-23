@@ -35,7 +35,7 @@ set -uo pipefail
 DRILL=${1:?drill}
 OUT=${2:?output dir}
 
-SRC=${SRC:-$HOME/CNNiEMEA2.ts}
+SRC=${SRC:-$HOME/contrib-10m.ts}
 SEGSECS=${SEGSECS:-2}
 PORT=${PORT:-18190}
 RECV=${RECV:-tsp}

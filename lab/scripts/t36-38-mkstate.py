@@ -2,7 +2,7 @@
 """Write the authorization stub's state file. Called to set up an arm and to
 flip a lever mid-session; the write is the instant of the control-plane decision.
 
-    mkstate.py --cache-control "max-age=5" --enable affakey,affbkey,wbdkey,rivalkey
+    mkstate.py --cache-control "max-age=5" --enable affakey,affbkey,bcastkey,rivalkey
     mkstate.py --mode refuse
 """
 import argparse
@@ -15,18 +15,18 @@ STATE = f"{W}/authstate.json"
 DECISIONS = f"{W}/decisions.jsonl"
 
 KEYS = {
-    "wbdkey":   f"{W}/keys/wbd.pub.jwk",
+    "bcastkey":   f"{W}/keys/bcast.pub.jwk",
     "rivalkey": f"{W}/keys/rival.pub.jwk",
     "affakey":  f"{W}/keys/affa.pub.jwk",
     "affbkey":  f"{W}/keys/affb.pub.jwk",
     "affckey":  f"{W}/keys/affc.pub.jwk",
 }
 CHANNELS = {
-    "wbdkey": ["cnn", "cnn-intl", "tnt", "nobody"],
-    "rivalkey": ["cnn"],
-    "affakey": ["cnn"],
-    "affbkey": ["cnn", "tnt"],
-    "affckey": ["tnt"],
+    "bcastkey": ["ch1", "ch1-intl", "ch2", "nobody"],
+    "rivalkey": ["ch1"],
+    "affakey": ["ch1"],
+    "affbkey": ["ch1", "ch2"],
+    "affckey": ["ch2"],
 }
 
 
@@ -34,7 +34,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", default="up", choices=["up", "refuse", "unavailable"])
     ap.add_argument("--cache-control", default=None)
-    ap.add_argument("--enable", default="wbdkey,rivalkey,affakey,affbkey,affckey")
+    ap.add_argument("--enable", default="bcastkey,rivalkey,affakey,affbkey,affckey")
     ap.add_argument("--keymap", default=None,
                     help="kid=path,kid=path — override which key file a kid resolves to")
     ap.add_argument("--mark", default="", help="label this decision in decisions.jsonl")

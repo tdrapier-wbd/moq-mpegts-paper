@@ -17,43 +17,43 @@ echo "############ ENABLE ARMS ############"
 
 # ---- E1: grant, then connect. Zero is the grant appearing at the endpoint ----
 echo "== E1: grant-and-connect =="
-python3 $W/mkstate.py --cache-control "max-age=5" --enable "wbdkey,rivalkey,affbkey,affckey" --mark "E1 pre" >/dev/null
+python3 $W/mkstate.py --cache-control "max-age=5" --enable "bcastkey,rivalkey,affbkey,affckey" --mark "E1 pre" >/dev/null
 sleep 2
 for r in 1 2 3 4 5; do
   python3 $W/mkstate.py --cache-control "max-age=5" --mark "E1-r$r" >/dev/null   # the grant
   T0=$(python3 -c "
 import json;print([json.loads(l) for l in open('$W/decisions.jsonl') if json.loads(l).get('mark')=='E1-r$r'][-1]['wall'])")
   timeout 10 $M --backoff-timeout 100ms \
-    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa.jwt)" \
-    "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/E1-r$r.log \
+    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/affa.jwt)" \
+    "${MOQ_FP[@]}" "$FP" export --broadcast ch1 ts 2>$W/logs/E1-r$r.log \
     | python3 $LB --out $W/out/E1-r$r.ts --record $W/lastbyte.jsonl --mark "E1-r$r" >/dev/null
   python3 -c "
 import json
 lb={json.loads(l)['mark']:json.loads(l) for l in open('$W/lastbyte.jsonl')}
 r=lb.get('E1-r$r')
 print(f\"  E1-r$r grant-to-first-byte: {r['first_write']-$T0:6.3f} s   ({r['bytes']:,} B delivered)\" if r and r.get('first_write') else '  E1-r$r NO MEDIA')"
-  python3 $W/mkstate.py --cache-control "max-age=5" --enable "wbdkey,rivalkey,affbkey,affckey" --mark "E1 reset r$r" >/dev/null
+  python3 $W/mkstate.py --cache-control "max-age=5" --enable "bcastkey,rivalkey,affbkey,affckey" --mark "E1 reset r$r" >/dev/null
   sleep 1
 done
 
 reset E2
 echo
 echo "== E2: add a second channel to a live affiliate =="
-# affiliate B already holds cnn+tnt. Start cnn, then bring up tnt on a second
-# session, and grade whether cnn was disturbed.
+# affiliate B already holds ch1+ch2. Start ch1, then bring up ch2 on a second
+# session, and grade whether ch1 was disturbed.
 timeout 24 $M --backoff-timeout 100ms \
-  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affb.jwt)" \
-  "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/E2-cnn.log \
-  | python3 $LB --out $W/out/E2-cnn.ts --record $W/lastbyte.jsonl --mark "E2-cnn" >/dev/null &
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/affb.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast ch1 ts 2>$W/logs/E2-ch1.log \
+  | python3 $LB --out $W/out/E2-ch1.ts --record $W/lastbyte.jsonl --mark "E2-ch1" >/dev/null &
 sleep 8
 python3 $W/mkstate.py --cache-control "max-age=5" --mark "E2-add" >/dev/null
 timeout 12 $M --backoff-timeout 100ms \
-  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affb.jwt)" \
-  "${MOQ_FP[@]}" "$FP" export --broadcast tnt ts 2>$W/logs/E2-tnt.log \
-  | python3 $LB --out $W/out/E2-tnt.ts --record $W/lastbyte.jsonl --mark "E2-tnt" >/dev/null
+  "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/affb.jwt)" \
+  "${MOQ_FP[@]}" "$FP" export --broadcast ch2 ts 2>$W/logs/E2-ch2.log \
+  | python3 $LB --out $W/out/E2-ch2.ts --record $W/lastbyte.jsonl --mark "E2-ch2" >/dev/null
 wait
-echo "  cnn continuity across the addition:"
-python3 $W/grade.py $W/out/E2-cnn.ts $W/out/E2-tnt.ts
+echo "  ch1 continuity across the addition:"
+python3 $W/grade.py $W/out/E2-ch1.ts $W/out/E2-ch2.ts
 
 echo
 echo "############ DISABLE ARMS ############"
@@ -63,7 +63,7 @@ echo "== D1: stop refreshing — does expiry bound a live session? =="
 for variant in withrecheck norecheck; do
   reset "D1-$variant"
   EXP=$(($(date +%s)+15))
-  $M token sign --key $W/keys/affa.jwk --root wbd --subscribe cnn --expires $EXP > $W/tok/affa-short.jwt
+  $M token sign --key $W/keys/affa.jwk --root bcast --subscribe ch1 --expires $EXP > $W/tok/affa-short.jwt
   if [ "$variant" = "withrecheck" ]; then
     python3 $W/mkstate.py --cache-control "max-age=5" --mark "D1-$variant" >/dev/null
   else
@@ -71,8 +71,8 @@ for variant in withrecheck norecheck; do
   fi
   sleep 1
   timeout 50 $M --backoff-timeout 100ms \
-    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/wbd?jwt=$(cat $W/tok/affa-short.jwt)" \
-    "${MOQ_FP[@]}" "$FP" export --broadcast cnn ts 2>$W/logs/D1-$variant.log \
+    "${MOQ_DIAL[1]}" "https://127.0.0.1:9443/bcast?jwt=$(cat $W/tok/affa-short.jwt)" \
+    "${MOQ_FP[@]}" "$FP" export --broadcast ch1 ts 2>$W/logs/D1-$variant.log \
     | python3 $LB --out $W/out/D1-$variant.ts --record $W/lastbyte.jsonl --mark "D1-$variant" >/dev/null
   python3 -c "
 import json
@@ -89,7 +89,7 @@ done
 echo
 echo "== D3a: withdraw the verifying key =="
 reset D3a
-./dartm.sh D3a 6 14 --cache-control "max-age=5" --enable "wbdkey,rivalkey,affbkey,affckey"
+./dartm.sh D3a 6 14 --cache-control "max-age=5" --enable "bcastkey,rivalkey,affbkey,affckey"
 
 echo "== D3b: REPLACE the key under the same kid (a 'does a key exist' check would miss this) =="
 reset D3b
@@ -111,7 +111,7 @@ echo
 echo "== D6: endpoint returns no Cache-Control, then the grant is withdrawn =="
 reset D6
 python3 $W/mkstate.py --mark "D6 pre (no cache-control)" >/dev/null; sleep 1
-./dartm.sh D6 6 40 --enable "wbdkey,rivalkey,affbkey,affckey"
+./dartm.sh D6 6 40 --enable "bcastkey,rivalkey,affbkey,affckey"
 
 reset final
 echo

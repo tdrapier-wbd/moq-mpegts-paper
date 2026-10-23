@@ -42,7 +42,7 @@ moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 PACER=${PACER:?set PACER to the mpegts-pacer binary}
 STIM=${STIM:-$HOME/f5/ts-partial-stall.py}
 LIVENESS=${LIVENESS:-$HOME/f5/ts-liveness.py}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 # One broadcast name per arm. Sharing a name across back-to-back arms fails: T25 showed the relay
 # retains an abandoned session until the QUIC idle timeout, so the next arm's subscriber attaches to
 # the previous arm's broadcast and is dropped the moment the new publisher replaces it — which cost

@@ -84,7 +84,7 @@ over five samples, max 0.81 ms; ICMP is blocked between them, so ping is not ava
 wide-area path**, and §Limits says what that forbids concluding.
 
 Both hosts were checked before each run by `f5-reset.sh`, which kills prior processes and then
-*verifies* none survived. The relay host also carries standing CNN services costing a steady
+*verifies* none survived. The relay host also carries standing live-feed services costing a steady
 **12.8–13.3 % of its two cores**; these were left running, measured, and recorded in each run's
 `meta.txt`. Per-process accounting keeps them out of the relay's own CPU figure, but they do move the
 box's saturation point earlier, which is why the relay's own utilisation is reported beside the box's

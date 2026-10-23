@@ -462,7 +462,7 @@ together (+2 video, +8 PSI above). It is masked out of every figure in this sect
 **2. The SI cadence was anchored to process start.** `export.rs` decided when to re-emit a table by
 measuring forward from its own last emission, so two legs put the tables on different frames.
 Measured at the exporter with the groomer removed ([`export-determinism.sh`](scripts/export-determinism.sh),
-`CNNiEMEA2.ts`, second subscriber joining 20 s late),
+`contrib-10m.ts`, second subscriber joining 20 s late),
 [`ts-table-anchor.py`](scripts/ts-table-anchor.py) tags each emission with the PTS of the frame that
 triggered it and reports frames where both legs emitted over frames where either did:
 
@@ -512,7 +512,7 @@ continuity counter masked, leg B joining 20 s late:
 |---|---|---|---|---|
 | video-only 2 Mb/s, 1.8 s GOP | 96.43 % | **100.00 %** | 100.00 % | **100.00 %** |
 | video-only 2 Mb/s, 2 s GOP | 100.00 % | 100.00 % | — | — |
-| `CNNiEMEA2.ts` — 2 audio, B-frames, SDT + NIT | 87.75 % | 89.72 % | **95.62 %** | **94.09 %** |
+| `contrib-10m.ts` — 2 audio, B-frames, SDT + NIT | 87.75 % | 89.72 % | **95.62 %** | **94.09 %** |
 
 The first three columns are hand-built approximations (upstream `6d3c51d7` plus the patch under
 review); the last is a stock build of `main` at `eab960192`, which is the one to quote. The
@@ -541,7 +541,7 @@ the interleave, which is a race; the single-track pair is 100 % every time.
 rather than arrival and puts unchanged SI repeats on the media-time grid, closing
 [#2829](https://github.com/moq-dev/moq/issues/2829) and
 [#3948](https://github.com/moq-dev/moq/issues/3948). It was graded against the standing `84b34f54`
-on the primary, two replicates each, `CNNiEMEA2.ts`, leg B joining 20 s late, the export unpadded
+on the primary, two replicates each, `contrib-10m.ts`, leg B joining 20 s late, the export unpadded
 (`--mux-rate 0`), by three instruments that each ask one question of the raw exporter output
 ([`export-determinism.sh`](scripts/export-determinism.sh)):
 
@@ -612,7 +612,7 @@ rather than with the counter masked:
 | Source | identical, stock `main` | identical, padded | masked ceiling |
 |---|---|---|---|
 | video-only 2 Mb/s, 1.8 s GOP | 0.37 % | **99.92 %** | 100.00 % |
-| `CNNiEMEA2.ts` | 24.61 % | **93.57 %** | 93.79 % |
+| `contrib-10m.ts` | 24.61 % | **93.57 %** | 93.79 % |
 
 - **The counter stops being a defect**, on both sources: raw identity arrives within 0.2 points of
   the masked ceiling. What is left below 100 % on the multi-track source is the interleave.
@@ -912,7 +912,7 @@ leg joining 8 s late is byte-identical to the first ([T48](test-48-passthrough-e
 pair, each leg through its own stream-clocked groomer, stay hitless when either leg is lost mid-run?
 
 **Rig** ([`t12-opaque-late.sh`](scripts/t12-opaque-late.sh)). The secondary alone, clear of its
-standing units: `CNNiEMEA2.ts` paced in real time into `import ts --passthrough` on a merged `main`
+standing units: `contrib-10m.ts` paced in real time into `import ts --passthrough` on a merged `main`
 relay and teed as the reference, for 150 s so the clip never wraps; legs A and B, each `export ts
 --passthrough --delay 2s` into its own `mpegts-pacer --rtp --stream-clock` at the clip's rate, with
 shared SSRC and sequence seed, to ports 5100 and 5200. B starts 8 s after A. One loopback `tcpdump`

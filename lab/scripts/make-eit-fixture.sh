@@ -38,8 +38,8 @@
 set -euo pipefail
 
 VARIANT="${1:-full}"
-SRC="${2:-$HOME/CNNiEMEA2.ts}"
-OUT="${3:-$HOME/CNNiEMEA2_eit_${VARIANT}.ts}"
+SRC="${2:-$HOME/contrib-10m.ts}"
+OUT="${3:-$HOME/contrib-10m_eit_${VARIANT}.ts}"
 # Must match the service the EPG describes; see eit-epg.xml.
 SERVICE_ID="${SERVICE_ID:-1}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -51,7 +51,7 @@ runs on the **EC2 secondary** (8 vCPU / 15 GB, `eu-west-1b`), chosen over the pr
 Substituting macOS dummynet would still be wrong, for the comparability reason, and was not done.
 The method rule this cost is in [method-notes](method-notes.md) § Rig hygiene.
 
-**Grader validation, measured.** Five cells, one command, `CNNiEMEA.ts` as the source:
+**Grader validation, measured.** Five cells, one command, `contrib-5m.ts` as the source:
 
 | Cell | Injected | Measured lost | Measured duplicated | Continuity errors |
 |---|---|---|---|---|
@@ -113,7 +113,7 @@ have both, the tap figure agrees with the capture's within 0.85 s on outage cell
 
 **Environment.** EC2 secondary, 8 vCPU / 15 GB, Ubuntu 26.04. Two network namespaces joined by veth
 (`t8b-netns.sh`), `cake` at the bottleneck provisioned at 20 Mb/s, 100 ms base RTT (50 ms each way),
-source a 120 s ~9.95 Mb/s CBR slice of `CNNiEMEA2.ts` paced with `tsp regulate --pcr-synchronous`.
+source a 120 s ~9.95 Mb/s CBR slice of `contrib-10m.ts` paced with `tsp regulate --pcr-synchronous`.
 `moq import ts` → relay → `moq export ts`, **no groomer in the path**, captured at the subscriber.
 Outage = 100 % loss applied at the bottleneck for a fixed duration, 20 s after delivery settles.
 Measurement point **P1**, graded on content and conserved, as above. The build and QUIC backend are

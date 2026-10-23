@@ -24,7 +24,7 @@ Usage: make-mpts-epg.py <services> <step_seconds> <events> <out.xml>
 import datetime
 import sys
 
-# CNNiEMEA2.ts's own TDT epoch; change it with the source clip or the p/f table is empty at t=0.
+# contrib-10m.ts's own TDT epoch; change it with the source clip or the p/f table is empty at t=0.
 EPOCH = datetime.datetime(2026, 6, 19, 7, 54, 42)
 
 

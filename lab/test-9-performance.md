@@ -89,7 +89,7 @@ overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time 
   **The overhead legs must run off loopback and with `--server-quic-gso=false`**, or the kernel
   coalesces sends and the datagram distribution — the output that prices per-packet cost — is
   meaningless.
-- **Source:** `~/CNNiEMEA2.ts` looped via `tsp regulate --pcr-synchronous` (≈ 9.93 Mbps). For the
+- **Source:** `~/contrib-10m.ts` looped via `tsp regulate --pcr-synchronous` (≈ 9.93 Mbps). For the
   bitrate sweep, `t9_2mbps.ts` and `t9_27mbps.ts` were encoded on the box from that clip
   (verified at 2.000 and 27.500 Mbps). For the publisher-role soak, `t9_loop_vidonly.ts` — the same
   clip remuxed to **video only**, which is the one variant that survives a loop wrap (below). Note
@@ -221,7 +221,7 @@ marginal ~1.7 MB per subscriber. Memory is not the fan-out constraint on either 
 ## Bitrate sweep: cost per Mbps falls sharply as bitrate rises
 
 `~/t9/bitrate_cache_ec2.sh`, N held at 10 subscribers so the box stays far from saturation, over
-three sources: a 2 Mbps and a 27.5 Mbps clip encoded on the box from the standard CNN clip, plus the
+three sources: a 2 Mbps and a 27.5 Mbps clip encoded on the box from the standard news clip, plus the
 clip itself at 9.95 Mbps.
 
 | Case | Aggregate | Relay CPU | **CPU % per Mbps** | CPU per session | Relay RSS |

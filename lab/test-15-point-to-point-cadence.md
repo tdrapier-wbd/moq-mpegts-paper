@@ -33,7 +33,7 @@ Single macOS host, loopback path, same clip and same instrument as T14.
 
 | | |
 |---|---|
-| Source | `~/CNNiEMEA2.ts` — 1080i25 H.264, 9,945,951 bps CBR, 4.57 % null stuffing |
+| Source | `~/contrib-10m.ts` — 1080i25 H.264, 9,945,951 bps CBR, 4.57 % null stuffing |
 | Publisher | `tsp -I file --infinite -P regulate --pcr-synchronous`, identical to every T14 arm |
 | RIST | TSDuck 3.44-4676 `rist` input/output plugins, and libRIST 0.2.20 `ristsender`/`ristreceiver` |
 | SRT | TSDuck `srt` plugins, matched 1000 ms latency both ends |
@@ -78,27 +78,27 @@ is what T14 published on and the 5 ms one is what resolves the transport.
 
 ```bash
 # Instrument floor: no transport at all, both source granularities
-lab/scripts/t15-cadence.sh          ~/CNNiEMEA2.ts ~/t15 60 udp
-WAITMIN=5 lab/scripts/t15-cadence.sh ~/CNNiEMEA2.ts ~/t15 60 udp
+lab/scripts/t15-cadence.sh          ~/contrib-10m.ts ~/t15 60 udp
+WAITMIN=5 lab/scripts/t15-cadence.sh ~/contrib-10m.ts ~/t15 60 udp
 
 # The transports, at the resolving source granularity
 for leg in rist-main rist-simple srt librist librist-cbr; do
-	WAITMIN=5 lab/scripts/t15-cadence.sh ~/CNNiEMEA2.ts ~/t15 60 "$leg"
+	WAITMIN=5 lab/scripts/t15-cadence.sh ~/contrib-10m.ts ~/t15 60 "$leg"
 done
 
 # MoQ re-run on the same fine source, to separate object model from input
-WAITMIN=5 lab/scripts/t14-a.sh ~/CNNiEMEA2.ts ~/t15/moq-w5 60
+WAITMIN=5 lab/scripts/t14-a.sh ~/contrib-10m.ts ~/t15/moq-w5 60
 
 python3 lab/scripts/t15-bursts.py ~/t15/*-egress.csv
 python3 lab/scripts/t15-bursts.py --sweep ~/t15/librist-cbr-w5-egress.csv
 
 # Measurement 4: the clock, on the same three transports plus the UDP control
-lab/scripts/tdt-transports.sh ~/CNNiEMEA2.ts ~/tdt_transports 75
+lab/scripts/tdt-transports.sh ~/contrib-10m.ts ~/tdt_transports 75
 
 # and on the media-aware lane, whose arms vary the source cadence against the
 # exporter's 30 s re-emission timer
 lab/scripts/tdt-moq.sh "$TGT/moq" "$TGT/moq-relay" \
-	~/moq-dev/demo/relay/localhost.toml ~/CNNiEMEA2.ts ~/tdt_moq 300
+	~/moq-dev/demo/relay/localhost.toml ~/contrib-10m.ts ~/tdt_moq 300
 ```
 
 ## Results

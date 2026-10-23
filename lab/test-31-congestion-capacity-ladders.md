@@ -167,7 +167,7 @@ Per cell, per lane:
 **Environment.** EC2 secondary, 8 vCPU / 15 GB, Ubuntu 26.04 — the primary's 2 vCPU cannot carry a
 relay, a publisher and a subscriber without the knee being the host's. Two network namespaces joined
 by veth (`t8b-netns.sh`), `cake` at the bottleneck, 100 ms base RTT (50 ms each way). Source a 120 s
-~9.95 Mb/s CBR slice of `CNNiEMEA2.ts` paced with `tsp regulate --pcr-synchronous`. Build
+~9.95 Mb/s CBR slice of `contrib-10m.ts` paced with `tsp regulate --pcr-synchronous`. Build
 **`ffa5b81b`** (noq), `--max-age 3s`, n = 1 subscriber, **no groomer in the path**. Rig
 [`t28-t31-moq-ladder.sh`](scripts/t28-t31-moq-ladder.sh) with `STREAM_MBIT=9.95`; graded with
 [`t28-content-lost.py`](scripts/t28-content-lost.py) on the exporter's output (**P1**, content
@@ -426,7 +426,7 @@ window falls to 9–29 kB in the dip at 20 ms, against 96–241 kB at 200 ms.
 ## Measured — the segmented step-capacity ladder
 
 **Environment.** EC2 secondary, 8 vCPU / 15 GB. Source the same ~9.95 Mb/s CBR slice of
-`CNNiEMEA2.ts`, packaged by `tsp -O hls` to nginx and pulled over **HTTP/3** by
+`contrib-10m.ts`, packaged by `tsp -O hls` to nginx and pulled over **HTTP/3** by
 [`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py), the byte-faithful receiver — an FFmpeg
 receiver re-muxes and would grade itself rather than the wire ([T42](test-42-h3-receiver-fidelity.md)).
 Provisioned rate 20 Mb/s, rungs derived from `STREAM_MBIT=9.95` exactly as the MoQ ladder derives

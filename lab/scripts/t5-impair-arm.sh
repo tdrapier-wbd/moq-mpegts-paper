@@ -32,7 +32,7 @@ SPEC=${2:?netem spec, or "none"}
 SECS=${3:?capture seconds}
 OUT=${4:?output dir}
 
-SRC=${SRC:-$HOME/CNNiEMEA2.ts}
+SRC=${SRC:-$HOME/contrib-10m.ts}
 SEGSECS=${SEGSECS:-2}
 PORT=${PORT:-18099}          # hls origin
 RELAY_PORT=${RELAY_PORT:-4499} # private relay for the moq control arm

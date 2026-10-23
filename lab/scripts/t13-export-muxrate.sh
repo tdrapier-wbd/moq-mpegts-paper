@@ -44,7 +44,7 @@ SECS=${2:-90}
 
 NEW=${NEW:?set NEW to the post-#3831 binary dir}
 OLD=${OLD:-}
-CLIP=${CLIP:-$HOME/CNNiEMEA2.ts}
+CLIP=${CLIP:-$HOME/contrib-10m.ts}
 PORT=${PORT:-4460}
 # 300,000 packets is the slice T13's file-domain census uses; keeping it makes the two
 # comparable without rescaling the stuffing percentages.

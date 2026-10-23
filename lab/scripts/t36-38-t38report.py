@@ -42,16 +42,16 @@ def main():
         return m[-1]["wall"] if m else None
 
     for topo, withdrawn, kept, extra, mark in (
-        ("BROAD", "BROAD-cnn", "BROAD-tnt", "BROAD-tnt2", "BROAD withdraw cnn"),
-        ("NARROW", "NARROW-cnn", "NARROW-tnt", None, "NARROW withdraw cnn"),
+        ("BROAD", "BROAD-ch1", "BROAD-ch2", "BROAD-ch2b", "BROAD withdraw ch1"),
+        ("NARROW", "NARROW-ch1", "NARROW-ch2", None, "NARROW withdraw ch1"),
     ):
         t0 = dec(mark)
         print(f"\n  --- {topo} ---")
         if t0 is None:
             print("    no decision recorded")
             continue
-        for role, mk in (("withdrawn channel (cnn)", withdrawn),
-                         ("KEPT channel (tnt)", kept),
+        for role, mk in (("withdrawn channel (ch1)", withdrawn),
+                         ("KEPT channel (ch2)", kept),
                          ("kept channel, re-provisioned", extra)):
             if mk is None:
                 continue

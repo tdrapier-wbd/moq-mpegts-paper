@@ -138,7 +138,7 @@ for a permanent feed, so record an abort or a collapse as a *result*, not a reas
 
 ### Source and buffers
 
-- Source: a real broadcast feed (`CNNiEMEA2.ts`) carried media-aware, paced with
+- Source: a real broadcast feed (`contrib-10m.ts`) carried media-aware, paced with
   `tsp -I file … --infinite -P regulate --pcr-synchronous` (**not** `ffmpeg -re`, which mis-paces this
   TS). Media-aware carriage strips stuffing, so the wire profile is VBR — the representative input.
 - Matched buffers as in T8: MoQ `--latency-max 2s`, SRT `--latency 2000` on listener and caller.
@@ -191,7 +191,7 @@ sudo ./scripts/t8b-netns.sh pub <relay-binary> --server-bind 10.99.0.1:4443 \
 
 # publisher (media-aware; stuffing stripped -> VBR on the wire)
 sudo ./scripts/t8b-netns.sh pub bash -c \
-  'tsp -I file ~/CNNiEMEA2.ts --infinite -P regulate --pcr-synchronous -O file - \
+  'tsp -I file ~/contrib-10m.ts --infinite -P regulate --pcr-synchronous -O file - \
    | <moq> --client-tls-disable-verify --client-connect https://10.99.0.1:4443/anon \
        --broadcast t8b.c1.bbr1 import ts'
 
@@ -220,7 +220,7 @@ receivers — `agg_bytes`, `agg_mbps`, `agg_pct_cap` — summed at grade time by
 ## Results
 
 Rig: two network namespaces on the EC2 host, 5 Mb/s `htb` bottleneck, 100 ms base RTT (2 × 50 ms
-`netem`), 500 ms `bfifo` (312 500 B). Source `CNNiEMEA2.ts` carried media-aware (VBR on the wire),
+`netem`), 500 ms `bfifo` (312 500 B). Source `contrib-10m.ts` carried media-aware (VBR on the wire),
 paced at ~9.93 Mb/s — i.e. ~2:1 over-subscription of the cap (condition **C1**, the failure mode).
 MoQ `--latency-max 2s`, SRT `--latency 2000`. Each backend used its matching relay build (quinn /
 quiche / noq); `loss` = CUBIC, `delay` = BBRv1 (quinn) / BBRv2 (quiche) / BBRv3 (noq).

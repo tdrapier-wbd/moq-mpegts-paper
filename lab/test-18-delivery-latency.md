@@ -64,7 +64,7 @@ internet. Same clip, same groomer, same taps in both.
 
 | | |
 |---|---|
-| Source | `~/CNNiEMEA2.ts` — 1080i25 H.264, 9,945,951 bps CBR, 4.57 % null stuffing |
+| Source | `~/contrib-10m.ts` — 1080i25 H.264, 9,945,951 bps CBR, 4.57 % null stuffing |
 | Publisher | `tsp -I file --infinite -P regulate --pcr-synchronous --wait-min 5`, T15's resolving granularity |
 | Groomer | `mpegts-pacer`, RTP egress at 10 Mb/s, PCR regenerated, `--latency-ms` = cushion, `--max-latency-ms` = cushion + 500, `--stall-ms` = cushion + 2000, `--on-stall mute` |
 | SRT | TSDuck `srt` plugins, 1000 ms latency both ends |
@@ -119,14 +119,14 @@ byte-transparent tunnel and a remultiplexer without changing what it counts.
 # Loopback: the whole ladder, one cell at a time; udp first, because nothing else
 # means anything until the floor is known
 PACER=<mpegts-pacer> SETTLE=30 \
-	lab/scripts/t18-sweep.sh ~/CNNiEMEA2.ts ~/t18b 90 udp srt rist moq hls
+	lab/scripts/t18-sweep.sh ~/contrib-10m.ts ~/t18b 90 udp srt rist moq hls
 
 # One cell, for diagnosis
-PACER=<mpegts-pacer> lab/scripts/t18-arm.sh ~/CNNiEMEA2.ts ~/t18b 90 srt 1000
+PACER=<mpegts-pacer> lab/scripts/t18-arm.sh ~/contrib-10m.ts ~/t18b 90 srt 1000
 
 # The rate-surplus diagnostic: the same lane with the carrier matched to its content
 # rate rather than to the original mux rate
-PACER=<mpegts-pacer> RATE=9750000 lab/scripts/t18-arm.sh ~/CNNiEMEA2.ts ~/t18c 90 moq 2000
+PACER=<mpegts-pacer> RATE=9750000 lab/scripts/t18-arm.sh ~/contrib-10m.ts ~/t18c 90 moq 2000
 
 # WAN: the clock reference is a fixture, brought up once and probed by every cell
 export ORIGIN_IP=<EC2_IP> PEM=<ssh-key> PACER=<mpegts-pacer>

@@ -46,7 +46,7 @@ EXP=$(($(date +%s) + 7200))
 $M token generate --algorithm HS256 --id affa --out-dir $W/keydir >/dev/null 2>&1
 # `exp` is two hours out so the credential's own expiry cannot be what ends the session --
 # otherwise a long staleness window and a short-lived token are indistinguishable.
-$M token sign --key $W/keydir/affa.jwk --root wbd --subscribe cnn --expires $EXP >$W/tok/affa.jwt
+$M token sign --key $W/keydir/affa.jwk --root bcast --subscribe ch1 --expires $EXP >$W/tok/affa.jwt
 
 python3 - "$W" <<'PY'
 import json, sys
@@ -56,9 +56,9 @@ json.dump({
     # max-age only. Naming neither stale-if-error nor stale-while-revalidate is the whole
     # point: it is the default path that is under test.
     "cache_control": "max-age=1",
-    "channels": ["cnn"],
-    "affiliates": {"affa": {"enabled": True, "channels": ["cnn"], "key": f"{w}/keydir/affa.jwk"}},
-    "public": {"wbd": {"subscribe": [], "publish": ["cnn"]}},
+    "channels": ["ch1"],
+    "affiliates": {"affa": {"enabled": True, "channels": ["ch1"], "key": f"{w}/keydir/affa.jwk"}},
+    "public": {"bcast": {"subscribe": [], "publish": ["ch1"]}},
     "alias": {}, "tier": None,
 }, open(f"{w}/state.json", "w"), indent=1)
 PY
@@ -81,15 +81,15 @@ FP=$(curl -s --max-time 4 http://127.0.0.1:$HTTP/certificate.sha256)
 }
 
 tsp -I file ~/t12_vidonly.ts --infinite -P regulate --pcr-synchronous -O file - 2>/dev/null |
-	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd" "${MOQ_FP[@]}" "$FP" \
-		--quic-gso=false --broadcast cnn import ts >$W/logs/pub.log 2>&1 &
+	$M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/bcast" "${MOQ_FP[@]}" "$FP" \
+		--quic-gso=false --broadcast ch1 import ts >$W/logs/pub.log 2>&1 &
 PUB=$!
 trap 'kill $STUB $RELAY $PUB 2>/dev/null' EXIT
 sleep 5
 
 AJ=$(cat $W/tok/affa.jwt)
-(timeout $((WATCH + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/wbd?jwt=$AJ" \
-	"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast cnn export ts 2>$W/logs/s.log |
+(timeout $((WATCH + 60)) $M "${MOQ_DIAL[1]}" "https://127.0.0.1:$PORT/bcast?jwt=$AJ" \
+	"${MOQ_FP[@]}" "$FP" --quic-gso=false --broadcast ch1 export ts 2>$W/logs/s.log |
 	python3 $R/t37-lastbyte.py --out $W/out/s.ts --record $W/out/s.json --mark s) \
 	>>$W/logs/lb.log 2>&1 &
 sleep 12
@@ -110,7 +110,7 @@ done
 
 TEND=$(python3 -c 'import time;print(repr(time.time()))')
 echo "$TEND" >$W/tend
-pkill -f "127\.0\.0\.1:$PORT/wbd.jwt=" 2>/dev/null
+pkill -f "127\.0\.0\.1:$PORT/bcast.jwt=" 2>/dev/null
 sleep 4
 kill $PUB 2>/dev/null
 sleep 1

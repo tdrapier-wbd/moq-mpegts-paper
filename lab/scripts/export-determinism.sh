@@ -25,7 +25,7 @@ MOQ="${1:?usage: export-determinism.sh <moq> <moq-relay> <label> [src] [join_s] 
 moq_cli_detect "$MOQ" "${RELAY:-${RELAY_BIN:-}}"
 RELAY="${2:?}"
 LABEL="${3:?}"
-SRC="${4:-$HOME/CNNiEMEA2.ts}"
+SRC="${4:-$HOME/contrib-10m.ts}"
 JOIN="${5:-20}"
 WINDOW="${6:-45}"
 BROADCAST="det-$LABEL.hang"

@@ -20,7 +20,7 @@ for cad in 1 2 5 10 30; do
     python3 $W/mkstate.py --cache-control "max-age=$cad" --mark "reset $id" > /dev/null
     sleep 1
     OFFSET=$off ./dartm.sh "$id" 6 "$obs" --cache-control "max-age=$cad" \
-        --enable "wbdkey,rivalkey,affbkey,affckey" > $W/logs/sweep-$id.txt 2>&1
+        --enable "bcastkey,rivalkey,affbkey,affckey" > $W/logs/sweep-$id.txt 2>&1
     python3 - "$id" "$cad" "$off" >> $W/sweep-d2.tsv <<'PY'
 import json, sys
 W="/tmp/t36"; mark, cad, off = sys.argv[1], sys.argv[2], sys.argv[3]

@@ -14,6 +14,8 @@
 set -euo pipefail
 
 NEW="${1:?new bin dir, e.g. /home/ubuntu/bin-d518b61b}"
+# The loop publisher's unit, if this host runs one (named in INSTRUCTIONS); unset, it is left alone.
+LOOP_UNIT=${LOOP_UNIT:-}
 [ -x "$NEW/moq" ] && [ -x "$NEW/moq-relay" ] || {
 	echo "need both $NEW/moq and $NEW/moq-relay" >&2
 	exit 2
@@ -24,7 +26,7 @@ echo "=== new build ==="
 "$NEW/moq-relay" --version
 echo "  (the version NUMBER is known to go stale in this tree; the -<sha> suffix is the authority)"
 
-ALL=(moq-relay srt-ingest moq-live-publisher moq-publisher-cnn-loop)
+ALL=(moq-relay srt-ingest moq-live-publisher ${LOOP_UNIT:+"$LOOP_UNIT"})
 UNITS=()
 for u in "${ALL[@]}"; do
 	[ -f "/etc/systemd/system/$u.service" ] && UNITS+=("$u")
@@ -99,7 +101,7 @@ sudo systemctl daemon-reload
 
 # Order matters: the relay first, then the ingest stage, then the thing that publishes into it.
 echo "=== restarting ==="
-for u in moq-relay srt-ingest moq-live-publisher moq-publisher-cnn-loop; do
+for u in moq-relay srt-ingest moq-live-publisher ${LOOP_UNIT:+"$LOOP_UNIT"}; do
 	[ -f "/etc/systemd/system/$u.service" ] || continue
 	# Do not start something that was deliberately left stopped.
 	if [ "$(systemctl is-enabled "$u" 2>/dev/null)" = "disabled" ] &&
@@ -118,7 +120,7 @@ for u in "${UNITS[@]}"; do
 	A=$(systemctl is-active "$u" 2>/dev/null)
 	R=$(systemctl show "$u" -p NRestarts --value 2>/dev/null)
 	printf "  %-26s %-10s restarts=%s\n" "$u" "$A" "$R"
-	[ "$A" = "active" ] || [ "$u" = "moq-publisher-cnn-loop" ] || FAIL=1
+	[ "$A" = "active" ] || [ "$u" = "$LOOP_UNIT" ] || FAIL=1
 done
 
 # Prove the relay is the new binary and is actually serving, not merely "active".
@@ -139,8 +141,8 @@ echo "=== proving the relay serves, not merely that it is active ==="
 SELF=$(hostname -I | awk '{print $1}')
 ORIGIN=$(grep -ho -- '--listen-tls-generate [^ ]*' /etc/systemd/system/moq-relay.service 2>/dev/null | awk '{print $2}')
 ORIGIN=${ORIGIN:-$SELF}
-LOOPBC=$(grep -ho -- '--broadcast [^ ]*' /etc/systemd/system/moq-publisher-cnn-loop.service 2>/dev/null | awk '{print $2}' | head -1)
-if [ -n "$LOOPBC" ] && [ "$(systemctl is-active moq-publisher-cnn-loop 2>/dev/null)" = active ]; then
+LOOPBC=$(grep -ho -- '--broadcast [^ ]*' "/etc/systemd/system/$LOOP_UNIT.service" 2>/dev/null | awk '{print $2}' | head -1)
+if [ -n "$LOOPBC" ] && [ "$(systemctl is-active "$LOOP_UNIT" 2>/dev/null)" = active ]; then
 	# 25 s, not 15: the publisher has just been restarted, and its first loop plus the announce
 	# reaching a fresh subscriber takes most of 20 s. A short window here reads as a dead chain.
 	timeout 25 "$NEW/moq" --connect-tls-insecure --connect "https://$ORIGIN:443/anon" \

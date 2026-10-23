@@ -27,11 +27,11 @@ State file shape:
     {
       "mode": "up" | "refuse" | "unavailable",
       "cache_control": "max-age=5, stale-while-revalidate=30",
-      "channels": ["cnn", "cnn-intl", "tnt"],
+      "channels": ["ch1", "ch1-intl", "ch2"],
       "affiliates": {
-        "<kid>": {"enabled": true, "channels": ["cnn"], "key": "<path to public jwk>"}
+        "<kid>": {"enabled": true, "channels": ["ch1"], "key": "<path to public jwk>"}
       },
-      "public": {"<root>": {"subscribe": ["cnn"], "publish": []}},
+      "public": {"<root>": {"subscribe": ["ch1"], "publish": []}},
       "alias": {"<root>": "<canonical root>"},
       "tier": null
     }

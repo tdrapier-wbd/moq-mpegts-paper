@@ -314,9 +314,9 @@ cadence at or below five seconds and is a property of that setting rather than o
 The same effect accounts for the four sweep runs that recorded no media: each followed an arm that
 had withdrawn the grant, and the withdrawal was still cached when the next arm's subscriber dialled.
 
-**E2 — adding a channel to a live affiliate costs nothing.** With affiliate B streaming `cnn`, a
-second channel was brought up alongside it. `cnn` delivered 143,728 packets with **zero continuity
-errors** across the addition, and `tnt` 76,840 packets with zero. Adding a service does not disturb
+**E2 — adding a channel to a live affiliate costs nothing.** With affiliate B streaming `ch1`, a
+second channel was brought up alongside it. `ch1` delivered 143,728 packets with **zero continuity
+errors** across the addition, and `ch2` 76,840 packets with zero. Adding a service does not disturb
 the services already flowing.
 
 ### D7 — the revocation window with more than one session live

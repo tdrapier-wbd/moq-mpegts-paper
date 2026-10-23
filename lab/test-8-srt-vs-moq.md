@@ -36,7 +36,7 @@ opaque lane on EC2 (opaque-remote follow-up).
 
 ```bash
 # 1. EC2 — one encoder, timecode burnt in, tee'd byte-identical to both transports (latency runs)
-CLIP=~/CNNiEMEA2.ts
+CLIP=~/contrib-10m.ts
 ~/FFmpeg/ffmpeg -stream_loop -1 -re -i "$CLIP" -map 0:v:0 -map 0:a:0 \
   -vf "drawtext=…:timecode='00\:00\:00\:00':rate=25:…, drawtext=…:text='%{localtime}':…" \
   -c:v libx264 -preset veryfast -tune zerolatency -b:v 8M -maxrate 8M -bufsize 1M -g 25 -bf 0 \
@@ -76,7 +76,7 @@ byte-transparent. Impairment is forward (download) path only.
 
 ## Results
 
-### Clean path (condition 0), real EC2 → home internet, `CNNiEMEA2.ts` loop
+### Clean path (condition 0), real EC2 → home internet, `contrib-10m.ts` loop
 
 | Result (clean path) | MoQ over QUIC + pacer | SRT (byte-faithful) |
 |---|---|---|
@@ -84,7 +84,7 @@ byte-transparent. Impairment is forward (download) path only.
 | CC errors | **0** | **0** |
 | Egress PCR > 40 ms | raw 10.78 % (max 1200 ms) → **paced 0.06 %** (8 gaps, max 139 ms) | **0 %** (native, mean 24.5 ms) |
 | PCR accuracy (paced) | **0 `pcrverify` viol. @ ±500 ns**; exact CBR 10.892 Mbps | n/a (native cadence) |
-| Service / SI | **stripped** → "(unknown)", **PMT PID → 0x1000** | **preserved** — "CNNI EMEA HD" / WBD / type 0x19, **PMT PID 0x0064** |
+| Service / SI | **stripped** → "(unknown)", **PMT PID → 0x1000** | **preserved** — the source's name and provider, type 0x19, **PMT PID 0x0064** |
 | Origin CPU (2-vCPU EC2) | `moq import` **~34 %** of a core; relay **2.6 %**; load ~1.45 | `tsp regulate`+carriage **~1 %**, no relay |
 | Reference: raw TCP same path | **292 Mbps** (SSH bulk) — link is not the limit | — |
 

@@ -10,33 +10,33 @@ EXP=$(($(date +%s) + 7200))
 PAST=$(($(date +%s) - 60))
 
 # ---- publisher tokens (tenant key, publish role) -------------------------
-for ch in cnn cnn-intl tnt nobody; do
-  $M token sign --key keys/wbd.jwk --root wbd --publish "$ch" --expires $EXP > tok/pub-$ch.jwt
+for ch in ch1 ch1-intl ch2 nobody; do
+  $M token sign --key keys/bcast.jwk --root bcast --publish "$ch" --expires $EXP > tok/pub-$ch.jwt
 done
-$M token sign --key keys/rival.jwk --root rival --publish cnn --expires $EXP > tok/pub-rival-cnn.jwt
+$M token sign --key keys/rival.jwk --root rival --publish ch1 --expires $EXP > tok/pub-rival-ch1.jwt
 
 # ---- affiliate subscribe tokens ------------------------------------------
 # The licensing matrix, fixed here before any arm runs:
-#   affa : wbd/cnn
-#   affb : wbd/cnn, wbd/tnt
-#   affc : wbd/tnt
-#   wbd/cnn-intl : licensed by nobody (the shared-stem trap)
-#   wbd/nobody   : licensed by nobody (the control channel)
-$M token sign --key keys/affa.jwk --root wbd --subscribe cnn                     --expires $EXP > tok/affa.jwt
-$M token sign --key keys/affb.jwk --root wbd --subscribe cnn --subscribe tnt     --expires $EXP > tok/affb.jwt
-$M token sign --key keys/affc.jwk --root wbd --subscribe tnt                     --expires $EXP > tok/affc.jwt
+#   affa : bcast/ch1
+#   affb : bcast/ch1, bcast/ch2
+#   affc : bcast/ch2
+#   bcast/ch1-intl : licensed by nobody (the shared-stem trap)
+#   bcast/nobody   : licensed by nobody (the control channel)
+$M token sign --key keys/affa.jwk --root bcast --subscribe ch1                     --expires $EXP > tok/affa.jwt
+$M token sign --key keys/affb.jwk --root bcast --subscribe ch1 --subscribe ch2     --expires $EXP > tok/affb.jwt
+$M token sign --key keys/affc.jwk --root bcast --subscribe ch2                     --expires $EXP > tok/affc.jwt
 
 # ---- arm-specific credentials -------------------------------------------
 # A4: expired
-$M token sign --key keys/affa.jwk --root wbd --subscribe cnn --expires $PAST > tok/affa-expired.jwt
+$M token sign --key keys/affa.jwk --root bcast --subscribe ch1 --expires $PAST > tok/affa-expired.jwt
 # A7: subscribe-only token, used to attempt a publish
 cp tok/affa.jwt tok/affa-subonly.jwt
 # A8: publish-only token, used to attempt a subscribe
-$M token sign --key keys/wbd.jwk --root wbd --publish cnn --expires $EXP > tok/pubonly.jwt
-# A10: parent-path grant (root wbd, subscribe "" = everything beneath wbd)
-$M token sign --key keys/wbd.jwk --root wbd --subscribe "" --expires $EXP > tok/wbd-parent.jwt
+$M token sign --key keys/bcast.jwk --root bcast --publish ch1 --expires $EXP > tok/pubonly.jwt
+# A10: parent-path grant (root bcast, subscribe "" = everything beneath bcast)
+$M token sign --key keys/bcast.jwk --root bcast --subscribe "" --expires $EXP > tok/bcast-parent.jwt
 # A3: a token minted by the OTHER tenant's key, for its own root
-$M token sign --key keys/rival.jwk --root rival --subscribe cnn --expires $EXP > tok/rival-sub.jwt
+$M token sign --key keys/rival.jwk --root rival --subscribe ch1 --expires $EXP > tok/rival-sub.jwt
 
 # A6: malformed variants, derived from a valid token
 V=$(cat tok/affa.jwt)
@@ -55,7 +55,7 @@ sys.stdout.write(f"{h}.{e(json.dumps(claims).encode())}.{s}")
 PY
 
 echo "estate laid out:"
-echo "  broadcasters : wbd, rival"
-echo "  wbd channels : cnn, cnn-intl (shared stem), tnt, nobody (licensed by nobody)"
-echo "  affiliates   : affa={cnn}  affb={cnn,tnt}  affc={tnt}"
+echo "  broadcasters : bcast, rival"
+echo "  bcast channels : ch1, ch1-intl (shared stem), ch2, nobody (licensed by nobody)"
+echo "  affiliates   : affa={ch1}  affb={ch1,ch2}  affc={ch2}"
 echo "  tokens       : $(ls tok | wc -l | tr -d ' ') files"

@@ -327,7 +327,7 @@ Validated in both directions before use: the campaign clip passes on all seven c
 damaged capture fails on two of them — continuity, and one unsignalled interval of 140 ms — with exit
 status 1.
 
-**The live feed passes the gate at its hand-off** (CNN International EMEA over SRT into the primary
+**The live feed passes the gate at its hand-off** (the news channel over SRT into the primary
 EC2 host, the caller in-region at ~0.2 ms RTT; a 30 s capture of the listener's output, P1). All seven
 checks pass: 498,674 packets, 0 continuity errors, 1,556 PCR on one PID, intervals 0.06 / 19.29 /
 25.09 ms, and 0 of 1,555 PCRs outside ±500 ns. Against the looped clip of the same service it differs
