@@ -1248,7 +1248,7 @@ continuous delivery is restored — not how quickly a session reconnects. Rank o
 because a 30 s outage that costs 30 s of programme is a worse result than a 60 s outage that costs
 none, and the ladder exists to find where each lane crosses from the second behaviour to the first.
 
-This closes the single largest comparative gap called out as [P1-a](planned-experiments.md#p1--establishes-where-one-architecture-is-superior):
+This closes the single largest comparative gap called out as P1-a (its remainder is [P2-l](planned-experiments.md#p2--completeness)):
 the campaign has substantial partial evidence ([T5](test-5-network-impairment.md),
 [T6](test-6-relay-resilience.md)) but no unified matrix scored in the broadcast domain.
 

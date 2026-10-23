@@ -1,4 +1,4 @@
-# T3 — Transport transparency: the opaque `m2ts` lane and segmented HTTP (local)
+# T3 — Transport transparency: the opaque lane and segmented HTTP (local)
 
 ## Objective
 
@@ -12,8 +12,8 @@ it constructs a new multiplex by design; these two lanes forward one, so for the
 
 Two lanes are scored here against the same inventory and the same three clips:
 
-- **The platform's opaque `m2ts` lane** — the fallback lane ([architecture](../docs/architecture.md)
-  §4.2), and the one the prototype chain implements end to end.
+- **The opaque lane** — `moq-dev`'s whole-multiplex passthrough, `moq import ts --passthrough` to
+  `moq export ts --passthrough`: the fallback lane ([architecture](../docs/architecture.md) §4.2).
 - **Segmented HTTP carrying MPEG-TS** — classic HLS with TS segments, the alternative data plane
   [comparison](../docs/comparison.md) grades MoQ against. Added because the paper now treats
   segmented HTTP as a candidate for primary distribution rather than as a foil, and the
@@ -55,17 +55,14 @@ sixth is new, and it is the one this arm was expected to fail.
 
 ## Environment
 
-### The opaque `m2ts` lane
+### The opaque lane
 
-- Binaries: private `moq_relay` / `moq_publisher` / `moq_subscriber` built from the repo's pinned
-  `Cargo.lock` — `moq-transport` 0.14.2, `moq-native` 0.17.0, `moq-relay` 0.12.9. Default local relay
-  mode. Negotiated **draft-14**. No GSO workaround needed (unlike the moq-dev relay in T2).
-- Relay config `relay.toml` (QUIC + HTTP on `[::]:4443`, self-signed `localhost`, anonymous auth).
-- Publisher: TCP ingest `127.0.0.1:5001`, broadcast `mpegts`, track `ts`. Each MoQ Object is a
-  concatenation of whole 188-byte TS packets (default 7 → 1316 bytes), batched into ordered groups
-  — **byte-preserving by construction**.
-- Subscriber: reassembles Objects → MPEG-TS with a decoder-safe start gate, an adaptive CBR/PCR
-  pacer, and **read-only TR 101 290 monitoring** on the egress; output UDP / RTP / TCP.
+| Component | Detail |
+|---|---|
+| Build | `moq-dev` at `3c0daa21` (the standing units' build), release |
+| Chain | `tsp -I file … -P regulate --pcr-synchronous` → `moq import ts --passthrough` → local `moq-relay` → two `moq export ts --passthrough --delay 1s`, the second joining 8 s late |
+| Rig | [`t48-passthrough.sh`](scripts/t48-passthrough.sh), graded by [`ts-passthrough-identity.py`](scripts/ts-passthrough-identity.py), upstream's `pcr-timing.py --live` and `compliance.py` |
+| Window | 120 s per clip, one run each, on this workstation (shared) |
 
 ### The segmented-HTTP lane
 
@@ -79,8 +76,8 @@ sixth is new, and it is the one this arm was expected to fail.
 | Window | 60 s of media per clip, bounded by packet count, one run each |
 | Segment durations | 2 s on all three clips; 1 s and 6 s on `CNNiEMEA` for the duration sweep |
 
-The measurement point is the **ungroomed** egress, matching the opaque arm, which ran its
-subscriber with `--no-pacing`. [T16](test-16-grooming-segmented-http.md) measures the groomed
+The measurement point is the **ungroomed** egress, matching the opaque arm, whose exporter releases
+the source's bytes on the source's PCR and adds none. [T16](test-16-grooming-segmented-http.md) measures the groomed
 version of this same chain, and the two answer different questions: T16 asks whether the cadence can
 be repaired, this asks whether the mux arrived.
 
@@ -97,12 +94,12 @@ from `moq export ts` by [`t14-a.sh`](scripts/t14-a.sh) — 45 s per clip, all th
 TSDuck 3.44-4676 (Darwin 25.5.0). All localhost. Three clips: `testloop_clean`, `testloop` (4:2:2),
 `CNNiEMEA`.
 
-**Load-bearing methodological finding — feed the lane the raw TS, not an ffmpeg remux.** The repo's
-convenience ingest (`ffmpeg -re -i clip.ts -c copy -f mpegts tcp://…`) regenerates the TS container
+**Load-bearing methodological finding — feed the lane the raw TS, not an ffmpeg remux.** A
+convenience ingest (`ffmpeg -re -i clip.ts -c copy -f mpegts …`) regenerates the TS container
 before it reaches the publisher: it strips null padding (`testloop_clean` 10.00 → 8.31 Mbps) and
 rewrites the PCR cadence to ~80 ms (**99 % of intervals > 40 ms**). That is an FFmpeg muxer artefact,
 **not** the lane. Every result below uses raw, PCR-paced bytes (`tsp … -P regulate` piped straight
-into the publisher's TCP ingest, or fed to `tsp -O hls`), which reproduces the source exactly.
+into the publisher, or fed to `tsp -O hls`), which reproduces the source exactly.
 
 ### What this environment cannot show
 
@@ -110,7 +107,7 @@ into the publisher's TCP ingest, or fed to `tsp -O hls`), which reproduces the s
 - Single programme throughout. HLS normatively excludes multi-programme TS segments, and that cell
   now carries the whole of MoQ's remaining carriage advantage; it is unrun
   ([planned-experiments](planned-experiments.md)).
-- One run per clip per lane. The opaque lane's draft-14 pin is a tracked dependency.
+- One run per clip per lane.
 - The duration sweep ran on `CNNiEMEA` only, so its invariance claim leans on the bitrate spread from
   the three-clip runs for generality rather than on a second sweep.
 - The media-aware captures are bounded by wall clock, not packet count. That is sound for grading a
@@ -129,27 +126,13 @@ into the publisher's TCP ingest, or fed to `tsp -O hls`), which reproduces the s
 ### The opaque lane
 
 ```bash
-# 1. relay
-cd ~/moq-publisher-subscriber && ./target/release/moq_relay
-
-# 2. subscriber (groomer) + capture; reader connected BEFORE the feed starts.
-#    TCP playout is always 188-aligned (TSDuck's UDP ip input drops non-aligned datagrams).
-./target/release/moq_subscriber --output-protocol tcp --playout-bind 127.0.0.1:5002 --no-pacing
-nc 127.0.0.1 5002 > <clip>_out.ts
-#    (single-program clips also capture via UDP: --output-protocol udp --output-port 5000
-#     + tsp -I ip 5000 -O file <clip>_out.ts)
-
-# 3. publisher (opaque m2ts, TCP ingest)
-./target/release/moq_publisher     # relay https://localhost:4443/anon, broadcast mpegts, track ts
-
-# 4. feed the RAW source TS, PCR-paced, into the publisher's TCP ingest (no remux)
-tsp -I file <clip> -P regulate -P until --seconds 30 -O file - | nc 127.0.0.1 5001
-
-# 5. analyse egress (analyze / continuity / pcrextract per lab/README.md)
+for c in testloop_clean testloop CNNiEMEA; do
+	TSC=<moq-dev>/test/ts RELAY_TOML=<moq-dev>/demo/relay/localhost.toml \
+		lab/scripts/t48-passthrough.sh <bin-dir> ~/$c.ts ~/t3pt/$c 120
+done
+# file-domain PCR accuracy at the P2 limit, per leg-A capture
+tsp -I file ~/t3pt/<clip>/a.ts -P pcrverify --absolute --jitter-max 13 -O drop
 ```
-
-`--no-pacing` is used because `tsp regulate` already delivers the source in real time (the
-subscriber's own pacer would double-pace); in-band PCR figures are identical with or without it.
 
 ### The segmented-HTTP lane
 
@@ -197,39 +180,30 @@ capture for the identity below to mean anything.
 
 ## Results
 
-### The opaque `m2ts` lane
+### The opaque lane
 
-Source identity vs opaque egress — every field **preserved**:
+**All six criteria are met on all three clips, because each leg's output is the source's bytes.**
+Every packet either leg wrote is a source packet, in source order, with none skipped:
 
-| Field (source → egress) | `testloop_clean` | `testloop` | `CNNiEMEA` |
-|---|---|---|---|
-| Transport Stream Id | 0x0001 → **0x0001** | 0x0001 → **0x0001** | 0x0000 → **0x0000** |
-| Original Network Id | 0xFF01 → **kept** | 0x0001 → **kept** | 0x0000 → **kept** |
-| Service name / type | Service01 / 0x01 → **kept** | Cartoonito UK HD 422 / 0x01 → **kept** | CNNI EMEA HD / 0x19 → **kept** |
-| PMT PID | 0x1000 → **kept** | 0x0020 → **kept** | 0x0064 → **kept** |
-| PCR PID | 0x0100 → **kept** | 0x0030 → **kept** | 0x006F → **kept** |
-| Egress PID count | 6 | 11 | 13 |
-| Reference bitrate (Mbps) | **10.000** (= src) | **27.5** (= src) | **9.95** (= src) |
-| CBR / null padding | **preserved** | **preserved** | **preserved** |
-| Continuity-counter errors | **0** | **0** | **0** |
-| Transport errors / invalid sync | 0 / 0 | 0 / 0 | 0 / 0 |
-| PCR interval min/mean/max (ms) | 1.20 / 19.80 / 20.00 | 27.34 / 27.74 / 28.16 | 0.30 / 24.42 / 24.95 |
-| PCR intervals > 40 ms | **0 %** | **0 %** | **0 %** |
+| | `testloop_clean` | `testloop` | `CNNiEMEA` |
+|---|---:|---:|---:|
+| Leg A packets, all from the source in order | 711,125 | 1,948,177 | 708,631 |
+| Leg B (8 s late) packets, likewise | 743,484 | 2,037,081 | 734,588 |
+| Gaps / foreign packets, either leg | 0 / 0 | 0 / 0 | 0 / 0 |
+| Leg B against leg A over their overlap | identical, 126.2 MB | identical, 345.1 MB | identical, 124.5 MB |
+| Objects the exporter dropped late | 0 | 0 | 0 |
+| PCR violations at 481 ns (`--absolute`, file domain) | **0** of 5,399 | **0** of 3,839 | **0** of 4,386 |
+| T-STD (`compliance.py`), output / source span | fail / **the same fail** | fail / **the same fail** | pass / pass |
+| PCR releases outside ±10 ms of their schedule | 12 of 5,397 | 9 of 3,839 | 5 of 4,384 |
 
-Every component from the T1 inventory survived verbatim at its original PID. For `CNNiEMEA` the
-egress carried, unchanged: AVC video 0x006F, MPEG-1 audio 0x0079, **AC-3** 0x007B, teletext 0x0083,
-**all three SCTE-35 splice PIDs** (0x008D/8E/8F, table_id 0xFC), and the full PSI/SI — PAT, **NIT**
-(0x0010), **SDT** (0x0011), **TDT/TOT** (0x0014), PMT (0x0064). For `testloop` the egress
-additionally preserved the visual-impaired commentary audio 0x0042 and the CAT.
-
-#### Built-in egress monitor (read-only TR 101 290)
-
-- **Transient P1** (`pat_missing` / `pmt_missing` / `pid_missing`, `raised` → `recovered`) only
-  during the live-join window while the first PAT/PMT/PID cycle arrives; self-clears within the first
-  group. Expected.
-- **P2 `pcr_jitter` on `CNNiEMEA`** (~4–5 ms on PCR PID 0x006F): carried from the source
-  contribution feed — the lane surfaces it, does not create it (raw-fed egress still 0 % > 40 ms).
-- **0 discontinuities** in steady state; egress bitrate tracks the source.
+So the inventory rows the segmented table scores below (TSID, ONID, service, PMT and PCR PIDs, every
+component at its PID, PSI/SI including CAT and TDT/TOT, stuffing and mux rate, continuity, PCR
+intervals and table repetition) are the source's on this lane by identity rather than by census, and
+criterion 6 is measured, not argued: 0 foreign packets. The two T-STD failures are the clips': the
+same buffers overflow in the source span the output covers. The release-timing row grades when, not
+what: on a shared workstation 0.1–0.2 % of PCRs left more than 10 ms off schedule (p95 1.8–2.4 ms), as
+[T48](test-48-passthrough-export.md) found on this host and not on a dedicated one; the exporter's
+release clock read the same host jitter as source drift and dropped nothing.
 
 ### The segmented-HTTP lane
 
@@ -401,9 +375,9 @@ and the conservation row are that fact measured two ways.
 
 Media-aware column shows as-shipped and, where PR #2440 changes it, the state after "→".
 
-| Property | T2 media-aware (`moq-dev`) | T3 opaque (platform) | T3 segmented HTTP |
+| Property | T2 media-aware (`moq-dev`) | T3 opaque (`--passthrough`) | T3 segmented HTTP |
 |---|---|---|---|
-| Wire model | demux → typed + opaque tracks (hang catalog) | whole-TS Objects (MSFTS `m2ts` catalog) | TS sliced at packet boundaries, PAT/PMT per segment |
+| Wire model | demux → typed + opaque tracks (hang catalog) | the source's TS packets as `m2ts` objects | TS sliced at packet boundaries, PAT/PMT per segment |
 | Elementary streams | preserved (all audio, teletext, SCTE-35) | **preserved, verbatim, same PIDs** | **preserved, verbatim, same PIDs** |
 | PAT / PMT | PMT renumbered → 0x1000 → **kept (#2440)** | **PMT PID kept** | **PMT PID kept** (0x1000, 0x0020, 0x0064 all held) |
 | SDT / NIT | dropped → **preserved (#2440)** | **preserved verbatim** | **preserved verbatim** |
@@ -415,16 +389,15 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 | Mux structure | VBR; nulls stripped (CBR restored by pacer) | **CBR preserved; nulls preserved** | **nulls preserved**; PCR-derived rate +0.004–0.17 % |
 | Continuity errors | **0** | **0** | **0** |
 | PCR intervals > 40 ms (P1), file domain | 0–26 % by clip → **0 % (paced)** | **0 %** | **0 %** |
-| PCR accuracy, file domain | **gate is degenerate ungroomed** — no mux rate to grade against, and meaningful only once a groomer restores one (below) | not measurable on this machine (below) | **37–74 ns → 109–302 µs**; 0 violations at 500 µs; **0 at 481 ns once groomed** ([T16](test-16-grooming-segmented-http.md)) |
+| PCR accuracy, file domain | **gate is degenerate ungroomed** — no mux rate to grade against, and meaningful only once a groomer restores one (below) | **the source's: 0 violations at 481 ns** | **37–74 ns → 109–302 µs**; 0 violations at 500 µs; **0 at 481 ns once groomed** ([T16](test-16-grooming-segmented-http.md)) |
 | Packets added to the mux | rebuilt, so not comparable | **none** | **one PAT/PMT pair per segment, and nothing else** |
-| Egress monitoring | none | **built-in TR 101 290** | none |
 | Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** ([#2824](https://github.com/moq-dev/moq/pull/2824), which would have carried it, closed unmerged) | **broadcast-transparent** | **transparent to the mux's content; not to its clock** |
 
-#### Why the PCR-accuracy row cannot be filled across lanes
+#### Why the PCR-accuracy row cannot be filled for the media-aware lane
 
 That row was expected to be a cheap gap to close: run `pcrverify --absolute` on the two MoQ lanes and
-make it a three-way comparison. **It is not closable, and the reason is a property of the gate rather
-than of the lanes.**
+make it a three-way comparison. **On the media-aware lane it is not closable, and the reason is a
+property of the gate rather than of the lane.**
 
 The media-aware lane was captured ungroomed on all three clips on a named current build
 (`moq 0.9.10-eab960192`, stock `main`, via [`t14-a.sh`](scripts/t14-a.sh) — the same rig and the same
@@ -456,31 +429,17 @@ undefined, and what it actually establishes is the thing T13 and T16 already con
 direction: **on that lane the groomer is not an optimisation, it is what creates the quantity the gate
 names.**
 
-**The opaque lane still cannot be graded, but the reason has moved.** Its source tree turned out to
-survive on the EC2 host ([T4](test-4-remote-e2e-srt.md)), with a `Cargo.lock` pinning
-`moq-transport` 0.14.2 / `moq-native` 0.17.0 / `moq-relay` 0.12.9 — the versions this experiment
-recorded — and it builds on macOS from that lock. So the lane is recoverable and
-[`t3-opaque-lane.sh`](scripts/t3-opaque-lane.sh) now scripts what was previously a hand-run sequence.
-
-What blocks the grade is the egress, not the transport. Publisher, relay and subscriber connect, the
-subscriber accepts a playout reader and reports `bytes_out` climbing at ~10 Mb/s with 0
-discontinuities, and **no bytes reach the reader** — reproduced four ways (TCP passthrough with and
-without `--no-pacing`, UDP passthrough, and TCP `--egress-profile broadcast --mux-rate`), with `lsof`
-confirming a single established connection and no write error logged. Whether that is a defect in this
-build or an artefact of building it on macOS is unresolved; the discriminator is to run the same chain
-with the Linux binaries already present on EC2.
-
-So **"the opaque lane preserves PCR arithmetic" remains reasoned from byte-preservation rather than
-measured**. Being byte-preserving by construction it would return its source's own figure, but that is
-an argument, and the row says so rather than showing a number.
+**On the opaque lane the gate is defined, because the lane keeps the source's stuffing, and it returns
+the source's figure:** 0 violations at 481 ns on all three clips. That was argued from
+byte-preservation until the lane's output could be captured; it is now measured.
 
 ---
 
 ## Observations
 
-- **The opaque lane is byte-transparent at P1**: TSID/ONID, service name/type, all PSI/SI
-  (PAT/PMT/SDT/NIT/TDT/CAT), PMT PID, PCR PID, every elementary stream and every SCTE-35 PID
-  preserved verbatim; 0 CC / transport errors; CBR and PCR conformance preserved when fed raw.
+- **The opaque lane is byte-identical to its source**, from the first group it releases, on both
+  legs and on all three clips, so everything T3 scores is the source's, file-domain PCR accuracy
+  at the P2 limit included.
 - **Segmented HTTP is transparent to what a mux contains and not to when it was sent, and that is a
   sharper claim than "verbatim".** [T14](test-14-data-plane-comparison.md) established the content
   half by comparing a segment against the source; the missing half is that the lane is *additive*.
@@ -519,8 +478,8 @@ is what caught the injected pair. Where it is not, it returns the maximum PCR in
 an answer.
 
 The load-bearing gaps that remain are **P2 hardware conformance** ([T7](test-7-timing-integrity.md),
-Gate 2) and **the opaque lane over a real path** ([T4](test-4-remote-e2e-srt.md) leg C, not run;
-T4 carries segmented HTTP over the public internet) — file-based localhost transparency is
+Gate 2) and the lanes over a real path ([T48](test-48-passthrough-export.md)'s internet leg for the
+opaque lane, [T4](test-4-remote-e2e-srt.md) for segmented HTTP) — file-based localhost transparency is
 necessary, not sufficient. Recorded as a permanent finding in
 [`docs/evidence.md`](../docs/evidence.md).
 
@@ -528,10 +487,8 @@ necessary, not sufficient. Recorded as a permanent finding in
 
 | Cell | Needs |
 |---|---|
-| The opaque lane at the P2 PCR-accuracy gate | **a working egress on that lane.** The build is recovered (source survives on EC2, compiles on macOS at its own lock) and rigged in [`t3-opaque-lane.sh`](scripts/t3-opaque-lane.sh), but no output protocol delivers bytes to a reader while the subscriber reports them sent — four configurations tried. Next step is the same chain on EC2's Linux binaries, to separate a build defect from a macOS one. The media-aware half of this cell is closed, with the finding that the gate is degenerate there |
 | Multi-programme carriage through both lanes | the MPTS fixture and, for HLS, a real CDN ([planned-experiments](planned-experiments.md)) |
 | A lossy segmented path | a path that drops segments. Nothing was ever missing here, only late — so this experiment says what a lane *does* to a mux, never what it does when the path damages one |
-| The opaque lane on a current draft | it remains pinned to draft-14 against a private implementation, and has never been repeated |
 | The duration sweep on the 27.5 Mbps clip | one rig invocation. The sweep ran on `CNNiEMEA` only; the invariance claim rests on the bitrate spread from the three-clip runs rather than on a second sweep |
 
 ---
@@ -552,8 +509,8 @@ than omitting the row.*
 
 **"Closing the PCR-accuracy row is cheap" was wrong, and wrong in a way that mattered.** This file
 listed the row as needing "nothing — the captures and the analyser exist", on the assumption that an
-unfilled cell is unfilled for want of instrument time. Two things were false. The opaque lane's build
-was gone from the machine, so half the cell was blocked on an artefact rather than on a run; and on the
+unfilled cell is unfilled for want of instrument time. Two things were false. The opaque lane then had
+no capturable egress, so half the cell was blocked on an artefact rather than on a run; and on the
 half that *could* be run, the gate turned out not to measure the quantity its name implies — on a
 stuffing-free egress `pcrverify --absolute` returns the maximum PCR interval, matching it to 0.003 % on
 three clips. *Rule: before booking a gap as cheap, check that the instrument is defined on the thing
@@ -590,5 +547,6 @@ media, and the instrument asserts the reference's homogeneity.*
   the PCR-accuracy deviation measured here.
 - Finding: [`docs/evidence.md`](../docs/evidence.md) §3.1.
 - Rigs: [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh),
-  [`t3-transparency.py`](scripts/t3-transparency.py), and [`t14-a.sh`](scripts/t14-a.sh) for the
-  media-aware capture graded in the PCR-accuracy section.
+  [`t3-transparency.py`](scripts/t3-transparency.py), [`t48-passthrough.sh`](scripts/t48-passthrough.sh)
+  for the opaque lane, and [`t14-a.sh`](scripts/t14-a.sh) for the media-aware capture graded in the
+  PCR-accuracy section.

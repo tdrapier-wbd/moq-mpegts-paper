@@ -532,6 +532,12 @@ Check span, byte count and wall-clock duration against siblings and the nominal 
 metric, grade after the writer exits, `rm -f` each target inside the measurement function, wrap
 unattended local runs in `caffeinate -dims`, and void a short cell rather than score it clean.
 
+**A run measures the machine it runs on, so what else the machine does is part of the cell.**
+*(T9, T21, T26.)* Give soaks, memory arms and timing rigs a host window of their own, never beside a
+build; run a deliberate saturation (the segmented fan-out) last in a session, and keep a segmented
+origin off any box carrying a MoQ relay. Cheap namespace cells fill a window whose main item is
+posting, reviewing or building.
+
 **Every statistic the experiment reports is an output the cell prints, and no cleanup job runs against a
 live results tree.** *(T8b C3.)* A mid-matrix janitor deleted four of six captures C3 needed summed. Sum
 at grade time and print the aggregate; a number recovered later from surviving files is a salvage.

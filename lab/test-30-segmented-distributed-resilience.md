@@ -5,7 +5,7 @@ addressable objects and multiple delivery paths enable near-seamless failover wi
 re-establish — but the evidence is one filesystem, co-started packagers, and [T6](test-6-relay-resilience.md)
 drills reported as recovery times. This experiment would grade distributed resilience across two hosts,
 including production-shaped join and silent misconfiguration; it has not run because the two-host segment
-store and standby-join rig are specified under [P1-c](planned-experiments.md#p1--establishes-where-one-architecture-is-superior)
+store and standby-join rig are specified under [P2-l](planned-experiments.md#p2--completeness)
 and blocked on the second EC2 instance layout used for cross-host work.
 
 ## Objective
@@ -19,8 +19,7 @@ The metric is **media lost at the groomed egress**, not time to first byte after
 against [T29](test-29-moq-distributed-resilience.md) for the same failure classes where the mapping
 is fair.
 
-Specified as [P1-c](planned-experiments.md#p1--establishes-where-one-architecture-is-superior) /
-[P1-c](planned-experiments.md#p1--establishes-where-one-architecture-is-superior).
+Specified as [P2-l](planned-experiments.md#p2--completeness).
 
 ## What is already known, and precisely what it leaves open
 
@@ -70,7 +69,7 @@ loss).
 **Control — T6 dual packager, co-started, one filesystem.** Replay hitless baseline with groomer inserted;
 confirm 0 media lost on origin kill with `DUAL_NAMES=identical`.
 
-**Cell 1 — Standby joins running feed ([P2-c](planned-experiments.md#p2--completeness) / T12 segmented remainder).**
+**Cell 1 — Standby joins running feed ([P2-l](planned-experiments.md#p2--completeness) / T12 segmented remainder).**
 Start packager A and receiver; at mid-stream start packager B into the same namespace. Prediction:
 content-chosen segment boundaries align intra-coded pictures so B drops into the same naming sequence;
 that is a prediction, not a result. Grade first 30 s after B joins for media lost and naming collisions.
@@ -141,7 +140,7 @@ At groomed P1 egress unless the cell tests pre-groom receive:
 - **CloudFront / multi-CDN** blocked without account; nginx single-node cache is indicative, not
   multi-CDN proof.
 - **Low-latency partial segments** and commercial ABR-to-TS gateways remain [T14](test-14-data-plane-comparison.md)
-  measurement 1 / [B-4](planned-experiments.md#blocked-on-apparatus) — out of scope here.
+  measurement 1, [not pursued](planned-experiments.md#deliberately-not-doing) — out of scope here.
 - **Groomer cushion bisection** (1 s vs 8 s byte identity from [T12](test-12-dual-path-handoff.md))
   is a latency-cost question for segmented 1+1, not a resilience question; it may be run in the same
   rig but is not a pass criterion of this file.
@@ -150,8 +149,8 @@ At groomed P1 egress unless the cell tests pre-groom receive:
 
 [T6](test-6-relay-resilience.md) answered serving-node failover on loopback with co-started packagers;
 [T12](test-12-dual-path-handoff.md) extended MoQ egress 1+1 and listed the segmented remainder cells
-explicitly. [P1-c](planned-experiments.md#p1--establishes-where-one-architecture-is-superior) ranks the
+explicitly. [P2-l](planned-experiments.md#p2--completeness) ranks the
 two-host store behind cross-host fan-out ([T26](test-26-cross-host-fanout.md)) because both need the
 second instance and the fan-out experiment deliberately saturates a box last. The standby-join cell
-([P2-c](planned-experiments.md#p2--completeness)) is cheap once P1-5's steady state exists — it is
+([P2-l](planned-experiments.md#p2--completeness)) is cheap once P1-5's steady state exists — it is
 queued behind this file's Cell 2, not instead of it.

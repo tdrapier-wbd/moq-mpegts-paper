@@ -44,8 +44,7 @@ much, because that is what the paper's carriage-fidelity verdict is scored on.
 
 - **Deployed cloud path = the `moq-dev` media-aware lane, not the opaque lane.** SSH inspection
   established this as a material fact: the relay is `moq-relay` on UDP 443 and both publishers use
-  `moq import ts` (a loop and the SRT-fed live broadcast). The opaque lane's service lines are present
-  but commented out.
+  `moq import ts` (a loop and the SRT-fed live broadcast).
 - **Build under test: `moq-relay 0.14.11-eab96019` / `moq 0.9.11-eab96019`**, a source build at `main`
   `eab960192`. All three units point at it and none has restarted.
 - EC2 services (already running; relay never restarted during this test):
@@ -240,10 +239,7 @@ tsp -I file loop_out.ts -P analyze -O drop   # + continuity, pcrextract per lab/
   --broadcast cnn.international.emea.live.hang export ts --latency-max 5s > t4_live_out.ts
 tsp -I file t4_live_out.ts -P analyze -O drop     # + continuity, pcrextract per lab/README.md
 
-# C. opaque remote (T3 over the wire) — NOT RUN: the lane's egress delivers nothing to a reader
-#    (Still open 4). The subscriber, built on macOS from the source pinned on EC2:
-# moq_subscriber --output-protocol tcp --playout-bind 127.0.0.1:5002 --no-pacing \
-#   --broadcast mpegts --track ts https://<EC2_IP>:443/anon
+# C. opaque remote (T3 over the wire): T48's internet leg, `moq export ts --passthrough`
 ```
 
 ## Results
@@ -276,8 +272,8 @@ record rather than inferred.** Thirteen PIDs of thirteen at their source numbers
 TDT/TOT, all three splice PIDs, stuffing, the exact source mux rate, an identical PSI cadence, a PCR
 grid indistinguishable from the file's, 0 continuity errors, and 0 PCR-accuracy violations at the
 481 ns P2 gate over a ~125 ms internet path. This is the first time the campaign has graded PCR
-*accuracy* on a lane's delivered capture: [T3](test-3-opaque-transparency.md) could not, because the
-opaque lane's egress delivers nothing and the media-aware lane has no mux rate for the gate to work
+*accuracy* on a lane's delivered capture over a real path; on loopback,
+[T3](test-3-opaque-transparency.md) found the media-aware lane has no mux rate for the gate to work
 against. It grades the bytes, the source's PCR-to-position relationship arriving intact, which
 byte-faithful carriage implies; when the receiver released them was not graded.
 
@@ -480,18 +476,6 @@ transport.
   against the source's 29.97 s. The media-aware lane puts **31.12 s** in the same count. A packet bound
   is therefore an equal-media bound only for a byte-faithful lane, and the choice of bound has to be
   justified per lane rather than per rig.
-- **The opaque lane is installed on EC2 at T3's pinned versions, and its egress delivers nothing.**
-  Its service unit lines are commented out, so nothing serves it; the `moq_relay` /
-  `moq_publisher` / `moq_subscriber` binaries and the full source tree with its
-  `Cargo.lock` are on the box. The lock pins **`moq-transport` 0.14.2, `moq-native` 0.17.0,
-  `moq-relay` 0.12.9** — the exact versions [T3](test-3-opaque-transparency.md) recorded, so a run
-  there is comparable with T3's published opaque results rather than being a different lane. The
-  source **builds on macOS** from that lock, so the subscriber side of leg C exists, and
-  [`t3-opaque-lane.sh`](scripts/t3-opaque-lane.sh) scripts the chain. Leg C is unrun because the
-  lane's **egress delivers nothing**: publisher, relay and subscriber connect and the subscriber reports `bytes_out` climbing at ~10 Mb/s while zero bytes reach a connected reader,
-  on TCP paced and unpaced, on UDP, and under `--egress-profile broadcast`. `lsof` shows one
-  established connection and the subscriber logs no write error. Whether this is a defect in the build
-  or specific to compiling it on macOS is unresolved.
 - **Home uplink < 10 Mbps sustained**, so a full-rate mux cannot be *published* from the local end;
   the SRT leg was transcoded (`h264_videotoolbox`). 3.5 Mbps dropped after ~30 s; 2 Mbps was stable.
   Publish-side figures are bounded by the access link, and the SRT transcode is not byte-transparent
@@ -526,7 +510,8 @@ each other only in whether the segmenter's two packets are there.
 The live contribution chain works end to end: SRT contribution into EC2, MoQ publish, relay and local
 subscribe, with 0 continuity errors.
 
-Opaque-remote (leg C) remains unrun, blocked on the lane's egress delivering nothing to a reader.
+Opaque-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: the passthrough's
+output over this kind of path is the source's bytes.
 Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §1.
 
 ## Still open
@@ -539,9 +524,7 @@ Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §1
    no mux rate, `analyze`'s repetition figures are meaningless and only an average over the PCR span is
    available (399 ms against P1's 500 ms limit). Whether individual gaps breach P1 is unknown.
 3. **Byte-faithful SRT in the contribution direction** is not measurable on this access link.
-4. **Leg C**, blocked on the opaque lane's egress delivering zero bytes; the cheap discriminator is the
-   Linux binaries already on the box.
-5. **Delivery cadence per lane over this path** is deliberately out of scope here — this arm scores
+4. **Delivery cadence per lane over this path** is deliberately out of scope here — this arm scores
    carriage and integrity. T8 holds the delivered-rate comparison and T18 the latency work.
 
 ## Corrections

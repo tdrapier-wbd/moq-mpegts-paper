@@ -1,9 +1,12 @@
 # T21 — the permanence soak of the complete media-aware lane
 
-> **State: 24 h complete; the seven-day live arm (P0-g) running. The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
+> **State: complete. The seven-day live arm (P0-g) ran 169 h unattended on the real feed and passes
+> F2 in every role; on the media plane continuity and attribution pass, and PCR accuracy was graded at
+> ±18.5 µs, not the ±500 ns fixed** ([§ The seven-day live arm: result](#the-seven-day-live-arm-result)).
+> **The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
 > resources, in one role, on `d518b61b`; the 24 h resource re-soak on upstream `main` at `9d2a4f6e`
 > passes F2 in every role.** On `d518b61b`: 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
-> zero PCR intervals over 40 ms, zero absolute PCR failures at ±500 ns, zero drops, **zero underruns**,
+> zero PCR intervals over 40 ms, zero absolute PCR failures at ±18.5 µs, zero drops, **zero underruns**,
 > zero respawns, and a worst programme gap of **27 ms across the whole day**. The 33-bit rollover was
 > crossed in flight at 19.4 h and cost nothing. The groomer's own resident memory is **flat**, and the
 > buffer walk that [P0-3b](planned-experiments.md) was opened for **did not occur**.
@@ -142,7 +145,7 @@ which is the 24 h row above.
 | Continuity errors | **0** |
 | PCR intervals > 40 ms | **0** |
 | Worst PCR interval | **30.08 ms** |
-| `pcrverify` absolute failures at ±500 ns | **0** |
+| `pcrverify` absolute failures at ±18.5 µs | **0** |
 | Mux rate | **11,000,000 b/s** (occasional 10,999,999 rounding) |
 | Programme conserved | yes — content advances at 6,348 pkt/s ≈ **9.55 Mb/s**, the source rate |
 | Dropped / late-dropped packets | **0 / 0** |
@@ -395,7 +398,7 @@ through it tests the same finding live, at length, and without the placement.
 | Packets delivered / counted | **632,199,204 / 632,199,204** | conserved |
 | Continuity errors | **0**, in every one of 1,437 samples | 0 |
 | PCRs verified | **5,947,298** | — |
-| Absolute PCR failures at ±500 ns | **0** | no regression on the 1 h baseline |
+| Absolute PCR failures at ±18.5 µs | **0** | no regression on the 1 h baseline |
 | PCR intervals > 40 ms | **0** | 0 |
 | Worst PCR interval | **30.08 ms** | < 40 ms |
 | Mux rate | **11,000,000 b/s** exact | exact |
@@ -596,7 +599,8 @@ as flat.
   feed, which never wraps; and a standing `moq export ts --delay 1s` of its broadcast on the
   secondary, across the public path between the two hosts.
 - **Rig:** [`p0j-step-watch.sh`](scripts/p0j-step-watch.sh) `watch` with `GRADE_RATE=25000000`
-  (continuity and absolute PCR accuracy at ±500 ns on the export's padded output, in flight), its
+  (continuity and absolute PCR accuracy on the export's padded output, in flight; it ran at
+  ±18.5 µs, see [Corrections](#corrections)), its
   `ring` on the primary shared with [T34](test-34-real-encoder-severity.md)'s P0-j, and
   [`live-unit-sample.sh`](scripts/live-unit-sample.sh) at 60 s on both hosts (RSS, `smaps_rollup`,
   threads, descriptors, CPU, per process). Nothing touches the standing units. An export that ends
@@ -615,22 +619,45 @@ as flat.
 - **Limits:** one subscriber; the hand-off is in-region, so no contribution-path failure is
   exercised; the hosts' unattended upgrades restart the publisher when a library it links changes.
 
+## The seven-day live arm: result
+
+*Measured, P1 and the export's output, live feed, build `3c0daa21`, primary to secondary across the
+public path, 169.0 h (from the start to the watch's timeout), one export restart.*
+
+| Criterion | Reading | Verdict |
+|---|---|---|
+| 1. Continuity | **0** errors in both exports' output, 10.11 G packets | **pass** |
+| 1. PCR | export 1 (99.0 h): 5 of 14,260,290 PCRs past ±18.5 µs (four at 24.9 ms, one 57 µs), not timestamped; export 2 (70.0 h): **0** of 10,075,358. Not graded at ±500 ns | **not met as fixed** |
+| 1. Attribution | one export end, two liveness gaps, each in a damage episode of the hand-off | **pass** |
+| 2. Resources (F2) | every series under the host's exhaustion rate of 1.60 MB/h; the fastest +0.135 MB/h (export 1, 12 years) | **pass** |
+| 3. Unattended | no unit restarted (each role kept one PID; no package restart); four probe sessions on the relay at 16–17 h | **pass** for the units |
+
+**Every media-plane event is damage in the contribution, upstream of SRT.** The import's own
+TR 101 290 counters rose in eight episodes (continuity, PAT, PMT and PCR-repetition errors, three
+`pts_error`), with SRT reporting no loss in any of their 5-minute windows, and each matches an
+export warning that it dropped an AC-3 frame cut by a gap. Five cost nothing else. Two dropped video
+past its threshold: **2.3 s** at 36.1 h, where the import saw the video stop for 1.9 s, and **1.5 s**
+at 145.1 h. One, at 99.0 h, raised the unflagged-PCR-discontinuity count by one, jumped the AC-3
+timeline about 16,848 s forward, and **ended export 1**: it failed on "the source's clock runs
++1257.8 ppm off ours, past the 30 ppm the output's may follow". `main` fails a source past the
+limit alike, once half the delay is spent. The watch restarted it within 1 s; programme was lost from
+the late drops 4 s before the exit to the successor's first byte, which is not logged.
+
+**Resources plateau.** The relay sat at 231–245 MB for 16 h, rose 100 MB in the minute after the
+probe sessions, and stayed at 355–369 MB for the last 150 h (+0.05 MB/h over 72 h). The importer
+held 375–379 MB and released 27 MB at 101 h. Each export rose to about 335 MB in its first hours,
+took one step of about 42 MB (at 22 h and at 29 h), anonymous memory as fast as RSS, and then held
+380–390 MB; export 1's last 72 h fit +0.135 MB/h at R² 0.10, export 2's last half −0.001 MB/h.
+Threads and descriptors did not move in any role.
+
+**What it settles from § Open.** The relay converges on this build, and the exporter's step is heap
+that does not accumulate: one per export, not one a day. The rollover crossed six times, on a real
+encoder's clock.
+
 ## Open
 
-**Whether the relay converges on the build under test.** On `d518b61b` the relay is logarithmic at
-R²=0.9895 over 24 h, sampled by signature. On `main` `9d2a4f6e` it is flat at 117–139 MB over 24 h,
-sampled per PID. Those are different relay builds, and neither is `ffa5b81b`, so the relay's 24 h
-shape on the build under test is unmeasured. It can be measured only once that build, or its
-successor, runs a continuous source for 24 h.
-
-**What the exporter's step is.** It has now appeared in two of the three valid per-PID runs: +14.5 MB at
-5.0 h in the 6 h run on the merged build, and +11.8 MB at 11.0 h in the 24 h re-soak on `9d2a4f6e`,
-flat on either side both times. It did not appear in the 2 h run. At most one step per 24 h, and not
-at a fixed period, it is not a resource failure under F2. But it is unexplained, and a step that
-repeats without releasing memory would become one over a week. Reading `/proc/<pid>/smaps_rollup` on
-the exporter at 1 min cadence through a 24 h run would show whether the step is heap or mapped
-memory. The 7-day arm of [P0-g](planned-experiments.md#p0--could-change-a-viability-conclusion)
-would show whether it accumulates.
+**PCR accuracy at ±500 ns over days.** Neither soak graded it (see [Corrections](#corrections)).
+Any ≥ 72 h export graded at `--jitter-max 13` would; the rigs now pass it.
 
 **The groomer's thread count on a 2-vCPU host.** 10 → 74 in the first run, not reproduced on 8 vCPU
 (13 → 15). A small-host question, unexplained.
@@ -644,11 +671,6 @@ different peak-to-mean ratio. If it does not, the cushion is not a designed quan
 of host speed, and the control constant is the wrong one. Reading `buffer_packets` against
 `latency_target_ms` on the existing diagnostic lane over hours, on both hosts, would settle it
 without changing anything.
-
-**What 24 h does not reach.** The rollover recurs every 26.51 h and this run crossed it once, so a
-second crossing is untested; and the campaign has no true live source, so the joins are content cuts
-on a continuous synthetic clock rather than encoder behaviour. Both are stated in
-[P0-g](planned-experiments.md#p0--could-change-a-viability-conclusion) as the bounds of the claim.
 
 ## Corrections
 
@@ -669,3 +691,8 @@ should be graded over a window longer than its integration time**, and the relea
 by how long the estimator's accumulators take to depart, which nobody had asked. Where a change
 replaces an open loop with a closed one, the qualifying run has to outlast the loop's own time
 constants or it has qualified only the transient.
+
+**Believed:** both soak rigs graded PCR accuracy at ±500 ns. **True:** with `--absolute`,
+`pcrverify --jitter-max 500` is 500 ticks, 18.5 µs, as TSDuck's own summary line says; so it was in
+`t21-lane-soak.sh` from the first run and in `p0j-step-watch.sh`. **Rule:** method notes §2, read a
+TSDuck threshold from its echo; both rigs now pass `--jitter-max 13` (481 ns).

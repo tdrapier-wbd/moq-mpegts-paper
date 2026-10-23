@@ -1251,7 +1251,7 @@ sends; four of those tests fail without the withholding; two legs through a loop
 draft 18 shared 36,465 datagrams, none differing. Every hop must carry the epoch: draft 17+ or
 lite-07.
 
-**State.** In review on `main`.
+**State.** The maintainer took the branch over and is finishing it.
 
 ### Four closed as completed by a planning document that changed no code
 
@@ -1557,7 +1557,8 @@ identity change refuses; so do a PID listed twice and 65,536 stream revisions. T
 revises the PMT at the next version, dropping a PID once its tail is out. The PAT half follows a
 moved PMT and programs leaving or rejoining the PAT.
 
-**State.** #6208 merged; #6289 in review, `--sync` revisions still open; #6301 on it.
+**State.** #6208 merged; #6289 queued to merge on the maintainer's rework. #6301 closed: the PAT half is
+re-planned on #6371's shared parser.
 
 ---
 
@@ -1729,10 +1730,9 @@ distinguishable from programme filter or PAT rewrite. #16 and #17 closed with
 field reduction). #15 closed after [#40](https://github.com/mondain/msfts/pull/40) reconciled Egress
 Timing with the arrival-time definition (outcomes also under *The 2026-09-17 round*).
 
-**Not measurement.** The only `m2ts` carriage run here is a private loopback prototype
-([T3](test-3-opaque-transparency.md)); the public implementation strips nulls and derives SPTS per
-programme — so shipped "transparent" is not byte-verbatim either. The review establishes the
-specification no longer permits the silent version.
+**Not measurement.** The `m2ts` carriage measured here is `moq-dev`'s passthrough, byte-verbatim
+([T48](test-48-passthrough-export.md)); the review establishes that the specification no longer
+permits a silent departure from verbatim.
 
 ### The three named modes are published, and the gap they leave is output timing
 

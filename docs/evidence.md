@@ -36,15 +36,13 @@ defined in broadcast terms in the [Glossary](glossary.md#moq).
 | **Upstream `moq-dev`, media-aware lane** | The preferred path, and the lane almost every result was measured on | The public internet, through an AWS EC2 [relay](glossary.md#transport-and-deployment-terms) |
 | **[`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)** (public, ours) | The CBR/PCR [groomer](glossary.md#broadcast-terms-used-without-definition), deliberately outside the transport | Every lane |
 | **Upstream `moq-dev`, whole-multiplex passthrough** (its export ours) | The opaque lane | **Loopback on one host; one live feed across hosts** |
-| **Private opaque `m2ts` prototype** (IETF draft-14, MSFTS packaging) | The opaque lane's first reference | Loopback only. One run. Never deployed |
 | **TSDuck plugins** — `hls`, `srt`, `rist` | The alternative data planes, built from the tool used as the oracle throughout | Loopback and the public internet, from the same EC2 origin |
 
 FFmpeg, GStreamer and [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) are graded as
 grooming and sending *stages*, not transports ([T13](../lab/test-13-downstream-grooming.md),
 [T16](../lab/test-16-grooming-segmented-http.md)). The media-aware lane runs the moq-lite version
 its build negotiates by default, 04 to 06 across the builds measured, with BBR set explicitly unless
-an experiment says otherwise; the passthrough runs on the same builds and protocol, and the
-prototype on `moq-transport` draft-14 with quinn's default CUBIC.
+an experiment says otherwise; the passthrough runs on the same builds and protocol.
 
 ### 1.1 Instruments, and what each cannot show
 
@@ -168,8 +166,8 @@ the media-aware lane's re-mux writes its own. Hardware IRDs lock a PLL to PCR an
 goes wrong — accepted practice, not observed here. **Ungroomed**, the re-mux's PCR values leave 0–26 %
 of intervals above 40 ms depending on the source (P1, file;
 [T2](../lab/test-2-media-aware-transparency.md), [T7](../lab/test-7-timing-integrity.md)), while the
-opaque lane keeps the source's intervals on every clip, the private prototype's three
-([T3](../lab/test-3-opaque-transparency.md)) and the passthrough's two (§3.1), which puts the loss
+opaque lane keeps the source's intervals on all five clips graded
+([T3](../lab/test-3-opaque-transparency.md), §3.1), which puts the loss
 in the re-mux and not in QUIC. The exporter now writes an exact 25 ms PCR grid with each PCR beside
 the bytes it labels ([T13](../lab/test-13-downstream-grooming.md)); what the groomer rebuilds is the
 clustering between slots and accuracy against a constant-rate model.
@@ -872,7 +870,7 @@ do not differ between planes, so the comparison holds while the total does not. 
 the WAN leg was 12.8 ms, so nothing exercised the recovery the tunnels exist for; a long (80–150 ms) or
 lossy path could change the ordering.
 
-**The opaque lane is one run per arm and build** — on `moq-dev`, two clips on loopback and one live
+**The opaque lane is one run per arm and build** — on `moq-dev`, five clips on loopback and one live
 feed across hosts (§3.1).
 
 **The data-plane comparison is single-route, single-clip and single-host.** The segmented arm of the

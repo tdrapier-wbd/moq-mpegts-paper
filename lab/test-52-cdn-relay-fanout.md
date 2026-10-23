@@ -1,6 +1,6 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: specified, not run.** Waits on the operator's window and logging level, and on P0-g's end.
+**State: specified, not run.** The operator's node logs at INFO with its stats exposed; waits on the author's spend alarm.
 
 ## Objective
 
@@ -19,7 +19,7 @@ implementation and another operator run, across the internet:
   deployment*, `<CDN_RELAY_URL>`, draft 18 over raw QUIC. A single-core VM behind a 4 Gb/s traffic
   policer, as its operator configured it, with logging at INFO for the whole run.
 - **Publishers:** on the primary, one per lane, each a separate consumer of the live ingest's loopback
-  multicast group (B-7), `moq import ts` and `moq import ts --passthrough`. The standing units are
+  multicast group, `moq import ts` and `moq import ts --passthrough`. The standing units are
   not touched.
 - **Subscribers:** on the tertiary (8 vCPU), `moq export ts --delay 1s` and `moq export ts
   --passthrough`.

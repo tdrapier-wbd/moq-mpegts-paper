@@ -1,6 +1,8 @@
 # Test 34 — A real encoder against the continuous-source fence
 
-**State: partial — P0-j's 48 h captured no real backward step.** On the live feed the standing import
+**State: closed without a step — in 213 h on the live feed the real encoder never stepped back.**
+The seven-day re-run on standing units past #3997 saw no import exit in 169 h (§ *The seven-day
+re-run*); P0-j's first 44.4 h, below, saw nine exits and none a step. On the live feed the standing import
 ends every few hours on *frame timestamp is below the live edge*, with the hand-off clean each time
 (§ *The live feed*). None of the nine exits P0-j captured with the hand-off around them was a step
 in the feed: each time the standing build stamped a SCTE-35 section below the one before it, which
@@ -234,6 +236,18 @@ session timed out 31 s later, and the export then received nothing for 3.6 h and
 That is this build re-splicing onto whatever instance serves the path; on `main` an epochless track
 ends at a replacement instead ([upstream ledger](upstream-contributions.md) § *A re-request onto a
 live route*). None of this is graded here, and none of it is a new defect.
+
+### The seven-day re-run: no step in 169 h
+
+*Measured, P1, standing build `3c0daa21`, the ring and watch shared with
+[T21](test-21-permanence-soak.md)'s seven-day live arm.* The ring, keyed on the import's invocation,
+recorded **no event**: the import ran its one invocation for all 169 h. From moq 0.14.0 a backward
+step on any track ends the import, so the feed stepped back on none. What it did instead was arrive
+damaged eight times, upstream of SRT; once, at 99 h, the import counted a PCR discontinuity without
+the indicator and the AC-3 timeline jumped about 16,848 s forward, and the export failed on its
+clock check and was restarted. That step is forward, its class was not captured (the ring keys on
+import exits), and its cost is in T21. One graded backward step would still answer P0-j; none is
+expected often enough to keep a ring for it.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 

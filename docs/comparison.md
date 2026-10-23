@@ -363,8 +363,8 @@ half is an architectural reading.
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | **yes**, from the first released group | every field, count and cadence measured identical, not diffed byte-for-byte |
 
 Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-4-remote-e2e-srt.md));
-the opaque lane on loopback, two clips on `moq-dev` ([T48](../lab/test-48-passthrough-export.md)) and
-three on an earlier prototype ([T3](../lab/test-3-opaque-transparency.md)); EIT on a synthetic
+the opaque lane on loopback, five clips on `moq-dev` ([T48](../lab/test-48-passthrough-export.md),
+[T3](../lab/test-3-opaque-transparency.md)); EIT on a synthetic
 fixture ([T17](../lab/test-17-si-snapshot-tracks.md)); figures and qualifications in
 [Evidence](evidence.md) §3.1. **Single-programme mux content on segmented HTTP is as verbatim as the
 opaque MoQ lane** — the only difference in a 1,200-packet window is byte 3 on one PAT and one PMT — and
@@ -513,8 +513,7 @@ pressure and ends a broadcast with its publisher ([Architecture](architecture.md
 **One open implementation subscribes to whole-TS carriage**, as of October 2026: `moq-dev`'s
 whole-multiplex import and its export, which writes the source's bytes back out
 ([Evidence](evidence.md) §3.1). `moq2ts` and `moqxr` publish only; `moq-dev`'s "verbatim" tracks
-carry undecoded PIDs one per track inside the media-aware lane; and the earlier opaque prototype
-measured here is private. Byte-faithful carriage over MoQ therefore rests on one implementation,
+carry undecoded PIDs one per track inside the media-aware lane. Byte-faithful carriage over MoQ therefore rests on one implementation,
 measured one run per arm, which is why §8's structural limits do not yet by themselves move the
 preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
 ([Evidence](evidence.md) §3.7).
@@ -535,7 +534,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
-| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ for a day at a peak-coded-frame buffer; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
+| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
 | Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path; not established on the receive path** | M+S | decisive through caches and general clients, for a single programme; the low-latency receive path is unmet or unmeasured (§6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
@@ -560,7 +559,7 @@ under what conditions each is preferable.
 
 | Gate | Cleared when | MoQ today | Segmented HTTP today |
 |---|---|---|---|
-| **Conformant egress** | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane.** P1/P2 holds in software for a day, and the same wire fails the T-STD, which only a re-multiplexing stage repairs (§5.1, §8); no build is measured to carry every timeline case. Not on hardware | **P1/P2 cleared in software** on a local groomer run; buffer model ungraded; never soaked; not on hardware |
+| **Conformant egress** | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane.** P1/P2 holds in software, its continuity and PCR repetition for a day, and the same wire fails the T-STD, which only a re-multiplexing stage repairs (§5.1, §8); no build is measured to carry every timeline case. Not on hardware | **P1/P2 cleared in software** on a local groomer run; buffer model ungraded; never soaked; not on hardware |
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Excluded on the media-aware lane** (specified); a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Partial: a day, on two builds, never a week** — delivery and conformance on moq 0.11.2, resources on moq 0.12.8 ([Evidence](evidence.md) §3.6) | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |

@@ -33,8 +33,8 @@ prose.** A new section needs a reason that editing an existing one cannot satisf
   then…", superseded readings kept beside current ones. That is the notebook's; git keeps the rest.
 - Keep text because it records history, or copy detailed output upward because it is interesting.
 - Leave completed work or results in `planned-experiments.md`. When nothing of an entry is
-  outstanding, delete the entry and add its ID to the file's retired-ID line, so citations elsewhere
-  still resolve; an entry that names no document it could falsify is deleted too.
+  outstanding, delete the entry and add its ID to the retired-ID line in `lab/README.md`, so
+  citations elsewhere still resolve; an entry that names no document it could falsify is deleted too.
 - Fix duplication by adding cross-references. Delete the copies; keep one home.
 - Let a correction become a narrative. Fix the stale claim where it is made, and keep at most one
   `## Corrections` entry (what was believed, what is true, the method rule) in the experiment file.

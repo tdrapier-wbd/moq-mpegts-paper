@@ -1114,8 +1114,8 @@ architecture rather than wished away.
 encoding and the data-plane encoding to the point that the working group describes them as "almost a
 completely new protocol". Broadcasters plan on five-to-ten-year horizons. Neither lane, as measured,
 sits on the interop target: both ride moq-lite, upstream's own simplified wire protocol, so they track
-upstream releases rather than the IETF draft series. The earlier private opaque prototype pinned
-draft-14, and a draft-14 endpoint cannot negotiate an ALPN with a draft-18 one.
+upstream releases rather than the IETF draft series, and a draft-14 endpoint cannot negotiate an ALPN
+with a draft-18 one.
 
 Multi-draft negotiation from a single build is trending (`moq-dev` carries draft-14–19 alongside
 moq-lite). **Version fragmentation is a real planning problem; measured, it is not what blocks interop**

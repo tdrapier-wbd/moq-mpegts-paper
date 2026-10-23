@@ -137,7 +137,7 @@ bash -c "while :; do
       --broadcast $BCAST export ts ${MOQ_LAT[*]} $LATENCY_MAX 2>> $RUN/export.log \
       | $PACER - $RATE --latency-ms $CUSHION_MS --max-latency-ms $CAP_MS \
           --stall-ms 1000 --on-stall mute --stats-interval-ms $((SAMPLE * 1000)) 2>> $RUN/pacer.log \
-      | tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 500 --bitrate $RATE \
+      | tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 13 --bitrate $RATE \
             -P count --total --interval 100000 -O file - 2>> $RUN/grade.log \
       | python3 $MONITOR --window $SAMPLE >> $RUN/pcr.log 2>&1
     echo \"\$(date -Is) egress exit rc=\$?\" >> $RUN/respawn.log

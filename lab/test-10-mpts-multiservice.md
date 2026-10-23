@@ -54,7 +54,7 @@ audience count.
 Gate 1 (carriage fidelity) at multi-service scale is the acceptance gate. The campaign's residual
 carriage advantage on mux content — now carried entirely by this cell rather than by
 single-programme results — is the comparative stake; see [T14](test-14-data-plane-comparison.md)
-measurement 3 and [B-5](planned-experiments.md#blocked-on-apparatus) in the planning record.
+measurement 3; the commercial edge it needs is [not pursued](planned-experiments.md#deliberately-not-doing).
 
 ## What was already known, and what it left open
 
@@ -180,8 +180,7 @@ cause. The anchor's forward movement is summed from A's log lines.
 **Arm C — several concurrent SPTS broadcasts (MoQ).** Not run; its channel-count question is
 answered by [T43](test-43-fanout-current-build.md) S2.
 
-**Arm E — MPTS through a real CDN.** Not run: it needs a CDN account the lab does not hold
-([B-5](planned-experiments.md#blocked-on-apparatus)).
+**Arm E — MPTS through a real CDN.** Not run: it needs a commercial packaging edge, [not pursued](planned-experiments.md#deliberately-not-doing).
 
 ## Metrics
 
@@ -567,8 +566,7 @@ programme 1's PMT at once, and programmes 2 and 3 at their source cadence.
   sees one video PID, and it steps back only by that stream's B-frame reordering. Programme 1 alone
   never re-anchored here. A stream whose reordering spans more than 500 ms, or a programme with two
   video PIDs, would step it back that far; that is *reasoned* from the code and not run.
-- **Arm E**, MPTS segments through a commercial CDN, blocked on an account
-  ([B-5](planned-experiments.md#blocked-on-apparatus)). A byte cache does not parse the payload, so
+- **Arm E**, MPTS segments through a commercial CDN, [not pursued](planned-experiments.md#deliberately-not-doing). A byte cache does not parse the payload, so
   the cell is only worth running where the edge is media-aware. And the SI carriage-cost scaling of
   [T17](test-17-si-snapshot-tracks.md), which needs many more services than three.
 

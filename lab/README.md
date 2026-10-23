@@ -62,7 +62,7 @@ no number without the conditions its file states. The rung and gate are from
 |---|---|---|---|---|---|
 | T1 | Baseline TS characterisation (P0 reference) | reference · precondition for Gate 1 | complete | The four-clip source set is clean and representative, so downstream deltas are honest | [test-1](test-1-baseline-ts.md) |
 | T2 | Transport transparency — media-aware lane | 1–3 · Gate 1 (reference lane) | complete | Every elementary stream and the DVB service layer round-trip; the lane's own PCR cadence does not | [test-2](test-2-media-aware-transparency.md) |
-| T3 | Transport transparency — opaque `m2ts` lane | 1–3 · **Gate 1 (product lane)** | complete | Byte-transparent at P1 on one run, and the reference the other lanes are read against | [test-3](test-3-opaque-transparency.md) |
+| T3 | Transport transparency — the opaque lane and segmented HTTP | 1–3 · **Gate 1 (product lane)** | complete | `moq-dev`'s passthrough is byte-identical on all three inventory clips, PCR accuracy at 481 ns included; segmented HTTP adds one PAT/PMT pair per segment | [test-3](test-3-opaque-transparency.md) |
 | T4 | Remote relay end-to-end + SRT contribution | 2 · Gates 1 and 3 | complete, all three lanes | Three data planes graded over one internet path by one instrument; the service layer survives it | [test-4](test-4-remote-e2e-srt.md) |
 | T5 | Network impairment | 2 · Gates 1 and 3 | complete | Loss behaviour is the congestion controller's, not the lane's; its reordering cell is superseded by T20 | [test-5](test-5-network-impairment.md) |
 | T6 | Relay resilience and active/active source failover | 6 · Gate 3 | partial | Relay failover is bounded by the QUIC idle timeout and is not hitless; a graceful source exit still ends the export; the shared-hop and shared-epoch arms measured a mechanism upstream has since removed | [test-6](test-6-relay-resilience.md) |
@@ -81,7 +81,7 @@ no number without the conditions its file states. The rung and gate are from
 | T18 | Delivery latency at equal conformance, four data planes | 1 · supports Gate 2 | complete, loopback and internet | **It refuted its premise**: on the media-aware lane latency and PCR conformance are independent, and the fastest cushions are not P1/P2-conformant on any lane | [test-18](test-18-delivery-latency.md) |
 | T19 | The PCR grid, and a CBR wire from a media-aware source | supports Gate 2 | complete; criteria 1–3 met, 4 not | **The lane passes PCR repetition on the wire** after three upstream fixes and three groomer fixes, and **fails its own latency criterion** at that configuration | [test-19](test-19-pcr-grid-verification.md) |
 | T20 | The segmented lane over HTTP/3 | Gate 1 · substrate matching | complete | T5's reordering separation was a packet-size artefact; through a byte-faithful receiver the HLS wire is PCR-conformant and the impairment cells are re-measured | [test-20](test-20-segmented-http3.md) |
-| T21 | Permanence soak of the complete media-aware lane | Gate 2 over time | 24 h complete; the seven-day live arm running | **The media plane passes 24 h** on `d518b61b`; resources fail in the importer there and pass in every role on `main` at `9d2a4f6e` | [test-21](test-21-permanence-soak.md) |
+| T21 | Permanence soak of the complete media-aware lane | Gate 2 over time | complete; the seven-day live arm meets its resource and unattended criteria, its PCR criterion graded at ±18.5 µs | **169 h unattended on the live feed with every resource series flat**; each media-plane event was damage arriving in the contribution | [test-21](test-21-permanence-soak.md) |
 | T22 | Silent media-plane failure | R8 | complete, both lanes | **Neither lane's transport detects a stalled source**; only the segmented lane's playlist moves | [test-22](test-22-silent-media-plane-failure.md) |
 | T23 | Which PCR timeline events the lane survives | Gate 2 | complete, re-graded against both fixes | The 33-bit rollover always carried; since #3375 and #3529 every placed class sits at the control's content gap | [test-23](test-23-pcr-discontinuity-classes.md) |
 | T24 | A partial media-plane stall | R8 · corrects T22 | complete | The lane contains the failure, but **TR 101 290 P1 cannot see it**; only per-PID access-unit liveness caught every arm | [test-24](test-24-partial-media-plane-stall.md) |
@@ -94,8 +94,7 @@ no number without the conditions its file states. The rung and gate are from
 | T31 | Congestion and capacity step ladders | 7 · R4/R5 | partial; the delay matrix run, sustained and transient; the relay's queue read from qlog on the transient | **MoQ loses picture at every sustained shortfall, including 0.9×**, and no release delay up to 6 s prevents it; a transient's loss at 20 ms RTT is mostly the relay abandoning groups; the segmented lane loses less by falling behind rather than discarding | [test-31](test-31-congestion-capacity-ladders.md) |
 | T32 | Would commercial monitoring have caught T22, T24, T27? | R8 | fault-to-telemetry mapping measured; vendor survey not started | The mapping is measured on both lanes; what remains is vendor outreach | [test-32](test-32-observability-survey.md) |
 | T33 | Gate 2 preparation: boundary fixtures and harness | 3–4 · **de-risks Gate 2** | run; nine of ten criteria met | Every buildable boundary condition carried with zero continuity errors; the harness is rehearsed with its pass table fixed | [test-33](test-33-gate2-preparation.md) |
-| T34 | A real encoder against the continuous-source fence | 2 · Gate 3 | partial; P0-j captured no real step | Each of the nine import exits captured was a SCTE-35 cue the standing build mis-stamped, not a step in the feed | [test-34](test-34-real-encoder-severity.md) |
-| T35 | LEO / Starlink handover impairment | 2 · candidate | specified, not run | — | [test-35](test-35-leo-handover-impairment.md) |
+| T34 | A real encoder against the continuous-source fence | 2 · Gate 3 | closed without a step | **The real feed never stepped back in 213 h**; each of the nine import exits captured was a SCTE-35 cue the standing build mis-stamped | [test-34](test-34-real-encoder-severity.md) |
 | T36 | Entitlement enforcement | control plane | complete; six of six criteria, and FETCH and TRACK_STATUS refused outside the grant | The relay admits exactly what a credential names, **before any media is delivered** | [test-36](test-36-entitlement-enforcement.md) |
 | T37 | Provisioning and de-provisioning | control plane | complete; criterion 2 failed | **The binding finding is correctness**: three `Cache-Control` forms disable re-checking silently, so a withdrawn grant never takes effect | [test-37](test-37-entitlement-revocation.md) |
 | T38 | The affiliate estate | control plane | complete; six of seven criteria, and four of four behind an auth server | **The key-per-entitlement estate scales**, because neither the relay nor the auth server holds keys; a deleted key stops a live session only on a re-check | [test-38](test-38-entitlement-estate.md) |
@@ -113,6 +112,13 @@ no number without the conditions its file states. The rung and gate are from
 | T51 | Same-epoch importers that number groups alike (our `hop-aligned-import`, [#5895](https://github.com/moq-dev/moq/pull/5895)) | 6 · R6 | run; declined upstream | **On a clean exit the change removed #4354's rewind on both lanes**, where the stack without it rewinds or repeats 0.6 s; upstream closed it and removed the shared epoch, so no merged build has the pair | [test-51](test-51-same-epoch-groups.md) |
 | T52 | Fan-out and permanence through a CDN-hosted relay | R2, P1-j | specified | — | [test-52](test-52-cdn-relay-fanout.md) |
 | T53 | Token interoperability across relay implementations | R7, P1-ac | specified | — | [test-53](test-53-token-interop.md) |
+
+**Retired roadmap IDs** resolve to the experiment that discharged or holds them: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
+and [T24](test-24-partial-media-plane-stall.md), P0-g → [T21](test-21-permanence-soak.md), P0-i → [T8b](test-8b-congestion-control.md), P0-j → [T34](test-34-real-encoder-severity.md),
+P0-l and P1-u → [T45](test-45-live-tstd-remux.md), P0-m → [T47](test-47-fixed-delay-export.md), P1-a and P1-c → [P2-l](planned-experiments.md#p2--completeness), P1-d → [T31](test-31-congestion-capacity-ladders.md), P1-e → [P2-m](planned-experiments.md#p2--completeness),
+P1-f → [T26](test-26-cross-host-fanout.md), P1-g → [T9](test-9-performance.md), P1-h → [T11](test-11-interop.md), P1-i → [T14](test-14-data-plane-comparison.md), P1-k → [T38](test-38-entitlement-estate.md), P1-m, P1-q, P1-y and P1-z → [T28](test-28-failure-injection-matrix.md),
+P1-n → [T13](test-13-downstream-grooming.md), P1-p → [T6](test-6-relay-resilience.md), P1-r, P1-s, P1-w and P1-x → [T41](test-41-import-reanchor-coverage.md),
+P1-v → [T14](test-14-data-plane-comparison.md), P2-b → [T25](test-25-isolation-under-abuse.md), P2-d → [P1-b](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), P2-h and P1-t → [T48](test-48-passthrough-export.md).
 
 ### Pass criteria (agreed in advance)
 
@@ -180,10 +186,10 @@ a fast-moving upstream that speaks draft protocol versions.
 
 ```
 Source TS (file or live SRT/RTP)
-   → Publisher (media-aware `moq import ts`  OR  opaque `moq_publisher`)
+   → Publisher (media-aware `moq import ts`  OR  opaque `moq import ts --passthrough`)
    → [impairment node: tc/netem]
    → MoQ relay (localhost or AWS EC2)
-   → Subscriber + groomer (`moq export ts` + `mpegts-pacer`  OR  opaque `moq_subscriber`)
+   → Subscriber (`moq export ts --delay`, or `--passthrough` on the opaque lane)
    → RTP/UDP (multicast, ST 2022-7) → hardware IRD + TR 101 290 analyser
    → (egress + source captured to TSDuck)
 ```
@@ -208,8 +214,8 @@ Source TS (file or live SRT/RTP)
 | TS structural / conformance analysis | **TSDuck** 3.44-4676 (`tsp`, `pcrverify`, `pcrextract`, `analyze`, `continuity`, `pat`/`pmt`/`sdt`) |
 | Real-time source pacing | TSDuck `regulate` (PCR-based; `--pcr-synchronous` for looped files) |
 | Media-aware lane | `moq-dev` `moq` (import/export) + `moq-relay` (public reference implementation) |
-| Opaque `m2ts` lane | private `moq_publisher` / `moq_relay` / `moq_subscriber` (draft-14 / MSFTS `m2ts`) |
-| CBR/PCR grooming | [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 (`cargo install --git`; the `cbr_file` example for file arms). The live egress adapter was the `moq_egress` example, renamed `ts_egress` at [T16](test-16-grooming-segmented-http.md) and now the crate's `mpegts-pacer` binary; records name whichever they ran against |
+| Opaque lane | `moq-dev` `moq import ts --passthrough` and `moq export ts --passthrough` ([T48](test-48-passthrough-export.md)) |
+| CBR/PCR grooming | The merged `moq export ts --delay` on a CBR source (with `--sync` for 1+1); TSDuck `pcradjust` + `regulate` for a VBR one. [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0, the groomer of record for T2–T21, takes no new work; its live adapter was the `moq_egress` example, then `ts_egress`, then the crate's binary, and records name whichever they ran against |
 | Network impairment | Linux `tc` / `netem` (optionally `tbf`/`htb` for rate); the shaped-bottleneck rigs are described in `INSTRUCTIONS.local.md` |
 | Hardware conformance | Hardware IRD + TR 101 290 analyser (P2; access-dependent) |
 

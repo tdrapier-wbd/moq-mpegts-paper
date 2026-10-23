@@ -78,7 +78,7 @@ watch)
 	read -ra XFLAGS <<<"$EXPORT_FLAGS"
 	grade() {
 		if [ -n "$GRADE_RATE" ]; then
-			tee >(tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 500 \
+			tee >(tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 13 \
 				--bitrate "$GRADE_RATE" -O drop 2>>"$OUT/grade.log")
 		else
 			cat
