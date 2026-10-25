@@ -130,9 +130,9 @@ release offers, timed from the change to the session's end, or recorded as conti
    `/h4`, which grants by the matcher a CAT's claim uses (moqx's documentation; read, not
    measured). A8 (publish-only subscribing) and A10 (the parent grant narrowing) have no moqx form,
    and `moqx-issuer` emits exact namespace grants only.
-3. **C5 has no payload to count.** `openmoq-publisher` announces every track with PUBLISH, which
-   `moq-relay` refuses ("PUBLISH is not supported"). Its admission is read from the auth server's
-   grant and the relay's announcement.
+3. **C5 has no payload to count.** The arm ran `openmoq-publisher` with `--publish-catalog`, which
+   announces every track with PUBLISH, and `moq-relay` refuses PUBLISH ("PUBLISH is not
+   supported"), by design at every draft ([#3076](https://github.com/moq-dev/moq/issues/3076)). Its admission is read from the auth server's grant and the relay's announcement.
 4. **Discovery on moqx** needs its own grant. `moq` opens with a root-wide SUBSCRIBE_NAMESPACE.
    `/h4` grants namespace subscription everywhere, and `/h4n` scopes it to `[bcast, ch1]`; both are
    reported.
@@ -197,7 +197,9 @@ Payload bytes at the receiver, draft 16 then draft 18.
 
 A1x on draft 18: the relay logged "auth grant cannot be encoded as one AUTH_OK; refusing the token",
 ended the session's lease, and the client was told unauthorized. `moq auth sign` issues the grant
-without comment.
+without comment. **On `main` at `66af72315` the exact grant is admitted on both drafts**: 8,422,964 ·
+8,609,460 bytes in 8 s, beside the subtree grant's 8,764,748 · 9,479,712 (token in the URL, one
+subscriber per arm, a minimal script, since that build no longer has the rig's `--connect-once`).
 
 **Disclosure.** On `moq-relay`, both drafts, A was announced `ch1`, B `ch1` and `ch2`, C `ch2`:
 exactly what each licenses. On moqx, announcements follow the `subscribe_namespace` grant, not the
@@ -235,8 +237,9 @@ The match is on namespace elements, not bytes.
 2. **H1 does not hold.** C3 was refused: the Token Type 0 field carries across, but `moq` holds a
    token as text and moqx parses the field's bytes as a CWT. C4's Type 0 form shows moqx admitting
    the same field when the bytes are binary. C5 crossed the other way as far as admission, with no
-   payload, because `openmoq-publisher` publishes by PUBLISH and `moq-relay` does not take it. The
-   message is portable; neither client carries the other relay's token end to end.
+   payload, because the arm's publishing mode was PUBLISH, which `moq-relay` does not take. The
+   message is portable; `moq` does not carry moqx's token end to end, and `openmoq-publisher`
+   carrying `moq-relay`'s was not measured in the mode that delivers (see Corrections).
 3. **H2 holds.** C6–C10 were refused with zero payload bytes. No cross-format admission.
 4. **H3 does not hold.**
    - Of the eleven arms with a form on both relays, ten agree. P3k does not: a moqx key is valid
@@ -245,7 +248,7 @@ The match is on namespace elements, not bytes.
    - Disclosure diverges. `moq-relay` announces exactly the licensed channels; moqx announces what
      a separate discovery grant covers, and with `moq` as the client the narrow rendering refuses
      discovery outright.
-   - `moq-relay`'s own verdict on an exact grant depends on the draft (A1x).
+   - `moq-relay`'s own verdict on an exact grant depended on the draft (A1x); on `66af72315` it does not.
    - A8 and A10 had no moqx form.
    - Every refusal on either relay delivered zero payload bytes.
 5. **H4 holds** on moqx's matcher, through `anonymous_claim`: `ch1` and its child admitted,
@@ -265,22 +268,24 @@ The match is on namespace elements, not bytes.
   - On moqx, discovery is a grant of its own.
   - On moqx, isolation between broadcasters needs one service each, since keys are not scoped.
     This is read from the configuration, not measured.
-  - On `moq-relay`, a grant must be a union of subtrees for draft 17 and later.
+  - On a `moq-relay` build without #6621, a grant must be a union of subtrees for draft 17 and later.
 - **On moqx v0.3.6 a token's lifetime does not bound access.** Expiry does not end a live session,
   and withdrawal before expiry is a restart. On `moq-relay` both are bounded: expiry exactly,
   withdrawal by one cadence.
-- **An estate issuing exact grants on `moq-relay` breaks on a wire upgrade.** A grant that works on
-  draft 16 is refused on draft 18, and the signer accepts it without warning.
+- **An exact grant survives a wire upgrade only on a `moq-relay` build with #6621.** Without it, a
+  grant that works on draft 16 is refused on draft 18, and the signer accepts it without warning.
 
 **Defects found, reported upstream** (state in the
-[ledger](upstream-contributions.md#token-interoperability-four-defects--reported-as-6566-6567-on-moqx786-and-as-moqxr83)):
-- `moq-relay`: the draft-17 refusal of exact grants is not in its authentication guide
-  ([#6566](https://github.com/moq-dev/moq/issues/6566)). It applies with the token in the URL too.
+[ledger](upstream-contributions.md#token-interoperability--6566-and-6567-fixed-moqx786-open-moqxr83-a-mode)):
+- `moq-relay`: the draft-17 refusal of exact grants, undocumented, with the token in the URL too
+  ([#6566](https://github.com/moq-dev/moq/issues/6566); fixed, re-measured above).
 - `moq`: it prints `MALFORMED_AUTH_TOKEN` as an unknown code
-  ([#6567](https://github.com/moq-dev/moq/issues/6567)), and it cannot carry a binary token.
+  ([#6567](https://github.com/moq-dev/moq/issues/6567); `main` names 0x16, read from the code), and it
+  cannot carry a binary token.
 - moqx v0.3.6: the documented `SIGHUP` reload ends the process
   ([on #786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516)).
-- `openmoq-publisher`: it exits when a relay refuses PUBLISH, so it cannot publish to `moq-relay`
+- `openmoq-publisher`: it exits when a relay refuses PUBLISH; without `--publish-catalog` it
+  publishes to `moq-relay` on draft 18 and exits on draft 16, refusing the relay's request ID
   ([moqxr#83](https://github.com/openmoq/moqxr/issues/83)).
 
 ## Limits
@@ -294,3 +299,13 @@ The match is on namespace elements, not bytes.
 - No CDN-hosted relay: its key is not ours to provision.
 - Not measured: verification cost, DPoP proofs, other CAT profiles, and the MoQ Auth extension's
   in-band renewal.
+
+## Corrections
+
+**`openmoq-publisher` and `moq-relay`.** Believed: `openmoq-publisher` cannot publish to
+`moq-relay`, since it exits when the relay refuses PUBLISH. True: the arm ran it with
+`--publish-catalog`, the mode that publishes by PUBLISH. Without it, v0.4.10 publishes by
+PUBLISH_NAMESPACE and serves the relay's SUBSCRIBE on draft 18; on draft 16 it exits, refusing the
+relay's request ID 1 as out of sequence (loopback, `moq-relay` at `f13283b30`, no token). C5's
+admission stands; its delivery end to end is unmeasured. Rule ([method notes](method-notes.md) §4):
+before reporting that a client cannot reach a relay, run it in each of its publishing modes.

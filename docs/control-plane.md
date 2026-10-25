@@ -163,9 +163,8 @@ of draft is measured below.
 > **Across two implementations, enforcement transfers and the token does not.** `moq-relay` and moqx
 > each refused everything outside a grant before any payload byte and matched on path segments, but
 > their token formats, carriage, key scope, disclosure and withdrawal all differ, so what an operator
-> carries between relays is the entitlement record, rendered for each. Two parts of the shape above
-> do not hold everywhere: on moqx's release a live session outlives its token's expiry, and
-> `moq-relay` refuses on a later draft an exact-path grant an earlier one admits
+> carries between relays is the entitlement record, rendered for each. One part of the shape above
+> does not hold everywhere: on moqx's release a live session outlives its token's expiry
 > ([Evidence](evidence.md) §3.10, [T53](../lab/test-53-token-interop.md)).
 
 **The role split above is load-bearing.** On the build measured, client-certificate authentication

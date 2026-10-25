@@ -23,8 +23,9 @@ alwaysApply: true
   any script its formatter rewrote before pushing it.
 - **An upstream pull request goes round one loop until it is clear** (commands in
  `INSTRUCTIONS.local.md` §1, *The PR loop*): fetch the maintainer's pushes; fix, with a test that
- fails without the fix; pass the gate; push; wait for CI; mark ready; wait for the automated
- reviews; fix and push, or reply to, each finding; repeat until CI is green and nothing on the head
+ fails without the fix; pass the gate and a local CodeRabbit review; push; wait for CI; mark
+ ready; await the automated reviews with `lab/scripts/pr-await-bots.py`, never a fixed wait; fix
+ and push, or reply to, each finding; repeat until CI is green and nothing on the head
  is unanswered. Never request a review. Read every finding on a head before changing code, and
  push a round once. **Stop after two rounds whose new findings land on code the previous round
  changed:** the design is moving under the reviewers, so summarise what is open on the pull request

@@ -411,6 +411,11 @@ subscribers cost 1,833 MB churned every 5 s and 65 MB held.
 T8b.)* Under one shortfall a segmented client either lost the session at 43 s or held 99 %, depending only
 on its 404 re-anchoring.
 
+**Before reporting that a client cannot reach a relay, run it in each of its publishing modes and read
+its interop notes.** *(T53.)* `openmoq-publisher` with `--publish-catalog` publishes by PUBLISH, which
+`moq-relay` refuses; without it, the same release is served on draft 18. The arm's mode was reported as
+the client's defect.
+
 **When two runs differ in more than one variable, do not credit the one you have been tuning; and a
 quantity that does not move under your variable is not thereby someone else's.** *(T13, T18, T19.)*
 Cushion took the credit for a PCR result until an eightfold sweep moved nothing; the same invariance was

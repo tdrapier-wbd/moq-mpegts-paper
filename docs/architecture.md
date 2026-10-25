@@ -445,7 +445,7 @@ no freely available client fetches them ([Comparison](comparison.md) §5).
 ## 5. Redundancy and 1+1
 
 Availability target: no visible failure during contracted content (R6), addressed at every layer on a
-best-effort substrate.
+best-effort substrate, with legs that start and restart at different times.
 
 ```mermaid
 flowchart LR
@@ -500,8 +500,9 @@ delivery pair can be:
   (§5.1). It protects everything below the importer. The importer stays single: its loss ends every
   passthrough export (§5.5), and input protection stays at the source (§5.4).
 - **On the media-aware lane, 1+1 is a switch.** Its multi-track legs are byte-identical only when
-  co-started (§5.1), so a pair that cannot be co-started is protected by selection: input-select at
-  the IRD, or the demultiplexing export following a second importer as a marked programme switch.
+  co-started (§5.1), and legs are not co-started, so the pair is protected by selection:
+  input-select at the IRD, or the demultiplexing export following a second importer as a marked
+  programme switch.
   Two importers fed from separate sources then protect the input as well, at the price of a marked
   discontinuity at each failover, about one detection interval for a lost importer (§5.5). This
   lane keeps per-track egress, prioritisation and selection (§6).

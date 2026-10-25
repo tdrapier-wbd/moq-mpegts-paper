@@ -25,7 +25,7 @@ this campaign's own measurements (§8), where the ratio is the point.
 - **Audio and per-stream liveness** (§2): [frame-sync loss](#frame-sync-loss-killed-the-whole-publisher--closed-in-two-days) · [splice substitution](#a-splice-publishes-a-substituted-frame--closed-with-two-measured-residuals) · [recovery signalling](#a-recovered-stream-is-signalled-nowhere--closed-exactly-as-asked-and-it-exposed-a-bigger-gap) · [liveness at import (#4502, #4506)](#per-stream-liveness-in-the-ts-importer--contributed-as-4502-and-4506-both-merged) and [at export (#4577)](#per-stream-liveness-at-the-ts-exporter--contributed-as-4577-merged) · [TR 101 290 counters at ingest (#4750)](#tr-101-290-counters-at-ingest--contributed-as-4750-merged)
 - **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352), the rewind at the switch (#4354) and the relay-loss skip (#6062)](#activeactive-source-failover-shipped-bounded-three-defects-reported) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
 - **Congestion and memory** (§4, §5): [subscriber death under contention](#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) · [the qlog loss trigger](#the-qlog-loss-trigger-is-computed-backwards--fixed-in-quinn-and-in-noq-released-in-neither) · [relay memory](#5-relay-memory) and [the publisher's leak](#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)
-- **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-schema-merged-reporters-drafted) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
+- **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-schema-and-reporters-merged) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
 - **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--declined-re-asked-narrowly-deferred) · [closures by a planning document](#four-closed-as-completed-by-a-planning-document-that-changed-no-code) · [a multi-packet PMT (#5110)](#a-pmt-longer-than-one-packet-ended-the-export--reported-as-5110-fixed-by-5220) · [video TB overrun (#5142)](#video-overran-its-transport-buffer-where-the-multiplex-outran-its-rx--reported-as-5142-fixed-by-5207-and-5306) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363, #5516)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-fixed-by-5363-and-5516)
 - **Interoperability** (§6, §6b): [the announce convention](#the-announce-convention--reported-as-a-hazard-not-a-bug-and-fixed) · [the empty namespace prefix](#the-empty-namespace-prefix--a-specification-inconsistency-converged) · [the media-level interop profile](#a-media-level-interop-profile--contributed) · [a flag-alias regression](#a-flag-alias-regression--reported-fixed-verified-closed) · [an independent stack](#corroboration-from-an-independent-stack) · [OpenMOQ's MSFTS publisher (moqxr#57)](#openmoqs-msfts-publisher-through-moq-relay--reported-as-openmoqmoqxr57) · [moq5's relay (moq5#51)](#moq5s-relay-and-a-late-subscriber--reported-as-openmoqmoq551) · [a CDN-hosted moqx relay (moqx#842)](#a-cdn-hosted-moqx-relay-at-a-join--reported-on-openmoqmoqx795-and-as-842) · [FFmpeg's HLS client](#6b-ffmpeg-an-hls-client-that-asks-for-http3-and-carries-the-media-over-http11)
 - **The MSFTS specification** (§7): [the named modes and output timing](#the-three-named-modes-are-published-and-the-gap-they-leave-is-output-timing) · [the September 2026 round](#the-2026-09-17-round-eleven-issues-filed-plus-one-comment-and-one-cross-venue-pair) · [the output contract (#37)](#the-output-contract-what-a-rebuilding-subscriber-emits-filed-as-37-and-merged) · [the CAT and the retain list](#the-retain-list-drops-the-cat-so-conditional-access-cannot-survive-program-level-filtering) · [mode 3 and the reference implementation](#mode-3-and-the-reference-implementation-are-not-the-same-thing-and-that-is-the-convergence-problem) · [the -02 revision](#the--02-revision-verbatim-only-carriage-41)
@@ -782,8 +782,7 @@ A quest-only PR replacing `plan-ts-alignment`: a shared `--epoch` (refusals buil
 counters restart per group, released by clock recovery rather than wall time; and RTP legs that stay silent rather than send a datagram they cannot fill.
 **Merged.** #5967 has since removed the shared importer epoch and its alignment (§ *Active/active
 source failover*), so we closed our co-start test
-[#5955](https://github.com/moq-dev/moq/pull/5955). #6554 (open) removes `--sync` (#5949); #6304
-is closed.
+[#5955](https://github.com/moq-dev/moq/pull/5955); #6554, merged, removed `--sync` (#5949).
 
 ### A restarted relay cannot reset its predecessor's connections — reported as [#5861](https://github.com/moq-dev/moq/issues/5861)
 
@@ -803,8 +802,8 @@ laid it apart. Anchoring each group at its HRD's buffering period removed that, 
 [#5949](https://github.com/moq-dev/moq/pull/5949). **Decided and closed: that anchor is the rule**
 (quest `ts-hitless`), identity promised only where the stream carries a NAL HRD buffering period;
 a packet plan declined, H.265 is `ts-hitless-h265`. #5949, merged, implements it. On a source
-without one, a late leg's video differs from its partner's for up to 100 s: reported as
-[#6546](https://github.com/moq-dev/moq/issues/6546).
+without one, a late leg's video differs from its partner's for up to 100 s:
+[#6546](https://github.com/moq-dev/moq/issues/6546), closed with `--sync`'s removal.
 
 ---
 
@@ -1010,16 +1009,20 @@ undocumented outside the source. Closed as completed and absorbed into
 server: the behaviour was accepted as wrong, and the remedy replaces the surface rather than patching
 it. Whether that closes the hazard is not yet checkable; T37 measured a component being redesigned.
 
-### Token interoperability: four defects — reported as [#6566](https://github.com/moq-dev/moq/issues/6566), [#6567](https://github.com/moq-dev/moq/issues/6567), on [moqx#786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516) and as [moqxr#83](https://github.com/openmoq/moqxr/issues/83)
+### Token interoperability — [#6566](https://github.com/moq-dev/moq/issues/6566) and [#6567](https://github.com/moq-dev/moq/issues/6567) fixed, [moqx#786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516) open, [moqxr#83](https://github.com/openmoq/moqxr/issues/83) a mode
 
-[T53](test-53-token-interop.md), re-checked against each project's current `main` before posting:
-`moq-relay` refuses on draft 18 an exact-path grant that draft 16 admits ("grant cannot be encoded
-as one AUTH_OK"), with the token in the URL or in SETUP, and its guide does not say so; `moq`
-reports a MALFORMED_AUTH_TOKEN session close (0x16) as `unknown code=22`; SIGHUP, which moqx
-v0.3.6's docs say reloads, ends the process; `openmoq-publisher` exits when a relay refuses
-PUBLISH, so it cannot publish to `moq-relay`. **State.** Open, unanswered.
+[T53](test-53-token-interop.md), re-checked on each project's `main` before posting: `moq-relay`
+refused on draft 18 an exact-path grant that draft 16 admits, undocumented; `moq` printed a
+MALFORMED_AUTH_TOKEN close (0x16) as `unknown code=22`; SIGHUP, which moqx v0.3.6's docs say
+reloads, ends the process; `openmoq-publisher` exited when `moq-relay` refused PUBLISH. **State.**
+#6566 fixed by [#6621](https://github.com/moq-dev/moq/pull/6621) (AUTH_OK carries the grant's
+patterns; on `66af72315` the exact grant delivers on draft 18), #6567 by
+[#6612](https://github.com/moq-dev/moq/pull/6612). moqx#786 unanswered.
+moqxr#83: the exit is `--publish-catalog`'s; without it v0.4.10 publishes on draft 18 and exits on
+draft 16 on the relay's request ID ([reported back](https://github.com/openmoq/moqxr/issues/83#issuecomment-6398652913);
+T53 § *Corrections*).
 
-### Subscriber-reported health telemetry — accepted, re-planned as solicited viewer feedback; schema merged, reporters drafted
+### Subscriber-reported health telemetry — accepted, re-planned as solicited viewer feedback; schema and reporters merged
 
 [#3608](https://github.com/moq-dev/moq/issues/3608) was filed **as aspirational** because no control
 plane in current use gives an origin this visibility. Upstream accepted it and planned it as hang
@@ -1027,26 +1030,25 @@ tracks ([#4510](https://github.com/moq-dev/moq/pull/4510), `quest/m1/stats/`). *
 names one `stats` snapshot track in its catalog; a publisher that wants to hear from viewers solicits it
 with an `echo: { path }` section, and each viewer then publishes one `.echo` broadcast under that path**
 carrying, per rendition, what it received, decoded, played late and stalled on, with its transport
-counters. A shared model classifies either report as unknown, healthy, degraded or unhealthy and names
-its observer; a preflight run reports which media layer is broken. Reporting is opt-in, trust is the
+counters; a preflight run reports which media layer is broken. Reporting is opt-in, trust is the
 token prefix, and **self-reports are never billing, authorization or route-selection input**; the relay
-keeps aggregated histograms only. The campaign
-position — not via `mpegts-pacer` — is unchanged.
+keeps aggregated histograms only.
 **Contributed, [#5367](https://github.com/moq-dev/moq/pull/5367), merged**: a catalog entry names
 its track apart from its key, so the snapshots can key by rendition and two broadcasts' same-named
 tracks share one catalog; rebinding an export when a key's track changes is deferred to
 [#5406](https://github.com/moq-dev/moq/pull/5406).
 
 **The TS half was `quest/m2/ts-health-stats.md`**: `ts::stats`'s TR 101 290 counters and per-PID
-liveness in both reports. Its export side is this campaign's case: the affiliate's edge decodes where
-the origin cannot see ([T39](test-39-cross-boundary-observability.md)).
+liveness in both reports ([T39](test-39-cross-boundary-observability.md)).
 [#5360](https://github.com/moq-dev/moq/issues/5360) asked for it and MSF carriage; MSF is parked.
 **The maintainer [gave us](https://github.com/moq-dev/moq/pull/5643#issuecomment-6222787706) it and
 `stats/rust`**, with the export's re-timing in its own section. On #5643, merged:
-[#5848](https://github.com/moq-dev/moq/pull/5848), the CLI flags and sinks, **merged**;
+[#5848](https://github.com/moq-dev/moq/pull/5848), the CLI flags and sinks;
 [#5849](https://github.com/moq-dev/moq/pull/5849), `mpegts` at both edges and `release` (drops,
-trims, gaps, margin, offset, drift), **merged**. A clean clip reads zero on each check; one video PID silenced behind legal PCR and
-continuity grows only its `quiet`.
+trims, gaps, margin, offset, drift). A clean clip reads zero on each check; one video PID silenced behind legal PCR and
+continuity grows only its `quiet`. **Contributed, merged**: [#6552](https://github.com/moq-dev/moq/pull/6552),
+`import --echo-path`, a CLI publisher soliciting what `export --echo` reports (P1-l's gate);
+[#6654](https://github.com/moq-dev/moq/pull/6654), the shared model that grades either report and names its observer.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
@@ -1251,7 +1253,7 @@ numbers the datagrams it sent, so a late join or a restart shifts one leg's numb
 numbered by timeline position, withholding any the leg cannot vouch for. Legs joined apart or losing
 complementary groups sent byte-identical datagrams; four tests fail without the withholding.
 
-**State.** Closed unmerged: [#6554](https://github.com/moq-dev/moq/pull/6554) (open) removes
+**State.** Closed unmerged: [#6554](https://github.com/moq-dev/moq/pull/6554), merged, removed
 `--sync`, which the legs need. In-process RTP would be passthrough only, numbered by source packet
 position, scoped against a named receiver.
 
@@ -1546,20 +1548,20 @@ before its access unit delimiter, which H.264 and HEVC put first. **Fixed by
 [#6001](https://github.com/moq-dev/moq/pull/6001), merged**; at `f13283b30` a keyframe through the
 CDN relay has its source's NAL order (T11).
 
-### A PMT revision kept stale track names — contributed as [#6208](https://github.com/moq-dev/moq/pull/6208) (import), [#6289](https://github.com/moq-dev/moq/pull/6289) (export) and [#6301](https://github.com/moq-dev/moq/pull/6301) (PAT)
+### A PMT revision kept stale track names — contributed as [#6208](https://github.com/moq-dev/moq/pull/6208) (import), [#6289](https://github.com/moq-dev/moq/pull/6289) (export) and [#6689](https://github.com/moq-dev/moq/pull/6689) (PAT)
 
 **Report.** Upstream's fidelity audit (quest `ts-reliability/pmt-lifecycle`): a PMT that
 retypes, re-describes or drops a stream left its track and catalog entry in place, and program
 descriptors and identity were read once. P0-k's PID-change fixture revises its PMT.
 
-**Contributed.** The import half as decided: a changed or dropped listing ends its track and leaves
-the catalog, a changed stream reopens under a new name, `programDescriptors` follows the PMT, an
-identity change refuses; so do a PID listed twice and 65,536 stream revisions. The export half
-revises the PMT at the next version, dropping a PID once its tail is out. The PAT half follows a
-moved PMT and programs leaving or rejoining the PAT.
+**Contributed.** The import half: a changed or dropped listing ends its track and catalog entry,
+a changed stream reopens under a new name, `programDescriptors` follows the PMT, an identity
+change refuses; so do a PID listed twice and 65,536 stream revisions. The export half revises the
+PMT at the next version, dropping a PID after its tail. The PAT half's import follows a moved PMT
+and unannounces a dropped program; a restored one is a new epoch.
 
-**State.** #6208 and #6289 merged. #6301 closed: the PAT half is
-re-planned on #6371's shared parser.
+**State.** #6208, #6289 merged; #6689 open. Moving a running export's PMT awaits upstream's
+table rework.
 
 ---
 
@@ -1640,7 +1642,7 @@ and its receiver gets the final group twice; otherwise the loop is byte-exact. D
 with `moq-dev` waits on both adopting the framing moq-wg/moq-transport#2015 merged. Verified on
 `4717ce3`: pacing follows the PCR, closing `--paced`. Verified on `a734a91` with moqxr v0.4.8:
 interrupts exit cleanly, and the final group repeats with the receiver on moq5 `main` but not with
-[openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54). **Open until #54 merges.**
+[openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54). **Closed fixed: #54 merged.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
@@ -1671,7 +1673,8 @@ namespace and restart alike (our groups restart at 0, short of #795's preconditi
 refuses it on draft 18, losing a once-published catalog and a mid-group joiner's session
 ([T52](test-52-cdn-relay-fanout.md);
 [reported](https://github.com/openmoq/moqx/issues/795#issuecomment-6365312157)). On draft 18 the
-snapshot's 64-bit Hop ID closes `moq-dev` sessions ([moq#6545](https://github.com/moq-dev/moq/issues/6545)).
+snapshot's 64-bit Hop ID closed `moq-dev` sessions ([moq#6545](https://github.com/moq-dev/moq/issues/6545)),
+fixed by [#6614](https://github.com/moq-dev/moq/pull/6614).
 
 ---
 

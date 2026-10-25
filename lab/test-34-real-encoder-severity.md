@@ -2,7 +2,7 @@
 
 **State: closed without a step — in 213 h on the live feed the real encoder never stepped back.**
 The seven-day re-run on standing units past #3997 saw no import exit in 169 h (§ *The seven-day
-re-run*); P0-j's first 44.4 h, below, saw nine exits and none a step. On the live feed the standing import
+re-run*), though two since, uncaptured, are candidates; P0-j's first 44.4 h, below, saw nine exits and none a step. On the live feed the standing import
 ends every few hours on *frame timestamp is below the live edge*, with the hand-off clean each time
 (§ *The live feed*). None of the nine exits P0-j captured with the hand-off around them was a step
 in the feed: each time the standing build stamped a SCTE-35 section below the one before it, which
@@ -246,8 +246,17 @@ step on any track ends the import, so the feed stepped back on none. What it did
 damaged eight times, upstream of SRT; once, at 99 h, the import counted a PCR discontinuity without
 the indicator and the AC-3 timeline jumped about 16,848 s forward, and the export failed on its
 clock check and was restarted. That step is forward, its class was not captured (the ring keys on
-import exits), and its cost is in T21. One graded backward step would still answer P0-j; none is
-expected often enough to keep a ring for it.
+import exits), and its cost is in T21. One graded backward step would still answer P0-j.
+
+**Since the re-run, on the same build, the import has exited twice, with no ring running.** Each
+exit is *frame timestamp … is below the previous group's start*. The first, on the secondary's
+import alone, was 19,336 s below. Three days later both legs' imports exited in the same second,
+each exactly 16,841.17 s below, close to the size of the forward jump above. systemd restarted each
+import after its 5 s hold-off, and every session a CDN soak held on the feed ended with them
+([T52](test-52-cdn-relay-fanout.md)). Neither exit is classified: by the rule in *Corrections*, a refusal
+names what the import wrote, not what the feed sent. One identical refusal on two legs is a
+common-mode exit of the 1+1 pair from a single input event, and at about one exit every two days
+a ring keyed on import exits is now worth keeping.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 

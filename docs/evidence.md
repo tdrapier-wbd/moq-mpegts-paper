@@ -613,8 +613,7 @@ of each relay, drafts 16 and 18): `moq-relay` and moqx both refused everything o
 any payload byte and matched on path segments, but neither client carried the other relay's token
 end to end. moqx's keys verify grants on any namespace of their service, its announcements follow a
 separate discovery grant, and on v0.3.6 a live session outlives its token's expiry and a key is
-withdrawn only by a restart that ends every session. `moq-relay` refuses on draft 18 an exact-path
-grant that draft 16 admits. **Unmeasured**: a mesh, a real rights system in place of the stub, and
+withdrawn only by a restart that ends every session. **Unmeasured**: a mesh, a real rights system in place of the stub, and
 rights windows.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are

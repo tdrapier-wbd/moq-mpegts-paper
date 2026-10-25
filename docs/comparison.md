@@ -498,25 +498,24 @@ MoQ's, the commercial one segmented HTTP's.
 | | `moq-dev` | `moq2ts` / `moqxr` | Cloudflare `moq-rs` | This work |
 |---|---|---|---|---|
 | Lane | media-aware, and whole-multiplex passthrough | **transparent TS** | none — transport only | **transparent TS** + grooming |
-| Scope | publisher, relay, subscriber | **publisher only** | protocol library, **relay**, sample clients | publisher + egress + pacer |
+| Scope | publisher, relay, subscriber | **publisher**, console receiver | protocol library, **relay**, sample clients | publisher + egress + pacer |
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
 | Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
-| Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 14–22** | MOQT 16, 18 | MOQT 14, 16 and 18 | inherits `moq-dev` |
+| Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 14–22** | MOQT 14, 16–18, 21, 22 | MOQT 14, 16 and 18 | inherits `moq-dev` |
 | Source failover | route reselection; between importers, a marked switch to the newest (`export ts --stitch`) | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
 | Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
 
 **Only `moq-dev` does any of the broadcast-specific layer**: its export grooms a CBR source to a
-conformant wire (§11), and its importer counts TR 101 290 errors; no other implementation does either.
-Transparent carriage is no longer single-vendor, but **transparent is not verbatim** (`moq2ts` strips
-nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under
+conformant wire (§11), and its importer counts TR 101 290 errors. Transparent carriage is no longer single-vendor, but **transparent is not always verbatim**
+(`moq2ts`'s per-program mode drops nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under
 pressure and ends a broadcast with its publisher ([Architecture](architecture.md) §5).
 
-**One open implementation subscribes to whole-TS carriage**, as of October 2026: `moq-dev`'s
-whole-multiplex import and its export, which writes the source's bytes back out
-([Evidence](evidence.md) §3.1). `moq2ts` and `moqxr` publish only; `moq-dev`'s "verbatim" tracks
-carry undecoded PIDs one per track inside the media-aware lane. Byte-faithful carriage over MoQ therefore rests on one implementation,
-measured one run per arm, which is why §8's structural limits do not yet by themselves move the
-preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
+**Two open implementations subscribe to whole-TS carriage**: `moq-dev`'s whole-multiplex import
+and the export writing its bytes back out ([Evidence](evidence.md) §3.1),
+and `moq2ts`'s console receiver, on OpenMOQ's stack and not covered here. `moq-dev`'s "verbatim"
+tracks carry undecoded PIDs one per track inside the media-aware lane. Byte-faithful carriage over
+MoQ is measured on one implementation, one run per arm, which is why §8's structural limits do not
+yet move the preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
 ([Evidence](evidence.md) §3.7).
 
 ---
@@ -627,7 +626,7 @@ described, the grading is in [Evidence](evidence.md) §3.7 (interop) and §3.1 (
 - Cloudflare `moq-rs` — IETF-aligned transport library and production relay, media-agnostic:
   https://github.com/cloudflare/moq-rs
 - Cloudflare MoQ relay service and provisioning API: https://developers.cloudflare.com/moq/
-- `moq2ts` — transparent MPEG-TS publisher: https://github.com/openmoq/moq2ts
+- `moq2ts` — transparent MPEG-TS publisher and receiver: https://github.com/openmoq/moq2ts
 - `moqxr` / OpenMOQ Publisher: https://github.com/mondain/moqxr
 - [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — MPEG-TS VBR-to-CBR grooming stage
   (§11)

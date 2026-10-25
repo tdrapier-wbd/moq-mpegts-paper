@@ -35,7 +35,10 @@ segmented HTTP and MoQ work, with no measurements or verdicts, in `docs/primer.m
 - **Correcting an L2 statement that L3 clearly contradicts is a repair, not a promotion**, and is
   allowed. If the repair needs new L3 material in `docs/`, stop and ask.
 - Without approval, leave the text and report the proposed promotion: the claim, its evidence in
-  `lab/`, and where it would sit in `docs/`.
+ `lab/`, and where it would sit in `docs/`.
+- **A limitation is not proposed for promotion until an attempt to address it has run.** A fault the
+ campaign has not yet tried to design or measure around stays in `lab/`; propose it once that
+ attempt has a result.
 
 ## Public and private
 
