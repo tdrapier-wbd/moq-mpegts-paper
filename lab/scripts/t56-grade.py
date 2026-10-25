@@ -294,19 +294,22 @@ def main():
     ap.add_argument("run")
     ap.add_argument("--ref", required=True)
     ap.add_argument("--select", type=float, default=8.0)
+    ap.add_argument("--caps", default="sub1,sub2", help="the recordings to grade (T58: sub1,sub2,sub3)")
+    ap.add_argument("--arrive", action="store_true", help="also grade `arrive*` events (T58's restarts)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
+    caps = a.caps.split(",")
     ev = [(r.split()[0], float(r.split()[1])) for r in open(os.path.join(a.run, "events.txt")) if r.strip()]
     t0 = ev[0][1]
     end = next(t for n, t in ev if n == "end")
     build = open(os.path.join(a.run, "build.txt")).read()
     void = []
     exits = [(n, t) for n, t in ev if "_exit_" in n]
-    for n in (1, 2):
-        cap = os.path.join(a.run, f"sub{n}.idx")
+    for name in caps:
+        cap = os.path.join(a.run, f"{name}.idx")
         rows = [r for r in open(cap) if r.strip()] if os.path.exists(cap) else []
         if not rows or float(rows[-1].split(",")[1]) < end - 3:
-            void.append(f"sub{n} does not cover the run")
+            void.append(f"{name} does not cover the run")
     live = os.path.join(a.run, "live1.ts")
     if os.path.exists(live):
         lv = json.loads(subprocess.run([sys.executable, os.path.join(HERE, "t6-switch-grade.py"), live],
@@ -317,7 +320,7 @@ def main():
     ref = thumbs(a.ref, secs=secs)
     print(f"reference: {len(ref)} pictures over {secs:.0f} s", file=sys.stderr)
     faults = [(n, t) for n, t in ev if n[:4] in ("kill", "term", "outa", "ligh")
-              or (n.startswith("import") and t > t0)]
+              or (n.startswith("import") and t > t0) or (a.arrive and n.startswith("arrive"))]
     out = {"run": a.run, "build": build.splitlines()[1:3], "void": void, "restarts": exits, "rows": [], "summary": []}
     if "cell select" in build:
         e2 = next(t for n, t in ev if n == "export2_start")
@@ -326,7 +329,7 @@ def main():
         names = [("select", [(("select2" if j % 2 == 0 else "select1"), c) for j, c in enumerate(cuts)])]
         names += [(f"sub{n}", [(f"export{n}_start", next(t for m, t in ev if m == f"export{n}_start"))]) for n in (1, 2)]
     else:
-        names = [(f"sub{n}", faults) for n in (1, 2)]
+        names = [(name, faults) for name in caps]
     for name, evs in names:
         if not evs:
             continue

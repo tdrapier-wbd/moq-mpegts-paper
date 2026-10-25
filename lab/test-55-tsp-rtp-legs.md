@@ -3,7 +3,9 @@
 **State: run on the laptop, through a relay on EC2, and on an EC2 host; graded. H1 holds once `tsp`'s
 initial load is bounded; H3 holds; H2 does not, because a killed leg also costs packets at the merge.
 Two co-started legs make a pair, but no leg event the export's delay does not absorb leaves one: the
-route protects the RTP paths, not the MoQ legs.**
+route protects the RTP paths, not the MoQ legs. Through stream-clocked groomers instead, legs
+started apart kept the pair through a restart and a 1 s stall, and lost nothing when a 10 s stall
+ended a leg (on one host).**
 
 ## Objective
 
@@ -142,9 +144,53 @@ the export's session had ended and the export exited.
   source's timeline, not by a count. For P0-k and P1-b the legs are passthrough exports, each through
   a stream-clocked groomer; `tsp` serves where a pair can be restarted together.
 
+## Stream-clocked legs, started apart
+
+**Question.** T12's opaque-lane arm merged passthrough legs through stream-clocked groomers, one
+leg 8 s late, through blackouts and an export killed for good. Do such legs also carry this test's
+other events, a leg killed and restarted and an export stopped, when the two legs never start
+together?
+
+**Rig.** The rig with `START=apart LEG=pacer`: each export into `mpegts-pacer --rtp --stream-clock`
+at the clip's rate, shared SSRC and sequence seed, the pacer at `ea88793` (T12's fixed pacer); leg B
+8 s after leg A in every cell; `main` `66af72315`; the laptop, on loopback; 120 s; three runs per
+cell. Cells: `late` (the control), `kill` (A's export killed at 40 s, its export and pacer
+restarted 10 s later), `stall` for 1 s and for 10 s. No blackout: T12's 5 s blackouts, across which
+the export skipped, passed with this pacer, and the laptop has no `iptables`.
+
+**Pass criteria, fixed before running.**
+
+1. **Void** unless both legs are recorded over the run and the reference is captured. Nothing else
+   is graded unless the control's legs match on every datagram both carry, with no conflict.
+2. **Hitless:** in every run the receiver loses no datagram and meets no conflict, the merged output
+   has no continuity error, and `ts-passthrough-identity.py --groomed` finds no gap and no foreign
+   packet in it.
+3. **Protection restored:** once leg A is back, from its restart or after the 1 s stall, every
+   datagram it sends matches leg B's under the same number.
+4. **The fix holds** if 2 holds in every cell and 3 in `kill` and the 1 s `stall`. The 10 s stall
+   ends A's export, so it is graded on 2 alone.
+
+Reported, not graded: skew at equal numbers, and each pacer's withheld and discarded counts.
+
+**Results.** Twelve runs, all valid. In each control run all of B's datagrams (102,278–102,325) were
+in A under the same numbers, with no conflict. In every run the receiver lost no datagram and met
+no conflict, the merged output had no continuity error, and `--groomed` identity found no gap and
+no foreign packet. After A's restart its datagrams matched B's on every number (63,765–63,813, none
+mismatched), as after the 1 s stall (74,616–74,629). The datagrams left unpaired in a `kill` run are
+exactly B's while A was down or refilling its delay (10,907–10,932). The 10 s stall ended A's
+export in all three runs, and B carried the rest alone. Skew at equal numbers: medians −12.8 to
++4.6 ms, extremes −94 and +100 ms, inside the 450 ms window. The pacers' counts were not recorded:
+the stage set no `--stats-interval-ms`, and the rig stops each pacer by signal, before its final
+report.
+
+**Grading.** Criterion 2 holds in all twelve runs and 3 in `kill` and the 1 s `stall`, so **the fix
+holds**: stream-clocked groomers make a pair of passthrough legs that never start together and
+survive a leg killed and restarted, and a stall, without a lost datagram, where `tsp`'s own
+numbering lost the pair at a late start and at a restart.
+
 ## Limits
 
-- One clip, one source rate, 90 s runs, one run per cell. The receiver is a model, not a hardware
-  merge, and its window is Class C.
+- One clip, one source rate; the `tsp` cells 90 s once each, the stream-clocked arm 120 s three
+  times, on one host. The receiver is a model, not a hardware merge, and its window is Class C.
 - The blackout ran on loopback on one host, where QUIC's recovery after a 1 s outage is the
   loopback's, not a WAN path's.

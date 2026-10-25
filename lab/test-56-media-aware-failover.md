@@ -235,7 +235,8 @@ checked cut by cut. Nothing marks a cut, so each run carries about 61 continuity
   plus up to half a second, and a hard kill adds detection beyond it. No idle timeout brings a failover
   under a second at a delay that still absorbs the source's jitter.
 - **A hard kill can end a following export** (3 of 13 hard kills, all at idle timeouts of 4 s and
-  more), turning a marked switch into an unmarked restart.
+  more), turning a marked switch into an unmarked restart
+  ([#6802](https://github.com/moq-dev/moq/issues/6802)).
 - **An outage shorter than the idle timeout is absorbed**; a longer one leaves the output on the
   standby.
 - **The passthrough lane is the opposite trade**: arrivals are free, but losing the serving importer
@@ -244,4 +245,4 @@ checked cut by cut. Nothing marks a cut, so each run carries about 61 continuity
 - **Selection at the receiver avoided every switch in the relay.** Two exports, one per leg and
   started apart, cost nothing at either start. A cut between them cost under 0.9 s on two encodes,
   plus their offset, and up to 1.6 s on one source where it split a picture. This model has no
-  detection; a real input switch adds its receive timeout.
+  detection; [T58](test-58-receiver-select.md) measures a real input switch in its place.

@@ -59,7 +59,7 @@ Single host (the laptop), loopback, as in T36: enforcement measured without a ne
 
 | Component | Build |
 |---|---|
-| `moq-relay`, `moq`, `moq auth` | `main` at `f13283b30` |
+| `moq-relay`, `moq`, `moq auth` | `main` at `f13283b30`; re-run at `66af72315`, every verdict the same but A1x's and the C7–C8 reason |
 | `moq` for the SETUP arms | #6177's branch at `9425db108` |
 | moqx, `moqx-issuer` | release v0.3.6, macOS arm64 binaries |
 | `openmoq-publisher` | release v0.4.10 (`d6a19ab`), macOS binary, not built from source |
@@ -171,8 +171,8 @@ Payload bytes at the receiver, draft 16 then draft 18.
 | C3 | 0 · 0 | `MALFORMED_AUTH_TOKEN` (0x16), which `moq` prints as "unknown code=22" |
 | C5 | announced, no payload | the auth server granted `publish a5/**` on both drafts and the relay announced `a5`; the publisher's PUBLISH refused |
 | C6 | 0 · 0 | `MALFORMED_AUTH_TOKEN` |
-| C7 | 0 · 0 | the auth server: `InvalidToken` |
-| C8 | 0 · 0 | the auth server: `InvalidToken` |
+| C7 | 0 · 0 | the auth server: `InvalidToken`; at `66af72315`, `MALFORMED_AUTH_TOKEN` |
+| C8 | 0 · 0 | the auth server: `InvalidToken`; at `66af72315`, `MALFORMED_AUTH_TOKEN` |
 | C9 | 0 · 0 | unauthorized: moqx reads no URL token, and the service requires one in SETUP |
 | C10 | 0 · 0 | unauthorized: a Type 0 token on a Type 16 service counts as none |
 
@@ -197,9 +197,8 @@ Payload bytes at the receiver, draft 16 then draft 18.
 
 A1x on draft 18: the relay logged "auth grant cannot be encoded as one AUTH_OK; refusing the token",
 ended the session's lease, and the client was told unauthorized. `moq auth sign` issues the grant
-without comment. **On `main` at `66af72315` the exact grant is admitted on both drafts**: 8,422,964 ·
-8,609,460 bytes in 8 s, beside the subtree grant's 8,764,748 · 9,479,712 (token in the URL, one
-subscriber per arm, a minimal script, since that build no longer has the rig's `--connect-once`).
+without comment. **On `main` at `66af72315` the exact grant is admitted on both drafts**: 1,981,332 ·
+1,900,116 bytes, beside A1's 1,787,504 · 1,956,328.
 
 **Disclosure.** On `moq-relay`, both drafts, A was announced `ch1`, B `ch1` and `ch2`, C `ch2`:
 exactly what each licenses. On moqx, announcements follow the `subscribe_namespace` grant, not the
@@ -280,7 +279,7 @@ The match is on namespace elements, not bytes.
 - `moq-relay`: the draft-17 refusal of exact grants, undocumented, with the token in the URL too
   ([#6566](https://github.com/moq-dev/moq/issues/6566); fixed, re-measured above).
 - `moq`: it prints `MALFORMED_AUTH_TOKEN` as an unknown code
-  ([#6567](https://github.com/moq-dev/moq/issues/6567); `main` names 0x16, read from the code), and it
+  ([#6567](https://github.com/moq-dev/moq/issues/6567); at `66af72315` it prints "malformed auth token"), and it
   cannot carry a binary token.
 - moqx v0.3.6: the documented `SIGHUP` reload ends the process
   ([on #786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516)).

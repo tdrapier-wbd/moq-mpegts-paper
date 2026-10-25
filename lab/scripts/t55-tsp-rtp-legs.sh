@@ -17,13 +17,18 @@
 #   stall    both co-started; leg A's export stopped (SIGSTOP) at KILL_AT s for DARK_S s
 #   blackout both co-started; leg A's QUIC path dropped at KILL_AT s for DARK_S s (Linux, root)
 #
+# START=apart starts leg B LATE s after leg A in every cell, as `late` does. LEG=pacer puts each
+# export through T12's stream-clocked groomer (`mpegts-pacer --rtp --stream-clock` at RATE, shared
+# SSRC and SEQ_SEED) in place of tsp, so a datagram's number is its slot on the source's timeline.
+#
 #   CELL=costart BIN=<moq dir> CLIP=<ts> t55-tsp-rtp-legs.sh <label>
 #
 # Env: SECS (120), LATE (8), KILL_AT (40), DARK_S (10), DELAY (2s), PORT (4590), SEQ (1000),
 #      SSRC (538968071), BURST (7), TSP_LEG_OPTS (extra tsp options on each leg, e.g.
 #      "--initial-input-packets 7": by default tsp sends its first half-buffer, about 7 s of a
-#      10 Mb/s stream, as one burst), RELAY_URL (default: a local relay on PORT), BC, OUT
-#      (/tmp/t55). Grading commands are printed at the end.
+#      10 Mb/s stream, as one burst), START (together), LEG (tsp), PACER (the pacer's dir, for
+#      LEG=pacer), RATE (the clip's, bits/s: 9945951), SEQ_SEED (4242), RELAY_URL (default: a
+#      local relay on PORT), BC, OUT (/tmp/t55). Grading commands are printed at the end.
 set -uo pipefail
 
 H=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -43,6 +48,10 @@ SEQ=${SEQ:-1000}
 SSRC=${SSRC:-538968071}
 BURST=${BURST:-7}
 TSP_LEG_OPTS=${TSP_LEG_OPTS:-}
+START=${START:-together}
+LEG=${LEG:-tsp}
+RATE=${RATE:-9945951}
+SEQ_SEED=${SEQ_SEED:-4242}
 OUT=${OUT:-/tmp/t55}/$LABEL-$CELL
 REMOTE=${RELAY_URL:+1}
 URL=${RELAY_URL:-https://127.0.0.1:$PORT/anon}
@@ -73,6 +82,25 @@ command -v tsp >/dev/null || {
 	echo "tsp not found" >&2
 	exit 1
 }
+case "$START:$LEG" in
+together:tsp | apart:tsp) ;;
+together:pacer | apart:pacer)
+	[ -x "${PACER:-}/mpegts-pacer" ] || {
+		echo "LEG=pacer needs PACER, the dir holding mpegts-pacer" >&2
+		exit 1
+	}
+	;;
+*)
+	echo "START must be together or apart, LEG tsp or pacer" >&2
+	exit 1
+	;;
+esac
+[ "$CELL" = late ] && START=apart
+if [ "$LEG" = pacer ]; then
+	STAGE="'$PACER/mpegts-pacer' 127.0.0.1:%s $RATE --rtp --ssrc $SSRC --latency-ms 1500 --max-latency-ms 8000 --stall-ms 1000 --on-stall mute --stream-clock --sequence-seed $SEQ_SEED"
+else
+	STAGE="tsp --realtime $TSP_LEG_OPTS -O ip 127.0.0.1:%s --rtp --enforce-burst --packet-burst $BURST --start-sequence-number $SEQ --ssrc-identifier $SSRC"
+fi
 moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
 
 rm -rf "$OUT"
@@ -100,8 +128,10 @@ echo "=== $(date -u) t55-tsp-rtp-legs $LABEL cell $CELL ==="
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
 	tsp --version 2>&1 | head -1
-	echo "relay: ${REMOTE:+remote }$URL; broadcast $BC; ${SECS}s; delay $DELAY"
-	echo "legs: export ts --passthrough | tsp --realtime $TSP_LEG_OPTS -O ip --rtp --enforce-burst --packet-burst $BURST --start-sequence-number $SEQ --ssrc-identifier $SSRC"
+	[ "$LEG" = pacer ] && echo "pacer: $PACER/mpegts-pacer $(cat "$PACER.sha" 2>/dev/null || true)"
+	echo "relay: ${REMOTE:+remote }$URL; broadcast $BC; ${SECS}s; delay $DELAY; start $START"
+	# shellcheck disable=SC2059 # STAGE is the leg's format, %s its port
+	echo "legs: export ts --passthrough | $(printf "$STAGE" PORT)"
 } | tee "$OUT/build.txt"
 
 # The recorder: both legs' datagrams into one pcap (raw IPv4, synthesized headers carrying each
@@ -152,16 +182,15 @@ importer() {
 	stamp import_start
 }
 
-# A leg is its export piped into tsp; LEGPID is the export's pid. Not called through $(...): the
-# leg's process group has to land in PIDS for teardown.
+# A leg is its export piped into the RTP stage; LEGPID is the export's pid. Not called through
+# $(...): the leg's process group has to land in PIDS for teardown.
 LEGPID=""
 LEGPG=""
 leg() { # $1 name, $2 port
-	# shellcheck disable=SC2086 # TSP_LEG_OPTS is a list of options
+	# shellcheck disable=SC2059 # STAGE is the leg's format, %s its port
 	bash -c "'$BIN/moq' ${MOQ_DIAL[*]} '$URL' --broadcast '$BC' export ts --passthrough ${MOQ_LAT[*]} $DELAY \
 		2>>'$OUT/$1.export.log' & echo \$! > '$OUT/$1.export.pid'; wait" |
-		tsp --realtime $TSP_LEG_OPTS -O ip "127.0.0.1:$2" --rtp --enforce-burst --packet-burst "$BURST" \
-			--start-sequence-number "$SEQ" --ssrc-identifier "$SSRC" >>"$OUT/$1.tsp.log" 2>&1 &
+		bash -c "exec $(printf "$STAGE" "$2")" >>"$OUT/$1.$LEG.log" 2>&1 &
 	LEGPG=$!
 	PIDS+=("$LEGPG")
 	sleep 0.5
@@ -190,11 +219,12 @@ dark() { # $1 leg, $2 export pid, $3 seconds: drop the leg's QUIC flow both ways
 }
 
 T=0
-if [ "$CELL" = late ]; then
+if [ "$START" = apart ]; then
 	importer
 	sleep 6
 	leg a 5100
 	A=$LEGPID
+	APG=$LEGPG
 	sleep "$LATE"
 	leg b 5200
 	T=$((LATE + 1))
@@ -216,6 +246,10 @@ kill)
 	stamp a_kill
 	echo "   leg A's export killed"
 	sleep "$DARK_S"
+	kill -0 "$APG" 2>/dev/null && {
+		echo "   leg A's RTP stage still up ${DARK_S}s after its input ended; stopped" | tee -a "$OUT/events.note"
+		kill -TERM "$APG"
+	}
 	wait "$APG" 2>/dev/null
 	leg a 5100
 	echo "   leg A restarted"
@@ -251,3 +285,4 @@ grade:
   cd $OUT
   python3 $H/t55-grade.py legs.pcap ref.ts --events events.txt --json grade.json
 EOF
+[ "$LEG" = tsp ] || echo "  python3 $H/ts-passthrough-identity.py ref.ts merged.ts --groomed --json identity.json"

@@ -760,6 +760,11 @@ Three reading passes missed that the retain list never reaches the CAT; a BISS-C
 contribution round.)* PCR clock recovery within tolerance is 13818-9 and TR 101 290, not the idealised
 T-STD of 13818-1 §2.4.2.
 
+**Where the artefact is text in a repository, send the text.** *(The MSFTS review.)* Eleven issues in
+one day became eleven patches the editor wrote himself; an ask sent as a pull request moves that work to
+the reviewer, and a patch that builds is evidence of review. Give several asks a priority order, and
+check the tracker for an open issue that already covers half of one before filing it.
+
 **A precise upstream report can be undone by an imprecise in-house paraphrase, and the paraphrase is
 what gets cited.** *(T18.)* The issue said "not sparsity", with the mean conserved to 0.7 ms; summaries
 said "emits PCRs too rarely" and reached `docs/` and README. Restate the mechanism, not the symptom that

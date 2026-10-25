@@ -27,6 +27,12 @@ OMP=${OMP:?openmoq-publisher}
 FIXTURE=${FIXTURE:-$W/fixture.ts}
 CLIP=${CLIP:-$W/clip.mp4}
 DUR=${DUR:-8}
+# once <bin dir>: the flags for one dial attempt with that build. Before #6529 that is --connect-once.
+# Since, CLI dials always reconnect: a 1 ms retry budget starts no second walk of the one address, and
+# the 1 s first retry delay outlasts it after a session ends.
+once() { case "$("$1/moq" --help 2>&1)" in *--connect-once*) echo --connect-once ;; *) echo --connect-backoff-timeout 1ms ;; esac; }
+read -r -a ONCE <<<"$(once "$M6")"
+read -r -a ONCE_MOQ <<<"$(once "$MOQ")"
 P_RELAY=15443 P_AUTH=15440 P_MOQX=15433 P_ADMIN=15480
 RU=moqt://127.0.0.1:$P_RELAY
 XU=moqt://127.0.0.1:$P_MOQX
@@ -253,12 +259,14 @@ stop() {
 # sub <arm> <draft> <relay> <bin dir> <url> <broadcast> [token file for SETUP]: export ts for DUR s.
 sub() {
 	local arm=$1 d=$2 rl=$3 bin=$4 url=$5 bc=$6 tf=${7:-} out="$W/out/$1-$2.ts" log="$W/logs/$1-$2.log" rc=0
+	local -a once=("${ONCE[@]}")
+	if [ "$bin" = "$MOQ" ]; then once=("${ONCE_MOQ[@]}"); fi
 	if [ -n "$tf" ]; then
 		MOQ_CONNECT_TOKEN=$(cat "$tf") timeout "$DUR" "$bin/moq" --connect-tls-insecure --connect "$url" \
-			--connect-version "moq-transport-$d" --connect-once --broadcast "$bc" export ts > "$out" 2> "$log" || rc=$?
+			--connect-version "moq-transport-$d" "${once[@]}" --broadcast "$bc" export ts > "$out" 2> "$log" || rc=$?
 	else
 		timeout "$DUR" "$bin/moq" --connect-tls-insecure --connect "$url" --connect-version "moq-transport-$d" \
-			--connect-once --broadcast "$bc" export ts > "$out" 2> "$log" || rc=$?
+			"${once[@]}" --broadcast "$bc" export ts > "$out" 2> "$log" || rc=$?
 	fi
 	record "$arm" "$d" "$rl" "$(size "$out")" "$rc" "$(lasterr "$log")"
 }
@@ -268,10 +276,10 @@ xfetch() {
 	local arm=$1 d=$2 url=$3 bc=$4 tf=${5:-} out="$W/out/$1-$2.bin" log="$W/logs/$1-$2.log" rc=0 bin=$M6
 	if [ -n "$tf" ]; then
 		MOQ_CONNECT_TOKEN=$(cat "$tf") timeout "$DUR" "$bin/moq" --connect-tls-insecure --connect "$url" \
-			--connect-version "moq-transport-$d" --connect-once --broadcast "$bc" fetch vide_1 > "$out" 2> "$log" || rc=$?
+			--connect-version "moq-transport-$d" "${ONCE[@]}" --broadcast "$bc" fetch vide_1 > "$out" 2> "$log" || rc=$?
 	else
 		timeout "$DUR" "$bin/moq" --connect-tls-insecure --connect "$url" --connect-version "moq-transport-$d" \
-			--connect-once --broadcast "$bc" fetch vide_1 > "$out" 2> "$log" || rc=$?
+			"${ONCE[@]}" --broadcast "$bc" fetch vide_1 > "$out" 2> "$log" || rc=$?
 	fi
 	record "$arm" "$d" moqx "$(size "$out")" "$rc" "$(lasterr "$log")"
 }
@@ -353,7 +361,7 @@ part_a() {
 			--auth-profile moqx-compat --auth-token-type 0 --auth-token-file tok/pub-a5.raw
 		sleep 1
 		MOQ_CONNECT_TOKEN=$(cat tok/parent.jwt) timeout 4 "$M6/moq" --connect-tls-insecure --connect "$RU/bcast" \
-			--connect-version "moq-transport-$d" --connect-once announced > "out/C5-$d.txt" 2> "logs/C5-$d.log" || true
+			--connect-version "moq-transport-$d" "${ONCE[@]}" announced > "out/C5-$d.txt" 2> "logs/C5-$d.log" || true
 		sleep 2
 		record C5 $d moq-relay "announced=$(grep -c -w a5 "out/C5-$d.txt")" - "$(lasterr "logs/bg-c5-$d.log")"
 		stopbg "c5-$d"
@@ -376,7 +384,7 @@ part_b() {
 		# A7: the subscribe-only grant for a7 publishing to a7; the parent grant receives.
 		startbg "a7-$d" bash -c "tsp -I file '$FIXTURE' --infinite -P regulate -O file 2>/dev/null \
 			| MOQ_CONNECT_TOKEN='$(cat tok/subonly-a7.jwt)' '$M6/moq' --connect-tls-insecure --connect '$RU/bcast' \
-			--connect-version moq-transport-$d --connect-once --broadcast a7 import ts"
+			--connect-version moq-transport-$d ${ONCE[*]} --broadcast a7 import ts"
 		sleep 2
 		sub A7 $d moq-relay "$M6" "$RU/bcast" a7 tok/parent.jwt
 		echo "    A7 publisher said: $(lasterr "logs/bg-a7-$d.log")"
@@ -387,7 +395,7 @@ part_b() {
 		sub A1x $d moq-relay "$M6" "$RU/bcast" ch1 tok/affa-exact.jwt
 		for a in affa affb affc; do
 			MOQ_CONNECT_TOKEN=$(cat "tok/$a.jwt") timeout 5 "$M6/moq" --connect-tls-insecure --connect "$RU/bcast" \
-				--connect-version "moq-transport-$d" --connect-once announced > "out/disc-$a-$d.txt" 2> "logs/disc-$a-$d.log" || true
+				--connect-version "moq-transport-$d" "${ONCE[@]}" announced > "out/disc-$a-$d.txt" 2> "logs/disc-$a-$d.log" || true
 			echo "    disclosure $a: $(tr '\n' ' ' < "out/disc-$a-$d.txt")"
 		done
 
@@ -399,7 +407,7 @@ part_b() {
 		sub H4d $d moqx "$M6" "$XU/h4" bcast/ch2
 		sub H4n $d moqx "$M6" "$XU/h4n" bcast/ch1
 		timeout 5 "$M6/moq" --connect-tls-insecure --connect "$XU/h4" --connect-version "moq-transport-$d" \
-			--connect-once announced > "out/disc-h4-$d.txt" 2> "logs/disc-h4-$d.log" || true
+			"${ONCE[@]}" announced > "out/disc-h4-$d.txt" 2> "logs/disc-h4-$d.log" || true
 		echo "    disclosure /h4: $(tr '\n' ' ' < "out/disc-h4-$d.txt")"
 
 		echo "Part B on moqx /pg, draft $d (publisher arms: openmoq-publisher, Type 16)"
@@ -421,8 +429,8 @@ part_b() {
 # Part C: expiry and withdrawal, draft 18. Prints a timeline; the receiver's byte count is read
 # once a second.
 watch_bytes() { # watch_bytes <file> <seconds> <t0>: seconds after t0 at which the file stopped growing
-	local f=$1 n=$2 t0=$3 last=-1 cur still=0 i
-	for i in $(seq "$n"); do
+	local f=$1 n=$2 t0=$3 last=-1 cur still=0
+	for _ in $(seq "$n"); do
 		sleep 1
 		cur=$(size "$f")
 		if [ "$cur" = "$last" ]; then still=$((still + 1)); else still=0; fi
@@ -438,13 +446,13 @@ part_c() {
 	exp=$(( $(now) + 30 ))
 	$M auth sign --key keys/bcast.jwk --root bcast --subscribe 'ch1/**' --expires $exp > tok/affa-30s.jwt
 	MOQ_CONNECT_TOKEN=$(cat tok/affa-30s.jwt) "$M6/moq" --connect-tls-insecure --connect "$RU/bcast" \
-		--connect-version moq-transport-18 --connect-once --broadcast ch1 export ts > out/C-exp-relay.ts 2> logs/C-exp-relay.log &
+		--connect-version moq-transport-18 "${ONCE[@]}" --broadcast ch1 export ts > out/C-exp-relay.ts 2> logs/C-exp-relay.log &
 	echo "  expiry at +30s: $(watch_bytes out/C-exp-relay.ts 60 $(( exp - 30 )))"
 	kill -INT $! 2>/dev/null || true
 
 	echo "Part C on moq-relay: withdrawal, the HS256 key deleted from the auth server's key dir"
 	MOQ_CONNECT_TOKEN=$(cat tok/affa-hs.jwt) "$M6/moq" --connect-tls-insecure --connect "$RU/bcast" \
-		--connect-version moq-transport-18 --connect-once --broadcast ch1 export ts > out/C-wd-relay.ts 2> logs/C-wd-relay.log &
+		--connect-version moq-transport-18 "${ONCE[@]}" --broadcast ch1 export ts > out/C-wd-relay.ts 2> logs/C-wd-relay.log &
 	local sp=$!
 	sleep 5
 	mv pub/hs.jwk keys/hs-withdrawn.jwk
@@ -458,7 +466,7 @@ part_c() {
 	cat_tok pub-30s bcast client_setup,publish_namespace,publish bcast/ch1 30
 	t0=$(now)
 	omp Cexp 18 /pg bcast/ch1 16 cat/pub-30s.cwt
-	for i in 1 2 3 4 5 6 7; do
+	for _ in 1 2 3 4 5 6 7; do
 		sleep 10
 		xfetch "Cexp+$(( $(now) - t0 ))" 18 "$XU/pg" bcast/ch1
 		xstate "Cexp+$(( $(now) - t0 ))" 18 pg bcast/ch1

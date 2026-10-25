@@ -19,18 +19,6 @@ fixtures contributed where the tree could not yet produce the stream in dispute;
 *specification* rather than an implementation (§7); and requirements filed early and then withdrawn on
 this campaign's own measurements (§8), where the ratio is the point.
 
-**Where to find what.** Each link goes to the item's own section; its heading states where it stands.
-
-- **Media-aware carriage** (§1): [parameter sets and DTS, the lane's origin](#the-lane-this-campaign-measures-did-not-exist-when-it-started) · [the harness](#the-harness-that-found-most-of-what-follows) · [open-GOP keyframes](#open-gop-keyframe-detection--closed) and [leading pictures (#4501)](#open-gop-leading-pictures-at-tune-in--fixture-and-measurement-contributed-as-4501) · [PSI on half a catalog](#the-exporter-locked-its-psi-on-half-a-catalog--closed-by-a-better-fix-than-the-one-proposed) · [DVB service layer](#the-dvb-service-layer--closed) · [EIT](#eit-and-where-carried-si-should-live--the-question-we-priced) · [TDT/TOT](#tdttot--carriage-closed-then-emission-timing) · [PCR clustering](#pcr-clustering-reported-fixed-upstream-in-three-steps-nothing-further-owed) · [the rewound-timeline stall](#a-rewound-timeline-stalls-the-whole-programme-not-just-the-si-cadence--measurements-contributed-issue-fixed-and-closed-fix-later-found-to-regress-the-complement-next-section) and [its regression (#3533)](#3375-regressed-the-complement-a-non-rewinding-source-now-stalls-video-and-primary-audio--reported-as-3533) · [the mux rate](#the-mux-rate-the-lane-could-not-carry--closed-upstream-citing-this-campaigns-groomer)
-- **Audio and per-stream liveness** (§2): [frame-sync loss](#frame-sync-loss-killed-the-whole-publisher--closed-in-two-days) · [splice substitution](#a-splice-publishes-a-substituted-frame--closed-with-two-measured-residuals) · [recovery signalling](#a-recovered-stream-is-signalled-nowhere--closed-exactly-as-asked-and-it-exposed-a-bigger-gap) · [liveness at import (#4502, #4506)](#per-stream-liveness-in-the-ts-importer--contributed-as-4502-and-4506-both-merged) and [at export (#4577)](#per-stream-liveness-at-the-ts-exporter--contributed-as-4577-merged) · [TR 101 290 counters at ingest (#4750)](#tr-101-290-counters-at-ingest--contributed-as-4750-merged)
-- **Resilience and redundancy** (§3): [exporter death on session loss](#the-exporter-died-on-session-loss--closed) · [the cancelled write](#a-cancelled-write-dropped-bytes-and-said-nothing--closed-in-a-different-repository) · [active/active source failover, the standby's arrival (#4352), the rewind at the switch (#4354) and the relay-loss skip (#6062)](#activeactive-source-failover-shipped-bounded-three-defects-reported) · [MPTS through import](#a-multi-programme-ts-through-import-ts--reported-and-answered-by-programme-selection), [per-programme SI (#4580)](#a-selected-programme-still-carried-the-whole-multiplexs-si--contributed-as-4580-merged) and [PSI spanning packets (#4584)](#a-psi-table-spanning-packets-or-one-bad-crc-ended-a-ts-ingest--contributed-as-4584-merged) · [per-process counters](#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in) · [the #2825 residual (#3947)](#the-residual-2825-left-and-the-measurement-that-can-see-it--contributed-as-3947) · [the takeover livelock](#a-takeover-livelock--closed)
-- **Congestion and memory** (§4, §5): [subscriber death under contention](#the-subscriber-dies-under-contention--reported-fixed-on-the-media-path-then-on-the-catalog-track) · [the qlog loss trigger](#the-qlog-loss-trigger-is-computed-backwards--fixed-in-quinn-and-in-noq-released-in-neither) · [relay memory](#5-relay-memory) and [the publisher's leak](#the-relays-plateau-is-confirmed-at-24-h--and-the-publisher-is-the-role-that-actually-leaks)
-- **Authorization and observability** (§5b): [mTLS identity](#the-mtls-identity-never-reaches-the-authorization-decision--open-and-conceded-on-every-point) · [the revalidation window](#the-revalidation-window--closed-and-folded-into-a-rethink-of-the-whole-auth-line) · [health telemetry](#subscriber-reported-health-telemetry--accepted-re-planned-as-solicited-viewer-feedback-schema-and-reporters-merged) · [BISS-CA](#biss-ca-over-moq-the-native-mechanism-answers-access-not-operator-blindness) · [FEC's venue](#fec-is-a-transport-question-and-the-campaigns-contribution-to-it-is-the-comparison)
-- **The TS export and import robustness** (§5c): [determinism (#2829)](#the-determinism-measurement-posted-to-2829--and-the-correction-it-needed-first) and [its fix (#4001)](#2829-and-3948-closed-by-4001--real-code-and-verified) · [the byte schedule (#4579)](#the-byte-schedule-itself--contributed-as-4579-overtaken-by-the-maintainers-fixed-delay-export) · [T-STD conformance, the fixed-delay export (#4645) and TS passthrough (#5003)](#t-std-conformance-of-the-ts-export--taken-up-upstream-and-merged-as-the-fixed-delay-export-which-carries-every-track-of-a-broadcast-clip-with-its-clock-in-tolerance) · [the liveness exit (#4504), `--linger`, the crash-replace re-measure (#4945, #4947) and the re-request exit (#5052)](#the-liveness-exit-implemented--contributed-as-4504-merged-and-verified-on-main) · [the UDP sink](#a-udp-sink-for-export-ts--declined-re-asked-narrowly-deferred) · [closures by a planning document](#four-closed-as-completed-by-a-planning-document-that-changed-no-code) · [a multi-packet PMT (#5110)](#a-pmt-longer-than-one-packet-ended-the-export--reported-as-5110-fixed-by-5220) · [video TB overrun (#5142)](#video-overran-its-transport-buffer-where-the-multiplex-outran-its-rx--reported-as-5142-fixed-by-5207-and-5306) · [the video DTS reserve (#4500)](#the-video-dts-reserve-froze-at-the-pmt--contributed-as-4500-merged-and-verified-on-main) · [the #3798 reproduction](#3798s-plan-asks-for-a-reproduction-and-the-campaign-has-one--plus-a-correction-to-its-scope) · [the loop wrap (#4513, #4543)](#a-loop-wrap-moved-audio-against-video--contributed-as-4513-closed-in-favour-of-4543) · [one malformed packet (#4581, #4733)](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged) · [a full-rate live feed (#5362, #5363, #5516)](#a-full-rate-live-feed-stops-the-export--reported-as-5362-fixed-by-5363-and-5516)
-- **Interoperability** (§6, §6b): [the announce convention](#the-announce-convention--reported-as-a-hazard-not-a-bug-and-fixed) · [the empty namespace prefix](#the-empty-namespace-prefix--a-specification-inconsistency-converged) · [the media-level interop profile](#a-media-level-interop-profile--contributed) · [a flag-alias regression](#a-flag-alias-regression--reported-fixed-verified-closed) · [an independent stack](#corroboration-from-an-independent-stack) · [OpenMOQ's MSFTS publisher (moqxr#57)](#openmoqs-msfts-publisher-through-moq-relay--reported-as-openmoqmoqxr57) · [moq5's relay (moq5#51)](#moq5s-relay-and-a-late-subscriber--reported-as-openmoqmoq551) · [a CDN-hosted moqx relay (moqx#842)](#a-cdn-hosted-moqx-relay-at-a-join--reported-on-openmoqmoqx795-and-as-842) · [FFmpeg's HLS client](#6b-ffmpeg-an-hls-client-that-asks-for-http3-and-carries-the-media-over-http11)
-- **The MSFTS specification** (§7): [the named modes and output timing](#the-three-named-modes-are-published-and-the-gap-they-leave-is-output-timing) · [the September 2026 round](#the-2026-09-17-round-eleven-issues-filed-plus-one-comment-and-one-cross-venue-pair) · [the output contract (#37)](#the-output-contract-what-a-rebuilding-subscriber-emits-filed-as-37-and-merged) · [the CAT and the retain list](#the-retain-list-drops-the-cat-so-conditional-access-cannot-survive-program-level-filtering) · [mode 3 and the reference implementation](#mode-3-and-the-reference-implementation-are-not-the-same-thing-and-that-is-the-convergence-problem) · [the -02 revision](#the--02-revision-verbatim-only-carriage-41)
-- **Asked for, then retracted** (§8): [the ledger and its evidence](#8-what-was-asked-for-at-the-start-what-was-retracted-and-on-what-evidence)
-
 ---
 
 ## 1. Media-aware carriage: what a real contribution feed breaks
@@ -77,19 +65,16 @@ the feed round-trips deterministically, every stream, PID, `stream_type` and des
 
 ### Open-GOP leading pictures at tune-in — fixture and measurement contributed as [#4501](https://github.com/moq-dev/moq/pull/4501)
 
-#2066 made a recovery point start a group, but nothing in the tree exercised open GOP end to end.
-Upstream's consumer-side quest for leading pictures — decoded after a recovery point, presented before
-it, referencing the previous GOP — waited on a measurement of what a viewer does with them
-([#2067](https://github.com/moq-dev/moq/issues/2067)). The fixture that issue proposed,
-`kyrion_dirtystart.ts`, is not open GOP: every keyframe is an IDR, there is no recovery-point SEI, and
-no picture after a keyframe is presented before it.
+Upstream's consumer-side quest for leading pictures (decoded after a recovery point, presented before
+it) waited on a measurement of what a viewer does with them
+([#2067](https://github.com/moq-dev/moq/issues/2067)), and the fixture that issue proposed is not open
+GOP: every keyframe is an IDR.
 
-**Contributed as [#4501](https://github.com/moq-dev/moq/pull/4501)** (`test(ts)` and quest files only),
-merged as `12f23811a`. On `main` at `6f1a9e33` the Kyrion clip still round-trips 60 of 60. `just test
-ts --open-gop` round-trips a generated x264 `open-gop=1` clip with three leading pictures per recovery
-point, grading the capture access unit by access unit: 60 of 60 leading pictures across 20 recovery
-points in decode order, random-access indicator set on every random-access access unit, recovery-point
-SEI intact, `compliance.py` passing.
+**Contributed as [#4501](https://github.com/moq-dev/moq/pull/4501)**, merged (`test(ts)` and quest
+files only). `just test ts --open-gop` round-trips a generated x264 `open-gop=1` clip with three
+leading pictures per recovery point, graded access unit by access unit: 60 of 60 leading pictures
+across 20 recovery points in decode order, random-access indicator set on every random-access access
+unit, recovery-point SEI intact, `compliance.py` passing.
 
 **The viewer is where it breaks, and how depends on the decoder.** Measured through `<moq-watch>` in
 Chromium 153 on macOS, 120 s clip, one continuous subscriber and eight cold joins per decoder setting:
@@ -106,14 +91,11 @@ Chromium 153 on macOS, 120 s clip, one continuous subscriber and eight cold join
 The numbers sit in the upstream leading-picture quest (`quest/m1/open-gop-leading-pictures.md`), which
 the PR unblocks: trim before decode, and drive the software decoder in the test.
 
-**Found in the PR, fixed separately:** the TS exporter authors DTS after PTS on B pictures (374 of 500
-access units on the open-GOP clip, worst by 119.8 ms; 360 of 500 on the closed-GOP clip) because the
-decode-clock reserve stays at its 16-tick default until after the first group. Fixed by #4500, below.
+The PR also found the exporter authoring DTS after PTS on B pictures, fixed by #4500 (§ *The video DTS
+reserve*).
 
-**Open:** the consumer-side trim itself; Linux (not measured — the software-decoder outcome is expected
-where no hardware H.264 exists, but the settling arm is the same cold-join rig in Chromium on Linux).
-Painted-frame counts were not used: the host was heavily loaded and media arrived slower than real time
-in one run.
+**Open:** the consumer-side trim itself; Linux, not measured, where the software-decoder outcome is
+expected wherever no hardware H.264 exists.
 
 ### The exporter locked its PSI on half a catalog — closed, by a better fix than the one proposed
 
@@ -262,82 +244,44 @@ as interchangeable, shed 67.2 % of the T19 fixture; `mpegts-pacer` now guards ag
 
 ### A rewound timeline stalls the whole programme, not just the SI cadence — measurements contributed, issue fixed and closed, **fix later found to regress the complement** (next section)
 
-[#2833](https://github.com/moq-dev/moq/issues/2833) already described the mechanism — the exporter's
-last-emission time only advances, so after a backwards jump nothing is due until the timeline
-catches up — and asked for PCR and `discontinuity_indicator` handling together. This campaign added
-a [comment](https://github.com/moq-dev/moq/issues/2833#issuecomment-5554907607) with what
-[T23](test-23-pcr-discontinuity-classes.md) measured, not a new issue.
+**Report.** [#2833](https://github.com/moq-dev/moq/issues/2833) already described the mechanism: the
+exporter's last-emission time only advances, so after a backwards jump nothing is due until the
+timeline catches up. This campaign added a
+[comment](https://github.com/moq-dev/moq/issues/2833#issuecomment-5554907607) with what
+[T23](test-23-pcr-discontinuity-classes.md) measured rather than a new issue: the exporter stops
+emitting everything, not only SDT and NIT, for a time linear in the rewind (1 s costs 268 ms, 10 s
+costs 9,446 ms), and recovers in one burst that overran a groomer's 8 s cushion. Forward jumps recover
+in 238 ms, and PCR base rollover is carried correctly.
 
-**What the measurements add.** The title scopes the stall to SDT/NIT repetition; in fact the
-exporter stops emitting *everything*, so a rewind is a hole in the programme rather than a gap in
-the tables. The cost is **linear in the rewind** — 1 s → 268 ms, 2 s → 1,487 ms, 5 s → 4,514 ms, 10
-s → 9,446 ms, 44.7 s → 44,049 ms — which is what "until the timeline catches up" predicts, and which
-turns a qualitative defect into a budget. Recovery is a **single 18.3 MB burst** that overran our
-groomer's 8 s cushion, so a consumer that survives the outage can still be broken by the re-entry.
-Forward jumps recover in **238 ms**; only the backwards case needed handling. **33-bit PCR base
-rollover is carried correctly end to end** — 30.080 ms across the boundary in modulo arithmetic,
-6,259 PCRs within ±500 ns, zero continuity errors — so the `due` comparison never sees one.
-
-**Outcome.** [#3375](https://github.com/moq-dev/moq/pull/3375) opened citing the comment — *"Still
-needed after #3351… rewinds stop the entire program output until timestamps catch up"* — and merged
-as `0e61e3520`, closing #2833. It restarts the exporter on rewind: uncommitted media discarded,
-timing and table state reset, **the first new PCR flagged**, continuity counters of discarded bytes
-rolled back, plus `moq_mux::container::ts::Export::discontinuity()` so a consumer can see the event.
-**We supplied the verification the fix shipped without:** re-running all six arms unchanged against `d88c2ee99` puts every
-one at the control's content gap; the before/after table, three-point timeline evidence and collapse
-of the downstream buffer requirement went back in a [#3375
-comment](https://github.com/moq-dev/moq/pull/3375#issuecomment-5557693602). Detail is in [T23 §
-against the fix](test-23-pcr-discontinuity-classes.md#against-the-fix-3375).
-
-**Follow-ups.** [#3529](https://github.com/moq-dev/moq/pull/3529) discharges the forward-jump flag
-gap #3375 left: arm C unchanged on current `main` now emits the flag and a faithful **11 ms** jump
-(not **961 ms** short), with upstream's `a_signalled_reset_reaches_the_exported_clock` as the
-end-to-end shape the campaign graded ([T23 § against
-#3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)). #3529 also fixes policy:
-the exporter reports what the source **declared** and will not infer a break from a timestamp step;
-unsignalled jumps remain unflagged by design, and signalled forward conformance no longer depends on
-`mpegts-pacer`.
+**State.** [#3375](https://github.com/moq-dev/moq/pull/3375) merged citing the comment, closing #2833:
+the exporter restarts on a rewind and flags the first new PCR. We supplied the verification it shipped
+without, every T23 arm at the control's content gap
+([comment](https://github.com/moq-dev/moq/pull/3375#issuecomment-5557693602),
+[T23 § against the fix](test-23-pcr-discontinuity-classes.md#against-the-fix-3375)).
+[#3529](https://github.com/moq-dev/moq/pull/3529) closed the forward-jump flag gap #3375 left: arm C
+now emits the flag and a faithful 11 ms jump, not 961 ms short
+([T23 § against #3529](test-23-pcr-discontinuity-classes.md#against-3529-current-main)). The exporter
+reports what the source declared and infers no break from a timestamp step, so an unsignalled jump
+stays unflagged by design.
 
 ### #3375 regressed the complement: a *non*-rewinding source now stalls video and primary audio — reported as [#3533](https://github.com/moq-dev/moq/issues/3533)
 
-**The trade.** #3375 fixes the measured rewind case ([T23](test-23-pcr-discontinuity-classes.md))
-but on a **continuous** timeline with **content joins**, the fixed exporter stalls video and MPEG-1
-audio permanently ([T27](test-27-liveness-detector.md)). `git bisect` over 53 commits names first
-bad **`0e61e35`** (#3375) in `export.rs`; parent `025613d` held **9.0–9.8 Mb/s** across seven joins,
-#3375 **0.31 Mb/s** from the first join with no recovery.
+**Report.** #3375 fixed the rewind case, but on a continuous timeline with content joins, which is
+what a real encoder emits, the fixed exporter stalled video and MPEG-1 audio for good
+([T27](test-27-liveness-detector.md)): `git bisect` names #3375, whose parent held 9.0–9.8 Mb/s across
+seven joins where #3375 fell to 0.31 Mb/s from the first. The exporter itself introduced a backwards
+step of one pass length that is not on the wire; T27 bounds the attribution away from the source, the
+relay and the publisher. From the diff, one track's backwards report fenced every track into the old
+generation, and a track whose source never rewinds could not re-join. Which audio comparison reported
+a backward step with no backward PCR step is not established.
 
-| source | parent `025613d` | `#3375` `0e61e35` |
-|---|---|---|
-| **true rewind** — `tsp --infinite`, every 30 s | **0.00 Mb/s** from t = 40 s (the #2833 behaviour) | **8.66 Mb/s** mean, recovering after each rewind |
-| **continuous timeline, content join** every 30 s | **9.0–9.8 Mb/s** throughout | **0.31 Mb/s** — only PSI, AC-3 and teletext survive |
-
-**The exporter introduces a rewind that is not on the wire.** Per-PID liveness on each build's
-output at the same join: parent **0 delivered-clock discontinuities**, video and MPEG-1 audio live;
-#3375 a step **backwards by 119.35 s — one pass length** — after which PID 111 (AVC) and PID 121
-(MPEG-1 audio) go dead and never clear. Since the parent sees no discontinuity on the same bytes,
-the rewind is generated inside the new recovery path. **Attribution is bounded:** not the source
-(**0 backward PCR steps** over two 1200 s passes); not relay or publisher — while 60 incumbent
-subscribers stuck, a **freshly joining subscriber** was served at **8.9 Mb/s** (143,872 video
-packets in 25 s) from the same broadcast; not `--latency-max` or fan-out (N = 4 stalled together).
-Continuous timeline with content joins is what a real encoder emits; the pre-#3375 failure needed a
-rewinding stimulus the lab manufactured.
-
-**Mechanism (from the diff).** `Track::admit` fences tracks in an older generation unless a track
-both increments its discontinuity counter and steps backwards; `rewind()` leaves every track with a
-timeline in the old generation on a backwards boundary — one backwards report fences the rest, and a
-fenced track whose source never rewinds cannot re-join. Video-only sources stay clean on both builds
-(**~1.9 Mb/s** across five joins). Which audio comparison yields `backwards = true` with zero
-backward PCR steps is **not** established.
-
-Filed as [#3533](https://github.com/moq-dev/moq/issues/3533). **Closed** by
-[#3784](https://github.com/moq-dev/moq/pull/3784) in
-[#3793](https://github.com/moq-dev/moq/pull/3793) (`5d0991b9`): `export_test` passes and
-[T40](test-40-continuous-join-through-srt.md) no longer reads the **0.31 Mb/s** stall through SRT.
-On homogeneous `5d0991b9`, `moq import ts` can still exit at the first join with *frame timestamp is
-below the live edge* ([T40](test-40-continuous-join-through-srt.md) § `main-5d0991b9-swap`) —
-monotonic-timeline enforcement separate from the export fence, filed as
-[#3798](https://github.com/moq-dev/moq/issues/3798) because `reanchor()` from the #3533 fix applies
-to legacy audio only.
+**State.** [#3533](https://github.com/moq-dev/moq/issues/3533) closed by
+[#3784](https://github.com/moq-dev/moq/pull/3784) in [#3793](https://github.com/moq-dev/moq/pull/3793):
+`export_test` passes and [T40](test-40-continuous-join-through-srt.md) no longer reads the stall through
+SRT. On that build `moq import ts` can still exit at the first join with *frame timestamp is below the
+live edge* (T40 § `main-5d0991b9-swap`), a separate monotonic-timeline check filed as
+[#3798](https://github.com/moq-dev/moq/issues/3798), because the #3533 fix's `reanchor()` applies to
+legacy audio only.
 
 ### The mux rate the lane could not carry — closed upstream, citing this campaign's groomer
 
@@ -448,13 +392,11 @@ sync, so a video, Opus, verbatim-PES or SCTE-35 PID had none, and an absent row 
 
 **The contribution.** #4502 gives every carried elementary stream a `StreamStats` row with `units`, the
 access units delivered, and `quiet`, the transport time since the last one or since the PMT declared
-the PID. `quiet` runs on the PCR rather than on the importer's media clock, which follows the video PTS
-and so stops with the very stream it has to catch, and a PCR step over the mux-rate meter's 1 s bound
-adds nothing, so one corrupt PCR cannot add hours of silence to every PID, the failure
-[T27](test-27-liveness-detector.md)'s detector hit. `moq import ts` logs `elementary stream stopped
-delivering access units` once per silence, keyed on the count. #4506 moves that logger into `moq-mux` as
-`ts::StatsLog` and has the SRT publisher sample it under an `srt{path=…}` span, so a server carrying
-several ingests names the one affected. Merged as `395a92cbd` and `c2e7b5815`.
+the PID. `quiet` runs on the PCR, not on the media clock that stops with the stream it has to catch,
+and ignores a PCR step over 1 s, so one corrupt PCR cannot add hours of silence to every PID, the
+failure [T27](test-27-liveness-detector.md)'s detector hit. `moq import ts` logs `elementary stream
+stopped delivering access units` once per silence; #4506 moves that logger into `moq-mux` and has the
+SRT publisher name the affected ingest.
 
 **Verification**, P0, on the PR builds before merge: in-process tests on fixture files, with no wire
 and no cross-host run. With #3489's stimulus (one PID's PES suppressed for a window, its PCR kept in
@@ -482,13 +424,10 @@ stale attribution: the exporter and the `test/ts` graders gave TR 101 290 a 40 m
 where V1.4.1 sets 100 ms, and its Note 2 records that the 40 ms precondition was removed from
 TS 101 154 in 2005.
 
-**The contribution.** `Export::stats` returns one `ts::Stats` row per elementary stream in the PMT,
-named by the track suffix an import of the output would give that PID. The importer's liveness meter
-runs on the PCR the exporter writes, reset wherever it flags a discontinuity, and `units` is credited
-when a span leaves the mux buffer, so a rewind does not count what it discards. `moq export ts` logs
-through the logger `moq import ts` uses. The PR also moves the `test/ts` repetition defaults to 100 ms,
-and replaces the README's "VBR, no null packets, PCR once per frame" with what the exporter now does:
-it pads to the recorded multiplex rate and writes a PCR every 25 ms of media time.
+**The contribution.** `Export::stats` returns one row per elementary stream in the PMT, its liveness
+meter on the PCR the exporter writes and its `units` credited when a span leaves the mux buffer, so a
+rewind does not count what it discards; `moq export ts` logs through the importer's logger. The PR also
+moves the `test/ts` repetition defaults to 100 ms.
 
 **Verification**, P0 and P1, on the PR before `main` was merged into it; it has not been repeated on the
 merged build. At P0, on H.264 plus two AAC tracks, stopping video and one audio track halfway through a
@@ -516,18 +455,14 @@ checks a contribution feed is graded on, at ETSI's fixed limits, as counters onl
 
 **The contribution.** A private `ts::health` module counts `TS_sync_loss`, `Sync_byte_error`,
 `PAT_error_2`, `Continuity_count_error`, `PMT_error_2`, `Transport_error`, `PCR_repetition_error`,
-`PCR_discontinuity_indicator_error` and `PTS_error` beside the existing `CRC_error`, and changes nothing
-published. Sync is graded on its own 188-byte grid with ISO 13818-1 Annex G.1 hysteresis, lost after
-two corrupt sync bytes and acquired after five; table and PTS intervals run on the PCR-stepped program
-clock the liveness rows already use; a packet with TEI set counts `Transport_error` and nothing else.
-The shared logger writes one line with every total whenever any of them moves, so the CLI and the SRT
-gateway both report them. `PID_error` is left to the liveness rows, and `PCR_accuracy_error` is not
-measured, because the importer has no arrival clock of the precision it needs.
+`PCR_discontinuity_indicator_error` and `PTS_error` beside the existing `CRC_error`, publishes nothing
+new, and logs one line with every total whenever any moves, from the CLI and the SRT gateway alike.
+Table and PTS intervals run on the PCR-stepped program clock. `PID_error` is left to the liveness rows,
+and `PCR_accuracy_error` is not measured: the importer has no arrival clock precise enough.
 
-**Verification on the PR**, P0 and P1 (file domain at P0, live and co-resident at P1), before the
-maintainer's one pre-merge fix. At P0 there are 13 tests, one stimulus per check with a control each
-way, each imported both in whole packets and in 100-byte pieces; five of six mutants of the checks were
-killed and one is equivalent. Every `test_data` capture reads zero except `kyrion_mpeg2av_ac3.ts`,
+**Verification on the PR**, P0 (file) and P1 (live, co-resident). At P0, 13 tests, one stimulus per
+check with a control each way, in whole packets and in 100-byte pieces; five of six mutants killed, one
+equivalent. Every `test_data` capture reads zero except `kyrion_mpeg2av_ac3.ts`,
 which reads two `PAT_error_2` and two `PMT_error_2` against a PAT repetition TSDuck measures at 811 ms.
 On the 72 s `t23_F` excerpt of `contrib-10m.ts` the clean file reads zero, twenty packet-aligned 7-packet
 drops read 28 continuity errors (split 20, 3, 4 and 1 over four PIDs, exactly TSDuck's `continuity`
@@ -539,20 +474,16 @@ of short reads, recorded under [#4581](https://github.com/moq-dev/moq/issues/458
 counter now shows directly. Decode throughput, best of 20, is 1,091 MB/s before and 1,054–1,086 MB/s
 after on the excerpt.
 
-**On the merged build** (`main` at `83ce47fe`, which also carries
-[#4733](#one-malformed-packet-ends-a-ts-ingest--reported-as-4581-fixed-by-4733-merged); P1, live,
-co-resident, the same rig and excerpt) the counts are unchanged. The clean feed logs no line, two
-repeats of the aligned drops each read `continuity_count_error=28`, TEI on the video PID and on the
-audio PID each read `transport_error=1`, and the SRT arm, whose padding is not deterministic, reads
-906 sync losses and 29 continuity errors against 900 and 29 on the PR.
+**On the merged build** (P1, the same rig and excerpt) the counts are unchanged: the clean feed logs
+no line, the aligned drops read `continuity_count_error=28` twice, TEI on either PID reads
+`transport_error=1`, and the SRT arm, whose padding is not deterministic, reads 906 sync losses and 29
+continuity errors against 900 and 29.
 
-**Merge.** On `main` as `19563812f`, after the maintainer fixed the one defect review
-found: a PMT revision that dropped a stream left its PTS timer running, so `PTS_error` grew on a PID the
-programme no longer listed. Review also raised a resource point that holds. Every importer now
-keeps continuity state, including the last payload packet, for every non-null PID it sees, where before
-only routed PIDs had any; that is at most about 1.5 MB per importer, and `Programs` does not cap how many
-importers the first PAT creates. We offered two follow-ups, keeping the packet only for PIDs the PMT
-lists or grading the all-PID checks once in `Programs`, and have had no answer.
+**State:** merged, with the maintainer's fix for a `PTS_error` that kept growing on a PID a PMT
+revision dropped. A resource point from review holds: every importer keeps continuity state, the last
+payload packet included, for every non-null PID it sees, at most about 1.5 MB per importer, and
+`Programs` does not cap how many importers the first PAT creates. Our two offered follow-ups (keep the
+packet only for PIDs the PMT lists, or grade the all-PID checks once in `Programs`) have had no answer.
 
 **Open.** An unsignalled forward PCR jump below the importer's 1 s step bound stretches the program
 clock, so the PCR checks count the jump and any table or PTS the stretch makes late counts as well; the
@@ -830,65 +761,32 @@ press it.
 
 ### The subscriber dies under contention — reported, fixed on the media path, then on the catalog track
 
-[**#3491**](https://github.com/moq-dev/moq/issues/3491) — ***closed*** by
-[**#3515**](https://github.com/moq-dev/moq/pull/3515). **That fix was incomplete**: the same failure
-reproduced through the catalog consumer, was re-reported as
-[**#3897**](https://github.com/moq-dev/moq/issues/3897) and closed by
-[**#3907**](https://github.com/moq-dev/moq/pull/3907), and the residual is verified closed here.
-`moq export ts` exits with `Error: hang: moq error: old` when two subscribers pull separate broadcasts
-through one relay across a shared, under-provisioned bottleneck.
+**Report.** [#3491](https://github.com/moq-dev/moq/issues/3491): `moq export ts` exits with `Error:
+hang: moq error: old` when two subscribers pull separate broadcasts through one relay across a shared,
+under-provisioned bottleneck. Competing flows cause it, not a steady shortfall, and every graded
+capture has 0 continuity errors, so a monitor sees a conformant stream that simply stops
+([T8b](test-8b-congestion-control.md)). The filing named no cause: a draft's attribution to
+[#3271](https://github.com/moq-dev/moq/pull/3271) was withdrawn before filing, on the rules in
+[`method-notes.md`](method-notes.md) §1.
 
-**The cause was in `moq-net`, and it was a cursor confusion.** `GroupState::poll_finished()` returned
-the group's final frame count as soon as the *producer* finished, even if that particular consumer had
-not read that far. When retention later aborted the finished group to release its cached frames,
-`moq-mux` had already been told the group ended cleanly — so the `Old` read error propagated out of the
-export. The fix makes `Consumer::finished()` answer for its own read cursor and lets the container
-consumer skip transport eviction (`Old` or `Lagged`) while still propagating genuine payload decode
-errors.
+**Fix.** [#3515](https://github.com/moq-dev/moq/pull/3515): a group's consumer reported it finished
+when the producer had, not when its own read cursor had, so a group retention later aborted had already
+been reported as ending cleanly. The container consumer now skips an evicted group. The catalog
+consumer had no such skip and failed with `json: old` on `catalog.json`; reported as
+[#3897](https://github.com/moq-dev/moq/issues/3897), closed by
+[#3907](https://github.com/moq-dev/moq/pull/3907), which makes a snapshot consumer discard a group it
+cannot finish (`Old`, `Evicted`, `Lagged`), in `moq-binary` too.
 
-**Verified here incidentally but at much larger scale than the report.**
-[T26](test-26-cross-host-fanout.md) put **450 subscriber sessions** through cross-host fan-out on a
-build containing #3515, including episodes where per-subscriber delivery fell to 3–37 % of nominal for
-45 s — **no session exited with `Old`**, or with any error at all; the only process exits were the
-subscriber host's OOM kills. On the current released pair (`moq` 0.9.15 / `moq-relay` 0.14.14) it takes
-**6 of 8 cells and 7 of 16 subscribers**; every graded capture has **0 continuity errors**, so what a
-downstream monitor sees is a perfectly conformant stream that simply stops — the silent-failure class
-[T24](test-24-partial-media-plane-stall.md) is about. A *steady* shortfall does not cause it (0 of 12
-single-flow cells at 36 % of the required rate, despite thousands of evictions), so the condition
-appears to be flows competing rather than a flow starved.
+**Verification.** [T26](test-26-cross-host-fanout.md) put 450 subscriber sessions through cross-host
+fan-out on a build with #3515, through episodes at 3–37 % of nominal delivery for 45 s, and none exited
+with `Old` or any error. T8b's three-flow re-run, with a pre-fix control in the same session: 4 of 15
+cells exited without either fix, 1 of 15 and 1 of 10 with #3515 alone, 0 of 10 with both. Since 0 of
+10 is also the commonest outcome of an unchanged build at that rate, the weight rests on the
+conjunction of the closed code path, upstream's regression tests and a control that still provokes the
+defect.
 
-The report deliberately does not name a cause in its filing text. **An earlier draft attributed this to
-[#3271](https://github.com/moq-dev/moq/pull/3271) and was withdrawn before filing.** The split was wrong
-because the death detector read one of each cell's two subscriber logs, and re-reading every log gives 9
-of 15 against 3 of 15, p ≈ 0.060, while the relay was pinned to a July build even though the mechanism
-runs through relay group eviction. Both method rules are in [`method-notes.md`](method-notes.md) §1.
-#3491 reports the reproduction and crossed matrix, and offers the `poll_read` propagation path as a
-lead a maintainer may discard.
-
-**The residual was on the catalog track, and it is now fixed.** Re-run as its own experiment with a
-pre-fix build as a positive control ([T8b](test-8b-congestion-control.md) § *#3491 survives on the
-catalog track*), three concurrent flows: on `moq 0.9.15` without either fix, **4 of 15** cells saw the
-exporter exit on the media container with `hang: moq error: old`; on `moq 0.11.2-615d166d` with #3515
-but no catalog fix, **1 of 15** and **1 of 10** exited with `json: old` on `catalog.json`; on
-`moq 0.11.2` (`53f8aa99d`) with both fixes, **0 of 10** exited. `#3515` gave the *container* consumer a
-skip for an evicted group; `moq export ts` also reads a **JSON catalog track** whose consumer had no
-such skip — `moq-json`'s transparent `Net` error propagated `Old` out unclassified and unlogged. On a
-snapshot track `Error::Old` means *the value you hold has been superseded*, not *terminate*.
-
-**Reported as [#3897](https://github.com/moq-dev/moq/issues/3897) and closed the same day by
-[#3907](https://github.com/moq-dev/moq/pull/3907)**, which made the snapshot consumer discard a group it
-cannot finish and wait for the replacement, covering `Old`, `Evicted` and `Lagged`; the same treatment
-went to `moq-binary`. **The verification is consistent with the fix and does not establish it on its
-own.** The re-run put the fixed and control builds in the same session on the same rig; 0 of 10 is also
-the commonest outcome of an unchanged build at this event rate, so the weight sits on the conjunction —
-closed code path, upstream regression tests, and a control that still provokes the condition on demand.
-**Method rule: a low-rate failure needs its control in the same session, and a null against it is
-corroboration rather than proof.** A registered prediction was also tested and **failed**: exits do not
-fall monotonically with the drift budget (6 of 9 at 500 ms, 4 of 15 at 2 s, 3 of 9 at 8 s on the
-pre-fix build).
-
-**A second exit on the same track, when the publisher goes away, was filed as a question rather than a
-defect**, tracked in § *The liveness exit* and § *Four of these were closed as completed*.
+**State:** closed. A second exit on the same track, when the publisher leaves, is in § *The liveness
+exit*.
 
 ### The qlog loss trigger is computed backwards — fixed in quinn and in noq, released in neither
 
@@ -1012,14 +910,14 @@ it. Whether that closes the hazard is not yet checkable; T37 measured a componen
 ### Token interoperability — [#6566](https://github.com/moq-dev/moq/issues/6566) and [#6567](https://github.com/moq-dev/moq/issues/6567) fixed, [moqx#786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516) open, [moqxr#83](https://github.com/openmoq/moqxr/issues/83) a mode
 
 [T53](test-53-token-interop.md), re-checked on each project's `main` before posting: `moq-relay`
-refused on draft 18 an exact-path grant that draft 16 admits, undocumented; `moq` printed a
+refused on draft 18 an exact-path grant draft 16 admits, undocumented; `moq` printed a
 MALFORMED_AUTH_TOKEN close (0x16) as `unknown code=22`; SIGHUP, which moqx v0.3.6's docs say
 reloads, ends the process; `openmoq-publisher` exited when `moq-relay` refused PUBLISH. **State.**
 #6566 fixed by [#6621](https://github.com/moq-dev/moq/pull/6621) (AUTH_OK carries the grant's
-patterns; on `66af72315` the exact grant delivers on draft 18), #6567 by
-[#6612](https://github.com/moq-dev/moq/pull/6612). moqx#786 unanswered.
+patterns), #6567 by [#6612](https://github.com/moq-dev/moq/pull/6612): on `66af72315` the exact
+grant delivers on draft 18 and `moq` prints "malformed auth token". moqx#786 unanswered.
 moqxr#83: the exit is `--publish-catalog`'s; without it v0.4.10 publishes on draft 18 and exits on
-draft 16 on the relay's request ID ([reported back](https://github.com/openmoq/moqxr/issues/83#issuecomment-6398652913);
+draft 16 ([reported back](https://github.com/openmoq/moqxr/issues/83#issuecomment-6398652913);
 T53 § *Corrections*).
 
 ### Subscriber-reported health telemetry — accepted, re-planned as solicited viewer feedback; schema and reporters merged
@@ -1045,10 +943,11 @@ liveness in both reports ([T39](test-39-cross-boundary-observability.md)).
 `stats/rust`**, with the export's re-timing in its own section. On #5643, merged:
 [#5848](https://github.com/moq-dev/moq/pull/5848), the CLI flags and sinks;
 [#5849](https://github.com/moq-dev/moq/pull/5849), `mpegts` at both edges and `release` (drops,
-trims, gaps, margin, offset, drift). A clean clip reads zero on each check; one video PID silenced behind legal PCR and
-continuity grows only its `quiet`. **Contributed, merged**: [#6552](https://github.com/moq-dev/moq/pull/6552),
+trims, gaps, margin, offset, drift). **Contributed, merged**: [#6552](https://github.com/moq-dev/moq/pull/6552),
 `import --echo-path`, a CLI publisher soliciting what `export --echo` reports (P1-l's gate);
 [#6654](https://github.com/moq-dev/moq/pull/6654), the shared model that grades either report and names its observer.
+**The relay's half, open as [#6791](https://github.com/moq-dev/moq/pull/6791)**: egress `lag`
+histograms and `dropped` counters per broadcast, on the stats totals and prefix tracks.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
@@ -1225,9 +1124,7 @@ group through a flagged 20 s jump and fails without the marker. The export half,
 under 10 % loss its drop count reads 0 across 99 gaps, because the groups the relay evicts never reach
 the deadline check. `ts-passthrough-export` stays open under the acceptance
 [#5327](https://github.com/moq-dev/moq/pull/5327) set: the T-STD verdict and release schedule in CI,
-wider fixtures and counted group omissions. A catalog `burst` field for encoder send-ahead
-([#4649](https://github.com/moq-dev/moq/pull/4649)) was abandoned, `--delay` covering both the hold
-and the send-ahead.
+wider fixtures and counted group omissions.
 
 **The system buffers.** `tstd/psi-runs` is our merged [#5606](https://github.com/moq-dev/moq/pull/5606):
 padded export paces its tables against Bsys too, and `compliance.py` grades both system buffers,
@@ -1347,7 +1244,7 @@ same exit on the subscriber's own session loss is by design since
 broadcast waits for its path to return; the resume keeps the PIDs, flags the PCR discontinuity and
 re-sends PAT and PMT; the exit code is the last end's, 0 for a clean end and 1 for a drop.
 
-**Verified.** After the merge (`42a1fb5f3`), on `main` at `6f1a9e33`, `--linger` carries the
+**Verified** on `main` at `6f1a9e33`: `--linger` carries the
 exporter across a clean end, a `SIGKILL` and a relay restart, with the exit codes as specified,
 which closed #3926 ([T13](test-13-downstream-grooming.md) § *Liveness*).
 
@@ -1355,9 +1252,10 @@ which closed #3926 ([T13](test-13-downstream-grooming.md) § *Liveness*).
 
 | Item | Defect | State |
 |---|---|---|
-| [#4767](https://github.com/moq-dev/moq/issues/4767) | a resume flagged the discontinuity up to four times, each a whole-programme rewind as a consumer changed generation | closed against [#4845](https://github.com/moq-dev/moq/pull/4845); `main` flags each resume once since #4645 |
+| [#4767](https://github.com/moq-dev/moq/issues/4767) | a resume flagged the discontinuity up to four times | closed against [#4845](https://github.com/moq-dev/moq/pull/4845); `main` flags each resume once since #4645 |
 | [#4945](https://github.com/moq-dev/moq/issues/4945) | after [#4741](https://github.com/moq-dev/moq/pull/4741), the relay handed a replacement publisher the killed session's subscriptions before it published | split into [#4942](https://github.com/moq-dev/moq/pull/4942)'s publisher epochs and [#4915](https://github.com/moq-dev/moq/pull/4915); with both merged, 4 of 4 runs on `moq-lite-07` resume 8 of 8 crashes continuity-clean |
-| [#5052](https://github.com/moq-dev/moq/issues/5052) | a re-request onto a live route died on its first late video unit: the dead session's held frames were released 13–27 s later on old stamps ([diagnosis](https://github.com/moq-dev/moq/issues/5052#issuecomment-6084803300)) | fixed by our [#5109](https://github.com/moq-dev/moq/pull/5109) and, for epochless tracks, by `broadcast-epoch/no-stitch` ([#5108](https://github.com/moq-dev/moq/pull/5108), [#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)); on `90500867d` no run of 32 dies on a late unit, and under `--stitch` 6 of 7 replacements resume ([T47](test-47-fixed-delay-export.md)) |
+| [#5052](https://github.com/moq-dev/moq/issues/5052) | a re-request onto a live route died on its first late video unit | fixed by our [#5109](https://github.com/moq-dev/moq/pull/5109) and, for epochless tracks, by `broadcast-epoch/no-stitch` ([#5108](https://github.com/moq-dev/moq/pull/5108), [#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)); on `90500867d` no run of 32 dies on a late unit, and under `--stitch` 6 of 7 replacements resume ([T47](test-47-fixed-delay-export.md)) |
+| [#6802](https://github.com/moq-dev/moq/issues/6802) | under `--follow`, a hard kill's eviction ended an export on a missed decode deadline, 3 of 13 runs ([T56](test-56-media-aware-failover.md)) | open |
 | [#4947](https://github.com/moq-dev/moq/pull/4947), ours | a failed export lingered as though its broadcast had ended | merged (`1ec21ac23`): it lingers only if the broadcast closes within 1 s; crash-replace runs end 1.04 s after the failure, against 60.04 s |
 | [#5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371)'s same-instance resume | measured for its quest | closed with [#5545](https://github.com/moq-dev/moq/pull/5545)'s tests; the named CLI test passes 40 of 40 on `90500867d` |
 
@@ -1442,38 +1340,23 @@ against the pre-flip `main` at `6a016409`; [T23](test-23-pcr-discontinuity-class
 | C: 30 s forward, flagged | full window | parse failures below | full window; 0.45 s stall |
 | F: control | full window | full window | full window |
 
-Error: *frame timestamp is below the previous group's start*. Flagged backward discontinuity now
-kills a pipe-fed importer; SRT with redial + linger costs 1.1–1.5 s in four of five A/E runs;
-without linger, whole feed. **Reported [#4582](https://github.com/moq-dev/moq/issues/4582)** for
-in-connection republish after a signalled rewind; first planned as `ts-restart`
-([#4587](https://github.com/moq-dev/moq/pull/4587)), then **closed as not planned**:
-restarting a broadcast inside the importer is the wrong abstraction, so a TS rewind, flagged or not,
-stays fatal as #4543 made it; a supervisor that wants to continue publishes a new broadcast under a
-new epoch, or the source splits its own feed. The quest is deleted
-([#5058](https://github.com/moq-dev/moq/pull/5058)). The cost per rewind is the supervisor's
-restart plus the subscriber's move to the new epoch: on `f8215bc47`, `moq-lite-07`, 2.9–3.0 s of
-programme pipe-fed and the first post-step picture out 4.7 s after sending through the SRT gateway,
-with a co-started 1+1 pair byte-identical across it in 8 of 13 runs
-([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*); the
-other five were **reported as [#5101](https://github.com/moq-dev/moq/issues/5101)**, asking whether
-the schedule after a re-acquisition is meant to depend on the stream alone, and **closed as not
-planned**: a replaced broadcast is a new broadcast, so identical legs across a
-republish are not a goal. `ts-hitless --sync` promises identity within one epoch only, and the
-planned TS export restart (quest `broadcast-epoch/export-ts`, from
-[#5108](https://github.com/moq-dev/moq/pull/5108)) ends the export on a replacement unless
-`--stitch` asks for a fresh export with a full program switch; `Export::resume()` goes. Identity
-across a republish is left to the passthrough export, unmerged. E
-non-resume run not reproduced; `srt-live-transmit` zero-fill artefact is a candidate
-([method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
+Error: *frame timestamp is below the previous group's start*. A flagged backward discontinuity ends
+a pipe-fed importer; over SRT, redial with `--linger` costs 1.1–1.5 s in four of five A and E runs,
+and without it the whole feed. One E run that did not resume was not reproduced; `srt-live-transmit`'s
+zero-fill is a candidate ([method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
+
+**State.** A TS rewind, flagged or not, stays fatal: republishing inside the importer
+([#4582](https://github.com/moq-dev/moq/issues/4582)) was closed as not planned, since a supervisor
+that wants to continue publishes a new broadcast under a new epoch. That costs the supervisor's
+restart plus the subscriber's move: on `f8215bc47`, 2.9–3.0 s of programme pipe-fed, and the first
+post-step picture 4.7 s after sending through the SRT gateway
+([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*). A
+co-started 1+1 pair stayed byte-identical across it in 8 of 13 runs; the other five, reported as
+[#5101](https://github.com/moq-dev/moq/issues/5101), were closed as not planned, because a replaced
+broadcast is a new broadcast and identity across a republish is not a goal. The export ends on a
+replacement unless `--stitch` asks for a fresh export with a full program switch.
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
-
-Planned with #4582 in [#4587](https://github.com/moq-dev/moq/pull/4587);
-**[#4733](https://github.com/moq-dev/moq/pull/4733) merged to `main` 2026-10-03** (`9f94d85db`) and
-**closed #4581**. Post-`aae930a23` review fixes: dedicated PCR PID damage gets a clock-only stats
-row; a PES start whose header fails to parse flushes the prior unbounded PES and refuses only the
-new unit. On desync, H.264/H.265 call `import.cut(None)` so the group closes at the break (already
-in `aae930a23`).
 
 **The defect.** `import ts` and the SRT gateway end the whole ingest on the first unparseable
 packet; `transport_error_indicator` drops are already correct.
@@ -1494,14 +1377,11 @@ merged unreleased —
 [method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
 Pipe arms isolate the importer defect.
 
-**The fix, measured on #4733 PR head `aae930a23`** (before the last review fixes on merged
-`9f94d85db`; re-run posted on the PR, and the same arms on merged `main` at `83ce47fe3` posted as
-unchanged): refuses damaged PES/adaptation/access unit whole, clears PID,
-resumes video at next keyframe. Same pipe rig: PES and NAL arms run full 60 s with one `dropped a
-damaged TS unit` line vs exit 1 on pre-flip base `764b2868b`; TEI and twenty aligned 7-packet drops
-complete. Earlier head on pre-flip base could end `export ts` on drops (*frame timestamp is below
-the live edge*) from a keyframe-only group closing at the next GOP — `main`'s group-start rework
-removed that check on the rebased head. P0 frame counts on the same capture:
+**The fix, [#4733](https://github.com/moq-dev/moq/pull/4733), measured on its head `aae930a23`:** it
+refuses a damaged PES, adaptation field or access unit whole, clears the PID and resumes video at the
+next keyframe. On the same pipe rig the PES and NAL arms run the full 60 s with one `dropped a damaged
+TS unit` line, against exit 1 on the base `764b2868b`; TEI and twenty aligned 7-packet drops complete.
+P0 frame counts on the same capture:
 
 | Input | `764b2868b` | #4733 at `aae930a23` |
 |---|---|---|
@@ -1513,13 +1393,13 @@ A drop costs one frame on the base and the rest of its GOP on #4733 (~1.2 s here
 trades concealed artefacts for up to one GOP freeze per break (15 % vs 1 % video on this feed).
 Misaligned-drop arm through `tsp` stops at 6.6 s on every build (file input desync), grading none.
 
-**On the merged build** (`main` at `83ce47fe`, which also carries #4750; P1, the same pipe rig and
-capture) every arm completes. The PES-header and NAL arms and TEI on the video and on the audio PID each
-run the full 61.7 s with one `dropped a damaged TS unit` line, and two repeats of the twenty aligned
-drops complete. Each arm delivers the same 73,849,972 B as on `aae930a23`, a figure the padded mux rate
-sets rather than the content. The P0 frame counts were not repeated on the merged build.
+**On the merged build** (P1, the same pipe rig and capture) every arm runs the full 61.7 s, the damaged
+ones with one `dropped a damaged TS unit` line, and each delivers the same 73,849,972 B as on
+`aae930a23`, a figure the padded mux rate sets rather than the content. The P0 frame counts were not
+repeated on it.
 
-**Open.** Loopback SRT loss rate unexplained (to 6 % at 10 Mb/s); libsrt-to-libsrt comparison not yet usable.
+**State:** merged; #4581 closed. **Open:** the loopback SRT loss rate (to 6 % at 10 Mb/s) is
+unexplained, and a libsrt-to-libsrt comparison is not yet usable.
 
 ### A full-rate live feed stops the export — reported as [#5362](https://github.com/moq-dev/moq/issues/5362), fixed by [#5363](https://github.com/moq-dev/moq/pull/5363) and [#5516](https://github.com/moq-dev/moq/pull/5516)
 
@@ -1741,86 +1621,33 @@ permits a silent departure from verbatim.
 
 ### The three named modes are published, and the gap they leave is output timing
 
-§5.5 "Source Handling and Carriage Modes" subsumed #8, #14, #18 and #19 into **(1) unmodified SPTS or
-whole-multiplex; (2) modified programme-level; (3) modified ES-level** — naming media-aware carriage in
-spec scope for the first time. **None of the three modes requires the egress to *time* its MPEG-TS
-output**; that was [#32](https://github.com/mondain/msfts/issues/32) in the 2026-09-17 round, with a
-conditional MUST in Egress Timing after [#35](https://github.com/mondain/msfts/pull/35).
-
-The case is measured ([T4](test-4-remote-e2e-srt.md) three-lane arm, **wire**, cross-host, `eab960192`):
-raw `moq export ts` thins PAT 8.04 → 2.51/s, puts 8.19 % of PCR intervals above 40 ms (worst 319.94 ms
-vs none above 40 ms in 600 s on source), and `analyze` reads ~15.66 Gb/s on ~10 Mb/s content. File
-loopback percentages are worse ([T2](test-2-media-aware-transparency.md)) with join artefacts in maxima;
-wire figures are the ones to quote. Rate-controlled egress measures IRD-grade — 0 of 20,193 intervals
-> 40 ms over 300 s and the same over 24.01 h ([T19](test-19-pcr-grid-verification.md),
-[T21](test-21-permanence-soak.md)). Two conforming implementations can still fail a hardware receiver
-because **the property that decides lock is not in the mode definition.** Byte accuracy is specified in
-detail; time accuracy is not; for 13818-1, PCR *arrival* recovers the system clock, so byte-perfect
-delivery with arbitrary spacing is not a conformant transport stream at delivery.
-
-[#12](https://github.com/mondain/msfts/pull/12)'s §5.6 note (non-normative, lowercase "should",
-deployment-framed) concedes hardware IRDs recover mux clock from PCR arrival, that MOQT does not preserve
-inter-packet timing, and that deployments "may require a rate-controlled egress". Four changes were asked
-for, in descending priority.
-
-First, **`mpeg2tsMuxRate` on ES-level tracks.** The original ask was that the field MUST be absent in
-mode 3 ([#25](https://github.com/mondain/msfts/issues/25)); #35 instead made it RECOMMENDED, but mode 3
-still left the subscriber obliged to recombine tracks without a declared rate. Second, **promote egress
-timing** to a normative obligation on the subscriber that produces TS output, because MoQ cannot preserve
-timing and the duty belongs at reconstruction. Third, **connect §6.12 arrival-time to §5.6**, so mode 1
-with 192-octet stamped packets is the specified mechanism rather than an unused curiosity
-([#15](https://github.com/mondain/msfts/issues/15)). Fourth, require the egress to **honour
-`mpeg2tsPsiInterval` at output** ([#26](https://github.com/mondain/msfts/issues/26)), where measurement
-showed PAT repetition fall 8.04 → 2.51/s. That fourth ask is adjacent to #15 and #16, which describe
-timing that already exists on the wire, but it is not the same ask: it requires the egress to *impose*
-timing that carriage destroyed.
-
-Commercially, stating the target without mandating the method preserves a market for pacing components.
-PCR slot pre-emption, the rate estimator, and stream- versus arrival-clocked operation decide whether
-output is byte-identical or materially misaligned ([T19](test-19-pcr-grid-verification.md),
-[T18](test-18-delivery-latency.md), [T12](test-12-dual-path-handoff.md)). A specification that stays
-silent persuades implementers they need no such component until the first IRD fails to lock.
+In -01, §5.5 subsumed #8, #14, #18 and #19 into three modes: unmodified SPTS or whole multiplex,
+modified programme-level, and modified ES-level. **None required the egress to time its output**, and
+the property that decides an IRD's lock is PCR arrival, not byte accuracy: raw `moq export ts` at
+`eab960192` put 8.19 % of PCR intervals above 40 ms on the wire, cross-host, where a rate-controlled
+egress puts none ([T4](test-4-remote-e2e-srt.md), [T19](test-19-pcr-grid-verification.md),
+[T21](test-21-permanence-soak.md)). The asks, in descending priority: a declared mux rate on ES-level
+tracks ([#25](https://github.com/mondain/msfts/issues/25)), a normative egress-timing duty on the
+subscriber that produces TS ([#32](https://github.com/mondain/msfts/issues/32)), arrival-time stamps as
+the specified mechanism ([#15](https://github.com/mondain/msfts/issues/15)), and the PSI interval
+honoured at output ([#26](https://github.com/mondain/msfts/issues/26)). #35 answered #32 with a conditional MUST in
+Egress Timing and made the ES-level mux rate RECOMMENDED. **State:** superseded; -02 removed the
+modified modes, and #48 removed the output rules (below).
 
 ### The 2026-09-17 round: eleven issues filed, plus one comment and one cross-venue pair
 
-Filed 2026-09-17 as `t0ms` (consistent with #7, #13–#17). Substantive asks included delivery
-schedule ([#24](https://github.com/mondain/msfts/issues/24)), mux rate on ES tracks
-([#25](https://github.com/mondain/msfts/issues/25)), PSI interval at output
-([#26](https://github.com/mondain/msfts/issues/26)), CAT
-([#27](https://github.com/mondain/msfts/issues/27)), enumerated carriage mode
-([#28](https://github.com/mondain/msfts/issues/28)), verifiable `mpeg2tsModified`
-([#29](https://github.com/mondain/msfts/issues/29)), group duration bound
-([#30](https://github.com/mondain/msfts/issues/30)), group alignment
-([#31](https://github.com/mondain/msfts/issues/31)), **output timing**
-([#32](https://github.com/mondain/msfts/issues/32)), purpose of ES carriage
-([#33](https://github.com/mondain/msfts/issues/33)), TR 101 290 gap
-([#34](https://github.com/mondain/msfts/issues/34)), plus a [#15
-comment](https://github.com/mondain/msfts/issues/15#issuecomment-5714034547) on arrival-time
-mechanism and [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731) (six convergence decisions)
-cross-linked with #33.
-
-**Outcome.** The editor replied to every issue and merged
-[#35](https://github.com/mondain/msfts/pull/35) on 2026-09-22. The draft gained an Egress Timing
-section carrying #32's conditional MUST, a §5.4 table mapping carriage fields to permitted modes
-(#28), a §5.2 delivery-schedule paragraph with the ISO/IEC 13818-1 §2.4.2 pointer (#24), a BDAV
-definition of the 192-octet arrival-time prefix (#15), the CAT and CA-descriptor PIDs in the retain
-list (#27), and a recommendation rather than a prohibition of `mpeg2tsMuxRate` on ES-level tracks
-(#25). The draft renamed `m2ts` to `mpeg2ts` throughout and deleted `m2tsPsiInterval`, which
-dissolved half of #26 rather than answering it outright. Three asks were declined with reasons:
-field reduction (#17 and #27's CA-PID list), #29's source PID inventory (an inventory from the same
-pipeline that dropped PIDs would agree with its own output), and #34 (modified carriage as drafted
-passes TR 101 290 P1 on the elementary-stream packets it carries). Later,
-[#36](https://github.com/mondain/msfts/pull/36) replaced three fields with one `mpeg2tsMode` of six
-values and added `es-units` and `media-frames`, which closed #33 with two convergence differences
-noted for moq-dev. [#40](https://github.com/mondain/msfts/pull/40) fixed inconsistent Egress Timing
-wording against the arrival-time definition and closed #15.
-
-**Worth keeping from that round.** Issue #32 was written as a conditional MUST paired with a SHOULD NOT,
-not as a bare MUST, because re-pacing costs latency equal to its buffer (109 ms ungroomed against 2,447 ms
-groomed on different topologies, and no deployment has both). The #15 comment argued that arrival-time
-carriage makes §5.6's premise that MOQT does not preserve inter-packet timing false for mode 1 with
-stamps, and that #15 is therefore a blocking dependency for #32 rather than a loose end. Before filing a
-follow-up, check the tracker for an open issue whose title does not already cover half the ask.
+Eleven issues, [#24](https://github.com/mondain/msfts/issues/24)–[#34](https://github.com/mondain/msfts/issues/34),
+with a [#15 comment](https://github.com/mondain/msfts/issues/15#issuecomment-5714034547) and
+[moq-dev#3731](https://github.com/moq-dev/moq/issues/3731) cross-linked with #33.
+[#35](https://github.com/mondain/msfts/pull/35) answered most: Egress Timing with #32's conditional MUST
+(paired with a SHOULD NOT, since re-pacing costs latency equal to its buffer), a table of carriage fields
+against modes (#28), a delivery-schedule paragraph (#24), the arrival-time prefix defined (#15), the CAT
+in the retain list (#27), and `mpeg2tsPsiInterval` deleted, which dissolved half of #26. Declined, with
+reasons: field reduction (#17, #27's CA-PID list), #29's source PID inventory, which the pipeline that
+dropped PIDs would make agree with itself, and #34, since modified carriage passes TR 101 290 P1 on the
+packets it carries. [#36](https://github.com/mondain/msfts/pull/36) replaced three fields with one
+`mpeg2tsMode` and closed #33; [#40](https://github.com/mondain/msfts/pull/40) closed #15. **State:**
+closed; the modified modes and output rules have since gone (§ *The -02 revision*).
 
 ### moq-dev#3731 answered, and our re-assessment returned: agreement on the diagnosis, a concession on mux rate, one structural disagreement left
 
@@ -1857,72 +1684,26 @@ with the payload unit (filtered 188-octet packets against access units) left wit
 
 ### The maintainer's objection to the round, and why the volume half of it is right
 
-The editor objected to **volume** and **AI-generated** issues. On volume he is right: every one of sixteen
-merged PRs on the draft — including #10–#12, #18, #19 from the first review — was **authored by him**
-after our issues; filing defects had him write normative text, so eleven issues in one day is eleven patches
-on one volunteer.
-
-**Remedy.** Most of the eleven already contained proposed wording (#24, #25, #26 and #32 among them), and
-the draft is kramdown in a repository we can fork. Converting asks to pull requests moves the drafting
-work from the editor to us at close to zero marginal cost, and a patch that builds is evidence of review
-in a way an issue alone is not. Two further cheap moves consolidate #28–#31, which are four defects in
-one section, into a single pull request, and state a priority order rather than leaving eleven equal items,
-because only we can say "if you only take one, take #32".
-
-On AI provenance the objection is weaker but should not be argued with. The `moq-dev` repository openly
-labels its own drafts as AI-generated ([#3728](https://github.com/moq-dev/moq/pull/3728)), and the
-maintainer opened his reply to #3731 with *"I agree with mr AI"*. Provenance is not a norm being breached;
-review burden is, and pull requests reduce burden. **Method rule:** *a review that only files issues
-subcontracts its conclusions; where the artefact is text in a repository, send the text.* The first
-sixteen issues were not converted, because the cadence was handled directly with the editor as a
-relationship matter. The co-author later asked for group points to be filed as issues, and the *output
-contract* round was sized by this objection to one new issue, one reopen and one closure. **One point to
-accept without qualification:** the `moq-dev` implementer is not the reference for the draft. Argument
-#33 makes stands on the draft's own text and the base specifications in that venue, not on implementation
-choices, wherever the two projects disagree that is a convergence question for both.
+The editor objected to the volume of AI-written issues, and on volume he was right: he authored every
+one of the sixteen PRs merged on the draft after our issues, so eleven issues in one day were eleven
+patches by one volunteer. Later asks went as pull requests, sized to the objection (the rule is in
+[`method-notes.md`](method-notes.md) §6). One point holds without qualification: the `moq-dev`
+implementation is not the draft's reference, so an argument in that venue stands on the draft's text
+and the base specifications, and where the two projects disagree it is a convergence question for both.
 
 ### The output contract: what a rebuilding subscriber emits, filed as #37 and merged
 
-After [#36](https://github.com/mondain/msfts/pull/36), the co-author asked that the points put to the
-drafting group be filed as three tracker actions rather than eleven separate issues, because most of them
-describe one change seen from different sides.
-
-Issue [#37](https://github.com/mondain/msfts/issues/37) asked what a subscriber that rebuilds a transport
-stream must output: every table at its standard's interval, including SI carried as section tracks; the
-first output after a join; never re-emitting an unchanged TDT/TOT; the output where an Object is missing;
-the `es-units` schedule caveat extended to recombined tracks; and that two subscribers produce the same
-packets, which requires every regenerated field (interleave, table phase and `version_number`, continuity
-counters, PCR placement, stuffing) to be a function of the tracks, with a media time on every Object so
-sections can be placed. Issue [#34](https://github.com/mondain/msfts/issues/34) was reopened because
-`es-units` and `media-frames` now regenerate counters, adaptation fields and PCR, so a stopped elementary
-stream arrives as clean syntax. Issue [#33](https://github.com/mondain/msfts/issues/33) was closed as
-answered by #36, with the two convergence differences recorded in the closing comment.
-
-Before filing, the asks were cross-referenced against the moq-dev line, and that review changed two
-of them. Byte-identical output is already the implementer's goal
-([#4001](https://github.com/moq-dev/moq/issues/4001) fixed interleave and SI phase for an ST 2022-7
-pair, and the `ts-export-jitter` quest targets byte-identical legs), but continuity counters remain
-per process ([#3868](https://github.com/moq-dev/moq/issues/3868)) because a late joiner cannot know
-earlier packet counts. #37 names that constraint and the keyframe-restart prototype's cost rather
-than asking for deterministic counters as though they were free. On TDT/TOT, the group note said
-"regenerate from the clock, not replay", while the moq-dev exporter forwards each new source value
-and never re-sends an unchanged one; both sides forbid the repeated time, so #37 asks only for that
-rule and leaves the method open. We did not file an unrecognised-mode MUST, because it affects only
-an MSFTS-aware player on a future mode value and MSF parsers ignore unknown fields. We did not file
-the metadata model or PES unit as defects, because those are cross-draft convergence choices in
-#33's closing comment. Test vectors were offered in one line of #37; FEC belongs on the IETF list.
-
-The text went as pull requests, one per open issue
-([#38](https://github.com/mondain/msfts/pull/38)–[#40](https://github.com/mondain/msfts/pull/40));
-**all three merged**. An independent critical review changed
-[#39](https://github.com/mondain/msfts/pull/39) in three places. A continuity-counter jump on loss
-went from MUST to SHOULD-with-example, and applies only to subscribers that generate counters. The
-section timestamp is the ISO/IEC 13818-1 §2.4.2 byte arrival time, and it applies to `"section"`
-Objects only, because mixing PTS for PES with arrival time for sections does not yield one coherent
-timeline, so the interleave algorithm was dropped rather than specified. Identical output is
-required of two instances of one implementation, not across implementations, which would need a
-normative placement algorithm. #38 is scoped to the PCR PID; the reopen comment on #34 claimed
-any-PID stop, which is broader than the claim that survives in #38.
+[#37](https://github.com/mondain/msfts/issues/37) asked what a subscriber that rebuilds a transport
+stream must output: every table at its standard's interval, the first output after a join, no unchanged
+TDT/TOT re-emitted, the output where an Object is missing, and the same packets from two subscribers,
+which makes every regenerated field a function of the tracks. It named the per-process continuity
+counter ([#3868](https://github.com/moq-dev/moq/issues/3868)) as a constraint rather than asking for
+deterministic counters as though they were free. [#34](https://github.com/mondain/msfts/issues/34) was
+reopened, since ES-level carriage regenerates counters, adaptation fields and PCR, so a stopped stream
+arrives as clean syntax. The text went as [#38](https://github.com/mondain/msfts/pull/38)–[#40](https://github.com/mondain/msfts/pull/40),
+all merged; review narrowed identical output to two instances of one implementation, the section
+timestamp to `"section"` Objects, and #38 to the PCR PID. **State:** merged into -01, and removed with
+the Rebuilt Output section in -02.
 
 ### The retain list drops the CAT, so conditional access cannot survive program-level filtering
 
@@ -1960,20 +1741,13 @@ mode, and the draft should have said so (-01 scope; demuxed modes removed in -02
 
 ### Three further defects in the new sections, and one unimplementable MUST
 
-Issues #28–#31 were found reading published §5.5 against the implementation and filed in the 2026-09-17
-round. All four closed with [#35](https://github.com/mondain/msfts/pull/35).
-
-Issue #28 noted that carriage mode was not a field: a receiver inferred mode from `m2tsModified`, the
-presence of `m2tsEsPid` and `m2tsMpts`, with absent and false never stated equivalent for optional
-`m2tsMpts`. #35 answered with a §5.4 table mapping the three fields to permitted carriages. Issue #29
-noted that `m2tsModified: false` was an unverifiable assertion that common tooling violates silently:
-`ffmpeg -c copy -f mpegts` reduces a 13-PID mux to five, dropping NIT, TDT/TOT, a second audio,
-teletext and all three SCTE-35 PIDs ([T4](test-4-remote-e2e-srt.md)). #35 added a Security Considerations
-note and declined the optional source PID inventory for the reason given in the round summary. Issue #30
-noted that a fixed object count bounds byte span, not time, on a VBR multiplex, so join latency was
-unbounded; #35 deleted the object-count SHOULD. Issue #31 noted that §5.5.3's group-alignment MUST cannot
-be met literally across AAC and video cadences; #35 relaxed alignment to SHOULD with a note on differing
-frame durations.
+Issues #28–#31, from reading §5.5 against the implementation, all closed with
+[#35](https://github.com/mondain/msfts/pull/35): carriage mode was inferred from three fields rather
+than declared (#28, answered by a table); `m2tsModified: false` was an assertion common tooling breaks
+silently, `ffmpeg -c copy` reducing a 13-PID mux to five ([T4](test-4-remote-e2e-srt.md); #29, a
+Security Considerations note); an object count bounds bytes, not time, on a VBR multiplex (#30, the
+SHOULD deleted); and group alignment cannot be met literally across AAC and video cadences (#31,
+relaxed to SHOULD).
 
 ### Mode 3 and the reference implementation are not the same thing, and that is the convergence problem
 
@@ -2005,13 +1779,12 @@ after null strip, landed on both sides ([#3831](https://github.com/moq-dev/moq/p
 ### The -02 revision: verbatim-only carriage ([#41](https://github.com/mondain/msfts/pull/41))
 
 [#41](https://github.com/mondain/msfts/pull/41) ("Keep the verbatim family and simplify the draft
-for -02") **merged 2026-10-03** (`ca29d6aa`). **Datatracker:** latest submitted revision remains
-**-01** (2026-09-24); **-02 text is in the repository but not yet submitted.**
+for -02") merged, and -02 is the submitted revision.
 
 **Scope.** -02 is **verbatim-only**: `es-units`, `media-frames`, LOC tracks and the Rebuilt Output
-section are **removed**; demuxed carriage is **deferred** to `draft-lcurley-moq-mpegts`. Sections
-above through #36–#39 describe the -01 demuxed design; they remain the record of that round and the
-convergence argument with `moq-dev`, not the current MSFTS scope.
+section are **removed**; demuxed carriage is **deferred** to `draft-lcurley-moq-mpegts`. The sections
+above on the modified modes are the record of -01 and of the convergence argument with `moq-dev`, not
+the current MSFTS scope.
 
 **Adopted from our feedback:** a **188-octet `unmodified-program` baseline** every TS-output
 subscriber **MUST** support; an **output rule** for unmodified modes (pass the reconstructed stream
@@ -2030,21 +1803,17 @@ in #46, below.) Egress-timing promotion
 #42 T-STD scope for verbatim modes; demuxed timing and ES recombination obligations that lived in -01 are
 out of MSFTS until `draft-lcurley-moq-mpegts`.
 
-**Round-two feedback has been sent to the co-author's group, by email.** It raises six points on
-the -02 text: the 2-second Group bound against the random access rule, a multiplex without a reference
-program having nothing to pace on, where a timing method would go, `es-packets` without arrival times,
-whether a baseline subscriber can take `per-program`, and the two meanings of
-`mpeg2tsProgramNumber`. It offers neither the test vectors the co-author asked for nor a companion
-draft on TS-output health. **[#46](https://github.com/mondain/msfts/pull/46) answered it
-(merged):** a multiplex paces on the first program in the PAT by default, plus subscriber rules that
-#48 later removed; the Group bound, the timing method and `es-packets` timing were not taken up.
-**Round three posted as [#47](https://github.com/mondain/msfts/issues/47)**: one testable output rule in every mode, following the source clock within 2.4.2.1's
-limits, no waiting for a late Object, a replacement track or an unflagged PCR step treated as a
-switch, and the Group bound against random access as the one open question. **Answered by
-[#48](https://github.com/mondain/msfts/pull/48)**, merged after our review: MSFTS now specifies
-only the Objects, the Groups and the catalog, and leaves subscriber output to the receiver's
-standards, removing points 1–4, every output rule above and the Group bound. Closed by us on that
-answer.
+**Later feedback on -02.** Six points on its text (the 2-second Group bound against the random access
+rule, a multiplex with no reference program to pace on, where a timing method would go, `es-packets`
+without arrival times, whether a baseline subscriber can take `per-program`, and the two meanings of
+`mpeg2tsProgramNumber`) were answered by [#46](https://github.com/mondain/msfts/pull/46): a multiplex
+paces on the PAT's first program by default; the timing method and `es-packets` timing were not taken
+up. That feedback offered neither the test vectors the co-author asked for nor a companion draft on
+TS-output health. [#47](https://github.com/mondain/msfts/issues/47) asked for
+one testable output rule in every mode, and was answered by
+[#48](https://github.com/mondain/msfts/pull/48), merged after our review. **State:** MSFTS now specifies
+only the Objects, the Groups and the catalog, and leaves subscriber output to the receiver's standards,
+so every output rule above and the Group bound are gone; we closed #47 on that answer.
 
 ---
 
