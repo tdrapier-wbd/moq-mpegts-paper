@@ -111,13 +111,13 @@ subscribers, under a quarter of the node's policer. Through the degraded step th
 step 1's. **The node's own metrics put the knee in its event loop** (the operator's Prometheus,
 mean over each measure window):
 
-| N | Event loop busy | Busiest CPU | Node's interface sent (Gb/s) | Pacer timer lagged (/s) | Sends blocked by cwnd (/s) |
+| N | Event loop busy | Busiest CPU | Node's `eth0` sent (Gb/s) | Pacer timer lagged (/s) | Sends blocked by cwnd (/s) |
 |---|---|---|---|---|---|
-| 8 | 26.8 % | 16.6 % | 0.26 | 0.1 | 7.7 |
-| 16 | 48.9 % | 29.5 % | 0.48 | 445 | 41 |
-| 32 | 82.8 % | 47.2 % | 0.90 | 1,495 | 377 |
-| 40 | **99.4 %** | 55.4 % | 0.94 | 4,082 | 4,892 |
-| 48 | 88.6 % | 47.7 % | 0.92 | 1,811 | 1,789 |
+| 8 | 26.8 % | 16.6 % | 0.21 | 0.1 | 7.7 |
+| 16 | 48.9 % | 29.5 % | 0.42 | 445 | 41 |
+| 32 | 82.8 % | 47.2 % | 0.83 | 1,495 | 377 |
+| 40 | **99.4 %** | 55.4 % | 0.87 | 4,082 | 4,892 |
+| 48 | 88.6 % | 47.7 % | 0.85 | 1,811 | 1,789 |
 
 The relay's one event loop saturates at 40 subscribers while neither of the VM's two CPUs does, and
 its output stops growing; neither NIC dropped a packet.
@@ -183,7 +183,7 @@ the same second (16,841 s below the previous group, [T34](test-34-real-encoder-s
 and every session ended with it. The publisher was back in 1.2 s; each subscriber resubscribed after
 3.0–3.3 s and reported output by 5.3–5.6 s.
 
-**Ungraded: each subscriber lost video that the node never delivered to it.** After each start's
+**Ungraded: each subscriber lost video that never reached it in time.** After each start's
 first 15 s, a subscriber logged 116–169 video skips, 30.6–44.0 s of video in all (about two an hour,
 most of 320 ms), and 18–34 groups evicted as too old; no export missed a decode deadline. Of the
 distinct skips, 11 reached at least half the subscribers (ten of video, one of 96 ms on the MP2
@@ -192,8 +192,20 @@ subscriber dropped late frames; in five of them at least half did. The monitors 
 the export fills a skipped span with stuffing and keeps its PCR. The skips are neither the host's
 (CPU mean 15 %, peak 30 %) nor loss on the path to the last hop that answers ICMP (1 probe lost of
 258,973; RTT median 10.7 ms, 99.9th percentile 12.5 ms), and QUIC repairs loss rather than skipping
-it, so each reads as a group the node did not complete to that subscriber, or completed too late.
-Which, and why, is on the node's side; its metrics over the soak are not read (the login is the author's).
+it, so each reads as a group that reached its subscriber too late.
+
+**The node's counters do not place them** (its Prometheus per minute over the run, reported beside
+the result as the criteria set). It held 17 connections throughout, its event loop 58 % busy on
+average (75 % in the busiest minute), its CPUs 32 % (47 %), sending 0.42 Gb/s. Its subscriber-side
+subgroup and stream resets stayed at zero; its publisher-side subgroup resets moved only at the
+soak's start and at the break. Its QUIC declared 0.034 % of 10.8 billion packets lost, in 3,818 of
+4,321 minutes and steadily from hour to hour, with 15 persistent-congestion events in 11 minutes,
+the pacer timer lagging about 685 times a second and about 39 sends a second blocked by the
+congestion window; no interface, UDP-buffer or softnet drop. None of it stands out at the 11
+shared skips (loss 0–2,395 in their minutes, against a median minute's 544; no persistent
+congestion) or the five late minutes, and the hour with the most skips had among the least loss.
+At the node's rate the probe would have lost about 90, so the declared loss lies between the node
+and that hop, falls only on the node's own bursts, or is declared rather than real.
 
 **What the criteria could not see.** The byte criterion reads socket bytes, which carry about 1.3 %
 of QUIC and IP overhead over the publisher's input, so a loss under about 1.2 % would pass it; the
@@ -209,3 +221,8 @@ cannot see a hole the export has filled. A soak of this lane needs the export's 
   subscriber receives by `recvmsg`; the rig now counts each subscriber's socket in the firewall.
   Rule: a receiver that restores a constant rate cannot report delivery by what it writes
   ([method notes](method-notes.md) §2).
+- **The node's sent rate summed its interfaces.** The ramp's table first read every interface but
+  loopback. moqx runs in a container on this node, so its bridge and veth carry copies of the
+  traffic, 0.06–0.07 Gb/s above what the node sent. The column now reads `eth0`; the 48-subscriber
+  row, whose window the counters cannot place, is its reading less 0.07. Rule: on a containerised
+  host, read the physical interface.
