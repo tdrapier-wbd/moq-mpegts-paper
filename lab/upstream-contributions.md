@@ -1055,8 +1055,7 @@ Verified on upstream `main` `9d2a4f6e9`, file domain, harness loopback: `moq exp
 returns **3.09 %** of intervals within tolerance (exit 1 at `--schedule-pct-min 99`) and median **1,316 /
 31,081 B**, reproducing the T13 residual while the source clip grades 100 % (30,644 / 30,644 B). The
 harness's generated `ffmpeg -muxrate` clip grades 100 % (25,004 / 25,004 B) and its export 92–97 % over
-three 20 s runs (31,208 / 31,250 B), because that fixture is mostly padding, which is why a burst fixture
-is listed below.
+three 20 s runs (31,208 / 31,250 B), because that fixture is mostly padding.
 
 **Closed:** [#3925](https://github.com/moq-dev/moq/issues/3925), by us, as answered by #4645's PCR grid:
 on `f8215bc47` over 35 min every PCR checked is within ±481 ns of its byte position
@@ -1256,6 +1255,7 @@ which closed #3926 ([T13](test-13-downstream-grooming.md) § *Liveness*).
 | [#4945](https://github.com/moq-dev/moq/issues/4945) | after [#4741](https://github.com/moq-dev/moq/pull/4741), the relay handed a replacement publisher the killed session's subscriptions before it published | split into [#4942](https://github.com/moq-dev/moq/pull/4942)'s publisher epochs and [#4915](https://github.com/moq-dev/moq/pull/4915); with both merged, 4 of 4 runs on `moq-lite-07` resume 8 of 8 crashes continuity-clean |
 | [#5052](https://github.com/moq-dev/moq/issues/5052) | a re-request onto a live route died on its first late video unit | fixed by our [#5109](https://github.com/moq-dev/moq/pull/5109) and, for epochless tracks, by `broadcast-epoch/no-stitch` ([#5108](https://github.com/moq-dev/moq/pull/5108), [#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)); on `90500867d` no run of 32 dies on a late unit, and under `--stitch` 6 of 7 replacements resume ([T47](test-47-fixed-delay-export.md)) |
 | [#6802](https://github.com/moq-dev/moq/issues/6802) | under `--follow`, a hard kill's eviction ended an export on a missed decode deadline, 3 of 13 runs ([T56](test-56-media-aware-failover.md)) | open |
+| [#6877](https://github.com/moq-dev/moq/issues/6877) | a standby's arrival pre-empts the serving leg; a switch empties the follower's delay ([T56](test-56-media-aware-failover.md), [T58](test-58-receiver-select.md)) | open |
 | [#4947](https://github.com/moq-dev/moq/pull/4947), ours | a failed export lingered as though its broadcast had ended | merged (`1ec21ac23`): it lingers only if the broadcast closes within 1 s; crash-replace runs end 1.04 s after the failure, against 60.04 s |
 | [#5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371)'s same-instance resume | measured for its quest | closed with [#5545](https://github.com/moq-dev/moq/pull/5545)'s tests; the named CLI test passes 40 of 40 on `90500867d` |
 
@@ -1270,8 +1270,8 @@ not the error text, tells a crash from a clean end.
 
 `mpeg2ts` serialised the rebuilt PMT into one packet, so a playout recording with eleven AC-3
 services (a 391-byte section over three packets) was imported whole and exported not at all on
-`f8215bc47` ([T45](test-45-live-tstd-remux.md)). The maintainer's #5220 writes it whole, as we
-[reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794); verified on
+`f8215bc47` ([T45](test-45-live-tstd-remux.md)). #5220 writes it whole
+([reported on the PR](https://github.com/moq-dev/moq/pull/5220#issuecomment-6114047794)), verified on
 `main` at `90500867d` on the same recording. **Closed.**
 
 ### Video overran its transport buffer where the multiplex outran its Rx — reported as [#5142](https://github.com/moq-dev/moq/issues/5142), fixed by [#5207](https://github.com/moq-dev/moq/pull/5207) and [#5306](https://github.com/moq-dev/moq/pull/5306)
@@ -1440,8 +1440,8 @@ change refuses; so do a PID listed twice and 65,536 stream revisions. The export
 PMT at the next version, dropping a PID after its tail. The PAT half's import follows a moved PMT
 and unannounces a dropped program; a restored one is a new epoch.
 
-**State.** #6208, #6289 merged; #6689 open. Moving a running export's PMT awaits upstream's
-table rework.
+**State.** #6208, #6289 merged; #6689 passed to the maintainer, five findings open. Moving
+a running export's PMT awaits upstream's table rework.
 
 ---
 
@@ -1611,9 +1611,9 @@ not interoperate on pacing; `m2tsMuxRate` did not say the egress recovers clock 
 (rate is stuffing target) nor whether the figure counts 188- or 192-octet packets; null removal was
 declared via [#21](https://github.com/mondain/msfts/pull/21)'s `m2tsModified` but not
 distinguishable from programme filter or PAT rewrite. #16 and #17 closed with
-[#35](https://github.com/mondain/msfts/pull/35) on 2026-09-22 (#16 fixed as above; #17 declined on
-field reduction). #15 closed after [#40](https://github.com/mondain/msfts/pull/40) reconciled Egress
-Timing with the arrival-time definition (outcomes also under *The 2026-09-17 round*).
+[#35](https://github.com/mondain/msfts/pull/35) (#16 fixed, #17 declined), #15 after
+[#40](https://github.com/mondain/msfts/pull/40) reconciled Egress Timing with the arrival-time
+definition.
 
 **Not measurement.** The `m2ts` carriage measured here is `moq-dev`'s passthrough, byte-verbatim
 ([T48](test-48-passthrough-export.md)); the review establishes that the specification no longer
