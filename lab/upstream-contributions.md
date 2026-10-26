@@ -1543,18 +1543,18 @@ TRACK_STATUS.
 
 ### A CDN-hosted moqx relay at a join — reported on [openmoq/moqx#795](https://github.com/openmoq/moqx/issues/795#issuecomment-6289975173) and as [#842](https://github.com/openmoq/moqx/issues/842)
 
-[T11](test-11-interop.md): a joining FETCH never reaches the publisher, so a subscriber loses the
-head of each group in progress, the SI track's one object included (a fresh-namespace case on
-#795). TRACK_STATUS's undefined code (#842, closed) reads as INTERNAL_ERROR;
+[T11](test-11-interop.md): an unforwarded joining FETCH loses the head of the group in progress,
+the SI track's object included. TRACK_STATUS's undefined code (#842, closed) reads as INTERNAL_ERROR;
 [#843](https://github.com/openmoq/moqx/issues/843) asks for defined codes. Our STOP_SENDING ends the
 subscription: [#817](https://github.com/openmoq/moqx/issues/817), whose open fix covers it.
-**Open:** a local moqx on draft 16, v0.3.6 or the fixed snapshot, serves the joining FETCH, fresh
-namespace and restart alike (our groups restart at 0, short of #795's precondition); the node
-refuses it on draft 18, losing a once-published catalog and a mid-group joiner's session
-([T52](test-52-cdn-relay-fanout.md);
-[reported](https://github.com/openmoq/moqx/issues/795#issuecomment-6365312157)). On draft 18 the
-snapshot's 64-bit Hop ID closed `moq-dev` sessions ([moq#6545](https://github.com/moq-dev/moq/issues/6545)),
-fixed by [#6614](https://github.com/moq-dev/moq/pull/6614).
+**Open:** a local moqx on draft 16, v0.3.6 or the fixed snapshot, serves the joining FETCH (our
+groups restart at 0, short of #795's precondition); on draft 18 the node refuses it, unforwarded, to
+whichever subscriber opens a track there, losing a once-published catalog
+([T52](test-52-cdn-relay-fanout.md)); on the latest image, 14 openers of 14, no later joiner,
+and no mid-group join lost its session
+([re-tested](https://github.com/openmoq/moqx/issues/795#issuecomment-6418121868)). The snapshot's
+64-bit Hop ID ([moq#6545](https://github.com/moq-dev/moq/issues/6545)) is fixed by
+[#6614](https://github.com/moq-dev/moq/pull/6614).
 
 ---
 

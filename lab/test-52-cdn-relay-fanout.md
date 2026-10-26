@@ -1,11 +1,12 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: ramps done; the demultiplexed soak running.** The demultiplexed lane's knee is the relay's
+**State: ramps and the demultiplexed soak done.** The demultiplexed lane's knee is the relay's
 event loop: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where
 the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through
 this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss
 or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining
-FETCH).
+FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the
+source's, while each subscriber lost video about twice an hour, which the criteria cannot see.
 
 ## Objective
 
@@ -54,8 +55,8 @@ gap. A probe beside the subscribers records the path's loss and RTT each second,
 that answers ICMP: the node answers neither ICMP nor TCP.
 
 Rig: [`t52-cdn-fanout.sh`](scripts/t52-cdn-fanout.sh), [`f5-sub-side.sh`](scripts/f5-sub-side.sh)
-adapted to a remote relay: `pub` on the primary, `ramp` and `soak` on the tertiary. Grader:
-[`t52-grade.py`](scripts/t52-grade.py).
+adapted to a remote relay: `pub` on the primary, `ramp` and `soak` on the tertiary. Graders:
+[`t52-grade.py`](scripts/t52-grade.py) (ramps), [`t52-soak-grade.py`](scripts/t52-soak-grade.py) (soak).
 
 ## Pass criteria, fixed before running
 
@@ -164,6 +165,40 @@ time. The lane has one media track, so
 a stalled track is a silent connection; on the demultiplexed lane the other tracks would keep the
 connection alive and the stall would show as a skipped group, which fits its single skips from 24
 subscribers but is not shown. The demultiplexed ramp recorded no session end through 40.
+
+### The demultiplexed soak
+
+*Measured, `f2fca6fd2` at both ends, 16 subscribers, 72.0 h.*
+
+**The soak holds by its criteria; its one break was the source's.**
+
+| Criterion | Measured |
+|---|---|
+| No continuity error or PCR interval over 40 ms outside logged events | none in 4,321 one-minute windows on each graded subscriber |
+| Delivered bytes at least 99.9 % of the publisher's | 101.34–101.37 % over the run; 100.63 % in the lowest subscriber-hour (one subscriber's first, as it joined), at least 101.24 % in every other |
+| Every reconnect counted, with its gap and cause | one break, all 16 sessions at once: output again in 5.3–5.6 s; the source's (below) |
+
+At 18.8 h the soak's publisher exited on the backward step that ended both standing imports in
+the same second (16,841 s below the previous group, [T34](test-34-real-encoder-severity.md)),
+and every session ended with it. The publisher was back in 1.2 s; each subscriber resubscribed after
+3.0–3.3 s and reported output by 5.3–5.6 s.
+
+**Ungraded: each subscriber lost video that the node never delivered to it.** After each start's
+first 15 s, a subscriber logged 116–169 video skips, 30.6–44.0 s of video in all (about two an hour,
+most of 320 ms), and 18–34 groups evicted as too old; no export missed a decode deadline. Of the
+distinct skips, 11 reached at least half the subscribers (ten of video, one of 96 ms on the MP2
+track at all 16) and 1,653 fewer, 1,333 of those one subscriber alone. In 141 minutes some
+subscriber dropped late frames; in five of them at least half did. The monitors saw none of it:
+the export fills a skipped span with stuffing and keeps its PCR. The skips are neither the host's
+(CPU mean 15 %, peak 30 %) nor loss on the path to the last hop that answers ICMP (1 probe lost of
+258,973; RTT median 10.7 ms, 99.9th percentile 12.5 ms), and QUIC repairs loss rather than skipping
+it, so each reads as a group the node did not complete to that subscriber, or completed too late.
+Which, and why, is on the node's side; its metrics over the soak are not read (the login is the author's).
+
+**What the criteria could not see.** The byte criterion reads socket bytes, which carry about 1.3 %
+of QUIC and IP overhead over the publisher's input, so a loss under about 1.2 % would pass it; the
+subscribers' spread about their median, −0.022 % to +0.014 %, is the finer reading. The monitors
+cannot see a hole the export has filled. A soak of this lane needs the export's skip count graded.
 
 ## Corrections
 
