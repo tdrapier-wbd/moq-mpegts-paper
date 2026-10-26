@@ -9,7 +9,10 @@ are joined within 10 s either way. Per minute: the
 pictures matched and missing, and the latency's median, 1st and 99th percentiles. Over the run: the
 median, the drift (least-squares slope of the per-minute medians), every step (a per-minute median
 more than --step-ms from the last), the export's restarts, and each stream's PCR rate against its
-own arrivals, the export's against the hand-off's in ppm. With --primary, the primary's hand-off is
+own arrivals, the export's against the hand-off's in ppm. Beside it, the same per-minute summary of
+the delay on the two PCR clocks: each picture's latency less its lead over the hand-off's PCR at its
+arrival, plus its lead over the export's (PTS - PCR, interpolated between sampled PCRs), which takes
+out how each multiplexer schedules pictures. With --primary, the primary's hand-off is
 joined to the secondary's the same way: their offset per minute, beside the two hosts' chrony
 error bound (|system offset| + root delay / 2 + root dispersion, summed over both).
 """
@@ -31,41 +34,78 @@ def rows(path, kind):
                 yield int(v), int(ns)
 
 
+def led(path):
+    """Each picture's PTS and arrival, and its lead over its own stream's PCR at that arrival
+    (PTS - PCR, ms), the PCR interpolated between the sampled PCRs either side; None across a gap of
+    over a second or a backward PCR."""
+    pcr_ns, pcr_s = [], []
+    last, base = None, 0
+    for pcr, ns in rows(path, "C"):
+        if last is not None and pcr < last - (WRAP * 300) // 2:
+            base += WRAP * 300
+        last = pcr
+        pcr_ns.append(ns)
+        pcr_s.append((pcr + base) / 27e6)
+    last, base = None, 0
+    for pts, ns in rows(path, "P"):
+        if last is not None and pts < last - WRAP // 2:
+            base += WRAP
+        last = pts
+        i = bisect.bisect_left(pcr_ns, ns)
+        lead = None
+        if 0 < i < len(pcr_ns) and pcr_ns[i] - pcr_ns[i - 1] < 1e9 and pcr_s[i] >= pcr_s[i - 1]:
+            f = (ns - pcr_ns[i - 1]) / (pcr_ns[i] - pcr_ns[i - 1]) if pcr_ns[i] > pcr_ns[i - 1] else 1
+            lead = ((pts + base) / 9e4 - pcr_s[i - 1] - f * (pcr_s[i] - pcr_s[i - 1])) * 1e3
+        yield pts, ns, lead
+
+
 def join(src, dst, lead_ns=0):
-    """For each dst picture, the src arrival with the same PTS (within two ticks) from the 60 s
-    before it to lead_ns after it."""
+    """For each dst picture, the src picture with the same PTS (within two ticks) arriving from the
+    60 s before it to lead_ns after it. Rows are (pts, ns, ...)."""
     window = collections.deque()
     by_pts = collections.defaultdict(list)
     it = iter(src)
     pending = next(it, None)
-    for pts, ns in dst:
+    for row in dst:
+        pts, ns = row[0], row[1]
         while pending is not None and pending[1] <= ns + lead_ns:
             window.append(pending)
-            by_pts[pending[0]].append(pending[1])
+            by_pts[pending[0]].append(pending)
             pending = next(it, None)
         while window and window[0][1] < ns - 60_000_000_000:
-            p, t = window.popleft()
-            by_pts[p].remove(t)
-            if not by_pts[p]:
-                del by_pts[p]
+            old = window.popleft()
+            by_pts[old[0]].remove(old)
+            if not by_pts[old[0]]:
+                del by_pts[old[0]]
         hit = None
         for d in (0, 1, -1, 2, -2):
             c = by_pts.get((pts + d) % WRAP)
             if c:
                 hit = c[-1]
                 break
-        yield ns, hit
+        yield row, hit
 
 
-def minutes(pairs):
+def latency(row, src):
+    return (row[1] - src[1]) / 1e6
+
+
+def pcr_delay(row, src):
+    """The delay on the two PCR clocks: the latency less the source's lead, plus the export's."""
+    if row[2] is None or src[2] is None:
+        return None
+    return latency(row, src) - src[2] + row[2]
+
+
+def minutes(pairs, value=latency):
     per = collections.OrderedDict()
-    for ns, src in pairs:
-        m = ns // 60_000_000_000
+    for row, src in pairs:
+        m = row[1] // 60_000_000_000
         e = per.setdefault(m, [[], 0])
         if src is None:
             e[1] += 1
-        else:
-            e[0].append((ns - src) / 1e6)
+        elif (v := value(row, src)) is not None:
+            e[0].append(v)
     out = []
     for m, (lat, miss) in per.items():
         lat.sort()
@@ -140,11 +180,14 @@ def main():
     exp = os.path.join(a.run, "export.csv")
     mins = minutes(join(rows(hand, "P"), rows(exp, "P")))
     events = [line.split() for line in open(os.path.join(a.run, "events.txt")) if line.strip()]
+    pcr_mins = minutes(join(led(hand), led(exp)), pcr_delay)
     out = {"run": a.run, "build": open(os.path.join(a.run, "build.txt")).read().splitlines()[:3],
            "latency": summary(mins, a.step_ms),
+           "pcr_delay": summary(pcr_mins, a.step_ms),
            "restarts": [e for e in events if e[0].startswith("export_exit")],
            "pcr_ppm": {"handoff": pcr_ppm(hand), "export": pcr_ppm(exp)},
-           "per_minute": mins}
+           "per_minute": mins,
+           "pcr_delay_per_minute": pcr_mins}
     if None not in out["pcr_ppm"].values():
         out["pcr_ppm"]["export_vs_handoff"] = round(out["pcr_ppm"]["export"] - out["pcr_ppm"]["handoff"], 3)
     if a.primary:
@@ -168,6 +211,12 @@ def main():
     print(f"  latency median {lat.get('median_ms')} ms (per-minute {lat.get('min_minute_ms')}..{lat.get('max_minute_ms')}),"
           f" drift {lat.get('drift_ms_per_h')} ms/h ({lat.get('drift_ppm')} ppm), {len(lat.get('steps', []))} steps")
     for s in lat.get("steps", [])[:20]:
+        print(f"    step at {s['minute']}: {s['from_ms']} -> {s['to_ms']} ms")
+    pd = out["pcr_delay"]
+    print(f"  PCR-clock delay (beside C1, ungraded): median {pd.get('median_ms')} ms (per-minute"
+          f" {pd.get('min_minute_ms')}..{pd.get('max_minute_ms')}), drift {pd.get('drift_ms_per_h')} ms/h,"
+          f" {len(pd.get('steps', []))} steps")
+    for s in pd.get("steps", [])[:20]:
         print(f"    step at {s['minute']}: {s['from_ms']} -> {s['to_ms']} ms")
     print(f"  restarts: {len(out['restarts'])}; PCR ppm {out['pcr_ppm']}")
     if a.primary:

@@ -59,6 +59,10 @@ stream's PCR rate against its own arrivals.
 4. **C3, the hand-offs' offset**, measured, no pass mark: per minute, beside the two clocks' summed
    error bound. It is relied on as the primary-to-secondary path only where the bound is under a
    tenth of it.
+5. **Beside C1, ungraded, added after a look at the first 22 h:** the delay on the two PCR clocks,
+   each picture's latency less its lead over the hand-off's PCR at its arrival plus its lead over
+   the export's, summarised as C1 is. C1's measure times arrivals, so it carries how each
+   multiplexer schedules pictures against its own PCR; this one takes that out. C1 stays the grade.
 
 ## Limits, fixed in advance
 
