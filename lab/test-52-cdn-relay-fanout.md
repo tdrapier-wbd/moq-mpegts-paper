@@ -1,7 +1,7 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
 **State: ramps and the demultiplexed soak done.** The demultiplexed lane's knee is the relay's
-event loop: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where
+event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where
 the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through
 this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss
 or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining
@@ -121,7 +121,9 @@ mean over each measure window):
 | 48 | 88.6 % | 47.7 % | 0.85 | 1,811 | 1,789 |
 
 The relay's one event loop saturates at 40 subscribers while neither of the VM's two CPUs does, and
-its output stops growing; neither NIC dropped a packet.
+its output stops growing; neither NIC dropped a packet. The operator runs moqx on one thread,
+unpinned, so the scheduler spreads it over both CPUs, and keeps the rest of the VM for monitoring:
+the knee is one thread's.
 
 **On the passthrough lane the node fails joins two ways.** Traced at debug on both:
 
@@ -208,7 +210,9 @@ congestion window; no interface, UDP-buffer or softnet drop. None of it stands o
 shared skips (loss 0–2,395 in their minutes, against a median minute's 544; no persistent
 congestion) or the five late minutes, and the hour with the most skips had among the least loss.
 At the node's rate the probe would have lost about 90, so the declared loss lies between the node
-and that hop, falls only on the node's own bursts, or is declared rather than real.
+and that hop, falls only on the node's own bursts, or is declared rather than real. The operator
+counts 5,010 drops at the node's qdisc, not resolved in time: if all fell in the soak,
+about one in 700 of the declared loss.
 
 **The node's memory grew without bound**, by the operator's reading: about 57 MiB an hour, to
 3.06 GiB of its 4 GB by the end, falling back when the sessions ended. He traced part of it to cache
