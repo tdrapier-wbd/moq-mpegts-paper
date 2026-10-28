@@ -137,6 +137,13 @@ export, whose clustered PCRs broke its constant-rate assumption. Byte excision r
 together, and the media-aware lane loses one without the other; check agreement with pictures,
 content-PID packets or eviction logs on impaired captures.
 
+**Read a 33-bit timestamp step the shorter way round its clock, and replay a backward step from well
+above zero.** *(T34.)* A classifier subtracting modulo 2³³ one way read a 16,845 s step back as
+78,599 s forward. The wrap hides the step from a replay too: a fresh import starts at the capture's
+own clock, a few thousand seconds in, so the step falls below zero and publishes as a jump forward.
+Lift every PCR, PTS and DTS by more than the step, private streams included, and cut either side of
+the event as controls: a cut before it must read clean.
+
 **Verify the stimulus before the run: the fault is present in the bytes you will publish, it is the only
 fault, and a stimulus meant to be invisible to a detector passes that detector first.** *(T19, T23, T24,
 T39, T51.)* A source slice failed silently and the clip kept its audio; a "600 s backward jump" built by

@@ -89,7 +89,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs 3–4 s of programme per step and is not hitless for a 1+1 pair | Why the other five diverge; whether a real feed steps back, what a step costs a subscriber, and whether it is flagged | §3.13 |
+| **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish under a new epoch costs 3–4 s of programme per step and is not hitless for a 1+1 pair. **A real feed steps back** where its contribution switches between unlocked encodes, unflagged, ending both legs at once and costing a subscriber 9.8 s behind a supervisor that waits 5 s | Why the other five diverge; how often other contributions switch so | §3.13 |
 | **Interop** | The opaque lane crosses seven of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix | Why three relays never start a late subscriber | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -489,7 +489,9 @@ needs headroom and admission control. GSO alone cuts per-subscriber CPU by 25–
 **Through a CDN-hosted relay of another implementation, across the internet, the media-aware lane
 carried 32 subscribers of a 25 Mb/s live feed in full and degraded at 40**, what they received
 levelling at 0.82–0.86 Gb/s under a quarter of the relay's policer while the subscriber host stayed under
-30 % CPU and the publisher kept pace: the limit is the relay's or its egress path's. In its
+30 % CPU and the publisher kept pace. The limit is the relay's event loop, 99 % busy at 40 on the one
+thread its operator configures while neither of the VM's two CPUs passed 56 %: one thread's
+ceiling, not the implementation's or the host's. In the ramp's
 three-minute steps no group was skipped through 16 subscribers and from 24 some were, which the
 export fills with stuffing. **Held for 72 h at 16 subscribers, the lane passed its criteria, but each
 subscriber skipped video about twice an hour** (116–169 skips, most of 320 ms; 11 reached at least
@@ -690,7 +692,7 @@ silent downstream**: under `continue` it emits valid CBR with no programme indef
 carrier stops 0.1 s after the programme. Recovery resumes at the live edge, the programme clock skipping
 exactly the outage, so what was lost is gone and only redundancy mitigates it.
 
-### 3.13 Which PCR timeline events does the lane survive? — All five placed classes on the September 2026 builds measured; from moq 0.14.0 a backward step ends the import by design
+### 3.13 Which PCR timeline events does the lane survive? — All five placed classes on the September 2026 builds measured; from moq 0.14.0 a backward step ends the import by design, and a real feed steps back
 
 **For an operator:** on the builds measured in September 2026, a PCR base rollover, a forward jump,
 a rewind and an encoder restart each cross the lane with no programme hole and no deep buffer.
@@ -698,12 +700,17 @@ a rewind and an encoder restart each cross the lane with no programme hole and n
 kind measured**, while a flagged forward jump still publishes; upstream has declined an in-process
 restart, even for the flagged case. A source whose timeline steps back must then be republished at
 each step, by a supervisor under a new epoch, or the build pinned. Each republish costs 3–4 s of
-programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. On a real feed
-the standing import ended three times in about 19 h over a clean hand-off, two exits 3 min apart,
-but none of the exits since captured with their source was a step: each was the import mis-stamping
-a SCTE-35 cue, which current builds do not. **Whether a real feed steps back is not yet measured**
-([T34](../lab/test-34-real-encoder-severity.md); P1, the import's log and the hand-off ring, one
-feed, an October 2026 build).
+programme, and a 1+1 pair is not hitless across it, nor meant to be on this export. **A real feed
+does step back, where its contribution switches between two encodes whose clocks are not locked**
+([T34](../lab/test-34-real-encoder-severity.md) § *A switch between two encodes*; P1, the hand-off
+ring and both legs' import counters, one feed, three switches in 90 h, an October 2026 build). At
+one packet the whole multiplex changed source, mid-GOP, onto identical tables and a clock 16,844.6 s
+behind, unflagged and upstream of the hand-off; the captured bytes alone, replayed, end the import.
+Both legs' imports ended in the same millisecond, so a 1+1 pair fed by one contribution fails
+together, and a subscriber lost 9.8 s of output behind a supervisor that waits 5 s to restart. A
+switch forward, also unflagged, publishes, but ends the subscriber's export on its 30 ppm clock
+bound. None of the exits captured on earlier builds was a step: each was the import mis-stamping a
+SCTE-35 cue, which current builds do not.
 
 [T23](../lab/test-23-pcr-discontinuity-classes.md) (P0/P2, software; one run per arm per build)
 places one event at 45 s of a 105 s run, shifting PTS and DTS with PCR, and grades source, round

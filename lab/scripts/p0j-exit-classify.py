@@ -16,6 +16,12 @@ import sys
 d, exit_hms = sys.argv[1], sys.argv[2]
 files = sorted(glob.glob(os.path.join(d, 'ring-*.ts')))
 PKT_S = 188 * 8 / 25e6
+WRAP_S = (1 << 33) / 90000
+
+
+def step(a, b):
+    """b - a in seconds, the shorter way round the 33-bit clock: a step back across the wrap is negative."""
+    return (b - a + WRAP_S / 2) % WRAP_S - WRAP_S / 2
 
 
 def t_of(name):
@@ -128,7 +134,7 @@ for f in files:
         if not afc & 1 or off >= 188:
             continue
         if pid in last_cc and not di and cc != (last_cc[pid] + 1) & 15 and cc != last_cc[pid]:
-            cc_err.setdefault(pid, []).append(w)
+            cc_err.setdefault(pid, []).append((w, total - 1))
         last_cc[pid] = cc
         payload = p[off:]
         if pid == 0 and pusi and pmt_pid is None:
@@ -173,19 +179,24 @@ print(f'== {os.path.basename(d.rstrip("/"))}: ring {hms(t_of(files[0]))} -> '
 print(f'packets {total:,}, synced {synced:,}; video PID {video_pid}, SCTE-35 PIDs {sorted(scte)}')
 print('discontinuity_indicator:', len(disc), [(hms(w), p) for w, p in disc[:10]])
 print('cc errors:', {k: len(v) for k, v in cc_err.items()} or 0)
+if cc_err:
+    at = sorted(x[1] for v in cc_err.values() for x in v)
+    first = min(x[0] for v in cc_err.values() for x in v)
+    print(f'   at packets {at[0]}–{at[-1]} of the concatenated ring ({hms(first)})')
 for pid, s in sorted(pcr.items()):
-    steps = [(hms(s[k][0]), round(s[k][1] - s[k - 1][1], 4)) for k in range(1, len(s))
-             if s[k][1] - s[k - 1][1] < -0.001 or s[k][1] - s[k - 1][1] > 0.025]
-    worst = max((d for _, d in steps), default=None)
+    ds = [(hms(s[k][0]), round(step(s[k - 1][1], s[k][1]), 4)) for k in range(1, len(s))]
+    steps = [x for x in ds if x[1] < -0.001 or x[1] > 0.025]
+    worst = max(steps, key=lambda x: abs(x[1]), default=None)
     print(f'PCR pid {pid}: {len(s)} samples; {len(steps)} backward or > 25 ms, largest {worst}: {steps[:8]}')
 for pid, s in sorted(series.items()):
-    steps, mx = [], s[0][1]
+    steps, mx, u = [], 0.0, 0.0
     for k in range(1, len(s)):
-        if s[k][1] - mx < -0.5:
-            steps.append((hms(s[k][0]), round(s[k][1] - mx, 3)))
-            mx = s[k][1]
+        u += step(s[k - 1][1], s[k][1])
+        if u - mx < -0.5:
+            steps.append((hms(s[k][0]), round(u - mx, 3)))
+            mx = u
         else:
-            mx = max(mx, s[k][1])
+            mx = max(mx, u)
     gap = max((s[k][0] - s[k - 1][0], hms(s[k - 1][0])) for k in range(1, len(s)))
     print(f'PES pid {pid} (type 0x{pes_pids.get(pid, 0):02x}): {len(s)} PES; back > 0.5 s: {steps[:5]}; '
           f'largest wall gap {gap[0]:.3f} s after {gap[1]}')

@@ -57,7 +57,7 @@ distribution. A row leaves when a pull request takes it; ours are in the
 
 | Quest | Size | Would move | Why it ranks here | Gate |
 |---|---|---|---|---|
-| `route-health/design`, then `recovery` | M, then L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby without a 2022-7 receiver; the maintainer ranks it after clustering and federation | Epochs on every hop (lite-07 or draft 17) |
+| `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby, before the idle timeout, without a 2022-7 receiver | Its design, which the maintainer has claimed (#7096); epochs on every hop (lite-07 or draft 17) |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | The lag histogram whose type it reuses, which waits on moq-net's QUIC acknowledgments |
 | `ts-reliability/pat-lifecycle`, the export half | M | P2-m; P0-k's PID-change fixture | A PAT change on a live source is followed, published or retired, never ignored; our #6689 takes the import half | — |
 
@@ -65,8 +65,8 @@ Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's 
 [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one
 operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's
 supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH) and
-`ts-reliability/stitch-catch-up` (the rest of our #6877, a follower's latency back to `--delay`
-after a switch; no entry here waits on it).
+`ts-reliability/stitch-catch-up` (our #6877's latency half, which the maintainer's #7049 takes; no
+entry here waits on it).
 
 ## Blocked on apparatus
 

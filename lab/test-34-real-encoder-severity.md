@@ -1,15 +1,15 @@
 # Test 34 — A real encoder against the continuous-source fence
 
-**State: closed without a step — in 213 h on the live feed the real encoder never stepped back.**
-The seven-day re-run on standing units past #3997 saw no import exit in 169 h (§ *The seven-day
-re-run*), though two since, uncaptured, are candidates; P0-j's first 44.4 h, below, saw nine exits and none a step. On the live feed the standing import
-ends every few hours on *frame timestamp is below the live edge*, with the hand-off clean each time
-(§ *The live feed*). None of the nine exits P0-j captured with the hand-off around them was a step
-in the feed: each time the standing build stamped a SCTE-35 section below the one before it, which
-`main` no longer does. The `OLD`/`NEW` fence comparison below is moot, since from moq 0.14.0 a
-backward step ends the import by design ([Evidence](../docs/evidence.md) §3.13); what remains is a
-subscriber's export graded across a real step, on standing units past #3997: there an exit of the
-import is itself a candidate step, while this build, older than moq 0.14.0, need not exit on one.
+**State: graded on one real step, the feed's contribution switching between two encodes upstream,
+unflagged.** None of the nine exits P0-j first captured was a step: each was the standing build of
+the time stamping a SCTE-35 section below the one before it, which `main` no longer does, and the
+seven-day re-run saw no exit in 169 h. A later ring caught one, on standing units past moq
+0.14.0, where a backward step ends the import by design ([Evidence](../docs/evidence.md) §3.13): a
+hard switch, at one packet, to a second encode of the service with identical tables and a clock
+16,844.6 s behind, with no `discontinuity_indicator`. The import ended on both legs at once and a
+subscriber lost 9.8 s of output; a switch the other way, forward, ends the subscriber's export
+instead (§ *A switch between two encodes*). The `OLD`/`NEW` fence comparison below is moot by the
+same design.
 
 Specified as [P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion). Rig sketch:
 [`t27-realfeed-severity.sh`](scripts/t27-realfeed-severity.sh).
@@ -245,18 +245,55 @@ recorded **no event**: the import ran its one invocation for all 169 h. From moq
 step on any track ends the import, so the feed stepped back on none. What it did instead was arrive
 damaged eight times, upstream of SRT; once, at 99 h, the import counted a PCR discontinuity without
 the indicator and the AC-3 timeline jumped about 16,848 s forward, and the export failed on its
-clock check and was restarted. That step is forward, its class was not captured (the ring keys on
-import exits), and its cost is in T21. One graded backward step would still answer P0-j.
+clock check and was restarted. That step is forward and was not captured, since the ring keys on
+import exits; by its size and its single unflagged PCR discontinuity it is the switch below.
 
-**Since the re-run, on the same build, the import has exited twice, with no ring running.** Each
-exit is *frame timestamp … is below the previous group's start*. The first, on the secondary's
-import alone, was 19,336 s below. Three days later both legs' imports exited in the same second,
-each exactly 16,841.17 s below, close to the size of the forward jump above. systemd restarted each
-import after its 5 s hold-off, and every session a CDN soak held on the feed ended with them
-([T52](test-52-cdn-relay-fanout.md)). Neither exit is classified: by the rule in *Corrections*, a refusal
-names what the import wrote, not what the feed sent. One identical refusal on two legs is a
-common-mode exit of the 1+1 pair from a single input event, and at about one exit every two days
-a ring keyed on import exits is now worth keeping.
+### A switch between two encodes: the first graded step
+
+*Measured, P1, the ring's five 20 s files around the exit and the journal, standing build
+`3c0daa21` on both legs; classified by [`p0j-exit-classify.py`](scripts/p0j-exit-classify.py) and
+[`p0j-splice.py`](scripts/p0j-splice.py), replayed through `3c0daa21`; the subscriber's loss from
+[T57](test-57-cross-host-timing.md)'s export of the same broadcast on the second host.*
+
+**Reading 1, the class: an unflagged splice of the whole multiplex.** At one packet every PID
+changes source. Each of the twelve breaks its continuity counter once, the PSI and SI at their next
+packet; the video and the MP2 are cut mid-PES on both sides; the new video's first PES has no
+`random_access_indicator` and holds non-IDR slices, so it joins mid-GOP. PAT, PMT, NIT and SDT are
+byte-identical either side, versions and CRCs alike. PCR and every PES PID step back together, by
+16,844.35–16,844.65 s, and no packet in the ring sets `discontinuity_indicator`; the import counted
+it as a PCR discontinuity-indicator error. The TDT, stamped upstream, runs 34.3 s behind the
+hand-off before the splice and 23.4 s after, so the two encodes reach us by paths about 11 s apart.
+SRT lost nothing, and both legs' imports saw the splice in the same millisecond: it is upstream of
+the hand-off.
+
+**The source's bytes alone end the import.** Replayed through `3c0daa21`'s import, cut 7 packets
+before the splice or 4 after it, the ring reads to the end; cut 100 after it, the import exits with
+the live error, on the teletext's first PES after the splice. The replay lifts every timestamp by
+30,000 s first: a fresh import starts at the ring's own clock, from which this step would fall
+below zero, and reads it as a jump forward.
+
+**Reading 2, what the subscriber lost: 9.8 s of output.** The export on the second host stopped
+writing at the exit, wrote again 9.78 s later, then paused 0.3 s and 0.6 s. The publisher was away
+5.3 s, 5 s of it systemd's restart hold-off; the export's supervisor restarted it after 2 s; it
+wrote 2.4 s after its tracks were subscribed. A supervisor restarting at the step costs 3–4 s
+([Evidence](../docs/evidence.md) §3.13); the difference is the hold-off and the export's restart.
+
+**The switch runs both ways, every day or two.** Both legs' import counters record three such
+events in 90 h, each one PCR discontinuity-indicator error on both legs in the same second: back
+16,841.17 s, ending both imports and every session a CDN soak held on the feed
+([T52](test-52-cdn-relay-fanout.md)); forward 55 h later by 16,844.97 s; back 35 h after that by
+16,844.61 s, the one graded here. The import accepts the forward step. The export does not: 7.5 s
+after it, it failed on *the source's clock runs +172.5 ppm off ours, past the 30 ppm the output's
+may follow*, losing 8.0 s of output with shorter gaps either side, as export 1 did at the forward
+jump of about 16,848 s in [T21](test-21-permanence-soak.md). An earlier exit on one leg alone,
+19,336 s below, is not of this class and is not classified.
+
+**What it settles.** A real feed does step back, not at a programme junction but where its
+contribution switches between two encodes whose clocks are not locked. The switch breaks ISO
+13818-1's rule that a timebase change be flagged, so it goes to the contribution's engineer;
+upstream's handling of it is by design both ways. Both legs of a 1+1 pair fed by that contribution
+fail together, and on this design each backward switch costs every subscriber about 10 s of
+programme and each forward one ends every export.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 
@@ -278,7 +315,7 @@ does not protect the feed — it is the precondition under which the defect bite
 |---|---|
 | Steady feed, one uninterrupted encode, no junctions | **No.** Nothing resyncs, nothing steps backwards |
 | A hard cut at a programme junction or ad insertion, encoded continuously | **Expected yes** — this is the case the quest calls *"what a real encoder produces at a hard cut"*, and the one this experiment exists to confirm |
-| MediaConnect failover between two sources | **Likely yes**, and for the same reason: a content join on a continuous timeline |
+| A contribution failover between two sources on one timeline | **Likely yes**, and for the same reason: a content join on a continuous timeline |
 | SRT loss beyond the recovery window, or our own `srt-ingest` restart | **Probably not by this mechanism** — a transport gap tends to set the indicator, which is an exit. It may of course break the feed some other way |
 | A single-track (video-only) source | **No.** Measured immune on both builds: the fence needs a bystander track |
 
