@@ -273,7 +273,7 @@ the recovery the tunnels exist for, and **neither lane has been graded on a hard
 ([Evidence](evidence.md) §4).
 
 **A deployment constraint separate from latency.** From moq 0.14.0 a backward timestamp step ends
-the import by design, so a source whose timeline steps back is republished at each step, at 3–4 s
+the import by design, so a source whose timeline steps back is republished at each step, at 2.8–3.8 s
 of programme a step and not hitlessly for a 1+1 pair, or the build is pinned; no build is
 measured to carry every timeline case ([Evidence](evidence.md) §3.13).
 

@@ -1347,14 +1347,14 @@ zero-fill is a candidate ([method-notes](method-notes.md#2-instruments-and-readi
 
 **State.** A TS rewind, flagged or not, stays fatal: republishing inside the importer
 ([#4582](https://github.com/moq-dev/moq/issues/4582)) was closed as not planned, since a supervisor
-that wants to continue publishes a new broadcast under a new epoch. That costs the supervisor's
-restart plus the subscriber's move: on `f8215bc47`, 2.9–3.0 s of programme pipe-fed, and the first
-post-step picture 4.7 s after sending through the SRT gateway
-([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*). A
+that wants to continue publishes a new broadcast under a new epoch, at a cost measured in
+[T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*. A
 co-started 1+1 pair stayed byte-identical across it in 8 of 13 runs; the other five, reported as
 [#5101](https://github.com/moq-dev/moq/issues/5101), were closed as not planned, because a replaced
 broadcast is a new broadcast and identity across a republish is not a goal. The export ends on a
-replacement unless `--stitch` asks for a fresh export with a full program switch.
+replacement unless `--stitch` asks for a fresh export with a full program switch. Revisited in
+[#7102](https://github.com/moq-dev/moq/issues/7102), open: a real contribution switching encodes
+unflagged ends both legs at once ([T34](test-34-real-encoder-severity.md)).
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
 
