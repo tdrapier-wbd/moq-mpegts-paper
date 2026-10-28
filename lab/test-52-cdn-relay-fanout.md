@@ -6,7 +6,8 @@ the loop is 99 % busy, with groups skipped in common from 24. The passthrough la
 this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss
 or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining
 FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the
-source's, while each subscriber lost video about twice an hour, which the criteria cannot see.
+source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and
+the node's memory grew without bound.
 
 ## Objective
 
@@ -192,7 +193,9 @@ subscriber dropped late frames; in five of them at least half did. The monitors 
 the export fills a skipped span with stuffing and keeps its PCR. The skips are neither the host's
 (CPU mean 15 %, peak 30 %) nor loss on the path to the last hop that answers ICMP (1 probe lost of
 258,973; RTT median 10.7 ms, 99.9th percentile 12.5 ms), and QUIC repairs loss rather than skipping
-it, so each reads as a group that reached its subscriber too late.
+it, so each reads as a group that reached its subscriber too late. The subscribers ask for
+newest-first group order, the client's default, under which a relay may send a group ahead of the
+tail of the one before; the publisher ranks video below its audio, verbatim and catalog tracks.
 
 **The node's counters do not place them** (its Prometheus per minute over the run, reported beside
 the result as the criteria set). It held 17 connections throughout, its event loop 58 % busy on
@@ -206,6 +209,12 @@ shared skips (loss 0–2,395 in their minutes, against a median minute's 544; no
 congestion) or the five late minutes, and the hour with the most skips had among the least loss.
 At the node's rate the probe would have lost about 90, so the declared loss lies between the node
 and that hop, falls only on the node's own bursts, or is declared rather than real.
+
+**The node's memory grew without bound**, by the operator's reading: about 57 MiB an hour, to
+3.06 GiB of its 4 GB by the end, falling back when the sessions ended. He traced part of it to cache
+metadata moqx v0.3.6 keeps for each evicted group, so it grows with the group rate, about 74 a
+second here ([moqx#874](https://github.com/openmoq/moqx/issues/874)). At that rate the node had less
+than a day left, so 72 h is close to the longest this load can run on that release.
 
 **What the criteria could not see.** The byte criterion reads socket bytes, which carry about 1.3 %
 of QUIC and IP overhead over the publisher's input, so a loss under about 1.2 % would pass it; the

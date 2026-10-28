@@ -946,8 +946,8 @@ liveness in both reports ([T39](test-39-cross-boundary-observability.md)).
 trims, gaps, margin, offset, drift). **Contributed, merged**: [#6552](https://github.com/moq-dev/moq/pull/6552),
 `import --echo-path`, a CLI publisher soliciting what `export --echo` reports (P1-l's gate);
 [#6654](https://github.com/moq-dev/moq/pull/6654), the shared model that grades either report and names its observer.
-**The relay's half, open as [#6791](https://github.com/moq-dev/moq/pull/6791)**: egress `lag`
-histograms and `dropped` counters per broadcast, on the stats totals and prefix tracks.
+**The relay's half, [#6791](https://github.com/moq-dev/moq/pull/6791), closed unmerged**: egress `lag`
+histograms and `dropped` counters per broadcast, parked until moq-net exposes QUIC acknowledgments.
 
 ### Where the specification half of this belongs, and it is mostly not MSFTS
 
@@ -1253,9 +1253,9 @@ which closed #3926 ([T13](test-13-downstream-grooming.md) § *Liveness*).
 |---|---|---|
 | [#4767](https://github.com/moq-dev/moq/issues/4767) | a resume flagged the discontinuity up to four times | closed against [#4845](https://github.com/moq-dev/moq/pull/4845); `main` flags each resume once since #4645 |
 | [#4945](https://github.com/moq-dev/moq/issues/4945) | after [#4741](https://github.com/moq-dev/moq/pull/4741), the relay handed a replacement publisher the killed session's subscriptions before it published | split into [#4942](https://github.com/moq-dev/moq/pull/4942)'s publisher epochs and [#4915](https://github.com/moq-dev/moq/pull/4915); with both merged, 4 of 4 runs on `moq-lite-07` resume 8 of 8 crashes continuity-clean |
-| [#5052](https://github.com/moq-dev/moq/issues/5052) | a re-request onto a live route died on its first late video unit | fixed by our [#5109](https://github.com/moq-dev/moq/pull/5109) and, for epochless tracks, by `broadcast-epoch/no-stitch` ([#5108](https://github.com/moq-dev/moq/pull/5108), [#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)); on `90500867d` no run of 32 dies on a late unit, and under `--stitch` 6 of 7 replacements resume ([T47](test-47-fixed-delay-export.md)) |
-| [#6802](https://github.com/moq-dev/moq/issues/6802) | under `--follow`, a hard kill's eviction ended an export on a missed decode deadline, 3 of 13 runs ([T56](test-56-media-aware-failover.md)) | open |
-| [#6877](https://github.com/moq-dev/moq/issues/6877) | a standby's arrival pre-empts the serving leg; a switch empties the follower's delay ([T56](test-56-media-aware-failover.md), [T58](test-58-receiver-select.md)) | open |
+| [#5052](https://github.com/moq-dev/moq/issues/5052) | a re-request onto a live route died on its first late video unit | fixed by our [#5109](https://github.com/moq-dev/moq/pull/5109) and, for epochless tracks, by `broadcast-epoch/no-stitch` ([#5108](https://github.com/moq-dev/moq/pull/5108), [#5137](https://github.com/moq-dev/moq/pull/5137), [#5147](https://github.com/moq-dev/moq/pull/5147)); verified in [T47](test-47-fixed-delay-export.md) |
+| [#6802](https://github.com/moq-dev/moq/issues/6802) | under `--follow`, a hard kill's eviction ended an export on a missed decode deadline, 3 of 13 runs ([T56](test-56-media-aware-failover.md)) | fixed by [#6873](https://github.com/moq-dev/moq/pull/6873); not re-measured |
+| [#6877](https://github.com/moq-dev/moq/issues/6877) | a standby's arrival pre-empts the serving leg; a switch empties the follower's delay ([T56](test-56-media-aware-failover.md), [T58](test-58-receiver-select.md)) | standby ask declined; delay kept since [#6919](https://github.com/moq-dev/moq/pull/6919), its return to `--delay` quest `stitch-catch-up`; not re-measured |
 | [#4947](https://github.com/moq-dev/moq/pull/4947), ours | a failed export lingered as though its broadcast had ended | merged (`1ec21ac23`): it lingers only if the broadcast closes within 1 s; crash-replace runs end 1.04 s after the failure, against 60.04 s |
 | [#5328](https://github.com/moq-dev/moq/pull/5328#issuecomment-6123559371)'s same-instance resume | measured for its quest | closed with [#5545](https://github.com/moq-dev/moq/pull/5545)'s tests; the named CLI test passes 40 of 40 on `90500867d` |
 
