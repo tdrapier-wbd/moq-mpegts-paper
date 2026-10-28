@@ -4,7 +4,7 @@
 # Upstream ends a TS import at any backward timestamp step, flagged or not, so a source whose
 # timeline legitimately steps back (an encoder restart, a switcher) is carried only by a supervisor
 # that republishes it. Each `moq import ts` mints a fresh epoch, which on `moq-lite-07` replaces the
-# old broadcast at the relay, and `export ts --linger` follows it. This measures what that costs:
+# old broadcast at the relay, and `export ts --follow` (`--linger` before) follows it. This measures what that costs:
 # one stimulus from `t23-pcr-stimuli.py`, a supervisor that restarts the import each time it exits,
 # and two co-started exports, captured with each picture's arrival stamped.
 #
@@ -77,7 +77,7 @@ C=("${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT" --broadcast "$BCAST")
 
 for leg in a b; do
 	# shellcheck disable=SC2086
-	("$BIN/moq" "${C[@]}" export ts "${MOQ_LAT[@]}" "$LAT" --linger "$LINGER" ${EXPORT_ARGS:-} 2>"$OUT/export-$leg.log"
+	("$BIN/moq" "${C[@]}" export ts "${MOQ_LAT[@]}" "$LAT" "${MOQ_FOLLOW[@]}" "$LINGER" ${EXPORT_ARGS:-} 2>"$OUT/export-$leg.log"
 		echo "$? $(now)" >"$OUT/export-$leg.exit") |
 		python3 "$HERE/t18-latency.py" tap "$VPID" "$OUT/egress-$leg.csv" --pipe --seconds $((SECS + 20)) \
 			>"$OUT/egress-$leg.ts" &

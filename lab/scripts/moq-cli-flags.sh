@@ -11,7 +11,7 @@
 #   ...
 #   moq_require_bytes "$OUT/capture.ts" 200000 "subscriber" || return 1
 #
-# Sets: MOQ_CLI_NEW RELAY_CLI_NEW MOQ_DIAL MOQ_LAT MOQ_FP MOQ_GSO
+# Sets: MOQ_CLI_NEW RELAY_CLI_NEW MOQ_DIAL MOQ_LAT MOQ_FOLLOW MOQ_FP MOQ_GSO
 #       RELAY_BIND RELAY_TLS RELAY_GSO RELAY_AUTH RELAY_CC_FLAG RELAY_IDLE_FLAG RELAY_GREP
 #
 # ## Why this file exists rather than a set of literals in each rig
@@ -97,6 +97,12 @@ moq_cli_detect() {
 		MOQ_LAT=(--max-age)
 	elif "$moq" export ts --help 2>&1 | grep -q -- '--delay'; then
 		MOQ_LAT=(--delay)
+	fi
+	# `--linger` was renamed `--follow` with the same meaning, and the new surface refuses the old name.
+	if "$moq" export ts --help 2>&1 | grep -q -- '--follow'; then
+		MOQ_FOLLOW=(--follow)
+	else
+		MOQ_FOLLOW=(--linger)
 	fi
 
 	RELAY_CLI_NEW=$MOQ_CLI_NEW

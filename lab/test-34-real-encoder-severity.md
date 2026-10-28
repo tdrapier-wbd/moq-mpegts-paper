@@ -7,7 +7,7 @@ seven-day re-run saw no exit in 169 h. A later ring caught one, on standing unit
 0.14.0, where a backward step ends the import by design ([Evidence](../docs/evidence.md) §3.13): a
 hard switch, at one packet, to a second encode of the service with identical tables and a clock
 16,844.6 s behind, with no `discontinuity_indicator`. The import ended on both legs at once and a
-subscriber lost 9.8 s of output; a switch the other way, forward, ends the subscriber's export
+subscriber lost 9.8 s of output, 2.8 s at best with the import restarted at once; a switch the other way, forward, ends the subscriber's export
 instead (§ *A switch between two encodes*). The `OLD`/`NEW` fence comparison below is moot by the
 same design.
 
@@ -277,8 +277,48 @@ below zero, and reads it as a jump forward.
 **Reading 2, what the subscriber lost: 9.8 s of output.** The export on the second host stopped
 writing at the exit, wrote again 9.78 s later, then paused 0.3 s and 0.6 s. The publisher was away
 5.3 s, 5 s of it systemd's restart hold-off; the export's supervisor restarted it after 2 s; it
-wrote 2.4 s after its tracks were subscribed. A supervisor restarting at the step costs 3–4 s
-([Evidence](../docs/evidence.md) §3.13); the difference is the hold-off and the export's restart.
+wrote 2.4 s after its tracks were subscribed. A supervisor restarting the import at once costs
+2.8–3.2 s on this splice (below); the difference is the hold-off and the export's restart.
+
+**The best case on today's design, replayed.** The ring's five files, lifted by
+[`p0j-lift.py`](scripts/p0j-lift.py), through [T41](test-41-import-reanchor-coverage.md)'s
+[`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh): pipe-fed, played in real time for
+95 s, a supervisor restarting the import at once, two exports at `--delay 1s --linger 30s --stitch`
+(`--follow` on `main`, the same flag renamed), `moq-lite-07-wip`; three runs on `3c0daa21b`, where T41's synthetic flagged 1 s step lost 3,800 ms,
+and three on `main` `66af7231`; graded by [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py).
+*Fixed before running:*
+
+1. A run counts if the source plays in real time across the splice (no gap over 0.5 s in its tap
+   within 5 s of it), the import exits there once with the live error and its successor publishes
+   to the end, and both exports exit 0; otherwise it is reported, not graded.
+2. Per export: programme lost, the longest arrival gap, and the first post-splice picture's delay
+   beyond the steady latency.
+3. On `3c0daa21b` the real splice costs what the synthetic step did if within 200 ms of 3,800 ms;
+   more by up to the 0.44 s before the new encode's first keyframe is the mid-GOP join's; anything
+   else is reported as found.
+
+**Results: the real splice costs less than the synthetic step, and none of it is the splice's.**
+All six runs count: the source's longest tap gap near the splice is 146–364 ms, each import exits
+once and its successor starts 20–29 ms later, and every export exits 0. Each figure holds on both
+legs of every run:
+
+| Build | Runs | Programme lost (ms) | Longest arrival gap (ms) | First post-splice picture beyond the latency (ms) | Latency before the splice (ms) |
+|---|---:|---|---|---|---|
+| `3c0daa21b` | 3 | 3,160–3,240 | 3,026–3,050 | 1,184–1,187 | 1,845–1,850 |
+| `main` `66af7231` | 3 | 2,800 | 2,778–2,785 | 1,564–1,572 | 1,203–1,212 |
+
+Each loss has two parts, both the restart's. The export loses the old encode's last pictures, which
+it held but had not released when the old broadcast ended: about its latency, 1,880–1,960 ms on
+`3c0daa21b` and 1,240 ms on `main`. The restarted import then holds its catalog for 1.7–2.1 s, until
+its first mux-rate window is measured (T41 § *Where the step's cost grew*), and the export joins the
+new encode at the group live by then. On `3c0daa21b` that is the encode's second group, 1,280 ms in;
+`main` also trims that group's first 280 ms as already past their release time, so 1,560 ms are
+lost. The mid-GOP join costs nothing of its own: the new encode's first keyframe is 80 ms after
+the splice in decode order, inside the hold. On criterion 3 the result is reported as found, since
+it is 560–640 ms below the synthetic step. Each run also lists seven pictures missing after the
+break: they are the run's last 0.3 s, cut when the rig stops the source. The two exports are
+byte-identical in two of the three runs on `3c0daa21b`, and in none on `main`, where 0.1–3.4 % of
+packets differ.
 
 **The switch runs both ways, every day or two.** Both legs' import counters record three such
 events in 90 h, each one PCR discontinuity-indicator error on both legs in the same second: back
@@ -294,8 +334,8 @@ jump of about 16,848 s in [T21](test-21-permanence-soak.md). An earlier exit on 
 contribution switches between two encodes whose clocks are not locked. The switch breaks ISO
 13818-1's rule that a timebase change be flagged, so it goes to the contribution's engineer;
 upstream's handling of it is by design both ways. Both legs of a 1+1 pair fed by that contribution
-fail together, and on this design each backward switch costs every subscriber about 10 s of
-programme and each forward one ends every export.
+fail together. On the deployed units each backward switch costs every subscriber about 10 s of
+programme, 2.8 s at best with the import restarted at once, and each forward one ends every export.
 
 ## What actually has to happen for the fence to close, and what therefore will not trigger it
 
