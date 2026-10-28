@@ -264,7 +264,9 @@ byte-identical either side, versions and CRCs alike. PCR and every PES PID step 
 it as a PCR discontinuity-indicator error. The TDT, stamped upstream, runs 34.3 s behind the
 hand-off before the splice and 23.4 s after, so the two encodes reach us by paths about 11 s apart.
 SRT lost nothing, and both legs' imports saw the splice in the same millisecond: it is upstream of
-the hand-off.
+the hand-off. A stock decoder rides through it: ffmpeg 9.0.2 decoding the five files flags a
+timestamp discontinuity, re-offsets and decodes on, with errors until the first keyframe 0.44 s
+after the splice and its output continuous (98.08 s from 98 s).
 
 **The source's bytes alone end the import.** Replayed through `3c0daa21`'s import, cut 7 packets
 before the splice or 4 after it, the ring reads to the end; cut 100 after it, the import exits with
