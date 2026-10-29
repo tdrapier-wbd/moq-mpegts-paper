@@ -26,9 +26,16 @@ that took (T63). The last PCR, not the last packet, because a stream-clocked gro
 packets only up to the newest PCR it has seen. One that arrives later is passed on at once and
 logged as late. The host clock must be synchronised.
 
+A segment the playlist marks with EXT-X-DISCONTINUITY (a new source, a new timeline) is handed on
+with the transport stream's own signal for it, which a groomer or an IRD reads and a playlist tag
+does not reach: `discontinuity_indicator` is set on each PID's first PCR in the segment and on each
+other PID's first packet if it carries an adaptation field. Nothing else in the segment is changed,
+and nothing at all without the tag. A PID whose first packet has no adaptation field cannot be
+marked without re-packetising, and the log names it.
+
 Usage:
-  b8-hls-recv.py URL OUT [--seconds N] [--poll MS] [--edge N] [--timeout S] [--give-up-ms MS]
-                 [--release-ms MS] [--header 'Name: value']... [--log FILE.jsonl]
+  b8-hls-recv.py URL OUT [--seconds N, 0 for no end] [--poll MS] [--edge N] [--timeout S]
+                 [--give-up-ms MS] [--release-ms MS] [--header 'Name: value']... [--log FILE.jsonl]
 """
 import argparse
 import datetime
@@ -75,8 +82,9 @@ class Client:
 
 
 def parse_media_playlist(text):
-	"""Return (media_sequence, [segment_uri, ...], {uri: program date-time, unix s})."""
-	seq, uris, dated, pdt = 0, [], {}, None
+	"""Return (media_sequence, [segment_uri, ...], {uri: program date-time, unix s},
+	{uri that EXT-X-DISCONTINUITY precedes})."""
+	seq, uris, dated, disc, pdt, brk = 0, [], {}, set(), None, False
 	for line in text.splitlines():
 		line = line.strip()
 		if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
@@ -89,12 +97,40 @@ def parse_media_playlist(text):
 				pdt = datetime.datetime.fromisoformat(line.split(":", 1)[1]).timestamp()
 			except ValueError:
 				pdt = None
+		elif line == "#EXT-X-DISCONTINUITY":
+			brk = True
 		elif line and not line.startswith("#"):
 			uris.append(line)
 			if pdt is not None:
 				dated[line] = pdt
-			pdt = None
-	return seq, uris, dated
+			if brk:
+				disc.add(line)
+			pdt, brk = None, False
+	return seq, uris, dated, disc
+
+
+def mark_discontinuity(data):
+	"""Set discontinuity_indicator on each PID's first PCR and on each other PID's first packet
+	that has an adaptation field. Returns (data, marked PIDs, PIDs that could not be marked)."""
+	data = bytearray(data)
+	first, pcr_done = {}, set()
+	for i in range(0, len(data) - 187, 188):
+		p = data[i:i + 4]
+		if p[0] != 0x47:
+			continue
+		pid = (p[1] & 0x1F) << 8 | p[2]
+		if pid == 0x1FFF:
+			continue
+		has_af = p[3] & 0x20 and data[i + 4] > 0
+		if has_af and data[i + 5] & 0x10 and pid not in pcr_done:
+			data[i + 5] |= 0x80
+			pcr_done.add(pid)
+			first.setdefault(pid, True)
+		elif pid not in first:
+			if has_af:
+				data[i + 5] |= 0x80
+			first[pid] = bool(has_af)
+	return bytes(data), sorted(p for p, ok in first.items() if ok), sorted(p for p, ok in first.items() if not ok)
 
 
 def pcr_span(data):
@@ -122,7 +158,7 @@ def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("url")
 	ap.add_argument("out")
-	ap.add_argument("--seconds", type=float, default=60.0)
+	ap.add_argument("--seconds", type=float, default=60.0, help="how long to run; 0 runs until stopped")
 	ap.add_argument("--poll", type=float, default=250.0, help="playlist poll interval, ms")
 	ap.add_argument("--edge", type=int, default=1, help="join this many segments back from the live edge")
 	ap.add_argument("--timeout", type=float, default=3.0)
@@ -143,7 +179,7 @@ def main():
 
 	out = sys.stdout.buffer if args.out == "-" else open(args.out, "wb", buffering=0)
 	client = Client(args.url, headers, args.timeout)
-	deadline = time.time() + args.seconds
+	deadline = time.time() + args.seconds if args.seconds > 0 else float("inf")
 	poll = args.poll / 1000.0
 
 	# Segment identity is the URI; a restarted packager starts a new media sequence, and names
@@ -171,7 +207,7 @@ def main():
 			log("pl-recovered", after_s=round(time.time() - down_since, 3))
 			down_since = None
 
-		msn, uris, dated = parse_media_playlist(body.decode("utf-8", "replace"))
+		msn, uris, dated, disc = parse_media_playlist(body.decode("utf-8", "replace"))
 		if last_msn is not None and msn < last_msn and not set(uris) <= last_uris:
 			log("msn-regress", was=last_msn, now=msn)
 		# Segments listed and withdrawn between two of our reads: an edge that served a stale
@@ -207,6 +243,9 @@ def main():
 						meta["held_ms"] = round(wait * 1000, 1)
 					else:
 						meta["late_ms"] = round(-wait * 1000, 1)
+				if u in disc and n_seg:
+					data, marked, unmarked = mark_discontinuity(data)
+					log("discontinuity", name=u, marked=marked, unmarked=unmarked)
 				try:
 					t_write = time.time()
 					out.write(data)

@@ -77,7 +77,7 @@ the demotion experiment left waits on no entry here).
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d |
 | **B-7** CloudFront for the campaign's AWS user: distributions, functions, key-value stores, real-time logs | granted for distributions, functions, key-value stores and real-time log configs; Kinesis, S3 and listing cache policies denied, so real-time logs need Kinesis granted | P1-aj, P1-ak's logs, P1-al's CAT |
-| **B-8** An HLS receive front end feeding `tsp` or the groomer on stdin: retry, JSON telemetry, CMCD v2 keys | first increment built (`b8-hls-recv.py`: retry, telemetry, media-sequence regression and skips, release on the program date-time); CMCD and CAT to build ([T30](test-30-segmented-distributed-resilience.md) § *Tooling*). Pathway fallback is not needed: the origin group fails over inside the CDN ([T61](test-61-origin-group-failover.md)) | P1-ak, P1-al |
+| **B-8** An HLS receive front end feeding `tsp` or the groomer on stdin: retry, JSON telemetry, CMCD v2 keys | first increment built (`b8-hls-recv.py`: retry, telemetry, media-sequence regression and skips, release on the program date-time, a playlist's discontinuity signalled in the stream), with units for both ends ([`seg-units.sh`](scripts/seg-units.sh)); CMCD and CAT to build ([T30](test-30-segmented-distributed-resilience.md) § *Tooling*). Pathway fallback is not needed: the origin group fails over inside the CDN ([T61](test-61-origin-group-failover.md)) | P1-ak, P1-al |
 
 **Inside the hardware window**, which the analyser and IRDs share, measure against the live feed; debug
 no harness and run no cell that needs no hardware. [T33](test-33-gate2-preparation.md) orders the work.
