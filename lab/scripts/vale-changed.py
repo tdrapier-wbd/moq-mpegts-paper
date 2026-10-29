@@ -7,7 +7,7 @@
     vale-changed.py FILE...          # only these files
     vale-changed.py --all FILE...    # every line of these files
 
-Public Markdown is README.md and *.md under docs/, lab/ and interop/, less *.local.md. Exit status 1
+Public Markdown is README.md and *.md under docs/ and lab/, less *.local.md. Exit status 1
 when any alert is reported, 2 when Vale is missing.
 """
 
@@ -31,7 +31,7 @@ def public(path):
     p = Path(path)
     if p.suffix != ".md" or p.name.endswith(".local.md"):
         return False
-    return p.parts == ("README.md",) or (len(p.parts) > 1 and p.parts[0] in ("docs", "lab", "interop"))
+    return p.parts == ("README.md",) or (len(p.parts) > 1 and p.parts[0] in ("docs", "lab"))
 
 
 def changed_files(rev, staged):

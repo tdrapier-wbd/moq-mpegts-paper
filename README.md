@@ -106,7 +106,7 @@ pass criteria fixed before the numbers, and per-experiment procedures, commands 
 way, and [`lab/upstream-contributions.md`](lab/upstream-contributions.md) records what was found,
 reported and verified in other projects.
 
-**Code contributed back** is in [`interop/`](interop/README.md) — a media-level test client for the
+**Code contributed back** is in [`lab/interop/`](lab/interop/README.md) — a media-level test client for the
 community [MOQ Interop Runner](https://github.com/englishm/moq-interop-runner), on the argument that a
 transport stream checks itself, so no decoder or frame capture is needed. The grooming component is a
 separate public crate, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer).

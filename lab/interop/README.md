@@ -81,7 +81,7 @@ never produced.
 With `moq` 0.9.8 this client carried media through `moq-dev`'s relays only, because the publisher
 then announced only when asked, which is fixed upstream. At `main`, `moq-dev`'s TS crosses seven of
 nine third-party relays intact from the subscriber's join; imquic and red5 lose packets, and on three
-relays a late subscriber never starts ([`lab/test-11-interop.md`](../lab/test-11-interop.md)
+relays a late subscriber never starts ([`lab/test-11-interop.md`](../test-11-interop.md)
 § *Results at `main`*). Every control-plane cell succeeds on those five, which is the argument for
 the profile.
 

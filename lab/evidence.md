@@ -56,7 +56,7 @@ an experiment says otherwise; the passthrough runs on the same builds and protoc
 | `t18-latency.py` | Delivery latency on the PES PTS, source to groomed egress | Encoder and decoder delay, so not camera-to-display |
 | `t6-hls-pull.py` | Segmented-lane failover from a client that retries | A player. It bounds what the protocol permits, because TSDuck and FFmpeg both abandon the stream at a failed playlist reload |
 | `tc`/`netem` | Loss, delay, reordering, shaped bottlenecks | Real congestion: its loss is Bernoulli, its jitter reorders, and it does not deliver the commanded loss unless [segmentation offload](../docs/glossary.md#transport-and-deployment-terms) is off. Impairment figures carry the counted fraction, or are stated as commanded where §3.3 shows the counters cannot be trusted |
-| Interop client ([`interop/`](../interop/README.md)), `compliance.py`, `cost-model.py` | Media-level relay carriage; structural checks; the economic model | Pacing; decoder acceptance; negotiated rates |
+| Interop client ([`interop/`](interop/README.md)), `compliance.py`, `cost-model.py` | Media-level relay carriage; structural checks; the economic model | Pacing; decoder acceptance; negotiated rates |
 
 **Two rig properties recur**: a ratio computed across two captures is invalid unless both cover the
 same media, and a control with the mechanism removed is worth more than a second run of the same arm.
@@ -554,7 +554,7 @@ congestion control; per-bitrate CPU figures from them are not for sizing.*
 capacity is not yet a substitutable commodity.
 
 The test is media-level — a 20 s transport stream whose own continuity counters and PSI/SI are the
-oracle ([T11](test-11-interop.md); client public in [`interop/`](../interop/README.md)) — run
+oracle ([T11](test-11-interop.md); client public in [`interop/`](interop/README.md)) — run
 as the interop runner's two cases, a subscriber present from the start and one joining 8.5 s in, on
 the opaque lane (P1, over the internet, one run per relay and two for imquic and red5, `moq-dev` from
 October 2026 `main` at both ends). **Both cases pass through `moq-dev`'s relay, libquicr and moqx;

@@ -27,8 +27,8 @@ set -uo pipefail
 
 OUT=${1:-/tmp/t11seg}
 REPO=${REPO:-$HOME/moq-mpegts-paper}
-FIXTURE=${FIXTURE:-$REPO/interop/fixture.ts}
-ORACLE=${ORACLE:-$REPO/interop/validate-ts.sh}
+FIXTURE=${FIXTURE:-$REPO/lab/interop/fixture.ts}
+ORACLE=${ORACLE:-$REPO/lab/interop/validate-ts.sh}
 PORT=${PORT:-8099}
 CACHE_PORT=${CACHE_PORT:-8098}
 SEGDUR=${SEGDUR:-2}

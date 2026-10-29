@@ -15,6 +15,8 @@ lab/upstream/*
 __pycache__/
 *.pyc
 
-# Vale packages are fetched by `vale sync`; only the vocabulary is ours
-.vale/styles/*
-!.vale/styles/config/
+# Agent and editor configuration, and the Vale setup, stay local
+.cursor/
+.claude/
+.vale/
+.vale.ini

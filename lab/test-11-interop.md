@@ -54,7 +54,7 @@ and running it for ourselves is the same work.
 
 ## Method
 
-Client, fixture and oracle live in [`interop/`](../interop/README.md) — see that README for the
+Client, fixture and oracle live in [`interop/`](interop/README.md) — see that README for the
 interface contract, usage and the sensitivity results.
 
 - **Fixture:** synthetic, generated at build time. 20 s, 2 Mbps CBR, H.264 640×360 + AAC, 1 s closed
@@ -568,7 +568,7 @@ side adopts #2015's framing.
       `moq-dev`'s `--passthrough` lane through its relay
 - [ ] The two TS cases, fixture and checker proposed to the runner as
       [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159); once
-      it merges, [`interop/`](../interop/README.md) retires and this file's method cites the runner
+      it merges, [`interop/`](interop/README.md) retires and this file's method cites the runner
 - [x] T11b: OpenMOQ's MSFTS example publisher through a `moq-dev` relay, across drafts 14, 16, 17
       and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
 - [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
