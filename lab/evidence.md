@@ -102,37 +102,37 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 
 ### 3.1 Does the transport carry a broadcast mux intact? — Yes on all three lanes, each departing from verbatim in a different direction; the opaque lane does not depart
 
-**For an operator:** no lane is ruled out on content. SRT changes nothing; segmented HTTP adds at
-most a PAT/PMT pair per segment, received by an HLS input that hands on the segments' bytes; the
-media-aware lane loses the mux's timing, so it depends on the groomer of §3.2.
+**For an operator:** no lane is ruled out on clear content. SRT changes nothing; segmented HTTP adds
+at most a PAT/PMT pair per segment, received by an HLS input that hands on the segments' bytes; the
+media-aware lane loses the mux's timing, so it depends on the groomer of §3.2, and carries nothing
+scrambled.
 
 **Over the public internet, by one instrument on one window** ([T4](test-4-remote-e2e-srt.md),
 ungroomed): **byte-faithful SRT is transparent on every criterion** — 13 of 13 PIDs at their source
 numbers, SDT, NIT, TDT/TOT, splice PIDs, stuffing, the source mux rate exactly (9,945,951 b/s), the
 source PSI cadence and PCR grid, and every PCR within 481 ns of its byte position, the source's own
 accuracy delivered intact. **The media-aware
-lane is faithful to the mux as bytes and not as a timed object**: identity, PIDs, SI and splice
-signalling survive; stuffing, PSI density (8.04 → 2.51 PAT/s, mean gap 124 → 399 ms against P1's
-500 ms) and PCR spacing do not. Every elementary stream keeps its PID, `stream_type` and descriptors,
-SCTE-35 included ([T2](test-2-media-aware-transparency.md), P1). The importer records the source
+lane is faithful to the mux as bytes and not as a timed object**: identity, SI, SCTE-35 and every
+PID with its `stream_type` and descriptors survive ([T2](test-2-media-aware-transparency.md), P1);
+stuffing, PSI density (8.04 → 2.51 PAT/s, mean gap 124 → 399 ms against P1's 500 ms) and PCR
+spacing do not. The importer records the source
 mux rate and the exporter pads to it, +0.36 % of the source (file domain, moq 0.11.2,
 [T13](test-13-downstream-grooming.md)), which makes the P2 gate answerable on the ungroomed
 egress: it fails, with 0 of 1,807 PCRs inside it.
 
 **SI.** On per-table snapshot tracks the EIT's distinct sections equal the source's exactly across an
 8-day EPG, sparse sub-tables included, bitrate-neutral, with a ~1 ms join
-([T17](test-17-si-snapshot-tracks.md)). TDT/TOT is proxied byte-identically, but on the
-deployed build it was re-emitted on the exporter's own 30 s grid and arrived **~14 s late**
-([T15](test-15-point-to-point-cadence.md)); upstream has merged a fix this campaign has not
-re-measured. **Non-ideal sources** cross — open-GOP video, one-byte audio damage at a cost of one 24 ms
+([T17](test-17-si-snapshot-tracks.md)). TDT/TOT is proxied byte-identically but, on the
+deployed build, re-emitted on the exporter's own 30 s grid, arriving **~14 s late**
+([T15](test-15-point-to-point-cadence.md)); upstream's fix is unmeasured. **Non-ideal sources** cross — open-GOP video, one-byte audio damage at a cost of one 24 ms
 frame, splices left as gaps — with three residuals: ~1/16 splices invisible to the continuity counter,
 256 ms of good AC-3 lost per splice, and recovered gaps signalled nowhere (§5).
 
 **A multi-programme mux** ([T10](test-10-mpts-multiservice.md); P1, file domain, one host) is
 flattened by builds up to moq 0.12.8 into one PAT entry and one PMT, while SDT and EIT still list every
 service. Upstream `main` from the end of September 2026 splits it instead, publishing each programme as
-its own intact broadcast (four of four runs), with each SDT still listing every service. A multiplex
-travels as N single-programme feeds, and reassembly is the receiver's job.
+its own intact broadcast (four of four runs), with each SDT still listing every service; reassembly
+is the receiver's job.
 
 **Segmented HTTP is transparent to what a mux contains and not to when it was sent**
 ([T14](test-14-data-plane-comparison.md), [T3](test-3-opaque-transparency.md)). A
@@ -140,9 +140,8 @@ travels as N single-programme feeds, and reassembly is the receiver's job.
 counters of the PAT and PMT it injects — and across three clips it matches the opaque lane on content,
 CAT and TDT/TOT included. That packager re-multiplexes and cuts by picture type
 ([T11](test-11-interop.md)), so the claim is **verbatim in payload, not as a mux**. The injected
-pair costs predictable PCR accuracy: registered in advance and measured over a ~125 ms internet path,
-exactly 1.00 pair per segment head and 302.148 µs against 302.4 µs predicted, with 0 violations at
-500 µs. Groomed, it passes at 481 ns (§3.2). **What survives reception depends on the HLS input**
+pair costs a PCR accuracy registered in advance: over a ~125 ms internet path, 1.00 pair per segment
+head and 302.148 µs against 302.4 µs, 0 violations at 500 µs; groomed, 481 ns (§3.2). **What survives reception depends on the HLS input**
 ([T65](test-65-ird-hls-profile.md); P1, loopback, one clip, one run, from TSDuck's packager and
 ours, which injects nothing): TSDuck's, GStreamer's and our inputs hand on the segments' packets with
 every DVB table and SCTE-35 section verbatim, and FFmpeg's remux replaces the multiplex: its own PAT,
@@ -158,7 +157,12 @@ schedule. On a live 25 Mb/s contribution feed it holds across hosts (P1, one 150
 a 2 s delay): a leg in another availability zone, one joining 8 s late and one over the internet are
 each the hand-off capture's packets in order and identical to each other, every PCR within 2 ms.
 Upstream's relay test holds the import byte-identical through a flagged 20 s forward jump but for
-the break marker's sequence (P0, software, `moq-lite` 06 and `moq-transport` 14).
+the break marker's sequence (P0, software, `moq-lite` 06 and `moq-transport` 14). **A scrambled
+multiplex crosses it unaltered, and the groomer too** ([T66](test-66-scrambled-carriage.md); P1 and
+P2, upstream `main`, October 2026, loopback, one clip, one graded run): under DVB-CISSA with rotating
+control words, every scrambled packet, CAT, ECM and EMM arrives in order, and a descrambler
+before the groomer returns the clear source; the media-aware import refuses every scrambled unit and
+announces no broadcast. No key ladder ran.
 
 ### 3.2 What does delivery do to the clock, and can it be repaired? — Yes, on both lanes and on the wire in software; the wire is not the file, and on the media-aware lane the repair costs latency
 
@@ -182,8 +186,8 @@ measurement 11): **0 of 20,193 PCR intervals above 40 ms over 300 s, worst 30.1 
 errors, 0 drops, 0 underruns and exact 11 Mb/s CBR. It takes three groomer properties: the PCR slot is
 reserved on its deadline rather than waited for (inside a burst no spare slot comes), the media rate is
 a ratio of sums over 2 s, and release is closed on occupancy. **Cushion depth is not the variable**: an
-eightfold ladder moved repetition not at all. T19's fourth criterion, no latency regression, is **not**
-met: the passing arm delivers at 2,447 ms (§3.11). **Any "0 %" must name its domain** — a file grades
+eightfold ladder moved repetition not at all. T19's criterion of no latency regression **fails**: the
+passing arm delivers at 2,447 ms (§3.11). **Any "0 %" must name its domain** — a file grades
 the stage run offline, and the same stage once passed on file and failed live; neither grades arrival.
 
 **Over a day** ([T21](test-21-permanence-soak.md), moq 0.10.0 before its development line
@@ -921,8 +925,7 @@ Stated in one place, because the individual caveats understate their sum.
 **No hardware.** Nothing has been fed to a hardware IRD or graded by a hardware TR 101 290 analyser.
 Every conformance figure is graded from bytes, a file's or a socket capture's on a general-purpose OS,
 or by a reference software receiver; where file and socket disagree (§3.2) the socket is closer to an
-IRD and still is not one, and no figure grades arrival at an IRD's input. The make-or-break gate has
-never been attempted.
+IRD and still is not one, and no figure grades arrival at an IRD's input.
 
 **Delivery latency, not glass to glass, on healthy paths.** Encoder and decoder delay are unmeasured and
 do not differ between planes, so the comparison holds while the total does not. Loopback has no RTT and
@@ -934,10 +937,9 @@ feed across hosts (§3.1).
 
 **The data-plane comparison is single-route, single-clip and single-host.** The segmented arm of the
 carriage, cadence and latency comparisons is one route, one clip and one run per leg on loopback, with
-per-packet framing derived. Its impairment cells were re-measured on HTTP/3 through a byte-faithful
-receiver, because the first HTTP/3 receiver re-multiplexed and graded itself — reporting 0 continuity
-errors where ten packets had been excised ([T42](test-42-h3-receiver-fidelity.md)); everything
-else on that lane is HTTP/1.1 over TCP. A per-packet impairment is not a per-byte one: at matched MTU
+per-packet framing derived. Its impairment cells are on HTTP/3 through a byte-faithful receiver,
+since a re-multiplexing one graded ten excised packets clean ([T42](test-42-h3-receiver-fidelity.md));
+everything else on that lane is HTTP/1.1 over TCP. A per-packet impairment is not a per-byte one: at matched MTU
 the QUIC arm sends ~1.5× the packets of the TCP arm.
 
 **Impairment matrices are one run per condition** on `netem` models whose loss is Bernoulli and whose
@@ -947,9 +949,7 @@ jitter reorders, and the congestion aggregate reproduces only to about ±15 %.
 holds across two availability zones on single-track content only (§3.4). Only T12 and, over
 CloudFront, T59 and T61 merged RTP legs, packetised by TSDuck or our groomer; the deterministic
 exports are transport-stream identity, which ST 2022-7 needs and does not test. The ST 2022-7 oracle
-is self-tested against 14 adversarial conditions and 53 assertions — eight match the standard's
-requirements, one is unspecified, three are not modelled, one is a blind spot — and is not offered as
-reference-compliant.
+is self-tested ([T12](test-12-dual-path-handoff.md)) and not offered as reference-compliant.
 
 **Fan-out is one relay in one region**: cross-host at 0.72 ms RTT, and through one CDN-hosted relay
 across the internet; no multi-hop tree or edge fleet, so it bounds relay capacity and says nothing

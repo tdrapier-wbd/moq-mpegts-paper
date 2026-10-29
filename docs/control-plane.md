@@ -519,8 +519,12 @@ the 13818-1 buffer model ([Comparison](comparison.md) §8). The binding constrai
 lane a scrambled feed must move to, which has one open implementation today ([Comparison](comparison.md)
 §12). **This design weights conditional access as a
 narrow gate on the carriage choice, not an argument for either lane**: a route that must deliver a
-feed still scrambled selects byte-faithful carriage, and no other route is affected. Nothing here is
-measured: no part of this campaign scrambles anything.
+feed still scrambled selects byte-faithful carriage, and no other route is affected. Only carriage is
+measured ([Evidence](../lab/evidence.md) §3.1): a scrambled multiplex crosses the opaque lane and the
+groomer unaltered, the media-aware lane publishes none of it, and the key ladder is not exercised.
+**An affiliate whose IRD lacks BISS-CA is served at the receiver**, which descrambles onto the
+affiliate's LAN, in the clear as behind SRT and Zixi today, or re-scrambles it under BISS's older
+fixed-key modes (BISS-1, BISS-E); the descrambling is measured, the re-scrambling is design.
 
 **At rest**, logs, audit records and any captures are encrypted, partitioned by tenant and subject to
 retention limits — captures in particular may contain content and must be tightly controlled.
