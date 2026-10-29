@@ -1,6 +1,7 @@
 # Test 66 — A scrambled multiplex through the opaque lane, the groomer and a descrambling receiver
 
-**State: criteria fixed; not yet run.**
+**State: run twice; the second run holds every criterion, the first failed C on the rig's own
+start-up buffering.**
 
 Part of [P1-al](planned-experiments.md#p1--establishes-where-one-architecture-is-superior). Rig:
 [`t66-scrambled-carriage.sh`](scripts/t66-scrambled-carriage.sh).
@@ -69,4 +70,38 @@ D and E read the same file in parallel.
 - **The control words stand in for the key ladder.** The receiver steps through the same list from
   the first crypto-period, which a receiver joining late cannot do; BISS-CA's EMM (the session key
   under the receiver's RSA key) and ECM (the session word under the session key) are not exercised.
-- One clip, one run, loopback; the ECM and EMM do not change between crypto-periods.
+- One clip, one graded run, loopback; the ECM and EMM do not change between crypto-periods.
+
+## Results
+
+| # | Arm | Measured | Grade |
+|---|---|---|---|
+| 1 | Control | 753,959 payload packets on the four PIDs, none clear; 11 parity changes; 0 differ from the clear fixture once descrambled | pass |
+| 2 | A | 786,591 packets in order from source packet 6,369 (the first random-access indicator on 111) to the end; 0 gaps, 0 foreign; CAT 238, ECM 1,264, EMM 1,264, as in the span; 0 continuity errors, PCR intervals ≤ 25.0 ms | pass |
+| 3 | B | 753,491 content packets, A's span without its nulls; 0 gaps, 0 foreign; 0 continuity errors, PCR ≤ 28.8 ms; every scrambled packet and CA PID count as in A | pass |
+| 4 | C | 753,491 packets equal to the descrambled control, 0 gaps, 0 foreign, 0 continuity errors, PCR ≤ 27.5 ms; FFmpeg logs one AC-3 "incomplete frame" on the capture and the same on the clear span | pass |
+| 5 | D | the importer types 111 and 121 as decoded tracks and refuses every unit on the scrambled PIDs as damaged ("missing PES start code prefix": 4,299 on 111, 553, 415 and 2,995 on 121, 123 and 131), delivers 0 access units, never announces the broadcast, and at end of input fails to publish its catalog ("TS sections reached end of input without a media timestamp"); the export writes 0 bytes | as predicted, and further: no broadcast at all |
+| 6 | E | the segmenter anchors its date-time and names no segment | as predicted |
+
+The table is the second run. The first differed only in C, which failed criterion 4 on one foreign
+packet: `tsp` loads half its buffer (8 MB, 6.7 s of this source) before it processes, so the pacer
+met a 6.7 s lead against its 2.5 s cap and trimmed 30,641 packets before its first output and 145
+after its eighteenth, leaving 3 continuity errors and one PCR packet it inserted across the splice.
+The second run sets `--initial-input-packets 7`; the pacer's lead is 36 ms and it drops nothing.
+
+## Conclusions
+
+1. **BISS-CA asks nothing of the opaque lane or of the groomer.** Scrambling leaves the adaptation
+   field clear, and neither reads past it: the lane groups on the random-access indicator and
+   carries every scrambled packet and conditional-access PID unaltered, and the groomer re-times on
+   the PCR alone. Control §7.3's premise survives.
+2. **The soft receiver can descramble for an IRD that lacks BISS-CA**, at the scrambling layer: a
+   `tsp` descrambler before the pacer hands the IRD the clear source packet for packet. A `tsp`
+   stage in a live chain needs a small `--initial-input-packets`, or the pacer trims and splices
+   its start. The key ladder that would give the receiver its control words is not exercised.
+3. **The media-aware lane carries no part of a scrambled multiplex.** A subscriber finds no
+   broadcast; the publisher logs damage each second, and its only error comes at end of input,
+   which a live feed never reaches.
+4. **Our segmenter cannot cut a scrambled source**: it names each segment from a PES timestamp.
+   Naming from the PCR, which stays clear, would remove that dependency, untested; `tsp -O hls` is
+   untried.

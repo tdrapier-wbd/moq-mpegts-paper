@@ -114,7 +114,7 @@ PIDS+=($!)
 	"$PACER" "127.0.0.1:$UDP_B" "$RATE" "${PACE[@]}" 2>b-pacer.log) &
 PIDS+=($!)
 ("$MOQ" "${C[@]}" --broadcast "$BP" export ts --passthrough --delay 1s 2>c.log |
-	tsp --max-input-packets 7 --max-flushed-packets 7 \
+	tsp --initial-input-packets 7 --max-input-packets 7 --max-flushed-packets 7 \
 		-P descrambler "${PIDS_SCR[@]}" --dvb-cissa --cw-file cw.txt 2>c-descr.log |
 	"$PACER" "127.0.0.1:$UDP_C" "$RATE" "${PACE[@]}" 2>c-pacer.log) &
 PIDS+=($!)
