@@ -17,7 +17,10 @@ the stimulus by DTS (to 2 ticks).
 - **1+1** compares the two exports packet by packet from the start: identical, or where they part
   and on which side of the break.
 
-Usage: t41-rewind-grade.py <stimulus.ts> <out-dir> [--vpid 111]
+`--pts` matches and measures on presentation times instead: the export authors the DTS of each
+group's first pictures, so on content with B-pictures decode times miscount holes and the loss.
+
+Usage: t41-rewind-grade.py <stimulus.ts> <out-dir> [--vpid 111] [--pts]
 """
 
 import argparse
@@ -31,7 +34,7 @@ TS = 188
 JUMP = 200 * 90
 
 
-def units(path, vpid):
+def units(path, vpid, pts=False):
     """(decode time, packet index) of each video PES start in file order, and the packet index of
     the first packet on `vpid` that sets discontinuity_indicator, if any."""
     out, flag = [], None
@@ -49,7 +52,7 @@ def units(path, vpid):
             i += 1 + p[4]
         if not p[1] & 0x40 or not afc & 1 or p[i : i + 3] != b"\x00\x00\x01" or not p[i + 7] & 0x80:
             continue
-        b = p[i + 14 : i + 19] if p[i + 7] & 0x40 else p[i + 9 : i + 14]
+        b = p[i + 14 : i + 19] if p[i + 7] & 0x40 and not pts else p[i + 9 : i + 14]
         out.append((((b[0] >> 1) & 7) << 30 | b[1] << 22 | (b[2] >> 1) << 15 | b[3] << 7 | b[4] >> 1, k))
     return out, flag
 
@@ -85,10 +88,11 @@ def main():
     ap.add_argument("stimulus")
     ap.add_argument("out")
     ap.add_argument("--vpid", type=int, default=111)
+    ap.add_argument("--pts", action="store_true")
     a = ap.parse_args()
     o = a.out
 
-    stim, _ = units(a.stimulus, a.vpid)
+    stim, _ = units(a.stimulus, a.vpid, a.pts)
     cut = split(stim)
     s0 = sorted(t for t, _ in stim[:cut])
     s1 = sorted(t for t, _ in stim[cut:])
@@ -114,7 +118,7 @@ def main():
         if not os.path.exists(path) or os.path.getsize(path) < TS:
             print(f"leg {leg}: no output")
             continue
-        seq, flag = units(path, a.vpid)
+        seq, flag = units(path, a.vpid, a.pts)
         brk = split(seq, flag)
         legs[leg] = (path, seq, brk)
         if brk is None:
