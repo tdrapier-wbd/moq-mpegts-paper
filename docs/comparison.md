@@ -583,8 +583,8 @@ footprint on a common always-on feed — and a route that reads "incumbent" on d
 
 ### 13.2 The limits under every verdict
 
-Beyond the two §5.1 names, no hardware IRD and only healthy paths, five limits qualify every row
-above ([Evidence](../lab/evidence.md) §4). The data-plane comparison is one route and one clip. Each
+Besides the two limits §5.1 states, no hardware IRD and only healthy paths, five more qualify every
+row above ([Evidence](../lab/evidence.md) §4). The data-plane comparison is one route and one clip. Each
 impairment cell is one run, on `netem` models whose loss is Bernoulli. Every 1+1 result comes from a
 software receiver, and the ST 2022-7 oracle is self-tested, not reference-compliant. Fan-out is one
 relay in one region, and the resilience work a two-relay lab. Most media-aware results are on
