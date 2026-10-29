@@ -194,14 +194,43 @@ an adaptation field, as ours does on a synthetic splice
 ([`b8-discontinuity-test.sh`](scripts/b8-discontinuity-test.sh)); accept interlaced and open-GOP video; survive the failure of one
 origin or pathway, which neither TSDuck's HLS input nor FFmpeg does
 ([T6](test-6-relay-resilience.md)) and ours does ([T59](test-59-segmented-1plus1-cloudfront.md),
-[T61](test-61-origin-group-failover.md)); and pace its output to the PCR before an IRD
-([T16](test-16-grooming-segmented-http.md)).
+[T61](test-61-origin-group-failover.md)); and pace its output to the PCR before an IRD, re-basing
+where the flag says the clock moved ([T16](test-16-grooming-segmented-http.md); *The groomer at
+the flag*, below).
+
+## The groomer at the flag
+
+The flag serves an IRD only if the stage behind the receiver honours it.
+[`t65-groomer-flag.sh`](scripts/t65-groomer-flag.sh) joins `tsp -O hls` segments of synthetic
+FFmpeg clips with `b8-hls-recv.py`, hands them one segment per burst every 2 s as a live fetch
+does, to `mpegts-pacer` stream-clocked at `seg-recv-leg.sh`'s 8 s cushion and 14 s cap, and grades
+the RTP it sends. Loopback, one run per case and build. The properties judged, set after the scratch
+run that found the first defect rather than before it: one flagged PCR step where the clock moved;
+video PTS steady against the emitted clock; nothing withheld beyond an outage the stream carries.
+
+| Case | Input | `0c7a5ba` (T62's build) | `97f3a38` |
+|---|---|---|---|
+| `step` | a flagged +3.000 s step, 20 s clip to 10 s clip | 9.0 s withheld from the wire, then an unflagged +9.04 s PCR jump; 17,298 content packets | one flagged +2.98 s PCR step; 22,942 content packets |
+| `splice` | a flagged +4,994 s step | re-based with the emitted PCR left on the old time base: video PTS 4,994 s ahead of the clock from the splice on | one flagged +4,993.99 s PCR step |
+| `restart` | one clip, segments 6–8 dropped, the return flagged, its clock carried on | the 6 s outage withheld, then rejoined; 15,877 content packets | the same; 15,875 |
+
+Elsewhere video PTS minus the clock stayed within 0.685–0.914 s. Content counts move by up to
+about 1,400 packets with when the first datagram goes out, which is why `step` puts its step 12 s
+into steady output.
+
+On the old build a flagged step under 5 s was not paced as content but lost: the leg read the step
+as stream it had missed, withheld it, and dropped what arrived for it. And every re-base, at any
+size, left the emitted PCR a splice away from the content's PTS. `97f3a38` fixes both: a declared
+step is a splice unless the leg's own silence, at most a quarter longer, accounts for it, which is
+what an origin restarting on the same clock looks like; and after a re-base the emitted PCR is the
+source's own, flagged on the first PCR of the new time base, alike on both legs of a pair.
 
 ## Limits
 
 No IRD is measured: the stacks stand in for what an HLS input may be built on, and which one a
 product uses is not known. One clip, one run, loopback, healthy origin; a 120 s window holds 8 TDT
 and 12 EIT schedule cycles. The clip has no CAT and no TOT, which T3 carried through TSDuck. What the
-validator calls a format change on this clip is not identified. Downstream of the flag, our pacer's
-stream-clocked mode does not read it (read from its code): it re-anchors on a backward step or a
-forward one over 5 s, so a flagged forward step under 5 s is paced as content.
+validator calls a format change on this clip is not identified. The groomer cases are synthetic
+clips, one run each. A flagged step no longer than about a fetch interval is still read there as
+the clock carrying on, since only the leg's silence tells it from a restart (from the groomer's
+code).
