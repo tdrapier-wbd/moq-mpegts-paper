@@ -66,7 +66,7 @@ These carry the reliability, scaling and cost arguments, so they appear in every
 | **Loss, reordering, outage** | The three impairment shapes measured: packets that never arrive, packets that arrive out of order, and a path that carries nothing for a while. QUIC declares a packet lost once enough later packets have arrived, so heavy reordering can read to the sender as heavy loss. |
 | **Idle timeout** | How long a QUIC endpoint waits without hearing from its peer before it treats the session as dead — 30 s by default on the builds most results here were measured on, and 10 s from moq 0.14.0. It bounds how quickly a hard failure is detected, and an outage longer than it ends the session ([Evidence](../lab/evidence.md) §3.4). |
 | **GSO** (generic segmentation offload) | A Linux host setting that lets a sender hand the kernel many packets in one call. It changes relay CPU cost materially, so every capacity figure names it ([Evidence](../lab/evidence.md) §3.6). |
-| **Supervisor** | A process manager, such as systemd, that restarts a program when it exits. A standing subscriber on the default protocol still needs one to survive a publisher crash, and a publisher needs one wherever its source's timeline steps back, because the import ends there ([Evidence](../lab/evidence.md) §3.4, §3.13). |
+| **Supervisor** | A process manager, such as systemd, that restarts a program when it exits. A standing subscriber on the default protocol still needs one to survive a publisher crash, and a publisher on a release needs one wherever its source's timeline steps back, because the released import ends there; upstream's current import republishes itself ([Evidence](../lab/evidence.md) §3.4, §3.13). |
 
 ## Broadcast terms used without definition
 

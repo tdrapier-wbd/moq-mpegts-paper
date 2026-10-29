@@ -285,10 +285,11 @@ and the ~650 ms defect bounds that in MoQ's favour. Both paths were healthy, so 
 the recovery the tunnels exist for, and **neither lane has been graded on a hardware IRD**
 ([Evidence](../lab/evidence.md) §4).
 
-**A deployment constraint separate from latency.** From moq 0.14.0 a backward timestamp step ends
-the import by design, so a source whose timeline steps back is republished at each step, at 2.8–3.8 s
-of programme a step and not hitlessly for a 1+1 pair, or the build is pinned; no build is
-measured to carry every timeline case ([Evidence](../lab/evidence.md) §3.13).
+**A deployment constraint separate from latency.** From moq 0.14.0 a release ends the import at a
+backward timestamp step, so a source whose timeline steps back is republished at each step behind a
+supervisor, at 2.8–3.8 s of programme a step and not hitlessly for a 1+1 pair. Upstream's current
+import republishes itself instead, for 1.4–1.6 s at an encoder switch, in no release measured and
+untested for a 1+1 ingest pair or a continuous restarting source ([Evidence](../lab/evidence.md) §3.13).
 
 ### 5.2 Whether the sub-second band matters
 

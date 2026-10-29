@@ -289,7 +289,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | | Measured | Domain |
 |---|---|---|
 | Groomed, MoQ lane, **current, over minutes** | **0 of 20,193 intervals above 40 ms over 300 s, 30.1 ms maximum**, with 0 continuity errors, 0 groomer drops, 0 underruns and 10,999,999 b/s against a nominal 11,000,000 | **wire** |
-| Groomed, MoQ lane, **across a source rewind** | **27 ms content gap, the control's figure**, on the September 2026 builds measured; from moq 0.14.0 a backward step ends the import instead (§12, question 3). Before upstream's rewind fix the same arm held every conformance figure — 0 above 40 ms, 0 continuity errors, exact CBR — across a **62.8 s hole in the programme**, which the wire could not show. That is why the content-gap counter is in the measurement; see [T23](../lab/test-23-pcr-discontinuity-classes.md) | **wire + content-gap counter** |
+| Groomed, MoQ lane, **across a source rewind** | **27 ms content gap, the control's figure**, on the September 2026 builds measured; from moq 0.14.0 a release ends the import at a backward step, which upstream's current import republishes across (§12, question 3). Before upstream's rewind fix the same arm held every conformance figure — 0 above 40 ms, 0 continuity errors, exact CBR — across a **62.8 s hole in the programme**, which the wire could not show. That is why the content-gap counter is in the measurement; see [T23](../lab/test-23-pcr-discontinuity-classes.md) | **wire + content-gap counter** |
 | Groomed, MoQ lane, **across the 33-bit PCR rollover** | carried correctly at every point: a 30.080 ms step in modulo arithmetic, 6,259 PCRs within ±500 ns, 0 continuity errors, 52 ms content gap against the control's 26 ms | **wire alone suffices** |
 | Groomed, MoQ lane, before the edge stage reserved the PCR slot | **131–159 intervals above 40 ms in 25 s, 227 ms maximum**, and **unchanged at every cushion across an eightfold ladder** | **wire** |
 | Groomed, MoQ lane | **0 %** of intervals above 40 ms, exact CBR, 0 `pcrverify` violations at ±500 ns across four clips | **file** |
@@ -1206,11 +1206,14 @@ Ranked by how much a negative answer would change the architecture.
    control's content gap ([T23](../lab/test-23-pcr-discontinuity-classes.md)). **A seventh case is the
    ordinary one**: a continuous timeline whose content restarts. It stops the importer at the first
    join on moq 0.11.2 and 0.12.1, is published through five joins on moq 0.12.8, and from moq 0.14.0
-   ends the import at the first backward step by design, flagged or not
+   ends a release's import at the first backward step by design, flagged or not
    ([T40](../lab/test-40-continuous-join-through-srt.md),
-   [T41](../lab/test-41-import-reanchor-coverage.md); [Evidence](../lab/evidence.md) §3.13). A deployment
-   whose source timeline steps back must republish at each step, at 2.8–3.8 s of programme a step,
-   or pin the build.
+   [T41](../lab/test-41-import-reanchor-coverage.md); [Evidence](../lab/evidence.md) §3.13). On a
+   release, a source whose timeline steps back is republished at each step behind a supervisor, at
+   2.8–3.8 s of programme a step and not hitlessly for a 1+1 pair. Upstream's current import
+   republishes itself instead, for 1.4–1.6 s at an encoder switch
+   ([T67](../lab/test-67-import-step-restart.md)), in no release measured and untested for a 1+1
+   ingest pair or a continuous restarting source.
    **T-STD occupancy is tested in software**: behind the media-aware lane it is beyond this gateway's
    reach, and upstream's merged fixed-delay export meets it in the subscriber (§4.3). What remains
    untested is source-clock drift and mid-stream PID change; each has a reproducible stimulus and an
