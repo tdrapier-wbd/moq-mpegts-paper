@@ -255,7 +255,7 @@ continuous. Every media, audio, teletext, splice and stuffing packet is byte-ide
 > and `testloop`'s CAT — and adds exactly one PAT/PMT pair per segment and nothing else. That
 > addition is not free: it displaces every later PCR in its segment relative to a constant-rate byte
 > clock, taking file-domain PCR accuracy from 37–74 ns to 109–302 µs, or 2,453 violations at the
-> TR 101 290 P2 gate against the source's zero. P1 repetition is untouched. So the arm is transparent
+> TR 101 290 P2 gate against the source's zero. PCR repetition is untouched. So the arm is transparent
 > to the mux's *content* and not to its *clock*, and the clock half is closed by the groomer of
 > [T16](test-16-grooming-segmented-http.md) rather than by the carriage.
 

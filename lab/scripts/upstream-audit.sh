@@ -7,8 +7,10 @@
 # nothing: each flag is a row to re-read.
 #
 #   merged, closed   the item ended: the ledger records its final state; the row goes
-#   reply <login>    someone other than us spoke after our last word and the row's date
+#   reply <login>    someone other than us spoke after the row's date (after our last word in a row
+#                    with no date): a comment we posted below it is not proof we read it
 #   bot <login>      an automated reviewer did
+#   xref <#N>        another issue or pull request referenced the item after the row's date
 #   ci <checks>      failing checks on a pull request that the row does not already name
 #   changes          a reviewer requested changes
 #   draft            the pull request is a draft (reported, not flagged)
@@ -26,7 +28,7 @@ while [[ $# -gt 0 ]]; do
 		shift 2
 		;;
 	-h | --help)
-		sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	*)
@@ -48,13 +50,14 @@ def bot: test("\\[bot\\]$|^(github-actions|coderabbitai|copilot|chatgpt-codex-co
 (([.comments[]? | {who: .author.login, at: .createdAt}]
 	+ [.reviews[]? | select(.state != "PENDING") | {who: .author.login, at: .submittedAt}])
 	| sort_by(.at)) as $words
-| ([($words | map(select(.who == $me)) | last | .at // ""), $read] | max) as $mine
+| (if $read != "" then $read else ($words | map(select(.who == $me)) | last | .at // "") end) as $mine
 | ($words | map(select(.at > $mine and .who != $me))) as $after
 | ($words | last) as $last
 | [
 	(if .state == "MERGED" then "merged" elif .state == "CLOSED" then "closed" else empty end),
 	($after | map(select(.who | bot | not)) | if length > 0 then "reply " + (map(.who) | unique | join(",")) else empty end),
 	($after | map(select(.who | bot)) | if length > 0 then "bot " + (map(.who) | unique | join(",")) else empty end),
+	($xrefs | map(select(.at > $mine and .who != $me and (.who | bot | not))) | if length > 0 then "xref " + (map("#\(.n)") | unique | join(",")) else empty end),
 	([.statusCheckRollup[]? | select((.conclusion // .state // "") | test("FAILURE|ERROR|TIMED_OUT|CANCELLED"; "i")) | (.name // .context)]
 		| unique | map(select(. as $check | $row | contains($check) | not))
 		| if length > 0 then "ci " + join(",") else empty end),
@@ -78,7 +81,10 @@ while IFS= read -r row; do
 		else
 			json=$(gh issue view "$num" -R "$repo" --json state,comments)
 		fi
-		jq -r --arg me "$ME" --arg id "$repo#$num" --arg row "$row" \
+		xrefs=$(gh api --paginate "repos/$repo/issues/$num/timeline" \
+			--jq '.[] | select(.event == "cross-referenced") | {at: .created_at, who: (.actor.login // ""), n: .source.issue.number}' |
+			jq -s .)
+		jq -r --arg me "$ME" --arg id "$repo#$num" --arg row "$row" --argjson xrefs "$xrefs" \
 			--arg read "${seen:+${seen}T23:59:59Z}" "$JQ" <<<"$json"
 	done
 done <<<"$ROWS"

@@ -31,7 +31,7 @@ tsp -I file <clip> -P analyze -O drop
 tsp -I file <clip> -P pcrverify -O drop
 tsp -I file <clip> -P pcrverify --jitter-max 500 -O drop     # then 50, 5
 tsp -I file <clip> -P pcrverify --absolute --jitter-max 13 -O drop   # then 5, 2, 1
-# 3. PCR interval / repetition (TR 101 290 P1, ≤ 40 ms) — see lab/README.md awk one-liner
+# 3. PCR interval / repetition (TR 101 290 P2, ≤ 40 ms) — see lab/README.md awk one-liner
 tsp -I file <clip> -P pcrextract --pcr --csv -o <clip>_pcr.csv -O drop
 # 4. continuity-counter integrity (no output = 0 errors)
 tsp -I file <clip> -P continuity -O drop

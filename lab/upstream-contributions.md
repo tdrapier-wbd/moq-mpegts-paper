@@ -857,8 +857,8 @@ The question C6 could not close was whether the soft second term converges (+1.8
 [T21](test-21-permanence-soak.md)'s 24 h soak closes it: relay growth past warm-up follows a
 **logarithm** (R²=0.9895 vs 0.9097 for a line), quarterly slopes halving — 9.85, 4.56, 2.42, 1.75 MB/h.
 The run reaches baseline +242.6 MB at 24 h, past C6's +200.5 MB asymptote; log extrapolation ~519 MB at
-a year. Posted on #2745 as promised follow-up (data point, not re-open), stating that extrapolated
-asymptote is not observed plateau and both legs are single runs on one topology.
+a year. Posted on #2745 as a data point: the asymptote is extrapolated, not observed, and both legs
+are single runs on one topology.
 
 **The same run found growth that is not the relay's:** over 24 h the relay grew 243 MB and
 **`moq import ts` grew 137 MB**, so end-point totals make the relay look worse when it is the better
@@ -1548,10 +1548,10 @@ the SI track's object included. TRACK_STATUS's undefined code (#842, closed) rea
 subscription: [#817](https://github.com/openmoq/moqx/issues/817), whose open fix covers it.
 **Open:** a local moqx on draft 16, v0.3.6 or the fixed snapshot, serves the joining FETCH (our
 groups restart at 0, short of #795's precondition); on draft 18 the node refuses it, unforwarded, to
-whichever subscriber opens a track there, losing a once-published catalog
-([T52](test-52-cdn-relay-fanout.md)); on the latest image, 14 openers of 14, no later joiner,
-and no mid-group join lost its session
-([re-tested](https://github.com/openmoq/moqx/issues/795#issuecomment-6418121868)). The snapshot's
+a track's opener, losing a once-published catalog ([T52](test-52-cdn-relay-fanout.md)); on the
+latest image 14 openers of 14, no later joiner; no mid-group join lost its session
+([re-tested](https://github.com/openmoq/moqx/issues/795#issuecomment-6418121868)); cause: the
+opener shares the publisher's I/O thread ([#883](https://github.com/openmoq/moqx/issues/883)). The snapshot's
 64-bit Hop ID ([moq#6545](https://github.com/moq-dev/moq/issues/6545)) is fixed by
 [#6614](https://github.com/moq-dev/moq/pull/6614).
 

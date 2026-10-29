@@ -12,7 +12,7 @@
 > **[T22](test-22-silent-media-plane-failure.md)'s recommended detector fails outright.** Across a
 > **57.22 s** hole in the video, PCR progression, continuity, PCR repetition and PCR accuracy are all
 > green: **0 continuity errors, 0 intervals over 40 ms, worst interval 30.080 ms**, identical to the
-> control. The entire TR 101 290 P1 set passes over a service with no pictures in it. T22 concluded
+> control. The entire TR 101 290 P1 set and P2's PCR checks pass over a service with no pictures in it. T22 concluded
 > that "PCR progression is the detector to build on"; against the failure mode most likely to occur —
 > an encoder whose video path dies behind a running mux — **that conclusion is wrong**, and T22's
 > recommendation is corrected here.
@@ -45,7 +45,8 @@ detector took to notice. It closed with a limit it could not address:
 They are not obviously sufficient for a structural reason. **PCR rides on the video PID** in this clip
 as in most — PID 111 here, carrying both the video and the programme clock. An encoder whose video
 path has died while its mux and clock keep running therefore emits a perfectly healthy PCR over no
-pictures at all, and every timing check in TR 101 290 P1 is a check on that PCR. The detector the
+pictures at all, and the TR 101 290 timing checks graded here, P2's PCR repetition and accuracy, are
+checks on that PCR. The detector the
 architecture's observability case rests on is defeated by the failure mode a broadcaster is most
 likely to meet.
 
@@ -188,7 +189,7 @@ after the cushion has filled and before the injection.
 | session / transport | silent | **silent** | WARN, on recovery | fails for video |
 | carrier present | yes | **yes** | **yes** | fails |
 | continuity | 0 | **0** | **0** | fails |
-| PCR repetition / accuracy (P1) | pass | **pass** | **pass** | **fails** |
+| PCR repetition / accuracy (P2) | pass | **pass** | **pass** | **fails** |
 | **stuffing ratio** | 13.8 %, peak 27.1 % | **13.7 % → 95.2 %, fires t=27** | peak **27.0 %** | works for video, **fails for audio** |
 | **groomer underruns** | 0 | **406,850** | **0** | works for video, fails for audio |
 | groomer `content_gap_max_ms` | 201 ms | 200 ms | 199 ms | fails |
@@ -239,9 +240,11 @@ recovery — the discontinuity is declared once, at the seam, and nothing downst
    objection — that reassembling a mux from independently delivered tracks lets one dead track block
    the others — **is measured and does not occur.** This is the result that matters for the
    architecture, and it is a positive one.
-2. **A partial stall is invisible to the whole of TR 101 290 P1.** Zero continuity errors, zero PCR
-   intervals over 40 ms, a worst interval identical to the control's, and 57 s with no pictures. Any
-   monitoring design that stops at P1 will report a dead service as healthy, indefinitely.
+2. **A partial stall is invisible to TR 101 290's P1 set and its PCR checks.** Zero continuity errors,
+   zero PCR intervals over 40 ms, a worst interval identical to the control's, and 57 s with no
+   pictures. Any monitoring design that stops there will report a dead service as healthy,
+   indefinitely. P2's PTS check (2.5, a PTS repetition period over 700 ms) should see the video PID
+   stop carrying PTS; it was not graded.
 3. **[T22](test-22-silent-media-plane-failure.md)'s recommendation is corrected.** "PCR progression is
    the detector to build on" holds for a total stall and fails for a partial one, because PCR shares a
    PID with the video whose absence it is being asked to report. The detector to build on is

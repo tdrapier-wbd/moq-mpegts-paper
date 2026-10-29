@@ -302,7 +302,7 @@ is the faithful measure.
 
 - As shipped, the media-aware lane is *media-faithful* (elementary streams, continuity, PCR PID
   intact) but **not broadcast-transparent**: it dropped the DVB service layer, renumbered the PMT,
-  and emitted non-CBR bursty egress violating TR 101 290 P1 on 13.7 % and 25.5 % of intervals
+  and emitted non-CBR bursty egress violating TR 101 290 P2 on 13.7 % and 25.5 % of intervals
   for the two clips whose native PCR cadence is coarser than the exporter's group boundaries, and on
   0.10 % for the 27.5 Mbps mux whose own 27 ms cadence is already inside the limit. **Quote the range
   as 0–26 % across the four clips T7 measured, not as 13–26 %.**

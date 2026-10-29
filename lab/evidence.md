@@ -186,7 +186,7 @@ eightfold ladder moved repetition not at all. T19's fourth criterion, no latency
 met: the passing arm delivers at 2,447 ms (§3.11). **Any "0 %" must name its domain** — a file grades
 the stage run offline, and the same stage once passed on file and failed live; neither grades arrival.
 
-**Over a day** ([T21](test-21-permanence-soak.md), moq 0.11.2 before its development line
+**Over a day** ([T21](test-21-permanence-soak.md), moq 0.10.0 before its development line
 merged): 24.01 h on a continuous timeline, 632,199,204 packets, 0 continuity errors, 0 intervals
 above 40 ms (worst 30.08 ms), 0 underruns, 0 respawns, and the 33-bit rollover crossed in flight. The source replays a clip with clocks
 advanced across joins, so the claim is a synthetic clock over repeating programme; resource behaviour
@@ -540,7 +540,7 @@ setting, and **plateauing softly at ~100 MB above baseline per publisher** after
 ~2–2.5× that ceiling per publisher: a 14 h soak converged on +200.5 MB and a 24 h one reached +242.6 MB
 ([T8b](test-8b-congestion-control.md), T21). A day-long noq relay reads flat.
 
-**Over a day**, the importer on moq 0.11.2 grew linearly at +2.83 MB/h, failing T21's resource
+**Over a day**, the importer on moq 0.10.0 grew linearly at +2.83 MB/h, failing T21's resource
 criterion in that role; on moq 0.12.8 a 24.0 h re-soak passes every role, the importer at +0.23 MB/h
 (P1, one host, one run each). **Over a week, on the live feed**, the standing chain on moq 0.14.2 (an
 October 2026 `main`) ran 169 h unattended to an export on a second host across the public path, and
@@ -959,7 +959,7 @@ about internet-scale fan-out (§3.6).
 builds, moq 0.10.0 to 0.13.0. Upstream `main` changed materially in October 2026 — a fixed-delay export
 that schedules the wire, an epoch-based publisher identity, a backward timestamp ending the import — and
 results are on it only where stated. The permanence evidence is a week on moq 0.14.2 with the live feed,
-for continuity and resources, and a day on moq 0.11.2 with a synthetic source, for PCR intervals; PCR
+for continuity and resources, and a day on moq 0.10.0 with a synthetic source, for PCR intervals; PCR
 accuracy over days is ungraded (§5 row 14).
 
 **No production relay cluster or federated mesh**: the resilience work is a two-relay lab.

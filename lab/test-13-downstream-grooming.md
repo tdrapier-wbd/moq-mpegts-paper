@@ -294,7 +294,7 @@ off the subscriber's pipe instead, with [`t13-wire-padding.sh`](scripts/t13-wire
 | mean | 25.62 ms | 25.62 ms |
 | p95 / p99 | 26.18 / 27.96 ms | 26.19 / 27.97 ms |
 | stdev | 13.95 ms | 13.94 ms |
-| intervals > 40 ms (P1 gate) | 3 (0.15 %) | 3 (0.15 %) |
+| intervals > 40 ms (P2 gate) | 3 (0.15 %) | 3 (0.15 %) |
 | **intervals < 1 ms (arrived in a burst)** | **0** | **0** |
 | TS packets over the window (2,006 PCRs both) | 317,150 | **333,072 (+5.0 %)** |
 
@@ -335,7 +335,7 @@ intact so `mpegts.muxRate` is recorded and #3831's padding is active.
 | PCR-bearing PIDs | 0x006F | 0x006F |
 | rate over the capture | 9,945,951 b/s | **9,966,922 b/s** (+0.21 % of declared) |
 | PCR interval, min / median / max | 0.151 / 24.65 / 24.95 ms | **25.00 / 25.00 / 25.00 ms** |
-| intervals over the 40 ms P1 gate | 0 | **0** |
+| intervals over the 40 ms P2 gate | 0 | **0** |
 | intervals under 1 ms | 21 (0.09 %) | **0** |
 | instantaneous rate, median | 9,945,955 b/s | **421,120 b/s** |
 | instantaneous rate, min → max | 9,945,628 → 9,946,846 | **60,160 → 278,600,960** |
@@ -393,7 +393,7 @@ one broadcast, five concurrent subscribers, so no arm got a different source or 
 | instantaneous rate, spread | 66,143 % | **0 %** | 0 % |
 | intervals within 1 % of nominal | 3.3 % | **100 %** | 100 % |
 | PCR interval, max | 25.00 ms | 30.09 ms | 24.95 ms |
-| intervals over the 40 ms P1 gate | 0 | **0** | 0 |
+| intervals over the 40 ms P2 gate | 0 | **0** | 0 |
 | intervals under 1 ms | 0 | **3,051 (29.08 %)** | 21 (0.09 %) |
 | null share | 4.01 % | 5.40 % | 4.59 % |
 
@@ -802,55 +802,16 @@ exit included (1.03–1.04 s).
   `ffa5b81b`, which has no `--linger`, the exporter exits on a relay restart
   ([T6](test-6-relay-resilience.md)).
 
-#### What retiring the groomer would cost: the capability audit
+#### What retiring the groomer would cost
 
-Read from `mpegts-pacer`'s `README.md` and `src/`, and from `moq export ts --help` plus
-`rs/moq-mux/src/container/ts/export.rs` on `53f8aa99d`. The exporter's whole option surface is two
-flags — `--max-age` and `--mux-rate` — so most of this table is settled by that alone.
-
-| Capability | `moq export ts` | `mpegts-pacer` | Notes |
-|---|---|---|---|
-| **Rate and stuffing** | | | |
-| Constant output rate, stated explicitly | **yes**, `--mux-rate` | yes | |
-| Rate recovered from the source | **yes**, and better placed: measured at *import* off the PCR clock and carried in `mpegts.muxRate`, so it survives the re-mux | yes, but estimated at egress over a warm-up window plus headroom | The exporter's is the stronger design — the pacer cannot see the source's original stuffing |
-| Variable-rate source left unpadded | yes | yes | |
-| **Bytes placed on the schedule the PCR describes** | **no** — measured above | yes | The defect the whole head-to-head turns on |
-| **De-jitter buffer** | | | |
-| Pinned cushion / hard cap | **no** | yes | `--max-age` is a staleness deadline deciding what to *skip*, not a cushion deciding when to *release* |
-| Depth sized from the observed arrival pattern | **no** | yes | The exporter's own output needs ~1,500 ms to stop starving a groomer |
-| Segment-aware sizing and start gate | **no** | yes | Matters for a segmented input, not for this lane |
-| **Determinism** | | | |
-| Two processes byte-identical for the same media | **no** — 4.97 %, measured above | yes, by design (`Clocking::Stream`) | Neither is currently usable on a merged build: the pacer's mode cannot run on this source. On #4645's PCR grid `[unmerged]` it runs, and a co-started pair is byte-identical through the groomer (*On #4645's PCR grid*) |
-| RTP sequence numbering, SSRC, sequence seed | **no** | yes | Prerequisite for ST 2022-7 |
-| **Content liveness** | | | |
-| Stops rather than minting a dead carrier | **yes** | yes (`StallPolicy::Mute`, the default) | The exporter's good result above |
-| Stall *detected and reported* as distinct from end of stream | **no** — exits `Error: json: dropped` | yes — `stalls`, `content_gap_max_ms`, `SourceState` observable while running | |
-| Survives the source returning | **no** | yes — resumes, re-anchors the clock, flags the discontinuity | |
-| Policy on stall (mute / continue / fail) | **no** | yes | |
-| **Output sinks** | | | |
-| stdout / pipe | yes | yes | |
-| UDP, unicast or multicast | **no** | yes | The estate's actual ingest; see below |
-| RTP (RFC 2250) | **no** | yes | |
-| SRT, RTMP, WebRTC, HLS/DASH | **yes**, all four | no | The exporter is far ahead here, and it is why "retire the pacer" is a reasonable question to ask |
-| **PCR handling** | | | |
-| Regenerate onto a grid | yes, time-locked | yes, **byte**-locked | The distinction is the measured defect |
-| Preserve the source's PCR values | **no** | yes | For a soft player that re-buffers |
-| Insert PCR-only packets to hold the repetition limit | not as such | yes, 4,357 in this run | |
-| **Telemetry** | | | |
-| Underruns, late drops, buffer high-water, burst profile, arrival lead | **no** | yes, ~20 counters | |
-| A guard on the source's PCR *positions* | **no** | yes — the instrument that measured the 871 ms above | |
-
-**The audit's answer to "can the groomer be retired for this data plane" is no, and the reason is
-narrower than the table makes it look.** Most rows are features a deployment may not need. Three
-are not optional for primary distribution: the byte schedule, the 1+1 property, and a route onto
-the wire the receiving estate ingests. The exporter has none of the three, and the first is the one
-the other two wait on — a correct byte schedule would make the pacer's deterministic mode work,
-and it is also what a UDP sink would need to be worth having.
-
-**Two things run the other way and belong in the same summary.** The exporter's rate measurement is
-better placed than the pacer's, because import can see the source's stuffing and an egress-side
-estimator cannot. And `export` already speaks SRT, RTMP, WebRTC and HLS/DASH, which the pacer does
-not and will not; the pacer's scope is one narrow job on the TS egress.
+**On current `main`, of the three things primary distribution cannot do without, the exporter has
+two for a CBR source:** `--delay` lays the bytes on the schedule the PCR describes, and a co-started
+pair's exports are byte-identical ([T47](test-47-fixed-delay-export.md)). `--follow` and `--stitch`
+carry it across a republish, and `--passthrough` keeps the source's PCR
+([T48](test-48-passthrough-export.md)). What the groomer still adds is the third, the route onto the
+wire the estate ingests (UDP and RTP, with the sequence numbering ST 2022-7 needs), along with a stall
+policy and running counters, while the importer, which sees the source's stuffing, measures the rate
+better than any egress-side estimator.
 
 ### File domain, MoQ lane
 

@@ -119,7 +119,7 @@ Same clip, same instrument, same 60 s window; only the binary changes.
 | Mean interval | 28.959 ms | **25.000 ms** |
 | Min interval | 0.011 ms | **25.000 ms** |
 | Max interval | 319.9 ms | **25.000 ms** |
-| Intervals > 40 ms (P1 gate) | 210 (9.89 %) | **0 (0.00 %)** |
+| Intervals > 40 ms (P2 gate) | 210 (9.89 %) | **0 (0.00 %)** |
 | Intervals < 1 ms (the clustering) | 1,813 (85.40 %) | **0 (0.00 %)** |
 | Continuity errors | 0 | **0** |
 | PCR packet shape | adaptation **+ payload** | adaptation-only, **no payload** |
@@ -287,7 +287,7 @@ interval it was paced to. 45 s per arm:
 |---|---:|---:|
 | mean / median | 26.64 / 21.46 ms | 24.84 / **24.69 ms** |
 | on the grid (22–28 ms) | 27.4 % | **56.9 %** |
-| above the 40 ms P1 gate | 18.26 % | **7.45 %** |
+| above the 40 ms P2 gate | 18.26 % | **7.45 %** |
 | arrived in a burst (< 1 ms) | 1.48 % | 28.88 % |
 | worst interval | 232.5 ms | 277.1 ms |
 | standard deviation | 31.47 ms | 36.65 ms |
@@ -342,7 +342,7 @@ window and the same publisher.
 
 | PCR inter-arrival at the pipe, post-#3006 | 2 vCPU (primary) | **8 vCPU (secondary)** |
 |---|---:|---:|
-| above the 40 ms P1 gate | 7.45 % | **7.45 %** |
+| above the 40 ms P2 gate | 7.45 % | **7.45 %** |
 | on the grid (22–28 ms) | 56.9 % | 54.6 % |
 | median | 24.69 ms | 24.62 ms |
 | p95 / p99 | — | 102.80 / 227.31 ms |

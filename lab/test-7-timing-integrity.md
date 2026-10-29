@@ -75,7 +75,7 @@ P1 (file) figures are the range across four groomed clips; P2 remains the load-b
 | PTS/DTS continuity | pass/fail | no gaps | **pass** (no gaps; DTS authored) | TBM |
 | Mux-rate stability | Mbps/jitter | CBR | **exact CBR** (bitrate = pcrbitrate) | TBM |
 | TR 101 290 P1 | pass/fail | pass | **pass** (file-level)⁴ | **TBM** |
-| TR 101 290 P2 | pass/fail | pass | n/a (file) | **TBM** |
+| TR 101 290 P2 | pass/fail | pass | PCR checks **pass** (rows above); the rest not graded | **TBM** |
 | IRD PLL lock (sustained) | hh:mm | stable | n/a | TBM (≥ 72 h: the PCR base wraps at 26.51 h) |
 | Drift / discontinuity / wrap | pass/fail | pass | **0 disc. (steady state)²** | TBM |
 
@@ -171,7 +171,7 @@ The media-aware lane + `mpegts-pacer` is CBR/PCR-conformant **at P1 on file** ac
 [T3](test-3-opaque-transparency.md). *Necessary but not sufficient* is not a formality here: on the
 one axis where a wire measurement has since been taken, the file result did not carry over
 ([T13](test-13-downstream-grooming.md), 131–159 intervals above 40 ms in 25 s). So this build's
-grooming design is "structurally sound and file-validated", and on P1 PCR repetition as delivered
+grooming design is "structurally sound and file-validated", and on PCR repetition as delivered
 "measurably not conformant" — not "proven broadcast-acceptable". The delivered half was settled by
 the groomer's design and not its depth: the reworked groomer passes repetition on the wire, and a
 cushion ladder moved it not at all ([T19](test-19-pcr-grid-verification.md)). **The hardware (P2)
@@ -203,7 +203,7 @@ rig upgrade and not an experiment; no entry plans it.
   receiver would grade a number differently, the number is not reportable without the domain that
   produced it — and a file result is the precondition for a wire result, never a substitute.
 - **A conformance failure was nearly published against the lane that was on trial.** The segmented
-  arm's 27.5 Mbps clip failed P1 repetition reproducibly, and the lane under test was the obvious
+  arm's 27.5 Mbps clip failed PCR repetition reproducibly, and the lane under test was the obvious
   culprit — the arrival pattern is bursty, the buffer is sized from it, and two plausible mechanisms
   (the adaptive ceiling, the segment gap) were available to explain it. Both were wrong. Removing the
   lane entirely and feeding the groomer a local file at the same output rate produced a *worse*

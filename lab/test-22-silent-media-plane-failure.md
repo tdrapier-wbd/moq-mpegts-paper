@@ -83,7 +83,7 @@ Four detectors are timed, in the order an operator would reach for them:
 |---|---|---|
 | `session` | transport errors, closes, timeouts, reconnects | the transport's — this is the **control** |
 | `carrier` | bytes arriving at the graded output | none |
-| `pcr` | PCR progression past the TR 101 290 P1 repetition limit | none |
+| `pcr` | PCR progression past the TR 101 290 P2 repetition limit | none |
 | `groomer` | the pacer's own content-liveness alarm | the groomer's |
 
 The `session` reading is filtered: every run opens with `moq_native::reconnect connecting/connected`,
@@ -118,7 +118,7 @@ All times in seconds from the last advancing media. "—" means the detector nev
 
 The `pcr` and `carrier` figures are observation-limited: the tick is 100 ms, so 0.1 is the floor the
 instrument can report, not the detector's floor. A PCR-progression alarm cannot in principle fire
-faster than the P1 repetition limit it is testing against, so its true floor is 40 ms.
+faster than the PCR repetition limit it is testing against, so its true floor is 40 ms.
 
 ### The 120 s arms are the ones that settle it
 

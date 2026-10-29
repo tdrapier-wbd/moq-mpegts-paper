@@ -52,10 +52,10 @@ encoder produces at a hard cut"*. That is the maintainer agreeing with the sever
 support, and still specification-and-code reasoning rather than a measurement on a never-repeating
 source** ([P0-j](planned-experiments.md#p0--could-change-a-viability-conclusion)). **The distinction is the whole point of this experiment.**
 
-Until answered: treat pre-#3375 build as the only one **demonstrated** to carry a continuous
-multi-track source; no build carries both that and a true rewind — re-confirmed on current `main`
-against the continuous reproducer ([T23 § #3533](test-23-pcr-discontinuity-classes.md),
-[upstream-contributions.md](upstream-contributions.md)).
+**Since closed on the synthetic source:** [T40](test-40-continuous-join-through-srt.md) and
+[T41](test-41-import-reanchor-coverage.md) found the fence fixed on `main` at `9d2a4f6e`, so the
+`OLD`/`NEW` comparison this file was built around is moot; what the live feed turned out to do is the
+encode switch below.
 
 ## Environment
 
@@ -336,74 +336,6 @@ contribution switches between two encodes whose clocks are not locked. The switc
 upstream's handling of it is by design both ways. Both legs of a 1+1 pair fed by that contribution
 fail together. On the deployed units each backward switch costs every subscriber about 10 s of
 programme, 2.8 s at best with the import restarted at once, and each forward one ends every export.
-
-## What actually has to happen for the fence to close, and what therefore will not trigger it
-
-This matters for operating the live feed as much as for running the experiment, and the answer is
-counter-intuitive in one place.
-
-**The trigger is a discontinuity in the *content*, not in the *transport*.** The fence needs the
-transport timeline to be continuous — PCR, PTS and DTS monotone, continuity counters unbroken, no
-`discontinuity_indicator` — while the content restarts. That is the defining difference between
-[#3533](https://github.com/moq-dev/moq/issues/3533) and the case #3375 was written to fix, and it has a
-consequence worth stating plainly: **a clean contribution feed is the worst case, not the safe one.** A
-transport-level break, which sets the discontinuity indicator, gives the fence one of its two exits; a
-flawless SRT hop carrying a hard cut gives it neither. So "the SRT hand-off is constant with no issues"
-does not protect the feed — it is the precondition under which the defect bites.
-
-**What does and does not qualify:**
-
-| Event | Closes the fence? |
-|---|---|
-| Steady feed, one uninterrupted encode, no junctions | **No.** Nothing resyncs, nothing steps backwards |
-| A hard cut at a programme junction or ad insertion, encoded continuously | **Expected yes** — this is the case the quest calls *"what a real encoder produces at a hard cut"*, and the one this experiment exists to confirm |
-| A contribution failover between two sources on one timeline | **Likely yes**, and for the same reason: a content join on a continuous timeline |
-| SRT loss beyond the recovery window, or our own `srt-ingest` restart | **Probably not by this mechanism** — a transport gap tends to set the indicator, which is an exit. It may of course break the feed some other way |
-| A single-track (video-only) source | **No.** Measured immune on both builds: the fence needs a bystander track |
-
-The qualification on the second row is the honest one: whether a given junction resyncs the *audio*
-importer depends on the upstream encoder and splicer, and nothing here has measured a real one. Our own
-clip carries three SCTE-35 PIDs, so the service is ad-supported and junctions are certain; whether they
-are encoded as hard cuts is not known.
-
-**Two properties make one event sufficient.** The fence is permanent — 0.31 Mb/s with no recovery over
-40 minutes — and it is *partial*: PSI, AC-3 and teletext keep flowing while video and primary audio
-stop. A receiver locks and shows nothing, and any monitor that asks "is the multiplex present" reports
-health. So the operational risk is not an occasional glitch; it is that the feed dies at the first
-junction and continues to look alive. **Watch delivered video bitrate at a subscriber, not mux
-presence** — which is the [T22](test-22-silent-media-plane-failure.md)/[T24](test-24-partial-media-plane-stall.md)
-lesson arriving in production form.
-
-### The two hosts are on opposite sides of the regression, which is a free control
-
-Measured by ancestry rather than assumed: `eab960192`, the build the **primary** runs, does **not**
-contain #3375 (merged `0e61e3520`, 2026-09-05); `fd4f5d82e`, the build under test on the **secondary**,
-does. Against a real encoder — a non-rewinding source — that puts the pair either side of the defect:
-
-| | Primary (`eab960192`) | Secondary (`fd4f5d82e`) |
-|---|---|---|
-| #3533 continuous-join fence | **absent** — predates the regression | **present** |
-| True-rewind stall that #3375 fixed | present, but a live encoder does not rewind | fixed |
-| Also missing on the older build | #3351's PCR-grid slicing, and TDT/TOT carriage | — |
-
-So the primary's older build would be expected to survive a junction the secondary's does not. That
-looked like a free `OLD`/`NEW` pair, and it is **no longer needed as one**: the better control has
-been run. The older build was never simply better either — it lacks #3351, so its raw egress carries
-the worse PCR grid, and a conformance figure from it is not comparable with one from the secondary.
-
-**The one-host version of the control is the instrument, and [T40](test-40-continuous-join-through-srt.md)
-has executed it.** The two-host arrangement shares a *source* but not a *machine*, so host, kernel,
-core count and contribution path all vary alongside the build. Running both arms on the secondary
-from the pinned T27 bisect binaries (`~/t27/bisect/0e61e35` and `025613d`) varies only the build, and
-T40 did exactly that through a faithful copy of the SRT ingest chain: the post-#3375 arm stalls
-permanently at the first content join (0.31 Mb/s residue), the parent is healthy across four joins,
-and the two traces are identical to the hundredth of a Mb/s until the join.
-
-**The builds are therefore free to move.** The control lives in pinned artefacts that no rebuild
-touches, so unifying the hosts costs nothing this experiment needed. What T40 leaves for T34 is the
-question T40 cannot answer: **whether a real encoder produces this junction at all.** T40's generator
-cuts hard at an IDR, which is legitimate but synthetic; only the live feed settles whether the fence
-is one production actually meets.
 
 ## Corrections
 

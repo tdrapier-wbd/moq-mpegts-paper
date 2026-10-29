@@ -43,8 +43,8 @@ sixth is new, and it is the one this arm was expected to fail.
    which the media-aware lane drops, the latter being a table no HLS document mentions — and none is
    re-versioned.
 4. **Mux structure.** Null stuffing preserved and the PCR-derived bitrate equal to source.
-5. **Integrity and P1 timing.** 0 continuity errors, 0 transport errors, 0 invalid sync; 0 PCR
-   repetition intervals above 40 ms; PAT/PMT/SDT repetition inside the TR 101 290 P1 limits.
+5. **Integrity and timing.** 0 continuity errors, 0 transport errors, 0 invalid sync; 0 PCR
+   repetition intervals above 40 ms; PAT/PMT/SDT repetition inside the TR 101 290 limits.
    `testloop` is the sensitive clip, at 475 ms against a 500 ms PAT/PMT limit ([T1](test-1-baseline-ts.md)).
 6. **Nothing added.** The egress contains no PID and no table the source did not have, and no
    packet the source did not send. The opaque lane passes this by construction; a segmenter writes
@@ -268,7 +268,7 @@ rather than on an absolute count.
 
 #### The clock is where transparency stops, and the error is one injected pair
 
-**PCR *repetition* is preserved and PCR *accuracy* is not.** The P1 mean and maximum intervals are
+**PCR *repetition* is preserved and PCR *accuracy* is not.** The mean and maximum PCR intervals are
 unchanged from source on all three clips, and 0 % exceed 40 ms — the same result the opaque lane
 posts. (The *minimum* interval moves on `contrib-5m`, 0.30 → 0.60 ms; T1 attributes sub-millisecond
 minima on these clips to capture boundaries and P1 bounds the maximum, so nothing turns on it.) But
@@ -364,7 +364,7 @@ mean falls and the maximum does not move.
 | 2. Service identity | **Met.** TSID, ONID, service name, provider, service type, PMT PID and PCR PID unchanged. The two non-default PMT PIDs (0x1000, 0x0020) were held rather than renumbered. |
 | 3. PSI/SI completeness | **Met.** PAT, PMT, SDT, NIT, TDT/TOT and CAT all survive; no table re-versioned. None of these clips carries EIT, so that table is measured separately on a synthetic fixture through this same rig: all 69 sections of an 8-day EPG arrive byte-identical, sparse schedule sub-tables included, at 1.003× the source's PID rate ([T17](test-17-si-snapshot-tracks.md) §5). |
 | 4. Mux structure | **Half met.** Null stuffing is preserved (14.83 → 14.95 %, 5.26 → 5.25 %, 4.66 → 4.66 %). The PCR-derived bitrate is **not** equal to source — it rises by +0.004 % to +0.17 %, upward on every clip, which is the injected packets showing up in a whole-capture rate estimate. Same cause as criterion 6. |
-| 5. Integrity and P1 timing | **Met.** 0 continuity errors on two independent instruments, 0 transport errors, 0 invalid sync, 0 PCR intervals above 40 ms, and every table inside its P1 repetition limit — with more margin than the source had. |
+| 5. Integrity and timing | **Met.** 0 continuity errors on two independent instruments, 0 transport errors, 0 invalid sync, 0 PCR intervals above 40 ms, and every table inside its repetition limit — with more margin than the source had. |
 | 6. Nothing added | **Failed, as expected, and by exactly one thing.** No PID and no table the source lacked, but one PAT/PMT pair per segment: +25/+25, +22/+23 and +27/+26 against 25, 23 and 26 segment heads. The cost is 109–302 µs of file-domain PCR accuracy, closed by grooming ([T16](test-16-grooming-segmented-http.md)). |
 
 Criteria 4 and 6 fail together and for one reason, which is the useful form of the result: **the lane's
@@ -388,7 +388,7 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 | SCTE-35 splice PIDs | carried (opaque per-PID tracks) | **preserved in-mux, verbatim** | **preserved in-mux, verbatim** |
 | Mux structure | VBR; nulls stripped (CBR restored by pacer) | **CBR preserved; nulls preserved** | **nulls preserved**; PCR-derived rate +0.004–0.17 % |
 | Continuity errors | **0** | **0** | **0** |
-| PCR intervals > 40 ms (P1), file domain | 0–26 % by clip → **0 % (paced)** | **0 %** | **0 %** |
+| PCR intervals > 40 ms (P2), file domain | 0–26 % by clip → **0 % (paced)** | **0 %** | **0 %** |
 | PCR accuracy, file domain | **gate is degenerate ungroomed** — no mux rate to grade against, and meaningful only once a groomer restores one (below) | **the source's: 0 violations at 481 ns** | **37–74 ns → 109–302 µs**; 0 violations at 500 µs; **0 at 481 ns once groomed** ([T16](test-16-grooming-segmented-http.md)) |
 | Packets added to the mux | rebuilt, so not comparable | **none** | **one PAT/PMT pair per segment, and nothing else** |
 | Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** ([#2824](https://github.com/moq-dev/moq/pull/2824), which would have carried it, closed unmerged) | **broadcast-transparent** | **transparent to the mux's content; not to its clock** |

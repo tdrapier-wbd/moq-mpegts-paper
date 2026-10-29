@@ -4,8 +4,8 @@
 > F2 in every role; on the media plane continuity and attribution pass, and PCR accuracy was graded at
 > ±18.5 µs, not the ±500 ns fixed** ([§ The seven-day live arm: result](#the-seven-day-live-arm-result)).
 > **The 24 h soak on a continuous timeline passes on the media plane and fails F2 on
-> resources, in one role, on `d518b61b`; the 24 h resource re-soak on upstream `main` at `9d2a4f6e`
-> passes F2 in every role.** On `d518b61b`: 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
+> resources, in one role, on `222cc72`; the 24 h resource re-soak on upstream `main` at `9d2a4f6e`
+> passes F2 in every role.** On `222cc72`: 24.01 h, 632,199,204 packets, 5,947,298 PCRs: **zero** continuity errors,
 > zero PCR intervals over 40 ms, zero absolute PCR failures at ±18.5 µs, zero drops, **zero underruns**,
 > zero respawns, and a worst programme gap of **27 ms across the whole day**. The 33-bit rollover was
 > crossed in flight at 19.4 h and cost nothing. The groomer's own resident memory is **flat**, and the
@@ -16,7 +16,7 @@
 > for 300 s overflow the video, audio and PSI transport buffers throughout, with audio decoder buffers
 > illegal at every PCR offset ([T44](test-44-tstd-grading.md)).
 >
-> The one failure on `d518b61b` is upstream and it is in the publisher: **`moq import ts` resident
+> The one failure on `222cc72` is upstream and it is in the publisher: **`moq import ts` resident
 > memory grows linearly at +2.83 MB/h** and holds that slope across all four quarters of the run,
 > which on this host is exhaustion in about seven and a half months. F2's criterion was fixed in
 > advance and this trips it. The relay, by contrast, is **logarithmic and bounded**, which settles a
@@ -128,7 +128,7 @@ Full tables and resource breakdown: [§ The 24 h soak](#the-24-h-soak-on-a-conti
 
 | | Media plane (F2) | Resources (F2) |
 |---|---|---|
-| Verdict, `d518b61b` | **pass** — 24.01 h, **632,199,204** packets, **0** continuity errors, **0** underruns, worst programme gap **27 ms**, 33-bit rollover crossed at 19.4 h | **fail** — **`moq import ts` +2.83 MB/h linear**; relay logarithmic and bounded; groomer flat |
+| Verdict, `222cc72` | **pass** — 24.01 h, **632,199,204** packets, **0** continuity errors, **0** underruns, worst programme gap **27 ms**, 33-bit rollover crossed at 19.4 h | **fail** — **`moq import ts` +2.83 MB/h linear**; relay logarithmic and bounded; groomer flat |
 | Verdict, re-soak on `main` `9d2a4f6e` | not fully graded — 24.0 h, 632 M packets, **0** continuity errors, **0** underruns, stalls or drops; PCR accuracy and programme gap not measured by this rig | **pass** — `moq import ts` **+0.23 MB/h**, last quarter −0.15; relay and groomer flat; exporter flat but for one +11.8 MB step |
 | Detail | [§ The wire, over 24 hours](#the-wire-over-24-hours), [§ The release loop](#the-release-loop-and-p0-3b) | [§ Resources — the one failure](#resources--the-one-failure), [§ The #3493 re-soak](#the-3493-re-soak) |
 
@@ -372,7 +372,7 @@ source that only looks continuous would confound the run it is supposed to clean
 The grade read PCR and continuity counters, not PES timestamps, and it missed a defect in the
 generator. The generator rebased PTS and DTS only for stream IDs `0xC0`–`0xEF`, so the clip's AC-3
 and teletext (private stream 1) stepped back one pass span, 600 s, at every join. PCR and every
-other PID stayed continuous. `d518b61b` re-anchors each stream on its own and carried both. None of this soak's metrics reads those two PIDs' timestamps. It does, however, mean the source
+other PID stayed continuous. `222cc72` re-anchors each stream on its own and carried both. None of this soak's metrics reads those two PIDs' timestamps. It does, however, mean the source
 was not "what a continuous encoder emits" on every PID. The script has since been corrected, and
 [`ts-join-scan.py`](scripts/ts-join-scan.py) now checks each PID's timestamps across the joins
 ([method notes](method-notes.md#1-controls)).
@@ -533,14 +533,14 @@ is a leak, and one that decays is a cache filling.
 | `moq export ts` | 136.2 → 158.8 MB | 124.7–165.2 | +1.32 | +0.68 | +4.49 | +0.14 | −0.22 | **+11.8 at 11.0 h** | step, slope not meaningful |
 | groomer / source / `tsp` | 5.7 → 5.6 MB | — | +0.00 | 0.00 | 0.00 | −0.00 | −0.00 | +0.0 | flat |
 
-- **The importer's leak is gone.** Its slope is a twelfth of the +2.83 MB/h the `d518b61b` soak measured,
+- **The importer's leak is gone.** Its slope is a twelfth of the +2.83 MB/h the `222cc72` soak measured,
   no quarter exceeds +0.61 MB/h, and the last quarter is negative, where the original held
   2.36–2.87 MB/h in every quarter at R² 0.9898. The grader cannot separate a line from a logarithm at
   this amplitude (8.7 MB over 22 h, inside a 15 MB band), so the residual shape is unresolved. The
   resource verdict does not depend on it: +0.23 MB/h is about 2 GB a year on a 15.3 GB host, below
   F2's exhaustion rate, and the series is not rising at the end.
 - **The relay is flat on this build.** It holds 117–139 MB throughout, with no quarterly trend. The
-  `d518b61b` soak's relay rose logarithmically from 28 to 271 MB. That build runs on quinn
+  `222cc72` soak's relay rose logarithmically from 28 to 271 MB. That build runs on quinn
   and this one on noq, so this is a different relay rather than a second reading of the same one.
 - **The exporter steps once and is flat on either side.** It swings about ±5 MB between samples
   throughout, and rises 143.8 → 158.7 MB within 1 min at 11.1 h. Its quarters outside that step are
@@ -549,17 +549,17 @@ is a leak, and one that decays is a cache filling.
   continuity errors in all 2,878 samples and all six roles alive to the end. The groomer counted 0
   underruns, stalls, drops, late drops or mutes. The longest silence in its input was 310 ms, against
   a 1,000 ms cushion. The rig does not grade PCR accuracy, PCR intervals or programme gaps, so none of
-  the `d518b61b` soak's wire figures is re-established here. The clip's 33-bit rollover falls at about
+  the `222cc72` soak's wire figures is re-established here. The clip's 33-bit rollover falls at about
   19.4 h, and no role logged anything there.
 - **One importer warning per content join.** Every 600 s the importer logged `audio stream lost frame
   sync and resynced` on PID 121 (MPEG-1 audio), discarding 72 bytes, 144 times in all. That is the
   audio frame the content cut splits, discarded rather than carried. Nothing else was logged before
   the teardown second.
-- **The source was the uncorrected generator, as in the `d518b61b` soak.** Its copy on the host advanced
+- **The source was the uncorrected generator, as in the `222cc72` soak.** Its copy on the host advanced
   PTS and DTS only for stream IDs `0xC0`–`0xEF`, so the clip's AC-3 and teletext stepped back 600 s at
   every one of the 144 joins, while PCR and the other PIDs stayed continuous. `main`'s importer
   re-anchors each stream on its own and carried both without logging. So the comparison with the
-  `d518b61b` soak is like-for-like, but the resource result is for a source that rewinds two PIDs every
+  `222cc72` soak is like-for-like, but the resource result is for a source that rewinds two PIDs every
   10 min. Upstream's `dev` branch ends the import at any such rewind, by design, so this run would not
   survive its first join there.
 
@@ -584,8 +584,8 @@ continuity errors:
 from the signature, with the largest half-hour increment only 17 % of total growth, so it is a ramp
 rather than a jump. That is what [#3493](https://github.com/moq-dev/moq/issues/3493) reports.
 
-**Two things the shorter run says that the `d518b61b` soak does not.** The
-exporter here is *not* the smooth convergence the `d518b61b` soak's table shows: it sat between 119 and 122 MB from
+**Two things the shorter run says that the `222cc72` soak does not.** The
+exporter here is *not* the smooth convergence the `222cc72` soak's table shows: it sat between 119 and 122 MB from
 0.5 h to 4.5 h and then stepped +14.5 MB inside one half-hour. And 6 h is too short to read the relay's
 shape at all — its tail slope slightly *exceeds* its overall slope and the two fits do not separate
 (r² 0.538 linear against 0.492 log), where 24 h separated them cleanly. Neither disturbs the publisher
@@ -696,3 +696,9 @@ constants or it has qualified only the transient.
 `pcrverify --jitter-max 500` is 500 ticks, 18.5 µs, as TSDuck's own summary line says; so it was in
 `t21-lane-soak.sh` from the first run and in `p0j-step-watch.sh`. **Rule:** method notes §2, read a
 TSDuck threshold from its echo; both rigs now pass `--jitter-max 13` (481 ns).
+
+**Believed:** the 24 h soak ran on `d518b61b` (moq 0.11.2), a label given at the re-soak. **True:** it ran
+on `222cc72` (moq 0.10.0, before #3375), as *Environment* said: `d518b61b` is dated eleven days after
+the soak's result, and on T21's source it stalls at the first join ([T40](test-40-continuous-join-through-srt.md)).
+**Rule:** a build named after the fact must predate the result and reproduce it; check the commit's
+date and its version, not the binary a host holds now.

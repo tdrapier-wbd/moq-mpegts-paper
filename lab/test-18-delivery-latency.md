@@ -5,7 +5,7 @@
 [T16](test-16-grooming-segmented-http.md) closed the question of whether a segmented-HTTP egress can be
 groomed to broadcast conformance — it can — and in doing so named the run this experiment performs:
 
-> If depth is what buys P1 PCR repetition, then the MoQ lane needs depth too — and depth is latency,
+> If depth is what buys conformant PCR repetition, then the MoQ lane needs depth too — and depth is latency,
 > which is the only axis on which MoQ leads. […] Where the MoQ lane's curve crosses zero, and whether
 > that point is compatible with sub-second delivery, is unmeasured and is now the campaign's
 > highest-leverage outstanding run.
