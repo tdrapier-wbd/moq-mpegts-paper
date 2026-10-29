@@ -542,9 +542,12 @@ individually, and the vendors who would otherwise carry it serve customers too s
 the thesis rather than a detail of it.**
 
 **On segmented HTTP the unsponsored piece is smaller and sits with the distributor.** Delivery is
-already multi-supplier; what no specification covers is how a receiver rebuilds an IRD-ready transport
-stream from HLS, chooses between pathways and reports what it lost, and the HLS-input receivers on the
-market align on nothing beyond HLS ([Comparison](comparison.md) §4.4). A distributor that publishes
+already multi-supplier, and one CDN origin group fails over between origins itself
+([Architecture](architecture.md) §5.4); what no specification covers is how a receiver rebuilds an
+IRD-ready transport stream from HLS and reports what it lost, and the HLS-input receivers on the
+market align on nothing beyond HLS. Which kind of input a product is decides whether the DVB layer
+reaches the IRD: one that hands on the segments' packets keeps every table, and one that remuxes
+keeps none ([Comparison](comparison.md) §4.4, measured on software stacks). A distributor that publishes
 that receive profile, with an open reference receiver, lets its affiliates choose among conforming
 products without the distributor adopting a closed one — a sponsorship one large distributor can
 fund alone, as the relay-interop work above is not.

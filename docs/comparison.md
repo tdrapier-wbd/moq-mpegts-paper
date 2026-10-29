@@ -194,8 +194,20 @@ is required on both paths.
 
 Ateme TITAN Edge, Sencore MRD 8000, Spica HLS2SRT and Synamedia MEG (its ABR2TS function) list HLS
 input with transport-stream output — **vendor datasheet claims, unmeasured**. They align on nothing
-beyond HLS: no specification says how a receiver rebuilds an IRD-ready stream, selects between
-pathways or reports what it lost. Whether any such stage passes TR 101 290 on hardware is open
+beyond HLS: no specification says how a receiver rebuilds an IRD-ready stream or reports what it
+lost.
+
+**What decides whether such an input can serve an IRD is whether it hands on the segments'
+packets**, measured on the software stacks a product may be built on (loopback, one broadcast clip,
+one run; [Evidence](../lab/evidence.md) §3.1). TSDuck's, GStreamer's and this campaign's HLS inputs
+deliver every DVB table and SCTE-35 section verbatim. FFmpeg's remuxes: its own PAT, PMT and SDT, no
+NIT, EIT or TDT, every PID renumbered, and SCTE-35 carried as PES a splicer does not read. A
+datasheet's "HLS in, TS out" does not say which a product is. **Apple's validator is the wrong
+judge**: a contribution feed (interlaced, open GOP) fails its device rules whatever the packager.
+The receive profile these results imply is drafted in [T65](../lab/test-65-ird-hls-profile.md): SI
+and SCTE-35 unchanged from packager to IRD, segments that open on a random access point within their
+target duration, and a receiver that survives an origin's failure and paces to the PCR. Whether any
+product meets it, or passes TR 101 290 on hardware, is open
 ([planned-experiments](../lab/planned-experiments.md)).
 
 ### 4.5 Where the demarcation puts the gateway
@@ -208,7 +220,8 @@ client; in regional PoPs it serves every PoP ([Economics](economics.md) §4.5,
 
 Three claims are run together under "hand-off". **Receiving** favours segmented HTTP at classic
 segment durations — off the shelf, though no free receiver survives an origin failure (§3.2), with
-HLS-input receivers purchasable (conformance unmeasured, §4.4) — and reverses at low latency, where
+HLS-input receivers purchasable (conformance unmeasured, and only one that hands on the segments'
+packets keeps the DVB layer, §4.4) — and reverses at low latency, where
 nothing free receives TS-in-HLS (§6.1). **Grooming burden**
 favours MoQ, and **which stage can carry it** favours segmented HTTP (§4.3). **The groomed wire** is
 a tie on P1/P2 and not on its cost: both reach 0 PCR intervals above 40 ms in software, segmented at
@@ -373,7 +386,9 @@ the opaque lane on loopback, five clips on `moq-dev` ([T48](../lab/test-48-passt
 fixture ([T17](../lab/test-17-si-snapshot-tracks.md)); figures and qualifications in
 [Evidence](../lab/evidence.md) §3.1. **Single-programme mux content on segmented HTTP is as verbatim as the
 opaque MoQ lane** — the only difference in a 1,200-packet window is byte 3 on one PAT and one PMT — and
-**its clock is not**, which grooming closes at the demarcation (§4.1).
+**its clock is not**, which grooming closes at the demarcation (§4.1). The segmented column is
+TSDuck's packager and HLS input: a packager that injects nothing adds no pair, and an input that
+remuxes keeps none of the SI (§4.4).
 
 **The media-aware lane is a transmux lane, and for TS-out it has three structural limits.** It loses the
 packet layout, which is why the encoder's VBV budget moves into the groomer's buffer (§5.1). Its

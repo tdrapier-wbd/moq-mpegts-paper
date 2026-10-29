@@ -40,8 +40,8 @@ defined in broadcast terms in the [Glossary](../docs/glossary.md#moq).
 | **TSDuck plugins** — `hls`, `srt`, `rist` | The alternative data planes, built from the tool used as the oracle throughout | Loopback and the public internet, from the same EC2 origin |
 
 FFmpeg, GStreamer and [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts) are graded as
-grooming and sending *stages*, not transports ([T13](test-13-downstream-grooming.md),
-[T16](test-16-grooming-segmented-http.md)). The media-aware lane runs the moq-lite version
+grooming, sending and HLS-receiving *stages*, not transports ([T13](test-13-downstream-grooming.md),
+[T16](test-16-grooming-segmented-http.md), [T65](test-65-ird-hls-profile.md)). The media-aware lane runs the moq-lite version
 its build negotiates by default, 04 to 06 across the builds measured, with BBR set explicitly unless
 an experiment says otherwise; the passthrough runs on the same builds and protocol.
 
@@ -54,6 +54,7 @@ an experiment says otherwise; the passthrough runs on the same builds and protoc
 | `t12-merge-oracle.py` and companions | ST 2022-7 merge, byte identity, skew | A hardware IRD's merge engine; the oracle is a self-tested reference implementation of the selection rules (§4) |
 | `ts-tstd.py` | The 13818-1 T-STD per PID, calibrated per stream type and to the video's HRD, validated on a source that passes at exactly +0 ms. It agrees with upstream's independently written check on all 35 files of a cross-validation set ([T46](test-46-tstd-check-cross-validation.md), file domain) | A real decoder's tolerance: it grades the minimum buffers the standard guarantees. SCTE-35 and SI have no normative T-STD |
 | `t18-latency.py` | Delivery latency on the PES PTS, source to groomed egress | Encoder and decoder delay, so not camera-to-display |
+| Apple's `mediastreamvalidator` | HLS playlist and segment conformance | A broadcast receive profile: it applies Apple's device rules, which a contribution source (interlaced, open GOP) fails whatever the packager ([T65](test-65-ird-hls-profile.md)) |
 | `t6-hls-pull.py` | Segmented-lane failover from a client that retries | A player. It bounds what the protocol permits, because TSDuck and FFmpeg both abandon the stream at a failed playlist reload |
 | `tc`/`netem` | Loss, delay, reordering, shaped bottlenecks | Real congestion: its loss is Bernoulli, its jitter reorders, and it does not deliver the commanded loss unless [segmentation offload](../docs/glossary.md#transport-and-deployment-terms) is off. Impairment figures carry the counted fraction, or are stated as commanded where §3.3 shows the counters cannot be trusted |
 | Interop client ([`interop/`](interop/README.md)), `compliance.py`, `cost-model.py` | Media-level relay carriage; structural checks; the economic model | Pacing; decoder acceptance; negotiated rates |
@@ -144,8 +145,8 @@ exactly 1.00 pair per segment head and 302.148 µs against 302.4 µs predicted, 
 500 µs. Groomed, it passes at 481 ns (§3.2). **What survives reception depends on the HLS input**
 ([T65](test-65-ird-hls-profile.md); P1, loopback, one clip, one run, from TSDuck's packager and
 ours, which injects nothing): TSDuck's, GStreamer's and our inputs hand on the segments' packets with
-every DVB table and SCTE-35 section verbatim, and FFmpeg's remux replaces the multiplex, keeping
-none of them verbatim.
+every DVB table and SCTE-35 section verbatim, and FFmpeg's remux replaces the multiplex: its own PAT,
+PMT and SDT, no NIT, EIT or TDT, every PID renumbered, and SCTE-35 as PES.
 
 **The opaque lane is byte-transparent on `moq-dev`** ([T48](test-48-passthrough-export.md);
 P1 and P2, upstream `main`, October 2026; loopback on one dedicated host, two clips, 120 s at a 1 s
@@ -983,7 +984,7 @@ rebuild.
 | 2 | **Can a live re-multiplexer keep the lane's wire T-STD-conformant across hosts, and for 1+1?** On one host it can; the merged export does across hosts and as a co-started pair (§3.4, §3.16) | A schedule computed from the stream alone; a source of another profile that passes the T-STD | Whether the lane serves TS-out to an IRD at conformance in a deployment |
 | 3 | **Is upstream's merged fixed-delay export itself an acceptable conformant stage?** It carries every track conformantly for 35 min across hosts and settles on a drifting remote source, but its wire's drift rate exceeds 0.075 Hz/s, and 500 ms does not last a whole capture (§3.16) | A hardware IRD and analyser, for whether those steps matter | Whether the subscriber is itself the conformant stage, and at what latency |
 | 4 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs; 80–150 ms of RTT | The case that should favour the tunnels |
-| 5 | **Does a commercial ABR-to-TS receiver produce P1/P2-conformant output?** | MEG- or TITAN-class hardware | Whether affiliates' own receivers can be the lane's receive stage ([Comparison](../docs/comparison.md) §4.4) |
+| 5 | **Does a commercial ABR-to-TS receiver hand on the segments' packets, and produce P1/P2-conformant output?** | MEG- or TITAN-class hardware | Whether affiliates' own receivers can be the lane's receive stage ([Comparison](../docs/comparison.md) §4.4) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | The MPTS fixture through the campaign's CloudFront access | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
 | 8 | **How large is a media-aware failover as a decoder sees it, and can it be brought under a second?** A hard-killed importer costs about one detection interval, a marked switch, and detection is bounded by the QUIC idle timeout; the decoder's freeze is not measured, nor the relay-loss case on the build that fixed it (§3.4) | A decoder-graded failover run across idle timeouts | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |
@@ -994,5 +995,5 @@ rebuild.
 | 13 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 14 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
 | 15 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin and a soak | Its per-role CPU, memory and fan-out knee; the origin measured is `python3 -m http.server` |
-| 16 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Upstream `main` now counts TR 101 290 errors at `moq import ts`, equal per PID to TSDuck's on a 72 s excerpt at P0 and P1, but signals nothing downstream and does not grade PCR accuracy ([upstream contributions](upstream-contributions.md)) |
+| 16 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Whether a stage downstream can tell a recovered gap from clean programme; the import counts TR 101 290 errors and signals nothing ([upstream contributions](upstream-contributions.md)) |
 Protocols for the runnable ones are in [planned-experiments](planned-experiments.md).
