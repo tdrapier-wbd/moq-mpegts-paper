@@ -15,8 +15,9 @@ lab/upstream/*
 __pycache__/
 *.pyc
 
-# Agent and editor configuration, and the Vale setup, stay local
+# Agent and editor configuration, the Vale setup and the lint settings stay local
 .cursor/
 .claude/
 .vale/
 .vale.ini
+pyproject.toml
