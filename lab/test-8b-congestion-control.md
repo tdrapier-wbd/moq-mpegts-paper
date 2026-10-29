@@ -1131,4 +1131,4 @@ stalling, not about content delivered; the merged build, re-graded, carries 2.6�
 - Impairment method and SSH-safe lane: [test-5-network-impairment.md](test-5-network-impairment.md).
 - Upstream: [#2468](https://github.com/moq-dev/moq/pull/2468) (backend-specific CC defaults),
   [noq #768](https://github.com/n0-computer/noq/issues/768) (BBRv3 panic).
-- Findings destination (once settled): [`docs/evidence.md`](../docs/evidence.md) §3.3.
+- Findings destination (once settled): [`evidence.md`](evidence.md) §3.3.

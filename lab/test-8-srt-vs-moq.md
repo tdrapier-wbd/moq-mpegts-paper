@@ -235,7 +235,7 @@ backend delivers full clean-path rate (noq 9.63, quiche 9.28, quinn 9.6 Mbps).
   under-provisioned condition at 2–3 replicates**, which is enough to say the ranking inverts by
   regime and **not** enough to disqualify a controller. The two matrices are scoped to different
   failure regimes rather than in conflict, and neither supports a recommendation for a permanent
-  fixed-rate trunk ([evidence](../docs/evidence.md) §3.3).
+  fixed-rate trunk ([evidence](evidence.md) §3.3).
 
 ### Congestion-control defaults & methodology (bounding how these numbers read)
 
@@ -309,7 +309,7 @@ put MoQ's media-aware lane at 0.982x the source TS rate against SRT's 1.037x, an
 both rose by about the loss rate with the ranking unchanged. What this rig is still the right host for
 is loss above 1 %, where each protocol charges retransmission differently and T9's inference from
 shaper counters stops being good enough. Recorded as a permanent finding in
-[`docs/evidence.md`](../docs/evidence.md) §3.3. This is a comparison, not a gate: the thesis is decided
+[`evidence.md`](evidence.md) §3.3. This is a comparison, not a gate: the thesis is decided
 by T7 (Gate 2), and the [T8b](test-8b-congestion-control.md) congestion-control run gates any
 controller recommendation for a permanent fixed-rate trunk.
 
@@ -318,4 +318,4 @@ controller recommendation for a permanent fixed-rate trunk.
 - Impairment method reused from: [test-5-network-impairment.md](test-5-network-impairment.md).
 - Congestion control for a permanent fixed-rate trunk (C1–C6): [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Upstream: [#2432](https://github.com/moq-dev/moq/pull/2432), [#2468](https://github.com/moq-dev/moq/pull/2468), [#1706](https://github.com/moq-dev/moq/pull/1706), [noq #768](https://github.com/n0-computer/noq/issues/768).
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.3; feeds [`docs/economics.md`](../docs/economics.md) §4 and §9.
+- Findings: [`evidence.md`](evidence.md) §3.3; feeds [`docs/economics.md`](../docs/economics.md) §4 and §9.

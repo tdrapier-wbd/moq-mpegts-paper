@@ -401,9 +401,7 @@ rejection mechanism — is the wrong instrument because one Announce Stream carr
 So the finding does not split by wire after all. **The fix that would help an operator is client-side
 and needs no protocol change on either wire:** the publishing client knows both the broadcast paths it
 holds and every interest prefix it has received, so it can warn when a broadcast matches none of them.
-Written up at
-[`docs/upstream/publish-refusal-not-signalled.local.md`](../docs/upstream/publish-refusal-not-signalled.local.md),
-staged and unfiled, with the protocol half explicitly held for a separate conversation.
+A report was drafted and not filed, with the protocol half held for a separate conversation.
 
 **One provenance point, because it bounds how far "any conformant implementation" reaches.** moq-lite
 is itself an Internet-Draft (`draft-lcurley-moq-lite`) but an **individual submission, not a MoQ
@@ -422,9 +420,7 @@ only useful detector on hardware the broadcaster does not own, under someone els
 Part A shows it is additive and needs no groomer changes, which is the strongest technical answer
 available, and it does not answer the commercial one.
 
-**The silent announce refusal deserves the upstream report it has been drafted into**, at
-[`docs/upstream/publish-refusal-not-signalled.local.md`](../docs/upstream/publish-refusal-not-signalled.local.md).
-An unattended telemetry reporter that is silently refused is indistinguishable, at the reporter, from
+**The silent announce refusal deserves an upstream report**, not yet filed. An unattended telemetry reporter that is silently refused is indistinguishable, at the reporter, from
 one that is working.
 
 **Clock offset across the boundary is unmeasured.** The correlation convention is exact in media time

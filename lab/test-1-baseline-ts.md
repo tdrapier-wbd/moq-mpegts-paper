@@ -116,6 +116,6 @@ baseline. Reference established.
 
 ## References
 
-- Contribution-feed class (a news channel, open-GOP): [`docs/evidence.md`](../docs/evidence.md) §3.1.
+- Contribution-feed class (a news channel, open-GOP): [`evidence.md`](evidence.md) §3.1.
 - File vs wire domain, and what each gate can decide: [`docs/architecture.md`](../docs/architecture.md) §4.2.
-- Pre-groom baseline used downstream: [`docs/evidence.md`](../docs/evidence.md) §3.
+- Pre-groom baseline used downstream: [`evidence.md`](evidence.md) §3.

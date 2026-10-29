@@ -5,7 +5,7 @@
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/moq-cli-flags.sh"
 # Does a publishing client learn that its announce was refused? Measured, per wire version.
 #
-# `docs/upstream/publish-refusal-not-signalled.local.md` claimed, from reading the source, that
+# A draft upstream report claimed, from reading the source, that
 # moq-transport signals a refused publish (PUBLISH_NAMESPACE_ERROR / REQUEST_ERROR) where
 # moq-lite silently drops the same Error::Unauthorized. That is a claim about the wire, and it
 # was never run. This runs it.

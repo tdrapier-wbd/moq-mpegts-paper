@@ -15,7 +15,7 @@ develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive co
 >
 > **Most of this document describes a design, not a system; the enforcement layer is the
 > exception.** Three experiments measured it, and two of the design's claims did not survive
-> ([Evidence](evidence.md) §3.10). What is measured: admission and refusal against a credential,
+> ([Evidence](../lab/evidence.md) §3.10). What is measured: admission and refusal against a credential,
 > tenant and path isolation, announcement scope, revocation timing and its mechanism, token expiry as
 > a backstop, de-provisioning granularity, key rotation, key handling, and the CPU cost of
 > authorization. Where measurement bears on a section, the section states the measured behaviour.
@@ -152,7 +152,7 @@ of draft is measured below.
 > token, publish-only credential, parent path and three malformed tokens — delivered **exactly zero
 > payload bytes** each, counted at the receiving endpoint. Path matching is segment-aware, so a grant
 > on `ch1` does not reach `ch1-intl`. Refusal also governs *disclosure*: an affiliate is announced
-> only the channels it licenses ([Evidence](evidence.md) §3.10,
+> only the channels it licenses ([Evidence](../lab/evidence.md) §3.10,
 > [T36](../lab/test-36-entitlement-enforcement.md)).
 >
 > One operational caveat the claim does not anticipate: refusal arrives by two mechanisms, and one of
@@ -165,7 +165,7 @@ of draft is measured below.
 > their token formats, carriage, key scope, disclosure and withdrawal all differ, so what an operator
 > carries between relays is the entitlement record, rendered for each. One part of the shape above
 > does not hold everywhere: on moqx's release a live session outlives its token's expiry
-> ([Evidence](evidence.md) §3.10, [T53](../lab/test-53-token-interop.md)).
+> ([Evidence](../lab/evidence.md) §3.10, [T53](../lab/test-53-token-interop.md)).
 
 **The role split above is load-bearing.** On the build measured, client-certificate authentication
 for *subscribers* did not scope them: a peer presenting a valid certificate and no token at all was
@@ -263,7 +263,7 @@ Revocation is the hard part of any entitlement system. The platform uses two pat
 >
 > **Two further costs of a tight cadence.** Re-check is per *session*, so at a one-second cadence the
 > per-subscriber CPU slope rises 27 % against an unauthenticated relay, where a ten-second cadence
-> costs nothing marginal at all ([Evidence](evidence.md) §3.10). And provisioning is bounded by the
+> costs nothing marginal at all ([Evidence](../lab/evidence.md) §3.10). And provisioning is bounded by the
 > same cache as revocation: a grant *added* to the endpoint is not visible to the relay until the
 > cached admission reply expires, so `max-age` sets the floor on §8's provisioning latency too.
 
@@ -583,7 +583,7 @@ makes the silent-disable case survivable rather than unbounded.
 delta-seconds with a one-second floor, so no configuration reaches sub-second — but a few seconds is
 acceptable for a primary broadcast feed, so there is no figure to commit to and no work outstanding.
 For any future case that *is* latency-sensitive, quote the multi-session measurement of §4.1
-([Evidence](evidence.md) §3.10, [T37](../lab/test-37-entitlement-revocation.md) D7).
+([Evidence](../lab/evidence.md) §3.10, [T37](../lab/test-37-entitlement-revocation.md) D7).
 
 Every measurement boundary is the last byte the affiliate actually received, which is the figure that
 matters commercially, not teardown at the relay, which is the relay's account of itself.
@@ -615,7 +615,7 @@ path, tenant-isolation boundaries and federation interconnects; red-team scenari
 cross-tenant access, token theft and replay, a compromised endpoint, a compromised federation peer
 over-reaching its negotiated scope, and control-plane privilege escalation. The enforcement,
 revocation, rotation and isolation paths have been exercised against a single relay driven by a stub
-([Evidence](evidence.md) §3.10); what that leaves is clustering, the integration surface, and rights
+([Evidence](../lab/evidence.md) §3.10); what that leaves is clustering, the integration surface, and rights
 windows.
 
 ---

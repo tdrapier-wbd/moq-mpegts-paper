@@ -16,7 +16,7 @@ measured the source time each switch loses, on one build at one idle timeout: a 
 5.4–9.0 s and a clean exit under 2 s, and a relay lost under one importer skips 7 s unflagged. What a
 downstream decoder shows is a different quantity, and the lane's acceptability turns on it: the
 operational threshold this test grades against is that a failover under a second is tolerable and
-one of several seconds is not ([Evidence](../docs/evidence.md) §5 row 8). The test absorbs T6's
+one of several seconds is not ([Evidence](evidence.md) §5 row 8). The test absorbs T6's
 relay-loss cell on the current build (P1-ab).
 
 **Questions.**

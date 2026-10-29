@@ -1168,4 +1168,4 @@ source, including arms that are shedding 80 % of their content.
 - Diagnosed in [test-18-delivery-latency.md](test-18-delivery-latency.md) measurement 6; the gate is
   [test-13-downstream-grooming.md](test-13-downstream-grooming.md) criterion 3.
 - The byte-locking model the fix breaks is [test-12-dual-path-handoff.md](test-12-dual-path-handoff.md).
-- Findings destination: [`docs/evidence.md`](../docs/evidence.md) §3.2.
+- Findings destination: [`evidence.md`](evidence.md) §3.2.

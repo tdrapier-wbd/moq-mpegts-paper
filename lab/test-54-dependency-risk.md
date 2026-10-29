@@ -60,7 +60,7 @@ from the offered lists, not measured.
 | `moq token` became `moq auth`; `--listen` requires `--auth-url` or `--auth-public` | 0.12.0 | the entitlement rigs | rewritten |
 | quinn removed | 0.12.0 | the backend comparisons, which took the BBR generation from the QUIC backend | those cells cannot be re-run on a current build |
 | Relay config: `[server]` became `[listen]`, `[iroh]` refused | `main` in the 0.12.0 cycle | rigs taking a relay TOML | each takes a stripped copy of its tree's config |
-| An import ends on a backward timestamp | 0.14.0 | looped fixtures, a join rig, the live import | fixtures longer than any run ([T53](test-53-token-interop.md)'s 1,200 s); the live import ends on a source step ([Evidence](../docs/evidence.md) §3.13) |
+| An import ends on a backward timestamp | 0.14.0 | looped fixtures, a join rig, the live import | fixtures longer than any run ([T53](test-53-token-interop.md)'s 1,200 s); the live import ends on a source step ([Evidence](evidence.md) §3.13) |
 | A redundant publisher's identity, `--hop`, became `--epoch`, which was later removed | `main` only | the same-epoch and redundancy rigs ([T6](test-6-relay-resilience.md), [T51](test-51-same-epoch-groups.md)) | per-build flags in each rig; T51's change has no merged build |
 | The session's grant reported in AUTH_OK, prefixes only | `main` only | the entitlement estate on draft 17 and later | an exact grant refused on draft 18 ([T53](test-53-token-interop.md)); grants rendered as subtrees |
 | The export's `--delay` redefined (runs that far behind the source), default 500 ms to 1 s | `main` only | the export rigs and the status script | the status script detects `--delay` |

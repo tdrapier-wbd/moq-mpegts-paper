@@ -176,7 +176,7 @@ grooming design is "structurally sound and file-validated", and on P1 PCR repeti
 the groomer's design and not its depth: the reworked groomer passes repetition on the wire, and a
 cushion ladder moved it not at all ([T19](test-19-pcr-grid-verification.md)). **The hardware (P2)
 pass remains the open, load-bearing test.** Recorded as a permanent finding in
-[`docs/evidence.md`](../docs/evidence.md) §3.2.
+[`evidence.md`](evidence.md) §3.2.
 
 **On the segmented lane the same four clips are conformant as delivered at ~10 Mbps** — 0 intervals
 above 40 ms, 0 `pcrverify` violations at ±500 ns, 0 continuity errors, and declared rate agreeing with
@@ -232,4 +232,4 @@ rig upgrade and not an experiment; no entry plans it.
 - Hardware-soak protocol (not yet run): [planned-experiments.md](planned-experiments.md), P0-k.
 - The groomer that passes repetition on the wire, and its cushion ladder:
   [T19](test-19-pcr-grid-verification.md).
-- Finding: [`docs/evidence.md`](../docs/evidence.md) §3.2.
+- Finding: [`evidence.md`](evidence.md) §3.2.

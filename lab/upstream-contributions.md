@@ -235,7 +235,7 @@ and [#1988](https://github.com/moq-dev/moq/pull/1988).
 **State.** Closed; nothing further is owed upstream. The cadence question is settled negatively:
 with all three exporter domains fixed, the wire still carries 12.2 % of intervals above 40 ms,
 because a coded frame's bytes belong to its 40 ms of media; the downstream groomer clears the gate
-(T19 measurement 11, `docs/evidence.md` §3.2). Test contribution
+(T19 measurement 11, `evidence.md` §3.2). Test contribution
 [#3335](https://github.com/moq-dev/moq/pull/3335) added `test/ts/pcr-timing.py` upstream; #3006's
 release contract still has no regression test there. Open: the share above 40 ms varies by clip
 (25.2 % synthetic CBR, 13.9 % and 9.1 % on two contribution captures, 0 % on a 27.5 Mb/s broadcast
@@ -1006,7 +1006,7 @@ milliseconds**, and any proposal must be scored against raising `--latency-max` 
 equivalent budget (2000 ms spanning ~100 RTT at 18.6 ms RTT here is heuristic, not an SRT property).
 
 **The matched SRT arm has been run** ([T28](test-28-failure-injection-matrix.md) § *The matched ladder*;
-[`docs/evidence.md`](../docs/evidence.md) *Matched against SRT, and graded on content*). At measurement
+[`evidence.md`](evidence.md) *Matched against SRT, and graded on content*). At measurement
 point P1, on a single host at 20 Mb/s and 100 ms RTT, build `53f8aa99d`, SRT's `--latency` was set to the
 MoQ lane's measured median at each budget. Unimpaired, both grade 0.000 s lost. **Graded on content, SRT
 loses less programme than the media-aware lane under every impairment shape run** — under a 5 s outage, MoQ
@@ -1136,7 +1136,7 @@ statistics that count neither a skipped group nor an absent track, and an `out_o
 that climbs through every start; and the join-dependent latency at 500 ms, which on `f8215bc47` is
 whether the clock anchors on AC-3 ([T47](test-47-fixed-delay-export.md) conclusion 20;
 [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)). Detail lives in T44–T48,
-measurement points in [`docs/evidence.md`](../docs/evidence.md) §3.16.
+measurement points in [`evidence.md`](evidence.md) §3.16.
 
 ### A UDP sink for `export ts` — declined; RTP legs for ST 2022-7, [#6304](https://github.com/moq-dev/moq/pull/6304), closed with `--sync`
 
@@ -1776,7 +1776,7 @@ matter: why access units rather than filtered TS packets, why audio cuts a group
 SI belongs in the catalog or as tracks, and what the exporter must reconstruct and cannot,
 coordinated with wire conformance measurements. The cheapest convergence win, a declared mux rate
 after null strip, landed on both sides ([#3831](https://github.com/moq-dev/moq/pull/3831) and draft
-#25; [`evidence.md`](../docs/evidence.md) §3.5).
+#25; [`evidence.md`](evidence.md) §3.5).
 
 ### The -02 revision: verbatim-only carriage ([#41](https://github.com/mondain/msfts/pull/41))
 

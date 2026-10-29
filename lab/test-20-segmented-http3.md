@@ -2,7 +2,7 @@
 
 > **State:** the HTTP/3 acquisition path is built, proven and reproducible, and the substrate-matched
 > impairment cells are measured. This closes [P0-2](planned-experiments.md) and answers open question
-> 18 in [`docs/evidence.md`](../docs/evidence.md) §5.
+> 18 in [`evidence.md`](evidence.md) §5.
 >
 > **An HTTP/3 HLS client exists now.** FFmpeg master built `--enable-libcurl` against a libcurl with
 > ngtcp2/nghttp3 and OpenSSL 3.5 native QUIC fetches an HLS presentation entirely over HTTP/3. The
@@ -530,7 +530,7 @@ property of FFmpeg's mpegts muxer rather than a transport result — but labelli
 same as knowing the one it displaced. The wire reads max 24.95 ms and 0.00 % above gate. The method
 rule is that **an instrument known to distort a quantity should be recorded as producing no
 measurement of it, not a caveated one**: the caveated 95 % sat in this file and in
-[`docs/evidence.md`](../docs/evidence.md) for months, and a caveat is not load-bearing enough to stop
+[`evidence.md`](evidence.md) for months, and a caveat is not load-bearing enough to stop
 a reader carrying the number forward.
 
 **The continuity count in this rig never worked.** `grade()` counted `tsp -P continuity` output lines

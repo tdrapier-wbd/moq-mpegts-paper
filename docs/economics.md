@@ -91,7 +91,7 @@ the entire modelled transport line. **This is a transport-line comparison, not a
 
 ## 3. The measured inputs
 
-Two of the model's inputs are measured rather than assumed ([Evidence](evidence.md) §3.5, §3.6).
+Two of the model's inputs are measured rather than assumed ([Evidence](../lab/evidence.md) §3.5, §3.6).
 
 **Relay compute is not the constraint.** A subscriber session costs 0.34 % / 0.87 % / 1.18 % of a
 core at 2 / 10 / 27 Mbps *co-resident* (subscribers on the relay's own host), so cost per delivered
@@ -101,7 +101,7 @@ are the expensive case. They are — but on the egress line. **For a sizing deci
 cross-host figure instead**: with the relay alone on its own instance and every subscriber
 elsewhere, a remote subscriber costs **1.258 % of a core** on `moq-relay` 0.15.1 (noq), measured,
 which extrapolates to about 80 subscribers per core. An earlier build (`moq-relay` 0.14.15, on the
-quinn QUIC stack) measured 0.806 %, or 124–139 per core ([Evidence](evidence.md) §3.6). Three
+quinn QUIC stack) measured 0.806 %, or 124–139 per core ([Evidence](../lab/evidence.md) §3.6). Three
 cautions travel with it. A host without GSO, a Linux setting ([Glossary](glossary.md)), overstates
 relay CPU: enabling it cut the cost by 25–29 % on both builds. Past the limit throughput *collapses*
 rather than degrading, so the purchasable capacity is below the measured ceiling. And each carried
@@ -115,7 +115,7 @@ decision before core count.**
 path, because MoQ declines to carry the null stuffing the edge regenerates anyway: a 5.3 % wire saving
 on the reference clip, 4.57 % nulls, and none on a stuffing-free live feed (1.033 against 1.035; the
 opaque lane 1.054). **Treat it as a wash with upside**, not as 5 % of egress banked, because the
-advantage is the source's stuffing ([Evidence](evidence.md) §3.5).
+advantage is the source's stuffing ([Evidence](../lab/evidence.md) §3.5).
 
 ---
 
@@ -223,7 +223,7 @@ the far end needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
-| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes seven of nine other relays after the join, five for a late subscriber ([Evidence](evidence.md) §3.7) |
+| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes seven of nine other relays after the join, five for a late subscriber ([Evidence](../lab/evidence.md) §3.7) |
 | SRT | 1.037 *(measured, same path; 1.035 on the feed)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
 | Zixi | ~1.03 *(estimated)* | sub-second *(vendor claim, not measured here)* | broadcaster fans out | proprietary, per-GB licence |
 | HLS with TS segments | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1/P2-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, RFC 8216 and its second edition; DVB-DASH (ETSI TS 103 285) profiles ISOBMFF only — **not standards-track, yet carried by every cache, CDN and general-purpose client; how a receiver rebuilds a transport stream from it is specified nowhere** ([Comparison](comparison.md) §4.4, §6.1) |
@@ -243,7 +243,7 @@ ten times commodity today.
 ### 4.5 Where relay fan-out changes the bill, and where it does not
 
 **Relay fan-out does not reduce last-mile egress.** Measured, 150 subscribers each receive **9.84 Mb/s,
-a full copy** ([Evidence](evidence.md) §3.6). What is nearly free is *state*: 2.62 MB and 1.258 % of a
+a full copy** ([Evidence](../lab/evidence.md) §3.6). What is nearly free is *state*: 2.62 MB and 1.258 % of a
 core per subscriber on `moq-relay` 0.15.1, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where
 receivers cluster, the relay economises upstream backhaul instead, ~$11,500 a year flat against $185,000
 for sixteen destinations without a relay on the eight-service model, which is the same topology an HTTP
@@ -287,7 +287,7 @@ relay rate (§4.4). The whole of that gap is the assumption.
 four to ten times commodity delivery. Professional contribution carries SLA, monitoring and support
 obligations that consumer CDN pricing does not, so some of the gap is real cost rather than margin.
 Relay portability between implementations is partial: five of nine other relays serve a subscriber
-joining mid-stream ([Evidence](evidence.md) §3.7), and a market cannot commoditise a product buyers
+joining mid-stream ([Evidence](../lab/evidence.md) §3.7), and a market cannot commoditise a product buyers
 cannot reliably switch between.
 **And the band itself is not yet evidenced for MoQ: no conformant sub-second configuration has been
 measured on it, and none has passed a whole capture on any lane** ([Comparison](comparison.md) §5.1), so
@@ -418,7 +418,7 @@ building it or renting from one of two premium suppliers (§4.6).
 
 A CDN takes on the fan-out, point-of-presence operation, peering and capacity risk. It does **not** take
 the conformance hand-off, for which nothing off the shelf exists on the MoQ lane
-([Evidence](evidence.md) §3.2); TR 101 290 monitoring inside its network; the entitlement and control
+([Evidence](../lab/evidence.md) §3.2); TR 101 290 monitoring inside its network; the entitlement and control
 plane (§8); the receive estate (§2); or operations to the broadcast standard.
 
 **The complexity transferred is bandwidth-shaped and the complexity retained is broadcast-shaped**:
@@ -428,7 +428,7 @@ renting moves most of the *bill*, not most of the *engineering*.
 
 - **No hand-off problem.** Byte-faithful SRT is transparent on every criterion over a real path — all 13
   PIDs, SI/splice, stuffing, source mux rate, PSI cadence, PCR grid, 0 continuity errors, **the
-  source's PCR accuracy intact, ungroomed** ([Evidence](evidence.md) §3.1). **Removes the grooming
+  source's PCR accuracy intact, ungroomed** ([Evidence](../lab/evidence.md) §3.1). **Removes the grooming
   workstream** MoQ cannot buy out of; the IRD-facing RTP egress, and an identical pair of it for
   ST 2022-7, remain on every lane.
 - **Primary distribution has little fan-out** (§4.5) — tens of destinations, N tunnels tractable; CDN
@@ -438,7 +438,7 @@ renting moves most of the *bill*, not most of the *engineering*.
 
 **Two measured qualifications cut the other way.** SRT continuity degrades under well-behaved AQM —
 4,279 errors under FIFO but **17,652–22,365 under `codel`** at the same shortfall
-([Evidence](evidence.md) §3.3, [T8b](../lab/test-8b-congestion-control.md)) — byte transparency delivers
+([Evidence](../lab/evidence.md) §3.3, [T8b](../lab/test-8b-congestion-control.md)) — byte transparency delivers
 shortfall as corrupted bytes, not absent ones. MoQ's counters read zero there, but by construction: its
 exporter writes its own continuity counters, so its shortfall surfaces as absent content instead, and
 the zero is not a measurement of it. SRT's latency advantage is a buffer setting, paid from the
@@ -489,7 +489,7 @@ of both. **The category is mis-specified for this buyer rather than merely expen
 
 | Layer | Generalises? | Who should supply it |
 |---|---|---|
-| **Mechanism** — token issue and verification, key rotation, authorisation enforcement, revocation semantics | yes; it is protocol and cryptography | open source or a vendor. The *enforcement point* is native and verified to exist, but the credential profile above it is a deployment choice rather than a wire primitive, so this layer is generalisable in principle and not yet standardised in practice ([Evidence](evidence.md) §3.10) |
+| **Mechanism** — token issue and verification, key rotation, authorisation enforcement, revocation semantics | yes; it is protocol and cryptography | open source or a vendor. The *enforcement point* is native and verified to exist, but the credential profile above it is a deployment choice rather than a wire primitive, so this layer is generalisable in principle and not yet standardised in practice ([Evidence](../lab/evidence.md) §3.10) |
 | **Orchestration** — provision a route, place a relay, configure a groomer, tear it down | partly; the primitives generalise, the topology and change process do not | vendor primitives, in-house policy |
 | **Observability** — probes and conformance checks generalise; sinks, thresholds, escalation and runbooks are the operator's | partly | vendor probes, in-house integration |
 | **Policy** — who is entitled to what, when, under which contract, and what happens when it changes | no; it lives inside the rights, scheduling and CA systems | in-house, necessarily |
@@ -525,7 +525,7 @@ staffed from the same place.
   the process, encoded across those isolated systems, and needs it honoured rather than replaced.
 - **Data-plane vendor value has moved rather than disappeared.** There is little left in *transport*.
   But the campaign's own negative results are a product specification: nothing off the shelf turns a MoQ
-  egress into a conformant transport stream ([Evidence](evidence.md) §3.2), and the campaign's own
+  egress into a conformant transport stream ([Evidence](../lab/evidence.md) §3.2), and the campaign's own
   groomer does so only as far as P1/P2 (§3.16 of the same document). **The value sits at the
   hand-off, not in the carriage** — the edge appliance, the IRD-facing gateway, the conformance stage —
   which is a smaller market than transport was, and a real one.
@@ -577,7 +577,7 @@ fund alone, as the relay-interop work above is not.
 - **How much of MoQ's carriage advantage survives a third source?** On two it *is* the source's
   stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely
   filled carrier would bound the range. The cheapest outstanding measurement on the deciding line
-  ([Evidence](evidence.md) §5).
+  ([Evidence](../lab/evidence.md) §5).
 - **What is the overhead on a lossy real path?** Both protocols are measured back-to-back at 1 %
   random loss and neither moved by more than a point; random loss beyond that stresses a transport
   rather than models a route, and the sender-side cost is inferred rather than captured.
@@ -591,7 +591,7 @@ fund alone, as the relay-interop work above is not.
 - **What does relay memory cost to operate around?** A sizing line rather than a restart cycle,
   since it plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot
   ceiling per publisher** — and the cost lands on multi-channel relay density, not on audience:
-  growth is flat across 0–4 subscribers ([Evidence](evidence.md) §3.6). That plateau was measured on
+  growth is flat across 0–4 subscribers ([Evidence](../lab/evidence.md) §3.6). That plateau was measured on
   the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a
   property of the design or of the QUIC stack is open.
 - **How much of the operational-saving hypothesis survives running an immature platform to a

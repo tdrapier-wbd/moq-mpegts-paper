@@ -11,7 +11,7 @@ The set decays by accretion, not by error. Reserve the tail of every session for
 
 | # | Group | Look especially for |
 |---|---|---|
-| 1 | `docs/evidence.md` | a §2 row that no longer matches its §3; a result missing its P-point, domain or build |
+| 1 | `lab/evidence.md` | a §2 row that no longer matches its §3; a result missing its P-point, domain or build |
 | 2 | `docs/comparison.md`, `docs/problem.md` | restated evidence; a verdict cell whose qualification lives only in `evidence.md`; a requirement scored on since re-measured evidence |
 | 3 | `docs/architecture.md`, `docs/control-plane.md` | design a measurement has overtaken; unimplemented design presented without its weight |
 | 4 | `docs/economics.md`, `docs/glossary.md`, `lab/cost-model.md` | a modelled rate that lost its *hypothetical* label; a term defined twice |

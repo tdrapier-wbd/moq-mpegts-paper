@@ -5,7 +5,7 @@ Layer: background. How the stream format and the three transports work, for a re
 them and not others; no verdicts and no measurements.
 Scope: terms defined in the [Glossary](glossary.md) are linked rather than defined again. Which
 transport suits primary distribution, and why, is [Comparison](comparison.md); every measurement is in
-[Evidence](evidence.md).
+[Evidence](../lab/evidence.md).
 
 ---
 

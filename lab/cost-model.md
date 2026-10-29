@@ -319,7 +319,7 @@ intuition that CPU is what you buy:
 Sessions per instance at 9.8 Mbps of MoQ wire rate: c7g.large 231 by CPU but **95** by network
 baseline; c6gn.large 231 by CPU and 305 by network, so 231. That CPU column is T9's co-resident
 rate; at the cross-host rate the paper sizes on, about 80 sessions a core
-([Evidence](../docs/evidence.md) §3.6), CPU allows 159 on either and every binding stands. **On a
+([Evidence](evidence.md) §3.6), CPU allows 159 on either and every binding stands. **On a
 general-purpose instance the sustained network allowance throws away 40–60 % of the relay's measured
 compute headroom.**
 The "up to 12.5 Gbps" headline is burst credit, irrelevant to a 24/7 feed. Network-optimised

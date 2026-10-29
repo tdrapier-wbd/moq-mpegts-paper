@@ -8,7 +8,7 @@ scheduling; the hand-offs' offset is below what the clocks can bound.**
 ## Objective
 
 End-to-end timing through MoQ is measured on loopback, or for 2 h across hosts on PCR arrivals, and
-an export's regenerated PCR grades the export, not the path ([Evidence](../docs/evidence.md) §3.11,
+an export's regenerated PCR grades the export, not the path ([Evidence](evidence.md) §3.11,
 §3.16; §5 row 3). The live feed is handed off twice from one contribution path, once to each host.
 Tapping the secondary's own hand-off against its export of the primary's import puts both ends of
 the path, from the primary's ingest through its relay to the secondary's export, on one clock.

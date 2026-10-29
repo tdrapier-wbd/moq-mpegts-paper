@@ -44,14 +44,14 @@ two-to-nine-second delivery budget. But at conformance it does not necessarily b
 point-to-point incumbents it would displace, which carry their source’s own conformant timing and
 buy their latency with a jitter buffer the operator sets. Nothing below about one second was
 conformant over a whole capture on any lane, so MoQ’s strategic sub-second case is architecturally
-credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](docs/evidence.md) §3.11).
+credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidence](lab/evidence.md) §3.11).
 
 **Two things separate a credible evaluation from a deployable one, and neither is a transport property.**
 The make-or-break conformance gate has never been attempted — nothing here has been fed to a hardware
 receiver or graded by a hardware analyser. And relay capacity is not yet substitutable: a MoQ feed
 crosses most other implementations' relays tested, but fewer for a subscriber joining mid-stream,
 which matters commercially rather than technically, because the economic case for MoQ depends on
-relay capacity being a market the buyer can shop ([Evidence](docs/evidence.md) §3.7, [Economics](docs/economics.md) §4.6).
+relay capacity being a market the buyer can shop ([Evidence](lab/evidence.md) §3.7, [Economics](docs/economics.md) §4.6).
 
 **On cost, the protocol barely registers.** The bill is set by destination count and by which delivery
 market the capacity is bought in — published cloud egress sits about an order of magnitude above
@@ -65,11 +65,11 @@ media, and an opaque one, which carries its bytes unchanged.
 
 - **The TR 101 290 P1/P2 gate was met in software on both planes, and held for a day on the
   media-aware lane.** It closed downstream, in an edge stage that no off-the-shelf tool provides behind
-  MoQ ([Evidence](docs/evidence.md) §3.2). That is not full conformance on the media-aware lane: as a
+  MoQ ([Evidence](lab/evidence.md) §3.2). That is not full conformance on the media-aware lane: as a
   transmux it discards the source's packet schedule, and its wire fails the 13818-1 buffer model, which
   only a re-multiplexer repairs. Upstream's fixed-delay export, now merged, builds that stage into the
   subscriber and, at a 1 s delay, keeps every track and buffer on every join tried, at about a lab
-  re-multiplexer's latency ([Evidence](docs/evidence.md) §3.16).
+  re-multiplexer's latency ([Evidence](lab/evidence.md) §3.16).
 - **Conformance costs that lane latency, though not as cushion depth.** Part of the cost is an
   identified upstream regression that could be recovered; the rest is structural, because a demuxed
   lane moves the contribution encoder's buffer budget downstream into the edge gateway
@@ -96,7 +96,7 @@ the problem, the structure should show which part is which.
 | [Comparison](docs/comparison.md) | **Data plane** | The head-to-head, with the evidence type marked on every verdict row |
 | [Architecture](docs/architecture.md) | **Above the transport** | The reference architecture; the edge gateway and 1+1 redundancy come first as the measured part |
 | [Control, Entitlement and Security](docs/control-plane.md) | Above the transport | Provisioning, entitlement, threat model. **Design, except the enforcement layer, which is measured** |
-| [Evidence](docs/evidence.md) | Cross-cutting | Method, instruments, results by question, and the limits of the evidence |
+| [Evidence](lab/evidence.md) | Lab record | Method, instruments, results by question, and the limits of the evidence |
 | [Economics](docs/economics.md) | Cross-cutting | Cost framework, the always-on model at published rates, and the ownership questions that follow |
 | [Glossary](docs/glossary.md) | — | The two vocabularies side by side, in broadcast terms |
 

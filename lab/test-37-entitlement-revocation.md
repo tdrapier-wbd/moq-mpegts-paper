@@ -67,7 +67,7 @@ qualifying.**
 
 ## What is already known, and precisely what it leaves open
 
-Only that the enforcement point exists ([Evidence](../docs/evidence.md) §3.10). Everything about its
+Only that the enforcement point exists ([Evidence](evidence.md) §3.10). Everything about its
 behaviour over time is open.
 
 Reading the relay's authorization path yielded four hypotheses, stated so that the run could
@@ -487,7 +487,7 @@ periods, the implementation documenting two" rather than a single number.
   quoted for deployment, it must be quoted as a floor.
 - **No clustering.** A single relay revokes a session it admitted itself. Revocation across a relay
   mesh — where the session and the decision may be on different nodes — is not tested, and is
-  distributed-systems work the platform would have to build ([Evidence](../docs/evidence.md) §3.10).
+  distributed-systems work the platform would have to build ([Evidence](evidence.md) §3.10).
 - **Token lifetime and re-check cadence are separate parameters and this experiment keeps them
   separate.** [Control](../docs/control-plane.md) §4 calls TTL "the single most consequential
   parameter in the model"; if H1 and H2 hold, the consequential parameter for a live session is the

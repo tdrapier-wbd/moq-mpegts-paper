@@ -13,7 +13,7 @@ the source's own PCR. The quest's claim is that from the first group it releases
 source's bytes, less any object dropped late, so it is exactly as T-STD-conformant as the source,
 and that two exporters of one broadcast write identical bytes. If that holds on real captures, the
 media-aware lane has a TS-out mode whose conformance is the source's
-([Evidence](../docs/evidence.md) §3.16, §5 row 2) and whose 1+1 legs are byte-identical without
+([Evidence](evidence.md) §3.16, §5 row 2) and whose 1+1 legs are byte-identical without
 being co-started ([Architecture](../docs/architecture.md) §5.1, P1-o). The demultiplexed export can
 claim neither.
 

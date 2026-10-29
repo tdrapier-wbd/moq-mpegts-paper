@@ -42,7 +42,7 @@ prose.** A new section needs a reason that editing an existing one cannot satisf
 ## Size budgets (tripwires)
 
 `README.md` 700–1,000 words · `STATUS.md` ≤ 600 · `lab/planned-experiments.md` ≤ 2,500 ·
-`lab/method-notes.md` ≤ 21,000 · `lab/upstream-contributions.md` ≤ 15,000 · `docs/evidence.md` ≈ 10,000 ·
+`lab/method-notes.md` ≤ 21,000 · `lab/upstream-contributions.md` ≤ 15,000 · `lab/evidence.md` ≈ 10,000 ·
 `docs/comparison.md` ≈ 7,000. A change that takes a file over budget cuts the same file elsewhere, or
 justifies the growth in the report. A file already over budget (the ledger, at about 29,000 words)
 takes no net growth from any change, and each rotation pass on it cuts at least 3,000 words until it

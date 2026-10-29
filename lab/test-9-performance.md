@@ -1047,7 +1047,7 @@ awk '{n++;x=$1;y=$2;sx+=x;sy+=y;sxy+=x*y;sxx+=x*x}
 ## References
 
 - Plan: [planned-experiments.md](planned-experiments.md) (T9), [README](README.md) roadmap.
-- Reconnect/retention behaviour the soak interacts with: [evidence](../docs/evidence.md) §3.4,
+- Reconnect/retention behaviour the soak interacts with: [evidence](evidence.md) §3.4,
   [#2469](https://github.com/moq-dev/moq/pull/2469), [#2647](https://github.com/moq-dev/moq/pull/2647),
   [#2615](https://github.com/moq-dev/moq/pull/2615).
 - The distinct relay-wedge failure mode: [#2701](https://github.com/moq-dev/moq/pull/2701),

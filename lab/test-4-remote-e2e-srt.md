@@ -512,7 +512,7 @@ subscribe, with 0 continuity errors.
 
 Opaque-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: the passthrough's
 output over this kind of path is the source's bytes.
-Recorded as a permanent finding in [`docs/evidence.md`](../docs/evidence.md) §1.
+Recorded as a permanent finding in [`evidence.md`](evidence.md) §1.
 
 ## Still open
 
@@ -558,7 +558,7 @@ mode (drop times out, refusal returns immediately).
 
 ## References
 
-- Deployed cloud path and end-to-end result: [`docs/evidence.md`](../docs/evidence.md) §1.
+- Deployed cloud path and end-to-end result: [`evidence.md`](evidence.md) §1.
 - Three-lane rig: [`scripts/t4-three-lane.sh`](scripts/t4-three-lane.sh); shared instrument:
   [`scripts/t3-transparency.py`](scripts/t3-transparency.py).
 - Same criteria on loopback, and the P2-gate degeneracy: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).

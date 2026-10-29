@@ -352,7 +352,7 @@ sets in by ~3 % loss and **reordering** is the boundary condition. The loss half
 a CUBIC default on either lane and is removed by BBR on either lane
 ([T8](test-8-srt-vs-moq.md)); reordering is not, and it damages both lanes once their packets are
 comparable ([T20](test-20-segmented-http3.md)). Recorded as a permanent finding in
-[`docs/evidence.md`](../docs/evidence.md) §3.3.
+[`evidence.md`](evidence.md) §3.3.
 
 **What would settle the part that is still open** is the same ladder against a real CDN edge rather
 than a single unoptimised origin. The one residual, the 10 % cell's four consecutive fetches before its
@@ -405,4 +405,4 @@ takes.
 - The segmented lane's congestion behaviour under a shaped bottleneck, where the same client dies
   rather than re-anchoring: [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Shaper rules this experiment contributed: [method-notes.md](method-notes.md) §5.
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.3.
+- Findings: [`evidence.md`](evidence.md) §3.3.

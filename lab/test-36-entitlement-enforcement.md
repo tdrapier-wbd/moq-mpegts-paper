@@ -30,7 +30,7 @@ must receive exactly what it licenses and must not receive, or learn about, anyt
 
 ## What is already known, and precisely what it leaves open
 
-[Evidence](../docs/evidence.md) §3.10 records the only established fact: MoQ carries authorization
+[Evidence](evidence.md) §3.10 records the only established fact: MoQ carries authorization
 information at the point of subscription and a relay can accept or refuse there, so **the enforcement
 point exists and is native**. That is an architectural reading of the protocol. It says nothing about
 whether the enforcement is correct, complete, or free of a delivery window before refusal.
@@ -305,7 +305,7 @@ but no build at hand fails them.
   ([Control](../docs/control-plane.md) §7.3, §9); nothing here tests a scheme that would change it.
 - **One implementation.** Everything measured is a property of this relay. The credential profile —
   path-scoped JWTs, expiry, mTLS peer identity — is a deployment choice rather than a wire primitive
-  guaranteed across implementations ([Evidence](../docs/evidence.md) §3.10), so a pass here does not
+  guaranteed across implementations ([Evidence](evidence.md) §3.10), so a pass here does not
   generalise to another MoQ relay.
 - **The capture is a userspace forwarder, not an interface capture**, for the reason given under
   Environment. It sees the same bytes; it is not the same instrument, and it would not see traffic

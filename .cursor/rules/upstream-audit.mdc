@@ -22,7 +22,7 @@ It changes nothing; it prints one line per tracked item, `ok` or `CHECK` with fl
 
 - `merged`, `closed`: the ledger (`lab/upstream-contributions.md`) takes the final state; the row
   goes. A closure that unblocks or kills work moves that work in `STATUS.md`.
-- `reply`: read it. Answer with a draft in `docs/upstream/` (posted only with the author's go-ahead),
+- `reply`: read it. Answer with a draft in `lab/upstream/` (posted only with the author's go-ahead),
   or state in the row what it changes. A reply that decides something the campaign relies on
   reaches the ledger entry too.
 - `bot`, `ci`, `changes` on our pull requests: act as the repository's CONTRIBUTING says (fix or

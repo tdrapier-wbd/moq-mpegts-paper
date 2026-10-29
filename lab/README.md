@@ -4,16 +4,17 @@ This directory is the engineering notebook for the MoQ MPEG-TS primary-distribut
 holds the campaign **plan** — the objective, the gate mapping and the pass criteria fixed before the
 numbers were known — and the campaign **record**: for each experiment, the objective, environment,
 exact procedure, measured results and conclusion, written so that an external engineer can reproduce
-it. It is the executable companion to [evidence](../docs/evidence.md) §1.2, which defines the
+it. It is the executable companion to [evidence](evidence.md) §1.2, which defines the
 validation pyramid and the acceptance gates.
 
-Three other files here are not experiments. [`method-notes.md`](method-notes.md) is the rulebook to
-consult before designing or grading an experiment.
-[`upstream-contributions.md`](upstream-contributions.md) records what was found, reported and verified
-in other people's projects, including the review of the MSFTS carriage specification.
+Four other files here are not experiments. [`evidence.md`](evidence.md) gathers the results by
+question, with the method, the instruments and the limits of the evidence; where an observation here
+has become a finding, a test file points to it rather than restating it.
+[`method-notes.md`](method-notes.md) is the rulebook to consult before designing or grading an
+experiment. [`upstream-contributions.md`](upstream-contributions.md) records what was found, reported
+and verified in other people's projects, including the review of the MSFTS carriage specification.
 [`planned-experiments.md`](planned-experiments.md) is the roadmap of what remains. The paper in
-[`docs/`](../docs/) states what has been learned; where an observation here has become a permanent
-finding, this notebook points to [`docs/evidence.md`](../docs/evidence.md) rather than restating it.
+[`docs/`](../docs/) states what has been learned, and cites `evidence.md` for it.
 
 > **On honesty.** The plan is written to be disproven. Results that reached the wrong conclusion and
 > were later corrected are recorded in the per-test files, which state the current finding and, where
@@ -36,7 +37,7 @@ The thesis fails if any of the following holds and cannot be remedied:
 - MoQ carriage is *not* bit-transparent (continuity errors, dropped signalling, or structural
   corruption survive a lossless path).
 - Groomed egress cannot pass **TR 101 290 P1/P2 on a hardware IRD** (the make-or-break gate —
-  [evidence](../docs/evidence.md) §1.2, Gate 2).
+  [evidence](evidence.md) §1.2, Gate 2).
 - Impairment or failure behaviour is qualitatively worse than the incumbent IP transports
   (SRT/Zixi/RIST) it would replace, at matched conditions.
 
@@ -56,7 +57,7 @@ Environment / Procedure / Results / Observations / Conclusion / References. **Th
 authoritative** for its measurements, scope and qualifications, and its `State:` line for how far it
 has got. The *Current finding* column is an index entry, not a summary of the evidence: one line, and
 no number without the conditions its file states. The rung and gate are from
-[evidence](../docs/evidence.md) §1.2.
+[evidence](evidence.md) §1.2.
 
 | # | Experiment | Rung · gate | State | Current finding | File |
 |---|---|---|---|---|---|
@@ -176,7 +177,7 @@ one-line edit.
 
 ## Where the campaign stands, and what is left
 
-What is and is not established is stated once, in [evidence](../docs/evidence.md) §2, and the limits
+What is and is not established is stated once, in [evidence](evidence.md) §2, and the limits
 of the evidence in §4. What is outstanding, what blocks it and in what order to run it is stated
 once, in [planned-experiments.md](planned-experiments.md), ranked P0/P1/P2 by what a result could
 change. Neither is restated here. Read every row of the table above against the limits in

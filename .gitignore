@@ -2,7 +2,7 @@
 INSTRUCTIONS.local.md
 lab-notes.local.md
 STATUS.md
-docs/upstream/*
+lab/upstream/*
 
 # lab/ is a public engineering notebook, but raw internal digests stay local
 *.local.md

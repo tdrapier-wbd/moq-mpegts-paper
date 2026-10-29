@@ -5,7 +5,7 @@
 [T14](test-14-data-plane-comparison.md) measurement 2 established that a segmented-HTTP egress is ~240×
 coarser than a MoQ egress by median burst size, and stopped there on purpose: the measurement point was
 the *ungroomed* egress, because the question was burst granularity. That left the consequence unmeasured.
-[evidence](../docs/evidence.md) §3.2 said so in as many words — "the equivalent grooming
+[evidence](evidence.md) §3.2 said so in as many words — "the equivalent grooming
 pass on a segmented-HTTP egress is unmeasured, and would need a larger buffer" — and T14's observations
 disposed of it in one sentence:
 
@@ -324,7 +324,7 @@ buyable with it on either plane.
 
 ## Conclusion
 
-**The unmeasured cell in [evidence](../docs/evidence.md) §3.2 is closed, and the answer is
+**The unmeasured cell in [evidence](evidence.md) §3.2 is closed, and the answer is
 yes.** A segmented-HTTP egress grooms to the same standard T13 reached on the MoQ lane — 0 PCR violations
 at 481 ns, 0 repetition intervals above 40 ms, 0 continuity errors, 10 ms CoV 0.068, largest silence
 17.2 ms, every PID and all three SCTE-35 PIDs preserved — by the same tool, in the same chain, with
@@ -418,6 +418,6 @@ the flag.*
   observation arm D reproduces
 - [T9](test-9-performance.md) — the loopback span artefact recorded in Corrections
 - [architecture](../docs/architecture.md) §4.5 — the work this measures
-- [evidence](../docs/evidence.md) §3.2 — the unmeasured cell this closes
+- [evidence](evidence.md) §3.2 — the unmeasured cell this closes
 - Rigs: [`t16-groom-segmented.sh`](scripts/t16-groom-segmented.sh),
   [`t13-cadence.py`](scripts/t13-cadence.py), [`t13-grade.py`](scripts/t13-grade.py)

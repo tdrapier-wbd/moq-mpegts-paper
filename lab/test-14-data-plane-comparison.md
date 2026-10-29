@@ -268,7 +268,7 @@ injection costs file-domain PCR accuracy that the opaque lane's byte-preserving 
 Both absences on the MoQ leg are known and by design, and this run reproduces them rather than
 discovering them. **Stuffing** is not carried, which is exactly where the media-aware lane's 0.982× wire
 figure comes from. **TDT/TOT** is not relayed either, so the edge must mint wall time
-([evidence](../docs/evidence.md) §3.1, [architecture](../docs/architecture.md) §4.2). Arm B1 carries both
+([evidence](evidence.md) §3.1, [architecture](../docs/architecture.md) §4.2). Arm B1 carries both
 without being asked to.
 
 ### Measurement 5 — wire cost: HTTP's own overhead is negligible, and MoQ's ~7 % lead is the price of not being verbatim
@@ -428,7 +428,7 @@ unrun, and now carrying the whole of that row.
 has no normative reference implementation — it is an Apple-authored informational document — yet it
 interoperates everywhere, and its authoritative implementation is closed-source and macOS-only. MoQ is
 standards-track with open implementations and no cross-implementation media interop
-([evidence](../docs/evidence.md) §3.7). Open source and interoperability are not the same axis.
+([evidence](evidence.md) §3.7). Open source and interoperability are not the same axis.
 
 ---
 

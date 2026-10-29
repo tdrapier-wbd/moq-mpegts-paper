@@ -960,7 +960,7 @@ What changes is **framing**: "a seamless relay-side merge is out of scope" is tr
 implementation*, not of the standard, which specifies object-dedup as a SHOULD. The genuinely
 out-of-scope case in *both* spec and implementation is bridging two *different* broadcasts (timestamp
 rewriting) — that is Malformed under §9.1, and is the "won't merge two broadcasts" the maintainer means.
-Docs corrected accordingly ([evidence](../docs/evidence.md) §3.4, [architecture](../docs/architecture.md) §8.4/§5.1,
+Docs corrected accordingly ([evidence](evidence.md) §3.4, [architecture](../docs/architecture.md) §8.4/§5.1,
 [architecture](../docs/architecture.md) §8.4, [architecture](../docs/architecture.md) §5.5/§14.5).
 
 ### Reconnect latency and media retention
@@ -1312,7 +1312,7 @@ case with stream-clocked grooming. Every failover number in *this* file is a sin
 time, so it is break-before-make by construction; the dual-leg drill it points to has since run as
 T12, which grades two concurrently live legs at a receiver and finds the switch hitless — including
 the graceful exit that has no single-leg answer. The full validated finding — including which of our
-reports were real vs harness artefacts — is recorded in [`docs/evidence.md`](../docs/evidence.md) §3.4.
+reports were real vs harness artefacts — is recorded in [`evidence.md`](evidence.md) §3.4.
 On upstream `main` each importer mints its own epoch (#5967), and the demultiplexed export survives
 every takeover as a marked programme switch: a hard kill costs about one detection interval, a clean
 exit under 2 s, and a standby's start or restart is a switch of its own. A relay lost under one
@@ -1340,4 +1340,4 @@ decided entirely by whether the pair shares a source and a naming scheme.
   [`lab/scripts/t6-segmented-sweep.sh`](scripts/t6-segmented-sweep.sh) (the set),
   [`lab/scripts/t6-hls-pull.py`](scripts/t6-hls-pull.py) (the retrying client). Method rules in
   [method-notes.md](method-notes.md) §5.
-- Finding: [`docs/evidence.md`](../docs/evidence.md) §3.4.
+- Finding: [`evidence.md`](evidence.md) §3.4.

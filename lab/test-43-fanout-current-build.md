@@ -197,7 +197,7 @@ and the graded subscribers counted no continuity error.
 
 The memory term is the larger for sizing: at 60–69 MB a channel, an edge carrying a hundred 10 Mb/s
 channels would hold 6–7 GB before its first subscriber on each. It is not the per-group stream-slot
-retention of [evidence §3.6](../docs/evidence.md), which at about 9 KiB a group comes to under 2 MB for
+retention of [evidence §3.6](evidence.md), which at about 9 KiB a group comes to under 2 MB for
 a channel connected for three minutes.
 
 **What holds it is the relay's media retention.** From the code at `ffa5b81b`: every media track the

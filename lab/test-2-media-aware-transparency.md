@@ -331,7 +331,7 @@ pass (T7). The tables have since been closed upstream on snapshot tracks — EIT
 the P2 hardware pass is the one that remains. EIT p/f round-tripped byte-identically on
 [#2824](https://github.com/moq-dev/moq/pull/2824) here, but that PR closed unmerged, so the
 measurement grades a design step. The permanent finding is recorded in
-[`docs/evidence.md`](../docs/evidence.md) §3.2 (PCR cadence + pacer) and §3.1 (open-GOP + service layer).
+[`evidence.md`](evidence.md) §3.2 (PCR cadence + pacer) and §3.1 (open-GOP + service layer).
 
 ## References
 
@@ -339,4 +339,4 @@ measurement grades a design step. The permanent finding is recorded in
 - Byte-for-byte counterpart and the decisive contrast: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).
 - Upstream: [#1979](https://github.com/moq-dev/moq/issues/1979), #2072, #2066,
   [#2440](https://github.com/moq-dev/moq/pull/2440).
-- Findings: [`docs/evidence.md`](../docs/evidence.md) §3.1, §3.2.
+- Findings: [`evidence.md`](evidence.md) §3.1, §3.2.

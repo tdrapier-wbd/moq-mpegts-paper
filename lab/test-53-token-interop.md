@@ -9,7 +9,7 @@ carry across as a token, and moqx v0.3.6 can withdraw a grant only by a restart.
 [Control](../docs/control-plane.md) §3 holds that the transport contributes the enforcement point,
 not the token format, and that the entitlement service is transport-independent. Every enforcement
 result behind it ([T36](test-36-entitlement-enforcement.md)–[T38](test-38-entitlement-estate.md)) is
-one implementation, `moq-relay`, and [Evidence](../docs/evidence.md) §3.10 lists a second
+one implementation, `moq-relay`, and [Evidence](evidence.md) §3.10 lists a second
 implementation as unmeasured. This test puts one entitlement estate in front of two relay
 implementations, `moq-relay` and moqx (OpenMOQ's relay, [T11](test-11-interop.md)), and asks which of
 three layers carries across:

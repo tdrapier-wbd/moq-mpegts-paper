@@ -481,7 +481,7 @@ The load-bearing gaps that remain are **P2 hardware conformance** ([T7](test-7-t
 Gate 2) and the lanes over a real path ([T48](test-48-passthrough-export.md)'s internet leg for the
 opaque lane, [T4](test-4-remote-e2e-srt.md) for segmented HTTP) — file-based localhost transparency is
 necessary, not sufficient. Recorded as a permanent finding in
-[`docs/evidence.md`](../docs/evidence.md).
+[`evidence.md`](evidence.md).
 
 ### Still open
 
@@ -545,7 +545,7 @@ media, and the instrument asserts the reference's homogeneity.*
   extends from one clip to three and adds the additive direction to.
 - [T16](test-16-grooming-segmented-http.md) — the groomed version of this same chain, which closes
   the PCR-accuracy deviation measured here.
-- Finding: [`docs/evidence.md`](../docs/evidence.md) §3.1.
+- Finding: [`evidence.md`](evidence.md) §3.1.
 - Rigs: [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh),
   [`t3-transparency.py`](scripts/t3-transparency.py), [`t48-passthrough.sh`](scripts/t48-passthrough.sh)
   for the opaque lane, and [`t14-a.sh`](scripts/t14-a.sh) for the media-aware capture graded in the
