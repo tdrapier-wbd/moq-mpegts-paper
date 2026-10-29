@@ -35,7 +35,7 @@ Point-to-point incumbents set a low bar on fan-out (§10).
 | Candidate | What it is here | Class |
 |---|---|---|
 | **MoQ** | `moq import ts` → relay fabric → `moq export ts`, on QUIC/WebTransport | live publish/subscribe with native relay |
-| **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (DVB-DASH profiles ISOBMFF only), at classic segment durations over HTTP/1.1; Low-Latency HLS would need HTTP/2 or HTTP/3 | cacheable-object pull over commodity delivery |
+| **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (DVB-DASH profiles ISOBMFF only), at classic segment durations over HTTP/1.1 | cacheable-object pull over commodity delivery |
 | **SRT / Zixi / RIST** | a reliable UDP tunnel per destination, optionally through a gateway tier | point-to-point session transport |
 
 They are grouped by *scaling shape*, not by quality, which flatters two of them: RIST is openly
@@ -392,7 +392,7 @@ binary.
 
 **MoQ's remaining mux-content advantage is multi-programme carriage alone, and only on the opaque lane**,
 unmeasured on one. Against the media-aware lane segmented HTTP keeps stuffing, CAT, continuity counters
-and wall clock, and **fidelity costs the source's stuffing in wire volume** on both planes (§9).
+and wall clock.
 
 ---
 
@@ -403,8 +403,7 @@ Fully modelled in [Economics](economics.md).
 **Wire volume favours MoQ by the source's stuffing** — §8's fidelity trade: on a clip 4.57 % nulls,
 **0.982×** media-aware against **1.056×** segmented HTTP/3 (derived) and **1.037×** SRT; on a
 stuffing-free feed 1.033× against SRT's 1.035× ([Evidence](../lab/evidence.md) §3.5). Verbatim carriage
-costs 1.03–1.06×; the off-the-shelf packager retains stuffing. HTTP overhead is 0.06 %, and
-HTTP/3 costs ~2.6 points more than HTTP/2 on TCP.
+costs 1.03–1.06×; the off-the-shelf packager retains stuffing.
 
 **Destination count decides the bill, not the transport** ([Economics](economics.md) §4.4). **The
 delivery market decides the level:** commodity CDN at $0.005–0.010/GB against two MoQ suppliers at
@@ -424,8 +423,7 @@ narrow sub-second claim. Zixi adds a per-GB licence.
 
 RIST (VSF TR-06) is the **strongest point-to-point transport** here: openly specified and
 multi-vendor, RTP-native, with native dual-path protection. On the hand-off it ties SRT on
-worst-case silence (~35 ms against MoQ's 149 ms and segmented HTTP's 4.01 s) and passes the source's
-bursts through (§4.3). **It fails the same way as SRT**: fan-out is N sessions the operator runs,
+worst-case silence and passes the source's bursts through (§4.3). **It fails the same way as SRT**: fan-out is N sessions the operator runs,
 and multicast is for managed networks. For tens of destinations over owned transit RIST may beat
 both candidates; the Internet-native case is about **reach and cost at scale**.
 
@@ -486,12 +484,9 @@ HLS back into a transport stream** ([Evidence](../lab/evidence.md) §3.9):
 |---|---|---|---|
 | **Publish / package** | `moq import ts` (media-aware), or an opaque lane under MSFTS | classic `tsp -O hls`; low-latency TS through Apple `mediastreamsegmenter` | — |
 | **Fan-out** | `moq-relay`; Cloudflare's implementation | any HTTP origin and cache, or a commodity CDN | — |
-| **Receive → TS** | `moq export ts` | classic: `tsp -I hls`, FFmpeg, neither surviving an origin restart; low latency: **nothing free** | HLS: Ateme TITAN Edge, Sencore MRD 8000, Spica HLS2SRT, Synamedia MEG (§4.4); MoQ: **none** |
+| **Receive → TS** | `moq export ts` | classic: `tsp -I hls`, FFmpeg, neither surviving an origin restart; low latency: **nothing free** | HLS: the receivers of §4.4; MoQ: **none** |
 | **Groom → CBR, PCR re-stamped, mux preserved** | for a CBR source, `moq export ts --delay` itself: it lays the mux back at the rate the importer recorded, conformant to P1/P2 and the buffer model across hosts ([Evidence](../lab/evidence.md) §3.16); for a VBR source, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer), conformant on the wire (§5.1) | the same binary, no flags changed; or TSDuck `pcradjust` + `regulate` | Synamedia, Ateme, Harmonic gateways |
 | **CBR TS → paced wire** | [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts), `mpegts-pacer` | identical | the same gateways |
-
-The receive row is the layer §6.1 leaves open, and it points both ways: the free low-latency receiver is
-MoQ's, the commercial one segmented HTTP's.
 
 ---
 
@@ -513,7 +508,7 @@ MoQ's, the commercial one segmented HTTP's.
 **Only `moq-dev` does any of the broadcast-specific layer**: its export grooms a CBR source to a
 conformant wire (§11), and its importer counts TR 101 290 errors. Transparent carriage is no longer single-vendor, but **transparent is not always verbatim**
 (`moq2ts`'s per-program mode drops nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under
-pressure and ends a broadcast with its publisher ([Architecture](architecture.md) §5).
+pressure ([Architecture](architecture.md) §5).
 
 **Two open implementations subscribe to whole-TS carriage**: `moq-dev`'s whole-multiplex import
 and the export writing its bytes back out ([Evidence](../lab/evidence.md) §3.1),
@@ -536,7 +531,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells, by a margin its build and QUIC stack set (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more programme to every failure but a relay that keeps its key or a killed exporter (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
-| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and in one CDN for interchangeable origins in an origin group, merged downstream from two edges by receivers released in phase (within 1.1 ms; unreleased, up to ±1.5 s); one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
+| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and for interchangeable origins in one CDN origin group, merged downstream by receivers released in phase; one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
@@ -568,7 +563,7 @@ under what conditions each is preferable.
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, silent time-travel when not |
-| **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU, in one region; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** Cache offload at one node, not a CDN |
+| **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** Cache offload at one node, not a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
 | **A receive stage at the route's latency budget** | A stage turns the delivered feed back into a transport stream at the latency the route allows | **Cleared, single-implementation** (§11) | **Cleared at classic segment durations, open below them** (§6.1) |
@@ -585,6 +580,15 @@ broadcast medium and puts IP behind it only for repair. It is not scored because
 measured here, but it is strongest exactly where both planes are weakest — a large estate inside one
 footprint on a common always-on feed — and a route that reads "incumbent" on destination count in
 [Economics](economics.md) §6 is one where it is the live alternative.
+
+### 13.2 The limits under every verdict
+
+Beyond the two §5.1 names, no hardware IRD and only healthy paths, five limits qualify every row
+above ([Evidence](../lab/evidence.md) §4). The data-plane comparison is one route and one clip. Each
+impairment cell is one run, on `netem` models whose loss is Bernoulli. Every 1+1 result comes from a
+software receiver, and the ST 2022-7 oracle is self-tested, not reference-compliant. Fan-out is one
+relay in one region, and the resilience work a two-relay lab. Most media-aware results are on
+September 2026 builds and hold on current upstream only where stated.
 
 ---
 
