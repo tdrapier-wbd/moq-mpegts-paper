@@ -714,9 +714,9 @@ exactly the outage, so what was lost is gone and only redundancy mitigates it.
 **For an operator:** on the builds measured in September 2026, a PCR base rollover, a forward jump,
 a rewind and an encoder restart each cross the lane with no programme hole and no deep buffer.
 **From moq 0.14.0 a backward timestamp step ends the import instead, flagged or not, on every stream
-kind measured**, while a flagged forward jump still publishes; upstream has declined an in-process
-restart. A source whose timeline steps back must then be republished at
-each step, by a supervisor under a new epoch, or the build pinned. Each republish costs 2.8–3.8 s
+kind measured**, while a flagged forward jump still publishes. Until upstream's planned in-process
+republish lands, a source whose timeline steps back must be republished at each step, by a
+supervisor under a new epoch, or the build pinned. Each republish costs 2.8–3.8 s
 of programme, and a 1+1 pair is not hitless across it. **A real feed
 does step back, where its contribution switches between two encodes whose clocks are not locked**
 ([T34](test-34-real-encoder-severity.md) § *A switch between two encodes*; P1, the hand-off
