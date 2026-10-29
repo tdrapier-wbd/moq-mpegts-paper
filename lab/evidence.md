@@ -55,7 +55,7 @@ an experiment says otherwise; the passthrough runs on the same builds and protoc
 | `ts-tstd.py` | The 13818-1 T-STD per PID, calibrated per stream type and to the video's HRD, validated on a source that passes at exactly +0 ms. It agrees with upstream's independently written check on all 35 files of a cross-validation set ([T46](test-46-tstd-check-cross-validation.md), file domain) | A real decoder's tolerance: it grades the minimum buffers the standard guarantees. SCTE-35 and SI have no normative T-STD |
 | `t18-latency.py` | Delivery latency on the PES PTS, source to groomed egress | Encoder and decoder delay, so not camera-to-display |
 | Apple's `mediastreamvalidator` | HLS playlist and segment conformance | A broadcast receive profile: it applies Apple's device rules, which a contribution source (interlaced, open GOP) fails whatever the packager ([T65](test-65-ird-hls-profile.md)) |
-| `t6-hls-pull.py` | Segmented-lane failover from a client that retries | A player. It bounds what the protocol permits, because TSDuck and FFmpeg both abandon the stream at a failed playlist reload |
+| `t6-hls-pull.py` | Segmented-lane failover from a client that retries | A player; it bounds what the protocol permits (§3.4) |
 | `tc`/`netem` | Loss, delay, reordering, shaped bottlenecks | Real congestion: its loss is Bernoulli, its jitter reorders, and it does not deliver the commanded loss unless [segmentation offload](../docs/glossary.md#transport-and-deployment-terms) is off. Impairment figures carry the counted fraction, or are stated as commanded where §3.3 shows the counters cannot be trusted |
 | Interop client ([`interop/`](interop/README.md)), `compliance.py`, `cost-model.py` | Media-level relay carriage; structural checks; the economic model | Pacing; decoder acceptance; negotiated rates |
 
@@ -357,11 +357,7 @@ two relays on one host): nothing downstream learns of a hard failure sooner (~30
 30 s default, ~11 s at moq 0.14.0's 10 s), the standby relay's own subscribers were lost at its
 arrival or at the failover, and a graceful exit was never reliably failed over, because the relay
 propagated completion. **Continuity-clean is not hitless**: the outage is a PCR/PTS discontinuity
-across a content hole. The shared importer epoch that followed failed over nothing in a mesh, and
-on one relay removed the standby's arrival teardown but not the outage; upstream has since removed
-it
-([T6](test-6-relay-resilience.md) § *Single-relay standby*,
-[T51](test-51-same-epoch-groups.md)).
+across a content hole.
 **On upstream's current model every importer takeover is a marked programme switch that the
 demultiplexed export survives, and a relay lost under one importer is not seamless**
 ([T6](test-6-relay-resilience.md) § *Distinct epochs*; P1, file domain, loopback, October
@@ -424,8 +420,11 @@ either receiver or the merge anything, and no receiver waited over 5.2 s for a s
 a Dublin and a Düsseldorf edge, each holding a segment until its last PCR's program date-time plus
 1.5 s, started within 1.1 ms of each other in ten trials of ten, against −22 to 379 ms unreleased; a
 groomer taking segments in at 12 MB/s left two trials of ten 86–87 ms apart. The hold adds to the
-delay, receivers on two hosts add their clocks' offset, and a failure of the feed or the CDN is
-outside the design.
+delay, receivers on two hosts add their clocks' offset, and a failure of the CDN is outside the
+design. **Damage in the feed reaches both pathways together** ([T62](test-62-origin-group-soak.md);
+72 h, one run): six continuity breaks each withdrew both playlists until a window was whole, 54 s
+in all, though the origins stayed byte-identical. After a splice the groomer build soaked, since
+fixed, left PTS 4.7 h from its PCR, which PCR intervals do not show.
 
 **On the media-aware lane the redundancy belongs at the receiver, and it is hitless**
 ([T12](test-12-dual-path-handoff.md), 42 cells, one run each). Two live legs into a reference
@@ -814,10 +813,9 @@ capture and no programme; only process supervision detects it.
 
 Through a congested bottleneck, 0 of 10 subscribers exited with both upstream fixes, against 4 of 15
 on a build without them ([T8b](test-8b-congestion-control.md); P1, three flows, five
-replicates). **The count is
-consistent with the fix without establishing it**, since 0 of 10 is also what an unchanged build
-produces most of the time; the conclusion rests on the closed code path, upstream's regression tests,
-and a control that still provokes the failure
+replicates). Since 0 of 10 is also what an unchanged build produces most of the time, the
+conclusion rests on the closed code path, upstream's regression tests, and a control that still
+provokes the failure
 ([upstream contributions](upstream-contributions.md)).
 
 ### 3.16 Is the media-aware lane's TS-out a conformant transport stream? — Not through a pacing groomer: its P1/P2-conformant wire fails the buffer model on the lane's packet order, which only a re-multiplexing stage repairs
@@ -920,8 +918,6 @@ behave as SRT's.
 
 ## 4. The limits of the evidence
 
-Stated in one place, because the individual caveats understate their sum.
-
 **No hardware.** Nothing has been fed to a hardware IRD or graded by a hardware TR 101 290 analyser.
 Every conformance figure is graded from bytes, a file's or a socket capture's on a general-purpose OS,
 or by a reference software receiver; where file and socket disagree (§3.2) the socket is closer to an
@@ -947,7 +943,7 @@ jitter reorders, and the congestion aggregate reproduces only to about ±15 %.
 
 **The 1+1 result is a software receiver**, with skew injected on one host; the determinism precondition
 holds across two availability zones on single-track content only (§3.4). Only T12 and, over
-CloudFront, T59 and T61 merged RTP legs, packetised by TSDuck or our groomer; the deterministic
+CloudFront, T59, T61 and T62 merged RTP legs, packetised by TSDuck or our groomer; the deterministic
 exports are transport-stream identity, which ST 2022-7 needs and does not test. The ST 2022-7 oracle
 is self-tested ([T12](test-12-dual-path-handoff.md)) and not offered as reference-compliant.
 
@@ -994,6 +990,6 @@ rebuild.
 | 12 | **What does a CDN edge, or an origin whose sender ignores random loss, deliver under loss at 100 ms RTT?** (§3.3) | A run at 100 ms RTT through CloudFront, or the origin on BBR | The segmented lane's loss curve off loopback |
 | 13 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 14 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
-| 15 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin and a soak | Its per-role CPU, memory and fan-out knee; the origin measured is `python3 -m http.server` |
+| 15 | **What does a segmented origin cost at fan-out?** At two receivers no process takes over 6 % of a core, memory flat for 72 h ([T62](test-62-origin-group-soak.md)) | An origin under many edges | Its fan-out knee; the origin measured at load is `python3 -m http.server` |
 | 16 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Whether a stage downstream can tell a recovered gap from clean programme; the import counts TR 101 290 errors and signals nothing ([upstream contributions](upstream-contributions.md)) |
 Protocols for the runnable ones are in [planned-experiments](planned-experiments.md).
