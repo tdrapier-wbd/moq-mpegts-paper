@@ -74,7 +74,9 @@ def identity(a, b, pair_s, cuts):
 
 
 def content(a, b):
-	h = lambda p: hashlib.blake2b(p, digest_size=12).digest()
+	def h(p):
+		return hashlib.blake2b(p, digest_size=12).digest()
+
 	ca = Counter(h(p) for *_, p in a)
 	where = {}
 	for _, seq, _, _, p in a:

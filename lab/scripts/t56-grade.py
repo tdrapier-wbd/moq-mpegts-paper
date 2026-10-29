@@ -327,7 +327,8 @@ def main():
         cuts = [e2 + 10 + a.select * j for j in range(int((end - e2 - 14) // a.select))]
         splice(a.run, cuts)
         names = [("select", [(("select2" if j % 2 == 0 else "select1"), c) for j, c in enumerate(cuts)])]
-        names += [(f"sub{n}", [(f"export{n}_start", next(t for m, t in ev if m == f"export{n}_start"))]) for n in (1, 2)]
+        starts = {n: next(t for m, t in ev if m == f"export{n}_start") for n in (1, 2)}
+        names += [(f"sub{n}", [(f"export{n}_start", starts[n])]) for n in (1, 2)]
     else:
         names = [(name, faults) for name in caps]
     for name, evs in names:
