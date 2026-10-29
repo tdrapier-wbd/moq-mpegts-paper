@@ -60,16 +60,14 @@ distribution. A row leaves when a pull request takes it; ours are in the
 
 | Quest | Size | Would move | Why it ranks here | Gate |
 |---|---|---|---|---|
-| `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby, before the idle timeout, without a 2022-7 receiver | Its design, which the maintainer has claimed (#7096); epochs on every hop, which only moq-lite 07 will carry (quest `ietf-epoch-cut`), so not P1-j's moqx hop |
+| `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby, before the idle timeout, without a 2022-7 receiver | Its design, which the maintainer has claimed (#7096); epochs on every hop, which only moq-lite 07 will carry (`ietf-epoch-cut`, taken by #7239), so not P1-j's moqx hop |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | The lag histogram whose type it reuses, which waits on moq-net's QUIC acknowledgments |
 | `restart-catalog` | S | P1-an; [Evidence](evidence.md) §3.13's republish cost | A restarted import reuses its predecessor's multiplex-rate measurement and sends its catalog at once, the 1.6 s of T34's 2.8 s that is not the export's held tail | `step-restart` (#7144) |
 
 Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement:
 [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one
 operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's
-supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH),
-`ts-reliability/stitch-catch-up` (its latency half landed in #7049 and its priority half in #7145;
-the demotion experiment left waits on no entry here).
+supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH).
 
 ## Blocked on apparatus
 
