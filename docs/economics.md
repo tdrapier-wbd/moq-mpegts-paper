@@ -226,7 +226,7 @@ the far end needs the contribution mux back byte-for-byte.
 | MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes seven of nine other relays after the join, five for a late subscriber ([Evidence](evidence.md) §3.7) |
 | SRT | 1.037 *(measured, same path; 1.035 on the feed)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
 | Zixi | ~1.03 *(estimated)* | sub-second *(vendor claim, not measured here)* | broadcaster fans out | proprietary, per-GB licence |
-| HLS with TS / DVB-DASH | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1/P2-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, ETSI TS 103 285 — **not standards-track, yet carried by every cache, CDN and general-purpose client; the low-latency transport-stream receive path is the exception** ([Comparison](comparison.md) §6.1) |
+| HLS with TS segments | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1/P2-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, RFC 8216 and its second edition; DVB-DASH (ETSI TS 103 285) profiles ISOBMFF only — **not standards-track, yet carried by every cache, CDN and general-purpose client; how a receiver rebuilds a transport stream from it is specified nowhere** ([Comparison](comparison.md) §4.4, §6.1) |
 
 *The latency column is source-to-groomed-egress over the public internet from a common EC2 origin, and
 it carries an important non-economic condition: **a latency figure on this lane is meaningless without
@@ -274,7 +274,10 @@ case, did not.
 
 **The argument is limited to sub-second routes.** At seconds of latency, primary distribution favours
 segmented HTTP on commodity economics, and the cost of the broadcast-grade edge layer remains on either
-plane (§7.2).
+plane (§7.2). **The price follows the product, not the HTTP version**: classic HLS rides HTTP/1.1 and
+Low-Latency HLS needs HTTP/2 or HTTP/3, and CloudFront and Akamai publish no surcharge for HTTP/3
+delivery, so either segmented mode sits in a delivery contract already negotiated, where a MoQ relay
+is a separate product with its own rate.
 
 **At its narrowest, then, the claim is about the sub-second band and is not a general cheapest-feed
 claim**: parity at ~95 destinations on published cloud rates against ~323 at an *assumed* commodity
@@ -537,6 +540,14 @@ to fix interop are precisely the ones whose in-house builds make it a lower prio
 individually, and the vendors who would otherwise carry it serve customers too small to pay for it.
 **Cooperative or standards-body funding is the structural answer, and the absence of one is a risk to
 the thesis rather than a detail of it.**
+
+**On segmented HTTP the unsponsored piece is smaller and sits with the distributor.** Delivery is
+already multi-supplier; what no specification covers is how a receiver rebuilds an IRD-ready transport
+stream from HLS, chooses between pathways and reports what it lost, and the HLS-input receivers on the
+market align on nothing beyond HLS ([Comparison](comparison.md) §4.4). A distributor that publishes
+that receive profile, with an open reference receiver, lets its affiliates choose among conforming
+products without the distributor adopting a closed one — a sponsorship one large distributor can
+fund alone, as the relay-interop work above is not.
 
 ---
 

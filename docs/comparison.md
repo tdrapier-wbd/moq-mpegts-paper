@@ -16,17 +16,16 @@ held at: **at the only configuration each has been measured TR 101 290 P1/P2-con
 picture over one internet path in 2,447 ms and segmented HTTP in 9,286 ms** ([Evidence](evidence.md)
 §3.11). That settles the latency question for a route in the two-to-nine-second band, and nothing else.
 **Neither plane is an unconditional choice.** Segmented HTTP leads on most of the remaining axes —
-maturity, delivery economics and the delivery path's interoperability — but those advantages are
-upstream of the receiver, and this evaluation did not establish a receiver path from segmented HTTP back
-to an IRD-ready transport stream (§4.6, §6.1). Everything that makes either plane *broadcast-grade* sits
+maturity, delivery economics and the delivery path's interoperability. Its path back to an IRD-ready
+transport stream is off the shelf at classic segment durations and groomed to P1/P2 in software, but
+no free receiver survives an origin failure, and no receiver on either plane has met hardware
+(§3.2, §4.6, §6.1). Everything that makes either plane *broadcast-grade* sits
 above the transport and is common to both ([Problem](problem.md) §1). **Below about one second no plane
 here is demonstrated conformant over a whole capture**, so MoQ's sub-second case is architecturally
 credible and not yet evidenced (§5.1).
 
 The demanding comparator is **segmented HTTP carrying MPEG-TS**: specified, interoperable along the
-whole delivery path, commodity-delivered today, and with an off-the-shelf path back to a transport
-stream at classic segment durations — though nothing free receives the low-latency variant, and no
-off-the-shelf client survives an origin restart (§3.2, §11) — where MoQ has one implementation.
+whole delivery path and commodity-delivered today, where MoQ has one implementation (§11).
 Point-to-point incumbents set a low bar on fan-out (§10).
 
 ---
@@ -36,11 +35,13 @@ Point-to-point incumbents set a low bar on fan-out (§10).
 | Candidate | What it is here | Class |
 |---|---|---|
 | **MoQ** | `moq import ts` → relay fabric → `moq export ts`, on QUIC/WebTransport | live publish/subscribe with native relay |
-| **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (and DVB-DASH), over HTTP/2 or HTTP/3 | cacheable-object pull over commodity delivery |
+| **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (DVB-DASH profiles ISOBMFF only), at classic segment durations over HTTP/1.1; Low-Latency HLS would need HTTP/2 or HTTP/3 | cacheable-object pull over commodity delivery |
 | **SRT / Zixi / RIST** | a reliable UDP tunnel per destination, optionally through a gateway tier | point-to-point session transport |
 
 They are grouped by *scaling shape*, not by quality, which flatters two of them: RIST is openly
-specified and multi-vendor where the others are not (§10.1). **All three rows assume the IP path carries
+specified and multi-vendor where the others are not (§10.1). **Segmented HTTP is scoped to a 5–10 s
+delivery budget and single-programme feeds**; its low-latency and multi-programme variants are
+described for completeness. **All three rows assume the IP path carries
 the whole feed**; the satellite-hybrid architectures of VSF TR-06-4 Parts 7 and 8, where RIST carries
 only the bytes a site lost, answer a different question and are treated in §10.2.
 
@@ -72,8 +73,8 @@ point (§10).
 | Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network — consumer, not affiliate, distribution | none | none |
 
 **Statelessness is the only differentiator between the two, and a reliability advantage in
-disguise** (§3): a destination can move between edges or suppliers mid-stream, where losing a MoQ or
-SRT relay loses a session. Per-subscription state also prices churn in relay memory, which a static
+disguise** (§3): a destination can move between edges or suppliers of one namespace mid-stream,
+where losing a MoQ or SRT relay loses a session. Per-subscription state also prices churn in relay memory, which a static
 segmented origin does not pay ([Evidence](evidence.md) §3.14) — a structural advantage, bought with
 the latency of §5, that an origin terminating sessions or personalising responses would give up.
 
@@ -118,14 +119,13 @@ Segmented HTTP gives each segment a **defined availability window** (HLS §4.4.3
 can be retried idempotently from another edge or Pathway without the sender. MoQ's reliability is
 scoped to a live subscription and a deliberately shallow relay cache ([Evidence](evidence.md) §3.4).
 **This favours segmented HTTP in the protocol, and the tooling does not deliver it**: no
-off-the-shelf TS client survives an origin restart ([T6](../lab/test-6-relay-resilience.md)), and
-Content Steering is specification-only. An origin killed for ten seconds costs the segmented lane no
-content, where the media-aware exporter skips to the live edge. Across a *transport* outage, graded
+off-the-shelf TS client survives an origin restart ([T6](../lab/test-6-relay-resilience.md)), retry
+cannot recover a fetch that succeeds stale (a playlist an edge holds past the window, replicas that
+disagree), and Content Steering is specification-only. An origin killed for ten seconds costs the
+segmented lane no content, where the media-aware exporter skips to the live edge. Across a *transport* outage, graded
 on content, the media-aware lane loses more programme than SRT: behind the fixed-delay export
 the margin is QUIC's probe-timeout backoff, which a conformant default cannot cap
-([Evidence](evidence.md) §3.3). A killed publisher, or a relay restarted without its reset key, costs
-the lane about twice SRT's loss, as both ends wait out QUIC's idle timeout; a relay keeping its key
-costs it less than SRT, and a killed exporter less than half.
+([Evidence](evidence.md) §3.3).
 
 **Neither lane's transport reports a stalled source, and only the segmented one offers a
 substitute**: its playlist media sequence stops advancing, which a poller can alarm on without
@@ -137,12 +137,14 @@ Broadcast reliability comes from **1+1 with selection at the receiver**, which i
 ([Architecture](architecture.md) §5, [Evidence](evidence.md) §3.4). Head-to-head the lanes diverge.
 **Serving-node failover** on MoQ is never hitless: relay reselection takes at least one idle timeout,
 and an importer takeover on current `main` is a marked programme switch ([Evidence](evidence.md)
-§3.4). A segmented pair sharing one feed and one set of segment names fails over with no measurable
-interruption, 3/3 runs.
+§3.4). A co-started segmented pair sharing one feed and one set of segment names fails over with no
+measurable interruption, 3/3 runs. A stock packager started later did not join its namespace; one
+naming segments by content time did, so two origins are interchangeable in one CDN origin group,
+which over CloudFront covered each failure of one pathway tested. Two receivers at different edges,
+released on the origin's program date-time, start within 1.1 ms for a 2022-7 merge; a
+start alone sets their skew at random within about ±1.5 s ([Evidence](evidence.md) §3.4).
 **Misconfiguration**: a segmented pair with mismatched sources delivers ±20 s of time-travel that passes
-continuity and PCR checks, where the media-aware relay refuses. On MoQ a hitless pair is built at the
-receiver from one importer's broadcast; on the segmented lane it falls out of a shared source and a
-naming convention.
+continuity and PCR checks and fails no request, where the media-aware relay refuses.
 
 ---
 
@@ -190,10 +192,10 @@ is required on both paths.
 
 ### 4.4 What the IRD vendors' HLS inputs are, and are not
 
-Professional IRD and edge-gateway platforms list HLS/DASH inputs with ABR-to-TS conversion (Ateme TITAN
-Edge, Synamedia MEG — **vendor datasheet claims, unmeasured**). That is a supply-chain option on the
-distributor's own side, not a reason to assume the hand-off problem is solved at the client's
-demarcation. Whether such a stage passes TR 101 290 on hardware is open
+Ateme TITAN Edge, Sencore MRD 8000, Spica HLS2SRT and Synamedia MEG (its ABR2TS function) list HLS
+input with transport-stream output — **vendor datasheet claims, unmeasured**. They align on nothing
+beyond HLS: no specification says how a receiver rebuilds an IRD-ready stream, selects between
+pathways or reports what it lost. Whether any such stage passes TR 101 290 on hardware is open
 ([planned-experiments](../lab/planned-experiments.md)).
 
 ### 4.5 Where the demarcation puts the gateway
@@ -205,8 +207,9 @@ client; in regional PoPs it serves every PoP ([Economics](economics.md) §4.5,
 ### 4.6 The honest verdict on this axis
 
 Three claims are run together under "hand-off". **Receiving** favours segmented HTTP at classic
-segment durations — off the shelf, with ABR-to-TS boxes purchasable (conformance unmeasured, §4.4) —
-and reverses at low latency, where nothing free receives TS-in-HLS (§6.1). **Grooming burden**
+segment durations — off the shelf, though no free receiver survives an origin failure (§3.2), with
+HLS-input receivers purchasable (conformance unmeasured, §4.4) — and reverses at low latency, where
+nothing free receives TS-in-HLS (§6.1). **Grooming burden**
 favours MoQ, and **which stage can carry it** favours segmented HTTP (§4.3). **The groomed wire** is
 a tie on P1/P2 and not on its cost: both reach 0 PCR intervals above 40 ms in software, segmented at
 the 8 s cushion its segments impose and MoQ at a buffer sized by the source's peak coded frame, MoQ
@@ -247,9 +250,8 @@ release loop closed on occupancy: the wire then returns 0 of 20,193 intervals ab
 0 over 24.01 h with the 33-bit rollover crossed ([Evidence](evidence.md) §3.2).
 
 **The conformant configuration delivers at 2,447 ms, an order of magnitude above the 109 ms, and neither
-part of the gap is cushion depth.** About **650 ms is a named upstream regression** — the exporter PCR
-change that made an even grid possible moved delivery latency from 120.0 to 771.6 ms against the same
-control ([T19](../lab/test-19-pcr-grid-verification.md) measurement 6) — a defect with an owner, and
+part of the gap is cushion depth.** About **650 ms is a named upstream regression**, the exporter PCR
+change that made an even grid possible ([Evidence](evidence.md) §3.11): a defect with an owner, and
 recoverable. **The rest is structural**: the buffer is sized by the source's peak coded frame, not its
 bitrate, because a demultiplexed lane cannot recover the encoder's VBV occupancy that the source's byte
 spacing carried. **The media-aware lane moves the encoder's VBV budget downstream into the edge gateway's
@@ -280,8 +282,9 @@ measured to carry every timeline case ([Evidence](evidence.md) §3.13).
 ### 5.2 The decision rule, restated
 
 **Segmented HTTP is the better engineering choice only where two conditions hold together**: the
-route's destinations absorb seconds — nearer six unless an ABR-to-TS receiver is bought — **and**
-the receive path to an IRD-ready transport stream is supplied separately. Then it wins on maturity,
+route's destinations absorb seconds — nearer six on free tooling, 9,286 ms at measured P1/P2
+conformance — **and** its receive stage survives the failures the delivery path absorbs, which no
+free TS client does (§3.2). Then it wins on maturity,
 delivery economics and delivery-path interoperability, and narrowly on the hand-off. **Otherwise,
 between roughly 2.5 and 9 seconds, MoQ is the better choice**, measured at P1/P2 conformance; at the
 buffer model the band is not yet compared, since segmented HTTP's wire is ungraded. **Below about
@@ -309,36 +312,38 @@ only five for a subscriber joining mid-stream ([Evidence](evidence.md) §3.7). *
 multi-programme carriage are mutually exclusive on segmented HTTP**: "Transport Stream Segments MUST
 contain a single MPEG-2 Program." HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and
 TDT/TOT through its catalog. SCTE-35 has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give
-client reporting MoQ has only in drafts — though they carry request and buffer state rather than
-delivered-media integrity, so **neither plane lets an origin establish that what a subscriber
-received was intact** ([Architecture](architecture.md) §9.4).
+client reporting MoQ has only in drafts — though their keys carry request, buffer and playback
+state, and version 2's custom keys could carry TR 101 290 counters that nothing defines, so
+**neither plane defines how an origin establishes that what a subscriber received was intact**
+([Architecture](architecture.md) §9.4).
 
 ### 6.1 Five layers, and they do not resolve the same way
 
 | Layer | Segmented HTTP | MoQ |
 |---|---|---|
-| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; five of nine other implementations' relays serve a late subscriber |
+| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; other implementations' relays carry it in part (§6) |
 | **General-purpose client reception** | clears, and is why the format is ubiquitous | within one implementation |
 | **Low-latency TS-in-HLS reception** | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](evidence.md) §3.9) | not applicable; no segment period |
 | **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation |
 | **Hardware-verified conformance of that hand-off** | **not run** | **not run** |
 
-**The first two layers are segmented HTTP's, decisively; the third and fourth are the unresolved
-condition on that plane, and the fifth is unresolved on both.** Its interoperability advantage is real,
-large and located upstream of the receiver, and a route cannot bank it as a receiver path unless that
-path is supplied separately.
+**The first two layers are segmented HTTP's, decisively; the fourth is off the shelf at classic
+durations but not resilient to an origin failure (§3.2); the third is unmet, and not asked of the lane
+(§1); and the fifth is unresolved on both.** Its interoperability
+advantage is real and large, and at classic durations it reaches the receiver.
 
 ---
 
 ## 7. Entitlement and access control (R7)
 
-**MoQ's advantage is real but narrow, and on revocation latency MoQ loses.** MoQ's revocation is a
-poll whose tightest worst case is **about 1.7 s measured and 2.11 s as documented**
+**MoQ's advantage is real but narrow, and on revocation latency MoQ loses to low-latency HLS.** MoQ's
+revocation is a poll whose tightest worst case is **about 1.7 s measured and 2.11 s as documented**
 ([Evidence](evidence.md) §3.10). Low-latency segmented HTTP re-fetches the playlist every part
 target, so where the CDN authorizes each request the bound is **0.28–0.30 s** against the part
 durations measured here ([T14](../lab/test-14-data-plane-comparison.md)): on worst case **MoQ is
-roughly six to seven times worse**; three plausible MoQ configurations disable revocation
-altogether, and an authorization outage is tolerated for an hour by default
+roughly six to seven times worse**. At the classic durations of §1 the same bound is about 2 s,
+level with MoQ's. Three plausible MoQ
+configurations disable revocation altogether, and an authorization outage is tolerated for an hour by default
 ([Control](control-plane.md) §4.1). It is not a verdict: the segmented figure is **derived**, not
 measured against a revocation, and holds only where the CDN checks **every request** rather than
 issuing a token with its own lifetime. What differs otherwise is **where enforcement lives and
@@ -481,7 +486,7 @@ HLS back into a transport stream** ([Evidence](evidence.md) §3.9):
 |---|---|---|---|
 | **Publish / package** | `moq import ts` (media-aware), or an opaque lane under MSFTS | classic `tsp -O hls`; low-latency TS through Apple `mediastreamsegmenter` | — |
 | **Fan-out** | `moq-relay`; Cloudflare's implementation | any HTTP origin and cache, or a commodity CDN | — |
-| **Receive → TS** | `moq export ts` | classic: `tsp -I hls`, FFmpeg; low latency: **nothing free** | low-latency HLS: Synamedia MEG, Ateme TITAN Edge; MoQ: **none** |
+| **Receive → TS** | `moq export ts` | classic: `tsp -I hls`, FFmpeg, neither surviving an origin restart; low latency: **nothing free** | HLS: Ateme TITAN Edge, Sencore MRD 8000, Spica HLS2SRT, Synamedia MEG (§4.4); MoQ: **none** |
 | **Groom → CBR, PCR re-stamped, mux preserved** | for a CBR source, `moq export ts --delay` itself: it lays the mux back at the rate the importer recorded, conformant to P1/P2 and the buffer model across hosts ([Evidence](evidence.md) §3.16); for a VBR source, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer), conformant on the wire (§5.1) | the same binary, no flags changed; or TSDuck `pcradjust` + `regulate` | Synamedia, Ateme, Harmonic gateways |
 | **CBR TS → paced wire** | [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts), `mpegts-pacer` | identical | the same gateways |
 
@@ -529,24 +534,23 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
 | Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells, by a margin its build and QUIC stack set (§3.1) |
-| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more across an outage, and about twice as much to a killed publisher or a relay restarted without its reset key (§3.2) |
+| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more programme to every failure but a relay that keeps its key or a killed exporter (§3.2) |
 | Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
-| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a shared-feed segmented pair, one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
+| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and in one CDN for interchangeable origins in an origin group, merged downstream from two edges by receivers released in phase (within 1.1 ms; unreleased, up to ±1.5 s); one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
 | Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
-| Interoperability (R1) | **segmented HTTP on the delivery path; not established on the receive path** | M+S | decisive through caches and general clients, for a single programme; the low-latency receive path is unmet or unmeasured (§6.1) |
+| Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (S) (§8) |
 | Wire volume | **MoQ**, by the source's stuffing | M+derived | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9) |
 | Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem, whose cost is in following upstream: a breaking change reached a rig about weekly, two of nine silently, so each upgrade needs a rig audit ([T54](../lab/test-54-dependency-risk.md)) |
 
-**Neither column adds up to a winner.** For routes whose destinations absorb seconds (nearer six
-unless an ABR-to-TS receiver is bought), that carry a single programme, **and that have a receive
-path to an IRD-ready transport stream from somewhere other than this evaluation**, segmented HTTP is
-the better engineering choice. **MoQ's case is route-specific and narrower than its headline
+**Neither column adds up to a winner.** For routes whose destinations absorb 5–10 s, that carry a
+single programme, **and whose receive stage survives an origin failure**, which no free TS client does
+(§3.2), segmented HTTP is the better engineering choice. **MoQ's case is route-specific and narrower than its headline
 latency**: smaller bursts for the groomer, multi-programme carriage, portable enforcement, up to ~7
 % less wire volume — a rounding error against five-to-ten× delivery cost — and, at equal P1/P2
 conformance, a decisive margin in the two-to-nine-second band that is not a sub-second result.
@@ -563,7 +567,7 @@ under what conditions each is preferable.
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Excluded on the media-aware lane** (specified); a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](evidence.md) §3.6) | **Unknown.** Never soaked |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless when configured correctly, silent time-travel when not |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU, in one region; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** Cache offload at one node, not a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
@@ -573,7 +577,8 @@ under what conditions each is preferable.
 scrambled, its programmes per feed, its destination estate, the delivery price, its impairment profile,
 its redundancy topology and its operational estate, each argued above. Both planes may be viable;
 neither without a distributor-owned edge stage, and neither as an unconditional choice. Conformance on
-hardware remains the deciding gate for both, and the receive path decides segmented HTTP specifically.
+hardware remains the deciding gate for both, and a resilient, observable receive stage decides
+segmented HTTP specifically.
 
 **These two are not the only choice on the table.** The satellite-hybrid model of §10.2 keeps the
 broadcast medium and puts IP behind it only for repair. It is not scored because nothing about it is
@@ -591,19 +596,17 @@ Ranked by leverage:
    neither has been near an IRD; on the media-aware lane it would also show how far receivers
    tolerate a wire that fails the buffer model (§5.1, §8).
 2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The
-   merged export keeps every track across hosts at 500 ms and 1 s, and two exports on two hosts are
-   byte-identical; over 35 min across hosts it stays conformant, and over 2 h its clock settles on a
-   drifting source's, though its 1 ms departure steps take the drift rate on arrivals past 0.075
-   Hz/s. Open: a laboratory stage following a remote clock; for 1+1 the lane merges a co-started
-   pair only ([Evidence](evidence.md) §3.4, §3.16). It decides whether the lane serves TS-out
+   merged export does across hosts, within the drift limits [Evidence](evidence.md) §3.16 states;
+   open are a laboratory stage following a remote clock, and 1+1 beyond a co-started pair
+   ([Evidence](evidence.md) §3.4). It decides whether the lane serves TS-out
    to an IRD in a deployment; its comparator, segmented HTTP's wire graded against the same model,
    has not been run either.
 3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has a
    technical discriminator over the incumbents at all, and on MoQ it turns on the ~650 ms
    regression, the peak-coded-frame bound for real contribution content and frames delivered ahead
    of decode (§5.1).
-4. **A commercial ABR-to-TS gateway on hardware?** The condition segmented HTTP's route-level case
-   rests on (§4.4, §6.1).
+4. **A receive stage that survives delivery-path failures and reports them, and HLS-input receivers
+   on hardware?** The condition segmented HTTP's route-level case rests on (§3.2, §4.4).
 5. **Sub-second requirement: routes or preference?** It decides MoQ's addressable share, and is a
    commercial question (§5.2).
 6. **MPTS in TS segments in practice?** MoQ's remaining mux-content advantage (§8).

@@ -29,14 +29,14 @@ hand-off — a stage neither specification mentions and which the taker must own
 no longer supply its clients' receivers. Most of the engineering, and most of the risk, sits *above*
 the transport ([Comparison](docs/comparison.md), [Architecture](docs/architecture.md)).
 
-**Segmented HTTP has a mature cache-delivery model, and a receiver path only at classic segment
-durations.** Named segments can be served through commodity CDN infrastructure and retried from
-another edge while they remain within their availability window. But the target IRD estate does not
-consume HLS directly: a distributor-owned stage must reassemble and groom it into a transport stream.
-Free tools build that stage at classic segment durations; below them nothing free receives TS-in-HLS,
-and the commercial ABR-to-TS path remains untested. The measured recovery advantage is therefore
-conditional and does not establish end-to-end receiver interoperability
-([Comparison](docs/comparison.md) §3.2, §4, §5.1).
+**Segmented HTTP has a mature cache-delivery model and, at the 5–10 s budget it is scoped to, an
+off-the-shelf receive path.** Named segments are served through commodity CDNs and retried from
+another edge while they remain in their availability window. The IRD estate does not consume HLS,
+so a stage must reassemble and groom it into a transport stream: free tools do so to TR 101 290
+P1/P2 in software, but none survives an origin failure, and the commercial receivers that take HLS
+align on nothing beyond HLS itself. Its recovery advantage is therefore real in the protocol and
+conditional on a resilient, observable receive stage, which a distributor could specify and open
+to vendors ([Comparison](docs/comparison.md) §3.2, §4, §6.1; [Economics](docs/economics.md) §8.5).
 
 **MoQ beats the other Internet-native plane decisively on latency at the configurations measured TR
 101 290-conformant in software.** That makes the case for MoQ on routes with a roughly
@@ -48,10 +48,10 @@ credible but not yet evidenced ([Comparison](docs/comparison.md) §5.1, [Evidenc
 
 **Two things separate a credible evaluation from a deployable one, and neither is a transport property.**
 The make-or-break conformance gate has never been attempted — nothing here has been fed to a hardware
-receiver or graded by a hardware analyser. And a MoQ feed
-carries no media through any third-party relay tested, which matters commercially rather than
-technically, because the economic case for MoQ depends on relay capacity being a market the buyer can
-shop ([Evidence](docs/evidence.md) §3.7, [Economics](docs/economics.md) §4.6).
+receiver or graded by a hardware analyser. And relay capacity is not yet substitutable: a MoQ feed
+crosses most other implementations' relays tested, but fewer for a subscriber joining mid-stream,
+which matters commercially rather than technically, because the economic case for MoQ depends on
+relay capacity being a market the buyer can shop ([Evidence](docs/evidence.md) §3.7, [Economics](docs/economics.md) §4.6).
 
 **On cost, the protocol barely registers.** The bill is set by destination count and by which delivery
 market the capacity is bought in — published cloud egress sits about an order of magnitude above

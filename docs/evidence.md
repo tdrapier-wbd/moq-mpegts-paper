@@ -83,8 +83,8 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing; the opaque lane, on `moq-dev`, is the source's bytes. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond one run per arm | §3.1 |
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; arrival at an IRD-facing output; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s across hosts and at up to 2 % loss, its clock following a drifting source, but not over a whole capture at 500 ms; on arrivals its drift rate exceeds 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
-| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a real CDN edge or captured path; burst loss; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
-| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs of one broadcast merge on the media-aware lane only co-started, behind the fixed-delay export merged on October 2026 `main`, on one host or two; its opt-in `--sync` mode merged a late leg only where the source carries an H.264 HRD. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged. The segmented lane is hitless with no merge, given one feed and one naming scheme | A hardware merge; a late leg on a source without an HRD; a cross-host pair beyond 120 s; a distributed segment store | §3.4 |
+| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a real CDN edge at long RTT, or a captured path; burst loss; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
+| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs of one broadcast merge on the media-aware lane only co-started, behind the fixed-delay export merged on October 2026 `main`, on one host or two; its opt-in `--sync` mode merged a late leg only where the source carries an H.264 HRD. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged. The segmented lane is hitless with no merge, given one feed, one naming scheme and a common start: a later stock packager did not join, one naming segments by content time did. Over CloudFront, two such origins in one origin group covered each failure of one pathway tested, and receivers at two edges released on the origin's program date-time started within 1.1 ms (unreleased, up to ±1.5 s) | A hardware merge; a late leg on a source without an HRD; a cross-host pair beyond 120 s; a distributed segment store; receivers on two hosts; a failure of the CDN | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on; through a CDN-hosted relay, 32 subscribers of a 25 Mb/s feed on the media-aware lane, and 16 for 72 h at about two skips an hour each | A third source; fan-out beyond one relay; the opaque lane through that relay | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
@@ -196,7 +196,7 @@ lane reaches the same wire standard** — 0 intervals above 40 ms and 0 PCR viol
 2,496 PCRs ([T16](../lab/test-16-grooming-segmented-http.md)) — but there depth binds: at 1 s against
 2 s segments it posts 311 continuity errors, and at 8 s none.
 
-### 3.3 How does the transport behave under loss? — The controller decides it on every lane; once the lanes are substrate-matched, reordering does not separate them either; and matched with SRT on measured latency, the media-aware lane loses more across an outage, a killed publisher and a relay restarted without its reset key, by a margin the build and QUIC's recovery set, as in every stress cell but 5 % reorder
+### 3.3 How does the transport behave under loss? — The controller decides it on every lane, and reordering does not separate substrate-matched lanes; matched with SRT on measured latency, the media-aware lane loses more across an outage, a killed publisher and a relay restarted without its reset key
 
 **For an operator:** on a lossy route the congestion controller and the QUIC stack decide what the
 media-aware lane delivers. Pin the controller, because the default is backend-specific, and choose it
@@ -311,12 +311,16 @@ completing no fetch after two segments at 5 %, because nginx's QUIC sender is lo
 "Loss is invisible" on this lane is a loopback result; the arm that would show it riding loss runs the
 origin with BBR.
 
-### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane it does not
+### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane a pair started together needs none
 
 **For an operator:** on the media-aware lane, build hitless redundancy at the receiver — two legs into
-an ST 2022-7 merge, each behind a stream-clocked groomer. Relay reselection is bounded by the idle
-timeout and does not cover a clean exit. On the segmented lane a pair sharing one feed and one naming
-scheme is hitless with no merge.
+an ST 2022-7 merge, each behind a stream-clocked groomer. An importer takeover is a marked switch,
+bounded by the idle timeout at a hard kill and costing a decoder 1.4–2.5 s even at a clean exit. On
+the segmented lane a pair sharing one feed and one naming scheme is hitless with no merge only if
+started together, unless its packagers name segments by content time. Over one CDN, put the source
+protection in the CDN, as two such packagers' origins in one origin group, and the last mile's in two
+receivers at different edges merged the same way, each released on the origin's program date-time:
+a start alone sets their skew at random within about ±1.5 s.
 
 **At the transport.** Two subscribers of one broadcast produce byte-identical captures, the
 publisher redials and re-announces, and two relays cluster. On builds from moq 0.12.1 the exporter
@@ -337,36 +341,17 @@ replacement, taken for a refusal (P1, file domain, loopback, one relay,
 one to four runs per arm; [T47](../lab/test-47-fixed-delay-export.md) § *Re-requests on `main`*). So
 a standing egress keeps its supervisor as a backstop.
 
-**Source failover across a relay mesh worked for a hard kill on the builds before the epoch, bounded by
-detection and by the standby's lag** ([T6](../lab/test-6-relay-resilience.md); P1, two relays on one
-host). A shared publisher identity declared two feeds interchangeable — `--hop` on those builds, a
-shared `--epoch` on early October 2026 `main`, with which nothing failed over in the mesh: the
-standby's relay asked it for its tracks once, before its PMT, and never again, so every subscriber on
-both relays was silent from the failover on, without an error (10 of 10 runs, `moq-lite-07` on every
-process).
-Nothing downstream learns of a hard failure before the QUIC idle timeout, so the resume is at least
-one timeout late: ~30 s at the builds' 30 s default, ~11 s at moq 0.14.0's 10 s. **The precondition is a common source**, and on moq 0.12.1 a standby that joined
-mid-stream adds its group-numbering lag to the outage. On the `--hop` builds the standby relay's own
-subscribers are lost at its arrival or at the failover, so on no build measured is mesh failover
-reliable for every subscriber. **Continuity-clean is not hitless**: the outage is a
-PCR/PTS discontinuity across a content hole. **A graceful exit is never reliably failed over** — the
-relay propagates completion, or hands the exporter a standby behind its live edge, and the subscriber
-ends either way — so failover covers host loss and not the commoner SIGTERM or rolling restart.
-
-**On one relay a shared importer epoch removed the standby's arrival teardown but not the outage,
-and upstream has since removed it** ([T6](../lab/test-6-relay-resilience.md) § *Single-relay
-standby*, [T47](../lab/test-47-fixed-delay-export.md) § *Re-requests on `main`*; P1, loopback, one
-host, two publishers of one forked feed, a 6 s idle timeout, one to three runs per arm). On
-moq-lite 07 a hard kill moved a subscription to the standby with no error, but each importer numbered
-its groups from its own start, so the continuation landed on different media: the export survived
-where the standby had started later (3 of 3, and all 8 exports on later `main`), after a 3–6 s stall,
-and aborted on a timestamp rewind in two of three where it had started earlier, and in one of two
-with byte-identical inputs. A clean exit, switched 8–13 ms after the signal, ended an export in all 8
-counted runs, 7 on the rewind; importers numbering every group by the shared catalog clock's second
-kept both exporters in all 7 counted runs and 0 foreign packets in 12 passthrough captures, where
-the stack without it repeated media in all 8, in a build upstream declined ([T51](../lab/test-51-same-epoch-groups.md); 3–4 counted runs per lane and build).
-On the default 06 every failover is the exporter re-requesting; with `--stitch --linger` all four
-exports took over the kill of the instance they followed after a 4–6 s stall, one flag each.
+**On the builds before the epoch, source failover across a relay mesh covered a hard kill of a
+common source, at least one QUIC idle timeout late** ([T6](../lab/test-6-relay-resilience.md); P1,
+two relays on one host): nothing downstream learns of a hard failure sooner (~30 s at those builds'
+30 s default, ~11 s at moq 0.14.0's 10 s), the standby relay's own subscribers were lost at its
+arrival or at the failover, and a graceful exit was never reliably failed over, because the relay
+propagated completion. **Continuity-clean is not hitless**: the outage is a PCR/PTS discontinuity
+across a content hole. The shared importer epoch that followed failed over nothing in a mesh, and
+on one relay removed the standby's arrival teardown but not the outage; upstream has since removed
+it
+([T6](../lab/test-6-relay-resilience.md) § *Single-relay standby*,
+[T51](../lab/test-51-same-epoch-groups.md)).
 **On upstream's current model every importer takeover is a marked programme switch that the
 demultiplexed export survives, and a relay lost under one importer is not seamless**
 ([T6](../lab/test-6-relay-resilience.md) § *Distinct epochs*; P1, file domain, loopback, October
@@ -374,8 +359,9 @@ demultiplexed export survives, and a relay lost under one importer is not seamle
 epoch, the relay serves the newest, and `export ts --stitch` marks a replacement with a new PMT
 version and a flag on every PID; a shared epoch is kept for replicas of one publisher's bytes. With
 two importers on one relay or across a two-relay mesh, every exporter survived every event in 24
-runs: a hard kill of the serving importer cost 5.4–9.0 s, about one detection interval, and a clean
-exit under 2 s; on moq-lite 07 a standby's start and each restart are switches of their own. With
+runs: a hard kill of the serving importer cost 5.4–9.0 s of source time, about one detection
+interval, and a clean exit under 2 s, which a decoder sees as 1.4–2.5 s of programme at a 2 s export
+delay ([T56](../lab/test-56-media-aware-failover.md)); on moq-lite 07 a standby's start and each restart are switches of their own. With
 `--passthrough`, which refuses `--stitch`, the serving importer's loss ends the exporter. One
 importer reaching the exporters through two relays, on moq-lite 07, survived the serving relay's
 loss with no error or flag, but skipped 7.02 s of programme in every run, at the default delay and at
@@ -389,12 +375,47 @@ discarding cached groups within its maximum age, and fixed both on later `main`;
 |---|---|---|
 | Serving node dies and returns | resumes across a **content hole** | **loses no content** — backlog refetched from the store |
 | 1+1 source failover, hard kill | one idle timeout or more; hitless unreachable by reselection | **no measurable interruption**, 3/3 runs |
-| Source exits gracefully | **not reliably failed over** | hitless; `EXT-X-ENDLIST` visible for 1.10 s |
+| Source exits gracefully | **not reliably failed over** before the epoch; on current `main` a marked switch | hitless; `EXT-X-ENDLIST` visible for 1.10 s |
 | A misconfigured pair | refused, both torn down | **accepted silently** — ±20 s of repeated and skipped time, at 0 continuity errors |
 
-The hitless result needs one source **and** one set of segment names, and its standby was always
-co-started onto one filesystem. It is a protocol result: **neither TSDuck's HLS input nor FFmpeg's
-demuxer survives an origin restart**; a purpose-written client showed it.
+The hitless result is a protocol result: **neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart**; a
+purpose-written client showed it. **A packager started later did not join the namespace** in any
+stock TSDuck configuration on T30's clip: numbering from zero, it repeats names already fetched, so
+once the first dies the receiver takes nothing new; continuing them, each served its own PAT and PMT
+counters (about 220 continuity errors); slicing unchanged, its cuts differ (30–39 errors and 0.32 s
+lost). The misconfigured pair fails no request; its one signal is the playlist's media sequence going
+backwards. Behind an edge cache an origin outage costs only cushion, but retry does not cover a
+fetch that succeeds stale: a playlist held past the live window lost 25 s of a 100 s run, and
+disagreeing replicas 80 s, through 404s the edge cached, with no response naming either cause
+([T30](../lab/test-30-segmented-distributed-resilience.md); one host, loopback, TSDuck 3.44).
+
+**Over CloudFront, separate pathways merged downstream are hitless at a window covering their skew,
+and the skew is random** ([T59](../lab/test-59-segmented-1plus1-cloudfront.md); P1, wire, the live
+feed, two origin hosts in one region, one distribution, both receivers on one host, one 300 s run
+per cell, TSDuck 3.44). Each pathway had its own packager, origin and names; each receiver fed one
+into a stream-clocked groomer, and a 2022-7 receiver model merged the two RTP legs, identical at
+equal numbers. A packager killed or frozen for 10 s, a 30 s origin outage, a receiver restart and
+2 % loss at 20 ms on one pathway each cost the merge nothing; the loss cost even its own leg
+nothing. Each start fixes the skew, from −1.42 s to +1.47 s across runs, as each receiver anchors
+on the live edge it first sees: two runs of seven fell within a Class C receiver's 450 ms, and
+outside it a struck leg the receiver was following cost a re-lock, a skip of up to 2.02 s or a
+repeat of 0.57 s. Through the outage CloudFront kept serving the last playlist and failed no
+request, then the media sequence jumped past ten unseen segments. Origin load was one fetch per
+segment per edge.
+
+**Inside one CDN the source protection can be the CDN's, and receivers released on the origin's
+clock start in phase** ([T61](../lab/test-61-origin-group-failover.md),
+[T63](../lab/test-63-pdt-anchored-release.md); P1, wire, the same feed and hosts, one
+distribution, both receivers on one host, 300 s cells). Two packagers that cut and name each segment by a multiple of content
+time, started apart, cut 2,632 segments alike in duration, size and hash. With their origins in one
+origin group, each behind a guard that answers 404 once its playlist stops advancing, no 30 s
+failure of one pathway (its packager killed or frozen, its origin refused, hung or unreachable) cost
+either receiver or the merge anything, and no receiver waited over 5.2 s for a segment. Receivers at
+a Dublin and a Düsseldorf edge, each holding a segment until its last PCR's program date-time plus
+1.5 s, started within 1.1 ms of each other in ten trials of ten, against −22 to 379 ms unreleased; a
+groomer taking segments in at 12 MB/s left two trials of ten 86–87 ms apart. The hold adds to the
+delay, receivers on two hosts add their clocks' offset, and a failure of the feed or the CDN is
+outside the design.
 
 **On the media-aware lane the redundancy belongs at the receiver, and it is hitless**
 ([T12](../lab/test-12-dual-path-handoff.md), 42 cells, one run each). Two live legs into a reference
@@ -432,8 +453,7 @@ and 13.6 s at 40 Mb/s (two hosts in one region, two runs). The design does not r
 
 **On the opaque lane a pair with one leg 8 s late merges hitlessly**, through the
 join, 5 s blackouts of each leg in turn and one leg's export killed, once each leg's stream-clocked
-groomer stays silent rather than send a datagram it cannot fill exactly; with the earlier groomer
-every impaired cell lost packets ([T12](../lab/test-12-dual-path-handoff.md); P1, wire, one clip,
+groomer stays silent rather than send a datagram it cannot fill exactly ([T12](../lab/test-12-dual-path-handoff.md); P1, wire, one clip,
 one host, one run per cell, October 2026 `main`). The export's media-time interleave falls back to arrival order under sustained
 loss, which keeps its output at the mux rate at 10 % loss, though graded on content that output
 carries 3–8 % of the video, and limits determinism to a clean path (moq 0.14.0,
@@ -908,8 +928,8 @@ the QUIC arm sends ~1.5× the packets of the TCP arm.
 jitter reorders, and the congestion aggregate reproduces only to about ±15 %.
 
 **The 1+1 result is a software receiver**, with skew injected on one host; the determinism precondition
-holds across two availability zones on single-track content only (§3.4). Only T12 merged RTP legs,
-packetised by TSDuck or our groomer; the deterministic exports are transport-stream identity, which ST 2022-7
+holds across two availability zones on single-track content only (§3.4). Only T12 and, over
+CloudFront, T59 and T61 merged RTP legs, packetised by TSDuck or our groomer; the deterministic exports are transport-stream identity, which ST 2022-7
 needs and does not test. The ST 2022-7 oracle is
 self-tested against 14 adversarial conditions and 53 assertions — eight match the standard's
 requirements, one is unspecified, three are not modelled, one is a blind spot — and is not offered as
@@ -947,14 +967,14 @@ rebuild.
 | 2 | **Can a live re-multiplexer keep the lane's wire T-STD-conformant across hosts, and for 1+1?** On one host it can; the merged export does across hosts and as a co-started pair (§3.4, §3.16) | A schedule computed from the stream alone; a source of another profile that passes the T-STD | Whether the lane serves TS-out to an IRD at conformance in a deployment |
 | 3 | **Is upstream's merged fixed-delay export itself an acceptable conformant stage?** It carries every track conformantly for 35 min across hosts and settles on a drifting remote source, but its wire's drift rate exceeds 0.075 Hz/s, and 500 ms does not last a whole capture (§3.16) | A hardware IRD and analyser, for whether those steps matter | Whether the subscriber is itself the conformant stage, and at what latency |
 | 4 | **Does the latency ordering survive a lossy or long path?** | Impairment on the WAN legs; 80–150 ms of RTT | The case that should favour the tunnels |
-| 5 | **Does a commercial ABR-to-TS gateway produce P1/P2-conformant output as the distributor's edge stage?** | MEG- or TITAN-class hardware | The only route to a low-latency TS-in-HLS receiver ([Comparison](comparison.md) §6.1) |
-| 6 | **Can a CDN carry a multi-programme TS segment in practice?** | A CDN account and the MPTS fixture | MoQ's remaining carriage-fidelity advantage |
+| 5 | **Does a commercial ABR-to-TS receiver produce P1/P2-conformant output?** | MEG- or TITAN-class hardware | Whether affiliates' own receivers can be the lane's receive stage ([Comparison](comparison.md) §4.4) |
+| 6 | **Can a CDN carry a multi-programme TS segment in practice?** | The MPTS fixture through the campaign's CloudFront access | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
 | 8 | **How large is a media-aware failover as a decoder sees it, and can it be brought under a second?** A hard-killed importer costs about one detection interval, a marked switch, and detection is bounded by the QUIC idle timeout; the decoder's freeze is not measured, nor the relay-loss case on the build that fixed it (§3.4) | A decoder-graded failover run across idle timeouts | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](architecture.md) §5) |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
-| 12 | **What does a CDN edge, or an origin whose sender ignores random loss, deliver under loss at 100 ms RTT?** (§3.3) | A tuned edge, or the origin on BBR | The segmented lane's loss curve off loopback |
+| 12 | **What does a CDN edge, or an origin whose sender ignores random loss, deliver under loss at 100 ms RTT?** (§3.3) | A run at 100 ms RTT through CloudFront, or the origin on BBR | The segmented lane's loss curve off loopback |
 | 13 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 14 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
 | 15 | **What does the segmented lane cost to run?** (§3.6) | An nginx origin and a soak | Its per-role CPU, memory and fan-out knee; the origin measured is `python3 -m http.server` |

@@ -1,12 +1,12 @@
 # Test 30 — Segmented-HTTP distributed resilience
 
-**State: specified, not run.** The segmented lane's strongest theoretical claim is that independent
-addressable objects and multiple delivery paths enable near-seamless failover without session state to
-re-establish — but the evidence is one filesystem, co-started packagers, and [T6](test-6-relay-resilience.md)
-drills reported as recovery times. This experiment would grade distributed resilience across two hosts,
-including production-shaped join and silent misconfiguration; it has not run because the two-host segment
-store and standby-join rig are specified under [P2-l](planned-experiments.md#p2--completeness)
-and blocked on the second EC2 instance layout used for cross-host work.
+**State: the single-host cells run (0, 1, 3, 4, 5); Cell 2 (two hosts) is
+[P1-am](planned-experiments.md#p1--establishes-where-one-architecture-is-superior); Cell 6 is
+blocked, no client steering.** A co-started pair sharing one namespace loses no programme when either
+packager dies, nor when the origin behind an edge is down for 10 s. A packager started into a running
+namespace cannot join it with stock TSDuck. Disagreeing replicas and a stale edge lose most of the
+programme, with no HTTP error that names the cause. A desynchronised pair is accepted silently, and
+delivered as time travel or not according to a race.
 
 ## Objective
 
@@ -18,8 +18,6 @@ serve stale metadata.
 The metric is **media lost at the groomed egress**, not time to first byte after reconnect. Compare
 against [T29](test-29-moq-distributed-resilience.md) for the same failure classes where the mapping
 is fair.
-
-Specified as [P2-l](planned-experiments.md#p2--completeness).
 
 ## What is already known, and precisely what it leaves open
 
@@ -38,7 +36,7 @@ same groomer that clears PCR conformance can delete programme while PCR statisti
 conservation must be scored as its own column ([method-notes](method-notes.md)). Segmented resilience
 is graded *downstream of* a conformant groomer unless the cell explicitly tests ungroomed egress.
 
-**Two production shapes were never measured.** [T12](test-12-dual-path-handoff.md) segmented remainder
+**Three shapes were unmeasured before this file.** [T12](test-12-dual-path-handoff.md) segmented remainder
 and [T6](test-6-relay-resilience.md) together leave three cells: (1) a **standby packager joining an
 already-running feed** — the shape co-start cannot measure; (2) **two hosts writing one store**, where
 consistency is free on one filesystem and is the engineering across two; (3) **mid-write fetch**, because
@@ -53,26 +51,33 @@ loss).
 
 | | |
 |---|---|
-| Baseline | Two `tsp -O hls` packagers (2 s segments, `--intra-close --align-first-segment`, window sizing from [T6](test-6-relay-resilience.md)), HTTP origin, receiver chain through [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) for conformant P1 egress ([T16](test-16-grooming-segmented-http.md)). |
-| Store | v1: shared NFS or object store mounted at `<SEGMENT_STORE>` on both hosts — placeholder, not yet provisioned. v0 shakeout: one host, two packagers, local disk (replicates T6, not this test's claim). |
-| Hosts | `<EC2_IP_A>` and `<EC2_IP_B>` in separate AZs for two-host arms; loopback only for control replay. |
-| Receivers | `t6-hls-pull.py` as protocol-capable minimum; `tsp -I hls --live` and FFmpeg as shelf columns where
-  [T6](test-6-relay-resilience.md) showed divergent error handling. |
-| Edge (optional) | nginx `proxy_cache` then CloudFront distribution `<CDN_DISTRIBUTION>` when account exists — last in procedure. |
-| Grader | Media lost, continuity errors, PCR discontinuity; **playlist-media consistency checks** (segment
-  named in playlist present on store; media sequence monotonic); **silent misconfiguration detector**
-  — byte-wise programme timeline versus source, not continuity alone ([T16](test-16-grooming-segmented-http.md)). |
-| Source | Looped `<CLIP>`, paced; identical fan-out to both packagers via `tee` or duplicate regulate. |
+| Baseline | Two `tsp -O hls` packagers (TSDuck 3.44; 2 s segments, `--live 6 --live-extra-segments 3 --intra-close --align-first-segment`), nginx origin (`sendfile on`; playlist `max-age=1`, segments `max-age=60`), receiver `t6-hls-pull.py` (500 ms poll) into [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) given only a rate (T16 arm B, adaptive cushion). Rig: [`t30-segmented-resilience.sh`](scripts/t30-segmented-resilience.sh). |
+| Store | Cells 0, 1, 3–5: one host, local disk. Cell 2: an NFS export from a third host, mounted at `<SEGMENT_STORE>` on both packager hosts. |
+| Hosts | Single-host cells on one c6in.2xlarge over loopback; Cell 2 across `<EC2_IP_A>`, `<EC2_IP_B>` (separate AZs) and the store host. |
+| Receivers | `t6-hls-pull.py` is graded; `tsp -I hls --live` runs beside it as an ungroomed shelf column. FFmpeg is dropped: [T6](test-6-relay-resilience.md) showed it exits where `tsp` does. |
+| Edge (Cell 4) | nginx `proxy_cache` in front of the origin, shaped like a CDN default: honours origin `Cache-Control`, caches 404 for 10 s (CloudFront's default error TTL), collapses concurrent misses, never marks an origin down. The shelf column reads the origin directly so it neither warms nor shields the edge. |
+| Grader | At groomed egress: content lost and duplicated from video PTS ([`t28-content-lost.py`](scripts/t28-content-lost.py)); **timeline oracle** [`t30-timeline.py`](scripts/t30-timeline.py), which flags every arrival-order PTS step backward beyond 2 s as silent time travel (forward steps are holes, scored by the content grader); TSDuck continuity, groomed and raw. Playlist consistency from the receiver log (listed segment not fetchable) and the origin and edge access logs. Cell 3 adds [`t30-hammer.py`](scripts/t30-hammer.py): every newly listed segment fetched at once and at +50, +200 and +1,000 ms, and torn when any body differs from the last. |
+| Source | `contrib-10m.ts` (578.9 s, no loop wrap inside a run), `tsp regulate` to a loopback multicast group, so a packager can join the running feed late; the packagers read the group with `tsp -I ip`. |
 
 ## Procedure
 
-**Control — T6 dual packager, co-started, one filesystem.** Replay hitless baseline with groomer inserted;
-confirm 0 media lost on origin kill with `DUAL_NAMES=identical`.
+Every run: packagers start, then the source; the receiver starts once the playlist lists three
+segments; events are timed from the receiver's start (event at 40 s, run 100 s).
 
-**Cell 1 — Standby joins running feed ([P2-l](planned-experiments.md#p2--completeness) / T12 segmented remainder).**
-Start packager A and receiver; at mid-stream start packager B into the same namespace. Prediction:
-content-chosen segment boundaries align intra-coded pictures so B drops into the same naming sequence;
-that is a prediction, not a result. Grade first 30 s after B joins for media lost and naming collisions.
+**Control — T6 dual packager, co-started, one filesystem.** Replay hitless baseline with groomer inserted;
+confirm 0 media lost when the active packager is SIGKILLed with identical names. The kill is the
+packager's, as in T6's hitless drill: a single origin killed for 10 s has no redundancy to exercise
+and exceeds the 8 s cushion by construction (Cell 4 runs it behind an edge).
+
+**Cell 1 — Standby joins running feed (T12's segmented remainder).**
+Start packager A and receiver; at mid-stream start packager B into the same namespace, then SIGKILL A
+30 s later. Two variants: *naive* (B's own numbering, from `seg-000000`) and *aligned* (B's first file
+name and `--start-media-sequence` continue A's playlist; TSDuck takes a template's trailing digits as
+the first number). Prediction: content-chosen segment boundaries align intra-coded pictures so B drops
+into the same naming sequence; that is a prediction, not a result. Grade the 30 s after B joins for
+media lost and naming collisions, and the kill for media lost. Added after the first batch, under the
+same criterion: *aligned* with `--slice-only` on both packagers, which stops each injecting its own
+PAT and PMT (the aligned variant's failure, *Results*), with a co-started control under the same flag.
 
 **Cell 2 — Two hosts, one store.** Packager A on `<EC2_IP_A>`, packager B on `<EC2_IP_B>`, shared
 `<SEGMENT_STORE>`. Fail: kill A while B runs; kill B while A runs; partition store visibility (iptables
@@ -82,13 +87,20 @@ drop between host and store). Grade merge at receiver without operator action.
 write in place (`tsp -O hls` default). Optional: artificial delay between playlist update and segment
 close. Grade partial segments, continuity, and whether client retries recover without media lost.
 
-**Cell 4 — Partial failures (F7 list).** One at a time: edge up, origin down; origin up, edge stale;
-playlist references missing segment; segment present, playlist stale; premature deletion inside
-availability window; two replicas disagree on bytes for the same URL.
+**Cell 4 — Partial failures (F7 list).** One at a time, receiver behind the edge: edge up, origin down
+(origin SIGKILLed for 10 s); origin up, edge stale (edge holds the playlist 20 s, ignoring
+`max-age=1`); playlist references missing segment (a newly listed segment deleted three times, 15 s
+apart); segment present, playlist stale (playlist frozen 10 s while segments land); premature deletion
+inside availability window (receiver paused 8 s, every listed segment but the newest deleted at +6 s,
+with a pause-only control); two replicas disagree on bytes for the same URL (edge round-robins two
+origins, the second packaging its own copy of the clip 20 s behind).
 
-**Cell 5 — Silent misconfiguration.** Deliberately desynchronise packagers (distinct `DUAL_NAMES` or
-phase offset) while both serve; grade with timeline oracle, not continuity alone — reproducing the T6
-failure class under distributed conditions.
+**Cell 5 — Silent misconfiguration.** Deliberately desynchronise packagers while both serve one
+namespace: *independent-source* (B packages its own copy of the clip from 40 s, same naming; T6's
+class) and *names-offset* (B co-started on the same source, numbering five segments ahead). Grade with
+the timeline oracle, not continuity alone. Added after the first batch, because *independent-source*
+numbers from `seg-000000` and so only rewrites names the receiver has already fetched:
+*independent-aligned*, the same source with B's first name and media sequence continuing A's.
 
 **Cell 6 — Content Steering (optional, last).** Only when a client implements it; otherwise recorded as
 blocked.
@@ -101,7 +113,7 @@ loss distinct from origin kill.
 At groomed P1 egress unless the cell tests pre-groom receive:
 
 - **Media lost (headline)** — seconds of programme missing or duplicated.
-- **Continuity errors** — TSDuck; interpeted with segmented skip semantics ([method-notes](method-notes.md)
+- **Continuity errors** — TSDuck; interpreted with segmented skip semantics ([method-notes](method-notes.md)
   on modulo-16 counters and post-window re-anchor).
 - **Silent error flag** — programme timeline offset > 2 s from source while continuity and PCR checks
   pass — the T6 misconfiguration class.
@@ -113,8 +125,8 @@ At groomed P1 egress unless the cell tests pre-groom receive:
 
 ## Pass criteria, fixed before running
 
-1. **Control.** Co-started identical-name pair on one store: origin kill with `t6-hls-pull.py` reports
-   0 s media lost and 0 continuity errors at groomed egress — reproducing [T6](test-6-relay-resilience.md)
+1. **Control.** Co-started identical-name pair on one store: active-packager kill with `t6-hls-pull.py`
+   reports 0 s media lost and 0 continuity errors at groomed egress — reproducing [T6](test-6-relay-resilience.md)
    before any distributed cell runs.
 2. **Seamless (distributed).** For Cell 2 single packager kill with surviving packager healthy: 0 s
    media lost, 0 continuity errors, no operator action — *seamless* as defined in F7.
@@ -137,20 +149,137 @@ At groomed P1 egress unless the cell tests pre-groom receive:
 - **HTTP/1.1 origin unless noted.** [T20](test-20-segmented-http3.md) substrate-matched cells are
   separate; this test's distributed-store claim starts on the same stack as [T6](test-6-relay-resilience.md).
 - **One clip, one region, one bitrate** — same cross-cutting limits as [T14](test-14-data-plane-comparison.md).
-- **CloudFront / multi-CDN** blocked without account; nginx single-node cache is indicative, not
-  multi-CDN proof.
-- **Low-latency partial segments** and commercial ABR-to-TS gateways remain [T14](test-14-data-plane-comparison.md)
-  measurement 1, [not pursued](planned-experiments.md#deliberately-not-doing) — out of scope here.
+- **One edge, not a CDN.** The edge is one nginx shaped like a CDN default; CloudFront waits for
+  B-7 ([P1-ai](planned-experiments.md#p1--establishes-where-one-architecture-is-superior)).
+- **Low-latency partial segments** and commercial ABR-to-TS gateways are out of scope: Low-Latency
+  HLS is [not pursued](planned-experiments.md#deliberately-not-doing).
 - **Groomer cushion bisection** (1 s vs 8 s byte identity from [T12](test-12-dual-path-handoff.md))
   is a latency-cost question for segmented 1+1, not a resilience question; it may be run in the same
   rig but is not a pass criterion of this file.
+- **One receiver's policy.** `t6-hls-pull.py` remembers the names it has fetched and never fetches
+  one twice. The naive join's dead end and the independent source's silence follow from that
+  policy; a receiver that follows the media sequence would fail those rows differently.
 
-## Why this has not run
+## Results
 
-[T6](test-6-relay-resilience.md) answered serving-node failover on loopback with co-started packagers;
-[T12](test-12-dual-path-handoff.md) extended MoQ egress 1+1 and listed the segmented remainder cells
-explicitly. [P2-l](planned-experiments.md#p2--completeness) ranks the
-two-host store behind cross-host fan-out ([T26](test-26-cross-host-fanout.md)) because both need the
-second instance and the fan-out experiment deliberately saturates a box last. The standby-join cell
-([P2-l](planned-experiments.md#p2--completeness)) is cheap once P1-5's steady state exists — it is
-queued behind this file's Cell 2, not instead of it.
+*Measured on one host over loopback: TSDuck 3.44-4676, the system nginx, `t6-hls-pull.py` at a
+500 ms poll (50 ms in Cell 3), `mpegts-pacer` adaptive at 11.438 Mb/s; events 40 s after the
+receiver starts, runs of 100 s.* Programme lost is from video PTS at the groomed egress; the stall
+is the longest run of seconds with no new receiver input (2 s is the segment cadence), beside the
+groomer's muted output ([`t30-regrade.py`](scripts/t30-regrade.py)), which a stall that runs to the
+end of a capture shows and PTS cannot.
+
+| Cell, variant | Runs | Programme lost | Stall; muted | Continuity errors | Receiver saw |
+|---|---|---|---|---|---|
+| Control, active packager killed | 3 | 0 | 2 s; 0 | 0 | — |
+| Join, naive | 2 | 0 while both write; after the kill, nothing to the run's end | 8 s while both write; 33 s after the kill, 24 s muted | 0 | nothing |
+| Join, aligned | 3 | 0.92 s at the join | 2 s; 0 | 219–221, 208 on PAT and PMT | nothing |
+| Join, aligned, `--slice-only` | 3 | 0.32 s in two holes, 0.03–0.06 s duplicated | 2 s; 0 | 30–39, in five bursts | nothing |
+| Control, `--slice-only` | 1 | 0 | 1 s; 0 | 0 | — |
+| Misconfig, independent source | 2 | 0 | 4 s; 0 | 0 | nothing |
+| Misconfig, independent, aligned names | 2 | not measurable: two timelines 47 s apart, 14 steps back and 14 forward a run | 2 s; 0.9–1.0 s | 176–177; 10 on its input | nothing |
+| Misconfig, names five ahead | 2 | 0; 7.2 s, after a 6.84 s step back | 2 s; 9 s, 0 muted | 0; 20 | nothing |
+| Origin down 10 s behind the edge | 2 | 0 | 10 s; 0.5 s | 0 | 17 failed fetches (502), recovered |
+| Edge holds the playlist 20 s | 1 | 24.8 s in four holes, then 12 s stalled at the end | 20 s; 17.1 s | 41 | nothing |
+| A listed segment deleted, three times | 1 | 7.8 s, a segment each | 5 s; 0 | 32 | three 404s |
+| Playlist frozen 10 s | 2 | 0.40–0.48 s | 11 s; 1.5–1.9 s | 67–72; 0 on its input | nothing |
+| Receiver paused 8 s, listed segments deleted | 1 | 5.9 s | 9 s; 0.9 s | 10 | two 404s |
+| Receiver paused 8 s, nothing deleted | 1 | 0 | 7 s; 0 | 0 | — |
+| Replicas disagree behind the edge | 1 | 80.4 s in 11 holes, then 12 s stalled at the end | 18 s; 21.7 s | 97 | 35 404s |
+| Mid-write: 50 ms poll, every new segment fetched four times | 3 | 0 | 2 s; 0 | 0 | — |
+
+**Join.** Two packagers rewriting one playlist in place alternate in it, and the receiver read
+listings that mixed them (one gave media sequence 0 over names to `seg-000019`). In the naive variant B
+numbers from `seg-000000`, names the receiver has already fetched, so once A dies nothing new is
+ever listed: the playlist stays fresh and the programme stops. Aligned, B's names continue A's and
+the kill is hitless, but each packager stamps its own continuity counter on the PAT and PMT it
+inserts at each segment's start, so every segment while both write carries a counter jump on PIDs 0
+and 100. `--slice-only` removes the inserted tables, and TSDuck then refuses
+`--align-first-segment`: B's cuts no longer fall where A's do, one name holds two segmentations, and
+each switch between them costs a few packets on every PID. A co-started pair under the same flag is
+clean, so the cost is the cuts', not the flag's.
+
+**Misconfiguration.** With B numbering from `seg-000000` behind A, the playlist alternates between
+media sequences 15–27 and 0–8 and the receiver, ignoring names it has fetched, delivers A alone.
+Names five ahead: in one run the first listing was A's and the programme came through clean; in
+the other it was B's, and the receiver delivered a 6.84 s step back, which the timeline oracle
+flagged as time travel and continuity counted as 20 errors, as it would a lost segment. With B's names continuing A's, T6's class returns in
+both runs: the receiver alternates between the two sources, 47 s apart, with no failed request,
+and the oracle flags every step.
+
+**Partial failures.** Behind the edge an origin outage costs nothing but the groomer's cushion,
+which covers all but 0.5 s of a 10 s stall. Holding the playlist 20 s against a 12 s live window loses whole
+segments with no failed request anywhere. Disagreeing replicas fail by absence, not time travel:
+the second origin has not yet written the names the first lists, its 404s are cached at the edge
+for 10 s, and retry cannot recover. A frozen playlist loses nothing at the receiver; the loss is the
+groomer's, which drops 2,681 packets of the 12.2 MB catch-up burst against its 8 s cap.
+`tsp -I hls`, reading the origin directly, exited when the origin went down and in one names-ahead
+run; elsewhere it matched the groomed column.
+
+**Mid-write.** TSDuck lists a segment only after closing it, so 39 segments fetched four times
+each never differed, three runs out of three. The playlist, rewritten in place, was caught empty
+once in about 19,600 requests: nginx aborted that response and the receiver's next poll succeeded.
+
+## Conclusions
+
+1. **Criterion 1 passes.** T6's hitless co-started pair holds downstream of the groomer.
+2. **Criterion 2 is not run** (two hosts, P1-am).
+3. **Criterion 3 fails in every variant.** Naive meets the window and fails the kill: its names
+   collide with fetched ones, so the standby never takes over. Aligned and `--slice-only` meet the
+   2 s bound, and their collisions serve TS with continuity errors: each packager's own table
+   counters, then cuts that no longer align. No stock TSDuck configuration lets a packager join a
+   running namespace. A shared namespace survives a co-started pair only; a packager that can
+   restart needs its own namespace, or a packager whose cuts and names follow from the content
+   alone.
+4. **Criterion 4 passes.** In-place segment writes never reached the receiver torn; the in-place
+   playlist did, once, harmlessly.
+5. **Criterion 5: the grader passes, the lane does not detect.** The oracle flagged every delivered
+   jump; nothing in HTTP did, and the receiver accepted each. The one signal is the playlist's
+   media sequence going backwards.
+6. **Criterion 6, ranked:** disagreeing replicas (80 s) > a stale edge (25 s) > deleted segments
+   (6–8 s) > a frozen playlist (0.4 s, the groomer's) > an origin outage behind an edge (0, 0.5 s
+   muted). "Playlist stale, segment fresh" loses almost nothing; "playlist fresh, segment missing"
+   loses each segment: opposite, as predicted. The two worst rows are the two whose cause no HTTP
+   response names: a stale edge fails no request, and disagreeing replicas fail as missing segments.
+7. **Criterion 7 has no comparison:** T29 has not run.
+
+## Tooling: what the evaluation reuses and what it builds
+
+**TSDuck carries everything that touches the transport stream. The one missing piece is HTTP-side,
+and it sits in front of TSDuck, not instead of it.** Per stage: what serves it, what this file or
+the one cited showed it lacks, and what closing the gap takes.
+
+| Stage | Reuse | Gap | To close it | Upstream dependency |
+|---|---|---|---|---|
+| Package | `tsp -O hls` | the playlist is rewritten in place (Cells 1, 3); numbering restarts at 0, so a restarted packager reuses names a cache may still hold; a second packager cannot join a namespace (conclusion 3) | no code: one namespace per pathway; a first name derived from the wall clock, with `--start-media-sequence` | none on the path; optional TSDuck changes: write-then-rename, cuts and names set by the content |
+| Receive | `tsp -I hls` byte-faithful in steady state; `--headers` adds a static header (a CAT, static CMCD keys) to every request | exits on one failed reload or fetch (*Results*, T6); no retry, no second pathway, no event log; an HTTP fault is invisible to TSDuck's metrics | **B-8**: a front end that owns HTTP and writes the TS to stdout | none |
+| Rebuild cadence | `mpegts-pacer`, adaptive; `--stream-clock` for 1+1 | the cap drops a post-stall catch-up burst (*Results*, frozen playlist) | B-8 paces its catch-up, or the cap is set from the window (P1-ag) | none |
+| Monitor the TS | `tsp -P influx` (TR 101 290 counters, PCR and PTS, bitrate per PID or service, to InfluxDB), `-P analyze`, `-P continuity`; the campaign's liveness probe | they grade continuity and PCR, not the programme timeline: a silent time jump shows at most as continuity errors, which benign cells raise too (Cell 5) | the timeline oracle's rule, run live | none |
+| Select between legs | ST 2022-7 on two groomed legs ([T12](test-12-dual-path-handoff.md)); `tsswitch` for a marked switch | — | — | none |
+| Scramble | `-P scrambler` / `-P descrambler`, DVB-CSA2 with a fixed control word | BISS-CA is absent; `-O hls` cannot find intra pictures in a scrambled stream and cuts at a later PES | P1-al measures the cost | none for P1-al |
+| Entitle | a CloudFront Function validating a CAT; `tsp --headers` for a token that outlives the session | renewal | in B-8 | B-7 |
+
+**B-8, specified.** Grown from `t6-hls-pull.py`, which already holds the playlist loop, URI
+bookkeeping and outage accounting: retry a failed reload or fetch for as long as the segment stays
+in the window; on a second failure, or a playlist older than three target durations, continue from
+a second pathway, locating the continuation by content (video PTS) rather than by name, because
+each pathway has its own packager (conclusion 3); in a second mode, fetch both pathways and pass
+each stretch of programme once; flag a listing whose media sequence goes backwards (Cell 5's only
+signal); pace a catch-up to the mux rate; write one JSON line per fetch and
+per anomaly (stall, retry, fallback, regression, 404); send CMCD v2 keys on each request and to an
+event-mode collector, carrying TR 101 290 counters read from the downstream `tsp` as custom keys;
+attach and renew a CAT. TS bytes go to stdout, into `tsp -I file -` or the groomer; it reads
+timestamps and alters no packet.
+
+**Why not a new receiver, and why not TSDuck first.** A new receiver would rebuild what TSDuck and
+the groomer already do on the packet side. Patching `-I hls` puts a C++ change behind another
+maintainer's release before the behaviour is settled; B-8 settles it first, and its retry and event
+log can then be offered to TSDuck. **The 1+1 design has three routes, and only one needs TSDuck
+changed.** Each pathway with its own packager and namespace, selected either by B-8 by content or
+by two receivers whose stream-clocked groomers feed a 2022-7 merge: P1-ai measures both, with
+existing tools and B-8. Or one namespace fed by packagers whose cuts and names follow from the
+content alone, so that a restart rejoins: a TSDuck change, worth proposing only if the receiver
+routes fail.
+
+**The shortest path to concluding the lane:** B-8, and CloudFront for the campaign's account (B-7).
+Everything else in P1-ag to P1-al runs on tools the campaign has.

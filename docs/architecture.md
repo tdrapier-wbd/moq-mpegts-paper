@@ -636,10 +636,22 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
   lost host on every build measured, so from the importer on continuity is delivered the way
   broadcasters already trust: **one importer → dual fan-out paths → dual receivers → dual groomers →
   ST 2022-7 selection at the receiver.**
-- **On segmented HTTP the same protection is far cheaper** — the serving node holds no state. Two
-  packagers of one feed into a shared store emit byte-identical segments (`--intra-close`) with no
-  receiver-side merge; the chain is still doubled, engineering moves to store consistency, and a pair
-  that does **not** share feed and naming is accepted silently ([Comparison](comparison.md) §2).
+- **On segmented HTTP the serving node holds no state, so over one CDN the source protection can be
+  the CDN's.** Two co-started packagers of one feed into a shared store emit byte-identical segments
+  (`--intra-close`) with no receiver-side merge. A packager started later did not join that
+  namespace in any stock TSDuck configuration (on the clip measured, its names collided with fetched
+  ones, or its table counters and cuts differed from its partner's), and a pair that does **not** share feed and naming
+  is accepted silently. A 24/7 feed restarts packagers, so the pair needs packagers that cut and
+  name each segment by content time: two started apart then publish the same objects, their origins
+  are interchangeable, and one CDN origin group fails over between them per request. Each origin
+  also needs a guard that withdraws a playlist that stops advancing, since a stopped packager's
+  origin goes on answering its last playlist with a 200, which no CDN fails over from. Over
+  CloudFront this covered both receivers and their merge through each failure of one pathway
+  tested. **The last mile is the receivers'**: two at different edges, merged by ST 2022-7, each
+  releasing a segment at the time the origin's program date-time puts on its last PCR plus a fixed
+  hold, which started them within 1.1 ms of each other on one host, where a start alone left them up
+  to ±1.5 s apart. The design
+  assumes one CDN; its own failure, or the feed's, is outside it ([Evidence](evidence.md) §3.4).
 
 ### 5.5 Failure scenarios
 
@@ -649,7 +661,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Importer** | Both legs carry its broadcast, so both lose it. On current `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval at a hard kill, under 2 s at a clean exit, with every demultiplexing exporter kept, in a mesh too. Earlier builds lost at least one idle timeout, and no takeover reached every subscriber in the mesh ([Evidence](evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
+| **Importer** | Both legs carry its broadcast, so both lose it. On current `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval at a hard kill, and 1.4–2.5 s of programme at a clean exit, with every demultiplexing exporter kept, in a mesh too. Earlier builds lost at least one idle timeout, and no takeover reached every subscriber in the mesh ([Evidence](evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -908,7 +920,8 @@ chain or external supervisor.
 **Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at
 10 s, the default from moq 0.14.0)** at a hard failure on every build measured. Earlier builds were
 **not reliable on a graceful exit**; on current `main` a takeover is a marked programme switch to
-the newest live importer, under 2 s at a clean exit ([Evidence](evidence.md) §3.4). Load-bearing
+the newest live importer, costing a decoder 1.4–2.5 s of programme at a clean exit
+([Evidence](evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).
 
@@ -1101,10 +1114,11 @@ would have to invent.
 **It is a greenfield capability, not a deficit against an incumbent, and no adoption decision here
 turns on it.** No open control plane and no transport protocol in current use gives an origin this
 visibility into a subscriber's delivered-media health — not WebRTC, SRT or RTMP, and not
-HLS/CMAF/DASH. CMCD/CMSD, the nearest thing, reports request- and buffer-level client state to a CDN
-and says nothing about whether the media that arrived was intact. No candidate in
+HLS/CMAF/DASH. CMCD/CMSD, the nearest thing, reports request-, buffer- and playback-level client
+state, since version 2 (CTA-5004-B) to an analytics collector as well as the CDN; its custom keys
+could carry a receiver's TR 101 290 counters, but no key defines them. No candidate in
 [Comparison](comparison.md) satisfies it. It is recorded because a distributor will meet the gap at
-fleet scale, and because the mechanism to close it is unusually close to hand on this data plane.
+fleet scale, and because a carrier for the report is close to hand on either data plane.
 
 **One route to it is deliberately not taken.** The edge stage (§4) already decodes the stream and
 counts per-PID access units, and could emit this telemetry with little new code. It is the wrong
