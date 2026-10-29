@@ -1340,8 +1340,7 @@ against the pre-flip `main` at `6a016409`; [T23](test-23-pcr-discontinuity-class
 | C: 30 s forward, flagged | full window | parse failures below | full window; 0.45 s stall |
 | F: control | full window | full window | full window |
 
-Error: *frame timestamp is below the previous group's start*. A flagged backward discontinuity ends
-a pipe-fed importer; over SRT, redial with `--linger` costs 1.1–1.5 s in four of five A and E runs,
+Error: *frame timestamp is below the previous group's start*. Over SRT, redial with `--linger` costs 1.1–1.5 s in four of five A and E runs,
 and without it the whole feed. One E run that did not resume was not reproduced; `srt-live-transmit`'s
 zero-fill is a candidate ([method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
 
@@ -1353,7 +1352,8 @@ in 8 of 13 runs; the other five, reported as [#5101](https://github.com/moq-dev/
 were closed as not planned: identity across a republish is not a goal. The export ends on a
 replacement unless `--stitch` asks for a full program switch. In
 [#7102](https://github.com/moq-dev/moq/issues/7102) a real contribution switching encodes unflagged
-ended both legs at once ([T34](test-34-real-encoder-severity.md)); upstream will tolerate it, the
+ended both legs at once ([T34](test-34-real-encoder-severity.md); our synthetic reproducer,
+[T64](test-64-synthetic-encoder-switch.md), [posted](https://github.com/moq-dev/moq/issues/7102#issuecomment-6496334839)); upstream will tolerate it, the
 export re-acquiring the clock ([#7165](https://github.com/moq-dev/moq/pull/7165), merged) and the
 CLI's supervisor republishing under a fresh epoch
 ([#7144](https://github.com/moq-dev/moq/pull/7144), open).
