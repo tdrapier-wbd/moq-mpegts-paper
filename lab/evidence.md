@@ -405,8 +405,8 @@ equal numbers. A packager killed or frozen for 10 s, a 30 s origin outage, a rec
 nothing. Each start fixes the skew, from −1.42 s to +1.47 s across runs, as each receiver anchors
 on the live edge it first sees: two runs of seven fell within a Class C receiver's 450 ms, and
 outside it a struck leg the receiver was following cost a re-lock, a skip of up to 2.02 s or a
-repeat of 0.57 s. Through the outage CloudFront kept serving the last playlist and failed no
-request, then the media sequence jumped past ten unseen segments. Origin load was one fetch per
+repeat of 0.57 s. Through the outage CloudFront served the last playlist, failing no
+request; then the media sequence skipped ten unseen segments. Origin load was one fetch per
 segment per edge.
 
 **Inside one CDN the source protection can be the CDN's, and receivers released on the origin's
@@ -419,12 +419,12 @@ failure of one pathway (its packager killed or frozen, its origin refused, hung 
 either receiver or the merge anything, and no receiver waited over 5.2 s for a segment. Receivers at
 a Dublin and a Düsseldorf edge, each holding a segment until its last PCR's program date-time plus
 1.5 s, started within 1.1 ms of each other in ten trials of ten, against −22 to 379 ms unreleased; a
-groomer taking segments in at 12 MB/s left two trials of ten 86–87 ms apart. The hold adds to the
-delay, receivers on two hosts add their clocks' offset, and a failure of the CDN is outside the
-design. **Damage in the feed reaches both pathways together** ([T62](test-62-origin-group-soak.md);
-72 h, one run): six continuity breaks each withdrew both playlists until a window was whole, 54 s
-in all, though the origins stayed byte-identical. After a splice the groomer build soaked, since
-fixed, left PTS 4.7 h from its PCR, which PCR intervals do not show.
+groomer taking segments in at 12 MB/s left two trials of ten 86–87 ms apart. The hold adds delay,
+receivers on two hosts add their clocks' offset, and a CDN failure is outside the design. **Damage in the feed reaches both pathways together** ([T62](test-62-origin-group-soak.md);
+72 h, one run): six continuity breaks withdrew both playlists until a window was whole, 54 s in
+all, the origins still byte-identical; elsewhere the merged wire kept continuity and 40 ms PCR
+repetition. After a splice the soaked groomer build, since fixed, left PTS 4.7 h from its PCR,
+invisible to PCR intervals.
 
 **On the media-aware lane the redundancy belongs at the receiver, and it is hitless**
 ([T12](test-12-dual-path-handoff.md), 42 cells, one run each). Two live legs into a reference

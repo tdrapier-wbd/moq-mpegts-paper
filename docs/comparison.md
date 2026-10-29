@@ -226,8 +226,8 @@ nothing free receives TS-in-HLS (§6.1). **Grooming burden**
 favours MoQ, and **which stage can carry it** favours segmented HTTP (§4.3). **The groomed wire** is
 a tie on P1/P2 and not on its cost: both reach 0 PCR intervals above 40 ms in software, segmented at
 the 8 s cushion its segments impose and MoQ at a buffer sized by the source's peak coded frame, MoQ
-at 2,447 ms against 9,286 ms and soaked for a day where the segmented lane never has been. The two
-are not equally tight: MoQ's conformance and latency come from one configuration, while the
+at 2,447 ms against 9,286 ms; MoQ's wire held for a day on a replayed clip, the segmented one for
+72 h on the live feed but at its six breaks. The two are not equally tight: MoQ's conformance and latency come from one configuration, while the
 segmented zero is a local groomer run and its internet cell posts 2 marginal intervals
 ([Evidence](../lab/evidence.md) §3.11). **The tie is P1/P2's alone**: at the buffer model the media-aware
 wire fails and the segmented one is ungraded (§8).
@@ -248,9 +248,8 @@ egress, excluding the encoder and decoder delay that no plane here varies.
 **Segmented HTTP's floor is arithmetic, not implementation quality.** `PART-HOLD-BACK` MUST be at least
 twice, and SHOULD be at least three times, the part target, and production part targets sit around
 200–330 ms, so the hold-back alone is roughly 0.6–1 s before encode, packaging, delivery and the
-gateway's de-jitter buffer. The specification warns that a shorter target "reduces latency but also
-reduces available buffer, handicaps adaption and increases delivery overhead, increasing the likelihood
-of playback stall." Two to five seconds is the realistic envelope, and **with MPEG-TS and free tooling it
+gateway's de-jitter buffer. The specification warns that a shorter target trades buffer for a
+greater "likelihood of playback stall." Two to five seconds is the realistic envelope, and **with MPEG-TS and free tooling it
 is nearer six**, because no free client that turns HLS back into a transport stream fetches parts
 ([Evidence](../lab/evidence.md) §3.9).
 
@@ -324,9 +323,8 @@ only five for a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §
 multi-programme carriage are mutually exclusive on segmented HTTP**: "Transport Stream Segments MUST
 contain a single MPEG-2 Program." HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and
 TDT/TOT through its catalog. SCTE-35 has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give
-client reporting MoQ has only in drafts — though their keys carry request, buffer and playback
-state, and version 2's custom keys could carry TR 101 290 counters that nothing defines, so
-**neither plane defines how an origin establishes that what a subscriber received was intact**
+client reporting MoQ has only in drafts, but **neither plane defines how an origin establishes
+that what a subscriber received was intact**
 ([Architecture](architecture.md) §9.4).
 
 ### 6.1 Five layers, and they do not resolve the same way
@@ -394,8 +392,7 @@ subscriber becomes the multiplexer, re-solving the T-STD schedule the source had
 pacing groomer cannot do — **not insurmountable**, since a laboratory re-multiplexer does it live, and
 upstream's fixed-delay export, merged in October 2026, does it in the subscriber, keeping every track
 and buffer on every join tried (§5.1). And it **cannot carry a scrambled
-stream**. Byte-faithful carriage has none of the three by construction; on MoQ that is the opaque lane,
-measured once per arm, on loopback and one live feed (§12).
+stream**. Byte-faithful carriage has none of the three by construction; on MoQ that is the opaque lane (§12).
 
 **Scrambling is a narrow gate.** Primary distribution is protected by the transport and the operator
 ([Control plane](control-plane.md) §7.3), and consumer conditional access is applied downstream of the
@@ -471,11 +468,9 @@ a joint probability, unevidenced here**: severe weather stresses local access an
 fades a downlink. **The receiver is the gate**: legacy IRDs keep decoding the satellite stream
 unrepaired until the client installs hybrid receivers ([Problem](problem.md) §1.5). **It resolves
 nothing the footprint already limited**: per-destination feeds, reach, event topologies and
-entitlement. It is also strictly worse on R4 than plain satellite: Part 7's informative sizing
-bounds the receiver buffer below by the satellite latency plus repair margin, a buffer nobody here
-has measured against §5.1. And it relocates the conformance problem: Part 8 concedes that splicing
-recovered data without re-stamping PCRs risks exceeding 13818-1's ±500 ns, a grooming function at
-the receiver.
+entitlement. It is also strictly worse on R4 than plain satellite: by Part 7's informative sizing
+its receiver buffers the satellite latency plus a repair margin. And it relocates the conformance problem into
+the receiver's splice ([Architecture](architecture.md) §2.1).
 
 **MoQ has no equivalent mechanism and is not asked the same question**: neither the IETF MoQ charter
 nor `draft-ietf-moq-transport-19` addresses loss in a parallel unidirectional path (*specified*, by
@@ -570,9 +565,9 @@ under what conditions each is preferable.
 
 | Gate | Cleared when | MoQ today | Segmented HTTP today |
 |---|---|---|---|
-| **Conformant egress** | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane.** P1/P2 holds in software, its continuity and PCR repetition for a day, and the same wire fails the T-STD, which only a re-multiplexing stage repairs (§5.1, §8); no build is measured to carry every timeline case. Not on hardware | **P1/P2 cleared in software** on a local groomer run; buffer model ungraded; never soaked; not on hardware |
+| **Conformant egress** | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane.** P1/P2 holds in software, its continuity and PCR repetition for a day, and the same wire fails the T-STD, which only a re-multiplexing stage repairs (§5.1, §8); no build is measured to carry every timeline case. Not on hardware | **P1/P2 cleared in software** on a local groomer run, and its continuity and PCR repetition for 72 h on the live feed but at the feed's six breaks; buffer model ungraded, PTS once hours from PCR (below); not on hardware ([Evidence](../lab/evidence.md) §3.4) |
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Carried on the opaque lane and through the groomer** (once, loopback, no key ladder); excluded on the media-aware lane; a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
-| **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Unknown.** Never soaked |
+| **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Not cleared**: 72 h on the live feed through one CDN, memory flat; six breaks in the contribution each withdrew both pathways, 54 s in all, and the groomer left PTS hours from PCR after a splice, its fix not soaked; one run ([Evidence](../lab/evidence.md) §3.4, §5) |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** Cache offload at one node, not a CDN |
@@ -587,10 +582,9 @@ neither without a distributor-owned edge stage, and neither as an unconditional 
 hardware remains the deciding gate for both, and a resilient, observable receive stage decides
 segmented HTTP specifically.
 
-**These two are not the only choice on the table.** The satellite-hybrid model of §10.2 keeps the
-broadcast medium and puts IP behind it only for repair. It is not scored because nothing about it is
-measured here, but it is strongest exactly where both planes are weakest — a large estate inside one
-footprint on a common always-on feed — and a route that reads "incumbent" on destination count in
+**These two are not the only choice on the table.** The satellite-hybrid model of §10.2 is not scored
+because nothing about it is measured here, but it is strongest exactly where both planes are weakest
+— a large estate inside one footprint on a common always-on feed — and a route that reads "incumbent" on destination count in
 [Economics](economics.md) §6 is one where it is the live alternative.
 
 ### 13.2 The limits under every verdict
