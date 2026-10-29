@@ -1350,10 +1350,10 @@ were closed as not planned: identity across a republish is not a goal. The expor
 replacement unless `--stitch` asks for a full program switch. In
 [#7102](https://github.com/moq-dev/moq/issues/7102) a real contribution switching encodes unflagged
 ended both legs at once ([T34](test-34-real-encoder-severity.md); our synthetic reproducer,
-[T64](test-64-synthetic-encoder-switch.md), [posted](https://github.com/moq-dev/moq/issues/7102#issuecomment-6496334839)); upstream will tolerate it, the
-export re-acquiring the clock ([#7165](https://github.com/moq-dev/moq/pull/7165), merged) and the
-CLI's supervisor republishing under a fresh epoch
-([#7144](https://github.com/moq-dev/moq/pull/7144), open).
+[T64](test-64-synthetic-encoder-switch.md), [posted](https://github.com/moq-dev/moq/issues/7102#issuecomment-6496334839)); upstream tolerates it: the
+export re-acquires the clock ([#7165](https://github.com/moq-dev/moq/pull/7165), merged) and the
+import restarts under a fresh epoch
+([#7144](https://github.com/moq-dev/moq/pull/7144), merged, closing it).
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
 
