@@ -790,7 +790,7 @@ stimulus and a control): at T64's switch, back and forward, and T34's captured o
 republished within 1.5 ms and no export ended. T64's cost 1,360 ms of presentation time against
 2,400–2,480 ms behind a supervisor, the capture's 1,600 ms of decode time against 2,800 ms. Two
 exports stayed byte-identical across T64's switch in six runs of six and differed by 1.2–3.5 % on
-the capture. A 1+1 ingest pair and the SRT gateway path are unmeasured across it.
+the capture. A 1+1 ingest pair and the SRT gateway path are unmeasured.
 
 ### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
 

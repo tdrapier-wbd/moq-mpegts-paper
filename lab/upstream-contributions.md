@@ -1543,9 +1543,9 @@ TRACK_STATUS.
 ### A CDN-hosted moqx relay at a join — reported on [openmoq/moqx#795](https://github.com/openmoq/moqx/issues/795#issuecomment-6289975173) and as [#842](https://github.com/openmoq/moqx/issues/842)
 
 [T11](test-11-interop.md): an unforwarded joining FETCH loses the head of the group in progress,
-the SI track's object included. TRACK_STATUS's undefined code (#842, closed) reads as INTERNAL_ERROR;
-[#843](https://github.com/openmoq/moqx/issues/843) asks for defined codes. Our STOP_SENDING ends the
-subscription: [#817](https://github.com/openmoq/moqx/issues/817), whose open fix covers it.
+the SI track's object included. TRACK_STATUS's undefined code (#842) reads as INTERNAL_ERROR, which
+the specification allows ([#843](https://github.com/openmoq/moqx/issues/843), closed). Our STOP_SENDING
+ended the subscription: [#817](https://github.com/openmoq/moqx/issues/817), fixed in moxygen; not re-tested.
 **Open:** a local moqx on draft 16, v0.3.6 or the fixed snapshot, serves the joining FETCH (our
 groups restart at 0, short of #795's precondition); on draft 18 the node refuses it, unforwarded, to
 a track's opener, losing a once-published catalog ([T52](test-52-cdn-relay-fanout.md)); on the
