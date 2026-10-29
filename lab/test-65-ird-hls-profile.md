@@ -173,7 +173,7 @@ CRC, and no row is short. **FFmpeg replaces the multiplex**, the same on both pa
 4. **`tsp -O hls` is not a conformant live packager for open-GOP contribution** on either rule above.
    A synthetic reproducer shows a third defect: without access unit delimiters it finds no open-GOP
    I-frame, and `--max-extra-duration` never forces the close, so a 30 s source became one segment.
-   All three are reportable upstream to TSDuck.
+   All three are reported to TSDuck ([upstream contributions](upstream-contributions.md) § 6c).
 
 ## The receive profile these results imply (draft)
 

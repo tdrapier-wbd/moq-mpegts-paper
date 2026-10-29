@@ -986,13 +986,11 @@ RTP into an IRD has no MoQ protection on its final hop. BISS-CA, in-content and 
 covers that gap.
 
 **The decisive constraint is that BISS-CA forecloses the media-aware lane:** CISSA scrambles TS
-payloads, so the demuxing importer cannot produce media tracks; it requires transparent MSFTS mode 1
-— the lane with worse measured latency that `moq-dev` does not implement on `main`. **Verdict: do
+payloads, so the demuxing importer cannot produce media tracks; it requires opaque carriage, which
+`moq-dev` carries byte-transparently on `main` ([T48](test-48-passthrough-export.md)). **Verdict: do
 not build it** unless a rights deal requires operator-blind carriage; MSFTS §10 already permits
-BISS-CA on transparent carriage. Recorded in `lab/discussions/biss-ca-over-moq.local.md`. **Promoted
-to [`control-plane.md`](../docs/control-plane.md) §7.3 and §9:** facility segments MoQ leaves
-unprotected are local and often clear today; the gap matters where operator or environment is not
-trusted; technical half answered (BISS-CA at price of opaque carriage), commercial half open.
+BISS-CA on transparent carriage. The paper's statement is [`control-plane.md`](../docs/control-plane.md)
+§7.3 and §9.
 
 ### FEC is a transport question, and the campaign's contribution to it is the comparison
 
@@ -1158,8 +1156,7 @@ position, scoped against a named receiver.
 [#3987](https://github.com/moq-dev/moq/pull/3987), quest files only, closed
 [#3798](https://github.com/moq-dev/moq/issues/3798), [#3925](https://github.com/moq-dev/moq/issues/3925),
 [#3926](https://github.com/moq-dev/moq/issues/3926) and [#3731](https://github.com/moq-dev/moq/issues/3731);
-each defect was intact on `ffa5b81b`. Since: #3798 fixed and #3926 closed by #4504, #3925 answered
-by #4645, and #3731 reopened as `quest/m3/msfts-convergence.md`, with T11c's discovery result
+each defect was intact on `ffa5b81b`. Since, #3731 reopened as `quest/m3/msfts-convergence.md`, with T11c's discovery result
 [posted](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800). Method rule:
 [`method-notes.md`](method-notes.md) § *A closed issue is a claim about a tracker, not about a binary*.
 
@@ -1585,6 +1582,16 @@ on master `45f3fecca` (2026-09-22) by reading; open PR
 [#24565](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24565) fixes a related whitelist gap for
 `local_addr`.
 
+## 6c. TSDuck: an HLS packager whose playlist overstates its segments
+
+**The report** ([tsduck/tsduck#1752](https://github.com/tsduck/tsduck/issues/1752)), from
+[T65](test-65-ird-hls-profile.md): with `--intra-close`, `--max-extra-duration` never forces a close,
+so a stream on which no I-frame is found becomes one segment; `EXTINF` exceeds `TARGETDURATION`, an
+RFC 8216 MUST; and `EXT-X-INDEPENDENT-SEGMENTS` is written whether or not segments are independent.
+**Verification:** on 3.45-4798, a public FFmpeg reproducer gives one 29.64 s segment, segments of
+2.56–2.63 s under a target of 2, and validator errors -50061 and 535038; `master` has each defect, by
+reading. **State:** open.
+
 ---
 
 ## 7. The carriage specification: MSFTS
@@ -1641,15 +1648,11 @@ modified modes, and #48 removed the output rules (below).
 Eleven issues, [#24](https://github.com/mondain/msfts/issues/24)–[#34](https://github.com/mondain/msfts/issues/34),
 with a [#15 comment](https://github.com/mondain/msfts/issues/15#issuecomment-5714034547) and
 [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731) cross-linked with #33.
-[#35](https://github.com/mondain/msfts/pull/35) answered most: Egress Timing with #32's conditional MUST
-(paired with a SHOULD NOT, since re-pacing costs latency equal to its buffer), a table of carriage fields
-against modes (#28), a delivery-schedule paragraph (#24), the arrival-time prefix defined (#15), the CAT
-in the retain list (#27), and `mpeg2tsPsiInterval` deleted, which dissolved half of #26. Declined, with
-reasons: field reduction (#17, #27's CA-PID list), #29's source PID inventory, which the pipeline that
-dropped PIDs would make agree with itself, and #34, since modified carriage passes TR 101 290 P1 on the
-packets it carries. [#36](https://github.com/mondain/msfts/pull/36) replaced three fields with one
-`mpeg2tsMode` and closed #33; [#40](https://github.com/mondain/msfts/pull/40) closed #15. **State:**
-closed; the modified modes and output rules have since gone (§ *The -02 revision*).
+[#35](https://github.com/mondain/msfts/pull/35) answered most, [#36](https://github.com/mondain/msfts/pull/36)
+closed #33 and [#40](https://github.com/mondain/msfts/pull/40) closed #15. Declined, with reasons: field
+reduction (#17, #27's CA-PID list), #29's source PID inventory, which the pipeline that dropped PIDs
+would make agree with itself, and #34, since modified carriage passes TR 101 290 P1 on the packets it
+carries. **State:** closed; what they added has gone with the modified modes (§ *The -02 revision*).
 
 ### moq-dev#3731 answered, and our re-assessment returned: agreement on the diagnosis, a concession on mux rate, one structural disagreement left
 
@@ -1838,8 +1841,7 @@ contradicted the ask.
   ([T12](test-12-dual-path-handoff.md)). Scrambled carriage and true MPTS stay out of reach for a
   demux/re-mux lane and belong to the packaging discussion (§7).
 - **#1839's remainder** went after the maintainer declined a module per transport without a
-  customer; a transport-agnostic pacer replaced it ([T13](test-13-downstream-grooming.md)). #2984
-  was therefore framed as a caller-contract defect, not as #1839 re-filed.
+  customer; a transport-agnostic pacer replaced it ([T13](test-13-downstream-grooming.md)).
 - **#1838 was corrected rather than withdrawn.** PCR and mux-rate checks on moq's egress target a
   stream no IRD sees, and would sit in alarm on a healthy chain (1,523 of 1,524 PCRs outside ±500 ns
   ungroomed, none after grooming; [T7](test-7-timing-integrity.md), T13), so they are the groomer's.
