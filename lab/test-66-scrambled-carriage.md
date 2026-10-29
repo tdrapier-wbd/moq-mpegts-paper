@@ -27,12 +27,15 @@ and whether the soft receiver can terminate it for an affiliate whose IRD lacks 
   16 kb/s from the stuffing. Their payloads are not BISS-CA's syntax, which a byte-faithful lane
   cannot see.
 - **Scrambling:** TSDuck's `scrambler` on the service, DVB-CISSA, 13 control words from a file,
-  10 s crypto-periods. Video, audio and teletext are scrambled; SCTE-35 stays clear, as is common.
+  10 s crypto-periods. Video, audio and teletext (the last only with `--subtitles`) are scrambled;
+  SCTE-35 stays clear, as is common. The scrambler nulls the packets before it has read the PAT and
+  PMT, the first 401 here.
 - **Builds:** `moq` and `moq-relay` at `66af72315`; `mpegts-pacer` `97f3a38`; TSDuck 3.45.
 
 ## Arms
 
-One relay on loopback; the scrambled stream published once, in real time on its own PCR.
+One relay on loopback. A–C share one publish of the scrambled stream, in real time on its own PCR;
+D and E read the same file in parallel.
 
 | Arm | Chain | Stands for |
 |---|---|---|
@@ -46,15 +49,16 @@ One relay on loopback; the scrambled stream published once, in real time on its 
 ## Pass criteria, fixed before the first run
 
 1. **Control.** Every payload-bearing packet on 111, 121, 123 and 131 is scrambled, both parities
-   occur, and the parity changes at least 11 times; descrambled offline, every such packet equals the
-   clear fixture's. Otherwise the stimulus is void and nothing below is graded.
+   occur, and the parity changes at least 11 times; descrambled offline, every such packet the
+   scrambler kept equals the clear fixture's. Otherwise the stimulus is void and nothing below is graded.
 2. **A.** `ts-passthrough-identity.py` against the scrambled fixture finds **0 foreign packets**, and
    the CAT, ECM and EMM PIDs occur in the capture as often as in the source span it covers. Gaps
    (objects dropped late) are reported, not failed: they are the lane's timing, not its transparency.
 3. **B.** `--groomed` identity (nulls dropped, PCR fields masked) against the scrambled fixture finds
    0 foreign packets; the capture has 0 continuity errors and no PCR interval over 40 ms.
 4. **C.** `--groomed` identity against the offline-descrambled control finds 0 foreign packets, and
-   FFmpeg decodes the capture with no error logged.
+   FFmpeg logs no error on the capture that it does not log on the same span of the clear fixture
+   (the clip's GOPs are open, so a capture's first pictures may lack their references either way).
 5. **D**, classified, not passed: what the importer publishes and what the export writes. Predicted:
    no video FFmpeg can decode, and no conditional-access PID.
 6. **E**, classified: predicted to name no segment, since it takes each segment's name from a PES
