@@ -190,8 +190,8 @@ is unaffected and why the defect needs an *unflagged* wrap to appear at all.
 6. **On `main` from #4543 an unflagged wrap is the end of the stream, by design**, on every stream
    kind (`83ce47fe`). A looping playout or any source whose timestamps step back without
    `discontinuity_indicator` cannot be published continuously on the current trunk. A flagged step
-   ends a pipe-fed import too, and upstream has declined an in-process restart for it
-   ([#4582](https://github.com/moq-dev/moq/issues/4582), closed as not planned): such a source is
+   ends a pipe-fed import too, and upstream's in-process restart for it is not merged
+   ([#7144](https://github.com/moq-dev/moq/pull/7144), open): until it is, such a source is
    carried only by a supervisor that republishes under a new epoch at each step, paying a restart
    per wrap ([upstream contributions](upstream-contributions.md), the #4513/#4543 entry).
 
