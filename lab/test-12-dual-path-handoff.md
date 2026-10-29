@@ -285,7 +285,7 @@ are below.
 
 ### Arm D — one stream-clocked pacer per leg: two groomers, one transport
 
-This is the arm arm B's failure asked for, and it works. Two groomers that share no process, no
+This is the arm that arm B's failure asked for, and it works. Two groomers that share no process, no
 clock and no messages emit the same bytes under the same numbers, because both compute placement
 from the stream instead of from themselves. The co-started control is **byte-identical on every
 datagram**: 23 175 on each leg, sequence offset 0, 100.00 % alignment yield, 0 conflicts, 0

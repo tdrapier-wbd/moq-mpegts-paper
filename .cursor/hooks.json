@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": ".cursor/hooks/vale-after-edit.py",
+        "matcher": "Write",
+        "timeout": 30
+      }
+    ]
+  }
+}

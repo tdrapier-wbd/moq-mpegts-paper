@@ -41,6 +41,11 @@ reasoned, datasheet* are load-bearing words. Distinguish what is established, li
 - Complete sentences. Shorten by cutting whole passages, never by compressing into fragments, arrow
   chains or dropped articles.
 - Mermaid for diagrams.
+- Vale (`.vale.ini`) checks spelling and proselint's style rules. An agent's edit gets back the
+  alerts on the wording it changed (`.cursor/hooks.json`) and a commit prints those on its staged
+  wording; run `python3 lab/scripts/vale-changed.py` before committing. Fix each alert or keep it
+  deliberately; a genuine term goes in `.vale/styles/config/vocabularies/PaperVocab/accept.txt`, one
+  word family per entry, never a character class.
 - A rate appears only if it is on a public price page, derived openly from one, or measured here.
   Anything else is labelled *hypothetical*, *assumed* or *illustrative* everywhere it appears, table
   headers included. Third-party reports of what somebody pays are not prices.
