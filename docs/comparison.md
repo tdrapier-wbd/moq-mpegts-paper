@@ -257,10 +257,9 @@ is nearer six**, because no free client that turns HLS back into a transport str
 ### 5.1 Latency and PCR conformance are independent axes, and the lane still pays for conformance in latency
 
 **Cushion depth does not buy conformance; the edge stage does.** An eightfold cushion ladder leaves the
-lane's PCR repetition unchanged. What clears the gate is a groomer that reserves the PCR slot instead of
-waiting for a spare one, which never comes inside a frame-sized burst, plus a media-rate estimate and a
-release loop closed on occupancy: the wire then returns 0 of 20,193 intervals above 40 ms over 300 s, and
-0 over 24.01 h with the 33-bit rollover crossed ([Evidence](../lab/evidence.md) §3.2).
+lane's PCR repetition unchanged, while a groomer that reserves the PCR slot rather than waiting for a
+spare one returns, on the wire, 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h
+([Evidence](../lab/evidence.md) §3.2).
 
 **The conformant configuration delivers at 2,447 ms, an order of magnitude above the 109 ms, and neither
 part of the gap is cushion depth.** About **650 ms is a named upstream regression**, the exporter PCR
@@ -336,14 +335,12 @@ state, and version 2's custom keys could carry TR 101 290 counters that nothing 
 |---|---|---|
 | **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; other implementations' relays carry it in part (§6) |
 | **General-purpose client reception** | clears, and is why the format is ubiquitous | within one implementation |
-| **Low-latency TS-in-HLS reception** | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](../lab/evidence.md) §3.9) | not applicable; no segment period |
-| **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation |
+| **Low-latency TS-in-HLS reception** | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](../lab/evidence.md) §3.9); not asked of the lane (§1) | not applicable; no segment period |
+| **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2), not surviving an origin failure (§3.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation |
 | **Hardware-verified conformance of that hand-off** | **not run** | **not run** |
 
-**The first two layers are segmented HTTP's, decisively; the fourth is off the shelf at classic
-durations but not resilient to an origin failure (§3.2); the third is unmet, and not asked of the lane
-(§1); and the fifth is unresolved on both.** Its interoperability
-advantage is real and large, and at classic durations it reaches the receiver.
+**Segmented HTTP's interoperability advantage is real and large**, decisive on the first two layers,
+and at classic durations it reaches the receiver.
 
 ---
 
@@ -484,8 +481,7 @@ the receiver.
 nor `draft-ietf-moq-transport-19` addresses loss in a parallel unidirectional path (*specified*, by
 absence), and named objects are a substrate for range repair only in *reasoning*. Both parts date
 from 2025–2026, with implementation evidence limited to vendor announcement and single-vendor
-demonstration. **Nothing in §10.2 is measured here**, which is why §13.1 frames the model as a
-competing resolution rather than scoring it.
+demonstration.
 
 ---
 
@@ -517,7 +513,7 @@ HLS back into a transport stream** ([Evidence](../lab/evidence.md) §3.9):
 | Scope | publisher, relay, subscriber | **publisher**, console receiver | protocol library, **relay**, sample clients | publisher + egress + pacer |
 | Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
 | Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
-| Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 14–22** | MOQT 14, 16–18, 21, 22 | MOQT 14, 16 and 18 | inherits `moq-dev` |
+| Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 18 and 22** on upstream `main` from late October 2026, 14–22 before | MOQT 14, 16–18, 21, 22 | MOQT 14, 16 and 18 | inherits `moq-dev` |
 | Source failover | route reselection; between importers, a marked switch to the newest (`export ts --stitch`) | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
 | Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
 
@@ -554,7 +550,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
-| Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (S) (§8) |
+| Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (M) (§8) |
 | Wire volume | **MoQ**, by the source's stuffing | M+derived | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9) |
 | Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
 | Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem, whose cost is in following upstream: a breaking change reached a rig about weekly, two of nine silently, so each upgrade needs a rig audit ([T54](../lab/test-54-dependency-risk.md)) |

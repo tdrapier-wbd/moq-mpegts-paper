@@ -342,15 +342,3 @@ fails the 13818-1 buffer model. Stages that rebuild the packet schedule pass it 
 re-multiplexer, and upstream's own exporter as merged in October 2026 — each at a latency of its own,
 and none sub-second over a whole capture. **R4 at R3 is therefore the open question on this lane, not
 a settled advantage** ([Evidence](../lab/evidence.md) §3.2, §3.11, §3.16).
-
----
-
-## 6. Where this goes next
-
-[Comparison](comparison.md) evaluates the two candidate Internet-native data planes — MoQ, and
-segmented HTTP carrying MPEG-TS — against R1–R7, and against the point-to-point incumbents of §2.3;
-it reaches R6 and R7 only as far as the data plane decides them. R8 is not a data-plane axis and is
-not scored there. [Architecture](architecture.md) develops R3, R6 and R8, which is where nearly all
-the measured work sits, and [Control plane](control-plane.md) develops R7. [Evidence](../lab/evidence.md) is
-the method, the results and the limits. [Economics](economics.md) is cross-cutting, and is where R2's
-arithmetic is actually done.
