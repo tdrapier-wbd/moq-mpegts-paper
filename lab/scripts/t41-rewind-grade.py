@@ -18,7 +18,8 @@ the stimulus by DTS (to 2 ticks).
   and on which side of the break.
 
 `--pts` matches and measures on presentation times instead: the export authors the DTS of each
-group's first pictures, so on content with B-pictures decode times miscount holes and the loss.
+group's first pictures, so on content with B-pictures decode times miscount holes and the loss. The
+cut and each break are still found in decode order, where reordered pictures make no 200 ms step.
 
 Usage: t41-rewind-grade.py <stimulus.ts> <out-dir> [--vpid 111] [--pts]
 """
@@ -93,7 +94,7 @@ def main():
     o = a.out
 
     stim, _ = units(a.stimulus, a.vpid, a.pts)
-    cut = split(stim)
+    cut = split(units(a.stimulus, a.vpid)[0])
     s0 = sorted(t for t, _ in stim[:cut])
     s1 = sorted(t for t, _ in stim[cut:])
     step = (stim[cut][0] - stim[cut - 1][0]) / 90
@@ -119,7 +120,7 @@ def main():
             print(f"leg {leg}: no output")
             continue
         seq, flag = units(path, a.vpid, a.pts)
-        brk = split(seq, flag)
+        brk = split(units(path, a.vpid)[0], flag)
         legs[leg] = (path, seq, brk)
         if brk is None:
             print(f"leg {leg}: {len(seq):,} video units, no break: the export did not resume")

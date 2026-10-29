@@ -218,8 +218,9 @@ but widen the blast radius of a leak; narrow-scope tokens do the reverse. The de
 >
 > So narrow is not merely the prudent default against a leak. It is the only topology under which
 > de-provisioning is surgical, and the practical unit is **one key per unit of entitlement**, which
-> sizes the key estate by the licensing matrix rather than by the affiliate count. Whether that scales
-> to a real estate is untested.
+> sizes the key estate by the licensing matrix rather than by the affiliate count. Holding it costs
+> nothing: grown from 10 to 20,000 keys, the auth server's memory showed no trend and admission did
+> not slow, because it reads the key a token names when asked ([Evidence](../lab/evidence.md) §3.10).
 
 ### 4.1 Revocation, and what deny-by-default does not mean
 

@@ -290,22 +290,9 @@ the import by design, so a source whose timeline steps back is republished at ea
 of programme a step and not hitlessly for a 1+1 pair, or the build is pinned; no build is
 measured to carry every timeline case ([Evidence](../lab/evidence.md) §3.13).
 
-### 5.2 The decision rule, restated
+### 5.2 Whether the sub-second band matters
 
-**Segmented HTTP is the better engineering choice only where two conditions hold together**: the
-route's destinations absorb seconds — nearer six on free tooling, 9,286 ms at measured P1/P2
-conformance — **and** its receive stage survives the failures the delivery path absorbs, which no
-free TS client does (§3.2). Then it wins on maturity,
-delivery economics and delivery-path interoperability, and narrowly on the hand-off. **Otherwise,
-between roughly 2.5 and 9 seconds, MoQ is the better choice**, measured at P1/P2 conformance; at the
-buffer model the band is not yet compared, since segmented HTTP's wire is ungraded. **Below about
-one second no plane here is demonstrated conformant**, and a sub-second route is choosing MoQ on a
-projection — that the ~650 ms regression is recovered, that the VBV-derived bound is smaller for its
-own content, and that the export, presenting about 140 ms past a 1 s delay, holds a shorter delay
-over a whole capture. **MoQ's distinguishing claim is architecturally
-credible and not yet evidenced.**
-
-**Whether that claim matters is a condition of MoQ's case specifically: does the sub-second requirement
+**Whether MoQ's sub-second claim matters is a condition of its case specifically: does the sub-second requirement
 exist on identifiable routes, or is it a preference?** "A few seconds tolerable" is true of the feed's
 own integrity and understates the transition: replacing a geostationary path with a 2–5 s one consumes a
 downstream budget that was previously free, at every destination — splice and blackout timing, alignment
@@ -522,8 +509,9 @@ and the export writing its bytes back out ([Evidence](../lab/evidence.md) §3.1)
 and `moq2ts`'s console receiver, on OpenMOQ's stack and not covered here. `moq-dev`'s "verbatim"
 tracks carry undecoded PIDs one per track inside the media-aware lane. Byte-faithful carriage over
 MoQ is measured on one implementation, one run per arm, which is why §8's structural limits do not
-yet move the preference to the opaque lane, and relay-level interop with `moqxr` holds only narrowly
-([Evidence](../lab/evidence.md) §3.7).
+yet move the preference to the opaque lane. Relay-level interop with `moqxr` holds only narrowly; with
+OpenMOQ's moq5 it holds at the byte both ways, though neither stack's catalog finds the other's TS
+track ([Evidence](../lab/evidence.md) §3.7).
 
 ---
 
@@ -541,7 +529,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and for interchangeable origins in one CDN origin group, merged downstream by receivers released in phase; one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
-| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day; segmented HTTP at its segment-imposed cushion; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
+| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day on a replayed clip; segmented HTTP at its segment-imposed cushion, and for 72 h on the live feed but at its six breaks; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
 | Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
@@ -555,7 +543,10 @@ single programme, **and whose receive stage survives an origin failure**, which 
 (§3.2), segmented HTTP is the better engineering choice. **MoQ's case is route-specific and narrower than its headline
 latency**: smaller bursts for the groomer, multi-programme carriage, portable enforcement, up to ~7
 % less wire volume — a rounding error against five-to-ten× delivery cost — and, at equal P1/P2
-conformance, a decisive margin in the two-to-nine-second band that is not a sub-second result.
+conformance, a decisive margin in the two-to-nine-second band, not yet compared at the buffer model.
+It is not a sub-second result: a sub-second route chooses MoQ on a projection, that the ~650 ms
+regression is recovered, that the VBV-derived bound is smaller for its own content, and that the
+export, presenting about 140 ms past a 1 s delay, holds a shorter delay over a whole capture.
 **Broadcast-grade work is common to both** and sits above neither specification.
 
 ### 13.1 The framework the final conclusion has to satisfy

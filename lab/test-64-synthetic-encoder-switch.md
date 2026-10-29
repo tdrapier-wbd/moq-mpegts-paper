@@ -1,7 +1,7 @@
 # Test 64 — A synthetic unflagged encoder switch
 
-**State: the reproducer built and replayed on `66af7231`; [P1-an](planned-experiments.md)'s runs on
-upstream's tolerance remain.** Rig: [`t64-switch.py`](scripts/t64-switch.py), replayed through
+**State: the reproducer built and replayed on `66af7231`; upstream's tolerance of it is
+[T67](test-67-import-step-restart.md)'s.** Rig: [`t64-switch.py`](scripts/t64-switch.py), replayed through
 [T41](test-41-import-reanchor-coverage.md)'s [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh).
 
 ## Objective
