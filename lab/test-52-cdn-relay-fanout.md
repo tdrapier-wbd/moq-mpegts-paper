@@ -217,8 +217,9 @@ about one in 700 of the declared loss.
 **The node's memory grew without bound**, by the operator's reading: about 57 MiB an hour, to
 3.06 GiB of its 4 GB by the end, falling back when the sessions ended. He traced part of it to cache
 metadata moqx v0.3.6 keeps for each evicted group, so it grows with the group rate, about 74 a
-second here ([moqx#874](https://github.com/openmoq/moqx/issues/874)). At that rate the node had less
-than a day left, so 72 h is close to the longest this load can run on that release.
+second here ([moqx#874](https://github.com/openmoq/moqx/issues/874), since fixed). At that rate the
+node had less than a day left, so 72 h is close to the longest this load can run on that release; a
+release with the fix is the one to re-soak (P1-j).
 
 **What the criteria could not see.** The byte criterion reads socket bytes, which carry about 1.3 %
 of QUIC and IP overhead over the publisher's input, so a loss under about 1.2 % would pass it; the

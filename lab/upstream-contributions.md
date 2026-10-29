@@ -1345,16 +1345,18 @@ a pipe-fed importer; over SRT, redial with `--linger` costs 1.1–1.5 s in four 
 and without it the whole feed. One E run that did not resume was not reproduced; `srt-live-transmit`'s
 zero-fill is a candidate ([method-notes](method-notes.md#2-instruments-and-reading-what-they-tell-you)).
 
-**State.** A TS rewind, flagged or not, stays fatal: republishing inside the importer
-([#4582](https://github.com/moq-dev/moq/issues/4582)) was closed as not planned, since a supervisor
-that wants to continue publishes a new broadcast under a new epoch, at a cost measured in
-[T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*. A
-co-started 1+1 pair stayed byte-identical across it in 8 of 13 runs; the other five, reported as
-[#5101](https://github.com/moq-dev/moq/issues/5101), were closed as not planned, because a replaced
-broadcast is a new broadcast and identity across a republish is not a goal. The export ends on a
-replacement unless `--stitch` asks for a fresh export with a full program switch. Revisited in
-[#7102](https://github.com/moq-dev/moq/issues/7102), open: a real contribution switching encodes
-unflagged ends both legs at once ([T34](test-34-real-encoder-severity.md)).
+**State.** A TS rewind, flagged or not, ends the importer: republishing inside it
+([#4582](https://github.com/moq-dev/moq/issues/4582)) was closed as not planned, for a supervisor
+publishing a new broadcast under a new epoch ([T41](test-41-import-reanchor-coverage.md) § *A
+flagged rewind carried as a new broadcast*). A co-started 1+1 pair stayed byte-identical across it
+in 8 of 13 runs; the other five, reported as [#5101](https://github.com/moq-dev/moq/issues/5101),
+were closed as not planned: identity across a republish is not a goal. The export ends on a
+replacement unless `--stitch` asks for a full program switch. In
+[#7102](https://github.com/moq-dev/moq/issues/7102) a real contribution switching encodes unflagged
+ended both legs at once ([T34](test-34-real-encoder-severity.md)); upstream will tolerate it, the
+export re-acquiring the clock ([#7165](https://github.com/moq-dev/moq/pull/7165), merged) and the
+CLI's supervisor republishing under a fresh epoch
+([#7144](https://github.com/moq-dev/moq/pull/7144), open).
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
 
@@ -1440,8 +1442,8 @@ change refuses; so do a PID listed twice and 65,536 stream revisions. The export
 PMT at the next version, dropping a PID after its tail. The PAT half's import follows a moved PMT
 and unannounces a dropped program; a restored one is a new epoch.
 
-**State.** #6208, #6289 merged; #6689 passed to the maintainer, five findings open. Moving
-a running export's PMT awaits upstream's table rework.
+**State.** All three merged, #6689 finished by the maintainer. A running export follows a moved
+PMT in upstream's [#7182](https://github.com/moq-dev/moq/pull/7182), open.
 
 ---
 

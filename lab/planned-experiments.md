@@ -23,12 +23,18 @@ defined [below](#blocked-on-apparatus).
 | # | What remains | Why it matters | Gate | Done when | Protocol |
 |---|---|---|---|---|---|
 | P1-b | 1+1 across two distribution chains: two passthrough legs of one broadcast, each through a stream-clocked groomer into RTP, one through our relay and one through P1-j's, merged by a 2022-7 receiver while one chain fails | [Architecture](../docs/architecture.md) §5's active/active from the importer on is measured on one host or two over our own relays, under `netem` | P1-j's relay | Hitless through each failure class on one chain (relay restart, path outage, export killed), the pair's real differential delay against a named receiver class, both legs' RTP identical | [T29](test-29-moq-distributed-resilience.md), [T12](test-12-dual-path-handoff.md) |
-| P1-j | Permanence through a CDN-hosted relay: the passthrough lane's ramp and soak once the node serves its joins; later, more than one hop | Every fan-out figure is one relay in one region ([Evidence](../docs/evidence.md) §6), so the R2 row reads *indicated* ([Comparison](../docs/comparison.md) §13) | Passthrough: the node's fixes (moqx#795, #817) | 72 h with the wire grader on, reconnects counted with gap and cause, the path's loss and RTT recorded; both ramps read against the node's own stats | [T52](test-52-cdn-relay-fanout.md) |
+| P1-j | Permanence through a CDN-hosted relay: the passthrough lane's ramp and soak once the node serves its joins, and the demultiplexed soak again on a release whose memory is flat; later, more than one hop | Every fan-out figure is one relay in one region ([Evidence](../docs/evidence.md) §6), so the R2 row reads *indicated* ([Comparison](../docs/comparison.md) §13) | Passthrough: the node's fixes (moqx#795, #817); the re-soak: moqx#874's fix on the test nodes | 72 h with the wire grader on, reconnects counted with gap and cause, the path's loss and RTT recorded; both ramps read against the node's own stats | [T52](test-52-cdn-relay-fanout.md) |
 | P1-ad | The latency ordering on a long, lossy path: SRT and both MoQ lanes from the primary to a host in a distant region (80–150 ms RTT), clean and at two loss rates | Every ordering is loopback or one 12.8 ms path ([Evidence](../docs/evidence.md) §3.11; §5 row 4), and a long, lossy path is the case that should favour the tunnels | A host in a distant region (the author's go-ahead) | Each lane's matched-PTS latency at equal conformance, and its delivered programme, per condition, three replicates | [T18](test-18-delivery-latency.md) |
-| P1-aa | Source-to-egress media timing across hosts on one clock: the secondary's own hand-off of the feed tapped against its export of the primary's import, PTS-matched | End-to-end timing through MoQ is loopback, or 2 h across hosts on PCR arrivals; the export's regenerated PCR grades the export, not the path ([Evidence](../docs/evidence.md) §3.11, §3.16; §5 row 3) | — | Matched-PTS latency, its drift and any steps over ≥ 72 h, with the export's rate against the hand-off's on arrivals; arrivals stamped by the kernel or NIC and the two hosts' clock error calibrated, or the uncertainty bounded and stated, before the hand-off's offset from the primary's is relied on | [T57](test-57-cross-host-timing.md) (running) |
+| P1-an | Upstream's tolerance of an unflagged encoder switch: T34's captured backward switch replayed through the step-restart supervisor, and a synthetic forward step through the re-acquiring export | On the deployed units each backward switch costs every subscriber about 10 s of programme and each forward one ends every export ([T34](test-34-real-encoder-severity.md)); [Evidence](../docs/evidence.md) §3.13 prices a republish at 2.8–3.8 s | — for the forward step (the re-acquiring export is on `main`); quest `step-restart` (#7144) for the backward | Programme lost per switch in each direction, three runs each on `main`, against T34's table; the synthetic reproducer built (posting it is the author's call) | [T34](test-34-real-encoder-severity.md) |
 | P1-af | [T58](test-58-receiver-select.md)'s uplink outage: the serving leg's importer cut off from its relay for less and more than the receive timeout and the QUIC idle timeout | The one failure class T58 has not run, and the one whose leg can come back on its own session | a Linux host (`iptables`), with no other timing work on it | The outage rows of T58's table, graded against its C0–C2 | — (T58's rig has no outage cell yet) |
 | P1-ac | Revocation at scale on a second implementation: a subset of a fan-out's subscribers withdrawn on P1-j's relay | Every revocation result is `moq-relay` on loopback ([Evidence](../docs/evidence.md) §3.10); on moqx v0.3.6 a live session outlives its token and a key is withdrawn only by a restart ([T53](test-53-token-interop.md)) | P1-j's relay taking our tokens, and a moqx release that reloads its keys | Time to effect and collateral on the kept subscribers, against T37's | [T53](test-53-token-interop.md) |
 | P1-l | The telemetry return path end to end, run inside P1-j's window | Delivered-media health at a subscriber is satisfied by no candidate ([Comparison](../docs/comparison.md) gates); closes T39 Part B | — (`import --echo-path`, `import --report` and `export echo` are on `main`) | Each subscriber's feedback (or a CMCD Event Timeline track) and the TS health counters read back over the same relay, from every subscriber of a P1-j step; T32's faults graded against each | [T39](test-39-cross-boundary-observability.md) § *Open* |
+| P1-ag | Fault injection and the cushion on the segmented chain: T28's shapes at its durations beside its MoQ and SRT rows (T30 ran packager, origin and edge, unmatched), path shapes under `netem`; the cushion bisected between T12's 1 s and 8 s for two independent chains, and the cap against a catch-up burst | The lane's recovery figures are loopback drills; its cushion sets its latency at P1/P2, and T30's frozen playlist lost programme to the cap | — | Media lost per shape, three replicates; the smallest cushion keeping both chains byte-identical, to 0.5 s; the cap that keeps a 10 s frozen playlist lossless | [T28](test-28-failure-injection-matrix.md), [T12](test-12-dual-path-handoff.md) |
+| P1-am | T30's remainder: Cell 2, two packager hosts over one NFS store (each killed, the store partitioned) | Criterion 2, the only distributed one, is unrun | three hosts (the tertiary as store) | T30's criterion 2 | [T30](test-30-segmented-distributed-resilience.md) |
+| P1-ah | Latency against the 5–10 s budget: 1 s and 2 s segments at their minimum cushions, graded on P1/P2 and the 13818-1 buffer model, over the internet path | The segmented wire is ungraded at the buffer model ([Comparison](../docs/comparison.md) §8, §13.1) and its 9,286 ms is one configuration | P1-ag | Matched-PTS latency with the P1/P2 and T-STD verdicts of the same bytes, per configuration | [T16](test-16-grooming-segmented-http.md), [T44](test-44-tstd-grading.md) |
+| P1-aj | Permanence: 72 h of the single-CDN design ([T61](test-61-origin-group-failover.md)) through CloudFront, across PTS wraps | *Permanent operation* reads *unknown* for the lane ([Comparison](../docs/comparison.md) §13.1) | — (running) | P1/P2 on the merged wire for 72 h, every role's resources flat, every event traced | [T62](test-62-origin-group-soak.md) |
+| P1-ak | Observability: B-8's HLS telemetry beside TSDuck's TR 101 290 counters (`influx`), on T22, T24 and T32's faults; CMCD v2 from B-8 into CloudFront's logs and an event-mode collector | R8 on this lane, and whether CMCD v2 is enough for a NOC | B-8; B-7 for the logs | Each fault's detection time and signal per source; which CMCD v2 keys reach the logs; what CMCD cannot express | [T32](test-32-observability-survey.md) |
+| P1-al | Access and scrambling: CAT (CTA-5007-B) on CloudFront with AES-128 segment keys, against what BISS-CA gives the route; and a DVB-CSA-scrambled source through `tsp -O hls`, descrambled after the receiver | R7 on this lane is derived ([Comparison](../docs/comparison.md) §7); `--intra-close` cannot cut a scrambled source | B-7 for CAT | Revocation timed at the edge; the BISS-CA properties kept and lost; the descrambled feed identical to the clear source | — (specified when run) |
 | P1-ae | Encrypted carriage through a third-party relay, both lanes | [Control](../docs/control-plane.md) §7.3 offers upstream's object-level encryption as a contract option, by design and unmeasured: relays and caches hold only ciphertext | Upstream E2EE through `moq-mux` (quests `net-wrap/mux`, `e2ee/rust-publish`) | Each lane's export identical to an unencrypted control through P1-j's relay, the relay holding only ciphertext, the per-frame overhead measured, and a re-key drill timed | — (specified when the gate clears) |
 
 ## P2 — completeness
@@ -38,12 +44,9 @@ defined [below](#blocked-on-apparatus).
 | P2-a | What commercial monitoring would have caught: the vendor survey | — (outreach, not apparatus) | Survey answers mapped against the measured fault-to-telemetry table | [T32](test-32-observability-survey.md) |
 | P2-e | Replicates for the segmented congestion rungs | — | Every segmented rung at three replicates (the MoQ rungs and the delay matrix are) | [T31](test-31-congestion-capacity-ladders.md) |
 | P2-i | T12's churn arms: the recovered-leg and late-join cells, with a grader | — (upstream's planned per-group counters would be a second subject) | Both cells graded against our keyframe-restart padding filter | [T12](test-12-dual-path-handoff.md) |
-| P2-l | The segmented lane's remainders: T28's segmented shapes, T30's distributed resilience, and a soak behind an nginx origin | — | The segmented shapes completed inside the `netns` rig; T30 run against its criteria, the standby arm last; the soak's per-role CPU and memory measured on nginx (§5 row 15) | [T28](test-28-failure-injection-matrix.md), [T30](test-30-segmented-distributed-resilience.md), [T21](test-21-permanence-soak.md) |
-| P2-m | MPTS: per-programme SI on the T10 rig, and the opaque-lane arm | — (upstream's shared parser is on `main`) | Per-programme SI verified on T10's fixtures; the opaque arm run | [T10](test-10-mpts-multiservice.md) |
 
-**Open in the paper, with no experiment scheduled.** [Evidence](../docs/evidence.md) §5 rows 6 (a
-CDN carrying a multi-programme TS segment) and 12 (a tuned CDN edge, or an origin on BBR, under loss
-at 100 ms RTT) bear on the segmented lane only, which is not pursued; rows 10 (a third source
+**Open in the paper, with no experiment scheduled.** [Evidence](../docs/evidence.md) §5 row 12 (a
+CDN edge under loss at 100 ms RTT) falls inside P1-ag's path shapes; rows 10 (a third source
 profile) and 13 (RIST against SRT on a real path) have no entry, and neither have the control
 strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions). Of the
 deployment milestones ([lab README](README.md)), operations has P1-l and P2-a but nothing for NOC
@@ -57,22 +60,24 @@ distribution. A row leaves when a pull request takes it; ours are in the
 
 | Quest | Size | Would move | Why it ranks here | Gate |
 |---|---|---|---|---|
-| `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby, before the idle timeout, without a 2022-7 receiver | Its design, which the maintainer has claimed (#7096); epochs on every hop (lite-07 or draft 17) |
+| `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby, before the idle timeout, without a 2022-7 receiver | Its design, which the maintainer has claimed (#7096); epochs on every hop, which only moq-lite 07 will carry (quest `ietf-epoch-cut`), so not P1-j's moqx hop |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | The lag histogram whose type it reuses, which waits on moq-net's QUIC acknowledgments |
-| `ts-reliability/pat-lifecycle`, the export half | M | P2-m; P0-k's PID-change fixture | A PAT change on a live source is followed, published or retired, never ignored; our #6689 takes the import half | — |
+| `restart-catalog` | S | P1-an; [Evidence](../docs/evidence.md) §3.13's republish cost | A restarted import reuses its predecessor's multiplex-rate measurement and sends its catalog at once, the 1.6 s of T34's 2.8 s that is not the export's held tail | `step-restart` (#7144) |
 
 Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement:
 [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one
 operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's
-supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH) and
-`ts-reliability/stitch-catch-up` (our #6877's latency half, which the maintainer's #7049 takes; no
-entry here waits on it).
+supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH),
+`ts-reliability/stitch-catch-up` (its latency half landed in #7049 and its priority half in #7145;
+the demotion experiment left waits on no entry here).
 
 ## Blocked on apparatus
 
 | Gate | State | Unblocks |
 |---|---|---|
 | **B-6** A professional DVB analyser and a bank of IRDs, on loan | promised alongside the live feed; not arrived | P0-k, P0-d |
+| **B-7** CloudFront for the campaign's AWS user: distributions, functions, key-value stores, real-time logs | granted for distributions, functions, key-value stores and real-time log configs; Kinesis, S3 and listing cache policies denied, so real-time logs need Kinesis granted | P1-aj, P1-ak's logs, P1-al's CAT |
+| **B-8** An HLS receive front end feeding `tsp` or the groomer on stdin: retry, JSON telemetry, CMCD v2 keys | first increment built (`b8-hls-recv.py`: retry, telemetry, media-sequence regression and skips, release on the program date-time); CMCD and CAT to build ([T30](test-30-segmented-distributed-resilience.md) § *Tooling*). Pathway fallback is not needed: the origin group fails over inside the CDN ([T61](test-61-origin-group-failover.md)) | P1-ak, P1-al |
 
 **Inside the hardware window**, which the analyser and IRDs share, measure against the live feed; debug
 no harness and run no cell that needs no hardware. [T33](test-33-gate2-preparation.md) orders the work.
@@ -83,7 +88,11 @@ Recorded so they are not proposed again; where a result exists, it is in the fil
 
 - **Closed or commercial components** (an ABR-to-TS gateway, a commercial packaging edge): the
   evaluation covers open, interoperable components only. [T14](test-14-data-plane-comparison.md)'s
-  cells that needed them stay empty.
+  cells that needed them stay empty. This does not close the segmented lane to commercial receivers:
+  a receive profile the distributor publishes, with an open reference receiver, is one Ateme's,
+  Sencore's or any vendor's HLS input may implement ([Economics](../docs/economics.md) §8.5).
+- **Low-Latency HLS**: 5–10 s qualifies the segmented lane.
+- **MPTS carriage**: deliveries are single-programme; [T10](test-10-mpts-multiservice.md) stands.
 - **LEO links for primary distribution.**
 - **The lab re-multiplexer's 550–600 ms floor**: the merged export superseded it as the live stage,
   and the export's own floor is [T47](test-47-fixed-delay-export.md)'s.

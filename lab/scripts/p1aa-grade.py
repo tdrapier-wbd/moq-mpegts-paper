@@ -24,6 +24,8 @@ import os
 import statistics
 
 WRAP = 1 << 33
+# The PTS and PCR unwrap separately, so a lead can come out a whole wrap off; no real lead is near half.
+HALF_WRAP_MS = WRAP / 90 / 2
 
 
 def rows(path, kind):
@@ -56,6 +58,7 @@ def led(path):
         if 0 < i < len(pcr_ns) and pcr_ns[i] - pcr_ns[i - 1] < 1e9 and pcr_s[i] >= pcr_s[i - 1]:
             f = (ns - pcr_ns[i - 1]) / (pcr_ns[i] - pcr_ns[i - 1]) if pcr_ns[i] > pcr_ns[i - 1] else 1
             lead = ((pts + base) / 9e4 - pcr_s[i - 1] - f * (pcr_s[i] - pcr_s[i - 1])) * 1e3
+            lead = (lead + HALF_WRAP_MS) % (2 * HALF_WRAP_MS) - HALF_WRAP_MS
         yield pts, ns, lead
 
 
@@ -117,22 +120,27 @@ def minutes(pairs, value=latency):
 
 
 def pcr_ppm(path):
-    """PCR ticks per arrival second against 27 MHz, in ppm, by least squares over the unwrapped PCR."""
-    n = sx = sy = sxx = sxy = 0
-    last, base, x0, y0 = None, 0, None, None
+    """PCR ticks per arrival second against 27 MHz, in ppm: least squares within each continuous
+    stretch of the unwrapped PCR, pooled. A stretch ends where the PCR's advance departs from the
+    arrivals' by over a second (a splice, or a restarted export's fresh clock)."""
+    segs, seg = [], None
+    last, base, prev = None, 0, None
     for pcr, ns in rows(path, "C"):
         if last is not None and pcr < last - (WRAP * 300) // 2:
             base += WRAP * 300
         last = pcr
         x, y = ns / 1e9, (pcr + base) / 27e6
-        if x0 is None:
-            x0, y0 = x, y
-        x, y = x - x0, y - y0
-        n += 1
-        sx, sy, sxx, sxy = sx + x, sy + y, sxx + x * x, sxy + x * y
-    if n < 3 or n * sxx == sx * sx:
+        if prev is None or abs((y - prev[1]) - (x - prev[0])) > 1:
+            seg = [x, y, 0, 0.0, 0.0, 0.0, 0.0]
+            segs.append(seg)
+        prev = (x, y)
+        x, y = x - seg[0], y - seg[1]
+        seg[2:] = [seg[2] + 1, seg[3] + x, seg[4] + y, seg[5] + x * x, seg[6] + x * y]
+    sxx = sum(s[5] - s[3] * s[3] / s[2] for s in segs)
+    sxy = sum(s[6] - s[3] * s[4] / s[2] for s in segs)
+    if sum(s[2] for s in segs) < 3 or sxx <= 0:
         return None
-    return round(((n * sxy - sx * sy) / (n * sxx - sx * sx) - 1) * 1e6, 3)
+    return round((sxy / sxx - 1) * 1e6, 3)
 
 
 def chrony(path):
@@ -208,8 +216,9 @@ def main():
             json.dump(out, f, indent=1)
     lat = out["latency"]
     print(f"run {a.run}: {lat.get('minutes')} min, {lat.get('matched')} pictures matched, {lat.get('missing')} missing")
-    print(f"  latency median {lat.get('median_ms')} ms (per-minute {lat.get('min_minute_ms')}..{lat.get('max_minute_ms')}),"
-          f" drift {lat.get('drift_ms_per_h')} ms/h ({lat.get('drift_ppm')} ppm), {len(lat.get('steps', []))} steps")
+    print(f"  latency median {lat.get('median_ms')} ms (per-minute {lat.get('min_minute_ms')}.."
+          f"{lat.get('max_minute_ms')}), drift {lat.get('drift_ms_per_h')} ms/h ({lat.get('drift_ppm')} ppm),"
+          f" {len(lat.get('steps', []))} steps")
     for s in lat.get("steps", [])[:20]:
         print(f"    step at {s['minute']}: {s['from_ms']} -> {s['to_ms']} ms")
     pd = out["pcr_delay"]

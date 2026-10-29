@@ -295,17 +295,23 @@ picture and ran 3.3 s late, and impaired cells logged `RCV-DROPPED` and ended 10
 ends' `--rcvbuf`/`--sndbuf` at (latency + RTT) × link rate every cell was clean. Size them so before
 running any SRT arm above about 8 s, and count `RCV-DROPPED` in the receiver's log.
 
-**Time a picture where a decoder presents it, on a clock averaged over many packets.** *(T45, T46.)* DTS
-spread 521 ms where presentation was flat, because the exporter authors DTS up to 280 ms early, and
-single-header offsets scattered ±37 ms through `tsp -P regulate`. Reference latency to the PTS, take each
-end's clock from a median over seconds of headers, check the instrument on a byte-faithful capture first,
-match pictures on slice data where a lane rebases PTS (`ts-decode-latency.py --key content`), and quote
-presentation latency only on bytes that pass the T-STD.
+**Time a picture where a decoder presents it, on a clock averaged over many packets.** *(T45, T46,
+T57.)* DTS spread 521 ms where presentation was flat, because the exporter authors DTS up to 280 ms
+early, and single-header offsets scattered ±37 ms through `tsp -P regulate`. Reference latency to the
+PTS, take each end's clock from a median over seconds of headers, check the instrument on a
+byte-faithful capture first, match pictures on slice data where a lane rebases PTS
+(`ts-decode-latency.py --key content`), and quote presentation latency only on bytes that pass the
+T-STD. Grade a delay's constancy across a re-multiplexer on the two PCR clocks, each picture's
+latency less its lead over its own stream's PCR plus the far end's (`p1aa-grade.py`): on arrivals,
+each multiplexer's scheduling moved a 72 h delay by tens of milliseconds a minute where on the PCR
+clocks it held a 43 ms range.
 
 **Grade a clock's rate by fitting PCR against the receiver's clock, not from a latency trend.** *(T45,
 T47.)* Trends between run thirds read 290–370 ppm where the fit read about 500 ppm. Fit over the longest
 span (`ts-decode-latency.py`, "PCR clock vs tap") against the same run's source tap, and grade 30 ppm on
-the whole-run fit. The slew limit is below a picture tap's reach: drift rate needs PCR-arrival timing
+the whole-run fit, breaking it wherever the PCR's advance departs from the arrivals' (a splice, a
+restarted export's fresh clock) and pooling the stretches: one unbroken fit across T57's splices read
+36 % (`p1aa-grade.py`). The slew limit is below a picture tap's reach: drift rate needs PCR-arrival timing
 (`t18-latency.py tap --pcr`, `ts-pcr-rate.py`), and where departures are quantized (25 ms slots, a 1 ms
 timer) a white-noise floor misleads, so read the clock from when the steps fall.
 
