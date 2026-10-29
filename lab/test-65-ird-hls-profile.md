@@ -188,7 +188,10 @@ leave the multiplex's SI and SCTE-35 in the segments unchanged; write a `TARGETD
 (*untested*). It SHOULD put the PAT and PMT first.
 
 **The receiver MUST:** hand on each segment's packets unchanged and in order, every PID included
-whether or not the PMT lists it; accept interlaced and open-GOP video; survive the failure of one
+whether or not the PMT lists it, except that after an `EXT-X-DISCONTINUITY` it sets
+`discontinuity_indicator` on each PCR PID's first PCR and on every other PID's first packet that has
+an adaptation field, as ours does on a synthetic splice
+([`b8-discontinuity-test.sh`](scripts/b8-discontinuity-test.sh)); accept interlaced and open-GOP video; survive the failure of one
 origin or pathway, which neither TSDuck's HLS input nor FFmpeg does
 ([T6](test-6-relay-resilience.md)) and ours does ([T59](test-59-segmented-1plus1-cloudfront.md),
 [T61](test-61-origin-group-failover.md)); and pace its output to the PCR before an IRD
@@ -199,4 +202,6 @@ origin or pathway, which neither TSDuck's HLS input nor FFmpeg does
 No IRD is measured: the stacks stand in for what an HLS input may be built on, and which one a
 product uses is not known. One clip, one run, loopback, healthy origin; a 120 s window holds 8 TDT
 and 12 EIT schedule cycles. The clip has no CAT and no TOT, which T3 carried through TSDuck. What the
-validator calls a format change on this clip is not identified.
+validator calls a format change on this clip is not identified. Downstream of the flag, our pacer's
+stream-clocked mode does not read it (read from its code): it re-anchors on a backward step or a
+forward one over 5 s, so a flagged forward step under 5 s is paced as content.

@@ -81,7 +81,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 
 | | Established | Not established | Where |
 |---|---|---|---|
-| **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing; the opaque lane, on `moq-dev`, is the source's bytes. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond one run per arm | §3.1 |
+| **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by at most one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing; the opaque lane, on `moq-dev`, is the source's bytes. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond one run per arm | §3.1 |
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; arrival at an IRD-facing output; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s across hosts and at up to 2 % loss, its clock following a drifting source, but not over a whole capture at 500 ms; on arrivals its drift rate exceeds 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
 | **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a real CDN edge at long RTT, or a captured path; burst loss; SRT below ≈2 s under loss; segmented HTTP under loss off loopback | §3.3 |
@@ -101,9 +101,9 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 
 ### 3.1 Does the transport carry a broadcast mux intact? — Yes on all three lanes, each departing from verbatim in a different direction; the opaque lane does not depart
 
-**For an operator:** no lane is ruled out on content. SRT changes nothing; segmented HTTP adds a
-PAT/PMT pair per segment; the media-aware lane loses the mux's timing, so it depends on the groomer of
-§3.2.
+**For an operator:** no lane is ruled out on content. SRT changes nothing; segmented HTTP adds at
+most a PAT/PMT pair per segment, received by an HLS input that hands on the segments' bytes; the
+media-aware lane loses the mux's timing, so it depends on the groomer of §3.2.
 
 **Over the public internet, by one instrument on one window** ([T4](test-4-remote-e2e-srt.md),
 ungroomed): **byte-faithful SRT is transparent on every criterion** — 13 of 13 PIDs at their source
@@ -135,13 +135,17 @@ travels as N single-programme feeds, and reassembly is the receiver's job.
 
 **Segmented HTTP is transparent to what a mux contains and not to when it was sent**
 ([T14](test-14-data-plane-comparison.md), [T3](test-3-opaque-transparency.md)). A
-segment differs from the source in two packets, each in byte 3 alone — the continuity counters of the
-PAT and PMT the segmenter injects — and across three clips it matches the opaque lane on content, CAT
-and TDT/TOT included. The packager re-multiplexes and cuts by picture type
+`tsp -O hls` segment differs from the source in two packets, each in byte 3 alone — the continuity
+counters of the PAT and PMT it injects — and across three clips it matches the opaque lane on content,
+CAT and TDT/TOT included. That packager re-multiplexes and cuts by picture type
 ([T11](test-11-interop.md)), so the claim is **verbatim in payload, not as a mux**. The injected
 pair costs predictable PCR accuracy: registered in advance and measured over a ~125 ms internet path,
 exactly 1.00 pair per segment head and 302.148 µs against 302.4 µs predicted, with 0 violations at
-500 µs. Groomed, it passes at 481 ns (§3.2).
+500 µs. Groomed, it passes at 481 ns (§3.2). **What survives reception depends on the HLS input**
+([T65](test-65-ird-hls-profile.md); P1, loopback, one clip, one run, from TSDuck's packager and
+ours, which injects nothing): TSDuck's, GStreamer's and our inputs hand on the segments' packets with
+every DVB table and SCTE-35 section verbatim, and FFmpeg's remux replaces the multiplex, keeping
+none of them verbatim.
 
 **The opaque lane is byte-transparent on `moq-dev`** ([T48](test-48-passthrough-export.md);
 P1 and P2, upstream `main`, October 2026; loopback on one dedicated host, two clips, 120 s at a 1 s
@@ -163,8 +167,7 @@ Size its buffer from the source's peak coded frame, not its bitrate; conformance
 latency (§3.11).
 
 Bursty delivery changes when PCRs arrive; a byte-faithful lane keeps their values and positions, and
-the media-aware lane's re-mux writes its own. Hardware IRDs lock a PLL to PCR and alarm when either
-goes wrong — accepted practice, not observed here. **Ungroomed**, the re-mux's PCR values leave 0–26 %
+the media-aware lane's re-mux writes its own. **Ungroomed**, the re-mux's PCR values leave 0–26 %
 of intervals above 40 ms depending on the source (P1, file;
 [T2](test-2-media-aware-transparency.md), [T7](test-7-timing-integrity.md)), while the
 opaque lane keeps the source's intervals on all five clips graded
@@ -267,31 +270,8 @@ SRT's 5.0–5.4 s, and its delivery latency steps up with the allowance, beyond 
 back (±0.24 s over the following ~75 s) — a bounded-latency concern for [R4](../docs/problem.md) as much as
 R5. The cost is the build's: the oldest build measured, moq 0.11.0, loses 4.8–8.5 s where every later
 `--max-age` build, on either stack, loses 17–23 s at the same budget, and the step is not attributed.
-**Behind the fixed-delay export merged on October 2026 `main`, matched at 2.2–11.9 s across delays of
-1–6 s, SRT keeps its lead on every shape but 5 % reorder, and the MoQ lane's latency is back within
-100 ms after every outage**. SRT loses 0–3.74 s of the outage, less as its latency rises, against
-6.1–7.6 s; at 2 s, 70–80 % of the excess falls
-between the link's return and the first delivered datagram, 2.4–2.5 s later, so SRT's lead there is
-**QUIC's probe-timeout backoff**, not the lane (noq). Capped at one doubling (a lab switch), the lane
-loses 4.9–6.1 s of a 5 s outage, but RFC 9002 requires the doubling, so a cap belongs only in a
-provisioned-path profile. The default adopted instead, an early probe once the peer is heard again,
-leaves 7.7–8.5 s (a later October 2026 `main`, three replicates): the rig drops only the relay's
-direction, so that probe is spent inside the outage. Dropping both directions costs 6.1–12.6 s: the
-first acknowledgement after it carries an RTT sample spanning the outage.
-Under 5–10 %
-random loss and 20 % reorder, stress cells rather than any route's model, SRT loses nothing against
-30–40 s of 40. At 11.9 s SRT needs both ends' buffers
-sized to its latency times the link rate, without which it fails even unimpaired; that column ran on
-a second host of the same type. **A killed component costs each lane its liveness timer** (October
-2026 `main`, matched at 3.8 s, 20 ms RTT, three replicates): a killed relay or publisher costs the
-MoQ lane 12.0–14.2 s of video against SRT's 5.4–6.3 s, because each waits out QUIC's 10 s idle
-timeout: a relay restarted with a new key cannot reset its predecessor's connections, and the
-relay holds a dead publisher's session as long; a killed exporter costs it 3.9 s against SRT's 8.8 s.
-**A relay keeping its reset key across the restart costs 4.2 s, less than SRT's 6.3 s**, since its
-stateless resets end both clients' sessions within 3 s (the same build, at 2.3 s against SRT's 3.8 s,
-so unmatched); the exporter still exits once. **On the `--max-age` builds, under sustained
-5–10 % loss the stack decides**: SRT lost nothing
-in twelve cells, the noq builds 23.4–33.6 s of 40, and the quinn builds 0.00–0.64 s at 5 %, because
+**On the `--max-age` builds, under sustained 5–10 % loss the stack decides**: SRT lost nothing in
+twelve cells, the noq builds 23.4–33.6 s of 40, and the quinn builds 0.00–0.64 s at 5 %, because
 BBRv1 does not treat loss as congestion (*reasoned*). **Under 20 % reorder every one, on both stacks,
 loses 30.8–38.3 s of 60**, while SRT delivers every picture with 430–692 continuity errors in four of
 six cells. On noq that is the stack's loss detection — every packet it declared lost was acknowledged
@@ -299,8 +279,32 @@ later, and relaxing both QUIC loss thresholds cuts the loss to 2.12–3.0 s. On 
 thresholds' cost is the same detection, since no queue on the path drops a packet, and relaxing them
 lets the window overrun the bottleneck, which then drops a third to two-fifths of what the relay
 declares lost; the programme is not saved.
-**An impairment figure on this lane must name its shape, build and
-QUIC stack.**
+
+**Behind the fixed-delay export merged on October 2026 `main`, matched at 2.2–11.9 s across delays of
+1–6 s, SRT keeps its lead on every shape but 5 % reorder, and the MoQ lane's latency is back within
+100 ms after every outage**. SRT loses 0–3.74 s of the outage, less as its latency rises, against
+6.1–7.6 s; at 2 s, 70–80 % of the excess falls between the link's return and the first delivered
+datagram, 2.4–2.5 s later, so SRT's lead there is **QUIC's probe-timeout backoff**, not the lane
+(noq). Capped at one doubling (a lab switch), the lane loses 4.9–6.1 s of a 5 s outage, but RFC 9002
+requires the doubling, so a cap belongs only in a provisioned-path profile. The default adopted
+instead, an early probe once the peer is heard again, leaves 7.7–8.5 s (a later October 2026 `main`,
+three replicates): the rig drops only the relay's direction, so that probe is spent inside the
+outage. Dropping both directions costs 6.1–12.6 s: the first acknowledgement after it carries an RTT
+sample spanning the outage. Under 5–10 % random loss and 20 % reorder, stress cells rather than any
+route's model, SRT loses nothing against 30–40 s of 40. At 11.9 s SRT needs both ends' buffers sized
+to its latency times the link rate, without which it fails even unimpaired; that column ran on a
+second host of the same type.
+
+**A killed component costs each lane its liveness timer** (October 2026 `main`, matched at 3.8 s,
+20 ms RTT, three replicates): a killed relay or publisher costs the MoQ lane 12.0–14.2 s of video
+against SRT's 5.4–6.3 s, because each waits out QUIC's 10 s idle timeout: a relay restarted with a
+new key cannot reset its predecessor's connections, and the relay holds a dead publisher's session
+as long; a killed exporter costs it 3.9 s against SRT's 8.8 s. **A relay keeping its reset key
+across the restart costs 4.2 s, less than SRT's 6.3 s**, since its stateless resets end both
+clients' sessions within 3 s (the same build, at 2.3 s against SRT's 3.8 s, so unmatched); the
+exporter still exits once.
+
+**An impairment figure on this lane must name its shape, build and QUIC stack.**
 
 **The segmented lane on the same shapes** ([T28](test-28-failure-injection-matrix.md),
 [T31](test-31-congestion-capacity-ladders.md); P1, content-graded, one host). At loopback RTT it
@@ -541,11 +545,13 @@ criterion in that role; on moq 0.12.8 a 24.0 h re-soak passes every role, the im
 October 2026 `main`) ran 169 h unattended to an export on a second host across the public path, and
 every role converged: the noq relay held 355–369 MB for the last 150 h, the importer 375–379 MB, and
 each export took one ~42 MB heap step in its first day and then held, the fastest series +0.135 MB/h,
-under the host's exhaustion rate of 1.60 MB/h. No unit restarted. One export ended at 99 h on a source-clock jump and was restarted within 1 s; the
-exports' output had 0 continuity errors in 10.11 G packets, and every media-plane event, that end
-included, traced to damage in the contribution upstream of SRT
-([T21](test-21-permanence-soak.md#the-seven-day-live-arm-result), P1, one run). Its PCR
-accuracy was graded at ±18.5 µs, not ±500 ns. *Except T26 and T43, these rigs are loopback with co-resident clients, pricing neither the NIC nor
+under the host's exhaustion rate of 1.60 MB/h. No unit restarted. One export ended at 99 h on a
+source-clock jump and was restarted within 1 s; the exports' output had 0 continuity errors in
+10.11 G packets, and every media-plane event, that end included, traced to damage in the contribution
+upstream of SRT ([T21](test-21-permanence-soak.md#the-seven-day-live-arm-result), P1, one run). Its
+PCR accuracy was graded at ±18.5 µs, not ±500 ns.
+
+*Except T26 and T43, these rigs are loopback with co-resident clients, pricing neither the NIC nor
 congestion control; per-bitrate CPU figures from them are not for sizing.*
 
 ### 3.7 Does it interoperate? — Through seven of nine other relays after the join, and for a late subscriber through five
@@ -619,26 +625,29 @@ disable it, and the revocable unit is the signing key, so provision one key per 
 [T38](test-38-entitlement-estate.md), P2): eight refusing arms each delivered zero payload bytes
 at the receiving endpoint, path matching is segment-aware, each affiliate is announced only what it
 licenses, and seven credentials against four channels gave twenty-eight correct cells. One refusal path
-leaves no relay log line, so a log-based audit would read nothing. **Revocation is a poll**
-([T37](test-37-entitlement-revocation.md), P2): `max-age=0` — what an operator writes meaning "ask
-every time" — a sub-second `max-age`, and an omitted `Cache-Control` each disable revalidation without
-warning, leaving token expiry (honoured within 0.110 s) as the only bound; an authorization outage is
-tolerated for an hour by default. With several sessions live, re-checks are served from a shared cache
-and the *measured* worst case is **1.54 cadences**, against two *specified*; with a one-second cadence
-floor, **the best achievable worst case is about 1.7 s measured and 2.11 s as documented**, so
-[Control](../docs/control-plane.md) §8's sub-second target cannot be met. **The revocable unit is the key**:
-withdrawing one of two channels sharing a key took the kept channel down for 2.78 s, and under a key per
-channel it was untouched. Authorization adds nothing to the per-subscriber CPU slope at a ten-second
-cadence and 27 % at one second. **A warning**: on the build measured, with client-certificate authentication
-configured, a valid certificate and no token was served every channel, another broadcaster's included
-(upstream's redesign since: [Control](../docs/control-plane.md) §3). **Across two implementations enforcement
-transfers and the token does not** ([T53](test-53-token-interop.md), P2, loopback, one release
-of each relay, drafts 16 and 18): `moq-relay` and moqx both refused everything outside a grant before
-any payload byte and matched on path segments, but neither client carried the other relay's token
-end to end. moqx's keys verify grants on any namespace of their service, its announcements follow a
-separate discovery grant, and on v0.3.6 a live session outlives its token's expiry and a key is
-withdrawn only by a restart that ends every session. **Unmeasured**: a mesh, a real rights system in place of the stub, and
-rights windows.
+leaves no relay log line, so a log-based audit would read nothing. **A warning**: on the build
+measured, with client-certificate authentication configured, a valid certificate and no token was
+served every channel, another broadcaster's included (upstream's redesign since:
+[Control](../docs/control-plane.md) §3).
+
+**Revocation is a poll** ([T37](test-37-entitlement-revocation.md), P2): `max-age=0` — what an
+operator writes meaning "ask every time" — a sub-second `max-age`, and an omitted `Cache-Control`
+each disable revalidation without warning, leaving token expiry (honoured within 0.110 s) as the only
+bound; an authorization outage is tolerated for an hour by default. With several sessions live,
+re-checks are served from a shared cache and the *measured* worst case is **1.54 cadences**, against
+two *specified*; with a one-second cadence floor, **the best achievable worst case is about 1.7 s
+measured and 2.11 s as documented**, so [Control](../docs/control-plane.md) §8's sub-second target
+cannot be met. **The revocable unit is the key**: withdrawing one of two channels sharing a key took
+the kept channel down for 2.78 s, and under a key per channel it was untouched. Authorization adds
+nothing to the per-subscriber CPU slope at a ten-second cadence and 27 % at one second.
+
+**Across two implementations enforcement transfers and the token does not**
+([T53](test-53-token-interop.md), P2, loopback, one release of each relay, drafts 16 and 18):
+`moq-relay` and moqx both refused everything outside a grant before any payload byte and matched on
+path segments, but neither client carried the other relay's token end to end. moqx's keys verify
+grants on any namespace of their service, its announcements follow a separate discovery grant, and on
+v0.3.6 a live session outlives its token's expiry and a key is withdrawn only by a restart that ends
+every session. **Unmeasured**: a mesh, a real rights system in place of the stub, and rights windows.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are
 
@@ -668,17 +677,18 @@ is their source's and their latency the operator's choice, the two agreeing with
 
 **At the buffer model**, the 2,447 ms is a P1/P2 figure on a wire that fails 13818-1 (§3.16). The
 lane's live configurations that pass it present **2,196.7 ms** behind the source through the
-laboratory re-multiplexer (moq 0.12.1, loopback, two clips of one service), about 1.6 s of that the
-lane's own transit and ordering, and **1,137 ms at a 1 s delay** and 2,176 ms at 2 s through
+laboratory re-multiplexer (moq 0.12.1, loopback, two clips of one service; its parts are §3.16's),
+and **1,137 ms at a 1 s delay** and 2,176 ms at 2 s through
 `main`'s export, which sends ahead within the delay, on a live 25 Mb/s feed (wire, loopback, one
-280 s run each; its limits are §3.16's). Builds and metrics differ, so these do not rank against each other, and segmented HTTP's wire is
-ungraded. **No configuration below one second has passed a whole capture on any lane**: the source's
+280 s run each; its limits are §3.16's). Builds and metrics differ, so these do not rank against each
+other, and segmented HTTP's wire is ungraded. **No configuration below one second has passed a whole
+capture on any lane**: the source's
 own bytes over UDP through the stream-clocked groomer pass at 113.7 ms only after a damaged first 5
 s, and over SRT at 234.0 ms one burst in 288 s went unrecovered
 ([T45](test-45-live-tstd-remux.md); loopback, one run each).
 
 *Carried from source:* a commanded cushion is not the depth in force when the carrier outruns the
-content; RIST's WAN cells had not settled; and no arm reached zero intervals above 40 ms on the WAN,
+content, and no arm reached zero intervals above 40 ms on the WAN,
 so this rig grades relative conformance reliably and absolute conformance only to within 12–21
 marginal intervals.
 
@@ -716,11 +726,12 @@ a rewind and an encoder restart each cross the lane with no programme hole and n
 **From moq 0.14.0 a backward timestamp step ends the import instead, flagged or not, on every stream
 kind measured**, while a flagged forward jump still publishes. Until upstream's planned in-process
 republish lands, a source whose timeline steps back must be republished at each step, by a
-supervisor under a new epoch, or the build pinned. Each republish costs 2.8–3.8 s
-of programme, and a 1+1 pair is not hitless across it. **A real feed
-does step back, where its contribution switches between two encodes whose clocks are not locked**
-([T34](test-34-real-encoder-severity.md) § *A switch between two encodes*; P1, the hand-off
-ring and both legs' counters, one feed, three switches in 90 h, an October 2026 build). The whole
+supervisor under a new epoch, or the build pinned. Each republish costs 2.8–3.8 s of programme, and
+a 1+1 pair is not hitless across it.
+
+**A real feed does step back, where its contribution switches between two encodes whose clocks are
+not locked** ([T34](test-34-real-encoder-severity.md) § *A switch between two encodes*; P1, the
+hand-off ring and both legs' counters, one feed, three switches in 90 h, an October 2026 build). The whole
 multiplex changed source at one packet, unflagged and upstream of the hand-off, onto identical
 tables and a clock 16,844.6 s behind; replaying the captured bytes alone ends the import. Both legs
 ended in the same millisecond, so a 1+1 pair on one contribution fails together; a subscriber lost
@@ -750,8 +761,8 @@ a continuous restarting source and the current design**, so §3.2's day is not r
 ([T41](test-41-import-reanchor-coverage.md) § *A flagged rewind carried as a new broadcast*;
 P1, wire; moq 0.14.2, `moq-lite-07`, one host, one clip, a flagged 1 s or 600 s step, thirteen
 runs). A supervisor restarted the import at the step under a fresh epoch; two co-started exports at
-a 1 s delay followed, missing no unit either side.
-Pipe-fed, 2.9–3.0 s of programme was lost, for either step size. Later October 2026 builds hold a
+a 1 s delay followed, missing no unit either side. Pipe-fed, 2.9–3.0 s of programme was lost, for
+either step size. Later October 2026 builds hold a
 restarted importer's catalog for its first mux-rate window and lose 3.8 s, 1.2 s of it to that hold
 ([T41](test-41-import-reanchor-coverage.md) § *Where the step's cost grew*; P1, wire, one
 host, seven runs). Replayed, the captured switch loses 3.2 s on such a build, 2.8 s on a later one
@@ -760,8 +771,7 @@ host, three runs each). Through an SRT gateway the first build lost
 3.2–7.7 s, mostly latency the gateway path had built up and the restart discarded.
 **The two exports stayed byte-identical across the break in 8 of 13 runs.** The other five part
 after it, by packetisation or one picture, which an ST 2022-7 merge cannot take; the cause is not
-located. Upstream promises
-byte identity within one epoch only, leaving identity across a republish to the whole-multiplex
+located. Upstream promises byte identity within one epoch only, leaving identity across a republish to the whole-multiplex
 export, merged (§3.1) but not measured across one.
 
 **A 1+1 ingest pair republished this way keeps both legs, but each export follows whichever leg
@@ -785,7 +795,7 @@ or delays a connection. **The cost lands on relay memory**: forty subscribers ki
 every 5 s take it from **87 MB to 1.9 GB in 60 s**. Capping the group cache leaves it there (1,930
 MB), holding the same audience instead of churning it costs 144 MB, and cutting the idle timeout
 from 30 s to 10 s cuts it to 489 MB — so **it is abandoned-session retention**: a peer killed
-without closing is served, unflow- controlled, until the idle timeout. The first storm sets the
+without closing is served, without flow control, until the idle timeout. The first storm sets the
 high-water mark. Provision `abandoned-session rate × idle timeout × media rate`, with
 `--server-quic-idle-timeout` as the control, traded against the failover detection the same timeout
 provides (§3.4); its default is 10 s from moq 0.14.0. **A static segmented origin has no such
@@ -812,14 +822,13 @@ transport stream, and the pacing groomer cannot close the remainder. For TS-out 
 a stage that re-multiplexes against the decoder model. A laboratory re-multiplexer does this live at
 2.2 s of presentation latency, most of it set by the lane; upstream's fixed-delay export, merged in
 October 2026, builds it into the subscriber and keeps every track and buffer on every join tried;
-sending ahead within the delay, it presents about 1.1 s behind at a 1 s delay. Byte-faithful carriage keeps the model behind an edge stage that places
-each packet on the source's PCR.
+sending ahead within the delay, it presents about 1.1 s behind at a 1 s delay. Byte-faithful carriage
+keeps the model behind an edge stage that places each packet on the source's PCR.
 
-**The problem.** ISO/IEC 13818-1 defines conformance through the T-STD: every PID's bytes must fit a
-512-byte transport buffer draining at a fixed rate, and then a decoder buffer that neither overflows nor
-underflows. TR 101 290 P1/P2 does not grade it. The source multiplexer solved that schedule in its byte
-positions; a lane that demultiplexes keeps the timestamps and discards the positions, so its subscriber
-has to solve the schedule again.
+**The problem.** TR 101 290 does not grade the T-STD, 13818-1's buffer model
+([Primer](../docs/primer.md) §1). The
+source multiplexer solved its schedule in its byte positions; a lane that demultiplexes keeps the
+timestamps and discards the positions, so its subscriber has to solve the schedule again.
 
 **Measured** ([T44](test-44-tstd-grading.md); P1, wire, loopback, one clip, 300 s arms): four
 media-aware configurations from moq 0.10.0 to 0.13.0, each reproducing its P1/P2 pass, against
@@ -862,8 +871,9 @@ passes, and every PCR is within ±500 ns — at 500 ms, 750 ms and 1 s on loopba
 with the output clock following the source to about 1.2 ppm, across hosts at 500 ms and 1 s, at
 every join phase tried, and at 2 % loss at 1 s and 1 % at 500 ms. **Over 35 min at 1 s it stays
 conformant on loopback and across hosts** (moq 0.14.2), through three joins of a source looped so
-that each join passes the T-STD, with every unit of every track carried inside the run. Across
-hosts, with the source paced 25 ppm fast, its clock follows the source at about its 0.075 Hz/s slew
+that each join passes the T-STD, with every unit of every track carried inside the run.
+
+Across hosts, with the source paced 25 ppm fast, its clock follows the source at about its 0.075 Hz/s slew
 limit, from 0 to +4.6 ppm over the run and inside 13818-1's 30 ppm, and presentation latency rises
 31.8 ms as the gap closes; following 25 ppm fully would take about 2.5 h (derived). **Behind a
 source 4 ppm fast it settles on the source's rate after about 100 min** (P1, wire; across hosts, 1
@@ -872,16 +882,21 @@ estimate follows the source, and it first spends, at the slew limit and up to 5.
 source, the 10–12 ms of delay the lane gives back in the 20 s after the export anchors. Its clock
 changes rate at the limit, but on arrivals the drift rate reaches 0.088 Hz/s between 600 s windows,
 over 13818-1's 0.075 Hz/s: the export writes on a 1 ms timer, so the wire's phase moves in 1 ms
-steps. **Its limits**: over 540 s at 500 ms it stops about 157 s in on the video's schedule, so 500
+steps.
+
+**Its limits**: over 540 s at 500 ms it stops about 157 s in on the video's schedule, so 500
 ms is not a working delay over a whole capture; **on a 25 ms path it stops between 2 % and 3 % loss
 at 1 s, and between 1 % and 2 % at 500 ms**, skipping evicted groups and then exiting loud on a
 missed deadline (at 500 ms and 2 % it runs the capture conformant but with units missing); on later
 October 2026 `main` it follows another publisher instance only as a flagged programme switch (§3.4);
 and where the multiplex runs faster than the video's Rx, it overruns the video's transport buffer on
 88 of 943,296 video packets of a 25 Mb/s broadcast recording (peak 646 B against 512 B; P1, wire,
-loopback, one 110 s cut, later October 2026 `main`), all in slots where the video is at its admission cap and four program-table packets lead it, which the interleave does not
-spread ([T45](test-45-live-tstd-remux.md)). **Sending ahead within the delay, it presents
-about 140–180 ms past it** at 1 s and 2 s (§3.11). At 500 ms **which track anchors its clock sets the figure**: on this
+loopback, one 110 s cut, later October 2026 `main`), all in slots where the video is at its
+admission cap and four program-table packets lead it, which the interleave does not spread
+([T45](test-45-live-tstd-remux.md)).
+
+**Sending ahead within the delay, it presents about 140–180 ms past it** at 1 s and 2 s (§3.11). At
+500 ms **which track anchors its clock sets the figure**: on this
 source AC-3 reads about 250 ms further behind its decode time than MP2, the next track, so a join
 that hears it within the 1 s acquisition window presents about 250 ms later, though joins that
 anchored elsewhere delivered every AC-3 unit at the same margins. Why AC-3 can go unheard for that
@@ -894,8 +909,7 @@ clock catches them ([T47](test-47-fixed-delay-export.md)).
 **Not established**: how a hardware IRD responds (**hardware: not run**); the re-multiplexer's clock
 recovery across hosts, and the stream-only schedule 1+1 needs (§3.4); another source profile; the
 decoded-picture buffer, which the grader does not model; and segmented HTTP's wire, *reasoned* to
-behave as SRT's. The arms that settle it are a hardware IRD fed this wire and its rebuild, and the
-re-multiplexer across hosts.
+behave as SRT's.
 
 ---
 
@@ -930,9 +944,9 @@ jitter reorders, and the congestion aggregate reproduces only to about ±15 %.
 
 **The 1+1 result is a software receiver**, with skew injected on one host; the determinism precondition
 holds across two availability zones on single-track content only (§3.4). Only T12 and, over
-CloudFront, T59 and T61 merged RTP legs, packetised by TSDuck or our groomer; the deterministic exports are transport-stream identity, which ST 2022-7
-needs and does not test. The ST 2022-7 oracle is
-self-tested against 14 adversarial conditions and 53 assertions — eight match the standard's
+CloudFront, T59 and T61 merged RTP legs, packetised by TSDuck or our groomer; the deterministic
+exports are transport-stream identity, which ST 2022-7 needs and does not test. The ST 2022-7 oracle
+is self-tested against 14 adversarial conditions and 53 assertions — eight match the standard's
 requirements, one is unspecified, three are not modelled, one is a blind spot — and is not offered as
 reference-compliant.
 
@@ -948,10 +962,11 @@ for continuity and resources, and a day on moq 0.11.2 with a synthetic source, f
 accuracy over days is ungraded (§5 row 14).
 
 **No production relay cluster or federated mesh**: the resilience work is a two-relay lab.
+
 **Reproducibility is partial**: the media-aware lane reproduces from public binaries, TSDuck and the
-public groomer, the opaque lane from upstream `main`, while the IRD-facing egress
-beyond grooming is private. **Large
-artefacts are not committed**; the notebook records their identity and how to regenerate them.
+public groomer, the opaque lane from upstream `main`, while the IRD-facing egress beyond grooming is
+private. **Large artefacts are not committed**; the notebook records their identity and how to
+regenerate them.
 
 ---
 
