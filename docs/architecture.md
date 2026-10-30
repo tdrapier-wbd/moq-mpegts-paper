@@ -500,13 +500,15 @@ delivery pair can be:
   emit one transport, which an ST 2022-7 receiver merges through a leg's late join, loss or restart
   (§5.1). It protects everything below the importer. The importer stays single: its loss ends every
   passthrough export (§5.5), and input protection stays at the source (§5.4).
-- **On the media-aware lane, 1+1 is a switch.** Its multi-track legs are byte-identical only when
-  co-started (§5.1), and legs are not co-started, so the pair is protected by selection:
-  input-select at the IRD, or the demultiplexing export following a second importer as a marked
-  programme switch.
-  Two importers fed from separate sources then protect the input as well, at the price of a marked
-  discontinuity at each failover, about one detection interval for a lost importer (§5.5). This
-  lane keeps per-track egress, prioritisation and selection (§6).
+- **On the media-aware lane, 1+1 is a switch, best made at the receiver.** Its multi-track legs are
+  byte-identical only when co-started (§5.1), and legs are not co-started, so the pair is protected
+  by selection. Made in the relay, by the demultiplexing export following a second importer of one
+  broadcast, each leg's start and restart is itself a switch (§5.4). Made at the receiver, each leg
+  its own broadcast and export into an input switch, legs start, restart and return at their own
+  times at no cost to the output and no failover waits on the transport, but a fault still costs a
+  decoder about one to three seconds (§5.5). Legs fed from separate sources protect the input as well,
+  adding their offset to each cut. This lane keeps per-track egress, prioritisation and selection
+  (§6).
 
 1. **Source** — main/backup playout with input failover *upstream of the platform* (§5.4). This
    resolves to **one** program; the switch is break-before-make and rare.
@@ -631,12 +633,14 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
     held as source-side failover for both. The relay serves the newest importer, so starting or
     restarting the standby is itself a switch. On later October 2026 `main` that switch keeps the
     export's delay and loses next to no programme, but a start on an open-GOP source still shows
-    about a second of corrupt pictures, so it is still scheduled like maintenance.
+    about a second of corrupt pictures, so it is still scheduled like maintenance. Selected at the
+    receiver as two broadcasts (§5), neither is a switch.
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout
   tuning, cache and fan-out, announce propagation, and route selection across the fabric.
 - **Broadcast-grade *service* redundancy is a doubled chain below the importer plus downstream
-  hitless selection.** Importer failover is a marked switch, at least one idle timeout late for a
-  lost host on every build measured, so from the importer on continuity is delivered the way
+  hitless selection.** Importer failover in the relay is a marked switch, at least one idle timeout
+  late for a lost host on every build measured, and at the receiver a cut costing about one to three
+  seconds, so from the importer on continuity is delivered the way
   broadcasters already trust: **one importer → dual fan-out paths → dual receivers → dual groomers →
   ST 2022-7 selection at the receiver.**
 - **On segmented HTTP the serving node holds no state, so over one CDN the source protection can be
@@ -664,11 +668,11 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and 1.4–2.5 s at a clean exit (measured before the delay was kept), with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
-| **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
+| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and 1.4–2.5 s at a clean exit (measured before the delay was kept), with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. Selected at the receiver instead (§5), the input switch cuts once the failed leg's export falls silent, after a hard kill its delay and about a second of padding later: at a 500 ms receive timeout an importer, relay or export lost cost a decoder 0.8–2.9 s, waiting on no idle timeout. That switch detects only silence and cuts anywhere; one that detects on content or cuts at a random-access point is unmeasured. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
+| **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today). On the media-aware lane's pair selected at the receiver, a 0.3 s uplink outage costs nothing, and one of 3 to 12 s costs what a hard kill does |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
-| **A leg that returns** | Rejoins the schedule and the numbering (§5.2). Input-select protection is restored immediately; sequence-merge protection on the opaque lane, and on the media-aware lane only with the pair restarted together |
+| **A leg that returns** | Rejoins the schedule and the numbering (§5.2). Input-select protection is restored immediately, and on the media-aware lane at no cost to the output, an importer cut off past the idle timeout reconnecting on its own; sequence-merge protection on the opaque lane, and on the media-aware lane only with the pair restarted together |
 | **IRD** | The second IRD, also dual-input, keeps delivering; doubling the receiver removes the last single point |
 | **Regional** | Routes are re-homed to another region; gateways in the failed region are replaced by gateways in a neighbouring one, at the cost of added path latency |
 | **Control-plane partition** | The data plane continues on last-known-good state; only change operations are suspended |
