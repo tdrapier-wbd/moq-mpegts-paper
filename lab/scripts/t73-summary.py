@@ -60,7 +60,8 @@ def main():
 				   cc=[c.get("wire", {}).get("cc_errors") for c in cells],
 				   pcr_over_40=[c.get("wire", {}).get("pcr_over_40ms") for c in cells],
 				   matched=[L.get("matched") for L in lat], seen=[L.get("seen") for L in lat],
-				   tstd=[(c.get("tstd") or {}).get("pass") for c in cells if "tstd" in c],
+				   tstd=[(c.get("tstd") or {}).get("ok") for c in cells if "tstd" in c],
+				   pcr_accuracy_over=[c.get("wire", {}).get("pcr_jitter_over") for c in cells],
 				   ran_s=[(c.get("receiver") or {}).get("ran_s") for c in cells])
 		if lane == "seg":
 			ev = {}

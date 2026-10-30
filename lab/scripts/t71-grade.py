@@ -94,11 +94,15 @@ def impairment(cell):
 	except OSError:
 		return dict(error="no counters")
 	loss = kv.get("loss", "nan")
+	direction = "both"
+	if loss.startswith(("in:", "out:")):
+		direction, loss = loss.split(":", 1)
 	if loss.startswith("ge:"):
 		p, r = (float(x) for x in loss[3:].split(","))
 		out = dict(commanded_pct=round(100 * p / (p + r), 3), model=loss, gro=kv.get("gro"))
 	else:
 		out = dict(commanded_pct=float(loss), gro=kv.get("gro"))
+	out["direction"] = direction
 	for d in ("in", "out"):
 		try:
 			s, x = int(kv[f"{d}_sent"]), int(kv[f"{d}_dropped"])

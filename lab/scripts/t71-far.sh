@@ -3,7 +3,8 @@
 #
 #   sudo ORIGIN_IP=<addr> t71-far.sh impair <loss>       the qdiscs, each way: <loss> is a percentage
 #                                                        (0 for a clean cell) or ge:<p>,<r>, a Gilbert
-#                                                        model (bursts of mean 100/<r> datagrams)
+#                                                        model (bursts of mean 100/<r> datagrams);
+#                                                        in:<spec> or out:<spec> for one direction
 #   sudo ORIGIN_IP=<addr> t71-far.sh counters <file>     netem's counters, appended to <file>
 #   sudo ORIGIN_IP=<addr> t71-far.sh clear
 #   t71-far.sh recv <cell-dir> <srt|opaque|aware|seg> <seconds> <broadcast>
@@ -45,23 +46,23 @@ clear_qdiscs() {
 }
 
 impair() {
-	local loss=$1 model
+	local loss=$1 inward outward
 	case "$loss" in
-	ge:*,*)
-		local p=${loss#ge:}
-		model=(loss gemodel "${p%,*}%" "${p#*,}%" 100% 0%)
-		;;
-	*) model=(loss "$loss%") ;;
+	in:*) inward=${loss#in:} outward=0 ;;
+	out:*) inward=0 outward=${loss#out:} ;;
+	*) inward=$loss outward=$loss ;;
 	esac
 	clear_qdiscs
 	ethtool -K "$DEV" gro off
 	modprobe ifb numifbs=0
 	ip link add "$IFB" type ifb
 	ip link set "$IFB" up
-	tc qdisc add dev "$IFB" root handle 1: netem "${model[@]}"
+	# shellcheck disable=SC2046
+	tc qdisc add dev "$IFB" root handle 1: netem $(model "$inward")
 	tc qdisc add dev "$DEV" handle ffff: ingress
 	tc qdisc add dev "$DEV" root handle 1: prio bands 4 priomap 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
-	tc qdisc add dev "$DEV" parent 1:4 handle 40: netem "${model[@]}"
+	# shellcheck disable=SC2046
+	tc qdisc add dev "$DEV" parent 1:4 handle 40: netem $(model "$outward")
 	local proto port
 	for proto in "17 $RELAY_PORT" "17 $SRT_PORT" "6 $SEG_PORT"; do
 		port=${proto#* }
@@ -72,7 +73,18 @@ impair() {
 		tc filter add dev "$DEV" parent 1: protocol ip prio 1 u32 \
 			match ip dst "$ORIGIN_IP/32" match ip protocol "$proto" 0xff match ip dport "$port" 0xffff flowid 1:4
 	done
-	echo "impairment: ${model[*]} each way on UDP $RELAY_PORT, $SRT_PORT and TCP $SEG_PORT with $ORIGIN_IP; GRO off"
+	echo "impairment: inward $(model "$inward"), outward $(model "$outward"), on UDP $RELAY_PORT, $SRT_PORT and TCP $SEG_PORT with $ORIGIN_IP; GRO off"
+}
+
+# A loss spec as netem arguments: a percentage, or ge:<p>,<r>, Gilbert's two-state model.
+model() {
+	case "$1" in
+	ge:*,*)
+		local p=${1#ge:}
+		echo "loss gemodel ${p%,*}% ${p#*,}% 100% 0%"
+		;;
+	*) echo "loss $1%" ;;
+	esac
 }
 
 # "Sent <bytes> bytes <pkts> pkt (dropped <n>, ...": what netem passed, and what it dropped.
