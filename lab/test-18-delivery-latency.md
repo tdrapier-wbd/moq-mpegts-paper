@@ -366,41 +366,39 @@ with the source on the EC2 origin in eu-west-1 and the receiver here, over the o
 
 | arm | cushion | WAN latency | loopback | path cost | PCR > 40 ms | max |
 |---|---|---|---|---|---|---|
-| srt | 250 ms | 1618 ms | 1606 | **+12 ms** | 18 / 3627 | 49.5 ms |
-| srt | 1000 ms | 2412 ms | 2407 | **+5 ms** | 21 / 3587 | 52.2 ms |
-| moq | 250 ms | **109 ms** | 127 | −18 ms | 504 / 3310 | 201.5 ms |
-| moq | 1000 ms | 110 ms | 126 | −16 ms | 505 / 3289 | 217.2 ms |
-| rist | 250 ms | 1348 ms | 1610 | −262 ms | 15 / 3638 | 49.0 ms |
-| rist | 1000 ms | 2072 ms | 2405 | −333 ms | 36 / 4874 | 48.9 ms |
-| hls | 2000 ms | 4067 ms | 3497 | +570 ms | 13 / 3486 | **130.7 ms** |
-| hls | 8000 ms | 9286 ms | 9185 | +101 ms | 2 / 4619 | 49.8 ms |
+| srt | 250 ms | 1623 ms | 1606 | **+17 ms** | 18 / 3627 | 49.5 ms |
+| srt | 1000 ms | 2417 ms | 2407 | **+10 ms** | 21 / 3587 | 52.2 ms |
+| moq | 250 ms | **141 ms** | 127 | **+14 ms** | 504 / 3310 | 201.5 ms |
+| moq | 1000 ms | 143 ms | 126 | **+17 ms** | 505 / 3289 | 217.2 ms |
+| rist | 250 ms | 1352 ms | 1610 | −258 ms | 15 / 3638 | 49.0 ms |
+| rist | 1000 ms | 2108 ms | 2405 | −297 ms | 36 / 4874 | 48.9 ms |
+| hls | 2000 ms | 4101 ms | 3497 | +604 ms | 13 / 3486 | **130.7 ms** |
+| hls | 8000 ms | 9324 ms | 9185 | +139 ms | 2 / 4619 | 49.8 ms |
 
-**The path costs its round trip and nothing else, on the arms that settle.** SRT adds 5–12 ms against a
-12.8 ms round trip, which is the whole of the difference. MoQ comes out 16–18 ms *lower* than on
-loopback, because the loopback rig had source, transport and groomer contending for one laptop while
-here the source is on another continent's worth of cable and its own CPU. Neither plane's conformance
+**The path costs its round trip and nothing else, on the arms that settle.** SRT adds 10–17 ms and MoQ
+14–17 ms against a 12.8 ms round trip, which is the whole of the difference. Neither plane's conformance
 moves at all: MoQ's repetition failure is 504 and 505 intervals out of ~3,310 PCRs against loopback's
 489–491 out of ~3,250, both in a 90 s cell, with the same ~200 ms maximum. **The defect isolated in measurement 4 is a property of the lane, not of the
 link.**
 
-**MoQ delivers a picture across the internet in 109 ms.** That is the number the paper has wanted and
-never had, and it is 15× lower than SRT over the same path in the same window.
+**MoQ delivers a picture across the internet in 141 ms.** That is the number the paper has wanted and
+never had, and it is 11× lower than SRT over the same path in the same window.
 
 **The segmented plane degrades on a real path, and only at the shallow end.** At a 2000 ms cushion its
-spread widens to 3511 ms with a 6430 ms worst case, its maximum PCR interval nearly triples to 130.7 ms,
+spread widens to 3511 ms with a 6464 ms worst case, its maximum PCR interval nearly triples to 130.7 ms,
 and in the first run of that cell *every* PCR failed the 481 ns accuracy gate. At 8000 ms it is orderly
-again — 2 intervals over 40 ms, 49.8 ms maximum, +101 ms over loopback. Segment-fetch jitter is real and
+again — 2 intervals over 40 ms, 49.8 ms maximum, +139 ms over loopback. Segment-fetch jitter is real and
 the deep cushion is what absorbs it, which is the same conclusion T16 reached by a different route.
 
 **RIST's WAN figures are not settled and should not be quoted as a protocol advantage.** They come out
-262–333 ms *below* loopback, which no path can cause, and their trend rises across the window (+54 ms and
+258–297 ms *below* loopback, which no path can cause, and their trend rises across the window (+54 ms and
 +119 ms) where every other arm's falls. A rising trend means the steady state is above the median quoted,
 so the apparent advantage over SRT is an artefact of a window that ends before the arm settles. This is
 recorded as open rather than as a finding.
 
 **The clock was the thing most likely to invent a result, so it is bracketed.** Every cell probes the
 offset before and after and reports the drift between them; the offset itself moved ~15 ms over the
-session, about 1 ms per minute. RIST at 1000 ms WAN reads **2072 ms** (see Corrections).
+session, about 1 ms per minute. RIST at 1000 ms WAN reads **2108 ms** (see Corrections).
 
 ### Against the pass criteria
 
@@ -442,7 +440,7 @@ deadline**, not exporter cadence (measurements 10–11).
 **SRT and RIST are the same product at this layer on a lossless link, and possibly not on a real one.**
 T15 found them indistinguishable in cadence; on loopback they are indistinguishable in latency to within
 6 ms across the whole ladder, so an operator choosing between them there is choosing on ecosystem,
-licensing and fan-out economics rather than on data-plane behaviour. Over the WAN RIST reads 262–333 ms
+licensing and fan-out economics rather than on data-plane behaviour. Over the WAN RIST reads 258–297 ms
 lower, but its cells had not settled — their trend rises where every other arm's falls — so that gap is
 not yet a finding. It is the one place in this experiment where a real path might separate two protocols
 the campaign has so far been unable to tell apart, and it is worth one careful run.
@@ -468,8 +466,8 @@ those few intervals.
 
 **The campaign's highest-leverage outstanding run is closed, and the answer is not the trade-off it was
 framed as.** Delivery latency and PCR conformance are independent on the media-aware lane. MoQ delivers a
-picture in 127 ms on loopback and **109 ms across the internet** where SRT needs 1606 and 1618 ms and
-segmented HTTP needs 3497 and 4067 ms at their shallowest runnable settings — and it fails PCR repetition
+picture in 127 ms on loopback and **141 ms across the internet** where SRT needs 1606 and 1623 ms and
+segmented HTTP needs 3497 and 4101 ms at their shallowest runnable settings — and it fails PCR repetition
 at every one of those settings, on both paths, for a reason that has nothing to do with depth or with the
 link: the exporter emits very nearly the right number of PCRs and places them wrong, clustering 85 % of
 them within 11 µs of each other and leaving the residue in 100 ms–1.8 s holes no downstream groomer can
@@ -479,10 +477,10 @@ fill (measurement 6).
 
 | plane | delivery latency (WAN) | repetition | verdict |
 |---|---|---|---|
-| MoQ, media-aware | **109 ms** | 504 / 3310, max 201 ms | fastest by 15×; fails the gate for a fixable carriage reason |
-| RIST | 1348 ms | 15 / 3638, max 49.0 ms | marginal; below SRT here, but the cell had not settled |
-| SRT | 1618 ms | 18 / 3627, max 49.5 ms | marginal; delay is the buffer the operator sets, plus the RTT |
-| Segmented HTTP | 4067 ms | 13 / 3486, max 131 ms | erratic at the shallow end on a real path; needs 9.3 s to be clean |
+| MoQ, media-aware | **141 ms** | 504 / 3310, max 201 ms | fastest by 11×; fails the gate for a fixable carriage reason |
+| RIST | 1352 ms | 15 / 3638, max 49.0 ms | marginal; below SRT here, but the cell had not settled |
+| SRT | 1623 ms | 18 / 3627, max 49.5 ms | marginal; delay is the buffer the operator sets, plus the RTT |
+| Segmented HTTP | 4101 ms | 13 / 3486, max 131 ms | erratic at the shallow end on a real path; needs 9.3 s to be clean |
 
 **The path costs its round trip and nothing more**, on every arm that settles, and it changes no
 plane's conformance. So the loopback ladder and the WAN figures agree, and the ordering is a property of
@@ -491,7 +489,7 @@ the data planes rather than of either environment.
 **The recommendation this changes is about where to spend effort.** The paper has treated MoQ's
 conformance gap as the cost of its latency advantage and priced that trade into its verdicts.
 [T19](test-19-pcr-grid-verification.md) shows exporter cadence alone does not close the gate; groomer
-PCR pre-emption does, at **2,447 ms** delivery latency — not the **109 ms** this experiment measured on
+PCR pre-emption does, at **2,447 ms** delivery latency — not the **141 ms** this experiment measured on
 the unfixed lane.
 
 ### Still open
@@ -501,7 +499,7 @@ the unfixed lane.
 | ~~*Why* the exporter clusters PCRs~~ **answered** | nothing. [#2967](https://github.com/moq-dev/moq/pull/2967) named it from the code: the authored decode clock is a saw on reordered content, and each B-frame dipping below it is nudged exactly one 90 kHz tick — **11.1 µs** — past the previous DTS, which is the median measured here |
 | ~~Whether an **evenly spaced** PCR cadence clears the gate~~ **answered** | **No** — exporter cadence alone does not; [T19](test-19-pcr-grid-verification.md) measurement 10 verifies the grid in PCR values but the wire figure does not move until measurement 11's groomer reserves the PCR slot |
 | Why one clip is immune | 0 % of intervals above 40 ms on a 27.5 Mb/s broadcast mux at a 27 ms native cadence, against 9–25 % on every other source. Unexplained, and it bounds how general the defect is |
-| **Whether RIST really beats SRT on a real path** | a window long enough for the RIST arms to settle. Their WAN medians sit 262–333 ms below their own loopback figures with a *rising* trend, so the apparent advantage is an unsettled arm, not a protocol property. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
+| **Whether RIST really beats SRT on a real path** | a window long enough for the RIST arms to settle. Their WAN medians sit 258–297 ms below their own loopback figures with a *rising* trend, so the apparent advantage is an unsettled arm, not a protocol property. The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | A lossy path | impairment on the WAN legs. Both paths here were healthy, so nothing exercised the recovery the tunnels exist for — the case that should favour them |
 | A long path | 80–150 ms of RTT rather than 12.8 ms. The path term is the RTT, but that is a rule, not a transferable number |
 | Absolute glass-to-glass | encoder and decoder latency, which no arm here varies and this rig cannot measure |
@@ -545,10 +543,16 @@ not return until the remote process it started has exited.** **Rule: launch a lo
 from a locally backgrounded SSH once as a deliberate setup step, and have the measurement probe it and
 refuse to run without it.**
 
-**Believed: RIST at 1000 ms WAN was the cleanest cell in the experiment (1000.3 ms median, zero PCR
-violations).** **True: the cell straddled a clock step and the figure was spurious; re-run reads 2072
+**Believed: RIST at 1000 ms WAN was the cleanest cell in the experiment (1018 ms median, zero PCR
+violations).** **True: the cell straddled a clock step and the figure was spurious; re-run reads 2108
 ms.** **Rule: a two-host latency rig must bracket its clock; a cell whose drift exceeds probe uncertainty
 is re-run rather than quoted.**
+
+**Believed: the WAN figures were corrected by the probed clock offset.** **True: `report` applied the
+offset `clock-client` prints with its sign inverted, so each WAN median read low by twice its cell's
+offset (+2 to +19 ms, so 4–37 ms); the figures above are corrected from each cell's recorded offset,
+and `report` now takes the probe's value as printed.** **Rule: before a two-host cell, run the probe
+against a server whose clock is shifted by a known amount, through to `report`.**
 
 ---
 

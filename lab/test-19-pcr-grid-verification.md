@@ -6,7 +6,7 @@
 > live wire with groomer fixes at `64595f6`. **Headline wire result (300 s arm):** 0 continuity errors,
 > 0/20,193 PCR intervals above 40 ms (worst 30.1 ms), 10,999,999 b/s CBR — measurement 11 and
 > Conclusion. **Pass criteria 1–3 met; criterion 4 (delivery latency) not met** — median **2,447 ms** on
-> the passing 90 s arm versus T18's **109 ms** gate (Pass criteria). **The criteria are TR 101 290
+> the passing 90 s arm versus T18's **141 ms** gate (Pass criteria). **The criteria are TR 101 290
 > P1/P2's, and the same configuration fails the T-STD buffer model** — transport-buffer overflow on
 > video, audio and PSI, audio decoder buffers illegal at every PCR offset ([T44](test-44-tstd-grading.md)) —
 > so "conformant" below means P1/P2-conformant. Upstream residue, positional fix,
@@ -38,7 +38,7 @@ that gate be met:
    packet carrying no payload must not advance the continuity counter. A stream that breaks that rule is
    broken for every receiver, whatever its PCR looks like.
 4. **No regression in delivery latency**, since the lane's whole case rests on it
-   ([T18](test-18-delivery-latency.md): 109 ms across the internet).
+   ([T18](test-18-delivery-latency.md): 141 ms across the internet).
    **Result (measurement 11, groomed live wire): NOT MET** — median delivery latency **2,447 ms**
    (90 s arm; groomer at `64595f6`, exporter unchanged).
 
@@ -769,7 +769,7 @@ Same arm at 300 s, all three changes in:
 
 **Criteria 1–3 are met; criterion 4 is not** — see Pass criteria. Criterion 1: 0 of 20,193 intervals
 above 40 ms. Criterion 2: mux survives, 0 continuity errors. Criterion 3: payload-less continuity
-discipline, as since #2967. Criterion 4: median delivery latency **2,447 ms** against T18's **109 ms**
+discipline, as since #2967. Criterion 4: median delivery latency **2,447 ms** against T18's **141 ms**
 gate; the groomer's own contribution improved (4,181 → 2,447 ms) but the lane's absolute latency remains
 an order of magnitude above the pre-#2967 control (#2967's regression, measurement 6).
 

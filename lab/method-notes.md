@@ -677,11 +677,14 @@ nulls, produced plausible, flatter, wrong tables. Treat an unexpectedly smooth r
 count.** *(T13.)* Killing a pipeline by its last PID reaped only the groomer; a 17 MB file that censused as
 2.4 M packets was the tell.
 
-**A two-host latency figure must bracket its clock.** *(T18.)* A cell that straddled a 13.94 ms clock step
-returned a clean 1,000.3 ms; the re-run read 2,072. Probe offset before and after each WAN cell.
+**A two-host latency figure must bracket its clock, and its correction must be tested.** *(T18, T70.)* A
+cell that straddled a 13.94 ms clock step returned a clean 1,018 ms; the re-run read 2,108. Probe offset
+before and after each WAN cell. The offset's sign was once applied inverted, reading every WAN cell low
+by twice its offset: run the probe against a server shifted by a known amount, through to the report.
 
 **Launch a long-lived remote fixture once, from a locally backgrounded SSH, and have cells probe it.**
-*(T18.)* `setsid nohup … &` over SSH blocks until the remote process exits.
+*(T18.)* `setsid nohup … &` over SSH blocks until the remote process exits, unless all three of its
+standard streams are redirected.
 
 **A sandboxed shell is not the environment.** *(T6, T18.)* A sandbox bound loopback and connected some
 clients and not others, and its `ps` missed a running sweep. Run loopback drills and process census from a

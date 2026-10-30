@@ -302,7 +302,7 @@ keeping MoQ's architectural wins. Residual gaps: pathological *reordering* (a QU
 item, not CC) and media-aware SI transparency, since closed by #2440, which carries the service
 layer as opaque SI sections. Lowering latency was
 explicitly not the objective here — robust delivery under degradation was — and *delivery* latency has
-since been measured in [T18](test-18-delivery-latency.md) at 109 ms across the public internet;
+since been measured in [T18](test-18-delivery-latency.md) at 141 ms across the public internet;
 glass-to-glass remains unmeasured. **The back-to-back wire-byte comparison has since been run, in
 [T9](test-9-performance.md) rather than here**: both protocols carrying the same clip over one path
 put MoQ's media-aware lane at 0.982x the source TS rate against SRT's 1.037x, and at 1 % forward loss

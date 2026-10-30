@@ -13,7 +13,7 @@ Every measurement cited here is stated with its measurement point, domain and bu
 **The conclusion, first.** For most primary-distribution routes there are *two* viable Internet-native
 data planes. They differ most on latency, and the margin depends on the conformance the comparison is
 held at: **at the only configuration each has been measured TR 101 290 P1/P2-conformant in, MoQ delivers a
-picture over one internet path in 2,447 ms and segmented HTTP in 9,286 ms** ([Evidence](../lab/evidence.md)
+picture over one internet path in 2,447 ms and segmented HTTP in 9,324 ms** ([Evidence](../lab/evidence.md)
 §3.11). That settles the latency question for a route in the two-to-nine-second band, and nothing else.
 **Neither plane is an unconditional choice.** Segmented HTTP leads on most of the remaining axes —
 maturity, delivery economics and the delivery path's interoperability. Its path back to an IRD-ready
@@ -226,7 +226,7 @@ nothing free receives TS-in-HLS (§6.1). **Grooming burden**
 favours MoQ, and **which stage can carry it** favours segmented HTTP (§4.3). **The groomed wire** is
 a tie on P1/P2 and not on its cost: both reach 0 PCR intervals above 40 ms in software, segmented at
 the 8 s cushion its segments impose and MoQ at a buffer sized by the source's peak coded frame, MoQ
-at 2,447 ms against 9,286 ms; MoQ's wire held for a day on a replayed clip, the segmented one for
+at 2,447 ms against 9,324 ms; MoQ's wire held for a day on a replayed clip, the segmented one for
 72 h on the live feed but at its six breaks. The two are not equally tight: MoQ's conformance and latency come from one configuration, while the
 segmented zero is a local groomer run and its internet cell posts 2 marginal intervals
 ([Evidence](../lab/evidence.md) §3.11). **The tie is P1/P2's alone**: at the buffer model the media-aware
@@ -238,8 +238,8 @@ wire fails and the segmented one is ungraded (§8).
 
 **This is the axis on which the two data planes differ most, and the size of the difference depends
 on the conformance it is held at.** Where no plane is P1/P2-conformant, MoQ delivers a picture over one
-internet path in **109 ms** against segmented HTTP's **4,067 ms**; at the only configuration each
-has been measured conformant in, MoQ delivers in **2,447 ms** and segmented HTTP in **9,286 ms**
+internet path in **141 ms** against segmented HTTP's **4,101 ms**; at the only configuration each
+has been measured conformant in, MoQ delivers in **2,447 ms** and segmented HTTP in **9,324 ms**
 ([Evidence](../lab/evidence.md) §3.11). The gap between the Internet-native planes survives conformance at
 about 3.8×, and MoQ's 37× headline does not. **Every latency figure on the media-aware lane must be
 quoted with the conformance of the same bytes.** All are *delivery* latency, source to groomed
@@ -260,7 +260,7 @@ lane's PCR repetition unchanged, while a groomer that reserves the PCR slot rath
 spare one returns, on the wire, 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h
 ([Evidence](../lab/evidence.md) §3.2).
 
-**The conformant configuration delivers at 2,447 ms, an order of magnitude above the 109 ms, and neither
+**The conformant configuration delivers at 2,447 ms, an order of magnitude above the 141 ms, and neither
 part of the gap is cushion depth.** About **650 ms is a named upstream regression**, the exporter PCR
 change that made an even grid possible ([Evidence](../lab/evidence.md) §3.11): a defect with an owner, and
 recoverable. **The rest is structural**: the buffer is sized by the source's peak coded frame, not its
@@ -275,7 +275,7 @@ and both presentation latency, which does not subtract from delivery latency ([E
 
 **At equal P1/P2 conformance MoQ keeps a decisive margin over segmented HTTP and none over the
 tunnels.** Byte-faithful SRT carries the source's own PCR grid over the public internet with 0 P2
-violations at 481 ns, ungroomed, at a latency the operator sets — **1,618 ms at a 1 s jitter
+violations at 481 ns, ungroomed, at a latency the operator sets — **1,623 ms at a 1 s jitter
 buffer**, and reducible ([Evidence](../lab/evidence.md) §3.1). **So the sub-second band, the one hard
 technical discriminator MoQ has over the incumbents ([Economics](economics.md) §7.4), is not
 demonstrated at conformance on MoQ, and no configuration below one second has passed a whole capture
@@ -531,7 +531,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day on a replayed clip; segmented HTTP at its segment-imposed cushion, and for 72 h on the live feed but at its six breaks; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
-| Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 109 ms where nothing is conformant; **2,447 against 9,286 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
+| Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 141 ms where nothing is conformant; **2,447 against 9,324 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
 | Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (M) (§8) |

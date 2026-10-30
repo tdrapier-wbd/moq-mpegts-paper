@@ -317,14 +317,14 @@ gate's, below.
 exporter never hands the groomer a PCR-bearing packet near the deadline and only the reserved slot
 clears the gate; the segmented arm reaches 0 on the wire by holding an 8 s cushion. So the trade is
 not buffer-versus-latency, but the conformant MoQ configuration is not free of latency either: it
-costs **2,447 ms of delivery latency against the 109 ms measured
+costs **2,447 ms of delivery latency against the 141 ms measured
 on a build whose wire cannot be made conformant**: about 650 ms is a named upstream regression and the
 rest is the buffer bound in §12's second open question, the contribution encoder's VBV occupancy moved
 downstream into this gateway ([Comparison](comparison.md) §5.1, [Evidence](../lab/evidence.md) §3.2, §3.11).
 
 **The architectural consequence is a real advantage over the other Internet-native plane and not a
 sub-second one.** At equal P1/P2 conformance this gateway delivers at 2,447 ms against the segmented
-plane's 9,286 ms, and does not beat a transparent tunnel, whose egress carries the source's own
+plane's 9,324 ms, and does not beat a transparent tunnel, whose egress carries the source's own
 conformant grid at whatever jitter buffer the operator sets. At the buffer model this gateway has no
 conformant configuration behind the media-aware lane at all. A re-multiplexing stage supplies one:
 offline; live, as a laboratory stage in this gateway's place, at 2.2 s behind the source on moq

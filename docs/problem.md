@@ -335,7 +335,7 @@ data plane.
 **R3 and R4 are coupled, but not by buffer depth**, which does not buy PCR conformance
 ([Comparison](comparison.md) §5.1). The two requirements are coupled all the same: the only
 configuration measured P1/P2-conformant on the media-aware lane delivers at **2,447 ms**, against
-**109 ms** at a cushion that is not conformant, so a latency figure for it is meaningless without the
+**141 ms** at a cushion that is not conformant, so a latency figure for it is meaningless without the
 conformance of the same bytes. And
 R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same configuration
 fails the 13818-1 buffer model. Stages that rebuild the packet schedule pass it — a laboratory

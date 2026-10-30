@@ -223,16 +223,16 @@ the far end needs the contribution mux back byte-for-byte.
 
 | Transport | Wire multiplier | Latency | Fan-out topology | Standardisation |
 |---|---|---|---|---|
-| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **109 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes seven of nine other relays after the join, five for a late subscriber ([Evidence](../lab/evidence.md) §3.7) |
-| SRT | 1.037 *(measured, same path; 1.035 on the feed)* | **1,618 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
+| MoQ, media-aware | 0.982 *(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)* | **2,447 ms** P1/P2-conformant, or **141 ms** on a build whose wire cannot be made conformant *(both measured over the internet, source to groomed egress)* | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes seven of nine other relays after the join, five for a late subscriber ([Evidence](../lab/evidence.md) §3.7) |
+| SRT | 1.037 *(measured, same path; 1.035 on the feed)* | **1,623 ms** at a 1 s jitter buffer *(measured, same path and window)* — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
 | Zixi | ~1.03 *(estimated)* | sub-second *(vendor claim, not measured here)* | broadcaster fans out | proprietary, per-GB licence |
-| HLS with TS segments | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,067 ms** *(measured, same path)*, and 9,286 ms at the depth that makes it P1/P2-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, RFC 8216 and its second edition; DVB-DASH (ETSI TS 103 285) profiles ISOBMFF only — **not standards-track, yet carried by every cache, CDN and general-purpose client; how a receiver rebuilds a transport stream from it is specified nowhere** ([Comparison](comparison.md) §4.4, §6.1) |
+| HLS with TS segments | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** *(HTTP layer measured at 1.0006×; framing derived)* | **4,101 ms** *(measured, same path)*, and 9,324 ms at the depth that makes it P1/P2-conformant; ~2–5 s low-latency mode, ~6 s on free TS tooling | cache fans out | *informational* spec, RFC 8216 and its second edition; DVB-DASH (ETSI TS 103 285) profiles ISOBMFF only — **not standards-track, yet carried by every cache, CDN and general-purpose client; how a receiver rebuilds a transport stream from it is specified nowhere** ([Comparison](comparison.md) §4.4, §6.1) |
 
 *The latency column is source-to-groomed-egress over the public internet from a common EC2 origin, and
 it carries an important non-economic condition: **a latency figure on this lane is meaningless without
 the conformance of the same bytes.** Held at TR 101 290 P1/P2 conformance the ordering is MoQ
-2,447 ms, segmented HTTP 9,286 ms, and the transparent tunnels at whatever jitter buffer the operator
-sets — 1,618 ms at 1 s — since their egress carries the source's own conformant grid ungroomed.
+2,447 ms, segmented HTTP 9,324 ms, and the transparent tunnels at whatever jitter buffer the operator
+sets — 1,623 ms at 1 s — since their egress carries the source's own conformant grid ungroomed.
 No sub-second configuration has been measured conformant on MoQ (§4.6). These are delivery figures, not camera-to-display.*
 
 **No option breaks last-mile linearity.** A relay is a cache (§4.6): upstream traffic collapses to one
