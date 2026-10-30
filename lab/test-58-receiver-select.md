@@ -54,6 +54,10 @@ At 30 s the rig fails one component of the leg `tsswitch` is serving, and restar
 | revertive | `--primary-input 0` (leg A) | 500 ms | `kill`, `relay` |
 | two sources | non-revertive, leg B on the separate encode | 500 ms | `kill`, `term` |
 
+**Diagnostic, not graded:** the 3 s outage, three times on `bdc47852a`, which carries
+[#6873](https://github.com/moq-dev/moq/pull/6873)'s fix for an export that ends on a missed decode
+deadline after a silence; reported as whether leg A's export ends, and the cell's costs.
+
 **Measures per event**, from [`t56-grade.py`](scripts/t56-grade.py) on each recording, as T56
 defines them: the stall, the decoder hole beside the same before the event, the programme lost or
 repeated, the latency step, and whether each cut is marked. Beside them, from `events.txt`: the
