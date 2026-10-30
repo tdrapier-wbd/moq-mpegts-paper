@@ -833,8 +833,10 @@ hypothesis worth an afternoon: TS segments differed from the source in two PSI p
 groomer mints conformant CBR with no programme; exclude its adaptation-only PCR from the content check.
 
 **Every stream-position quantity must be a function of position in the stream, not of what this instance
-emitted.** *(T12.)* An RTP sequence that counted datagrams sent left a resumed leg 8,756 behind; sequence,
-timestamp and PCR must be stream-derived for redundancy.
+emitted or saw.** *(T12, T30.)* An RTP sequence that counted datagrams sent left a resumed leg 8,756 behind; sequence,
+timestamp and PCR must be stream-derived for redundancy. Two `tsp -O hls` packagers of one source on
+two hosts cut 1.2 s apart until their input bitrate was fixed, and one that missed the first tables
+numbered its PAT and PMT apart: hash a pair's segments, written apart, before it shares a namespace.
 
 **Pin every parameter the property depends on, then measure; a predicted divergence is no substitute for
 one run.** *(T12.)* Ungroomed legs predicted to fail on phase aligned in all twelve cells and failed on

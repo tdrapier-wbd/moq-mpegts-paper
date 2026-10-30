@@ -13,7 +13,10 @@
 #                                    A's NFS traffic for PARTITION_S s
 #
 # Env: HOST_A, HOST_B, HOST_S, HOST_R (ssh aliases; HOST_R is A's or B's, default B's), IP_A, IP_B,
-#      IP_S (private addresses, required), T_EVENT (40), T_END (100), PARTITION_S (10), CAL_S (40).
+#      IP_S (private addresses, required), T_EVENT (40), T_END (100), PARTITION_S (10), CAL_S (40),
+#      TSP_OPTS (both packagers' tsp options; "--bitrate 9945951", the clip's PCR rate: without a
+#      fixed input bitrate a packager reading the source across hosts cuts elsewhere than one on
+#      its host; set it empty for the stock chain), KEEP_TS (keep the receiver's captures).
 #      Records: ~/t30c2runs/<run>/.
 set -u
 HOST_A=${HOST_A:-moq-primary}
@@ -25,6 +28,7 @@ T_EVENT=${T_EVENT:-40}
 T_END=${T_END:-100}
 PARTITION_S=${PARTITION_S:-10}
 CAL_S=${CAL_S:-40}
+TSP_OPTS=${TSP_OPTS-"--bitrate 9945951"}
 HERE=$(cd "$(dirname "$0")" && pwd)
 TO=/opt/homebrew/bin/timeout
 HS="bash t30c2/scripts/t30-cell2-host.sh"
@@ -88,9 +92,21 @@ else
 	dA=$MNT/www dB=$MNT/www
 	h "$HOST_S" "$HS origin-start $R $IP_S" || exit 1
 fi
-ev "start variant=$VARIANT t_event=$T_EVENT t_end=$T_END partition_s=$PARTITION_S"
-h "$HOST_A" "$HS pack-start $R A $dA -I ip 239.255.0.30:5030 --local-address 127.0.0.1"
-h "$HOST_B" "$HS pack-start $R B $dB -I ip 5031"
+ev "start variant=$VARIANT t_event=$T_EVENT t_end=$T_END partition_s=$PARTITION_S tsp_opts='$TSP_OPTS'"
+h "$HOST_A" "$HS pack-start $R A $dA $TSP_OPTS -I ip 239.255.0.30:5030 --local-address 127.0.0.1"
+h "$HOST_B" "$HS pack-start $R B $dB $TSP_OPTS -I ip 5031"
+bound() { # bound <host> <udp port>: a packager that misses the first PAT numbers its tables apart
+	local _
+	for _ in $(seq 1 50); do
+		h "$1" "ss -Huln 'sport = :$2' | grep -q ." && return 0
+		sleep 0.2
+	done
+	return 1
+}
+if ! bound "$HOST_A" 5030 || ! bound "$HOST_B" 5031; then
+	ev "a packager never bound its input"
+	exit 3
+fi
 sleep 1
 h "$HOST_A" "$HS source-start $R $IP_B"
 ev source-start
@@ -180,5 +196,5 @@ fetch "$HOST_R" pull.log pull.out pacer.log sizes.csv content.json timeline.json
 fetch "$HOST_S" playlist.csv ngx/access.log
 fetch "$HOST_A" pack-A.log source.log
 fetch "$HOST_B" pack-B.log
-h "$HOST_R" "rm -f $R/groomed.ts $R/raw.ts $R/shelf.ts"
+[ -n "${KEEP_TS:-}" ] || h "$HOST_R" "rm -f $R/groomed.ts $R/raw.ts $R/shelf.ts"
 cat "$L/origin.txt"

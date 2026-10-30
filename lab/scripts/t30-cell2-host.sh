@@ -4,7 +4,7 @@
 #
 #   store host     store-up A_IP B_IP | store-down A_IP B_IP | origin-start RUN BIND | origin-stop RUN
 #                  | watch PLAYLIST | hashes DIR
-#   packager hosts mount STORE_IP | umount | pack-start RUN NAME DIR <tsp -I ip args...> | pack-kill RUN
+#   packager hosts mount STORE_IP | umount | pack-start RUN NAME DIR <tsp args...> | pack-kill RUN
 #                  | pack-stop RUN | part-on STORE_IP | part-off
 #   source host    source-start RUN B_IP | source-stop RUN
 #   receiver host  recv RUN URL (foreground: receiver, groomer, shelf column, then T30's grade)
@@ -77,8 +77,8 @@ umount)
 	;;
 origin-start)
 	run=${1:?RUN} bind=${2:?BIND}
-	pfx=$run/ngx
-	mkdir -p "$pfx/tmp"
+	mkdir -p "$run/ngx/tmp"
+	pfx=$(cd "$run/ngx" && pwd)
 	cat >"$pfx/nginx.conf" <<EOF
 daemon off;
 master_process off;
