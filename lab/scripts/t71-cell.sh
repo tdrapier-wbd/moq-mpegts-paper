@@ -63,15 +63,12 @@ on "$FAR" 30 "echo 'loss=$LOSS' > $R/impair.txt; sudo $FENV bash t71/scripts/t71
 on "$FAR" 30 "sudo $FENV bash t71/scripts/t71-far.sh clear"
 
 step "collect"
-for f in source.csv clock-origin.txt relay-build.txt source.log; do
-	on "$ORIGIN" 60 "cat $R/$f" >"$LOG/$CELL/$f"
-done
-for f in source.csv clock-origin.txt relay-build.txt; do
-	put "$FAR" "$R/$f" "$LOG/$CELL/$f"
-done
-for f in clock-far.txt impair.txt recv-events.log receive.log; do
-	on "$FAR" 60 "cat $R/$f" >"$LOG/$CELL/$f" || true
-done
+on "$ORIGIN" 60 "tar -cf - -C $R source.csv clock-origin.txt relay-build.txt source.log" >"$LOG/$CELL/origin.tar"
+tar -xf "$LOG/$CELL/origin.tar" -C "$LOG/$CELL"
+put "$FAR" "$R/origin.tar" "$LOG/$CELL/origin.tar"
+on "$FAR" 60 "tar -xf $R/origin.tar -C $R && rm $R/origin.tar && tar -cf - -C $R clock-far.txt impair.txt recv-events.log receive.log" |
+	tar -xf - -C "$LOG/$CELL"
+rm "$LOG/$CELL/origin.tar"
 echo "lane=$LANE loss=$LOSS secs=$SECS broadcast=$BCAST" >"$LOG/$CELL/cell.txt"
 
 trap - EXIT

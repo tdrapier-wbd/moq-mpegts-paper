@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # T71's receiver: the impairment on the lanes' flows, one lane's receive stage, and the clock reads.
 #
-#   sudo -E t71-far.sh impair <loss-%>     the qdiscs, at <loss-%> each way (0 for a clean cell)
-#   sudo -E t71-far.sh counters <file>     netem's counters, appended to <file>
-#   sudo -E t71-far.sh clear
+#   sudo ORIGIN_IP=<addr> t71-far.sh impair <loss-%>     the qdiscs, at <loss-%> each way (0 for a clean cell)
+#   sudo ORIGIN_IP=<addr> t71-far.sh counters <file>     netem's counters, appended to <file>
+#   sudo ORIGIN_IP=<addr> t71-far.sh clear
 #   t71-far.sh recv <cell-dir> <srt|opaque|aware> <seconds> <broadcast>
 #   t71-far.sh clock <cell-dir> <before|after>
 #
