@@ -699,15 +699,18 @@ this away in exchange for verbatim carriage.
 **This is an available mechanism and not a measured behaviour, and what the lane does today is
 coarser.** Under congestion it sheds **whole groups** that missed the subscriber's release deadline,
 which is not selective by track and does not preferentially preserve the primary programme; the
-degradation is in *time*, uniformly across the mux ([Evidence](../lab/evidence.md) §3.3). One measured
-consequence bounds how much comfort to take from this section. That the process doing the shedding
+degradation is in *time*, uniformly across the mux ([Evidence](../lab/evidence.md) §3.3). Two measured
+consequences bound how much comfort to take from this section. That the process doing the shedding
 survives it is not established: with its media and catalog consumers both skipping a superseded
 group none of ten exited, consistent with survival at too low an event rate to establish it
 ([Evidence](../lab/evidence.md) §3.15), and without `--linger` it exits when its session drops (§8.4). A
-subscriber that exits is off air rather than degraded. Widening the subscriber's budget to recover
-groups rather than shed them is paid in latency set in advance, not in a step the impairment leaves:
-the fixed-delay export's latency is back within 100 ms after every outage measured
-([Evidence](../lab/evidence.md) §3.3). **No
+subscriber that exits is off air rather than degraded. And widening the subscriber's budget to
+recover groups rather than shed them does not substitute for a rate margin: with two or three feeds
+sharing an emulated link at 0.8× their combined rate for 80 s, each lost 14–22 s of video at every
+release delay from 1 to 6 s, a second of delay buying back about 0.6 s of picture, and against a 5 s
+dip a 6 s delay absorbed the loss at 200 ms RTT but not at 20 ms. What widening costs is latency set
+in advance, not a step the impairment leaves: the fixed-delay export's latency is back within 100 ms
+after every outage measured ([Evidence](../lab/evidence.md) §3.3). **No
 priority-ordered shedding policy has been built or graded here**; treating graceful degradation as a
 property of the lane rather than as work still to do would overstate it.
 
