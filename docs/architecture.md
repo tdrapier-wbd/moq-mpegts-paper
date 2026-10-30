@@ -975,7 +975,7 @@ egress can be read against what actually arrived. Upstream's importer has such c
 2026 `main`, not yet in a release. They cover the P1 set apart from `PID_error`, which the
 importer's per-stream liveness rows already answer, together with the transport, PCR repetition, PCR
 discontinuity and PTS checks of P2. Their measured agreement with an independent analyser is in
-[Evidence](../lab/evidence.md) §5 row 16. Two things stay outside them. PCR accuracy needs an arrival clock
+[Evidence](../lab/evidence.md) §5 row 15. Two things stay outside them. PCR accuracy needs an arrival clock
 the importer does not have. And they grade the transport rather than the pictures, so a frozen
 source that keeps sending valid PES passes them, which is the case §9.4 addresses.
 

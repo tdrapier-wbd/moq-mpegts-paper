@@ -82,7 +82,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Carriage** | All three lanes carry a single-programme broadcast mux at 0 continuity errors, departing from verbatim differently: SRT on no criterion, segmented HTTP by at most one PAT/PMT pair per segment, the media-aware lane by PSI density and PCR spacing; the opaque lane, on `moq-dev`, is the source's bytes. A multi-programme mux is flattened up to moq 0.12.8 and split on later `main` into one broadcast per programme whose SI still describes the whole mux | Multi-programme carriage through a CDN; the opaque lane beyond one run per arm | §3.1 |
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; arrival at an IRD-facing output; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s across hosts and at up to 2 % loss, its clock following a drifting source, but not over a whole capture at 500 ms; on arrivals its drift rate exceeds 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
-| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a real CDN edge at long RTT, or a captured path; burst loss; SRT below 1 s under loss; segmented HTTP under loss off loopback | §3.3 |
+| **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a captured path; burst loss; SRT below 1 s under loss | §3.3 |
 | **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. On merged builds multi-track legs of one broadcast merge on the media-aware lane only co-started, behind the fixed-delay export merged on October 2026 `main`, on one host or two; its opt-in `--sync` mode merged a late leg only where the source carries an H.264 HRD. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged. The segmented lane is hitless with no merge, given one feed, one naming scheme and a common start: a later stock packager did not join, one naming segments by content time did. Over CloudFront, two such origins in one origin group covered each failure of one pathway tested, and receivers at two edges released on the origin's program date-time started within 1.1 ms (unreleased, up to ±1.5 s) | A hardware merge; a late leg on a source without an HRD; a cross-host pair beyond 120 s; a distributed segment store; receivers on two hosts; a failure of the CDN | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on; through a CDN-hosted relay, 32 subscribers of a 25 Mb/s feed on the media-aware lane, and 16 for 72 h at about two skips an hour each | A third source; fan-out beyond one relay; the opaque lane through that relay | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
@@ -307,13 +307,16 @@ exporter still exits once.
 **An impairment figure on this lane must name its shape, build and QUIC stack.**
 
 **The segmented lane on the same shapes** ([T28](test-28-failure-injection-matrix.md),
-[T31](test-31-congestion-capacity-ladders.md), [T68](test-68-segmented-chain-cushion-faults.md); P1,
-content-graded, one host). At loopback RTT it returns control's bytes under 5–10 % loss and
-a 5 s outage, and is bounded by the origin's retention: a 30 s outage costs 17.134 s. **At 100 ms RTT
-the origin's controller decides.** Matched at 5.91 and 11.87 s, the current chain (groomer `97f3a38`) over HTTP/1.1 loses
-nothing under 5–20 % reorder on either controller, and under 5–10 % loss nothing on BBR, as SRT, but
-47–71 s of 95 on CUBIC, which holds each fetch near 1 Mb/s. A 5 s outage costs it 9.5–10.6 s at 5.91 s
-and nothing at 11.87 s. The first chain lost less than the MoQ lane on
+[T31](test-31-congestion-capacity-ladders.md), [T68](test-68-segmented-chain-cushion-faults.md),
+[T72](test-72-segmented-cdn-edge-impairment.md); P1, content-graded). At loopback RTT it returns
+control's bytes under 5–10 % loss and a 5 s outage, and is bounded by the origin's retention: a 30 s
+outage costs 17.134 s. **At 100 ms RTT the controller facing the last mile decides.** Matched at
+5.91 and 11.87 s, the current chain (groomer `97f3a38`) over HTTP/1.1 loses nothing under 5–20 %
+reorder on either controller, and under 5–10 % loss nothing on BBR, as SRT, but 47–71 s of 95 on
+CUBIC, which holds each fetch near 1 Mb/s. Through a CloudFront edge (one point of presence,
+Bernoulli loss on the edge-to-receiver path) it loses nothing under loss or reorder at either
+column: the edge's delivery behaves as BBR. A 5 s outage costs 8.8–10.6 s at 5.91 s, through the
+edge or not, and nothing at 11.87 s. The first chain lost less than the MoQ lane on
 every capacity rung (2.4 s against 13–18 s at 0.9× for 60 s), 21–22 s behind the live edge.
 
 ### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane a pair started together needs none
@@ -958,7 +961,7 @@ builds, moq 0.10.0 to 0.13.0. Upstream `main` changed materially in October 2026
 that schedules the wire, an epoch-based publisher identity, an import that republishes at a backward timestamp — and
 results are on it only where stated. The permanence evidence is a week on moq 0.14.2 with the live feed,
 for continuity and resources, and a day on moq 0.10.0 with a synthetic source, for PCR intervals; PCR
-accuracy over days is ungraded (§5 row 14).
+accuracy over days is ungraded (§5 row 13).
 
 **No production relay cluster or federated mesh**: the resilience work is a two-relay lab.
 
@@ -989,9 +992,8 @@ rebuild.
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
-| 12 | **What does a CDN edge deliver under loss at 100 ms RTT?** An origin on BBR loses nothing (§3.3) | A run at 100 ms RTT through CloudFront | The segmented lane's loss curve through a CDN |
-| 13 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
-| 14 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
-| 15 | **What does a segmented origin cost at fan-out?** At two receivers no process takes over 6 % of a core, memory flat for 72 h ([T62](test-62-origin-group-soak.md)) | An origin under many edges | Its fan-out knee; the origin measured at load is `python3 -m http.server` |
-| 16 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Whether a stage downstream can tell a recovered gap from clean programme; the import counts TR 101 290 errors and signals nothing ([upstream contributions](upstream-contributions.md)) |
+| 12 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
+| 13 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
+| 14 | **What does a segmented origin cost at fan-out?** At two receivers no process takes over 6 % of a core, memory flat for 72 h ([T62](test-62-origin-group-soak.md)) | An origin under many edges | Its fan-out knee; the origin measured at load is `python3 -m http.server` |
+| 15 | **Should a recovered audio gap be signalled downstream?** (§3.1) | Upstream design | Whether a stage downstream can tell a recovered gap from clean programme; the import counts TR 101 290 errors and signals nothing ([upstream contributions](upstream-contributions.md)) |
 Protocols for the runnable ones are in [planned-experiments](planned-experiments.md).
