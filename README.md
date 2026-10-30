@@ -38,9 +38,9 @@ align on nothing beyond HLS itself. Its recovery advantage is therefore real in 
 conditional on a resilient, observable receive stage, which a distributor could specify and open
 to vendors ([Comparison](docs/comparison.md) §3.2, §4, §6.1; [Economics](docs/economics.md) §8.5).
 
-**MoQ beats the other Internet-native plane decisively on latency at the configurations measured TR
-101 290-conformant in software.** That makes the case for MoQ on routes with a roughly
-two-to-nine-second delivery budget. But at conformance it does not necessarily beat the
+**The two Internet-native planes are level on latency at the configurations measured TR 101
+290-conformant in software**, about 2.4 s against 2.6 s over one internet path; latency no longer
+makes MoQ’s case on a multi-second route. Nor, at conformance, does MoQ necessarily beat the
 point-to-point incumbents it would displace, which carry their source’s own conformant timing and
 buy their latency with a jitter buffer the operator sets. Nothing below about one second was
 conformant over a whole capture on any lane, so MoQ’s strategic sub-second case is architecturally

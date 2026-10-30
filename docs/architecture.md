@@ -299,7 +299,7 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 | The MoQ lane's TS-out, **re-multiplexed live** in this gateway's place, a laboratory stage | **passes every buffer and P1/P2** over 270 s with nothing sent late, at **2,196.7 ms of presentation latency** on moq 0.12.1; two clips of one service, one run each, at the lowest lead that passes | **wire**, loopback |
 | The MoQ lane's TS-out from upstream's **fixed-delay export**, merged on October 2026 `main`, which re-multiplexes in the subscriber | **passes every buffer and P1/P2 with every track carried on every join tried**, at 500 ms to 1 s, on loopback, across hosts and at 1–2 % loss; sending ahead within the delay, 1,137 ms at a 1 s delay on a live feed. 500 ms does not last a 540 s capture, and 2–3 % loss ends it at 1 s | **wire**, two sources |
 | Byte-faithful SRT or UDP, **stream-clocked** groomer, against the T-STD | **passes every buffer** over the whole capture, at the source's own legal offsets, with every source null stripped. Arrival-clocked, the decoder buffers drift out | **wire**, loopback |
-| Groomed, segmented-HTTP lane, 8 s derived cushion | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors; buffer model not graded | **wire** |
+| Groomed, segmented-HTTP lane over one internet path, a 1–3 s cushion behind 1–2 s segments, stream-clocked groomer | **0** intervals above 40 ms, 0 PCR violations at 481 ns, 0 continuity errors, and **passes every buffer** of the T-STD, at four configurations; below the cushion its segments set, it fails both | **wire** |
 | Any lane | — | **hardware IRD: not run** |
 
 **PCR repetition failed as delivered because the edge stage placed PCR opportunistically** — only in
@@ -315,18 +315,19 @@ gate's, below.
 
 **Buffer depth fixes it on the segmented plane and does nothing on the MoQ lane**, where the
 exporter never hands the groomer a PCR-bearing packet near the deadline and only the reserved slot
-clears the gate; the segmented arm reaches 0 on the wire by holding an 8 s cushion. So the trade is
+clears the gate; the segmented arm reaches 0 on the wire with a cushion its segments' spans set,
+1–3 s on this clip. So the trade is
 not buffer-versus-latency, but the conformant MoQ configuration is not free of latency either: it
 costs **2,447 ms of delivery latency against the 141 ms measured
 on a build whose wire cannot be made conformant**: about 650 ms is a named upstream regression and the
 rest is the buffer bound in §12's second open question, the contribution encoder's VBV occupancy moved
 downstream into this gateway ([Comparison](comparison.md) §5.1, [Evidence](../lab/evidence.md) §3.2, §3.11).
 
-**The architectural consequence is a real advantage over the other Internet-native plane and not a
-sub-second one.** At equal P1/P2 conformance this gateway delivers at 2,447 ms against the segmented
-plane's 9,324 ms, and does not beat a transparent tunnel, whose egress carries the source's own
-conformant grid at whatever jitter buffer the operator sets. At the buffer model this gateway has no
-conformant configuration behind the media-aware lane at all. A re-multiplexing stage supplies one:
+**The architectural consequence is no latency advantage over the other Internet-native plane, and not
+a sub-second one.** At equal P1/P2 conformance this gateway delivers at 2,447 ms against the segmented
+plane's 2,604 ms, and does not beat a transparent tunnel, whose egress carries the source's own
+conformant grid at whatever jitter buffer the operator sets. At the buffer model the segmented wire
+passes and this gateway has no conformant configuration behind the media-aware lane at all. A re-multiplexing stage supplies one:
 offline; live, as a laboratory stage in this gateway's place, at 2.2 s behind the source on moq
 0.12.1, most of it the lane's own delivery schedule; and in the subscriber, as upstream's merged
 fixed-delay export, at about 1.1 s with a 1 s delay (§4.3).

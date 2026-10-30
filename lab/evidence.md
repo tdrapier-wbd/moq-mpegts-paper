@@ -616,12 +616,13 @@ bought.
 
 Apple's `mediastreamsegmenter` emits conformant low-latency playlists of MPEG-TS parts of 0.28–0.30 s,
 free and first time ([T14](test-14-data-plane-comparison.md)). **Both freely available clients
-that turn HLS back into a transport stream fetched zero parts and made zero blocking reloads**, against a
-static origin and Apple's own low-latency origin, while Apple's validator fetched 17–21 parts over the
-same origins, so the gap is in the clients. TSDuck cannot see parts, and FFmpeg's demuxer exposes
-no option for them. With parts, the median burst falls only from 2.95 MB to ~2.3 MB. **The practical
-envelope for TS-in-HLS remains nearer 6 s than the 2–5 s the hold-back arithmetic implies, and the
-reason is a market**: the missing stage is the receive stage commercial ABR-to-TS products sell.
+that turn HLS back into a transport stream fetched zero parts and made zero blocking reloads**, while
+Apple's validator fetched 17–21 parts from the same origins, so the gap is in the clients. TSDuck
+cannot see parts, and FFmpeg's demuxer exposes no option for them. Parts cut the median burst only
+from 2.95 MB to ~2.3 MB. **Through these clients TS-in-HLS stays nearer 6 s than the 2–5 s the
+hold-back arithmetic implies, and the reason is a market**: commercial ABR-to-TS
+products sell the missing receive stage. Without parts, one-second segments through the campaign's
+receiver deliver in 2,604 ms (§3.11).
 
 ### 3.10 Is there a credible entitlement substrate? — Enforcement is measured and exact; revocation is a poll with a floor above the proposed target
 
