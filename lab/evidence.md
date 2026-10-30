@@ -91,7 +91,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish costs 2.8–3.8 s of programme per step and is not hitless for a 1+1 pair; late October 2026 `main` republishes in the import, at 1.4–1.6 s an encoder switch. **A real feed steps back** where its contribution switches between unlocked encodes, unflagged, ending both legs at once; a subscriber lost 9.8 s | Why the other five diverge; how often other contributions switch so; a 1+1 ingest pair across the import's restart | §3.13 |
 | **Interop** | The opaque lane crosses seven of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix; OpenMOQ's moq5 and `moq-dev` carry each other's TS byte-exact, neither catalog finding the other's track | Why three relays never start a late subscriber | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s, 86 s at a CDN | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
-| **Latency** | Where nothing is conformant MoQ crosses the internet in 141 ms against SRT's 1,623 and segmented HTTP's 4,101. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,324 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
+| **Latency** | Where nothing is conformant MoQ crosses the internet in 141 ms against SRT's 1,623 and segmented HTTP's 4,101. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 2,604 ms, whose wire also passes the buffer model**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
 
 ---
 
@@ -662,30 +662,30 @@ path segments, but neither client carried the other relay's token end to end. mo
 grants on any namespace of their service, and on v0.3.6 a live session outlives its token's expiry and a key is withdrawn only by a restart that ends
 every session. **Unmeasured**: a mesh, a real rights system in place of the stub, and rights windows.
 
-### 3.11 How long does a picture take to cross each data plane? — MoQ by 11× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are
+### 3.11 How long does a picture take to cross each data plane? — MoQ by 11× where nothing is conformant, by 6 % over segmented HTTP at P1/P2
 
-**For an operator:** at the only configurations measured conformant, SRT and RIST deliver fastest,
-because their latency is a jitter-buffer dial on the source's own grid; the media-aware lane beats
-segmented HTTP but not the tunnels, and its far lower non-conformant figure is not a deployment latency.
+**For an operator:** at the configurations measured conformant, SRT and RIST deliver fastest,
+because their latency is a jitter-buffer dial on the source's own grid; MoQ and segmented HTTP sit
+within 6 %, and MoQ's far lower non-conformant figure is not a deployment latency.
 
 Measured source to groomed egress on each picture's PTS, **every figure paired with the conformance of
 the same bytes** ([T18](test-18-delivery-latency.md), P2; 90 s cells, an EC2 origin over a 12.8 ms
 round trip). At each plane's shallowest runnable cushion **MoQ delivers in 141 ms, against SRT's
 1,623 ms, RIST's 1,352 ms (unsettled) and segmented HTTP's 4,101 ms** — and no cell is P1/P2-conformant,
-MoQ's posting 504 of 3,310 intervals above 40 ms. At the only configurations measured conformant:
+MoQ's posting 504 of 3,310 intervals above 40 ms. At the fastest conformant configurations:
 
 | Plane | Conformant configuration | Delivery latency | Conformance measured |
 |---|---|---|---|
 | **MoQ, media-aware** | groomer reserves the PCR slot; buffer 3.6× the peak coded frame | **2,447 ms** | 0 / 20,193 intervals > 40 ms over 300 s; 0 over 24.01 h (§3.2) |
-| **Segmented HTTP** | 8 s cushion, set by segment duration | **9,324 ms** | 2 intervals > 40 ms, 49.8 ms maximum |
+| **Segmented HTTP** | 1 s epochs, no receiver hold, 1 s cushion ([T70](test-70-segmented-latency-budget.md); T18's first chain: 8 s, 9,324 ms) | **2,604 ms** | 0 / ~4,925 intervals > 40 ms per 120 s cell (three); buffer model passes |
 | **SRT / RIST** | none needed — the egress carries the source's grid | **1,623 ms** at a 1 s jitter buffer, a dial | 0 P2 violations at 481 ns ungroomed (§3.1) |
 
 **Conformance costs the media-aware lane an order of magnitude, in two parts, neither of them cushion
 depth.** About **650 ms is a named upstream regression** — the exporter PCR change that made an even grid
 possible moved latency from 120.0 to 771.6 ms against the same control
 ([T19](test-19-pcr-grid-verification.md) measurement 6) — and the rest is the peak-coded-frame
-buffer bound, which is structural. **Against segmented HTTP the advantage survives at 3.8×**, decisive
-for a route in the two-to-nine-second band; **against the tunnels it does not**, since their conformance
+buffer bound, which is structural. **Against segmented HTTP the advantage is 6 %** at P1/P2, on one
+clip and clean path; **against the tunnels there is none**, since their conformance
 is their source's and their latency the operator's choice, the two agreeing within 6 ms.
 
 **At the buffer model**, the 2,447 ms is a P1/P2 figure on a wire that fails 13818-1 (§3.16). The
@@ -694,16 +694,15 @@ laboratory re-multiplexer (moq 0.12.1, loopback, two clips of one service; its p
 and **1,137 ms at a 1 s delay** and 2,176 ms at 2 s through
 `main`'s export, which sends ahead within the delay, on a live 25 Mb/s feed (wire, loopback, one
 280 s run each; its limits are §3.16's). Builds and metrics differ, so these do not rank against each
-other, and segmented HTTP's wire is ungraded. **No configuration below one second has passed a whole
+other. Segmented HTTP's wire passes it at all four of T70's floors, 2.6–4.5 s over the internet
+path. **No configuration below one second has passed a whole
 capture on any lane**: the source's
 own bytes over UDP through the stream-clocked groomer pass at 113.7 ms only after a damaged first 5
 s, and over SRT at 234.0 ms one burst in 288 s went unrecovered
 ([T45](test-45-live-tstd-remux.md); loopback, one run each).
 
 *Carried from source:* a commanded cushion is not the depth in force when the carrier outruns the
-content, and no arm reached zero intervals above 40 ms on the WAN,
-so this rig grades relative conformance reliably and absolute conformance only to within 12–21
-marginal intervals.
+content.
 
 ### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes if it has stopped completely, and only from per-stream instrumentation if it has stopped partly
 

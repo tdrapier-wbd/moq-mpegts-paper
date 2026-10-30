@@ -206,8 +206,8 @@ is 0–0.25 s) against the measured 2.44 s. It falls one second per second of cu
 
 1. **On the current chain, two independent segmented chains are byte-identical at a 3 s cushion,
    not 8 s.** That holds with the receiver's 1.5 s hold and the groomer's alignment, as T62 and T63
-   ran them. With neither, the floor is 1.5 s. Both figures are for loopback and this clip; a real
-   path's fetch time adds to them (P1-ah).
+   ran them. With neither, the floor is 1.5 s. Both figures are for this clip; over a 12 ms internet
+   path both hold ([T70](test-70-segmented-latency-budget.md)).
 2. **The floor is the clip's cuts, not the receiver or the path.** Aligned, the cushion must cover
    the longest segment's span, 2.84 s here. Unaligned, it must cover the longest span less the
    anchor segment's. The epoch cuts this clip's 1.2 s GOP into 2.4 s and 1.2 s segments, so a source
