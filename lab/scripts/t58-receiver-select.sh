@@ -12,7 +12,9 @@
 # each restart (`import*` after the first event, and `arrive*`).
 #
 # Cells (CELL=): kill | term (the importer), relay (SIGKILL the leg's relay), egress (SIGKILL its
-# export). MODE=nonrevertive (--receive-timeout RT) | revertive (and --primary-input 0).
+# export), outage (drop the importer's QUIC flow both ways on loopback for OUTAGE_S s, and any
+# socket it opens meanwhile; nothing restarted; Linux, root, as T56's outage cell).
+# MODE=nonrevertive (--receive-timeout RT) | revertive (and --primary-input 0).
 # SRC2 set: importer B reads SRC2, a separate encode of the programme, started with SRC.
 #
 #   CELL=kill MODE=nonrevertive RT=500 BIN=<moq dir> SRC=<ts> t58-receiver-select.sh <label>
@@ -20,7 +22,8 @@
 # Env: RT (500: tsswitch receive timeout, ms), IDLE (6: QUIC idle timeout in s, keep-alive a third),
 #      KILL_AT (30), BACK (15), SECS (75), DELAY (2s), FOLLOW (10s), SRC2, PORT (4610; leg B's relay
 #      on PORT+1), UDP (5610), OUT (/tmp/t58), RETRY (the importers' --connect-backoff-timeout;
-#      unset, the CLI's 10 s, which a relay down BACK=15 s outlasts; 0s retries forever).
+#      unset, the CLI's 10 s, which a relay down BACK=15 s outlasts; 0s retries forever),
+#      OUTAGE_S (IDLE; may be fractional).
 set -uo pipefail
 
 H=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -44,14 +47,21 @@ PORT=${PORT:-4610}
 UDP=${UDP:-5610}
 OUT=${OUT:-/tmp/t58}/$LABEL
 RETRY=${RETRY:-}
+OUTAGE_S=${OUTAGE_S:-$IDLE}
 IMP=()
 [ -n "$RETRY" ] && IMP=(--connect-backoff-timeout "$RETRY")
 BC=t58.$CELL.$$
 
 case $CELL in
 kill | term | relay | egress) ;;
+outage)
+	[ "$(uname)" = Linux ] && [ "$(id -u)" -eq 0 ] || {
+		echo "outage needs Linux and root (iptables)" >&2
+		exit 1
+	}
+	;;
 *)
-	echo "CELL must be kill, term, relay or egress" >&2
+	echo "CELL must be kill, term, relay, egress or outage" >&2
 	exit 1
 	;;
 esac
@@ -84,7 +94,21 @@ set -m
 PIDS=()
 now() { python3 -c 'import time; print(f"{time.time():.6f}")'; }
 stamp() { echo "$1 $(now)" >>"$OUT/events.txt"; }
+dark() { # <port>: drop it both ways on loopback, once
+	grep -qx "$1" "$OUT/dark.ports" 2>/dev/null && return 0
+	iptables -I OUTPUT -o lo -p udp --sport "$1" -j DROP
+	iptables -I OUTPUT -o lo -p udp --dport "$1" -j DROP
+	echo "$1" >>"$OUT/dark.ports"
+}
+light() {
+	iptables -D OUTPUT -o lo -p udp --sport "$1" -j DROP 2>/dev/null
+	iptables -D OUTPUT -o lo -p udp --dport "$1" -j DROP 2>/dev/null
+}
+ports_of() { # <pid>: its UDP ports
+	ss -H -uanp 2>/dev/null | awk -v p="pid=$1," 'index($0, p) { n = split($4, a, ":"); print a[n] }' | sort -u
+}
 cleanup() {
+	[ -f "$OUT/dark.ports" ] && while read -r p; do light "$p"; done <"$OUT/dark.ports"
 	for p in ${PIDS+"${PIDS[@]}"}; do kill -TERM -- "-$p" 2>/dev/null || kill -TERM "$p" 2>/dev/null; done
 	sleep 1
 	for p in ${PIDS+"${PIDS[@]}"}; do kill -KILL -- "-$p" 2>/dev/null; done
@@ -101,6 +125,7 @@ trap cleanup EXIT
 	echo "src $SRC${SRC2:+; importer B reads $SRC2}; idle ${IDLE}s keep-alive $KEEP"
 	echo "fault at ${KILL_AT}s, back ${BACK}s later; ${SECS}s; export: ${EXP[*]}; tsswitch ${SWITCH[*]}"
 	echo "importer retry: ${RETRY:-CLI default}"
+	[ "$CELL" = outage ] && echo "outage ${OUTAGE_S}s"
 } | tee "$OUT/build.txt"
 
 declare -A RELAYPID IMPPID LEGPORT=([A]=$PORT [B]=$((PORT + 1)))
@@ -183,6 +208,21 @@ for ((t = 3; t <= SECS; t++)); do
 		term) kill -TERM "${IMPPID[$V]}" && stamp "termimport$V" ;;
 		relay) kill -KILL "${RELAYPID[$V]}" && stamp "killrelay$V" ;;
 		egress) pkill -KILL -f -- "--broadcast $BC.$V export" && stamp "killexport$V" ;;
+		outage)
+			VP=${IMPPID[$V]}
+			for p in $(ports_of "$VP"); do dark "$p"; done
+			stamp "outage$V"
+			(
+				end=$((${EPOCHREALTIME/./} + $(python3 -c "print(round($OUTAGE_S * 1e6))")))
+				while left=$((end - ${EPOCHREALTIME/./})) && [ "$left" -gt 0 ]; do
+					for p in $(ports_of "$VP"); do dark "$p"; done
+					if [ "$left" -gt 100000 ]; then sleep 0.1; else sleep "0.$(printf %06d "$left")"; fi
+				done
+				while read -r p; do light "$p"; done <"$OUT/dark.ports"
+				stamp "light$V"
+			) &
+			PIDS+=("$!")
+			;;
 		esac
 	fi
 	if [ "$t" -eq $((KILL_AT + BACK)) ]; then

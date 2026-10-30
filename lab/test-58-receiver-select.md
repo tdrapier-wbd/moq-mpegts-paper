@@ -23,7 +23,7 @@ redundant legs start and restart at their own times
 |---|---|
 | `moq`, `moq-relay` | `main` at `66af72315` (moq 0.14.2, moq-relay 0.17.2), recorded with each run |
 | Switch | TSDuck `tsswitch` 3.45, `--fast-switch` (both inputs read throughout), recorded with each run |
-| Host | the laptop, loopback; no other timing work and no build on the host during a run |
+| Host | the laptop, loopback; no other timing work and no build on the host during a run. `outage`: an 8-core Linux host with no other work, loopback, `tsswitch` 3.44, importers retrying without limit (`RETRY=0s`) |
 | One source | T56's: the drills' contribution clip (1080i H.264, 9.95 Mb/s CBR) played live to a file that each importer follows from its own start |
 | Two sources | T56's separate encode (720p H.264, 2 s closed GOP, 9 Mb/s CBR, other PIDs), played from the same instant |
 | Legs | leg A and leg B, each an importer, its own relay and its own broadcast, and an `export ts --stitch --follow 10s --delay 2s` under a supervisor that restarts it when it exits |
@@ -46,10 +46,11 @@ At 30 s the rig fails one component of the leg `tsswitch` is serving, and restar
 | `term` | SIGTERM its importer |
 | `relay` | SIGKILL its relay |
 | `egress` | SIGKILL its export |
+| `outage` | drop its importer's QUIC flow both ways, and any socket the importer opens meanwhile, for 0.3, 3, 6 and 12 s: under the receive timeout, between it and the idle timeout, at it and past it; nothing is restarted |
 
 | Mode | `tsswitch` | Receive timeouts | Cells |
 |---|---|---|---|
-| non-revertive | `--receive-timeout` alone | 500 ms, 2,000 ms | all four |
+| non-revertive | `--receive-timeout` alone | 500 ms, 2,000 ms | all four; `outage` at 500 ms |
 | revertive | `--primary-input 0` (leg A) | 500 ms | `kill`, `relay` |
 | two sources | non-revertive, leg B on the separate encode | 500 ms | `kill`, `term` |
 
@@ -76,6 +77,9 @@ and each restart.
    programme lost under 1 s, in all three runs. Graded against C0 rather than in place of it.
 6. **C4, two sources:** every cut decodes on, with a decoder hole under 1 s, and the programme step
    reported, in all three runs of both cells.
+7. **The outage** is graded on C0 to C2 at each duration: the uplink's return is an arrival (C0);
+   the outage itself is a fault (C1, C2). An outage that causes no switch is reported as such, with
+   the hole and programme lost it cost the output.
 
 ## Limits, fixed in advance
 
