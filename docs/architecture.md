@@ -628,7 +628,9 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
     or its takeover changes the programme as well as marking it. The practical topology is **two
     ingest paths, one selected path fanned into the importer and its standby**, with the second path
     held as source-side failover for both. The relay serves the newest importer, so starting or
-    restarting the standby is itself a switch, to be scheduled like maintenance.
+    restarting the standby is itself a switch. On later October 2026 `main` that switch keeps the
+    export's delay and loses next to no programme, but a start on an open-GOP source still shows
+    about a second of corrupt pictures, so it is still scheduled like maintenance.
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout
   tuning, cache and fan-out, announce propagation, and route selection across the fabric.
 - **Broadcast-grade *service* redundancy is a doubled chain below the importer plus downstream
@@ -661,7 +663,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval at a hard kill, and 1.4–2.5 s of programme at a clean exit, with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
+| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and 1.4–2.5 s at a clean exit (measured before the delay was kept), with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
