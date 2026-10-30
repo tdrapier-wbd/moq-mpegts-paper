@@ -1473,11 +1473,13 @@ detectable from the received bytes alone, and the checker shows its sensitivity 
 Two harness suggestions went with it: a control-plane test of zero-field namespace subscription (data
 for moq-wg#1457), and recording the transport negotiated beside the draft. **State:** another
 contributor took it up as a `media` area (CMSF first); [our
-reply](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6218255528) backs it and
-keeps T-STD out of pass/fail. **The MPEG-TS half is proposed in
+reply](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6218255528) keeps T-STD
+out of pass/fail. **The MPEG-TS half is proposed in
 [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159), open:** a
-fixture generated at build time, a TSDuck-backed checker with 13 sensitivity tests, and the cases
-`ts-carriage-integrity` and `ts-late-subscriber`, both passing on `moq-dev`'s passthrough through its relay.
+build-time fixture, a TSDuck-backed checker with 13 sensitivity tests, and the cases
+`ts-carriage-integrity` and `ts-late-subscriber`, both passing on `moq-dev`'s passthrough through its
+relay; it [rebases under](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6524273468)
+the area's README.
 
 ### A flag-alias regression — reported, fixed, verified, closed
 
