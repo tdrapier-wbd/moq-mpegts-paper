@@ -48,7 +48,8 @@ def pmt(path):
         d, i = sec[12 : 12 + pil], 0
         while i + 2 <= len(d):
             tag, ln = d[i], d[i + 1]
-            if tag == 0x09 and ln >= 4 and (d[i + 2] << 8 | d[i + 3]) == 0x2610 and ((d[i + 4] & 0x1F) << 8 | d[i + 5]) == 0x200:
+            ca_system, ca_pid = d[i + 2] << 8 | d[i + 3], (d[i + 4] & 0x1F) << 8 | d[i + 5]
+            if tag == 0x09 and ln >= 4 and ca_system == 0x2610 and ca_pid == 0x200:
                 with_ca += 1
                 break
             i += 2 + ln
@@ -86,7 +87,8 @@ def span(ref, cap, out, write=None):
     lo, hi = index[first], index[last + n - 1]
     src = packets(write) if write else r
     open(out, "wb").write(b"".join(src[lo : hi + 1]))
-    print(f"span: reference packets {lo}..{hi} ({(hi - lo + 1) * PKT * 8 / 9.95e6:.1f} s at the stimulus rate) written to {out}")
+    secs = (hi - lo + 1) * PKT * 8 / 9.95e6
+    print(f"span: reference packets {lo}..{hi} ({secs:.1f} s at the stimulus rate) written to {out}")
 
 
 def segs(keep):
@@ -124,7 +126,7 @@ def recv(log, hashes):
     for line in open(hashes):
         f = line.rstrip("\n").split("\t")
         ref[int(f[0])] = {"name": f[1], "period": int(f[2]), "clear": f[3], "enc": f[4]}
-    rows = [json.loads(l) for l in open(log)]
+    rows = [json.loads(line) for line in open(log)]
     seg = [r for r in rows if r["kind"] == "seg" and r["status"] == 200]
     match = sum(ref.get(r["seq"], {}).get("clear") == r["sha"] for r in seg)
     missing = [r["seq"] for r in seg if r["seq"] not in ref]
@@ -149,14 +151,18 @@ def recv(log, hashes):
 
 def revoked(log, write_end):
     t = float(write_end)
-    rows = [json.loads(l) for l in open(log)]
+    rows = [json.loads(line) for line in open(log)]
     after = [r for r in rows if r["t"] >= t]
     seg = [r for r in after if r["kind"] == "seg" and r["status"] == 200]
     first = next((r for r in after if r["status"] != 200), None)
     last_ok = max((r["t"] for r in after if r["status"] == 200), default=None)
-    print(f"revoked: after the write, {len(seg)} segments handed on ({sum(r['extinf'] for r in seg):.2f} s of programme); "
-          f"last admitted request {'%.2f s' % (last_ok - t) if last_ok else 'none'} after; first refusal "
-          f"{'%.2f s after, on the %s (%s %s)' % (first['t'] - t, first['kind'], first['status'], first['deny']) if first else 'none'}")
+    handed = sum(r["extinf"] for r in seg)
+    admitted = "%.2f s" % (last_ok - t) if last_ok else "none"
+    refused = "none"
+    if first:
+        refused = "%.2f s after, on the %s (%s %s)" % (first["t"] - t, first["kind"], first["status"], first["deny"])
+    print(f"revoked: after the write, {len(seg)} segments handed on ({handed:.2f} s of programme); "
+          f"last admitted request {admitted} after; first refusal {refused}")
 
 
 def trials(path):
@@ -171,8 +177,10 @@ def trials(path):
     for name, ps in by.items():
         f = [p["first_refusal_ms"] for p in ps if p["first_refusal_ms"] is not None]
         pre = sum(p["pre_n"] - p["pre_admitted"] for p in ps)
-        print(f"  {name} ({', '.join(sorted({p['pop'] or '-' for p in ps}))}): first refusal after the write ends "
-              f"median {statistics.median(f) if f else 'NA'} ms, min {min(f, default='NA')}, max {max(f, default='NA')} "
+        pops = ", ".join(sorted({p["pop"] or "-" for p in ps}))
+        med = statistics.median(f) if f else "NA"
+        print(f"  {name} ({pops}): first refusal after the write ends "
+              f"median {med} ms, min {min(f, default='NA')}, max {max(f, default='NA')} "
               f"over {len(f)}/{len(ps)}; reasons {sorted({p['first_deny'] for p in ps}, key=str)}; admitted after the "
               f"first refusal {sum(p['admitted_after_first_refusal'] for p in ps)} requests in "
               f"{sum(p['admitted_after_first_refusal'] > 0 for p in ps)} trials; refused before the write {pre}")

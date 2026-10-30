@@ -62,7 +62,8 @@ class Probe(threading.Thread):
 
 def kvs_put(arn, key, value="1"):
     etag = subprocess.run(["aws", "cloudfront-keyvaluestore", "describe-key-value-store", "--kvs-arn", arn,
-                           "--query", "ETag", "--output", "text"], capture_output=True, text=True, check=True).stdout.strip()
+                           "--query", "ETag", "--output", "text"],
+                          capture_output=True, text=True, check=True).stdout.strip()
     return etag, ["aws", "cloudfront-keyvaluestore", "put-key", "--kvs-arn", arn, "--key", key,
                   "--value", value, "--if-match", etag, "--query", "ETag", "--output", "text"]
 
@@ -141,6 +142,7 @@ def trials(a, key):
             post = [r for r in p.rows if r["mono"] >= w1]
             first = next((r for r in post if r["status"] != 200), None)
             after = [r for r in post if first and r["mono"] > first["mono"]]
+            last_ok = max((r["mono"] for r in post if r["status"] == 200), default=w1)
             trial["probes"].append({
                 "probe": name, "pop": next((r["pop"] for r in p.rows if r["pop"]), None),
                 "pre_n": len(pre), "pre_admitted": sum(r["status"] == 200 for r in pre),
@@ -149,16 +151,16 @@ def trials(a, key):
                 "first_refusal_from_start_ms": round((first["mono"] - w0) * 1000) if first else None,
                 "first_deny": first["deny"] if first else None,
                 "admitted_after_first_refusal": sum(r["status"] == 200 for r in after),
-                "last_admitted_ms": round((max((r["mono"] for r in post if r["status"] == 200), default=w1) - w1) * 1000),
+                "last_admitted_ms": round((last_ok - w1) * 1000),
                 "requests": len(p.rows), "rtt_ms_median": sorted(r["rtt_ms"] for r in p.rows)[len(p.rows) // 2],
             })
             with open(os.path.join(a.out, f"trial-{i}-{name}.jsonl"), "w") as f:
                 for r in p.rows:
                     f.write(json.dumps(dict(r, rel_w1_ms=round((r["mono"] - w1) * 1000))) + "\n")
         summary.append(trial)
-        print(json.dumps({k: trial[k] for k in ("trial", "write_ms", "put_rc")} |
-                         {p["probe"]: (p["pop"], p["first_refusal_ms"], p["first_deny"], p["admitted_after_first_refusal"])
-                          for p in trial["probes"]}), flush=True)
+        per_probe = {p["probe"]: (p["pop"], p["first_refusal_ms"], p["first_deny"], p["admitted_after_first_refusal"])
+                     for p in trial["probes"]}
+        print(json.dumps({k: trial[k] for k in ("trial", "write_ms", "put_rc")} | per_probe), flush=True)
         time.sleep(2)
     json.dump(summary, open(os.path.join(a.out, "trials.json"), "w"), indent=1)
 
@@ -182,10 +184,12 @@ def expiry(a, key):
                 for r in p.rows]
         early = [r for r in rows if r["edge_s"] is not None and r["edge_s"] < exp and r["status"] != 200]
         late = [r for r in rows if r["edge_s"] is not None and r["edge_s"] >= exp and r["status"] == 200]
+        last_ok = max((r["wall"] for r in rows if r["status"] == 200), default=0)
+        first_no = min((r["wall"] for r in rows if r["status"] != 200), default=0)
         out["probes"].append({"probe": name, "pop": next((r["pop"] for r in rows if r["pop"]), None),
                               "requests": len(rows), "refused_before_exp": len(early), "admitted_from_exp": len(late),
-                              "last_admitted_wall_minus_exp": round(max((r["wall"] for r in rows if r["status"] == 200), default=0) - exp, 3),
-                              "first_refused_wall_minus_exp": round(min((r["wall"] for r in rows if r["status"] != 200), default=0) - exp, 3),
+                              "last_admitted_wall_minus_exp": round(last_ok - exp, 3),
+                              "first_refused_wall_minus_exp": round(first_no - exp, 3),
                               "denies": sorted({r["deny"] for r in rows if r["deny"]})})
         with open(os.path.join(a.out, f"expiry-{name}.jsonl"), "w") as f:
             for r in rows:
