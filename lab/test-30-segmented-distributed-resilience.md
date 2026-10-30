@@ -52,12 +52,12 @@ loss).
 | | |
 |---|---|
 | Baseline | Two `tsp -O hls` packagers (TSDuck 3.44; 2 s segments, `--live 6 --live-extra-segments 3 --intra-close --align-first-segment`), nginx origin (`sendfile on`; playlist `max-age=1`, segments `max-age=60`), receiver `t6-hls-pull.py` (500 ms poll) into [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) given only a rate (T16 arm B, adaptive cushion). Rig: [`t30-segmented-resilience.sh`](scripts/t30-segmented-resilience.sh). |
-| Store | Cells 0, 1, 3–5: one host, local disk. Cell 2: an NFS export from a third host, mounted at `<SEGMENT_STORE>` on both packager hosts. |
-| Hosts | Single-host cells on one c6in.2xlarge over loopback; Cell 2 across `<EC2_IP_A>`, `<EC2_IP_B>` (separate AZs) and the store host. |
+| Store | Cells 0, 1, 3–5: one host, local disk. Cell 2: an NFS export (`sync`) from a third host, mounted at `<SEGMENT_STORE>` on both packager hosts for the run's duration (NFS 4.2, hard, `timeo=600`, `retrans=2`; client caching at its defaults). |
+| Hosts | Single-host cells on one c6in.2xlarge over loopback. Cell 2: packager A on `<EC2_IP_A>`, packager B on `<EC2_IP_B>` (separate AZs), store and origin on the store host (A's AZ), receiver and groomer on B's host, reading the origin over the hosts' private network. |
 | Receivers | `t6-hls-pull.py` is graded; `tsp -I hls --live` runs beside it as an ungroomed shelf column. FFmpeg is dropped: [T6](test-6-relay-resilience.md) showed it exits where `tsp` does. |
 | Edge (Cell 4) | nginx `proxy_cache` in front of the origin, shaped like a CDN default: honours origin `Cache-Control`, caches 404 for 10 s (CloudFront's default error TTL), collapses concurrent misses, never marks an origin down. The shelf column reads the origin directly so it neither warms nor shields the edge. |
 | Grader | At groomed egress: content lost and duplicated from video PTS ([`t28-content-lost.py`](scripts/t28-content-lost.py)); **timeline oracle** [`t30-timeline.py`](scripts/t30-timeline.py), which flags every arrival-order PTS step backward beyond 2 s as silent time travel (forward steps are holes, scored by the content grader); TSDuck continuity, groomed and raw. Playlist consistency from the receiver log (listed segment not fetchable) and the origin and edge access logs. Cell 3 adds [`t30-hammer.py`](scripts/t30-hammer.py): every newly listed segment fetched at once and at +50, +200 and +1,000 ms, and torn when any body differs from the last. |
-| Source | `contrib-10m.ts` (578.9 s, no loop wrap inside a run), `tsp regulate` to a loopback multicast group, so a packager can join the running feed late; the packagers read the group with `tsp -I ip`. |
+| Source | Cells 0, 1, 3–5: `contrib-10m.ts` (578.9 s, no loop wrap inside a run), `tsp regulate` to a loopback multicast group, so a packager can join the running feed late; the packagers read the group with `tsp -I ip`. Cell 2: one source on A's host, to its loopback group for A and as a unicast copy of the same packets to B; both packagers start before it. |
 
 ## Procedure
 
@@ -80,8 +80,15 @@ same criterion: *aligned* with `--slice-only` on both packagers, which stops eac
 PAT and PMT (the aligned variant's failure, *Results*), with a co-started control under the same flag.
 
 **Cell 2 — Two hosts, one store.** Packager A on `<EC2_IP_A>`, packager B on `<EC2_IP_B>`, shared
-`<SEGMENT_STORE>`. Fail: kill A while B runs; kill B while A runs; partition store visibility (iptables
-drop between host and store). Grade merge at receiver without operator action.
+`<SEGMENT_STORE>`; the origin serves the store from the store host, so no packager's failure takes it
+down. Rig [`t30-cell2.sh`](scripts/t30-cell2.sh), driving
+[`t30-cell2-host.sh`](scripts/t30-cell2-host.sh) on each host. First a calibration: the two
+packagers co-started into directories of their own for 40 s, their segments compared by name and
+hash. A shared namespace across hosts means what T6's did only if the two cut identically; if they
+do not, the difference is the result and the shared runs are not run. Then a co-started control
+with no fault, and three runs of each failure at 40 s, runs of 100 s, the single-host cells' groomer
+and poll: SIGKILL A while B runs; SIGKILL B while A runs; A's host partitioned from the store for
+10 s (its NFS traffic dropped both ways by a table of its own, then restored).
 
 **Cell 3 — Mid-write fetch.** Drive client fetch rate up against a shared-name pair while packagers
 write in place (`tsp -O hls` default). Optional: artificial delay between playlist update and segment
@@ -129,7 +136,10 @@ At groomed P1 egress unless the cell tests pre-groom receive:
    reports 0 s media lost and 0 continuity errors at groomed egress — reproducing [T6](test-6-relay-resilience.md)
    before any distributed cell runs.
 2. **Seamless (distributed).** For Cell 2 single packager kill with surviving packager healthy: 0 s
-   media lost, 0 continuity errors, no operator action — *seamless* as defined in F7.
+   media lost, 0 continuity errors, no operator action — *seamless* as defined in F7. The partition is
+   graded on the same columns and reported beside, not under, this criterion: a hard mount stalls the
+   cut-off packager and flushes its writes when the path returns, into a namespace the other has
+   moved on, and that flush is the hazard it measures.
 3. **Standby join (Cell 1).** Media lost in the 30 s after standby start ≤ 1 segment duration (2 s
    for default packager settings) and no naming collision that serves partial TS to the receiver; exceed
    is a fail of seamless join, not necessarily of the lane outright.
