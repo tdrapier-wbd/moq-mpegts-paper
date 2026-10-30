@@ -29,7 +29,7 @@ hand-off — a stage neither specification mentions and which the taker must own
 no longer supply its clients' receivers. Most of the engineering, and most of the risk, sits *above*
 the transport ([Comparison](docs/comparison.md), [Architecture](docs/architecture.md)).
 
-**Segmented HTTP has a mature cache-delivery model and, at the 5–10 s budget it is scoped to, an
+**Segmented HTTP has a mature cache-delivery model and, at classic segment durations, an
 off-the-shelf receive path.** Named segments are served through commodity CDNs and retried from
 another edge while they remain in their availability window. The IRD estate does not consume HLS,
 so a stage must reassemble and groom it into a transport stream: free tools do so to TR 101 290
@@ -64,7 +64,7 @@ MoQ was measured on two lanes: a media-aware one, which splits the transport str
 media, and an opaque one, which carries its bytes unchanged.
 
 - **The TR 101 290 P1/P2 gate was met in software on both planes, and held for a day on the
-  media-aware lane.** It closed downstream, in an edge stage that no off-the-shelf tool provides behind
+  media-aware lane; segmented HTTP's wire passes the 13818-1 buffer model too.** It closed downstream, in an edge stage that no off-the-shelf tool provides behind
   MoQ ([Evidence](lab/evidence.md) §3.2). That is not full conformance on the media-aware lane: as a
   transmux it discards the source's packet schedule, and its wire fails the 13818-1 buffer model, which
   only a re-multiplexer repairs. Upstream's fixed-delay export, now merged, builds that stage into the
