@@ -305,7 +305,7 @@ exporter still exits once.
 [T72](test-72-segmented-cdn-edge-impairment.md); P1, content-graded). At loopback RTT it returns
 control's bytes under 5–10 % loss and a 5 s outage, and is bounded by the origin's retention: a 30 s
 outage costs 17.134 s. **At 100 ms RTT the controller facing the last mile decides.** Matched at
-5.91 and 11.87 s, the current chain (groomer `97f3a38`) over HTTP/1.1 loses nothing under 5–20 %
+5.91 and 11.87 s, the current chain over HTTP/1.1 loses nothing under 5–20 %
 reorder on either controller, and under 5–10 % loss nothing on BBR, as SRT, but 47–71 s of 95 on
 CUBIC, which holds each fetch near 1 Mb/s. Through a CloudFront edge (one point of presence,
 Bernoulli loss on the edge-to-receiver path) it loses nothing under loss or reorder at either
@@ -332,9 +332,9 @@ exits when its broadcast's last session drops, by upstream design, so a standing
 supervisor ([T6](test-6-relay-resilience.md)). On moq
 0.14.0, **`--linger` lets it wait instead**: it resumed in-process, continuity-clean, across a relay
 restart (a 12.13 s gap for a 3 s outage) and across 24 resumes over a publisher's clean end or
-crash, each resume flagging the PCR discontinuity one to four times at the default `--max-age 500ms`
-(P1, file domain, loopback, one relay, one run
-per arm; [T13](test-13-downstream-grooming.md) § *Liveness*). **On later October 2026 `main`
+crash (P1, file domain, loopback, one relay, one run per arm;
+[T13](test-13-downstream-grooming.md) § *Liveness*); the fixed-delay export flags each resume once
+([T47](test-47-fixed-delay-export.md); the same rig, one run per build). **On later October 2026 `main`
 the linger covers one publisher instance, and following any other is an explicit programme switch**
 (`--stitch`: a new PMT, the break flagged on every PID). Without it a replacement ends the export at
 once (7 of 7 runs, either protocol). With it the export resumed at every replacement in 6 of 7,

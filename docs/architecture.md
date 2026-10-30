@@ -699,15 +699,15 @@ this away in exchange for verbatim carriage.
 **This is an available mechanism and not a measured behaviour, and what the lane does today is
 coarser.** Under congestion it sheds **whole groups** that missed the subscriber's release deadline,
 which is not selective by track and does not preferentially preserve the primary programme; the
-degradation is in *time*, uniformly across the mux ([Evidence](../lab/evidence.md) §3.3). Two measured
-consequences bound how much comfort to take from this section. That the process doing the shedding
+degradation is in *time*, uniformly across the mux ([Evidence](../lab/evidence.md) §3.3). One measured
+consequence bounds how much comfort to take from this section. That the process doing the shedding
 survives it is not established: with its media and catalog consumers both skipping a superseded
 group none of ten exited, consistent with survival at too low an event rate to establish it
 ([Evidence](../lab/evidence.md) §3.15), and without `--linger` it exits when its session drops (§8.4). A
-subscriber that exits is off air rather than degraded. And where the
-subscriber's budget is widened so that groups are recovered instead of shed, the lane absorbs the
-impairment as a **permanent step in delivery latency** rather than as lost media, which is a
-different failure and not obviously the better one for a route with a fixed playout schedule. **No
+subscriber that exits is off air rather than degraded. Widening the subscriber's budget to recover
+groups rather than shed them is paid in latency set in advance, not in a step the impairment leaves:
+the fixed-delay export's latency is back within 100 ms after every outage measured
+([Evidence](../lab/evidence.md) §3.3). **No
 priority-ordered shedding policy has been built or graded here**; treating graceful degradation as a
 property of the lane rather than as work still to do would overstate it.
 
@@ -913,9 +913,8 @@ linear in subscribers and is the line that dominates a real bill** ([Economics](
 
 Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill — recovery
 **automatic and bounded, not hitless**. The subscriber's exporter exits at the session drop unless
-run with `--linger`, which from moq 0.14.0 carries it across a relay restart in the same process,
-flagging each resume on the PCR PID, up to four times per resume at the default `--max-age` and once
-at 2 s ([Evidence](../lab/evidence.md) §3.4). The linger covers one publisher instance: a replacement,
+run with `--linger`, which from moq 0.14.0 carries it across a relay restart in the same process;
+the fixed-delay export flags each resume once on the PCR PID ([Evidence](../lab/evidence.md) §3.4). The linger covers one publisher instance: a replacement,
 whether a crash's or a clean restart's, is followed only under `--stitch`, as a programme switch with
 a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out a dead session. One
 replacement in seven still ended the export, so a supervisor stays as a backstop, and the edge stage
