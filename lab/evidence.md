@@ -90,7 +90,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
 | **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish costs 2.8–3.8 s of programme per step and is not hitless for a 1+1 pair; late October 2026 `main` republishes in the import, at 1.4–1.6 s an encoder switch. **A real feed steps back** where its contribution switches between unlocked encodes, unflagged, ending both legs at once; a subscriber lost 9.8 s | Why the other five diverge; how often other contributions switch so; a 1+1 ingest pair across the import's restart | §3.13 |
 | **Interop** | The opaque lane crosses seven of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix; OpenMOQ's moq5 and `moq-dev` carry each other's TS byte-exact, neither catalog finding the other's track | Why three relays never start a late subscriber | §3.7 |
-| **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
+| **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s, 86 s at a CDN | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 109 ms against SRT's 1,618 and segmented HTTP's 4,067. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 9,286 ms**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export, which sends ahead within the delay | Camera-to-display; lossy or long paths; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
 
 ---
@@ -159,7 +159,8 @@ multiplex crosses it unaltered, and the groomer too** ([T66](test-66-scrambled-c
 P2, upstream `main`, October 2026, loopback, one clip, one graded run): under DVB-CISSA with rotating
 control words, every scrambled packet, CAT, ECM and EMM arrives in order, and a descrambler
 before the groomer returns the clear source; the media-aware import refuses every scrambled unit and
-announces no broadcast. No key ladder ran.
+announces no broadcast. TSDuck's HLS packager carries it only without `--intra-close`
+([T69](test-69-segmented-access-and-scrambling.md), P1 and P2). No key ladder ran.
 
 ### 3.2 What does delivery do to the clock, and can it be repaired? — Yes, on both lanes and on the wire in software; the wire is not the file, and on the media-aware lane the repair costs latency
 
@@ -617,7 +618,7 @@ Apple's `mediastreamsegmenter` emits conformant low-latency playlists of MPEG-TS
 free and first time ([T14](test-14-data-plane-comparison.md)). **Both freely available clients
 that turn HLS back into a transport stream fetched zero parts and made zero blocking reloads**, against a
 static origin and Apple's own low-latency origin, while Apple's validator fetched 17–21 parts over the
-same origins, so the gap is in the clients. TSDuck cannot see parts at all, and FFmpeg's demuxer exposes
+same origins, so the gap is in the clients. TSDuck cannot see parts, and FFmpeg's demuxer exposes
 no option for them. With parts, the median burst falls only from 2.95 MB to ~2.3 MB. **The practical
 envelope for TS-in-HLS remains nearer 6 s than the 2–5 s the hold-back arithmetic implies, and the
 reason is a market**: the missing stage is the receive stage commercial ABR-to-TS products sell.
@@ -632,33 +633,33 @@ disable it, and the revocable unit is the signing key, so provision one key per 
 [T38](test-38-entitlement-estate.md), P2): eight refusing arms each delivered zero payload bytes
 at the receiving endpoint, path matching is segment-aware, each affiliate is announced only what it
 licenses, and seven credentials against four channels gave twenty-eight correct cells. One refusal path
-leaves no relay log line, so a log-based audit would read nothing. **A warning**: on the build
+leaves no relay log line. **A warning**: on the build
 measured, with client-certificate authentication configured, a valid certificate and no token was
 served every channel, another broadcaster's included (upstream's redesign since:
 [Control](../docs/control-plane.md) §3).
 
-**Revocation is a poll** ([T37](test-37-entitlement-revocation.md), P2): `max-age=0` — what an
-operator writes meaning "ask every time" — a sub-second `max-age`, and an omitted `Cache-Control`
-each disable revalidation without warning, leaving token expiry (honoured within 0.110 s) as the only
+**Revocation is a poll** ([T37](test-37-entitlement-revocation.md), P2): `max-age=0`, a sub-second
+`max-age` and an omitted `Cache-Control` each disable revalidation without warning, leaving token expiry (honoured within 0.110 s) as the only
 bound; an authorization outage is tolerated for an hour by default. With several sessions live,
 re-checks are served from a shared cache and the *measured* worst case is **1.54 cadences**, against
 two *specified*; with a one-second cadence floor, **the best achievable worst case is about 1.7 s
 measured and 2.11 s as documented**, so [Control](../docs/control-plane.md) §8's sub-second target
 cannot be met. **The revocable unit is the key**: withdrawing one of two channels sharing a key took
 the kept channel down for 2.78 s, and under a key per channel it was untouched. **Holding a key per
-channel costs nothing** ([T38](test-38-entitlement-estate.md) § *The estate behind an auth server*;
+channel costs nothing** ([T38](test-38-entitlement-estate.md);
 P1, one host, one sample per rung, October 2026 `main`): from 10 to 20,000 keys the auth server's
-memory showed no trend and admission stayed within one 50 ms poll, since it reads the key a token
-names when asked. A key written admits at once; a key deleted refuses the next session, not one
+memory showed no trend and admission stayed within one 50 ms poll. A key written admits at once; a key deleted refuses the next session, not one
 admitted. Authorization adds nothing to the per-subscriber CPU slope at a ten-second cadence and
 27 % at one second.
+
+**Behind a CDN, revocation took a median 24–28 s, at worst 86 s**
+([T69](test-69-segmented-access-and-scrambling.md); CloudFront, two PoPs, ten trials).
 
 **Across two implementations enforcement transfers and the token does not**
 ([T53](test-53-token-interop.md), P2, loopback, one release of each relay, drafts 16 and 18):
 `moq-relay` and moqx both refused everything outside a grant before any payload byte and matched on
 path segments, but neither client carried the other relay's token end to end. moqx's keys verify
-grants on any namespace of their service, its announcements follow a separate discovery grant, and on
-v0.3.6 a live session outlives its token's expiry and a key is withdrawn only by a restart that ends
+grants on any namespace of their service, and on v0.3.6 a live session outlives its token's expiry and a key is withdrawn only by a restart that ends
 every session. **Unmeasured**: a mesh, a real rights system in place of the stub, and rights windows.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 15× where nothing is conformant, and by 3.8× over the other Internet-native plane where both are

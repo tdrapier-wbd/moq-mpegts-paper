@@ -256,7 +256,7 @@ the one cited showed it lacks, and what closing the gap takes.
 | Rebuild cadence | `mpegts-pacer`, adaptive; `--stream-clock` for 1+1 | the cap drops a post-stall catch-up burst (*Results*, frozen playlist) | B-8 paces its catch-up, or the cap is set from the window (P1-ag) | none |
 | Monitor the TS | `tsp -P influx` (TR 101 290 counters, PCR and PTS, bitrate per PID or service, to InfluxDB), `-P analyze`, `-P continuity`; the campaign's liveness probe | they grade continuity and PCR, not the programme timeline: a silent time jump shows at most as continuity errors, which benign cells raise too (Cell 5) | the timeline oracle's rule, run live | none |
 | Select between legs | ST 2022-7 on two groomed legs ([T12](test-12-dual-path-handoff.md)); `tsswitch` for a marked switch | — | — | none |
-| Scramble | `-P scrambler` / `-P descrambler`, DVB-CSA2 with a fixed control word | BISS-CA is absent; `-O hls` cannot find intra pictures in a scrambled stream and cuts at a later PES | P1-al measures the cost | none for P1-al |
+| Scramble | `-P scrambler` / `-P descrambler`, DVB-CSA2 with a fixed control word | BISS-CA is absent; `-O hls --intra-close` publishes no segment of a scrambled stream until its input ends | `-O hls` without it, which cuts at PES starts ([T69](test-69-segmented-access-and-scrambling.md)) | none |
 | Entitle | a CloudFront Function validating a CAT; `tsp --headers` for a token that outlives the session | renewal | in B-8 | B-7 |
 
 **B-8, specified.** Grown from `t6-hls-pull.py`, which already holds the playlist loop, URI
