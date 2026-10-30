@@ -378,8 +378,8 @@ races the cut: on later October 2026 `main` two runs of three kept the stalled l
 | Question | Media-aware lane | Segmented lane |
 |---|---|---|
 | Serving node dies and returns | resumes across a **content hole** | **loses no content** — backlog refetched from the store |
-| 1+1 source failover, hard kill | in the relay one idle timeout or more (~30 s at the former 30 s default, ~11 s at 10 s); hitless unreachable by reselection | **no measurable interruption**, 3/3 runs |
-| Source exits gracefully | **not reliably failed over** before the epoch; on current `main` a marked switch | hitless; `EXT-X-ENDLIST` visible for 1.10 s |
+| 1+1 source failover, hard kill | in the relay one idle timeout or more (~11 s at 10 s); hitless unreachable by reselection | **no measurable interruption**, 3/3 runs |
+| Source exits gracefully | on current `main` a marked switch | hitless; `EXT-X-ENDLIST` visible for 1.10 s |
 | A misconfigured pair | refused, both torn down | **accepted silently** — ±20 s of repeated and skipped time, at 0 continuity errors |
 
 The hitless result is a protocol result: **neither TSDuck's HLS input nor FFmpeg's demuxer survives an origin restart**; a
