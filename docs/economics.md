@@ -188,10 +188,9 @@ a *hypothetical* 95 % discount off first-tier list moves parity only from ~19 to
 ### 4.3 Owning the egress
 
 Not buying metered egress at all is the largest structural lever. An owned or co-located relay fleet pays
-for transit, ports and facilities, none of it metered per gigabyte. §4.2's *illustrative* build-up,
-loaded with facilities, hardware and transit diversity, puts that at **$0.001–0.004/GB**, about tenfold
-below list egress. It is the figure here to **distrust most**, because its facilities and hardware
-inputs are assumptions rather than quotes.
+for transit, ports and facilities, none of it metered per gigabyte, at §4.2's *illustrative*
+$0.001–0.004/GB: the figure here to **distrust most**, because its facilities and hardware inputs are
+assumptions rather than quotes.
 
 An open-source relay and a standardised protocol lower the cost of entry against the SRT era, and
 because a relay is a cache (§4.6) the operational shape is familiar. The caveats are that it trades
@@ -234,11 +233,6 @@ the conformance of the same bytes.** Held at TR 101 290 P1/P2 conformance the or
 2,447 ms, segmented HTTP 9,324 ms, and the transparent tunnels at whatever jitter buffer the operator
 sets — 1,623 ms at 1 s — since their egress carries the source's own conformant grid ungroomed.
 No sub-second configuration has been measured conformant on MoQ (§4.6). These are delivery figures, not camera-to-display.*
-
-**No option breaks last-mile linearity.** A relay is a cache (§4.6): upstream traffic collapses to one
-copy, and the last mile stays N unicast copies. A CDN brings a **price**, not a topology: commodity
-delivery at $0.005–0.010/GB against $0.09 for cloud egress, and a MoQ relay from two suppliers at four to
-ten times commodity today.
 
 ### 4.5 Where relay fan-out changes the bill, and where it does not
 
@@ -403,16 +397,10 @@ fanned out by a CDN.
 
 ### 7.1 Transport choice determines build-or-rent options
 
-Data-plane choice largely sets the options, for the relay-as-cache reason in §4.6:
-
-| Data plane | Can you rent the fan-out? | From how many suppliers |
-|---|---|---|
-| Segmented HTTP | yes, and it is a commodity | a dozen, at published rates |
-| MoQ | yes | **two**, at 4–10× commodity |
-| SRT / RIST | not to the destination — CDNs take it at the door as contribution ingest | you, or a managed media service at per-flow premium |
-
-So SRT means owning the replication, segmented HTTP means it *can* be rented cheaply, and MoQ today means
-building it or renting from one of two premium suppliers (§4.6).
+Data-plane choice largely sets the options, for the relay-as-cache reason in §4.6, whose table prices
+them: SRT or RIST means owning the replication, since CDNs take it only as contribution ingest;
+segmented HTTP means it *can* be rented from a dozen suppliers at commodity rates; and MoQ today means
+building it or renting from one of **two**, at four to ten times commodity.
 
 ### 7.2 What renting transfers (§1)
 
@@ -515,7 +503,7 @@ staffed from the same place.
 ### 8.4 Where that leaves the value, including one correction
 
 - **Infrastructure providers — CDNs and hyperscalers — capture the durable value.** They sell fungible
-  capacity per unit, the one input nobody self-supplies past a certain reach, and §4 puts it at roughly
+  capacity per unit, the one input nobody self-supplies past a certain reach, and §1 puts it at roughly
   90 % of a self-built transport bill. The caveat is §4.6's: for MoQ the market premise the buyer
   relies on is not yet met.
 - **Control-plane vendors have a real market, and it is not the giants.** A smaller organisation has
@@ -598,5 +586,4 @@ fund alone, as the relay-interop work above is not.
   the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a
   property of the design or of the QUIC stack is open.
 - **How much of the operational-saving hypothesis survives running an immature platform to a
-  broadcast SLA?** One on-call engineer outweighs the entire modelled transport line at single-route
-  scale.
+  broadcast SLA?** Staffing already outweighs the modelled transport line at single-route scale (§2).

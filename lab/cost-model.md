@@ -353,7 +353,7 @@ transport on the list has a fan-out advantage over another. What differs between
 the operator charges, not the topology — which is why §4's ladder, not §8's mechanism, is where the
 fan-out case is won or lost.
 
-## 9. The carriage difference, priced — and it favours MoQ
+## 9. The carriage difference, priced — and it is the source's stuffing
 
 MoQ's 0.982x against SRT's 1.037x is a **5.3 % lower wire rate for the same service**, on the line
 that dominates, because the media-aware lane declines to carry null stuffing a byte pipe cannot
