@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # T30 Cell 2 from the laptop (lab/test-30-segmented-distributed-resilience.md): packager A on one
 # host and packager B on another write one NFS-exported namespace on a third, the store host, which
-# also runs the origin; the receiver runs on B's host. One source on A's host feeds A over loopback
+# also runs the origin; the receiver runs on HOST_R. One source on A's host feeds A over loopback
 # multicast and B by a unicast copy, and both packagers start before it.
 #
 #   t30-cell2.sh setup | teardown
@@ -12,12 +12,14 @@
 #                                    T_END s; kill-a and kill-b SIGKILL a packager, partition drops
 #                                    A's NFS traffic for PARTITION_S s
 #
-# Env: HOST_A, HOST_B, HOST_S (ssh aliases), IP_A, IP_B, IP_S (private addresses, required),
-#      T_EVENT (40), T_END (100), PARTITION_S (10), CAL_S (40). Records: ~/t30c2runs/<run>/.
+# Env: HOST_A, HOST_B, HOST_S, HOST_R (ssh aliases; HOST_R is A's or B's, default B's), IP_A, IP_B,
+#      IP_S (private addresses, required), T_EVENT (40), T_END (100), PARTITION_S (10), CAL_S (40).
+#      Records: ~/t30c2runs/<run>/.
 set -u
 HOST_A=${HOST_A:-moq-primary}
 HOST_B=${HOST_B:-moq-secondary}
 HOST_S=${HOST_S:-moq-tertiary}
+HOST_R=${HOST_R:-$HOST_B}
 IP_A=${IP_A:?set IP_A} IP_B=${IP_B:?set IP_B} IP_S=${IP_S:?set IP_S}
 T_EVENT=${T_EVENT:-40}
 T_END=${T_END:-100}
@@ -130,7 +132,7 @@ EOF
 fi
 
 URL="http://$IP_S:18300/index.m3u8"
-h "$HOST_B" "cd $R; T_EVENT=$T_EVENT T_END=$T_END nohup setsid bash ~/t30c2/scripts/t30-cell2-host.sh recv ~/$R $URL > recv.out 2>&1 < /dev/null & echo \$! > ~/$R/recv.pid"
+h "$HOST_R" "cd $R; T_EVENT=$T_EVENT T_END=$T_END nohup setsid bash ~/t30c2/scripts/t30-cell2-host.sh recv ~/$R $URL > recv.out 2>&1 < /dev/null & echo \$! > ~/$R/recv.pid"
 T0=$(now)
 ev recv-start
 at() { python3 -c "import time; time.sleep(max(0.0, $T0 + $1 - time.time()))"; }
@@ -160,13 +162,13 @@ partition)
 esac
 at "$T_END"
 for _ in $(seq 1 60); do
-	h "$HOST_B" "test -f $R/recv.done" && break
+	h "$HOST_R" "test -f $R/recv.done" && break
 	sleep 3
 done
 ev recv-done
 stop_all
 trap - EXIT
-h "$HOST_B" "cat $R/result.txt" | tee "$L/result.txt"
+h "$HOST_R" "cat $R/result.txt" | tee "$L/result.txt"
 fetch() { # fetch <host> <file under the run>...
 	local host=$1 f
 	shift
@@ -174,8 +176,9 @@ fetch() { # fetch <host> <file under the run>...
 		$TO 60 scp -q -o "ControlPath=/tmp/t30c2-%r@%h" "$host:$R/$f" "$L/" 2>/dev/null
 	done
 }
-fetch "$HOST_B" pull.log pull.out pacer.log sizes.csv content.json timeline.json shelf.log pack-B.log
+fetch "$HOST_R" pull.log pull.out pacer.log sizes.csv content.json timeline.json shelf.log
 fetch "$HOST_S" playlist.csv ngx/access.log
 fetch "$HOST_A" pack-A.log source.log
-h "$HOST_B" "rm -f $R/groomed.ts $R/raw.ts $R/shelf.ts"
+fetch "$HOST_B" pack-B.log
+h "$HOST_R" "rm -f $R/groomed.ts $R/raw.ts $R/shelf.ts"
 cat "$L/origin.txt"
