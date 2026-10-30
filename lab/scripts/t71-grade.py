@@ -14,7 +14,7 @@
     byte-faithful lanes ts-passthrough-identity.py against the clip;
   - with --tstd, the buffer model: ts-tstd.py --skip 8, pass when it exits 0.
 
-Usage: t71-grade.py <cell-dir> --lane srt|opaque|aware [--clip PATH] [--tstd] [--scripts DIR]
+Usage: t71-grade.py <cell-dir> --lane srt|opaque|aware|seg [--clip PATH] [--tstd] [--scripts DIR]
 """
 
 import argparse
@@ -93,7 +93,12 @@ def impairment(cell):
 		kv = dict(re.findall(r"(\w+)=(\S+)", open(os.path.join(cell, "impair.txt")).read()))
 	except OSError:
 		return dict(error="no counters")
-	out = dict(commanded_pct=float(kv.get("loss", "nan")), gro=kv.get("gro"))
+	loss = kv.get("loss", "nan")
+	if loss.startswith("ge:"):
+		p, r = (float(x) for x in loss[3:].split(","))
+		out = dict(commanded_pct=round(100 * p / (p + r), 3), model=loss, gro=kv.get("gro"))
+	else:
+		out = dict(commanded_pct=float(loss), gro=kv.get("gro"))
 	for d in ("in", "out"):
 		try:
 			s, x = int(kv[f"{d}_sent"]), int(kv[f"{d}_dropped"])
@@ -200,10 +205,28 @@ def receiver(cell):
 	return out
 
 
+def segmented(cell):
+	"""The segmented lane's receiver and groomer: fetches, retries, abandoned segments, playlist
+	skips and failures (b8-hls-recv.py's log), and the groomer's stalls."""
+	out = {}
+	try:
+		for line in open(os.path.join(cell, "recv.jsonl")):
+			ev = json.loads(line).get("ev")
+			if ev in ("seg", "seg-retry", "seg-lost", "msn-skip", "pl-fail"):
+				out[ev] = out.get(ev, 0) + 1
+	except (OSError, ValueError):
+		out["error"] = "no receiver log"
+	try:
+		out["stalls"] = open(os.path.join(cell, "pacer.log")).read().count("SOURCE STALLED")
+	except OSError:
+		out["stalls"] = None
+	return out
+
+
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("cell")
-	ap.add_argument("--lane", required=True, choices=("srt", "opaque", "aware"))
+	ap.add_argument("--lane", required=True, choices=("srt", "opaque", "aware", "seg"))
 	ap.add_argument("--clip", default=os.path.expanduser("~/contrib-10m.ts"))
 	ap.add_argument("--tstd", action="store_true")
 	ap.add_argument("--scripts", default=os.path.dirname(os.path.abspath(__file__)))
@@ -217,6 +240,8 @@ def main():
 	out["content"] = content(a.cell, a.scripts)
 	if a.lane in ("srt", "opaque"):
 		out["identity"] = identity(a.cell, a.scripts, a.clip)
+	if a.lane == "seg":
+		out["segmented"] = segmented(a.cell)
 	if a.tstd:
 		out["tstd"] = tstd(a.cell, a.scripts)
 	json.dump(out, open(os.path.join(a.cell, "grade.json"), "w"), indent=1)

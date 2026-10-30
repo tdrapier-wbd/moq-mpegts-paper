@@ -3,12 +3,12 @@
 # standing units, which it leaves alone.
 #
 #   t71-origin.sh relay-up <dir> | relay-down <dir> | clock-up <dir> | clock-down <dir>
-#   t71-origin.sh start <cell-dir> <srt|opaque|aware> <seconds> <broadcast> | stop <cell-dir>
+#   t71-origin.sh start <cell-dir> <srt|opaque|aware|seg> <seconds> <broadcast> | stop <cell-dir>
 #
 # The source is the clip from its start, paced by `tsp -P regulate` and tapped by a mirrored fork in
 # the same process as the transmitter: an inline tap between pacing and an SRT sender cost that lane
 # seconds and thousands of continuity errors (T28). On the MoQ lanes the transmitter is the pipe into
-# `moq import ts`.
+# `moq import ts`; on the segmented lane (T73) a loopback multicast group read by the segmenter.
 #
 # Every stage starts in its own session, with all three streams redirected so the ssh that started it
 # returns, and stops by the process group recorded in <dir>/<role>.pgid, never by a name pattern: the
@@ -16,7 +16,8 @@
 # bounds each stage; an inner one would move its children out of the recorded group.
 #
 # Env: BIN (~/bin-66af7231), CLIP (~/contrib-10m.ts), RELAY_PORT (4711), SRT_PORT (9711),
-# CLOCK_PORT (9710), CC (delay), BUFMS (1000), VPID (111), CLOCK_LIFETIME (14400 s)
+# CLOCK_PORT (9710), CC (delay), BUFMS (1000), VPID (111), CLOCK_LIFETIME (14400 s), SEG_PORT
+# (18731), SEG_GROUP (239.255.0.73:5073)
 set -euo pipefail
 
 ACTION=${1:?action}
@@ -30,6 +31,8 @@ CLOCK_PORT=${CLOCK_PORT:-9710}
 CC=${CC:-delay}
 BUFMS=${BUFMS:-1000}
 VPID=${VPID:-111}
+SEG_PORT=${SEG_PORT:-18731}
+SEG_GROUP=${SEG_GROUP:-239.255.0.73:5073}
 
 mkdir -p "$DIR"
 DIR=$(cd "$DIR" && pwd)
@@ -104,13 +107,54 @@ start)
 			"${left[@]}" "$BIN/moq" --connect-tls-insecure --connect "https://127.0.0.1:$RELAY_PORT/anon" \
 			--connect-websocket-enabled=false --broadcast "$BCAST" "${imp[@]}"
 		;;
+	seg)
+		# T70's chain at 1 s epochs: the paced clip to a loopback group, the epoch segmenter, and
+		# an nginx of the cell's own on SEG_PORT, each its own session.
+		mkdir -p "$DIR/www/hls" "$DIR/ngx/tmp"
+		launch segmenter timeout "$RUN" nice -n 10 python3 "$SCRIPTS/t61-epochseg.py" "$DIR/www/hls" \
+			--group "$SEG_GROUP" --duration 1 --window 6 --extra 3 --target 2 --pdt
+		launch source timeout "$RUN" "${pace[@]}" -O ip "$SEG_GROUP" --local-address 127.0.0.1 --enforce-burst
+		cat >"$DIR/ngx/nginx.conf" <<-EOF
+			daemon off;
+			master_process off;
+			worker_processes 1;
+			pid ngx.pid;
+			error_log error.log info;
+			events { worker_connections 64; }
+			http {
+				types { application/vnd.apple.mpegurl m3u8; video/mp2t ts; }
+				log_format t73 '\$msec \$status \$body_bytes_sent \$request_time';
+				access_log access.log t73;
+				client_body_temp_path tmp/body;
+				proxy_temp_path tmp/proxy;
+				fastcgi_temp_path tmp/fastcgi;
+				uwsgi_temp_path tmp/uwsgi;
+				scgi_temp_path tmp/scgi;
+				sendfile on;
+				keepalive_timeout 300s;
+				keepalive_requests 100000;
+				server {
+					listen 0.0.0.0:$SEG_PORT;
+					root $DIR/www;
+					location ~ \.m3u8\$ { add_header Cache-Control "max-age=1" always; }
+					location ~ \.ts\$ { add_header Cache-Control "max-age=60" always; }
+				}
+			}
+		EOF
+		launch nginx timeout "$RUN" nginx -p "$DIR/ngx" -c "$DIR/ngx/nginx.conf" -e "$DIR/ngx/error.log"
+		;;
 	*)
 		echo "unknown lane: $LANE" >&2
 		exit 2
 		;;
 	esac
 	;;
-stop) halt source ;;
+stop)
+	halt source
+	halt segmenter
+	halt nginx
+	rm -rf "$DIR/www"
+	;;
 *)
 	echo "unknown action: $ACTION" >&2
 	exit 2

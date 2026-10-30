@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # T71: one cell, driven from the workstation across both hosts.
 #
-#   ORIGIN_IP=<addr> ORIGIN=<ssh alias> FAR=<ssh alias> t71-cell.sh <cell> <srt|opaque|aware> <loss-%> [seconds]
+#   [BUFMS=1000 DELAY=1s] ORIGIN_IP=<addr> ORIGIN=<ssh alias> FAR=<ssh alias> \
+#     t71-cell.sh <cell> <srt|opaque|aware|seg> <loss> [seconds]
+#
+# BUFMS is SRT's latency and the segmented lane's cushion, DELAY the MoQ export's; <loss> is a
+# percentage, or ge:<p>,<r> for t71-far.sh's Gilbert model.
 #
 # The impairment, both clocks, the origin's source, the receive stage for <seconds>, both clocks
 # again, the source stopped, netem's counters read and the impairment cleared; then the origin's
@@ -21,7 +25,10 @@ FAR=${FAR:?set FAR to the receiver host ssh alias}
 LOG=${LOG:-$HOME/t71runs}
 TO=${TO:-$(command -v gtimeout || command -v timeout)}
 R=t71/runs/$CELL
-FENV="ORIGIN_IP=$ORIGIN_IP"
+BUFMS=${BUFMS:-1000}
+DELAY=${DELAY:-1s}
+FENV="ORIGIN_IP=$ORIGIN_IP BUFMS=$BUFMS DELAY=$DELAY"
+OENV="BUFMS=$BUFMS"
 BCAST="t71.$CELL.$(date +%s)"
 mkdir -p "$LOG/$CELL"
 
@@ -51,10 +58,10 @@ on "$ORIGIN" 30 "mkdir -p $R && cp t71/fix/relay-build.txt $R/ && { echo '== bef
 on "$FAR" 60 "$FENV bash t71/scripts/t71-far.sh clock $R before"
 
 step "source"
-on "$ORIGIN" 30 "bash t71/scripts/t71-origin.sh start $R $LANE $SECS $BCAST"
+on "$ORIGIN" 30 "$OENV bash t71/scripts/t71-origin.sh start $R $LANE $SECS $BCAST"
 
 step "receive"
-on "$FAR" "$((SECS + 60))" "$FENV bash t71/scripts/t71-far.sh recv $R $LANE $SECS $BCAST"
+on "$FAR" "$((SECS + 120))" "$FENV bash t71/scripts/t71-far.sh recv $R $LANE $SECS $BCAST"
 
 step "clocks after, stop, counters"
 on "$FAR" 60 "$FENV bash t71/scripts/t71-far.sh clock $R after"
@@ -63,13 +70,13 @@ on "$FAR" 30 "echo 'loss=$LOSS' > $R/impair.txt; sudo $FENV bash t71/scripts/t71
 on "$FAR" 30 "sudo $FENV bash t71/scripts/t71-far.sh clear"
 
 step "collect"
-on "$ORIGIN" 60 "tar -cf - -C $R source.csv clock-origin.txt relay-build.txt source.log" >"$LOG/$CELL/origin.tar"
+on "$ORIGIN" 60 "cd $R && tar -cf - source.csv clock-origin.txt relay-build.txt source.log \$(ls segmenter.log ngx/access.log 2>/dev/null)" >"$LOG/$CELL/origin.tar"
 tar -xf "$LOG/$CELL/origin.tar" -C "$LOG/$CELL"
 put "$FAR" "$R/origin.tar" "$LOG/$CELL/origin.tar"
-on "$FAR" 60 "tar -xf $R/origin.tar -C $R && rm $R/origin.tar && tar -cf - -C $R clock-far.txt impair.txt recv-events.log receive.log" |
+on "$FAR" 60 "tar -xf $R/origin.tar -C $R && rm $R/origin.tar && cd $R && tar -cf - clock-far.txt impair.txt recv-events.log receive.log \$(ls recv.jsonl recv.err pacer.log 2>/dev/null)" |
 	tar -xf - -C "$LOG/$CELL"
 rm "$LOG/$CELL/origin.tar"
-echo "lane=$LANE loss=$LOSS secs=$SECS broadcast=$BCAST" >"$LOG/$CELL/cell.txt"
+echo "lane=$LANE loss=$LOSS secs=$SECS bufms=$BUFMS delay=$DELAY broadcast=$BCAST" >"$LOG/$CELL/cell.txt"
 
 trap - EXIT
 step "done: $(on "$FAR" 30 "stat -c %s $R/egress.ts") egress bytes; $(grep -c . "$LOG/$CELL/source.csv") source rows; $(tr '\n' ' ' <"$LOG/$CELL/impair.txt")"
