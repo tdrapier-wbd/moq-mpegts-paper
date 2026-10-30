@@ -58,9 +58,31 @@ Two variants, because the deployed receivers and the measured design differ:
 - **Design:** hold 1.5 s and alignment 30 s, as T62 and T63 ran it; 150 s of legs.
 - **Default:** no hold and no alignment, as the standing receiver units start; 120 s of legs.
 
-**Part A.** Its rig is written before its pass: T28's SRT ladder's shaping on `t8b-netns.sh`, the
-packager on the host, nginx in the publisher namespace, receiver and groomer in the subscriber
-namespace.
+**Part A.** [`t68-netns-cell.sh`](scripts/t68-netns-cell.sh) runs one chain in T28's rig
+(`t8b-netns.sh`, 20 Mb/s `cake`, 100 ms RTT): source and packager on the host, nginx in the
+publisher namespace, receiver and groomer in the subscriber namespace, each shape on the media
+direction as T28 applied it. Video PTS is tapped at the source (mirrored) and at the groomer's output
+(inline) by `t18-latency.py`, T28's matching instrument. Design variant only, with the receiver's
+defaults (3 s socket timeout, a failing segment given up after 4 s). A cell's clock starts at the
+groomer's first output, after its alignment watch: 20 s clean, then the shape, and the receiver and
+groomer stop together at 60 s (outage) or 95 s (loss, reorder).
+[`t68-netns-drive.py`](scripts/t68-netns-drive.py) runs an arm (placement, controller, cushion): its
+control, three replicates of each shape replicate-major, then each cell conserved against the
+control at the groomer's output and at the receiver's.
+
+The hold is 2.5 s in both columns, set by the link rather than taken from the loopback design: at
+20 Mb/s a 2.84 s segment takes 1.4 s to cross, so 1.5 s cannot hold, and 2.5 s leaves the 5.91 s
+column its 3 s floor. The cushion then moves until criterion 9 holds. The rig check, an ungraded
+control at T28's placement on CUBIC, showed what the hold cannot cure. The receiver fetches one
+segment at a time: after a held segment it waits a poll and re-reads the playlist before the next
+fetch. So each 1.2 s segment, about 0.9 s to fetch, arrived 60–450 ms past its release whatever the
+hold, 21 of 47 segments in all. The cushion absorbed every one, and the control conserved to 0.0 s.
+Criterion 7's second half therefore fails at T28's placement, and its bias arm runs beside the
+T28-placement arms, not in their place: CUBIC with the whole RTT on the acknowledgement path, as
+T28's topology check ran it, at 5.91 s. It runs the outage and loss shapes only, because reorder
+needs a delay in front of the shaper. If a shape loses programme where the receiver gave a segment
+up or timed out, that shape is re-run at `--timeout 10 --give-up-ms 15000` (method notes § *A
+receiver's per-fetch timeout*).
 
 ## Pass criteria, fixed before running
 

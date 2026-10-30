@@ -259,10 +259,10 @@ def report(
 	if hits == 0:
 		sys.exit("report: no egress PTS matches the source within ±4 ticks")
 
-	# The receiver's clock reads `clock_offset` ahead of the origin's, so take it off
-	# the arrival side before differencing.
+	# `clock_offset` is the origin's clock ahead of the receiver's, as `clock-client`
+	# prints it, so the source stamps read that much late: add it back.
 	paired = [
-		(eg[p], (eg[p] - src[p + shift]) / 1e6 - clock_offset * 1e3) for p in eg if p + shift in src
+		(eg[p], (eg[p] - src[p + shift]) / 1e6 + clock_offset * 1e3) for p in eg if p + shift in src
 	]
 	paired.sort()
 	name = label or "arm"

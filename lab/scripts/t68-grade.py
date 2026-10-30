@@ -91,7 +91,7 @@ def content(run, chain, scripts):
 
 def freeze_detail(run, ev):
 	fz, th = ev["freeze-a"], ev["thaw-a"]
-	listings = [float(l.split()[0]) for l in open(os.path.join(run, "seg-a.log")) if " playlist " in l]
+	listings = [float(line.split()[0]) for line in open(os.path.join(run, "seg-a.log")) if " playlist " in line]
 	nxt = [t for t in listings if t > fz]
 	late = []
 	for line in open(os.path.join(run, "recv-a.jsonl")):
