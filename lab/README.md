@@ -270,15 +270,8 @@ awk -F, 'NR>1{cur=$7; if(prev!=""){d=(cur-prev)/27000; n++; sum+=d;
 
 ### macOS loopback gotchas (local runs)
 
-- **Take CLI flags from [`scripts/moq-cli-flags.sh`](scripts/moq-cli-flags.sh)**, not from memory:
-  `moq-dev`'s CLI was migrated, and the GSO, idle-timeout and TLS-fingerprint flags have different
-  names either side of it. `scripts/check-rigs.sh` fails the tree on a hard-coded renamed flag.
-- Disable UDP GSO on relay and clients, or QUIC handshakes time out on loopback. This understates
-  relay CPU by ~29 % ([T26](test-26-cross-host-fanout.md)), so no capacity figure should be quoted
-  from a GSO-disabled run.
+- Disable UDP GSO on relay and clients, or QUIC handshakes time out on loopback.
 - Connect over `https://` and pin the relay's certificate fingerprint explicitly; the `http://`
   fingerprint bootstrap is broken in recent builds.
-- Pace the input (`tsp … -P regulate`); an unpaced `import` hits stdin EOF and tears the session
-  down before the subscriber pulls.
 - Start the publisher before the subscriber, or subscribing to a not-yet-announced broadcast returns
   relay `code=4`.

@@ -716,7 +716,8 @@ below 85 % flagged an OOM-killed subscriber; watch `MemAvailable` directly.
 until the idle timeout, and a reused name attaches the next subscriber to it.
 
 **A file source feeding a live transport must be paced, with the reader attached first.** *(T4.)*
-Unpaced `tsp -I file` floods UDP and false-fails transports; use `-P regulate --pcr-synchronous`.
+Unpaced `tsp -I file` floods UDP and false-fails transports, and an unpaced `import` reaches EOF and
+ends the session before the subscriber pulls; use `-P regulate --pcr-synchronous`.
 
 **Never put `ffmpeg` in front of MoQ in a carriage path.** *(T3, T4.)* `ffmpeg -c copy -f mpegts` turned a
 13-PID slice into 5 renumbered PIDs; `tsp` is byte-identical. If ffmpeg must appear, declare it as a

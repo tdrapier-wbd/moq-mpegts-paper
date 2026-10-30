@@ -39,11 +39,8 @@ defined [below](#blocked-on-apparatus).
 | P2-e | Replicates for the segmented congestion rungs | — | Every segmented rung at three replicates (the MoQ rungs and the delay matrix are) | [T31](test-31-congestion-capacity-ladders.md) |
 | P2-i | T12's churn arms: the recovered-leg and late-join cells, with a grader | — (upstream's planned per-group counters would be a second subject) | Both cells graded against our keyframe-restart padding filter | [T12](test-12-dual-path-handoff.md) |
 
-**Open in the paper, with no experiment scheduled.** [Evidence](evidence.md) §5 rows 4 (a longer MoQ
-budget, or burst loss, on [T71](test-71-long-lossy-path.md)'s path), 10 (a third source profile) and
-12 (RIST against SRT on a real path)
-have no entry, and neither have the control
-strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions). Of the
+**Open in the paper, with no experiment scheduled:** the [Evidence](evidence.md) §5 rows no entry
+above names, and the control strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions). Of the
 deployment milestones ([lab README](README.md)), operations has P1-l and P2-a but nothing for NOC
 tooling or an SLA.
 
