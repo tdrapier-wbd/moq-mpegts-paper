@@ -661,7 +661,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Importer** | Both legs carry its broadcast, so both lose it. On current `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval at a hard kill, and 1.4–2.5 s of programme at a clean exit, with every demultiplexing exporter kept, in a mesh too. Earlier builds lost at least one idle timeout, and no takeover reached every subscriber in the mesh ([Evidence](../lab/evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
+| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval at a hard kill, and 1.4–2.5 s of programme at a clean exit, with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today) |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -918,9 +918,8 @@ should treat it as part of the egress, not as operations tooling.
 chain or external supervisor.
 
 **Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at
-10 s, the default from moq 0.14.0)** at a hard failure on every build measured. Earlier builds were
-**not reliable on a graceful exit**; on current `main` a takeover is a marked programme switch to
-the newest live importer, costing a decoder 1.4–2.5 s of programme at a clean exit
+10 s, the default from moq 0.14.0)** at a hard failure on every build measured. On October 2026 `main` a takeover is a marked programme
+switch to the newest live importer, costing a decoder 1.4–2.5 s of programme at a clean exit
 ([Evidence](../lab/evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).

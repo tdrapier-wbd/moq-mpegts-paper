@@ -11,10 +11,12 @@ distance to that frame is within three times the median of the pictures around i
 corrupt pictures are not; each is placed at its last packet's arrival.
 
 Per export and event: the *stall*, the longest gap between video packet arrivals; the *decoder
-hole*, the longest gap between good pictures, beside the same before the event; the *programme
-lost* (positive) or *repeated* (negative), the step in source frame less output picture across the
-event; the latency step; the switches the output marks (a PMT version change, the PIDs it leaves
-unflagged), from t6-switch-grade.py; the export's restarts; and audio's longest gap.
+hole*, the longest gap between good pictures, beside the same before the event; the *outage*, from
+the event's first gap over 0.5 s between good pictures to the first second of them with no such gap,
+which a blip of pictures inside a hole does not split; the *programme lost* (positive) or *repeated*
+(negative), the step in source frame less output picture across the outage; the latency step; the
+switches the output marks (a PMT version change, the PIDs it leaves unflagged), from
+t6-switch-grade.py; the export's restarts; and audio's longest gap.
 
 The select cell has no fault: the grader splices export 1 into export 2 and back every --select
 seconds, at packet boundaries by arrival, as a receiver's input select would, and grades each
@@ -262,14 +264,29 @@ def grade(run, name, ref, events, until, t0):
             hi = min(hi, times[e + 1] - 0.5)
         hole, _, back = longest(goods, te - 0.5, hi)
         back = back or te
+        # Output can resume in a blip, a few pictures, and stop again before it resumes for good:
+        # it has resumed at the first second of good pictures with no gap over 0.5 s.
+        sg = sorted(g for g in goods if back <= g < times[e + 1])
+        resume, i = back, 0
+        while i < len(sg):
+            j = i
+            while j + 1 < len(sg) and sg[j + 1] - sg[j] <= 0.5 and sg[j] - sg[i] < 1.0:
+                j += 1
+            if sg[j] - sg[i] >= 1.0:
+                resume = sg[i]
+                break
+            i = j + 1
+        sgo = sorted(goods)
+        gap0 = next((x for x, y in zip(sgo, sgo[1:]) if te - 0.5 <= x <= hi and y - x > 0.5), None)
         before = [k for k in range(n) if good[k] and max(settled, te - 10) <= arr[k] < te - 0.5]
-        stop = min([b2 for b2, a2 in zip(goods[1:], goods) if a2 > back and b2 - a2 > 0.5] + [back + 5.5])
-        after = [k for k in range(n) if good[k] and back + 0.2 <= arr[k] < stop]
+        stop = min([b2 for b2, a2 in zip(goods[1:], goods) if a2 > resume and b2 - a2 > 0.5] + [resume + 5.5])
+        after = [k for k in range(n) if good[k] and resume + 0.2 <= arr[k] < stop]
         row = {"export": name, "event": ev, "t": round(te - t0, 1),
                "stall_s": r3(longest(vt, te - 0.5, hi)[0]), "hole_s": r3(hole),
+               "outage_s": r3(resume - gap0) if gap0 is not None else None,
                "hole_before_s": r3(longest(goods, max(settled, te - 20), te - 1.5)[0]),
                "audio_gap_s": r3(longest(at, te - 0.5, hi)[0])}
-        settled = back + 0.5
+        settled = resume + 0.5
         if before and after:
             db = statistics.median(idx[k] - k for k in before)
             da = statistics.median(idx[k] - k for k in after)
@@ -348,7 +365,7 @@ def main():
     print("VOID: " + "; ".join(void) if void else "void checks: pass")
     for n, t in exits:
         print(f"  restart: {n} at {t - t0:.1f} s")
-    cols = ["export", "event", "t", "stall_s", "hole_s", "hole_before_s", "lost_s", "latency_step_s",
+    cols = ["export", "event", "t", "stall_s", "hole_s", "outage_s", "hole_before_s", "lost_s", "latency_step_s",
             "audio_gap_s", "bad_pictures", "switches"]
     print("\t".join(cols))
     for r in out["rows"]:

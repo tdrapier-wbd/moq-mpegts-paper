@@ -65,8 +65,7 @@ The campaign's measurement rules are in [`lab/method-notes.md`](method-notes.md)
 
 Seven rungs, cheapest and most decisive first: media round-trip fidelity; integration through a cloud
 relay; file-based conformance, which **does not prove hardware acceptance**; **hardware TR 101 290
-conformance, the decisive rung**; non-ideal-source robustness, which surfaced every media-aware import
-defect since fixed upstream; a redundancy drill; and the comparative lab against the alternative data
+conformance, the decisive rung**; non-ideal-source robustness; a redundancy drill; and the comparative lab against the alternative data
 plane and SRT. **Gate 1, media fidelity, is met at P1** (§3.1). **Gate 2, hardware conformance, is
 make-or-break and has not been attempted.** **Gate 3, resilience, is met in software against a
 reference receiver** (§3.4).
@@ -351,8 +350,7 @@ a standing egress keeps its supervisor as a backstop.
 **On the builds before the epoch, source failover across a relay mesh covered a hard kill of a
 common source, at least one QUIC idle timeout late** ([T6](test-6-relay-resilience.md); P1,
 two relays on one host): nothing downstream learns of a hard failure sooner (~30 s at those builds'
-30 s default, ~11 s at moq 0.14.0's 10 s), the standby relay's own subscribers were lost at its
-arrival or at the failover, and a graceful exit was never reliably failed over, because the relay
+30 s default, ~11 s at moq 0.14.0's 10 s), and a graceful exit was never reliably failed over, because the relay
 propagated completion. **Continuity-clean is not hitless**: the outage is a PCR/PTS discontinuity
 across a content hole.
 **On upstream's current model every importer takeover is a marked programme switch that the
@@ -364,7 +362,10 @@ version and a flag on every PID; a shared epoch is kept for replicas of one publ
 two importers on one relay or across a two-relay mesh, every exporter survived every event in 24
 runs: a hard kill of the serving importer cost 5.4–9.0 s of source time, about one detection
 interval, and a clean exit under 2 s, which a decoder sees as 1.4–2.5 s of programme at a 2 s export
-delay ([T56](test-56-media-aware-failover.md)); on moq-lite 07 a standby's start and each restart are switches of their own. With
+delay ([T56](test-56-media-aware-failover.md)). A standby's start and each restart are switches of their
+own, on either version. On later October 2026 `main` a switch keeps the export's delay: they lose no
+programme, and a hard kill loses its detection interval, 0.6–0.8 s at a 1 s idle timeout though a
+decoder shows 1.3 s, ending no export in 24. With
 `--passthrough`, which refuses `--stitch`, the serving importer's loss ends the exporter. One
 importer reaching the exporters through two relays, on moq-lite 07, survived the serving relay's
 loss with no error or flag, but skipped 7.02 s of programme in every run, at the default delay and at
@@ -419,8 +420,7 @@ groomer taking segments in at 12 MB/s left two trials of ten 86–87 ms apart. T
 receivers on two hosts add their clocks' offset, and a CDN failure is outside the design. **Damage in the feed reaches both pathways together** ([T62](test-62-origin-group-soak.md);
 72 h, one run): six continuity breaks withdrew both playlists until a window was whole, 54 s in
 all, the origins still byte-identical; elsewhere the merged wire kept continuity and 40 ms PCR
-repetition. After a splice the soaked groomer build, since fixed, left PTS 4.7 h from its PCR,
-invisible to PCR intervals.
+repetition.
 
 **On the media-aware lane the redundancy belongs at the receiver, and it is hitless**
 ([T12](test-12-dual-path-handoff.md), 42 cells, one run each). Two live legs into a reference
@@ -986,7 +986,7 @@ rebuild.
 | 5 | **Does a commercial ABR-to-TS receiver hand on the segments' packets, and produce P1/P2-conformant output?** | MEG- or TITAN-class hardware | Whether affiliates' own receivers can be the lane's receive stage ([Comparison](../docs/comparison.md) §4.4) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | The MPTS fixture through the campaign's CloudFront access | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
-| 8 | **How large is a media-aware failover as a decoder sees it, and can it be brought under a second?** A hard-killed importer costs about one detection interval, a marked switch, and detection is bounded by the QUIC idle timeout; the decoder's freeze is not measured, nor the relay-loss case on the build that fixed it (§3.4) | A decoder-graded failover run across idle timeouts | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |
+| 8 | **Can a media-aware failover be brought under a second as a decoder sees it?** Not at any idle timeout tried: at 1 s a hard kill loses under a second of programme and shows 1.3 s of hole; the relay-loss case is not re-measured on the build that fixed it (§3.4) | The 1 s kill on Linux; the relay cell on that build | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |

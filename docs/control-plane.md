@@ -78,12 +78,9 @@ being reachable at the moment of revocation**, or a control-plane outage would m
 impossible. §4 resolves this with short-lived tokens plus a re-check channel, so the worst case is
 bounded by token lifetime even if the re-check path is unavailable.
 
-> **Measured, and it holds by default — but it is a default, not a property of the design.** A
-> 150-second authorization-endpoint outage cost not one byte of established flow. Configure a
-> staleness window, however, and the relay begins closing established sessions when that window
-> lapses, **publishers included** — which trades this principle away in both directions
-> ([T37](../lab/test-37-entitlement-revocation.md), §4.2). Non-fate-sharing survives a control-plane
-> outage only if nobody has configured tolerance for one.
+> **Measured, and it holds by default — but it is a default, not a property of the design**: a
+> configured staleness window closes established sessions when it lapses, **publishers included**
+> ([T37](../lab/test-37-entitlement-revocation.md), §4.2).
 
 ---
 
@@ -583,12 +580,6 @@ survives an endpoint outage. A deployment must therefore **commit to an explicit
 `max-age`, assert it in deployment tests, and set `stale-if-error` explicitly if an hour of
 last-known-good service is not what it wants** (§4.1). Short token lifetimes remain the backstop that
 makes the silent-disable case survivable rather than unbounded.
-
-**The latency target is retired rather than restated.** The mechanism's period is integer
-delta-seconds with a one-second floor, so no configuration reaches sub-second — but a few seconds is
-acceptable for a primary broadcast feed, so there is no figure to commit to and no work outstanding.
-For any future case that *is* latency-sensitive, quote the multi-session measurement of §4.1
-([Evidence](../lab/evidence.md) §3.10, [T37](../lab/test-37-entitlement-revocation.md) D7).
 
 Every measurement boundary is the last byte the affiliate actually received, which is the figure that
 matters commercially, not teardown at the relay, which is the relay's account of itself.

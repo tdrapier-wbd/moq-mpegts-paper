@@ -411,6 +411,12 @@ instrument.
 *(T45.)* 550 ms failed worse than 500 ms because 1 % of its video arrived 199.5 ms late. Measure the lane
 in each run and report it beside the result.
 
+**Grade an outage to sustained recovery, not by its longest gap.** *(T56.)* After a hard kill an
+export resumed in a blip of pictures and paused again for about its delay: the longest gap between
+good pictures read 6.2 s where the outage was 8.7 s, and the window after it held no picture to
+measure the programme lost. End an outage at the first second of good pictures with no gap over
+0.5 s, and measure what was lost from there.
+
 ---
 
 ## 4. Attribution: naming a mechanism from the evidence
