@@ -82,7 +82,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Timing** | Grooming restores PCR repetition **on the wire** on both lanes; on the media-aware lane 0 of 20,193 intervals above 40 ms over 300 s, and 0 over 24.01 h crossing the 33-bit rollover. Buffer depth was never the variable | Hardware; arrival at an IRD-facing output; beyond a day; a real encoder's timeline | §3.2 |
 | **Buffer model** | **The media-aware lane's P1/P2-conformant wire fails the 13818-1 T-STD** on its packet order, on every build graded up to moq 0.13.0; the groomer cannot repair it, and a re-multiplexer does, live at 2,196.7 ms (moq 0.12.1, loopback). Upstream's fixed-delay export, merged on October 2026 `main`, keeps every track and buffer at 500 ms–1 s across hosts and at up to 2 % loss, its clock following a drifting source, but not over a whole capture at 500 ms; on arrivals its drift rate exceeds 0.075 Hz/s | Hardware; the re-multiplexer across hosts and for 1+1; another source profile | §3.16 |
 | **Loss** | The congestion controller decides the result on both Internet-native lanes, and reordering does not separate them once substrate-matched. No controller recommendation is supportable. **Matched on measured latency and graded on content, SRT loses less programme than the media-aware lane across an outage, a killed publisher and a relay restarted without its reset key**, by a margin the build and QUIC's recovery and idle timeout set, and in every random-loss and deep-reorder stress cell but 5 % reorder, which costs neither. A relay keeping its reset key costs it less, at unmatched latency | The trunking knee; a captured path; burst loss; SRT below 1 s under loss | §3.3 |
-| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. Multi-track legs of one broadcast merge on the media-aware lane only co-started, behind the fixed-delay export of October 2026 `main`, on one host or two; its opt-in `--sync` mode merged a late leg only where the source carries an H.264 HRD. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged; switched at the receiver between broadcasts, legs start and restart apart at no cost and a fault costs 0.8–2.9 s. The segmented lane is hitless with no merge, given one feed, one naming scheme and a common start: a later stock packager did not join, one naming segments by content time did; across hosts it needed more, and 5 co-starts of 23 missed it. Over CloudFront, two such origins in one origin group covered each failure of one pathway tested, and receivers at two edges released on the origin's program date-time started within 1.1 ms (unreleased, up to ±1.5 s) | A hardware merge; a switch that detects on content; a late leg on a source without an HRD; a cross-host pair beyond 120 s; receivers on two hosts; a failure of the CDN | §3.4 |
+| **Redundancy** | Stream-clocked groomers are byte-identical and hitless on **single-track** content with no shared component. Multi-track legs of one broadcast merge on the media-aware lane only co-started, behind the fixed-delay export of October 2026 `main`, on one host or two; its opt-in `--sync` mode merged a late leg only where the source carries an H.264 HRD. On the opaque lane a leg joining 8 s late merges. Relay source failover is not hitless on any build measured; on current `main` it is a marked programme switch, about one detection interval at a hard kill, and a relay lost under one importer skips 7 s unflagged; switched at the receiver between broadcasts, legs start and restart apart at no cost and a fault costs 0.8–2.9 s. The segmented lane is hitless with no merge, given one feed, one naming scheme and a common start; across hosts it needed more, and 5 co-starts of 23 missed it. Over CloudFront, two such origins in one origin group covered each failure of one pathway tested, and receivers at two edges released on the origin's program date-time started within 1.1 ms (unreleased, up to ±1.5 s) | A hardware merge; a switch that detects on content; a late leg on a source without an HRD; a cross-host pair beyond 120 s; receivers on two hosts; a failure of the CDN | §3.4 |
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on; through a CDN-hosted relay, 32 subscribers of a 25 Mb/s feed on the media-aware lane, and 16 for 72 h at about two skips an hour each | A third source; fan-out beyond one relay; the opaque lane through that relay | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
@@ -406,7 +406,8 @@ nothing. Each start fixes the skew, from −1.42 s to +1.47 s across runs, as ea
 on the live edge it first sees: two runs of seven fell within a Class C receiver's 450 ms, and
 outside it a struck leg the receiver was following cost a re-lock, a skip of up to 2.02 s or a
 repeat of 0.57 s. Through the outage CloudFront served the last playlist, failing no
-request, then skipped ten unseen segments.
+request, then skipped ten unseen segments. Four receivers at two edges cost the origin one fetch per
+segment per edge.
 
 **Inside one CDN the source protection can be the CDN's, and receivers released on the origin's
 clock start in phase** ([T61](test-61-origin-group-failover.md),
@@ -914,9 +915,8 @@ and `pcrverify` passed outputs with either, and only counting each PID's units a
 clock catches them ([T47](test-47-fixed-delay-export.md)).
 
 **Not established**: how a hardware IRD responds (**hardware: not run**); the re-multiplexer's clock
-recovery across hosts, and the stream-only schedule 1+1 needs (§3.4); another source profile; the
-decoded-picture buffer, which the grader does not model; and segmented HTTP's wire, *reasoned* to
-behave as SRT's.
+recovery across hosts, and the stream-only schedule 1+1 needs (§3.4); another source profile; and the
+decoded-picture buffer, which the grader does not model.
 
 ---
 
@@ -950,9 +950,9 @@ CloudFront, T59, T61 and T62 merged RTP legs, packetised by TSDuck or our groome
 exports are transport-stream identity, which ST 2022-7 needs and does not test. The ST 2022-7 oracle
 is self-tested ([T12](test-12-dual-path-handoff.md)) and not offered as reference-compliant.
 
-**Fan-out is one relay in one region**: cross-host at 0.72 ms RTT, and through one CDN-hosted relay
+**Fan-out is one relay in one region, or two CDN edges**: cross-host at 0.72 ms RTT, and through one CDN-hosted relay
 across the internet; no multi-hop tree or edge fleet, so it bounds relay capacity and says nothing
-about internet-scale fan-out (§3.6).
+about internet-scale fan-out (§3.4, §3.6).
 
 **The builds move faster than the evidence.** Most media-aware results were measured on September 2026
 builds, moq 0.10.0 to 0.13.0. Upstream `main` changed materially in October 2026 — a fixed-delay export
