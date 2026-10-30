@@ -309,14 +309,14 @@ exporter still exits once.
 **An impairment figure on this lane must name its shape, build and QUIC stack.**
 
 **The segmented lane on the same shapes** ([T28](test-28-failure-injection-matrix.md),
-[T31](test-31-congestion-capacity-ladders.md); P1, content-graded, one host). At loopback RTT it
-returns bytes identical to control under 5–10 % loss and a 5 s outage, and is bounded by the origin's
-retention: a 30 s outage costs 17.134 s. In the `netns`/`cake` rig at 100 ms RTT it loses less than the
-MoQ lane on every capacity rung (2.4 s against 13–18 s at 0.9× for 60 s) — **but not at equal latency**,
-running 21–22 s behind the live edge against MoQ's 2 s budget — and **under random loss it collapses**,
-completing no fetch after two segments at 5 %, because nginx's QUIC sender is loss-based (*reasoned*).
-"Loss is invisible" on this lane is a loopback result; the arm that would show it riding loss runs the
-origin with BBR.
+[T31](test-31-congestion-capacity-ladders.md), [T68](test-68-segmented-chain-cushion-faults.md); P1,
+content-graded, one host). At loopback RTT it returns control's bytes under 5–10 % loss and
+a 5 s outage, and is bounded by the origin's retention: a 30 s outage costs 17.134 s. **At 100 ms RTT
+the origin's controller decides.** Matched at 5.91 and 11.87 s, the current chain (groomer `97f3a38`) over HTTP/1.1 loses
+nothing under 5–20 % reorder on either controller, and under 5–10 % loss nothing on BBR, as SRT, but
+47–71 s of 95 on CUBIC, which holds each fetch near 1 Mb/s. A 5 s outage costs it 9.5–10.6 s at 5.91 s
+and nothing at 11.87 s. The first chain lost less than the MoQ lane on
+every capacity rung (2.4 s against 13–18 s at 0.9× for 60 s), 21–22 s behind the live edge.
 
 ### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane a pair started together needs none
 
@@ -990,7 +990,7 @@ rebuild.
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
-| 12 | **What does a CDN edge, or an origin whose sender ignores random loss, deliver under loss at 100 ms RTT?** (§3.3) | A run at 100 ms RTT through CloudFront, or the origin on BBR | The segmented lane's loss curve off loopback |
+| 12 | **What does a CDN edge deliver under loss at 100 ms RTT?** An origin on BBR loses nothing (§3.3) | A run at 100 ms RTT through CloudFront | The segmented lane's loss curve through a CDN |
 | 13 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 14 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
 | 15 | **What does a segmented origin cost at fan-out?** At two receivers no process takes over 6 % of a core, memory flat for 72 h ([T62](test-62-origin-group-soak.md)) | An origin under many edges | Its fan-out knee; the origin measured at load is `python3 -m http.server` |

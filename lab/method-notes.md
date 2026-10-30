@@ -610,9 +610,10 @@ delivered nothing where CUBIC delivered 55 s; in the `netns`/`cake` rig the cont
 beyond scatter.
 
 **A receiver's per-fetch timeout is a measurement parameter, and on an impaired lane it can be the whole
-result.** *(T28, T31.)* `curl --max-time` binds where one segment's goodput falls below its size over the
+result.** *(T28, T31, T68.)* `curl --max-time` binds where one segment's goodput falls below its size over the
 timeout; at 25 % reorder one cell read 4.0 % of control at 15 s and 25.4 % at 60 s. Quote the timeout and
-re-run impaired cells at a longer one.
+re-run impaired cells at a longer one, grading both: a longer one is not kinder to an outage, where 10 s
+instead of 3 s left a stalled fetch waiting past the link's return and lost 14.6–26.0 s against 9.5–10.6 s.
 
 **An origin or a receiver can be the bottleneck at the rig's RTT.** *(T31, T42.)* nginx's 64k
 `http3_stream_buffer_size` caps a stream near 4.6 Mb/s at 100 ms, and a `curl` per cycle restarts slow

@@ -1,11 +1,16 @@
 # Test 68 — The segmented chain's cushion, catch-up and path faults
 
-**State: parts B and C run, every criterion holds; part A not yet run.** Two independent chains of
+**State: run; every criterion holds but criterion 7's second half, which fails in every part A arm
+and is the receiver's, not the rig's.** Two independent chains of
 the current segmented design are byte-identical from a 3 s cushion with the receiver's hold and the
 groomer's alignment, and from 1.5 s with neither, against the 8 s the lane has used; the floor is
 set by how the epoch cuts the clip. A 10 s frozen playlist costs a leg what its cushion fails to
-cover, 2.44 s at 8 s and nothing at 10.5 s, and the groomer's cap never binds. Rig:
-[`t68-seg-pair.sh`](scripts/t68-seg-pair.sh), driven by [`t68-drive.py`](scripts/t68-drive.py).
+cover, 2.44 s at 8 s and nothing at 10.5 s, and the groomer's cap never binds. Under T28's path
+faults at matched latency the origin's controller decides: on BBR the chain loses nothing under loss
+or reorder, as SRT, and on CUBIC more than the MoQ lane; a 5 s outage costs 9.5–10.6 s at 5.91 s and
+nothing at 11.87 s. Rigs: [`t68-seg-pair.sh`](scripts/t68-seg-pair.sh), driven by
+[`t68-drive.py`](scripts/t68-drive.py) (B, C); [`t68-netns-cell.sh`](scripts/t68-netns-cell.sh), driven
+by [`t68-netns-drive.py`](scripts/t68-netns-drive.py) (A).
 
 ## Objective
 
@@ -191,6 +196,49 @@ No run dropped at the cap from first output to stop. The highest steady level wa
 at a 10.5 s cushion. The frozen leg's peak after its catch-up equalled the control leg's, because a
 segment released at its program date-time cannot arrive early.
 
+**Part A.** T28's rig at 20 Mb/s and 100 ms RTT, design variant behind a 2.5 s hold. Cushions of
+3.46 s and 9.42 s put every control at 5,909–5,911 ms and 11,870–11,871 ms. Median video lost at the
+groomer's output over three replicates, conserved against the control (the receiver's in brackets),
+beside T28's MoQ and SRT medians:
+
+| Shape | 5.91 s, CUBIC | 5.91 s, BBR | 5.91 s, CUBIC, RTT on the ack path | T28 MoQ / SRT, 5.91 s | 11.87 s, CUBIC | 11.87 s, BBR | T28 MoQ / SRT, 11.87 s |
+|---|---|---|---|---|---|---|---|
+| 5 s outage | 10.58 s (0.13) | — | 9.54 s (0.09) | 7.04 / 0.18 s | 0 (0.11) | — | 6.12 / 0 s |
+| 5 % loss | 62.88 s (32.24) | 0 | 59.56 s (32.22) | 31.28 / 0 s | 47.58 s (33.18) | 0 | 29.52 / 0 s |
+| 10 % loss | 71.18 s (34.01) | 0 | 61.52 s (32.22) | 37.76 / 0 s | 54.08 s (38.81) | 0 | 37.24 / 0 s |
+| 5 % reorder | 0 | 0 | — | 0 / 0 s | 0 | 0 | 0 / 0 s |
+| 20 % reorder | 0 | 0 | — | 36.76 / 0 s | 0 | 0 | 37.24 / 0 s |
+
+A 0 is a median replicate with no hole: in the 5.91 s arms such a cell conserves to −0.32 s, the
+control's own offset, and the receiver reads about 1.03 s in every 95 s cell, reorder included, which
+is the grader's window. One BBR replicate at 10 % loss and 5.91 s lost 1.28 s (four stalls). The
+outage ran on CUBIC alone (criterion 10 names loss and reorder), and the ack-path arm runs no reorder.
+
+On CUBIC, 5–10 % loss holds each fetch near 1 Mb/s. In a 5 % cell the receiver fetched two 3 MB
+segments in the shape's 40 s, taking 27 and 18 s, and skipped the 11 that had left the playlist;
+across the CUBIC loss cells the receiver lost 28.6–41.2 s. It came out of the shape about 10 s behind
+and, fetching one segment at a time, gained about 0.7 s a segment, so the groomer late-dropped and
+muted until near the window's end: one hole of about 61 s. On BBR the slowest fetches took 2.0–2.8 s
+at the 99th percentile, and the cushion absorbed them. In the outage the stalled playlist request
+failed at the 3 s timeout and recovered 0.6 s after the link returned, and the first segment arrived
+5.7 s late against a 3.46 s cushion; the 9.42 s cushion covered it.
+
+**The re-run.** Every CUBIC 5 % cell gave a segment up and every 5.91 s outage cell timed a playlist
+fetch out, so those shapes were re-run at `--timeout 10 --give-up-ms 15000`. The 10 % cells lost
+programme with no timeout or give-up, and the 11.87 s outage lost none.
+
+| Arm | Shape | Receiver defaults | 10 s timeout, 15 s give-up |
+|---|---|---|---|
+| CUBIC, 5.91 s | 5 s outage | 10.58 s | 26.00 s |
+| | 5 % loss | 62.88 s | 63.92 s |
+| CUBIC, RTT on the ack path, 5.91 s | 5 s outage | 9.54 s | 14.62 s |
+| | 5 % loss | 59.56 s | 57.36 s |
+| CUBIC, 11.87 s | 5 % loss | 47.58 s | 45.28 s |
+
+Loss costs the same either way, because its programme goes in the slow fetches, not in the give-up.
+The outage costs more at the longer timeout. The stalled request was never abandoned and answered
+4.7 s after the link returned, and the first segment arrived 11.3 s late against 5.7 s.
+
 **Grading.** Criterion 1 holds. Criterion 2: the floor is **3 s** with the hold and alignment and
 **1.5 s** with neither; each was reached by bisection, held in four runs of four, and failed 0.5 s
 below. Part B's prediction holds: both floors lie in 1.2–3 s. Criterion 4 holds in every part C
@@ -201,6 +249,18 @@ that arrived soonest after its stream position. Under the release that is a segm
 packet, so a segment's first packet has the cushion less its span. The frozen leg then loses
 about freeze + poll − phase + span − hold − cushion, which is 2.4–2.6 s at 8 s (the poll's part
 is 0–0.25 s) against the measured 2.44 s. It falls one second per second of cushion, as measured.
+
+**Grading, part A.** Criterion 7: every control conserves to 0.0 s, and its fetches finish in
+1.76–2.24 s at the 99th percentile, inside the 2.5 s hold. But 8.5–42.6 % of its segments still
+arrive past their release (at most 451 ms), on BBR as on CUBIC and with the RTT on the
+acknowledgement path as in front of the shaper, because the receiver waits a poll and a playlist
+after each held segment. The second half therefore fails in every arm, and it is the receiver's: the
+bias arm loses only 1.0–9.7 s less than T28's placement on each shape, so the delay's placement does
+not decide. Criteria 8, 9 (every control within 2 ms of its column) and 10 hold. The verdict, per
+shape and column: on BBR the segmented lane loses nothing under loss or reorder, as SRT, where the
+MoQ lane loses 29.5–37.8 s under loss and 20 % reorder; on CUBIC it loses more than the MoQ lane
+under loss and nothing under reorder. A 5 s outage costs it
+more than either at 5.91 s, and nothing at 11.87 s, where the MoQ lane loses 6.12 s.
 
 ## Conclusions
 
@@ -219,13 +279,22 @@ is 0–0.25 s) against the measured 2.44 s. It falls one second per second of cu
    freeze + poll − phase + span − hold − cushion: 2.44 s at the standing 8 s, and nothing at 10.5 s
    at this phase; at no phase and the 2.84 s segment the formula gives about 11.6 s, unmeasured. In
    a 1+1 pair the other leg covers it: chain B lost nothing.
-5. **For P1-ah:** the design's floor at 2 s epochs is 3 s of cushion behind a 1.5 s hold. A single
-   leg that must also ride a 10 s frozen playlist needs 10.5 s at the measured phase, and by the
-   formula up to about 11.6 s. The standing 8 s sits between.
+5. **Under path faults the origin's controller and the cushion decide.** With the origin's TCP on
+   BBR the chain loses nothing under 5–10 % loss or 5–20 % reorder at 100 ms RTT, as SRT, where the
+   MoQ lane loses 30–38 s of 40 under loss. On CUBIC it loses 47–71 s of 95: a loss-based sender
+   holds each fetch near 1 Mb/s, and a receiver fetching one segment at a time regains the live edge
+   only near the cell's end. A 5 s outage costs what the cushion does not cover, 9.5–10.6 s at
+   5.91 s and nothing at 11.87 s. On a lossy route the origin's controller is a deployment setting,
+   as the MoQ lane's is.
+6. **A longer receiver timeout is not a safer one.** At 10 s and 15 s the loss shapes cost the same,
+   and the outage up to 2.5 times as much, because the receiver waits on a stalled request instead
+   of reopening it.
 
 ## Limits
 
 One host, loopback, one clip; legs started together from the clip's start, so each variant
 anchored on one segment, and the default variant's floor could need up to the longest span less
 the shortest (1.64 s here, plus the poll) on another anchor. One freeze phase, and one freeze
-length. Part A has not run.
+length. Part A is one namespace path at one rate and RTT, with the origin on HTTP/1.1 over TCP
+(not HTTP/3, and no CDN edge) and the kernel's `bbr`; T28's MoQ and SRT rows are its own runs in the
+same rig and clip, not interleaved with these, and the outage ran on CUBIC alone.
