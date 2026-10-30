@@ -242,7 +242,7 @@ wire passes and the media-aware one fails (§8).
 **This axis separates the two data planes only where nothing is conformant.** There MoQ delivers a
 picture over one internet path in **141 ms**, inside a single segment's span; held at P1/P2
 conformance, MoQ delivers in **2,447 ms** and segmented HTTP, on one-second segments, in **2,604 ms**
-([Evidence](../lab/evidence.md) §3.11). MoQ's lead falls to 6 %, on one clip over a clean path. **Every latency figure on the media-aware lane must be
+([Evidence](../lab/evidence.md) §3.11). **Every latency figure on the media-aware lane must be
 quoted with the conformance of the same bytes.** All are *delivery* latency, source to groomed
 egress, excluding the encoder and decoder delay that no plane here varies.
 
@@ -264,10 +264,10 @@ spare one returns, on the wire, 0 of 20,193 intervals above 40 ms over 300 s, an
 **The conformant configuration delivers at 2,447 ms, an order of magnitude above the 141 ms, and neither
 part of the gap is cushion depth.** About **650 ms is a named upstream regression**, the exporter PCR
 change that made an even grid possible ([Evidence](../lab/evidence.md) §3.11): a defect with an owner, and
-recoverable. **The rest is structural**: the buffer is sized by the source's peak coded frame, not its
-bitrate, because a demultiplexed lane cannot recover the encoder's VBV occupancy that the source's byte
-spacing carried. **The media-aware lane moves the encoder's VBV budget downstream into the edge gateway's
-buffer** — content-dependent, sizeable from a published encoder parameter, and not removable by tuning.
+recoverable. **The rest is structural**: a demultiplexed lane cannot recover the VBV occupancy the
+source's byte spacing carried, so **the media-aware lane moves the encoder's VBV budget into the edge
+gateway's buffer**, sized by the peak coded frame rather than the bitrate — content-dependent,
+sizeable from a published encoder parameter, and not removable by tuning.
 
 **Both the conformance and the 2,447 ms are P1/P2's**; the same wire fails the 13818-1 buffer model (§8).
 The stages that repair it present at **2,196.7 ms** (a laboratory re-multiplexer, moq 0.12.1) and
@@ -281,9 +281,11 @@ technical discriminator MoQ has over the incumbents ([Economics](economics.md) �
 demonstrated at conformance on MoQ, and no configuration below one second has passed a whole capture
 on any lane.** Byte-faithful carriage comes closest, at 114–234 ms on loopback with a damaged stretch
 in each run, which weighs against MoQ,
-and the ~650 ms defect bounds that in MoQ's favour. Both paths were healthy, so nothing exercised
-the recovery the tunnels exist for, and **neither lane has been graded on a hardware IRD**
-([Evidence](../lab/evidence.md) §4).
+and the ~650 ms defect bounds that in MoQ's favour. **On a 116 ms path at an equal 1 s budget, only
+SRT stays whole at 1 % loss**, each MoQ lane losing under a second in one run of three; the
+media-aware lane trails both by about 0.25 s, and on CUBIC neither MoQ lane carries 0.1 %
+([Evidence](../lab/evidence.md) §3.11). **Neither lane has been graded
+on a hardware IRD** ([Evidence](../lab/evidence.md) §4).
 
 **A deployment constraint separate from latency.** From moq 0.14.0 a release ends the import at a
 backward timestamp step, so a source whose timeline steps back is republished at each step behind a
@@ -579,9 +581,9 @@ because nothing about it is measured here, but it is strongest exactly where bot
 
 ### 13.2 The limits under every verdict
 
-Besides the two limits §5.1 states, no hardware IRD and only healthy paths, five more qualify every
-row above ([Evidence](../lab/evidence.md) §4). The data-plane comparison is one route and one clip. Each
-impairment cell is one run, on `netem` models whose loss is Bernoulli. Every 1+1 result comes from a
+Besides the limit §5.1 states, no hardware IRD, five more qualify every row above
+([Evidence](../lab/evidence.md) §4). The data-plane comparison is one clip over two routes. Each
+impairment cell is one run, three on the second, on `netem` models whose loss is Bernoulli. Every 1+1 result comes from a
 software receiver, and the ST 2022-7 oracle is self-tested, not reference-compliant. Fan-out is one
 relay in one region, and the resilience work a two-relay lab. Most media-aware results are on
 September 2026 builds and hold on current upstream only where stated.
@@ -600,10 +602,8 @@ Ranked by leverage:
    open are a laboratory stage following a remote clock, and 1+1 beyond a co-started pair
    ([Evidence](../lab/evidence.md) §3.4). It decides whether the lane serves TS-out
    to an IRD in a deployment.
-3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has a
-   technical discriminator over the incumbents at all, and on MoQ it turns on the ~650 ms
-   regression, the peak-coded-frame bound for real contribution content and frames delivered ahead
-   of decode (§5.1).
+3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has any
+   technical discriminator over the incumbents, and turns on the three conditions §13 names.
 4. **A receive stage that survives delivery-path failures and reports them, and HLS-input receivers
    on hardware?** The condition segmented HTTP's route-level case rests on (§3.2, §4.4).
 5. **Sub-second requirement: routes or preference?** It decides MoQ's addressable share, and is a

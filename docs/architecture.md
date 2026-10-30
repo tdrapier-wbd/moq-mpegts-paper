@@ -929,9 +929,10 @@ bytes).
 
 ### 8.5 Congestion control is a deployment decision
 
-Congestion controller is selectable and decisive: CUBIC collapses under uniform loss; BBRv1 holds full
-rate on par with SRT, and BBRv3 — which reads loss as a congestion signal — collapses as CUBIC does at
-100 ms RTT ([Evidence](../lab/evidence.md) §3.3). **Pin the controller and the QUIC backend explicitly** —
+Congestion controller is selectable and decisive: CUBIC collapses under uniform loss, and on a 116 ms
+path neither MoQ lane carries the programme at 0.1 %; BBRv1 holds full rate on par with SRT, and
+BBRv3 — which reads loss as a congestion signal — collapses as CUBIC does at 100 ms RTT
+([Evidence](../lab/evidence.md) §3.3, §3.11). **Pin the controller and the QUIC backend explicitly** —
 defaults differ per backend, and the same flag selects different BBR generations on each. **No
 recommendation for a permanent fixed-rate trunk** from what has been run.
 
