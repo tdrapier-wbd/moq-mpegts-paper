@@ -1,6 +1,8 @@
 # Test 71 — The latency ordering on a long, lossy path
 
-**State: protocol fixed; not yet run.** Rig: [`t71-origin.sh`](scripts/t71-origin.sh) on the origin,
+**State: run, 27 cells and four diagnostics; every cell holds criteria 1–4, and the clean ordering
+survives 0.1 % loss but not 1 %, where each MoQ lane loses programme in one replicate of three and
+SRT in none.** Rig: [`t71-origin.sh`](scripts/t71-origin.sh) on the origin,
 [`t71-far.sh`](scripts/t71-far.sh) on the receiver, one cell by [`t71-cell.sh`](scripts/t71-cell.sh),
 graded by [`t71-grade.py`](scripts/t71-grade.py).
 
@@ -91,3 +93,95 @@ whose retransmission is lost again costs further round trips, the export drops w
 delay, and T47 had the media-aware export stop between 2 % and 3 % at 1 s on a 50 ms path. On CUBIC
 the MoQ lanes should not sustain 10 Mb/s at 1 % on this round trip: a Reno-like sender's loss bound
 there is about 1 Mb/s.
+
+## Results
+
+**Criteria 1–4 hold on every cell.**
+
+1. **Path.** Round trip 115–121 ms. Clean cells drop nothing. On every loss cell the media direction
+   is within ±30 % of the commanded rate: 0.083–0.105 % at 0.1 %, 0.93–1.03 % at 1 %. The return
+   direction carries 5,000–19,000 packets a cell and is within ±30 % except on three 0.1 % cells,
+   labelled with what was applied: `r1-srt-l0.1` 0.052 %, `r3-srt-l0.1` 0.139 % and `r3-aware-l0.1`
+   0.135 %.
+2. **Clock.** Both hosts synchronised before and after every cell, the bound 0.80–1.07 ms; the probe
+   agrees with zero within its ±58 ms. One media-aware 0.1 % cell lost its closing reads and
+   counters when the workstation driving it slept, and was re-run (`r2-aware-l0.1b`); the original
+   is not graded.
+3. **Same picture.** The PTS shift is 0 on SRT and the opaque lane and +1 tick on the media-aware
+   lane, in every cell; every egress picture matches a source picture, 4,210–4,279 a cell.
+4. **Clean conformance.** Every clean cell of every lane: 0 continuity errors, PCR intervals at most
+   25.1 ms, `ts-tstd.py` passing from 8 s. Reported: every clean cell, the media-aware lane's
+   included, has 0 PCRs beyond ±481 ns, as T47's merged export had; the reason the criterion gave
+   for not gating accuracy was the earlier build's.
+
+**Latency and delivered programme** (ms; median of the three cells' medians, their range, the
+median p95; clock bound ≤ 1.07 ms throughout):
+
+| Lane | Loss | Median (range) | p95 | Whole programme |
+|---|---|---|---|---|
+| SRT | clean | 1,030.0 (1,026.1–1,031.2) | 1,061.5 | 3 of 3 |
+| SRT | 0.1 % | 1,029.2 (1,028.8–1,030.5) | 1,060.8 | 3 of 3 |
+| SRT | 1 % | 1,029.1 (1,026.1–1,031.2) | 1,060.6 | 3 of 3 |
+| Opaque | clean | 1,046.9 (1,021.0–1,056.9) | 1,094.4 | 3 of 3 |
+| Opaque | 0.1 % | 1,045.4 (1,021.0–1,046.0) | 1,092.3 | 3 of 3 |
+| Opaque | 1 % | 1,040.7 (1,021.5–1,050.2) | 1,087.2 | 2 of 3 |
+| Media-aware | clean | 1,281.1 (1,277.8–1,338.1) | 1,353.3 | 3 of 3 |
+| Media-aware | 0.1 % | 1,286.6 (1,277.6–1,348.7) | 1,358.9 | 3 of 3 |
+| Media-aware | 1 % | 1,440.8 (1,374.7–1,786.5) | 1,513.4 | 2 of 3 |
+
+Every whole SRT and opaque cell is the source's packets with 0 identity gaps and 0 foreign packets.
+The two failing cells lost programme in short holes during the run, not at the join:
+
+- **Opaque, `r3-opaque-l1`:** 0.52 s of video and 0.36 s of audio in three holes of up to 200 ms,
+  at 49, 76 and 118 s, its 4,075 missing packets in 11 identity gaps; where they were missing the
+  wire broke, with 48 continuity errors and 10 PCR intervals over 40 ms (largest 147.9 ms).
+- **Media-aware, `r2-aware-l1`:** 0.92 s of video in four holes of up to 280 ms, at 76–117 s, and no
+  audio; its wire stayed conformant (0 continuity errors, 0 PCR intervals over 40 ms).
+
+Within a cell each lane's latency is flat: between the first and last thirds SRT rises 24 ms, the
+opaque lane moves −23 to +2 ms and the media-aware lane falls 27–64 ms.
+
+**Diagnostic, the relay on CUBIC** (one cell each, not ranked; a clean cell delivers about 4,250
+pictures):
+
+| Lane | Loss | Pictures delivered | Bytes in 120 s | Other |
+|---|---|---|---|---|
+| Opaque | 0.1 % | 1,004 | 42 MB (2.8 Mb/s) | 998 continuity errors, 184 identity gaps |
+| Media-aware | 0.1 % | 755 | 146 MB, 72 % of it null padding | median 1,704 ms, rising 152 ms over the cell |
+| Opaque | 1 % | 137 | 9.8 MB (0.65 Mb/s) | 548 continuity errors |
+| Media-aware | 1 % | 0 | nothing written | — |
+
+The opaque lane's rates sit near a Reno-like sender's loss bound at 1,200-byte packets and 116 ms,
+about 3.2 and 1.0 Mb/s. On streams this starved the picture count is the measure: the content
+grader infers its nominal step from the stream, and scores the 0.1 % media-aware cell 12.6 s lost.
+
+## Conclusions
+
+1. **At a 1 s budget on a 116 ms path, SRT and the opaque MoQ lane deliver at the same latency, and
+   the media-aware lane about a quarter of a second later.** SRT's and the opaque lane's ranges
+   overlap, 17 ms apart at the median; clean, the media-aware lane's median is 234 ms behind the
+   opaque lane's and 251 ms behind SRT's, and it is behind both in every replicate. SRT delivers at
+   its configured 1,000 ms plus 26–31 ms, below the predicted buffer plus a round trip. The
+   media-aware lane's latency is fixed at the join and holds for the run, varying between cells by
+   60 ms clean and 412 ms at 1 %: its export acquires its clock once, on the track sent latest,
+   which is the documented behaviour of the build's jitter buffer. What sets its surplus over the
+   opaque lane at the same delay was not isolated.
+2. **At 0.1 % random loss each way the ordering and every lane's programme survive at clean
+   latency.**
+3. **At 1 % only SRT stays whole.** Each MoQ lane lost under a second of programme in one replicate
+   of three, in three or four holes of at most 280 ms, so under criterion 6 both rank failing at
+   this budget. Neither lost rate, and the media-aware lane's median rose 160 ms. T47's export held
+   at 2 % at 1 s on a 50 ms path, so the margin shrinks with the round trip, though two paths do not
+   fit a curve.
+4. **The relay's controller decides whether the MoQ lanes work at all on this path.** On CUBIC
+   neither carries the programme at 0.1 %, and at 1 % the media-aware lane writes nothing; BBRv3
+   kept every cell at the source's rate.
+
+## Limits
+
+- One path between two regions, one 10 Mb/s clip, 120 s cells and three replicates: one failure in
+  three is an existence result at 1 %, not a rate.
+- Independent random loss only, the same each way; no burst loss, reordering or rate limit.
+- One budget: whether a longer MoQ delay restores whole delivery at 1 % is not measured. SRT is
+  ungroomed TSDuck at `--latency 1000`.
+- Software receivers only; no IRD.
