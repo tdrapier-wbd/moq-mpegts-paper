@@ -1,13 +1,13 @@
 # T56 — Media-aware failover: what a decoder sees, and how small it can be made
 
-**State: run on `main` at `66af72315` and graded; the kill cells run again on `bdc47852a`
-([`t56-failover.sh`](scripts/t56-failover.sh), [`t56-grade.py`](scripts/t56-grade.py)).** C4
-passes; C0, C2, C3, C5 and one-source C6 fail; R1 passes. On the demultiplexed lane every leg event
-is a switch, including a standby's start. On `66af72315` every switch cost at least the export's
-delay. On `bdc47852a` a switch keeps it: an arrival loses no programme, and a hard kill loses its
-detection interval alone, 0.6–0.8 s at a 1 s idle timeout, though a decoder still shows 1.3 s of
-hole. No export ended at a hard kill there. Selection at the receiver, between exports each on its
-own leg, avoided every switch in the relay.
+**State: run on `main` at `66af72315` and graded; the kill cells run again on `bdc47852a`, the 1 s
+kill on Linux ([`t56-failover.sh`](scripts/t56-failover.sh), [`t56-grade.py`](scripts/t56-grade.py)).**
+C4 passes; C0, C2, C3, C5 and one-source C6 fail; R1 passes. On the demultiplexed lane every leg
+event is a switch, including a standby's start. On `66af72315` every switch cost at least the
+export's delay. On `bdc47852a` a switch keeps it: an arrival loses next to no programme, and a hard
+kill loses its detection interval alone, 1.1–1.2 s at a 1 s idle timeout on Linux, with 1.3 s of
+decoder hole. No export ended at a hard kill there. Selection at the receiver, between exports each
+on its own leg, avoided every switch in the relay.
 
 ## Objective
 
@@ -58,7 +58,7 @@ relay-loss cell on the current build (P1-ab).
 | Component | Build |
 |---|---|
 | `moq`, `moq-relay` | `main` at `66af72315`, and for the kill cells' second run `bdc47852a` (both moq 0.14.2, moq-relay 0.17.2), recorded with each run |
-| Host | the laptop, loopback, for every cell but `outage`, which needs Linux and `iptables` (the secondary, loopback, its standing units untouched); no other timing work on the host |
+| Host | the laptop, loopback, for every cell but `outage`, which needs Linux and `iptables` (the secondary, loopback, its standing units untouched), and R3 (an 8-core Linux host with no standing units, loopback); no other timing work on the host |
 | One source | the drills' contribution clip (1080i H.264, 9.95 Mb/s CBR) played live to a file that every importer follows from its own start (T6's `FEED=file`) |
 | Two sources | the clip, and a separate encode of its first 200 s (720p H.264, 2 s closed GOP, 9 Mb/s CBR, other PIDs, a PTS origin 37 s later), each played live from the same instant, so that pictures align and packets do not |
 | Export | `export ts --stitch --follow 10s --delay 2s`, two per run, each under a supervisor that restarts it when it exits; the passthrough lane (`--passthrough` both ends, no `--stitch`) as the control |
@@ -132,6 +132,10 @@ fixed by [#6873](https://github.com/moq-dev/moq/pull/6873)), fixed before that r
     13, twelve clean runs would occur by chance about one time in 25.
 11. **R2, the costs** as C1, beside the earlier table; a median that moves by more than 0.5 s is
     the build's, not attributed to the fix alone. C2 is graded again.
+12. **R3, the 1 s kill on Linux**, fixed before its run: six runs of `kill` at a 1 s idle timeout
+    on `bdc47852a`, on an otherwise idle Linux host, void as criterion 1. C2 is graded on them by its
+    own terms; the decoder hole and the programme lost are reported beside the laptop's, and a median
+    more than 0.25 s from it is the laptop's scheduler.
 
 ## Limits, fixed in advance
 
@@ -141,7 +145,7 @@ fixed by [#6873](https://github.com/moq-dev/moq/pull/6873)), fixed before that r
   meets loss and jitter that loopback does not have, which C3 prices only in part.
 - The select cell's splice is a model of a receiver's input select, at packet boundaries on the
   exports' recorded arrivals; a real IRD or switch may resynchronise differently.
-- The laptop's timings carry its scheduler; the secondary repeats the cells whose results turn on
+- The laptop's timings carry its scheduler; a Linux host repeats the cells whose results turn on
   less than half a second.
 
 ## Results
@@ -203,6 +207,18 @@ therefore understates what a decoder sees; the outage exceeds the programme lost
 s and 6 s and by 1.2–1.4 s at 1 s. At the 10 s delay the restart came before the export had
 restored its delay on A, so the output resumed on B, 10 s after its restart, with no blip: that
 kill's cost includes the restart's timing, as on `66af72315`.
+
+**R3, the 1 s kill on Linux** (`bdc47852a`, six runs, every one passing the void checks; twelve
+exports, a start measured on six):
+
+| Event | Stall | Decoder hole | Outage | Programme lost | Bad |
+|---|---|---|---|---|---|
+| B's start | 0.07–0.08 | 1.10 | 1.10 | 0.04, once 0.36 | 25–27 |
+| SIGKILL | 0.85–1.16 | 1.27–1.30 | 2.23–2.56 | 1.12–1.20 | 27 |
+| B's restart | 0.07 | 0.25 | — | 0 | 1–2 |
+
+No export ended or restarted, and every switch was marked. The decoder hole matches the laptop's;
+the programme lost is 0.45 s more at the median, and the outage 0.2–0.5 s more.
 
 **Two sources (`sources`, 6 s).** Every switch moved the PMT to the other source's PID, with the
 PAT's and PMT's versions bumped and every PID flagged. No export ended. B's start and restart are
@@ -273,25 +289,27 @@ checked cut by cut. Nothing marks a cut, so each run carries about 61 continuity
   start each moved by more than 0.5 s, so those changes are the build's; among its changes the
   export keeps its delay through a stitched switch
   ([#6919](https://github.com/moq-dev/moq/pull/6919)) and returns to it after one
-  ([#7049](https://github.com/moq-dev/moq/pull/7049)). **C2 still fails**: at 1 s the programme lost is under a second
-  (0.64–0.80 s), the decoder hole is not (1.27–1.30 s). That margin, 0.27 s, is under the half second
-  the limits reserve for a repeat on the secondary, which is owed: it needs a Linux build of
-  `bdc47852a`. By C0's terms a restart now passes and a start fails on its 1.10 s of corrupt pictures.
+  ([#7049](https://github.com/moq-dev/moq/pull/7049)). By C0's terms a restart now passes and a
+  start fails on its 1.10 s of corrupt pictures.
+- **R3: C2 still fails, on both counts.** On Linux a 1 s kill loses 1.12–1.20 s of programme and
+  shows 1.27–1.30 s of hole. The laptop's 0.64–0.80 s of programme is more than 0.25 s from it, so it
+  is the laptop's; the hole is the same on both.
 
 ## Conclusions
 
 - **Legs started apart cost a switch at every arrival on the demultiplexed lane.** The relay serves
   the newest instance, so a standby's start or a failed leg's restart pre-empts a healthy serving
   leg. On `66af72315` that cost up to 3.3 s of decoder hole and 2.5 s of programme; on `bdc47852a`
-  it loses no programme, and costs 0.25 s of hole at a restart and 1.10 s at a start, the 25 corrupt
-  pictures of a switch inside this clip's open GOP. On those pictures alone the lane still fails the
+  a restart loses no programme and a start at most a frame in 26 of 27 (0.36 s in one), and they
+  cost 0.25 s of hole at a restart and 1.10 s at a start, the 25 corrupt pictures of a switch inside
+  this clip's open GOP. On those pictures alone the lane still fails the
   requirement that its legs need not start together.
 - **On `66af72315` a switch discarded the export's delay buffer**, putting the floor of every switch
   at the delay plus up to half a second. **On `bdc47852a` it keeps it**, so a hard kill loses its
-  detection interval alone: unchanged at 4 s and 6 s, and 0.64–0.80 s at 1 s. A decoder still sees
-  more at 1 s: 1.3 s of hole, mostly 27 corrupt pictures where the switch lands inside a GOP, and a
-  2 s outage, because the output resumes in a blip and pauses to restore its delay. No idle timeout
-  yet brings a failover under a second as a decoder sees it.
+  detection interval alone: unchanged at 4 s and 6 s, and 1.12–1.20 s at 1 s on Linux. A decoder
+  sees more at 1 s: 1.3 s of hole, mostly 27 corrupt pictures where the switch lands inside a GOP,
+  and a 2.2–2.6 s outage, because the output resumes in a blip and pauses to restore its delay. No
+  idle timeout yet brings a failover under a second.
 - **On `66af72315` a hard kill could end a following export** (3 of 13 hard kills, all at idle
   timeouts of 4 s and more), turning a marked switch into an unmarked restart
   ([#6802](https://github.com/moq-dev/moq/issues/6802)); on `bdc47852a` none of 24 exports did.

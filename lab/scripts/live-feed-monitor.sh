@@ -24,6 +24,11 @@ END_EPOCH=$(($(date +%s) + HOURS * 3600))
 MOQ_BIN=$(grep -ho "$HOME/bin-[a-zA-Z0-9._-]*/moq" /etc/systemd/system/moq-live-publisher.service | head -1)
 BCAST=$(grep -ho -- '--broadcast [^ ]*' /etc/systemd/system/moq-live-publisher.service | awk '{print $2}' | head -1)
 ORIGIN=$(grep -ho -- '--listen-tls-generate [^ ]*' /etc/systemd/system/moq-relay.service | awk '{print $2}' | head -1)
+# A relay closed to anonymous sessions (live-auth.sh) admits the host's probe token, passed in the
+# environment so that it stays out of the process list.
+URL="https://$ORIGIN:443/anon"
+PROBE_JWT=${PROBE_JWT:-$HOME/.moq-live/probe.jwt}
+[ -r "$PROBE_JWT" ] && URL="$URL?jwt=$(cat "$PROBE_JWT")"
 HZ=$(getconf CLK_TCK)
 
 timeout "$((HOURS * 3600))" tsp --timed-log -I ip "$MCAST" --local-address 127.0.0.1 --buffer-size 8388608 \
@@ -51,7 +56,7 @@ while [ "$(date +%s)" -lt "$END_EPOCH" ]; do
 	R1=$(ticks "$RELAY")
 	EGRESS=""
 	if [ $((N % EGRESS_EVERY)) -eq 0 ]; then
-		EGRESS=$(timeout 10 "$MOQ_BIN" --connect-tls-insecure --connect "https://$ORIGIN:443/anon" \
+		EGRESS=$(MOQ_CONNECT=$URL timeout 10 "$MOQ_BIN" --connect-tls-insecure \
 			--broadcast "$BCAST" export ts --max-age 2s 2>/dev/null | wc -c)
 	fi
 	printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$(date -u +%FT%TZ)" "$(cut -d' ' -f1 /proc/loadavg)" \

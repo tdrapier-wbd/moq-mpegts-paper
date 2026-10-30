@@ -68,9 +68,14 @@ fi
 # The fixed-delay export replaced `--max-age` with `--delay`; each build rejects the other's flag.
 HOLD=--max-age
 "$MOQ_BIN" export ts --help 2>/dev/null | grep -q -- '--delay ' && HOLD=--delay
+# A relay closed to anonymous sessions (live-auth.sh) admits the host's probe token; the URL goes
+# in the environment so that the token stays out of the process list.
+URL="https://$ORIGIN:443/anon"
+PROBE_JWT=${PROBE_JWT:-$HOME/.moq-live/probe.jwt}
+[ -r "$PROBE_JWT" ] && URL="$URL?jwt=$(cat "$PROBE_JWT")"
 SUB=$(mktemp /tmp/feedegress.XXXXXX.ts)
 T0=$(date +%s.%N)
-timeout "$((SECS + 10))" "$MOQ_BIN" --connect-tls-insecure --connect "https://$ORIGIN:443/anon" \
+MOQ_CONNECT=$URL timeout "$((SECS + 10))" "$MOQ_BIN" --connect-tls-insecure \
 	--broadcast "$BCAST" export ts "$HOLD" 2s >"$SUB" 2>/dev/null || true
 T1=$(date +%s.%N)
 EBYTES=$(stat -c%s "$SUB" 2>/dev/null || echo 0)
