@@ -65,13 +65,12 @@ interface contract, usage and the sensitivity results.
   (joins 8 s in). Publisher paced with `tsp regulate --pcr-synchronous`, so the relay sees a live
   arrival pattern rather than a file burst.
 
-**Byte-identity is not a pass criterion here.** `moq import ts` / `export ts` is the media-aware lane:
-it demuxes to `hang` tracks and remuxes at egress, so the egress legitimately differs from the source.
-Measured difference is 5,003,056 → 4,366,112 bytes, essentially the CBR null-packet stuffing (PID 8191)
-that is not carried. Byte-identity is the *transparent* lane's property and needs a purpose-built
-client, because **the `moq` CLI has no opaque byte-carriage mode** — every `ImportSource` and
-`ExportSink` is media-aware. That is a finding in itself and is the main gap between this proof of
-concept and a transparent-carriage test.
+**Byte identity is graded on the opaque lane only.** The sweep at `main` runs `import ts
+--passthrough` into `export ts --passthrough`, whose egress is the fixture's own bytes, and the
+proposal's `check-ts.py` grades it so. The first sweep, on `moq` 0.9.8, could run only the
+media-aware lane, which demultiplexes to `hang` tracks and remultiplexes at egress (5,003,056 →
+4,366,112 bytes, essentially the CBR null stuffing it does not carry), so it was graded on the
+oracle alone.
 
 ## Results at `main`: the registry's relays (P1-h)
 
@@ -187,7 +186,8 @@ The client's first sweep carried media through `moq-dev`'s relays alone and thro
 others. The main cause was the publisher's: it withheld `PUBLISH_NAMESPACE` until a peer sent it a
 `SUBSCRIBE_NAMESPACE`, which only `moq-dev`'s relay does. Proactive announcement is a MAY in the
 drafts, so it was reported as an interop hazard rather than a bug, and it is fixed upstream. Behind
-it, moxygen then rejected the subscriber's empty-prefix `SUBSCRIBE_NAMESPACE` (error 16), a draft
+it, moxygen then rejected the subscriber's empty-prefix `SUBSCRIBE_NAMESPACE` (error 16, confirmed by
+a same-relay version A/B), a draft
 inconsistency the working group resolved in favour of the empty tuple. moqtail refused SETUP, and
 quiche-moq and libquicr never established a session; at `main` those three resolve as above.
 
@@ -272,7 +272,7 @@ the packager emits is delivered unaltered (the `curl` and `tsp` arms agree to th
 
 ### Why this matters beyond our own question
 
-The interop matrix today is control-plane only. Against imquic, red5, aiomoqt, moqtail and Nokia,
+The runner's interop matrix is control-plane only. Against imquic, red5, aiomoqt, moqtail and Nokia,
 every control-plane cell this sweep exercised succeeds while media is lost or a late subscriber never
 starts. **That gap is invisible in the current matrix**, and it is the strongest argument for the
 media-level profile proposed in #32.
@@ -385,7 +385,7 @@ in `moq2ts` against the same relay on draft 22, where it does not get as far as 
 ## T11c — moq5 against `moq-dev`, both ways (criteria fixed before the first run)
 
 OpenMOQ's [moq5](https://github.com/openmoq/moq5) has a sender, a receiver and a relay, so it closes
-what `moqxr` left open. Four directions, each on every draft both builds speak (16, 18, 22; raw QUIC):
+what `moqxr` left open, and claims no cross-implementation result of its own. Four directions, each on every draft both builds speak (16, 18, 22; raw QUIC):
 
 | # | Publisher | Relay | Subscriber | Tests |
 |---|---|---|---|---|
@@ -529,56 +529,19 @@ side adopts #2015's framing.
 > and 18 pass, and only draft 22's failure was the relay's, fixed on moq5 `main` (§ T11c). Rule:
 > [method-notes](method-notes.md) §1, run the control before believing a striking result.
 
-## Status and next steps
+## Next steps
 
-- [x] Fixture generator, oracle, and oracle sensitivity tests
-- [x] Test client conforming to the runner's interface (TAP v14, exit 0/1/127)
-- [x] Local and public `moq-dev` validation
-- [x] Sweep across all registered public relays
-- [x] Proposal posted to [#32](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-5239364972)
-- [x] Root cause reported upstream as [moq-dev/moq#2730](https://github.com/moq-dev/moq/issues/2730),
-      framed as an interop hazard rather than a bug since the behaviour is conformant; fixed
-- [x] Findings posted back to [#32](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-5240521275),
-      including two harness-level suggestions: a control-plane test for zero-field
-      `SUBSCRIBE_NAMESPACE` handling (data for moq-wg#1457), and recording the transport actually used
-      alongside the negotiated draft
-- [x] Isolate the cross-implementation failure — empty-prefix `SUBSCRIBE_NAMESPACE`, confirmed by a
-      same-relay version A/B
-- [x] Segmented-HTTP arm: the same fixture and oracle through FFmpeg, VLC, `curl`, an nginx cache and
-      Apple's `mediastreamvalidator`
-- [ ] Report the packager's silent 5 % tail truncation on a finite input to TSDuck. It needs a minimal
-      reproducer first — the input ending between intra frames is the suspected trigger, and that
-      should be confirmed against a clip whose final GOP is complete before anything is filed.
-- [ ] Put the segmented arm through a real CDN rather than a local nginx. The cache result is the
-      architecturally load-bearing one and a single-node `proxy_cache` is the weakest possible form of
-      it: it shows the objects are cacheable, not that a distribution network will behave.
-- [ ] Raise the 200 ms QUIC→WebSocket fallback timer separately
-- [x] P1-h and the sweep at `main` across the registry's relays (§ Results at `main`)
-- [ ] Report imquic's and red5's losses once replicates map each to its group and object; the late
-      subscriber aiomoqt, moqtail and Nokia never start waits on their adopting moq-transport#2015's
-      framing
-- [x] The export's AUD after the SPS and PPS reported to `moq-dev`
-      ([moq-dev/moq#5951](https://github.com/moq-dev/moq/issues/5951))
-- [x] `moq-net` failing a subscription on any TRACK_STATUS refusal but NOT_SUPPORTED raised with moq-dev ([moq-dev/moq#5954](https://github.com/moq-dev/moq/issues/5954))
-- [x] The CDN relay's unserved joining FETCH and undefined TRACK_STATUS refusal (§ *A CDN-hosted
-      moqx deployment*) reported on [openmoq/moqx#795](https://github.com/openmoq/moqx/issues/795#issuecomment-6289975173)
-      and as [openmoq/moqx#842](https://github.com/openmoq/moqx/issues/842); its subscription end
-      on a reset stream is openmoq/moqx#817's
-- [x] Transparent-carriage variant: the runner proposal's checker grades byte identity, and passes
-      `moq-dev`'s `--passthrough` lane through its relay
-- [ ] The two TS cases, fixture and checker proposed to the runner as
-      [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159); once
-      it merges, [`interop/`](interop/README.md) retires and this file's method cites the runner
-- [x] T11b: OpenMOQ's MSFTS example publisher through a `moq-dev` relay, across drafts 14, 16, 17
-      and 18, raw QUIC and WebTransport, with IETF and moq-lite subscribers
-- [x] T11b's publisher defects A, B and D, and the single-group incompatibility C, reported as
-      [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
-- [x] T11c, the four moq5 directions on drafts 16, 18 and 22 (§ T11c); moq5 claims no
-      cross-implementation result of its own
-- [x] T11c's passthrough join reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51),
-      closed: draft 22's half fixed on moq5 `main`, the rest our subscriber (Corrections);
-      its discovery result posted to [moq-dev/moq#3731](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800)
-- [x] T11d, `moq2ts`'s headless publisher and receiver against `moq-dev` on draft 22
-- [ ] Rerun T11d arm A once `moqxr` or `moq-net` adopts moq-transport#2015's FILL_PARAMETERS framing
-- [x] T11d's pacing defect and repeated final group reported as
-      [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
+- Report the packager's silent 5 % tail truncation on a finite input to TSDuck. It needs a minimal
+  reproducer first — the input ending between intra frames is the suspected trigger, and that
+  should be confirmed against a clip whose final GOP is complete before anything is filed.
+- Raise the 200 ms QUIC→WebSocket fallback timer separately.
+- Report imquic's and red5's losses once replicates map each to its group and object; the late
+  subscriber aiomoqt, moqtail and Nokia never start waits on their adopting moq-transport#2015's
+  framing.
+- The two TS cases, fixture and checker are proposed to the runner as
+  [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159); once
+  it merges, [`interop/`](interop/README.md) retires and this file's method cites the runner.
+- Rerun T11d arm A once `moqxr` or `moq-net` adopts moq-transport#2015's FILL_PARAMETERS framing.
+
+What this experiment reported upstream, and each report's state, is in the
+[upstream ledger](upstream-contributions.md).
