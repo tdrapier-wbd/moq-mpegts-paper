@@ -909,13 +909,13 @@ it. Whether that closes the hazard is not yet checkable; T37 measured a componen
 
 ### Token interoperability — [#6566](https://github.com/moq-dev/moq/issues/6566) and [#6567](https://github.com/moq-dev/moq/issues/6567) fixed, [moqx#786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516) open, [moqxr#83](https://github.com/openmoq/moqxr/issues/83) a mode
 
-[T53](test-53-token-interop.md), re-checked on each project's `main` before posting: `moq-relay`
+[T53](test-53-token-interop.md), re-checked on `main` before posting: `moq-relay`
 refused on draft 18 an exact-path grant draft 16 admits, undocumented; `moq` printed a
-MALFORMED_AUTH_TOKEN close (0x16) as `unknown code=22`; SIGHUP, which moqx v0.3.6's docs say
-reloads, ends the process; `openmoq-publisher` exited when `moq-relay` refused PUBLISH. **State.**
+MALFORMED_AUTH_TOKEN close (0x16) as `unknown code=22`; SIGHUP, documented as reload, ends moqx
+v0.3.6; `openmoq-publisher` exited when `moq-relay` refused PUBLISH. **State.**
 #6566 fixed by [#6621](https://github.com/moq-dev/moq/pull/6621) (AUTH_OK carries the grant's
 patterns), #6567 by [#6612](https://github.com/moq-dev/moq/pull/6612): on `66af72315` the exact
-grant delivers on draft 18 and `moq` prints "malformed auth token". moqx#786 unanswered.
+grant delivers on draft 18 and `moq` prints "malformed auth token". [#884](https://github.com/openmoq/moqx/pull/884) makes moqx ignore SIGHUP; #786 unanswered.
 moqxr#83: the exit is `--publish-catalog`'s; without it v0.4.10 publishes on draft 18 and exits on
 draft 16 ([reported back](https://github.com/openmoq/moqxr/issues/83#issuecomment-6398652913);
 T53 § *Corrections*).

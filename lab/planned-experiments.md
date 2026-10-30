@@ -61,7 +61,6 @@ distribution. A row leaves when a pull request takes it; ours are in the
 |---|---|---|---|---|
 | `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would leave a stalled route for a same-epoch standby, before the idle timeout, without a 2022-7 receiver | Its design, which the maintainer has claimed (#7096); epochs on every hop, which only moq-lite 07 will carry (`ietf-epoch-cut`, taken by #7239), so not P1-j's moqx hop |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | The lag histogram whose type it reuses, which waits on moq-net's QUIC acknowledgments |
-| `restart-catalog` | S | [Evidence](evidence.md) §3.13's republish cost | A restarted import reuses its predecessor's multiplex-rate measurement and sends its catalog at once: the 1.3–1.6 s hold that is now all an encoder switch costs ([T67](test-67-import-step-restart.md)) | — |
 
 Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement:
 [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one
