@@ -1553,7 +1553,8 @@ groups restart at 0, short of #795's precondition); on draft 18 the node refuses
 a track's opener, losing a once-published catalog ([T52](test-52-cdn-relay-fanout.md)); on the
 latest image 14 openers of 14, no later joiner; no mid-group join lost its session
 ([re-tested](https://github.com/openmoq/moqx/issues/795#issuecomment-6418121868)); cause: the
-opener shares the publisher's I/O thread ([#883](https://github.com/openmoq/moqx/issues/883)). The snapshot's
+opener shared the publisher's I/O thread ([#883](https://github.com/openmoq/moqx/issues/883)), fixed by
+[#899](https://github.com/openmoq/moqx/pull/899), untested. The snapshot's
 64-bit Hop ID ([moq#6545](https://github.com/moq-dev/moq/issues/6545)) is fixed by
 [#6614](https://github.com/moq-dev/moq/pull/6614).
 
@@ -1685,8 +1686,8 @@ subscriber hands packets to its receiver, but it never stated explicitly that we
 transmit PCR.
 
 **Group alignment is settled for us in the optional formulation**
-([#31](https://github.com/mondain/msfts/issues/31)). The reply went once, on 2026-09-22, after
-[#35](https://github.com/mondain/msfts/pull/35) published; it reported four of six points resolved,
+([#31](https://github.com/mondain/msfts/issues/31)). Our one reply, after
+[#35](https://github.com/mondain/msfts/pull/35) published, reported four of six points resolved,
 with the payload unit (filtered 188-octet packets against access units) left with the editor at #33.
 
 ### The maintainer's objection to the round, and why the volume half of it is right

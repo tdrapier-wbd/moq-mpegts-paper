@@ -1,7 +1,7 @@
 # Test 31 — Congestion and capacity: the step ladders, both planes
 
 **State: both step-capacity ladders are run, replicated and graded on content in the `netns`/`cake`
-rig — three replicates per MoQ rung, two to three per segmented rung — with each lane's absorption
+rig — three replicates per rung on both lanes — with each lane's absorption
 boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ
 arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release
 delay up to 6 s absorbs a sustained 0.8× share, and against a 5 s dip to 0.8× only 6 s at 200 ms RTT
@@ -96,8 +96,8 @@ those cells (p95 178–183 ms) contradicts every other cell in the same conditio
 queue experienced cannot be shown to be the queue specified. Re-running them with the competing flow's
 own throughput recorded per cell is part of this experiment ([T8b § C2 withheld](test-8b-congestion-control.md#the-segmented-rows-of-c2-are-withheld-pending-a-re-run)).
 
-**Additional C3 replicates were deprioritised.** The planning record ([P2-e](planned-experiments.md#p2--completeness))
-notes that per-flow splits do not reproduce and the qualitative C3 result is already clear at one sample
+**Additional C3 replicates were deprioritised.** The planning record (P2-e)
+noted that per-flow splits do not reproduce and the qualitative C3 result is already clear at one sample
 per cell; two more replicates would only tighten error bars on numbers this experiment supersedes with
 the capacity ladder. Replicate work on C3 aggregates is explicitly **not** in scope here unless a ladder
 cell lands in the shedding regime and needs confirmation.
@@ -529,27 +529,32 @@ and a receiver that reconnects every cycle falls behind the live window on the u
 ([T42](test-42-h3-receiver-fidelity.md) § *What the receiver costs in time*). Same veth, `cake` at
 20 Mb/s, 100 ms RTT, the same rungs as multiples of 9.95 Mb/s and the same settle/recover timeline
 as the MoQ ladder; content-graded from 8 s and conserved against the invocation's own control.
-Packager `tsp -O hls --live 6 --live-extra-segments 3 --duration 2`, segments ~2.46 s. One sample
-per cell, **wire** domain, **P1**, one host.
+Packager `tsp -O hls --live 6 --live-extra-segments 3 --duration 2`, segments ~2.46 s. **Wire**
+domain, **P1**, one host.
 
 The first pass is one sample per cell; [`t2831-boundaries.sh`](scripts/t2831-boundaries.sh) then
 replicated the shedding rungs twice, walked 0.8×–0.6× for 60 s, and re-ran the 30 s outage and the
 loss cells with the receiver recording a truncated segment as a hole and a 60 s per-fetch timeout.
-Video lost in holes, first pass then replicates:
+Fixed before it ran (P2-e): each rung below three samples
+run again on the same host, rig and receiver settings, each invocation with its own control, to
+three; a replicate more than one segment (~2.46 s) from its rung's samples moves the rung, and the
+ranking against the MoQ column is read again. None moved: every replicate fell inside its rung's
+range or within 2.40 s of it, short at close stayed within the conservation's resolution, and the
+5 % loss cell again missed 60.92 s of its window. Video lost in holes, first pass then replicates:
 
 | Step | Segmented video lost in holes | Holes (cause) | Lag max, first pass | MoQ video lost in holes, same rig |
 |---|---|---|---:|---|
 | none (control) | 0.00; 0.00, 0.00 s | 0 | 8.5 s | 0.00 s |
-| 1.2× for 60 s | 0.00 s | 0 | 8.2 s | 0.00 s |
+| 1.2× for 60 s | 0.00; 0.00, 0.00 s | 0 | 8.2 s | 0.00 s |
 | 0.9× for 60 s | **0.00; 2.40, 2.40 s** | 0 or 1 (a segment evicted before it was fetched) | 21.4 s | 13.40–18.44 s |
 | 0.8× for 5 s | 0.00; 0.00, 0.00 s | 0 | 6.9 s | 0.00–1.12 s |
-| 0.8× for 60 s | 9.60, 9.60 s | 4 segments evicted | — | — |
-| 0.7× for 60 s | 14.40, 11.88 s | evictions | — | — |
-| 0.6× for 60 s | 19.80, 14.84 s | evictions | — | — |
+| 0.8× for 60 s | 9.60, 9.60, 7.20 s | 3–4 segments evicted | — | — |
+| 0.7× for 60 s | 14.40, 11.88, 12.08 s | evictions | — | — |
+| 0.6× for 60 s | 19.80, 14.84, 17.80 s | evictions | — | — |
 | 0.8× permanent | **2.40; 2.40, 2.40 s**, and 12.4–14.8 s short at close | 1 eviction | 21.3 s | 13.44–25.72 s |
 | 0.5× for 60 s | **20.36; 22.64, 23.08 s** | two 404s, then evictions | 21.9 s | 60.16–75.64 s |
-| outage 5 s | 0.00 s | 0 | 18.5 s | 16.96–20.84 s missing ¹ |
-| outage 30 s, truncation as a hole | **23.08, 23.08 s** | nine segments rolled out of the window during the outage | — | session ends ² |
+| outage 5 s | 0.00; 0.00, 0.00 s | 0 | 18.5 s | 16.96–20.84 s missing ¹ |
+| outage 30 s, truncation as a hole | **23.08, 23.08, 23.08 s** | nine segments rolled out of the window during the outage | — | session ends ² |
 | loss 5 %, whole window | **all but two segments** — 60.9–61.1 s missing of the window | every fetch after the second failed | — | — |
 | loss 10 %, whole window | **one segment or none** | the first fetch truncated | — | — |
 
@@ -557,7 +562,7 @@ Video lost in holes, first pass then replicates:
 timeout ([T28](test-28-failure-injection-matrix.md) § *The 30 s cell was the QUIC idle timeout*).
 Audio on the segmented lane tracks video to within 0.12 s on every cell, because a segment carries
 both. Short at close is within the conservation's ±1.3 s resolution on every segmented cell except
-chronic 0.8×, and is shown only there. The two replicates of a rung often agree exactly, because
+chronic 0.8×, and is shown only there. A rung's samples often agree exactly, because
 the lane loses whole segments of ~2.46 s.
 
 **The lane ranking survives the move to the AQM rig.** At every rung and at the 5 s outage the
@@ -588,9 +593,10 @@ same bound that stops the MoQ lane's noq builds under sustained loss
 "loss is invisible" result is a loopback result**: at near-zero RTT the bound is far above the
 stream, which is why T28's loopback cells return bytes identical to the control. What would make this
 lane ride loss is the same thing that makes the MoQ lane ride it — a sender that does not yield to
-random loss — and the arm that would show it runs the origin with BBR.
+random loss — and over HTTP/1.1 with the origin's TCP on BBR the lane lost nothing at 5–10 % but
+1.28 s in one replicate ([T68](test-68-segmented-chain-cushion-faults.md)).
 
-**The 30 s outage costs 23.08 s, identically in both replicates**, because the nine segments
+**The 30 s outage costs 23.08 s, identically in all three replicates**, because the nine segments
 produced during it rolled out of the window before the path returned. On loopback the same cell cost
 17.134 s; the difference is the lag the receiver already carried at 100 ms RTT.
 
@@ -713,7 +719,7 @@ and each group it skipped itself (`skipping slow groups`).
   ranks controllers; arms use one pinned controller unless explicitly comparing shedding at two budgets.
 - **Segmented lane is client-dependent.** Two clients are required where the question is lane versus
   receiver policy ([T8b C1](test-8b-congestion-control.md)); conclusions split by client.
-- **Not a replicate study of T8b C3 aggregates.** Additional C3 replicates ([P2-e](planned-experiments.md#p2--completeness))
+- **Not a replicate study of T8b C3 aggregates.** Additional C3 replicates (P2-e)
   were deprioritised in favour of this ladder; only ladder cells in active shedding may warrant a
   duplicate run.
 - **PCR interval columns are not Gate 2.** Intervals above 40 ms on MoQ may reflect the exporter cadence
@@ -732,7 +738,7 @@ and each group it skipped itself (`skipping slow groups`).
 | 6 | Delivered latency on `--delay` builds | **Met.** About twice the delay; no subscriber drifts more than 100 ms, none excluded |
 | 7 | Delay × contention × RTT | **No delay in {1, 2, 4, 6 s} suffices** at n ∈ {2, 3} or any RTT: 14.0–21.9 s of video lost against 0.00 s controls, falling 2.7–3.2 s in median from 1 s to 6 s |
 | 8 | Recovery on `--delay` builds | **Measured on the 5 s transient, n = 2.** At 20 ms RTT the loss is the relay's abandonment of groups (all of it at 6 s, 71–84 % at 2 s, where the rule leaves the cell unplaced); at 200 ms and 6 s the relay's queue rises to 0.40–0.96 s and drains with at most 0.05 s abandoned. No rate or queue regression after any dip; the 10 % buffer test cannot be applied to a near-empty queue. One replicate at 200 ms fails validity |
-| 9 | Error bars | **Met for criteria 7 and 10** (three replicates per cell, quoted as ranges); the segmented rungs with two replicates are not yet at three |
+| 9 | Error bars | **Met** for criteria 7 and 10 and every rung of both `netns`/`cake` ladders: three replicates per cell, quoted as ranges |
 | 10 | A delay against a transient shortfall | **6 s at 200 ms RTT; none in {1, 2, 6 s} at 20 ms**, at n ∈ {2, 3}, on video. The shaper drops nothing; audio loses up to 2.11 s, which the criterion does not grade |
 
 Criterion 5 deserves a note rather than a bare "not run": it asks for the *smallest* budget that keeps
@@ -750,8 +756,6 @@ a third party.
   1.0×–1.1× boundary measured on `ffa5b81b`; its rate over a keyframe's span is not measured.
 - **Buffer and RSS instrumentation on the sustained rungs** for criterion 2. Criterion 8 reads the
   relay's queue from qlog on the transient only.
-- **The segmented lane under loss with a sender that does not yield to it** — the same origin with
-  BBR — which would say whether the collapse at 100 ms RTT is the lane's or its origin's controller.
 - **Durations beyond 60 s** on either lane's boundary rungs; the segmented lane's margin is set by
   retention against accumulated lag, so a longer dip at 0.9× is the cell an operator sizing
   retention needs.

@@ -116,7 +116,6 @@ clear_loss() { ip netns exec t8b-pub tc qdisc change dev veth-pub root handle 1:
 cleanup_procs() {
 	[ -n "${RECV_PID:-}" ] && kill "$RECV_PID" 2>/dev/null
 	[ -n "${PKG_PID:-}" ] && kill "$PKG_PID" 2>/dev/null
-	pkill -f "tsp .*-O hls .*$HLS_DIR" 2>/dev/null
 	RECV_PID="" PKG_PID=""
 	sleep 1
 }
