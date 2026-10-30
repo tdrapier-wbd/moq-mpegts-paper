@@ -644,8 +644,10 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
   broadcasters already trust: **one importer → dual fan-out paths → dual receivers → dual groomers →
   ST 2022-7 selection at the receiver.**
 - **On segmented HTTP the serving node holds no state, so over one CDN the source protection can be
-  the CDN's.** Two co-started packagers of one feed into a shared store emit byte-identical segments
-  (`--intra-close`) with no receiver-side merge. A packager started later did not join that
+  the CDN's.** Two co-started packagers of one feed into a shared store on one host emit
+  byte-identical segments (`--intra-close`) with no receiver-side merge; across two hosts sharing an
+  NFS store a pair was hitless only with a fixed input bitrate, a store granting no delegations and
+  a common start, which 5 co-starts in 23 missed silently. A packager started later did not join that
   namespace in any stock TSDuck configuration (on the clip measured, its names collided with fetched
   ones, or its table counters and cuts differed from its partner's), and a pair that does **not** share feed and naming
   is accepted silently. A 24/7 feed restarts packagers, so the pair needs packagers that cut and

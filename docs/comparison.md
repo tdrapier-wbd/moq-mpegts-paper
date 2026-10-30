@@ -108,12 +108,12 @@ head-to-head under one shaper ([Evidence](../lab/evidence.md) §3.3):
   invisible to an integrity monitor, until the origin evicts the segment it asks for — a cliff where
   the media-aware lane has a slope.
 
-Past 7.7–12.2 % applied loss the segmented lane's HTTP/1.1 client re-anchors and leaves holes,
-silently past ~20 % ([T5](../lab/test-5-network-impairment.md)). **Against SRT, matched on
+**Against SRT, matched on
 measured latency and graded on content, the media-aware lane loses more programme in every
 random-loss and reorder stress cell but 5 % reorder**, by a margin its build and QUIC stack set.
 **Matched the same way at 100 ms RTT, the segmented lane loses nothing to 5–20 % reorder, and to
-5–10 % loss nothing on BBR, one replicate aside, as SRT, but more than the media-aware lane on CUBIC**; a 5 s outage costs
+5–10 % loss nothing on BBR, one replicate aside, as SRT, and nothing through a CloudFront edge,
+whose TCP behaves as BBR (one PoP), but more than the media-aware lane on CUBIC**; a 5 s outage costs
 it more than either where its cushion is short ([Evidence](../lab/evidence.md) §3.3).
 
 ### 3.2 On recovery: segmented HTTP has the more robust model
@@ -139,9 +139,8 @@ parsing media ([Evidence](../lab/evidence.md) §3.12) — a monitoring hook, not
 Broadcast reliability comes from **1+1 with selection at the receiver**, which is transport-independent
 ([Architecture](architecture.md) §5, [Evidence](../lab/evidence.md) §3.4). Head-to-head the lanes diverge.
 **Serving-node failover** on MoQ is never hitless: relay reselection takes at least one idle timeout,
-and an importer takeover on current `main` is a marked programme switch ([Evidence](../lab/evidence.md)
-§3.4). A co-started segmented pair sharing one feed and one set of segment names fails over with no
-measurable interruption, 3/3 runs. A stock packager started later did not join its namespace; one
+and an importer takeover on current `main` is a marked programme switch. A co-started segmented
+pair sharing a feed and segment names fails over on one host with no measurable interruption, 3/3 runs. A stock packager started later did not join its namespace; one
 naming segments by content time did, so two origins are interchangeable in one CDN origin group,
 which over CloudFront covered each failure of one pathway tested. Two receivers at different edges,
 released on the origin's program date-time, start within 1.1 ms for a 2022-7 merge; a
@@ -561,7 +560,7 @@ under what conditions each is preferable.
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Carried on the opaque lane and through the groomer** (once, loopback, no key ladder); excluded on the media-aware lane; a narrow gate (§8) | By construction as bytes (reasoned); not exercised |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Not cleared**: 72 h on the live feed through one CDN, memory flat; six breaks in the contribution each withdrew both pathways, 54 s in all, and the groomer left PTS hours from PCR after a splice, its fix not soaked; one run ([Evidence](../lab/evidence.md) §3.4, §5) |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, silent time-travel when not |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike on one host, silent time-travel when not |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** Cache offload at one node, not a CDN |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
