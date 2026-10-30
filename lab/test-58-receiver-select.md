@@ -1,8 +1,8 @@
 # Test 58: 1+1 on the media-aware lane, selected at the receiver
 
-**State: run on the laptop, graded, but for the uplink outage (a Linux host).** C0 and C3 hold; C2
-and C4 fail. No leg's start or restart cost the output anything; every fault cost it a cut and
-0.6–3.6 s of decoder hole, and no cell stayed under a second in all three runs.
+**State: run and graded.** C0 and C3 hold; C2 and C4 fail. No leg's start, restart or return cost
+the output anything; every fault but an uplink outage under the receive timeout cost it 0.6–3.6 s of
+decoder hole, and no cell stayed under a second in all three runs.
 
 ## Objective
 
@@ -23,7 +23,7 @@ redundant legs start and restart at their own times
 |---|---|
 | `moq`, `moq-relay` | `main` at `66af72315` (moq 0.14.2, moq-relay 0.17.2), recorded with each run |
 | Switch | TSDuck `tsswitch` 3.45, `--fast-switch` (both inputs read throughout), recorded with each run |
-| Host | the laptop, loopback; no other timing work and no build on the host during a run. `outage`: an 8-core Linux host with no other work, loopback, `tsswitch` 3.44, importers retrying without limit (`RETRY=0s`) |
+| Host | the laptop, loopback; no other timing work and no build on the host during a run. `outage`: an 8-core Linux host with no other work, loopback, `tsswitch` 3.44, importers retrying without limit (`RETRY=0s`), the clip's first 120 s byte for byte as the source |
 | One source | T56's: the drills' contribution clip (1080i H.264, 9.95 Mb/s CBR) played live to a file that each importer follows from its own start |
 | Two sources | T56's separate encode (720p H.264, 2 s closed GOP, 9 Mb/s CBR, other PIDs), played from the same instant |
 | Legs | leg A and leg B, each an importer, its own relay and its own broadcast, and an `export ts --stitch --follow 10s --delay 2s` under a supervisor that restarts it when it exits |
@@ -95,11 +95,12 @@ and each restart.
 - FFmpeg is the decoder, not an IRD. Loopback has no loss or jitter, and the laptop's scheduler is
   in every timing.
 - Both legs read one file on one host, so the source is common to them, which no 1+1 covers. The
-  uplink outage needs Linux and `iptables`, and runs later on a Linux host.
+  outage is a clean blackout of one flow on loopback, not a path that degrades.
 
 ## Results
 
-**As run.** 36 runs graded; every one passed the void checks. Three departures from the procedure:
+**As run.** 36 runs on the laptop and 15 outage runs on the Linux host (12 on `66af72315`, three on
+`bdc47852a`) graded; every one passed the void checks. Three departures from the procedure:
 
 - **The relay cell ran twice.** In its first nine runs each importer gave up after the CLI's default
   reconnect budget (10 s) while its relay was down for 15 s, so leg A never returned and its
@@ -125,6 +126,10 @@ to the cut that leaves its leg; *bad* is the range of corrupt pictures after it.
 | | `term` | 1.52 (1.54) | 0.52 (0.52) | 1.67 (1.69) | 0.44 (0.44) | 16–36 |
 | | `relay` | 3.19 (3.21) | 1.49 (1.50) | 2.54 (2.55) | 2.40 (2.40) | 0 |
 | | `egress` | 0.52 (0.53) | 0.51 (0.52) | 1.51 (1.54) | 0.40 (0.40) | 12–35 |
+| | `outage`, 0.3 s | no cut | 0.03 (0.03) | 0.13 (0.13) | 0 (0) | 0 |
+| | `outage`, 3 s | 3.41 (3.41) | 1.49 (1.49) | 2.87 (2.87) | 1.08 (1.08) | 33 |
+| | `outage`, 6 s | 3.41 (3.42) | 1.49 (1.49) | 2.87 (2.87) | 1.08 (1.08) | 33 |
+| | `outage`, 12 s | 3.42 (3.42) | 1.49 (1.49) | 2.87 (2.87) | 1.08 (1.08) | 33 |
 | non-revertive, 2,000 ms | `kill` | 4.87 (4.91) | 2.99 (3.00) | 3.30 (3.56) | 3.16 (3.16) | 4–12 |
 | | `term` | 3.02 (3.04) | 2.02 (2.03) | 3.15 (3.29) | 2.48 (2.52) | 13–16 |
 | | `relay` | 4.82 (4.88) | 3.00 (3.00) | 3.29 (3.59) | 3.16 (3.16) | 4–12 |
@@ -143,11 +148,28 @@ SIGTERM, media and packets stopped together, 0.95–0.98 s after the signal. Whe
 was killed, detection was the receive timeout (0.51–0.53 s and 1.98–2.18 s). No detection waited on
 the QUIC idle timeout.
 
+**Uplink outage.** At 0.3 s the importer kept its session and the output lost nothing. From 3 s the
+cut came 3.41–3.42 s after the outage began, whatever its length, about when a hard kill's does, at
+the same cost in all nine runs. The importer kept its session through 3 s. At 6 and 12 s the session
+closed at the idle timeout (6.02 s, 0.02 s before the 6 s outage ended), and the importer reconnected
+on its own: 0.5–1.0 s after the close, or 1.5–1.9 s after a 12 s outage ended. Leg A's export then
+followed the new instance, marking the switch, and did not exit. After each 3 s outage it exited
+instead, on *missed a decode deadline on PID 111*, 0.3–0.7 s after the uplink returned, and its
+supervisor restarted it a second later: [#6802](https://github.com/moq-dev/moq/issues/6802)'s
+failure, which `66af72315` predates. The cut came at the same instant whether or not the exit preceded
+it. A smoke run at 3 s before these did not cut: its export ran on, and the output took holes of 1.58
+and 1.30 s, 1.48 s of programme lost and 27 corrupt pictures.
+
+**On `bdc47852a`** (the diagnostic) the export dropped the late frames and ran on in all three runs,
+and the uplink's return raced the cut. Two runs did not cut: the output stayed on leg A with a 2.55 s
+hole, 2.40 s of programme lost and no corrupt picture. One cut at 3.41 s, at `66af72315`'s cost.
+
 **Arrivals.** 117 arrivals (each run's standby start, importer and export, and every restart but the
 revertive mode's, which C3 grades) caused no cut. Each one's decoder hole was 0.15–0.30 s, within its hole before the event plus 0.1 s, except
 the 2,000 ms egress restarts': 0.33, 0.48 and 0.63 s against 0.23 s. Re-graded on its own window, each
 of those gaps begins at the fault's cut onto leg B, 0.9–1.1 s after the restart, and the restarted
-leg was never selected.
+leg was never selected. In the 12 outage runs on `66af72315`, 36 more (the standby's starts, the
+uplink's returns and the 3 s cell's export restarts) caused no cut, each with a hole of 0.15–0.23 s, within the bar.
 
 **Revertive return.** One cut back to leg A in every run: after the importer's restart, a decoder
 hole of 0.20–0.21 s, 0.20 s of programme lost and one bad picture; after the relay's, 0.26–0.29 s,
@@ -157,12 +179,16 @@ hole of 0.20–0.21 s, 0.20 s of programme lost and one bad picture; after the r
 
 ## Grading
 
-- **C0 holds.** No arrival cut the output, and every arrival's hole is within the bar except two
-  restarts whose window holds the fault's own cut, which a restarted leg that is never selected cannot
-  cause.
+- **C0 holds.** No arrival cut the output, the uplink's returns included, and every arrival's hole is
+  within the bar except two restarts whose window holds the fault's own cut, which a restarted leg
+  that is never selected cannot cause.
 - **C1** is the table above.
-- **C2 fails** in every cell: at 500 ms each cell's hole exceeded 1 s in at least two runs of three,
-  and the programme lost exceeded 1 s in every `kill` and `relay` run.
+- **C2 fails** in every cell but the 0.3 s outage: at 500 ms each other cell's hole exceeded 1 s in
+  at least two runs of three, and the programme lost exceeded 1 s in every `kill`, `relay` and
+  3–12 s outage run.
+- **7, the outage:** under the receive timeout it caused no switch and cost nothing; from 3 s,
+  through and past the idle timeout, one cut costing 2.87 s of hole and 1.08 s of programme, and a
+  return that cost nothing. On `bdc47852a` a 3 s outage cost over a second whether it cut or not.
 - **C3 holds**: one cut, at most 0.29 s of hole and 0.24 s of programme, in all six runs.
 - **C4 fails**: every cut decoded on, but the hole was 1.89–3.64 s at SIGKILL and 0.60–2.49 s at
   SIGTERM, with a programme step of 0.96–2.68 s lost at SIGKILL and from 0.28 s repeated to 1.56 s
@@ -180,6 +206,11 @@ hole of 0.20–0.21 s, 0.20 s of programme lost and one bad picture; after the r
   a second of PCR and null packets. That hard kill cost 1.9–2.9 s of hole at a 500 ms timeout, against
   8.4–9.5 s for the relay's switch at the same 6 s idle timeout in T56, because no detection here
   waits on the transport.
+- **An uplink outage costs nothing under the receive timeout, and from 3 s is detected as a hard
+  kill is.** Once the export's delay runs dry the leg falls silent as a killed importer's does, so
+  the cut comes at 3.4 s however long the outage. Past the idle timeout the importer reconnects on its
+  own and its export follows, so the leg is ready again with nothing restarted. Outages between 0.3
+  and 3 s were not run; at 3 s, with the export's exit fixed, the uplink's return races the cut.
 - **A cut across missing programme corrupts until the next random-access point.** With detection at
   the timeout (a killed export) the hole was still 0.8–1.5 s, with 12–35 corrupt pictures, while the
   return between two live legs cost 0.2–0.3 s and one. An input switch that detects on the video
