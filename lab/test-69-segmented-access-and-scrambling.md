@@ -152,9 +152,9 @@ run of null packets in the capture exceeds 27 ms.
 3. **The segmented lane can carry a scrambled multiplex, through a packager that does not look into
    the payload.** Without `--intra-close`, TSDuck's packager carries it byte for byte, its CA PIDs
    and BISS-CA's CA_descriptor with it, and a descrambler after the receiver returns the clear source.
-   With `--intra-close`, the setting a clear feed is cut with, it cannot carry one live. The segments
-   then begin on PES boundaries, 58 of 60 away from a random-access point, so a receiver joining at a
-   segment waits inside it for the next one.
+   Its segments begin on PES boundaries, 58 of 60 away from a random-access point, so a receiver
+   joining at a segment waits inside it for the next one. With `--intra-close`, the setting a clear
+   feed is cut with, it cannot carry one live.
 4. **What the route keeps and loses against BISS-CA** (derived from parts C and S and T66):
 
 | | BISS-CA in the multiplex | The segmented route's own access |
@@ -164,7 +164,7 @@ run of null packets in the capture exceeds 27 ms.
 | Revocation | by entitlement message; not exercised | tens of seconds through the edge's store; expiry exact |
 | What it needs of the lane | byte-faithful carriage, measured here and on MoQ's opaque lane | a programmable edge and a key service |
 
-## Limits, stated in advance
+## Limits
 
 - One distribution, two PoPs, one viewer host; the second PoP is reached by a pinned address, not by
   a viewer there. Each probe holds one connection, so it reads one edge server per PoP. The token's
