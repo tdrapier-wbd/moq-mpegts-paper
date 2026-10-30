@@ -11,10 +11,10 @@ lanes' half is [T66](test-66-scrambled-carriage.md). Rigs:
 
 ## Objective
 
-R7 on the segmented lane is derived ([Comparison](../docs/comparison.md) §7): where the CDN authorises
-every request, revocation is bounded by the playlist's reload cadence, but no revocation has been
-timed against a CDN. And the lane's only scrambled-source result is a negative one: our segmenter
-names no segment of a scrambled multiplex ([T66](test-66-scrambled-carriage.md)). Two questions:
+R7 on the segmented lane rested on a derivation: where the CDN authorises every request, revocation
+would be bounded by the playlist's reload cadence, and no revocation had been timed against a CDN.
+And the lane's only scrambled-source result was a negative one: our segmenter names no segment of a
+scrambled multiplex ([T66](test-66-scrambled-carriage.md)). Two questions:
 
 - **C. Common Access Token at the edge.** A segmented stream encrypted per segment (HLS AES-128),
   every request gated at CloudFront by a CTA-5007 token that a CloudFront Function validates, with
@@ -144,7 +144,7 @@ run of null packets in the capture exceeds 27 ms.
 1. **A CDN that checks every request bounds revocation by its own propagation, not by the playlist
    cadence.** Through CloudFront's KeyValueStore the bound is tens of seconds: a median 24–28 s and a
    worst case of 86 s, set by whichever edge sees the write last. That is about 50 times MoQ's measured
-   1.7 s ([T37](test-37-entitlement-revocation.md)), not Comparison §7's derived 0.28–0.30 s. Expiry
+   1.7 s ([T37](test-37-entitlement-revocation.md)), not the 0.28–0.30 s part cadence. Expiry
    is exact to the probe interval, so a tighter bound needs short-lived tokens re-issued by the
    entitlement service: design, not exercised here (`catr` was not run).
 2. **The gate holds in front of the cache.** Revocation refused objects the edge held, so caching

@@ -299,12 +299,13 @@ content the bias is toward short lifetimes and an explicit, tight cadence.
 **How this compares with the alternative data plane** is developed in [Comparison](comparison.md)
 §7. The distinction is not push against poll, because MoQ's fast path is itself a poll on an
 integer-second period: it is a poll every `max-age` seconds against a check on every part request.
-Where the CDN authorizes each request, the segmented bound is one part-target interval, measured in
-this lab at **0.28–0.30 s** ([T14](../lab/test-14-data-plane-comparison.md)), against MoQ's **1.7 s
-measured and 2.11 s documented** worst case. **On revocation latency MoQ is the slower of the two,
-by roughly six to seven times**, and it is the only one of the two with configurations that disable
-revocation entirely — or that tolerate an hour of authorization-endpoint outage while continuing to
-serve. MoQ's real advantage is therefore narrower than a latency figure and does not depend on one:
+The check on every request does not make the segmented bound one part interval: an edge refuses a
+revoked token only once its copy of the revocation list holds it, which on CloudFront's key-value
+store took a median 24–28 s and 86 s at worst
+([T69](../lab/test-69-segmented-access-and-scrambling.md)), against MoQ's **1.7 s measured and 2.11 s
+documented** worst case. **On revocation latency MoQ is the faster of the two measured**, though it is
+the only one with configurations that disable revocation entirely — or that tolerate an hour of
+authorization-endpoint outage while continuing to serve. Its advantage does not rest on that figure:
 the enforcement point is a relay you can operate, so the policy is yours and portable, and a
 subscription is a live queryable fact rather than an inference from delivery logs.
 

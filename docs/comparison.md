@@ -332,20 +332,19 @@ and at classic durations it reaches the receiver.
 
 ## 7. Entitlement and access control (R7)
 
-**MoQ's advantage is real but narrow, and on revocation latency MoQ loses to low-latency HLS.** MoQ's
+**MoQ's advantage is real, and on revocation latency MoQ is the faster of the two measured.** MoQ's
 revocation is a poll whose tightest worst case is **about 1.7 s measured and 2.11 s as documented**
-([Evidence](../lab/evidence.md) §3.10). Low-latency segmented HTTP re-fetches the playlist every part
-target, so where the CDN authorizes each request the bound is **0.28–0.30 s** against the part
-durations measured here ([T14](../lab/test-14-data-plane-comparison.md)): on worst case **MoQ is
-roughly six to seven times worse**. At the classic durations of §1 the same bound is about 2 s,
-level with MoQ's. Three plausible MoQ
+([Evidence](../lab/evidence.md) §3.10). Low-latency segmented HTTP re-fetches its playlist every
+0.28–0.30 s part ([T14](../lab/test-14-data-plane-comparison.md)), but a CDN that checks every
+request refuses a revoked token only once its edges hold the revocation: through CloudFront's own
+key-value store, **a median 24–28 s and 86 s at worst** at two edge locations
+([T69](../lab/test-69-segmented-access-and-scrambling.md)), some fifty times MoQ's worst case. Expiry
+is exact on both, so a faster segmented bound needs short-lived tokens, which is design; the figure is
+one CDN's mechanism. Three plausible MoQ
 configurations disable revocation altogether, and an authorization outage is tolerated for an hour by default
-([Control](control-plane.md) §4.1). It is not a verdict: the segmented figure is **derived**, not
-measured against a revocation, and holds only where the CDN checks **every request** rather than
-issuing a token with its own lifetime. What differs otherwise is **where enforcement lives and
+([Control](control-plane.md) §4.1). What differs otherwise is **where enforcement lives and
 whether the session is observable** — at the relay, portable and queryable, or at the CDN through
-per-supplier machinery inferred from logs. MoQ's enforcement is exact and measured; the segmented
-half is an architectural reading.
+per-supplier machinery inferred from logs. Enforcement is exact on both.
 
 ---
 
@@ -360,13 +359,13 @@ half is an architectural reading.
 | PSI cadence, packets added | source cadence plus **one PAT/PMT pair per segment** | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap | unchanged; nothing added | **identical; nothing added** |
 | PCR repetition and accuracy (TR 101 290 P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | the source's PCRs, values and positions intact; each released within 2 ms of schedule, arrival jitter not graded | **0 violations at 481 ns**, ungroomed — the source's own, read from a capture over the internet |
 | Packet schedule (T-STD), wire | source order carried; **not graded** | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](../lab/evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips and one live feed | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
-| TS-level scrambling | carried as bytes; reasoned | **cannot be carried** — the importer refuses every scrambled unit and announces no broadcast | **carried byte for byte**, its CA PIDs with it, and through the groomer | carried by construction |
+| TS-level scrambling | **carried byte for byte**, its CA PIDs with it, by a packager not cutting on pictures; `--intra-close` publishes nothing | **cannot be carried** — the importer refuses every scrambled unit and announces no broadcast | **carried byte for byte**, its CA PIDs with it, and through the groomer | carried by construction |
 | Byte-identical to source | **in payload, yes; as a mux, no** | no | **yes**, from the first released group | every field, count and cadence measured identical, not diffed byte-for-byte |
 
 Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-4-remote-e2e-srt.md));
 the opaque lane on loopback, five clips on `moq-dev` ([T48](../lab/test-48-passthrough-export.md),
 [T3](../lab/test-3-opaque-transparency.md)); scrambling once, on loopback
-([T66](../lab/test-66-scrambled-carriage.md)); EIT on a synthetic
+([T66](../lab/test-66-scrambled-carriage.md), [T69](../lab/test-69-segmented-access-and-scrambling.md)); EIT on a synthetic
 fixture ([T17](../lab/test-17-si-snapshot-tracks.md)); figures and qualifications in
 [Evidence](../lab/evidence.md) §3.1. **Single-programme mux content on segmented HTTP is as verbatim as the
 opaque MoQ lane** — the only difference in a 1,200-packet window is byte 3 on one PAT and one PMT — and
@@ -533,7 +532,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer, its continuity and PCR repetition for a day on a replayed clip; segmented HTTP at its segment-imposed cushion, and for 72 h on the live feed but at its six breaks; neither on hardware, and **P1/P2 alone**: MoQ's wire fails the T-STD and segmented HTTP's is ungraded (§4.6, §8) |
 | Latency (R4) | **MoQ over segmented HTTP, decisively; MoQ over the tunnels, not at conformance** | **M** | 141 ms where nothing is conformant; **2,447 against 9,324 ms at P1/P2 conformance**, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
-| Entitlement and control (R7) | MoQ | R | narrow — enforcement point and session observability, not revocation speed (§7) |
+| Entitlement and control (R7) | MoQ | M+R | enforcement point, session observability, and revocation speed on the one CDN mechanism measured (§7) |
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (M) (§8) |
 | Wire volume | **MoQ**, by the source's stuffing | M+derived | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9) |
 | Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
