@@ -1079,6 +1079,7 @@ the groomer*, and they are worth naming because they are unfamiliar to a broadca
 |---|---|---|
 | Liveness signal | subscription state; relay memory against its per-ingested-channel ceiling | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
 | Silent failure mode | **a stalled source behind a healthy session, indefinitely.** The idle timeout catches an *idle* peer — a publisher with no subscriber dies to it at ~30 s and a frozen relay at 34.3 s, both at the 30 s default of the builds measured — but a publisher whose input has stopped is not idle from QUIC's point of view, and [T22](../lab/test-22-silent-media-plane-failure.md) froze one for 120 s without provoking a single error, timeout or reconnect anywhere. Detection has to come from the media plane, where it takes ~1.7 s. An edge stage configured `--on-stall continue` then re-hides it, emitting valid empty CBR | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
+| A dead video stream | **contained to its PID**: every other stream flows on, and per-PID liveness names the dead one ([Evidence](../lab/evidence.md) §3.12) | **every stream stops, on the segmenter measured**: it closes a segment only at a random-access picture, so none closed while the video was dead, the audio held back with it, and every monitor saw only an absence ([Evidence](../lab/evidence.md) §3.12; one clip, loopback). A segmenter that also cuts at a time bound should contain it; that is untested |
 | Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are *normal*, so an alarm below the segment duration chatters and one above it is slow. Measured, the groomer derives ~9 s against the MoQ lane's ~1 s |
 | Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
 | Recovery | reconnect and resubscribe | re-fetch; the segment is still addressable, which is genuinely easier |
@@ -1124,8 +1125,12 @@ would have to invent.
 turns on it.** No open control plane and no transport protocol in current use gives an origin this
 visibility into a subscriber's delivered-media health — not WebRTC, SRT or RTMP, and not
 HLS/CMAF/DASH. CMCD/CMSD, the nearest thing, reports request-, buffer- and playback-level client
-state, since version 2 (CTA-5004-B) to an analytics collector as well as the CDN; its custom keys
-could carry a receiver's TR 101 290 counters, but no key defines them. No candidate in
+state, since version 2 (CTA-5004-B) to an analytics collector as well as the CDN. **Measured, it
+reports transport faults and nothing inside the stream**: from a byte-faithful receiver on the
+segmented lane it named an origin outage within 0.2 s, a stalled source appeared only on resumption,
+and a dead elementary stream never by name ([Evidence](../lab/evidence.md) §3.12; loopback, no CDN,
+a receiver that sends no buffer level). Its custom keys could carry a receiver's TR 101 290
+counters, but no key defines them. No candidate in
 [Comparison](comparison.md) satisfies it. It is recorded because a distributor will meet the gap at
 fleet scale, and because a carrier for the report is close to hand on either data plane.
 
