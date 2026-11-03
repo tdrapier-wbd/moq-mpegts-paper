@@ -27,6 +27,15 @@ Each window prints one `key=value` line:
 The PID is discovered from the stream rather than configured: the first PID to
 carry a second PCR is the one being graded, so the monitor does not need a PMT
 and cannot be pointed at the wrong PID by a stale flag.
+
+With --pts (T76), each PES start's PTS is read against the last PCR before it,
+and the window adds:
+
+    lead_min_ms     the smallest PTS - PCR over every PID, which goes negative
+                    when frames arrive after their presentation time
+    lead_max_ms     the largest
+    lead_out        PES starts outside --lead-band (default 0,2000 ms)
+    leads           per PID, pid:min/max in ms
 """
 
 import argparse
@@ -52,6 +61,24 @@ def pcr_of(packet):
     return base * 300 + ext
 
 
+PTS_WRAP = 1 << 33
+# PES stream IDs with no PTS: program stream map, padding, private 2, ECM, EMM, DSM-CC, H.222.1 E, directory.
+NO_PTS = {0xBC, 0xBE, 0xBF, 0xF0, 0xF1, 0xF2, 0xF8, 0xFF}
+
+
+def pts_of(packet):
+    """The PTS (90 kHz) of the PES that starts in `packet`, or None."""
+    if not packet[1] & 0x40 or not packet[3] & 0x10:  # no payload_unit_start, or no payload
+        return None
+    off = 4 + (1 + packet[4] if packet[3] & 0x20 else 0)
+    if off + 14 > PACKET or packet[off : off + 3] != b"\x00\x00\x01" or packet[off + 3] in NO_PTS:
+        return None
+    if not packet[off + 7] & 0x80:
+        return None
+    b = packet[off + 9 : off + 14]
+    return ((b[0] >> 1) & 7) << 30 | b[1] << 22 | (b[2] >> 1) << 15 | b[3] << 7 | b[4] >> 1
+
+
 def unwrap(previous, current):
     """`current` advanced past `previous`, allowing for the 33-bit rollover."""
     delta = current - previous
@@ -73,8 +100,17 @@ class Window:
         self.packets = 0
         self.pcr_span = 0  # 27 MHz ticks between first and last PCR
         self.byte_span = 0  # transport packets between first and last PCR
+        self.leads = {}  # pid -> [min, max] PTS - PCR, ms
+        self.lead_out = 0
 
-    def line(self, elapsed, gap_ms):
+    def lead(self, pid, ms, band):
+        span = self.leads.setdefault(pid, [ms, ms])
+        span[0] = min(span[0], ms)
+        span[1] = max(span[1], ms)
+        if not band[0] <= ms <= band[1]:
+            self.lead_out += 1
+
+    def line(self, elapsed, gap_ms, pts=False):
         mean = self.total_ms / self.intervals if self.intervals else 0.0
         # The mux rate the stream asserts about itself: bytes carried between two
         # PCRs over the media time those PCRs claim separates them. On a
@@ -83,11 +119,17 @@ class Window:
         rate = 0
         if self.pcr_span > 0:
             rate = int(self.byte_span * PACKET * 8 * PCR_HZ / self.pcr_span)
-        return (
+        out = (
             f"t={elapsed} pcrs={self.pcrs} gt40={self.gt40} max_ms={self.max_ms:.3f} "
             f"mean_ms={mean:.3f} cc={self.cc} packets={self.packets} "
             f"rate_bps={rate} gap_ms={gap_ms:.0f}"
         )
+        if pts and self.leads:
+            lo = min(s[0] for s in self.leads.values())
+            hi = max(s[1] for s in self.leads.values())
+            per = ",".join(f"{p}:{s[0]:.0f}/{s[1]:.0f}" for p, s in sorted(self.leads.items()))
+            out += f" lead_min_ms={lo:.1f} lead_max_ms={hi:.1f} lead_out={self.lead_out} leads={per}"
+        return out
 
 
 def main():
@@ -95,7 +137,10 @@ def main():
     ap.add_argument("--window", type=float, default=60.0, help="seconds per summary line (default 60)")
     ap.add_argument("--repetition-ms", type=float, default=40.0, help="P1 PCR repetition limit (default 40)")
     ap.add_argument("--pid", type=int, default=None, help="grade this PID instead of discovering it")
+    ap.add_argument("--pts", action="store_true", help="also read every PTS against the PCR")
+    ap.add_argument("--lead-band", default="0,2000", help="PTS - PCR counted as in band, ms (default 0,2000)")
     args = ap.parse_args()
+    band = tuple(float(x) for x in args.lead_band.split(","))
 
     stdin = sys.stdin.buffer
     pid_last_pcr = {}  # pid -> last PCR, for discovery
@@ -148,6 +193,12 @@ def main():
                     window.cc += 1
             cc_last[pid] = counter
 
+            if args.pts and last_pcr is not None and (pts := pts_of(packet)) is not None:
+                d = (pts - last_pcr // 300) % PTS_WRAP
+                if d >= PTS_WRAP // 2:
+                    d -= PTS_WRAP
+                window.lead(pid, d / 90.0, band)
+
             pcr = pcr_of(packet)
             if pcr is None:
                 continue
@@ -184,14 +235,14 @@ def main():
             # does not come from the bytes, and the only one that can say the
             # feed stopped rather than that it is carrying something wrong.
             gap = (now - last_pcr_at) * 1000.0 if last_pcr_at else 0.0
-            print(window.line(int(now - started), gap), flush=True)
+            print(window.line(int(now - started), gap, args.pts), flush=True)
             window = Window()
             while window_ends <= now:
                 window_ends += args.window
 
     if window.packets:
         gap = (time.monotonic() - last_pcr_at) * 1000.0 if last_pcr_at else 0.0
-        print(window.line(int(time.monotonic() - started), gap), flush=True)
+        print(window.line(int(time.monotonic() - started), gap, args.pts), flush=True)
 
 
 if __name__ == "__main__":

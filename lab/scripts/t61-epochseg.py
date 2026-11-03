@@ -15,6 +15,14 @@ the input or the PTS going back withdraws the playlist at once and holds it unti
 of intact segments has been cut again. A pathway that has just joined, or lost input, therefore
 answers 404 for its playlist rather than a window its peer does not share.
 
+With --peer (T76), a continuity error no longer withdraws by itself. Every segment's SHA-1 is
+written beside it (seg-K.sha1), and a segment cut across an error is held out of the playlist
+while the peer's sidecar for K is read: the same digest is damage both pathways carry, published;
+a different one is damage of this pathway's own, so its segment is deleted (the CDN's request for
+it then fails over to the peer) and the playlist withdrawn as before; no sidecar by --peer-wait
+(the peer down, or not cutting K) leaves nothing to differ from, published. A stall, a lost sync
+byte and the PTS going back still withdraw at once.
+
 With --pdt, each segment carries EXT-X-PROGRAM-DATE-TIME: the wall-clock time of its first PCR,
 as the PCR plus an offset fixed from the soonest arrival over the first --pdt-settle seconds after
 a reset. It follows the content exactly and differs between origins only by their offsets, so a
@@ -23,18 +31,24 @@ receiver can release every segment at the same wall-clock time whichever origin 
 
   t61-epochseg.py DIR [--group 239.255.0.1:5000] [--duration 2] [--window 6] [--extra 3]
                   [--target 4] [--pdt] [--pdt-settle 2] [--file TS]
+                  [--peer URL --peer-header-file F --peer-wait 3]
 
 One line per event on stderr: "<unix time> seg k=K dur=S bytes=N sha1=H", "playlist", "reset why",
-"pdt offset=S".
+"pdt offset=S"; with --peer, "damaged k=K why", then "shared k=K", "unshared k=K" or "unverified
+k=K why".
 """
 import argparse
 import datetime
 import hashlib
 import os
+import queue
 import re
 import socket
 import sys
+import threading
 import time
+import urllib.error
+import urllib.request
 
 WRAP = 1 << 33
 HALF = 1 << 32
@@ -55,8 +69,33 @@ def pcr_of(p):
 	return None
 
 
+class Peer:
+	"""The other pathway's sidecars: the digest it cut for K, or None if it has none by the deadline."""
+
+	def __init__(self, url, headers, wait):
+		self.url = url if url.endswith("/") else url + "/"
+		self.headers = headers
+		self.wait = wait
+
+	def digest(self, k):
+		deadline = time.monotonic() + self.wait
+		why = "unreachable"
+		while True:
+			try:
+				req = urllib.request.Request(f"{self.url}seg-{k}.sha1", headers=self.headers)
+				with urllib.request.urlopen(req, timeout=1) as r:
+					return r.read().decode().strip(), "answered"
+			except urllib.error.HTTPError as e:
+				why = f"http {e.code}"
+			except (urllib.error.URLError, OSError) as e:
+				why = "missing" if isinstance(getattr(e, "reason", e), FileNotFoundError) else "unreachable"
+			if time.monotonic() >= deadline:
+				return None, why
+			time.sleep(0.1)
+
+
 class Segmenter:
-	def __init__(self, out, duration, window, extra, target, pdt=False, pdt_settle=2.0):
+	def __init__(self, out, duration, window, extra, target, pdt=False, pdt_settle=2.0, peer=None):
 		self.out = out
 		self.span = round(duration * 90000)
 		self.window = window
@@ -64,18 +103,28 @@ class Segmenter:
 		self.target = target
 		self.pdt = pdt
 		self.pdt_settle = pdt_settle
+		self.peer = peer
 		self.playlist = os.path.join(out, "index.m3u8")
 		self.pmt = None
 		self.video = None
 		self.pcr_pid = None
 		self.cc = {}
 		self.last_rx = None
+		self.gen = 0
+		self.held = set()
+		self.answers = queue.SimpleQueue()
+		self.asking = []
 		self.reset("start")
 
 	def event(self, what, detail=""):
 		print(f"{time.time():.3f} {what} {detail}".rstrip(), file=sys.stderr, flush=True)
 
 	def reset(self, why):
+		for k in self.held:
+			self.remove(k)
+		self.held = set()
+		self.gen += 1
+		self.damage = None
 		self.edge_k = None
 		self.cur = None
 		self.done = []
@@ -95,6 +144,42 @@ class Segmenter:
 		self.last_rx = now
 		for i in range(0, len(data) - 187, 188):
 			self.packet(data[i:i + 188], now)
+		self.settle()
+
+	def settle(self):
+		while True:
+			try:
+				gen, k, mine, theirs, why = self.answers.get_nowait()
+			except queue.Empty:
+				return
+			if gen != self.gen or k not in self.held:
+				continue
+			self.held.discard(k)
+			if theirs is not None and theirs != mine:
+				self.event("unshared", f"k={k}")
+				self.remove(k)
+				self.reset(f"unshared damage k={k}")
+				continue
+			self.event("shared" if theirs is not None else "unverified", f"k={k}" + ("" if theirs else f" {why}"))
+			if len(self.done) == self.window and not self.held:
+				self.publish()
+
+	def ask(self, gen, k, mine):
+		theirs, why = self.peer.digest(k)
+		self.answers.put((gen, k, mine, theirs, why))
+
+	def finish(self):
+		"""File input: let every pending question be answered before exiting."""
+		for t in self.asking:
+			t.join()
+		self.settle()
+
+	def remove(self, k):
+		for name in (f"seg-{k}.ts", f"seg-{k}.sha1"):
+			try:
+				os.remove(os.path.join(self.out, name))
+			except FileNotFoundError:
+				pass
 
 	def packet(self, p, now):
 		if p[0] != 0x47:
@@ -106,7 +191,10 @@ class Segmenter:
 			cc = p[3] & 0xF
 			last = self.cc.get(pid)
 			if last is not None and cc != (last + 1) & 0xF and cc != last:
-				self.reset(f"cc pid={pid}")
+				if self.peer and self.cur is not None:
+					self.damage = self.damage or f"cc pid={pid}"
+				else:
+					self.reset(f"cc pid={pid}")
 			self.cc[pid] = cc
 		pusi = p[1] & 0x40
 		if pusi and (pid == 0 or pid == self.pmt):
@@ -167,15 +255,28 @@ class Segmenter:
 	def close(self, v):
 		k, v0, buf, pcr0 = self.cur
 		name = f"seg-{k}.ts"
+		digest = hashlib.sha1(buf).hexdigest()
 		tmp = os.path.join(self.out, f".{name}.tmp")
 		with open(tmp, "wb") as f:
 			f.write(buf)
 		os.replace(tmp, os.path.join(self.out, name))
+		if self.peer:
+			tmp = os.path.join(self.out, f".seg-{k}.sha1.tmp")
+			with open(tmp, "w") as f:
+				f.write(digest + "\n")
+			os.replace(tmp, os.path.join(self.out, f"seg-{k}.sha1"))
 		dur = (v - v0) / 90000
 		self.done.append((k, dur, name, pcr0))
 		del self.done[:-self.window]
-		self.event("seg", f"k={k} dur={dur:.3f} bytes={len(buf)} sha1={hashlib.sha1(buf).hexdigest()[:16]}")
-		if len(self.done) == self.window:
+		self.event("seg", f"k={k} dur={dur:.3f} bytes={len(buf)} sha1={digest[:16]}")
+		if self.damage:
+			self.event("damaged", f"k={k} {self.damage}")
+			self.damage = None
+			self.held.add(k)
+			t = threading.Thread(target=self.ask, args=(self.gen, k, digest), daemon=True)
+			t.start()
+			self.asking = [a for a in self.asking if a.is_alive()] + [t]
+		if len(self.done) == self.window and not self.held:
 			self.publish()
 		self.prune(self.done[0][0] - self.extra)
 
@@ -195,7 +296,7 @@ class Segmenter:
 
 	def prune(self, below):
 		for f in os.listdir(self.out):
-			m = re.fullmatch(r"seg-(\d+)\.ts", f)
+			m = re.fullmatch(r"seg-(\d+)\.(ts|sha1)", f)
 			if m and int(m.group(1)) < below:
 				os.remove(os.path.join(self.out, f))
 
@@ -211,13 +312,25 @@ def main():
 	ap.add_argument("--pdt", action="store_true", help="EXT-X-PROGRAM-DATE-TIME on every segment")
 	ap.add_argument("--pdt-settle", type=float, default=2.0, help="seconds to settle the PCR offset")
 	ap.add_argument("--file", help="read a TS file instead of the group (tests)")
+	ap.add_argument("--peer", help="the other pathway's segment directory, as a URL (http:// or file://)")
+	ap.add_argument("--peer-header", metavar="NAME:FILE", help="a header for the peer, its value read from FILE")
+	ap.add_argument("--peer-wait", type=float, default=3.0, help="seconds to wait for the peer's sidecar")
 	args = ap.parse_args()
 	os.makedirs(args.dir, exist_ok=True)
-	seg = Segmenter(args.dir, args.duration, args.window, args.extra, args.target, args.pdt, args.pdt_settle)
+	peer = None
+	if args.peer:
+		headers = {}
+		if args.peer_header:
+			name, path = args.peer_header.split(":", 1)
+			with open(path) as f:
+				headers[name] = f.read().strip()
+		peer = Peer(args.peer, headers, args.peer_wait)
+	seg = Segmenter(args.dir, args.duration, args.window, args.extra, args.target, args.pdt, args.pdt_settle, peer)
 	if args.file:
 		with open(args.file, "rb") as f:
 			while data := f.read(1316):
 				seg.datagram(data, time.time())
+		seg.finish()
 		return
 	group, port = args.group.rsplit(":", 1)
 	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)

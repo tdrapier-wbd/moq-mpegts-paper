@@ -7,7 +7,7 @@ time-based bursts, a RIST lane added beside SRT.
 
 ## Objective
 
-[Evidence](evidence.md) §5 row 12: does RIST beat SRT on a real path? Both are retransmitting
+The question [Evidence](evidence.md) §5 held open: does RIST beat SRT on a real path? Both are retransmitting
 packet tunnels that hand on the source's bytes ([T15](test-15-point-to-point-cadence.md)), and on
 loopback and a 12.8 ms path nothing has separated them. A 116 ms path is where their recovery
 designs (SRT's ARQ with a latency window, RIST's NACK-based retransmission within its buffer) could

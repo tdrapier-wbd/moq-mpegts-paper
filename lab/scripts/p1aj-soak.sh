@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# P1-aj's soak on the receiver host, as root (lab/test-62-origin-group-soak.md): T61's design for
-# HOURS. Two receivers of the origin group (t59-legs.sh legs, aligned, B joining 20 s after A),
-# merged live by p1aj-merge.py, whose output is graded in flight by t21-pcr-monitor.py and tsp's
-# continuity check. Nothing is stored but logs and counters.
+# P1-aj's soak on the receiver host, as root (lab/test-62-origin-group-soak.md, test-76): T61's
+# design for HOURS. Two receivers of the origin group (t59-legs.sh legs, aligned, B joining 20 s
+# after A), merged live by p1aj-merge.py, whose output is graded in flight by t21-pcr-monitor.py
+# (PCR intervals, continuity, PTS against PCR) and tsp's continuity check. Nothing is stored but
+# logs and counters.
 #
 #   p1aj-soak.sh start DIR HOURS URL [URL_B] | stop DIR | status DIR
 #
@@ -19,7 +20,7 @@ start() {
 	mkdir -p "$dir"
 	chown ubuntu: "$dir"
 	setsid bash -c "python3 '$H/p1aj-merge.py' 2>>'$dir/merge.jsonl' |
-		tee >(python3 '$H/t21-pcr-monitor.py' --window 60 >>'$dir/pcr.log' 2>&1) |
+		tee >(python3 '$H/t21-pcr-monitor.py' --window 60 --pts >>'$dir/pcr.log' 2>&1) |
 		tsp -I file - -P continuity -O drop >>'$dir/cc.log' 2>&1" </dev/null >/dev/null 2>&1 &
 	echo $! >"$dir/merge.pid"
 	sleep 1
