@@ -220,6 +220,14 @@ imquic's FETCH of groups 0–19, ascending, from 26 s in, the publisher still co
   stream on 49 and opens a new one for 50, copying the upstream header's FIRST_OBJECT. No group
   whose final object is large (1,696 or 1,884 bytes) or whose FIN came on its own was split, and
   whether a small final is split varies from run to run (groups 5 and 9).
+- **Before and after a one-line patch (criteria fixed before the first run).** The patch marks an
+  object as the stream's end only if it also empties the chunk carrying the FIN. The same rig, three
+  replicates each, against imquic's relay at `7b19884` run on the laptop on loopback (`IP=127.0.0.1`,
+  certificate pinned by fingerprint), unpatched and then patched. **Valid:** unpatched, M lacks at
+  least one final object with a stitch warning in two of three replicates; otherwise loopback does
+  not reproduce the split and the comparison is void. **Pass:** patched, no replicate has a stitch
+  warning or a group I received on two streams, and every final object M lacks is a logged
+  deadline drop.
 - **Not settled here:** whether `moq-dev` should accept the second stream. Its first stream had
   already ended the group, and the second claims the subgroup's first object at ID 50, so it holds
   no consistent place to put it; a parked tail also waits on the subscription's unrelated join fill

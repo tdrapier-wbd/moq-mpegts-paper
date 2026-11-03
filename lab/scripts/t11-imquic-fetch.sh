@@ -7,6 +7,7 @@
 # The publisher's input is held open 30 s past the fixture's end, so F runs while it is connected.
 #
 #   BIN=<moq dir> SUB=<imquic-moq-sub> FIXTURE=<fixture.ts> t11-imquic-fetch.sh <out dir> [replicates]
+# HOST, PORT and IP select another relay; a self-signed one needs MOQ_CONNECT_TLS_FINGERPRINT.
 set -uo pipefail
 
 BIN=${BIN:?set BIN to the moq build dir}
@@ -16,7 +17,7 @@ OUT=${1:?out dir}
 N=${2:-3}
 HOST=${HOST:-lminiero.it}
 PORT=${PORT:-9000}
-IP=$(dig +short "$HOST" A | tail -n 1)
+IP=${IP:-$(dig +short "$HOST" A | tail -n 1)}
 [ -n "$IP" ] || {
 	echo "cannot resolve $HOST" >&2
 	exit 2
