@@ -958,7 +958,8 @@ The passthrough export merged as [#5349](https://github.com/moq-dev/moq/pull/534
 [#5327](https://github.com/moq-dev/moq/pull/5327)'s acceptance set.
 
 **Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair
-([T12](test-12-dual-path-handoff.md) § *Arm D*); release-clock statistics that count neither a
+([T12](test-12-dual-path-handoff.md) § *Arm D*), asked as
+[#7743](https://github.com/moq-dev/moq/issues/7743); release-clock statistics that count neither a
 skipped group nor an absent track; and the join-dependent latency at 500 ms
 ([T47](test-47-fixed-delay-export.md) conclusion 20,
 [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)).
@@ -1073,12 +1074,10 @@ the residue at the slot's edges, program tables written twice ahead of a capped 
 #5306's planner. On `main` with #5306 (`0d9e9ff78`) the 110 s cut overruns neither video nor system
 TB. **Closed.**
 
-### #3798's plan asks for a reproduction, and the campaign has one — plus a correction to its scope
+### #3798's reproduction — moot
 
-Posted to #3798 with the fixture recipe: [T41](test-41-import-reanchor-coverage.md) confirmed the
-quest's claim that the re-anchor is set once (H.264 aborts on wrap 1.00, legacy audio on 1.98), and
-corrected its scope, since AC-3 takes the legacy path too: the dividing line is the stream type,
-not the codec. **State: moot**: since #4543 no stream re-anchors at a wrap.
+[T41](test-41-import-reanchor-coverage.md)'s fixtures, posted to #3798, confirmed the re-anchor set
+once and widened its scope from the codec to the stream type. Since #4543 nothing re-anchors.
 
 ### A loop wrap moved audio against video — contributed as [#4513](https://github.com/moq-dev/moq/pull/4513), closed in favour of [#4543](https://github.com/moq-dev/moq/pull/4543)
 
@@ -1095,7 +1094,9 @@ contribution switching encodes unflagged ended both legs at once
 reproducer [T64](test-64-synthetic-encoder-switch.md)), upstream made the import restart itself
 under a fresh epoch ([#7144](https://github.com/moq-dev/moq/pull/7144)) and the export re-acquire
 the clock ([#7165](https://github.com/moq-dev/moq/pull/7165)), both merged; what a switch costs on
-`main` is [T67](test-67-import-step-restart.md)'s.
+`main` is [T67](test-67-import-step-restart.md)'s. A GOP of it on a short-GOP feed, the new
+instance announced only once its catalog resolves, is asked as
+[#7744](https://github.com/moq-dev/moq/issues/7744).
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
 
