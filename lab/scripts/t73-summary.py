@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""T73: summarise graded cells by lane, condition and budget.
+"""T73–T75: summarise graded cells by lane, condition and budget.
 
   t73-summary.py <runs-dir> [--json OUT]
 
-Reads <runs-dir>/r<k>-<lane>-<cond>-b<budget>/grade.json (t71-grade.py's) and prints, per lane,
+Reads <runs-dir>/[t7N-]r<k>-<lane>-<cond>[-b<budget>]/grade.json (t71-grade.py's; no budget is 2 s)
+and prints, per lane,
 condition and budget: replicates, how many are whole, the median of the cells' median latencies
 and their range, the largest p95, the in-cell trend (tail less head), the applied loss each way,
 the largest clock bound and the criteria-1-4 checks; on the segmented lane, its receiver's and
@@ -16,7 +17,7 @@ import os
 import re
 import statistics
 
-CELL = re.compile(r"^r(\d+)-(srt|opaque|aware|seg)-(clean|burst|l[0-9.]+)-b(\d)$")
+CELL = re.compile(r"^(?:t7\d-)?r(\d+)-(srt|rist|opaque|aware|seg)-(clean|burst|tb|ge|l[0-9.]+)(?:-b(\d))?$")
 
 
 def num(x):
@@ -34,6 +35,7 @@ def main():
 		if not m:
 			continue
 		_, lane, cond, budget = m.groups()
+		budget = budget or "2"
 		groups.setdefault((budget, cond, lane), []).append(json.load(open(g)))
 	rows = []
 	for (budget, cond, lane), cells in sorted(groups.items()):

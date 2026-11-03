@@ -135,7 +135,7 @@ The sessions themselves now set up everywhere but Nokia's draft-18 endpoint and 
 and libquicr, which the first sweep could not reach, accept PUBLISH_NAMESPACE and the empty-prefix
 SUBSCRIBE_NAMESPACE on both transports. Cloudflare's draft-18 relay takes an anonymous publish.
 
-**What this establishes.** Relay portability holds for carriage after the join on seven of nine
+**What this establishes.** Relay portability holds for carriage after the join on eight of nine
 third-party relays, and for both of the proposal's cases on libquicr and moqx; moxygen and Cloudflare
 join if a start at the next group is accepted. It is not yet the neutral fabric the architecture
 assumes: two relays lost media and imquic still does, and on three a subscriber joining mid-stream
