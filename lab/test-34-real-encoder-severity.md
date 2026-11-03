@@ -3,7 +3,7 @@
 **State: graded on one real step, the feed's contribution switching between two encodes upstream,
 unflagged.** None of the nine exits P0-j first captured was a step: each was the standing build of
 the time stamping a SCTE-35 section below the one before it, which `main` no longer does, and the
-seven-day re-run saw no exit in 169 h. A later ring caught one, on standing units past moq
+seven-day re-run saw no exit in 169 h. A later 168 h ring caught one, its only unplanned exit, on standing units past moq
 0.14.0, where a backward step ends the import by design ([Evidence](evidence.md) §3.13): a
 hard switch, at one packet, to a second encode of the service with identical tables and a clock
 16,844.6 s behind, with no `discontinuity_indicator`. The import ended on both legs at once and a
