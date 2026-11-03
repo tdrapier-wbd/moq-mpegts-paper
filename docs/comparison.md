@@ -309,9 +309,10 @@ to be answered per route by the destination.
 **Segmented HTTP wins the delivery path decisively, and "interoperable" has to say which layer it
 means.** HTTP bytes pass through every CDN and cache, where MoQ's relay is a protocol implementation
 and a MoQ feed crosses eight of nine other implementations' public relays intact after the join, but
-only five for a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). **Delivery-path interop and
-multi-programme carriage are mutually exclusive on segmented HTTP**: "Transport Stream Segments MUST
-contain a single MPEG-2 Program." HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and
+only five for a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). **Segmented HTTP
+excludes multi-programme carriage by specification, not delivery path**: "Transport Stream Segments
+MUST contain a single MPEG-2 Program," yet a CDN carries one intact ([Evidence](../lab/evidence.md)
+§3.1). HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and
 TDT/TOT through its catalog. SCTE-35 has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give
 client reporting MoQ has only in drafts, but **neither plane defines how an origin establishes
 that what a subscriber received was intact**
@@ -562,7 +563,7 @@ under what conditions each is preferable.
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Not cleared**: 72 h on the live feed through one CDN, memory flat; six breaks in the contribution each withdrew both pathways, 54 s in all, and the groomer left PTS hours from PCR after a splice, its fix not soaked; one run ([Evidence](../lab/evidence.md) §3.4, §5) |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike on one host, silent time-travel when not |
-| **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** One origin fetch per segment per CDN edge, at two edges; the origin's own knee unmeasured ([Evidence](../lab/evidence.md) §3.4) |
+| **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** One origin fetch per segment per CDN edge, at two edges; no origin knee to 128 edges ([Evidence](../lab/evidence.md) §3.4, §3.6) |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
 | **A receive stage at the route's latency budget** | A stage turns the delivered feed back into a transport stream at the latency the route allows | **Cleared, single-implementation** (§11) | **Cleared at classic segment durations, open below them** (§6.1) |
@@ -605,15 +606,14 @@ Ranked by leverage:
 3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has any
    technical discriminator over the incumbents, and turns on the three conditions §13 names.
 4. **A receive stage that survives delivery-path failures and reports them, and HLS-input receivers
-   on hardware?** The condition segmented HTTP's route-level case rests on (§3.2, §4.4).
+   on hardware, multi-programme segments included?** The condition segmented HTTP's route-level case rests on (§3.2, §4.4).
 5. **Sub-second requirement: routes or preference?** It decides MoQ's addressable share, and is a
    commercial question (§5.2).
-6. **MPTS in TS segments in practice?** MoQ's remaining mux-content advantage (§8).
-7. **Edge gateway at the demarcation or at a regional PoP?** It sets the delivery bill (§4.5).
-8. **Genuine segment loss against lateness?** Content Steering is specification-only (§3.2).
-9. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7).
-10. **A real estate's fade and connectivity profile?** The satellite-hybrid case turns on correlated
-    fades and on whether IP availability is independent of fade at each site (§10.2).
+6. **Edge gateway at the demarcation or at a regional PoP?** It sets the delivery bill (§4.5).
+7. **Genuine segment loss against lateness?** Content Steering is specification-only (§3.2).
+8. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7).
+9. **A real estate's fade and connectivity profile?** The satellite-hybrid case turns on correlated
+   fades and on whether IP availability is independent of fade at each site (§10.2).
 
 ---
 
