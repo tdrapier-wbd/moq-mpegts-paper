@@ -2,12 +2,15 @@
 # T71's receiver: the impairment on the lanes' flows, one lane's receive stage, and the clock reads.
 #
 #   sudo ORIGIN_IP=<addr> t71-far.sh impair <loss>       the qdiscs, each way: <loss> is a percentage
-#                                                        (0 for a clean cell) or ge:<p>,<r>, a Gilbert
-#                                                        model (bursts of mean 100/<r> datagrams);
-#                                                        in:<spec> or out:<spec> for one direction
-#   sudo ORIGIN_IP=<addr> t71-far.sh counters <file>     netem's counters, appended to <file>
+#                                                        (0 for a clean cell), ge:<p>,<r>, a Gilbert
+#                                                        model (bursts of mean 100/<r> datagrams), or
+#                                                        tb:<mean-ms>,<percent>,<seed>, T74's bursts
+#                                                        in time; in:<spec> or out:<spec> for one
+#                                                        direction
+#   sudo ORIGIN_IP=<addr> t71-far.sh counters <file>     netem's counters, appended to <file>, with
+#                                                        the burst scheduler's log beside it
 #   sudo ORIGIN_IP=<addr> t71-far.sh clear
-#   t71-far.sh recv <cell-dir> <srt|opaque|aware|seg> <seconds> <broadcast>
+#   t71-far.sh recv <cell-dir> <srt|rist|opaque|aware|seg> <seconds> <broadcast>
 #   t71-far.sh clock <cell-dir> <before|after>
 #
 # **Only the lanes' flows are impaired.** netem acts on UDP to and from the origin's relay and SRT
@@ -19,8 +22,9 @@
 # would be dropped whole), and the subscriber runs without GSO for the same reason.
 #
 # Env: ORIGIN_IP (required), BIN (~/bin-66af7231), RELAY_PORT (4711), SRT_PORT (9711),
-# CLOCK_PORT (9710), BUFMS (1000), DELAY (1s), VPID (111), DEV (ens5), IFB (ifb71); the segmented
-# lane: SEG_PORT (18731), PACER (~/pacer-97f3a38/mpegts-pacer), RATE (11438000), its cushion BUFMS
+# RIST_PORT (9712; the main profile's one port), CLOCK_PORT (9710), BUFMS (1000), DELAY (1s),
+# VPID (111), DEV (ens5), IFB (ifb71); the segmented lane: SEG_PORT (18731), PACER
+# (~/pacer-97f3a38/mpegts-pacer), RATE (11438000), its cushion BUFMS
 set -euo pipefail
 
 ACTION=${1:?action}
@@ -29,6 +33,7 @@ BIN=${BIN:-$HOME/bin-66af7231}
 SCRIPTS=${SCRIPTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 RELAY_PORT=${RELAY_PORT:-4711}
 SRT_PORT=${SRT_PORT:-9711}
+RIST_PORT=${RIST_PORT:-9712}
 CLOCK_PORT=${CLOCK_PORT:-9710}
 BUFMS=${BUFMS:-1000}
 DELAY=${DELAY:-1s}
@@ -38,8 +43,15 @@ IFB=${IFB:-ifb71}
 SEG_PORT=${SEG_PORT:-18731}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
 RATE=${RATE:-11438000}
+SCHED_PID=/run/t74-sched.pid
+SCHED_LOG=/tmp/t74-sched.jsonl
 
 clear_qdiscs() {
+	if [ -s "$SCHED_PID" ]; then
+		kill -TERM "$(cat "$SCHED_PID")" 2>/dev/null || true
+		sleep 0.5
+		rm -f "$SCHED_PID"
+	fi
 	tc qdisc del dev "$DEV" root 2>/dev/null || true
 	tc qdisc del dev "$DEV" ingress 2>/dev/null || true
 	ip link del "$IFB" 2>/dev/null || true
@@ -64,7 +76,7 @@ impair() {
 	# shellcheck disable=SC2046
 	tc qdisc add dev "$DEV" parent 1:4 handle 40: netem $(model "$outward")
 	local proto port
-	for proto in "17 $RELAY_PORT" "17 $SRT_PORT" "6 $SEG_PORT"; do
+	for proto in "17 $RELAY_PORT" "17 $SRT_PORT" "17 $RIST_PORT" "6 $SEG_PORT"; do
 		port=${proto#* }
 		proto=${proto% *}
 		tc filter add dev "$DEV" parent ffff: protocol ip prio 1 u32 \
@@ -73,23 +85,40 @@ impair() {
 		tc filter add dev "$DEV" parent 1: protocol ip prio 1 u32 \
 			match ip dst "$ORIGIN_IP/32" match ip protocol "$proto" 0xff match ip dport "$port" 0xffff flowid 1:4
 	done
-	echo "impairment: inward $(model "$inward"), outward $(model "$outward"), on UDP $RELAY_PORT, $SRT_PORT and TCP $SEG_PORT with $ORIGIN_IP; GRO off"
+	echo "impairment: inward $(model "$inward"), outward $(model "$outward"), on UDP $RELAY_PORT, $SRT_PORT, $RIST_PORT and TCP $SEG_PORT with $ORIGIN_IP; GRO off"
+	local dirs="" tb=""
+	case "$inward" in tb:*) dirs=in tb=${inward#tb:} ;; esac
+	case "$outward" in tb:*) dirs=${dirs:+$dirs,}out tb=${outward#tb:} ;; esac
+	[ -n "$dirs" ] || return 0
+	local mean=${tb%%,*} rest=${tb#*,}
+	setsid python3 "$SCRIPTS/t74-time-burst.py" --seed "${rest#*,}" --mean-ms "$mean" --percent "${rest%,*}" \
+		--dirs "$dirs" --dev "$DEV" --ifb "$IFB" --log "$SCHED_LOG" >/tmp/t74-sched.out 2>&1 </dev/null &
+	echo $! >"$SCHED_PID"
+	sleep 0.3
+	kill -0 "$(cat "$SCHED_PID")" || {
+		cat /tmp/t74-sched.out >&2
+		exit 1
+	}
+	echo "time bursts: mean ${mean} ms, ${rest%,*} % of time, seed ${rest#*,}, directions $dirs"
 }
 
-# A loss spec as netem arguments: a percentage, or ge:<p>,<r>, Gilbert's two-state model.
+# A loss spec as netem arguments: a percentage, ge:<p>,<r>, Gilbert's two-state model, or tb:…,
+# whose netem holds 0 % until the scheduler switches it.
 model() {
 	case "$1" in
 	ge:*,*)
 		local p=${1#ge:}
 		echo "loss gemodel ${p%,*}% ${p#*,}% 100% 0%"
 		;;
+	tb:*) echo "loss 0%" ;;
 	*) echo "loss $1%" ;;
 	esac
 }
 
 # "Sent <bytes> bytes <pkts> pkt (dropped <n>, ...": what netem passed, and what it dropped.
 counters() {
-	local out=$1 i e
+	local out=$1 i e cell
+	cell=$(dirname "$out")
 	i=$(tc -s qdisc show dev "$IFB" 2>/dev/null | awk '/Sent/{gsub(",", ""); print $4, $7; exit}')
 	e=$(tc -s qdisc show dev "$DEV" 2>/dev/null | awk '/netem 40:/{n=1} n && /Sent/{gsub(",", ""); print $4, $7; exit}')
 	{
@@ -97,6 +126,10 @@ counters() {
 		echo "in_sent=${i%% *} in_dropped=${i##* }"
 		echo "out_sent=${e%% *} out_dropped=${e##* }"
 		echo "gro=$(ethtool -k "$DEV" | awk '/generic-receive-offload/{print $2}')"
+		if [ -s "$SCHED_PID" ] && [ -s "$SCHED_LOG" ]; then
+			cp "$SCHED_LOG" "$cell/sched.jsonl"
+			echo "sched=$(python3 "$SCRIPTS/t74-time-burst.py" --summary "$SCHED_LOG")"
+		fi
 	} >>"$out"
 }
 
@@ -108,6 +141,7 @@ recv() {
 		--connect-websocket-enabled=false --quic-gso=false --broadcast "$bcast" export ts)
 	case "$lane" in
 	srt) rx=(tsp --realtime -I srt --caller "$ORIGIN_IP:$SRT_PORT" --latency "$BUFMS" -O file -) ;;
+	rist) rx=(tsp --realtime -I rist --buffer-size "$BUFMS" "rist://$ORIGIN_IP:$RIST_PORT" -O file -) ;;
 	opaque) rx=("${moq[@]}" --passthrough --delay "$DELAY") ;;
 	aware) rx=("${moq[@]}" --delay "$DELAY") ;;
 	seg)

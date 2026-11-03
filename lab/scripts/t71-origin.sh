@@ -3,7 +3,7 @@
 # standing units, which it leaves alone.
 #
 #   t71-origin.sh relay-up <dir> | relay-down <dir> | clock-up <dir> | clock-down <dir>
-#   t71-origin.sh start <cell-dir> <srt|opaque|aware|seg> <seconds> <broadcast> | stop <cell-dir>
+#   t71-origin.sh start <cell-dir> <srt|rist|opaque|aware|seg> <seconds> <broadcast> | stop <cell-dir>
 #
 # The source is the clip from its start, paced by `tsp -P regulate` and tapped by a mirrored fork in
 # the same process as the transmitter: an inline tap between pacing and an SRT sender cost that lane
@@ -16,7 +16,7 @@
 # bounds each stage; an inner one would move its children out of the recorded group.
 #
 # Env: BIN (~/bin-66af7231), CLIP (~/contrib-10m.ts), RELAY_PORT (4711), SRT_PORT (9711),
-# CLOCK_PORT (9710), CC (delay), BUFMS (1000), VPID (111), CLOCK_LIFETIME (14400 s), SEG_PORT
+# RIST_PORT (9712), CLOCK_PORT (9710), CC (delay), BUFMS (1000), VPID (111), CLOCK_LIFETIME (14400 s), SEG_PORT
 # (18731), SEG_GROUP (239.255.0.73:5073)
 set -euo pipefail
 
@@ -27,6 +27,7 @@ CLIP=${CLIP:-$HOME/contrib-10m.ts}
 SCRIPTS=${SCRIPTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 RELAY_PORT=${RELAY_PORT:-4711}
 SRT_PORT=${SRT_PORT:-9711}
+RIST_PORT=${RIST_PORT:-9712}
 CLOCK_PORT=${CLOCK_PORT:-9710}
 CC=${CC:-delay}
 BUFMS=${BUFMS:-1000}
@@ -97,6 +98,9 @@ start)
 	case "$LANE" in
 	srt)
 		launch source timeout "$RUN" "${pace[@]}" -O srt --listener "0.0.0.0:$SRT_PORT" --latency "$BUFMS"
+		;;
+	rist)
+		launch source timeout "$RUN" "${pace[@]}" -O rist --buffer-size "$BUFMS" "rist://@0.0.0.0:$RIST_PORT"
 		;;
 	opaque | aware)
 		imp=(import ts)

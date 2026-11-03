@@ -14,7 +14,7 @@
     byte-faithful lanes ts-passthrough-identity.py against the clip;
   - with --tstd, the buffer model: ts-tstd.py --skip 8, pass when it exits 0.
 
-Usage: t71-grade.py <cell-dir> --lane srt|opaque|aware|seg [--clip PATH] [--tstd] [--scripts DIR]
+Usage: t71-grade.py <cell-dir> --lane srt|rist|opaque|aware|seg [--clip PATH] [--tstd] [--scripts DIR]
 """
 
 import argparse
@@ -100,6 +100,10 @@ def impairment(cell):
 	if loss.startswith("ge:"):
 		p, r = (float(x) for x in loss[3:].split(","))
 		out = dict(commanded_pct=round(100 * p / (p + r), 3), model=loss, gro=kv.get("gro"))
+	elif loss.startswith("tb:"):
+		out = dict(commanded_pct=float(loss[3:].split(",")[1]), model=loss, gro=kv.get("gro"))
+		m = re.search(r"^sched=(\{.*\})$", open(os.path.join(cell, "impair.txt")).read(), re.M)
+		out["schedule"] = json.loads(m.group(1)) if m else None
 	else:
 		out = dict(commanded_pct=float(loss), gro=kv.get("gro"))
 	out["direction"] = direction
@@ -230,7 +234,7 @@ def segmented(cell):
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("cell")
-	ap.add_argument("--lane", required=True, choices=("srt", "opaque", "aware", "seg"))
+	ap.add_argument("--lane", required=True, choices=("srt", "rist", "opaque", "aware", "seg"))
 	ap.add_argument("--clip", default=os.path.expanduser("~/contrib-10m.ts"))
 	ap.add_argument("--tstd", action="store_true")
 	ap.add_argument("--scripts", default=os.path.dirname(os.path.abspath(__file__)))
@@ -242,7 +246,7 @@ def main():
 	out["latency"] = latency(a.cell, a.scripts)
 	out["wire"] = wire(a.cell)
 	out["content"] = content(a.cell, a.scripts)
-	if a.lane in ("srt", "opaque"):
+	if a.lane in ("srt", "rist", "opaque"):
 		out["identity"] = identity(a.cell, a.scripts, a.clip)
 	if a.lane == "seg":
 		out["segmented"] = segmented(a.cell)

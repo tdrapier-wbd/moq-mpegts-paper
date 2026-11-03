@@ -31,9 +31,10 @@ As [T73](test-73-long-path-budget-burst.md#environment) at the 2 s budget, with 
 ## Procedure
 
 **Before the matrix:** T73's `t73-burst-probe.py` through the scheduler, lanes idle, 60 s at 1,000
-datagrams a second and 60 s at 100, on one seed. A time-based model loses the same share and the
+datagrams a second and 60 s at 250, on one seed. A time-based model loses the same share and the
 same burst durations in milliseconds at both rates, where a datagram-counted one stretches each burst
-tenfold at the lower rate. Then one segmented cell under T73's `ge:0.05,5`, to confirm the relaunched
+fourfold at the lower rate. (At 250 a second the 4 ms spacing alone lengthens a measured 20 ms mean
+by about 8 %; at 100 it would by about 25 %, the width of criterion 1.) Then one segmented cell under T73's `ge:0.05,5`, to confirm the relaunched
 rig reproduces T73's failure. A 40 s smoke cell per lane, ungraded.
 
 **The matrix,** in three rounds, each with its own seed, the lanes in an order rotated per round:

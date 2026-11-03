@@ -16,7 +16,7 @@
 set -euo pipefail
 
 CELL=${1:?cell name}
-LANE=${2:?lane: srt, opaque or aware}
+LANE=${2:?lane: srt, rist, opaque, aware or seg}
 LOSS=${3:?loss %, 0 for clean}
 SECS=${4:-120}
 ORIGIN_IP=${ORIGIN_IP:?set ORIGIN_IP to the origin address the receiver dials}
@@ -73,7 +73,7 @@ step "collect"
 on "$ORIGIN" 60 "cd $R && tar -cf - source.csv clock-origin.txt relay-build.txt source.log \$(ls segmenter.log ngx/access.log 2>/dev/null)" >"$LOG/$CELL/origin.tar"
 tar -xf "$LOG/$CELL/origin.tar" -C "$LOG/$CELL"
 put "$FAR" "$R/origin.tar" "$LOG/$CELL/origin.tar"
-on "$FAR" 60 "tar -xf $R/origin.tar -C $R && rm $R/origin.tar && cd $R && tar -cf - clock-far.txt impair.txt recv-events.log receive.log \$(ls recv.jsonl recv.err pacer.log 2>/dev/null)" |
+on "$FAR" 60 "tar -xf $R/origin.tar -C $R && rm $R/origin.tar && cd $R && tar -cf - clock-far.txt impair.txt recv-events.log receive.log \$(ls recv.jsonl recv.err pacer.log sched.jsonl 2>/dev/null)" |
 	tar -xf - -C "$LOG/$CELL"
 rm "$LOG/$CELL/origin.tar"
 echo "lane=$LANE loss=$LOSS secs=$SECS bufms=$BUFMS delay=$DELAY broadcast=$BCAST" >"$LOG/$CELL/cell.txt"
