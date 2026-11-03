@@ -45,8 +45,9 @@ def main():
 		whole = sum(1 for c in cells if c.get("content", {}).get("whole") and not c.get("wire", {}).get("cc_errors"))
 		lost = [c.get("content", {}).get("content_lost_s") for c in cells]
 		alost = [c.get("content", {}).get("audio_lost_s") for c in cells]
-		applied = [(c["impairment"].get("in") or {}).get("applied_pct") for c in cells if isinstance(c.get("impairment"), dict)]
-		ret = [(c["impairment"].get("out") or {}).get("applied_pct") for c in cells if isinstance(c.get("impairment"), dict)]
+		imp = [c["impairment"] for c in cells if isinstance(c.get("impairment"), dict)]
+		applied = [(i.get("in") or {}).get("applied_pct") for i in imp]
+		ret = [(i.get("out") or {}).get("applied_pct") for i in imp]
 		rtt = [num(c.get("clock", {}).get("rtt_ms")) for c in cells]
 		bound = [num(c.get("clock", {}).get("bound_ms")) for c in cells]
 		shifts = sorted({L.get("shift") for L in lat})
