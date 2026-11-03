@@ -137,6 +137,19 @@ fixed by [#6873](https://github.com/moq-dev/moq/pull/6873)), fixed before that r
     own terms; the decoder hole and the programme lost are reported beside the laptop's, and a median
     more than 0.25 s from it is the laptop's scheduler.
 
+**The clean exit and the relay loss on `main` at `204c97f4f`**, where routes carry the importer's
+instance, fixed before those runs; the Linux host, void as criterion 1:
+
+13. **R4, a clean exit keeps the delay:** three runs of `term` at a 6 s idle timeout. It passes if
+    every export loses at most a frame of programme at the SIGTERM, every switch is marked and no
+    export ends; the hole and outage are reported beside the earlier table.
+14. **R5, a relay loss on this build:** T6's arm 3 on moq-lite 07 with `--stitch --follow 10s`, at
+    `--delay` 2 s and 10 s, three runs each, and three on the default version at 2 s as the
+    control, graded by `t6-switch-grade.py`. C5 is graded on the moq-lite 07 runs.
+
+*Predicted:* R4 passes; on moq-lite 07 the relay loss is seamless, and on the default version a
+marked switch.
+
 ## Limits, fixed in advance
 
 - FFmpeg is the decoder, not an IRD; the hardware window (B-6) can repeat `kill` and `sources` at
