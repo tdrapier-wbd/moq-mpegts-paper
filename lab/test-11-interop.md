@@ -5,9 +5,10 @@
 assumption in [architecture](../docs/architecture.md). **State:** T11a run at `main` (P1-h)
 against every relay in the interop runner's registry, `moq-dev` publishing and subscribing over raw
 QUIC. **Of nine third-party relay implementations reached, seven carry the TS intact from the
-subscriber's join, and two lose packets after it**, in each of two runs: imquic at group ends, at
-half the boundaries in one run and at one near the end in the other, and red5 within the group being
-written when a subscription joins. The join itself splits them. libquicr and moqx start a subscriber at the current group and
+subscriber's join, and two lost packets after it** in each of two runs, imquic at group ends and red5
+within the group being written when a subscription joins. Three replicates on later `main` mapped
+them: imquic never delivers a group's final object at the same ten of nineteen boundaries, and red5
+lost nothing after a join at the next group. The join itself splits them. libquicr and moqx start a subscriber at the current group and
 pass both of the runner proposal's cases. moxygen and Cloudflare start at the next group and still
 serve a late subscriber. aiomoqt, moqtail and Nokia (draft 22) also start at the next group, and
 never deliver the catalog to a late subscriber, so `moq export ts` joining mid-stream receives
@@ -128,7 +129,7 @@ client, fixture and grading.
   them once, about 18.7 s in, and never announced the late broadcast to the late subscriber, whose
   namespace subscription it acknowledged 8 s after accepting the publisher's; red5 lost 13 video
   packets, the PAT and PMT and one SDT packet within the first 1.2 s, and passed the late case.
-  Neither is reported upstream until replicates map each loss to its group and object.
+  The replicates below map each loss to its group and object.
 
 The sessions themselves now set up everywhere but Nokia's draft-18 endpoint and quiche-moq: moqtail
 and libquicr, which the first sweep could not reach, accept PUBLISH_NAMESPACE and the empty-prefix
@@ -137,7 +138,42 @@ SUBSCRIBE_NAMESPACE on both transports. Cloudflare's draft-18 relay takes an ano
 **What this establishes.** Relay portability holds for carriage after the join on seven of nine
 third-party relays, and for both of the proposal's cases on libquicr and moqx; moxygen and Cloudflare
 join if a start at the next group is accepted. It is not yet the neutral fabric the architecture
-assumes: two relays lose media, and on three a subscriber joining mid-stream never starts.
+assumes: two relays lost media and imquic still does, and on three a subscriber joining mid-stream
+never starts.
+
+### imquic and red5 replicated, losses mapped (criteria fixed before the first run)
+
+The export drops an object that arrives later than its `--delay` (1 s by default) and logs it, so a
+packet missing from the capture may be one the relay delivered late rather than lost. Three
+replicates of the sweep on early November 2026 `main`, `moq-dev`'s own relay first in each as the
+control, each adding a carriage subscriber at a 10 s delay (`SLOW_DELAY=10s`).
+[`t11-loss-map.py`](scripts/t11-loss-map.py) recomputes the importer's groups and objects from the
+fixture and names the group and object of every packet a capture lacks between its join and end;
+on a synthetic capture with four known packets removed it named those four.
+
+1. **Valid run:** the control passes carriage whole and the late case.
+2. **Late or lost:** a packet missing at the 1 s delay and present at 10 s was delivered late;
+   missing at both, it was not delivered within 10 s.
+3. **Reportable:** a loss at the same place in the group structure (for example a group's last
+   object) in at least two of three replicates, in the same class.
+
+**Results** (`moq-dev` at `204c97f4f` at both ends, from the EC2 host):
+
+| Relay | Carriage, 1 s delay | Carriage, 10 s delay | Late subscriber |
+|---|---|---|---|
+| `moq-dev` (control) | whole, 3 of 3 | whole, 3 of 3 | pass, 3 of 3 |
+| imquic | the last object of groups 2, 3, 5, 8, 9, 11, 12, 15, 17 and 18 missing, 3 of 3; in one, also seven objects of group 14 | the same ten, 3 of 3 | the same ten from its join, 3 of 3 |
+| red5 | intact from group 1, 3 of 3 | intact from group 1, 3 of 3 | pass, 3 of 3 |
+
+- **Criterion 1 holds** in every replicate.
+- **imquic does not deliver a group's final object at the same ten boundaries of nineteen**, in
+  every replicate and at either delay, the count the first sweep showed. Each is one PCR-only packet,
+  some with a null packet behind it; neither shape, size nor the group's object count (51 in all
+  nineteen) separates the ten from the nine it delivers. Reportable by criterion 3. Group 14's
+  objects, in one replicate, were late: the 1 s export dropped them (its seven deadline drops) and
+  the 10 s one has them.
+- **red5 lost nothing in any replicate**: it starts a subscription at the next group, as moxygen and
+  Cloudflare do. The earlier runs' losses within the first group did not recur on this build.
 
 ### A CDN-hosted moqx deployment, both lanes
 
@@ -535,9 +571,8 @@ side adopts #2015's framing.
   reproducer first — the input ending between intra frames is the suspected trigger, and that
   should be confirmed against a clip whose final GOP is complete before anything is filed.
 - Raise the 200 ms QUIC→WebSocket fallback timer separately.
-- Report imquic's and red5's losses once replicates map each to its group and object; the late
-  subscriber aiomoqt, moqtail and Nokia never start waits on their adopting moq-transport#2015's
-  framing.
+- Report imquic's undelivered final objects (drafted, unsent); the late subscriber aiomoqt, moqtail
+  and Nokia never start waits on their adopting moq-transport#2015's framing.
 - The two TS cases, fixture and checker are proposed to the runner as
   [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159); once
   it merges, [`interop/`](interop/README.md) retires and this file's method cites the runner.

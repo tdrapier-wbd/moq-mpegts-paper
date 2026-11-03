@@ -7,6 +7,9 @@
 #
 #   BIN=<moq dir> FIXTURE=<fixture.ts> CHECK=<check-ts.py> t11-relay-sweep.sh <out dir> [name...]
 #
+# SLOW_DELAY (e.g. 10s) adds a second carriage subscriber at that --delay (carriage-slow.*): a packet
+# the default subscriber lacks and it has was delivered late, not lost.
+#
 # FIXTURE must be the synthetic fixture (the runner's make-fixture.sh): a public relay announces
 # what it carries to anyone. Endpoints are the runner registry's raw-QUIC entries; edit ENDPOINTS
 # when it moves. Names given after the out dir restrict the sweep to those endpoints.
@@ -60,6 +63,12 @@ for e in "${ENDPOINTS[@]}"; do
 	timeout 45 "$BIN/moq" "${c[@]}" --broadcast "$b-carriage" export ts --passthrough \
 		>"$d/carriage.ts" 2>"$d/carriage.log" &
 	sub1=$!
+	subs=("$sub1")
+	if [ -n "${SLOW_DELAY:-}" ]; then
+		timeout 55 "$BIN/moq" "${c[@]}" --broadcast "$b-carriage" export ts --passthrough --delay "$SLOW_DELAY" \
+			>"$d/carriage-slow.ts" 2>"$d/carriage-slow.log" &
+		subs+=("$!")
+	fi
 	sleep 2
 	(tsp -I file "$FIXTURE" -P regulate --pcr-synchronous -O file - 2>/dev/null |
 		timeout 60 "$BIN/moq" "${c[@]}" --broadcast "$b-carriage" import ts --passthrough \
@@ -73,9 +82,13 @@ for e in "${ENDPOINTS[@]}"; do
 	timeout 35 "$BIN/moq" "${c[@]}" --broadcast "$b-late" export ts --passthrough \
 		>"$d/late.ts" 2>"$d/late.log" &
 	sub2=$!
-	wait "$sub1" "$sub2"
+	wait "${subs[@]}" "$sub2"
 	kill "$pub1" "$pub2" 2>/dev/null
 	wait "$pub1" "$pub2" 2>/dev/null
+	if [ -n "${SLOW_DELAY:-}" ]; then
+		python3 "$CHECK" --fixture "$FIXTURE" --received "$d/carriage-slow.ts" --suffix \
+			>"$d/carriage-slow-suffix.tap" 2>&1
+	fi
 
 	python3 "$CHECK" --fixture "$FIXTURE" --received "$d/carriage.ts" >"$d/carriage.tap" 2>&1
 	rc1=$?

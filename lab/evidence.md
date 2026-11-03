@@ -565,8 +565,9 @@ as the interop runner's two cases, a subscriber present from the start and one j
 the opaque lane (P1, over the internet, one run per relay and two for imquic and red5, `moq-dev` from
 October 2026 `main` at both ends). **Both cases pass through `moq-dev`'s relay, libquicr and moqx;
 moxygen and Cloudflare start a subscriber at the next group, not the current one, and serve the late
-one.** imquic and red5 lose packets after the join in both runs, imquic in a different pattern each
-time. aiomoqt, moqtail and Nokia carry the stream from the next group but never deliver the catalog
+one.** imquic and red5 lost packets after the join in both runs; in three replicates on early
+November `main`, imquic never delivered a group's final object at the same ten of nineteen
+boundaries, and red5 lost nothing after a join at the next group. aiomoqt, moqtail and Nokia carry the stream from the next group but never deliver the catalog
 to a late subscriber; a draft-22 framing ambiguity in the start filter would explain it,
 though their side was not observed.
 
@@ -994,7 +995,7 @@ rebuild.
 | 8 | **Can a media-aware failover be brought under a second as a decoder sees it?** Not at any idle timeout tried: at 1 s a hard kill loses 1.1–1.2 s of programme and shows 1.3 s of hole; nor switched at the receiver, which waits out the export's delay; a clean exit loses 0.3 s, and a relay loss the detection interval less half the delay, unflagged (§3.4) | An export that flags the skip, or a delay covering it; an input switch that detects on the video PID | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
-| 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
+| 11 | **Why do three relays never start a late subscriber, and imquic drop groups' final objects?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |
 | 12 | **Does RIST beat SRT on a real path?** | One long WAN run | The one place a real path may separate two protocols this campaign cannot otherwise tell apart |
 | 13 | **Is the export's PCR accurate to ±500 ns over days?** A week on the live feed passes continuity, attribution and resources in every role, but graded PCR at ±18.5 µs (§3.6) | A ≥ 72 h export graded at ±500 ns, best on hardware (row 1) | Whether the P2 accuracy that captures of minutes pass holds for a permanent feed (§3.16) |
 | 14 | **What does a segmented origin cost at fan-out?** At two receivers no process takes over 6 % of a core, memory flat for 72 h ([T62](test-62-origin-group-soak.md)) | An origin under many edges | Its fan-out knee; the origin measured at load is `python3 -m http.server` |
