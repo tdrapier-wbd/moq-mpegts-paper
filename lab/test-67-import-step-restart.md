@@ -1,9 +1,10 @@
 # Test 67 — The import's own restart at an unflagged encoder switch
 
-**State: run, three times per stimulus and a control; every criterion holds.** At an unflagged
-encoder switch, back or forward, the import republishes itself and neither export ends; a switch
-costs 1,360 ms of programme on T64's stimulus and 1,600 ms on T34's capture, against 2,400–2,800 ms
-behind a supervisor. Rig: [T41](test-41-import-reanchor-coverage.md)'s
+**State: run, three times per stimulus and a control, on two builds.** At an unflagged encoder
+switch, back or forward, the import republishes itself and neither export ends. Past the catalog
+fix a switch costs 160 ms of programme on T64's stimulus, the truncated picture and the wait for a
+random-access one; on T34's capture it still costs 1,600 ms, because the stitched export starts at
+the new instance's second group. Behind a supervisor it cost 2,400–2,800 ms. Rig: [T41](test-41-import-reanchor-coverage.md)'s
 [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh), graded by
 [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py); stimuli from
 [T34](test-34-real-encoder-severity.md) and [T64](test-64-synthetic-encoder-switch.md).
@@ -94,7 +95,8 @@ exports of every run. The real switch is on decode times, as T34's table is:
 The whole saving is the old encode's tail. Behind a supervisor the old broadcast ended with about
 the export's latency of it held and unreleased; now the export plays it to the switch. What remains
 of the tail is the picture the switch cut mid-PES, the source's own loss. The new encode's head is
-unchanged to the millisecond, so it is the restarted import's catalog hold, as T34 found. On
+unchanged to the millisecond: on T64's switch the restarted import's catalog hold, which #7293
+removes; on the capture not (§ *On `main` past the catalog fix*). On
 presentation times the capture costs 1,960 ms, 320 + 1,640: its truncated last picture is presented
 400 ms after its decode time, so it counts in that clock's tail.
 
@@ -127,14 +129,50 @@ the same class (`p0j-splice.py`: back 16,844.7–16,845.0 s, forward 16,844.0–
 *Predicted:* the head falls to the wait for the new encode's first random-access picture plus the
 export's re-anchor, under 700 ms.
 
+**Results.** Every run counts but the third forward one, whose exports both ended on a broken pipe
+at teardown, 15 s after the source; a fourth replaced it. Each valid run recorded one import start
+and no exit, and the source's longest gap was 0.21 s.
+
+| Switch | Build | Runs | Programme lost (ms) | Old encode's tail (ms) | New encode's head (ms) | Longest arrival gap (ms) |
+|---|---|---:|---|---|---|---|
+| T64 back, presentation times | `548a41ec3` (control) | 1 | 1,360 | 80 | 1,280 | 1,400 |
+| T64 back, presentation times | `204c97f4f` | 3 | 160 | 80 | 80 | 155–162 |
+| T64 forward, presentation times | `204c97f4f` | 3 | 160 | 80 | 80 | 200 |
+| T34 back, decode times | `204c97f4f` | 3 | 1,600 | 40 | 1,560 | 1,361–1,394 |
+
+On decode times T64's switch costs 200 ms (40 + 160) both ways. **R0** passes, to the
+millisecond. **R1** passes. **R2 passes on T64's switch and fails on T34's capture**, whose head
+is unchanged.
+
+**The capture's head is not the catalog hold.** The export's first picture after the switch is the
+source's second random-access picture, 1,680 ms of presentation time past the cut (its decode time
+is the export's own); the new encode's first, 80 ms in, never reached it. The import logged the
+export's requests for that group refused as `old` 1.2 s after the republish, about one export
+latency: that is when the stitched export turns to the new instance, and it starts at its newest
+group. On this capture video leads its decode time by 0.76 s and the GOP is 1.2 s, so the second
+group has begun by then; on T64's 2 s GOP the first is still the newest. This is read from the log
+and the timestamps, not instrumented. The exports stayed byte-identical across T64's switch in all
+six valid runs, and were 98.7–99.8 % identical on the capture, parting on the video and PID 131.
+
 ## Conclusions
 
 1. **Upstream's import now carries an unflagged encoder switch in both directions**, as a marked
    programme switch that `export ts --stitch --follow` follows. Neither the backward step that ended
    T34's imports nor the forward one that ended its exports ends anything on `main`.
-2. **A switch costs 1.4–1.6 s of programme**: the catalog hold of the restarted import, which the
-   `restart-catalog` quest would remove. Nothing of the old encode is lost but the picture the switch
-   itself truncated.
+2. **Past the catalog fix a switch costs what the encode's structure sets**: nothing of the old
+   encode but the picture the switch truncated, and of the new one the wait until the export's
+   first group. On T64's stimulus that is 160 ms. On T34's capture it is 1,600 ms, a GOP more than
+   the first random-access picture, because the stitched export reaches the new instance about one
+   latency late and starts at its newest group; a fetch of the first, 1.2 s old, is refused.
 3. **Not covered:** a 1+1 ingest pair, whose two importers each mint an epoch at the switch
    ([T41](test-41-import-reanchor-coverage.md) § *A 1+1 ingest pair whose importers each mint an
    epoch*); the SRT gateway path; and the release builds, which predate the restart.
+
+## Corrections
+
+- **The capture's head was not the catalog hold.** *Believed:* the 1,560 ms head on T34's capture
+  was the restarted import's catalog hold, because it was unchanged to the millisecond across a
+  build that changed the tail. *True:* the build that removes the hold leaves it unchanged; it is
+  the stitched export starting at the new instance's second group. *Rule:* a cost unchanged across
+  a build is attributed to nothing that build changed; it is attributed only by a build that
+  removes the mechanism.

@@ -128,7 +128,8 @@ def main():
         pre = [t for t, _ in seq[:brk]]
         post = [t for t, _ in seq[brk:]]
         pre_last, post_first = max(pre), min(post)
-        lost = ((max(s0) - pre_last) + (post_first - min(s1))) / 90
+        tail, head = (max(s0) - pre_last) / 90, (post_first - min(s1)) / 90
+        lost = tail + head
         hole0 = sum(1 for t in s0 if min(pre) < t < pre_last and not near(sorted(pre), t))
         hole1 = sum(1 for t in s1 if post_first < t < max(post) and not near(sorted(post), t))
         foreign = sum(1 for t in pre if not near(s0, t)) + sum(1 for t in post if not near(s1, t))
@@ -143,7 +144,8 @@ def main():
         base = statistics.median(lat) if lat else 0
         since = (resume - rewind - base) / 1e6 if resume and rewind else float("nan")
         print(
-            f"leg {leg}: {len(pre):,} units before the break, {len(post):,} after; programme lost {lost:.0f} ms; "
+            f"leg {leg}: {len(pre):,} units before the break, {len(post):,} after; programme lost {lost:.0f} ms "
+            f"(old encode's tail {tail:.0f}, new encode's head {head:.0f}); "
             f"wire gap {wire:.0f} ms; from the rewind {since:.0f} ms beyond the latency ({base / 1e6:.0f} ms); "
             f"holes {hole0} before, {hole1} after; foreign {foreign}; flag at packet {flag}, break at {seq[brk][1]}"
         )

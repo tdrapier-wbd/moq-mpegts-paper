@@ -87,7 +87,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
 | **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
-| **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish costs 2.8–3.8 s of programme per step and is not hitless for a 1+1 pair; late October 2026 `main` republishes in the import, at 1.4–1.6 s an encoder switch. **A real feed steps back** where its contribution switches between unlocked encodes, unflagged, ending both legs at once; a subscriber lost 9.8 s | Why the other five diverge; how often other contributions switch so; a 1+1 ingest pair across the import's restart | §3.13 |
+| **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish costs 2.8–3.8 s of programme per step and is not hitless for a 1+1 pair; `main` republishes in the import, an encoder switch costing 0.16 s on a synthetic stimulus and 1.6 s on the captured one. **A real feed steps back** where its contribution switches between unlocked encodes, unflagged, ending both legs at once; a subscriber lost 9.8 s | Why the other five diverge; how often other contributions switch so; a 1+1 ingest pair across the import's restart | §3.13 |
 | **Interop** | The opaque lane crosses seven of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix; OpenMOQ's moq5 and `moq-dev` carry each other's TS byte-exact, neither catalog finding the other's track | Why three relays never start a late subscriber | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s, 86 s at a CDN | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
 | **Latency** | Where nothing is conformant MoQ crosses the internet in 141 ms against SRT's 1,623 and segmented HTTP's 4,101. **At P1/P2 conformance MoQ reads 2,447 ms and segmented HTTP 2,604 ms, whose wire also passes the buffer model**; the tunnels carry their source's grid at a buffer the operator sets. At the buffer model MoQ presents at 2,196.7 ms through the re-multiplexer and 1,137 ms at a 1 s delay through the export. On a 116 ms path at 1 % loss only SRT stays whole at 1 s, every lane at 2 s; under datagram bursts all but segmented HTTP | Camera-to-display; time-correlated loss on a long path; **a sub-second configuration conformant over a whole capture, on any lane** | §3.11 |
@@ -743,7 +743,7 @@ a rewind and an encoder restart each cross the lane with no programme hole and n
 **From moq 0.14.0 a backward timestamp step ends the import instead, flagged or not, on every stream
 kind measured**, so a release is republished at each step behind a supervisor, for 2.8–3.8 s of
 programme. **Late October 2026 `main` republishes in the import**, at a step back or an unflagged
-one forward, and an encoder switch costs 1.4–1.6 s.
+one forward, and an encoder switch costs 0.16 s on a synthetic stimulus and 1.6 s on the captured one.
 
 **A real feed does step back, where its contribution switches between two encodes whose clocks are
 not locked** ([T34](test-34-real-encoder-severity.md) § *A switch between two encodes*; P1, the
@@ -788,13 +788,14 @@ importers each mint an epoch*; P1, wire, later October 2026 `main`, `--stitch`, 
 the single importer's cost and one flagged break; with one leg 2 s behind, the export ends on the
 lagging leg, up to the skew dearer. Losing the leg followed is a further switch, about 1.1 s missing.
 
-**In the import, a switch costs the restarted import's catalog hold and the picture it truncates**
-([T67](test-67-import-step-restart.md); P1, wire, late October 2026 `main`, one host, three runs per
-stimulus and a control): at T64's switch, back and forward, and T34's captured one, the import
-republished within 1.5 ms and no export ended. T64's cost 1,360 ms of presentation time against
-2,400–2,480 ms behind a supervisor, the capture's 1,600 ms of decode time against 2,800 ms. Two
-exports stayed byte-identical across T64's switch in six runs of six and differed by 1.2–3.5 % on
-the capture. A 1+1 ingest pair and the SRT gateway path are unmeasured.
+**In the import, a switch costs the picture it truncates and the wait for the export's first group**
+([T67](test-67-import-step-restart.md); P1, wire, `main` from late October 2026, one host, three
+runs per stimulus and a control): at T64's switch, back and forward, and T34's captured one, the
+import republished within 1.5 ms and no export ended. Past the catalog fix T64's cost 160 ms of
+presentation time against 2,400–2,480 ms behind a supervisor; the capture's cost 1,600 ms of decode
+time against 2,800 ms, as the stitched export joins the new instance at its newest group, a GOP
+past its first random-access picture. Two exports stayed byte-identical across T64's switch and
+differed by 0.2–3.5 % on the capture. A 1+1 ingest pair and the SRT gateway path are unmeasured.
 
 ### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
 
