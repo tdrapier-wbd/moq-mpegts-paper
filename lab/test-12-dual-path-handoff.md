@@ -1024,6 +1024,35 @@ with a groomer that stays silent rather than send a datagram it cannot fill exac
 return are hitless too. This is the evidence for lifting Architecture §5.1's co-start condition on
 the opaque lane; that edit awaits the author.
 
+## Arm D on the demultiplexed lane, one leg late, with the padding filter (P2-i)
+
+**Question.** Behind the fixed-delay export a co-started multi-track pair merges at the byte; a leg
+8 s late matched 98.5 % once a grader rewrote each PID's counter, the rest falling on the clock
+table's arrival-driven placement ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*),
+on an unmerged build. On merged `main`, with
+[`ts-keyframe-pad.py`](scripts/ts-keyframe-pad.py) numbering the counters from the stream in line,
+does a late or returning leg merge?
+
+**Rig.** [`t12-opaque-late.sh`](scripts/t12-opaque-late.sh) with `LANE=demux` (no `--passthrough`
+at either end), on the tertiary, `main` at `204c97f4f`, the pacer at `ea88793`, `contrib-10m.ts`,
+B 8 s late, `--delay 2s`, the groomers at 10.2 Mb/s for the filter's padding. One run per cell:
+D0, no filter, no fault; with `PAD=1`, D1 no fault, D2 5 s blackouts of each leg in turn, D3 A's
+export killed at 40 s. Graded by `t12-merge-oracle.py`, `t12-resume.py` and TSDuck `continuity`
+on the seq-merge output.
+
+**Criteria, fixed before running.**
+
+1. **The grader can fail:** D0's legs mismatch, as #2779's counters predict; if they do not, the
+   filter has nothing to fix on this build, and that is the result.
+2. **A late leg merges:** in D1 the legs mismatch in no datagram from 2 s after B's first, and the
+   seq-merge has no continuity error.
+3. **A returning leg merges:** in D2 each leg's numbering deficit is 0 after its return, with
+   criterion 2 holding from 2 s after it; in D3 the seq-merge loses nothing.
+4. **Reported:** where each mismatched datagram falls, against the TDT's packets in each leg.
+
+*Predicted:* criterion 2 fails, with mismatches confined to the stretches between one leg's TDT
+revision and the other's.
+
 ## Corrections
 
 > Each stale claim is fixed where it was made; each rule is in [method-notes.md](method-notes.md).

@@ -15,10 +15,13 @@
 # its own ephemeral UDP ports, so no other loopback traffic is touched, and a detached watchdog
 # removes the rules if the rig dies first.
 #
+# LANE=demux runs the same cells on the demultiplexed lane (no `--passthrough` at either end);
+# PAD=1 puts ts-keyframe-pad.py between each leg's export and its groomer.
+#
 #   sudo CELL=control BIN=<moq dir> PACER=<pacer dir> t12-opaque-late.sh <label>
 #
 # Env: CLIP, RATE (the clip's, bits/s), SECS (150), LATE (8), DARK_S (15), DELAY (2s), PORT (4480),
-#      SSRC, SEQ_SEED, OUT. The grading commands are printed at the end.
+#      LANE (opaque | demux), PAD (0), SSRC, SEQ_SEED, OUT. The grading commands are printed at the end.
 set -uo pipefail
 
 # shellcheck source=moq-cli-flags.sh
@@ -37,9 +40,21 @@ DELAY=${DELAY:-2s}
 PORT=${PORT:-4480}
 SSRC=${SSRC:-538968071}
 SEQ_SEED=${SEQ_SEED:-4242}
+LANE=${LANE:-opaque}
+PAD=${PAD:-0}
 OUT=${OUT:-/home/ubuntu/p1o-opaque}/$LABEL-$CELL
-BC="p1o.opaque.$CELL.$$"
+BC="p1o.$LANE.$CELL.$$"
 EGRESS=$PACER/mpegts-pacer
+case "$LANE" in
+opaque) PASS=--passthrough ;;
+demux) PASS="" ;;
+*)
+	echo "LANE must be opaque or demux" >&2
+	exit 1
+	;;
+esac
+FILTER=""
+[ "$PAD" = 1 ] && FILTER="| python3 '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ts-keyframe-pad.py'"
 
 [ "$(id -u)" -eq 0 ] || {
 	echo "run as root (sudo): iptables and tcpdump" >&2
@@ -114,7 +129,7 @@ echo "=== $(date -u) t12-opaque-late $LABEL cell $CELL ==="
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	cat "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
 	echo "pacer: $EGRESS $(cat "$PACER.sha" 2>/dev/null || true)"
-	echo "clip $CLIP at $RATE b/s; legs: export ts --passthrough ${MOQ_LAT[*]} $DELAY; B $LATE s late; ${SECS}s"
+	echo "clip $CLIP at $RATE b/s; lane $LANE; legs: export ts $PASS ${MOQ_LAT[*]} $DELAY${FILTER:+ | ts-keyframe-pad.py}; B $LATE s late; ${SECS}s"
 } | tee "$OUT/build.txt"
 
 # Sinks first: a datagram to a closed loopback port earns an ICMP error the pacer would see.
@@ -142,15 +157,15 @@ done
 # The reference is what the importer read, so a defect upstream of the lane cannot pass as one in it.
 (tsp --realtime -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>"$OUT/tsp.log" |
 	tee "$OUT/ref.ts" |
-	"$BIN/moq" "${MOQ_DIAL[@]}" "$URL" --broadcast "$BC" import ts --passthrough) >"$OUT/import.log" 2>&1 &
+	"$BIN/moq" "${MOQ_DIAL[@]}" "$URL" --broadcast "$BC" import ts $PASS) >"$OUT/import.log" 2>&1 &
 PIDS+=("$!")
 sleep 12
 
 # Not called through $(...): the leg's process group has to land in PIDS for teardown.
 LEGPID=""
 leg() { # $1 name, $2 port; sets LEGPID to the leg's export pid
-	bash -c "'$BIN/moq' ${MOQ_DIAL[*]} '$URL' --broadcast '$BC' export ts --passthrough ${MOQ_LAT[*]} $DELAY \
-		2>'$OUT/$1.export.log' \
+	bash -c "'$BIN/moq' ${MOQ_DIAL[*]} '$URL' --broadcast '$BC' export ts $PASS ${MOQ_LAT[*]} $DELAY \
+		2>'$OUT/$1.export.log' $FILTER \
 	| '$EGRESS' 127.0.0.1:$2 $RATE --rtp --ssrc $SSRC --latency-ms 1500 --max-latency-ms 8000 \
 		--stall-ms 1000 --on-stall mute --stream-clock --sequence-seed $SEQ_SEED" \
 		>"$OUT/$1.pacer.log" 2>&1 </dev/null &
@@ -200,7 +215,7 @@ cat <<EOF
 grade (as the user):
   cd $OUT
   python3 $H/t12-merge-oracle.py --pcap legs.pcap --leg-a-port 5100 --leg-b-port 5200 --k-ms 50 --out-prefix merged --json oracle.json
-  python3 $H/ts-passthrough-identity.py ref.ts merged.seqmerge.ts --groomed --json identity.json
+$([ "$LANE" = opaque ] && echo "  python3 $H/ts-passthrough-identity.py ref.ts merged.seqmerge.ts --groomed --json identity.json")
   python3 $H/t12-resume.py --pcap legs.pcap
   tsp -I file merged.seqmerge.ts -P continuity -O drop
 EOF
