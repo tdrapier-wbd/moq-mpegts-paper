@@ -211,7 +211,7 @@ The receive profile these results imply is drafted in [T65](../lab/test-65-ird-h
 and SCTE-35 unchanged from packager to IRD, segments that open on a random access point within their
 target duration, and a receiver that survives an origin's failure and paces to the PCR. Whether any
 product meets it, or passes TR 101 290 on hardware, is open
-([planned-experiments](../lab/planned-experiments.md)).
+([Evidence](../lab/evidence.md) §5).
 
 ### 4.5 Where the demarcation puts the gateway
 
@@ -223,8 +223,7 @@ client; in regional PoPs it serves every PoP ([Economics](economics.md) §4.5,
 
 Three claims are run together under "hand-off". **Receiving** favours segmented HTTP at classic
 segment durations — off the shelf, though no free receiver survives an origin failure (§3.2), with
-HLS-input receivers purchasable (conformance unmeasured, and only one that hands on the segments'
-packets keeps the DVB layer, §4.4) — and reverses at low latency, where
+HLS-input receivers purchasable (§4.4) — and reverses at low latency, where
 nothing free receives TS-in-HLS (§6.1). **Grooming burden**
 favours MoQ, and **which stage can carry it** favours segmented HTTP (§4.3). **The groomed wire** is
 a tie on P1/P2 and on its latency (§5): both reach 0 PCR intervals above 40 ms in software over one
@@ -281,8 +280,10 @@ demonstrated at conformance on MoQ, and no configuration below one second has pa
 on any lane.** Byte-faithful carriage comes closest, at 114–234 ms on loopback with a damaged stretch
 in each run, which weighs against MoQ,
 and the ~650 ms defect bounds that in MoQ's favour. **On a 116 ms path at an equal 1 s budget, only
-SRT stays whole at 1 % loss**, each MoQ lane losing under a second in one run of three; the
-media-aware lane trails both by about 0.25 s, and on CUBIC neither MoQ lane carries 0.1 %
+SRT stays whole at 1 % loss**, each MoQ lane losing under a second in one run of three and the
+media-aware lane trailing both by about 0.25 s; at 2 s every lane is, the MoQ lanes at 2.02–2.30 s
+and segmented HTTP at 3.22 s; under packet-counted burst loss segmented HTTP alone loses programme,
+a result of the burst model as much as of the lane. On CUBIC neither MoQ lane carries 0.1 %
 ([Evidence](../lab/evidence.md) §3.11). **Neither lane has been graded
 on a hardware IRD** ([Evidence](../lab/evidence.md) §4).
 
@@ -524,14 +525,14 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Axis | Favours | Basis | Margin |
 |---|---|---|---|
 | Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells, by a margin its build and QUIC stack set (§3.1) |
+| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells (§3.1) |
 | Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more programme to every failure but a relay that keeps its key or a killed exporter (§3.2) |
-| Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling**, since no off-the-shelf TS client survives an origin restart (§3.2) |
+| Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling** (§3.2) |
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and for interchangeable origins in one CDN origin group, merged downstream by receivers released in phase; one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
 | Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer; segmented HTTP at a 1–3 s cushion, its wire passing the T-STD too; neither on hardware, and MoQ's wire fails the T-STD (§4.6, §8) |
-| Latency (R4) | **MoQ over segmented HTTP only where nothing is conformant; level at P1/P2; MoQ over the tunnels, not at conformance** | **M** | 141 ms where nothing is conformant; **2,447 against 2,604 ms at P1/P2 conformance**, on one clip and a clean path, while the tunnels carry their source's grid at a latency the operator sets; **nothing conformant below ~1 s over a whole capture** (§5, §5.1) |
+| Latency (R4) | **MoQ over segmented HTTP only where nothing is conformant; level at P1/P2; MoQ over the tunnels, not at conformance** | **M** | 141 ms where nothing is conformant; **2,447 against 2,604 ms at P1/P2 conformance**, on one clip and a clean path; **nothing conformant below ~1 s over a whole capture** (§5, §5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
 | Entitlement and control (R7) | MoQ | M+R | enforcement point, session observability, and revocation speed on the one CDN mechanism measured (§7) |
 | Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (M) (§8) |
@@ -582,7 +583,7 @@ because nothing about it is measured here, but it is strongest exactly where bot
 
 Besides the limit §5.1 states, no hardware IRD, five more qualify every row above
 ([Evidence](../lab/evidence.md) §4). The data-plane comparison is one clip over two routes. Each
-impairment cell is one run, three on the second, on `netem` models whose loss is Bernoulli. Every 1+1 result comes from a
+impairment cell is one run, three on the second, on `netem` models whose loss is Bernoulli or packet-counted. Every 1+1 result comes from a
 software receiver, and the ST 2022-7 oracle is self-tested, not reference-compliant. Fan-out is one
 relay in one region or two CDN edges, and the resilience work a two-relay lab. Most media-aware results are on
 September 2026 builds and hold on current upstream only where stated.

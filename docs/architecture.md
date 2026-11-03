@@ -928,8 +928,8 @@ should treat it as part of the egress, not as operations tooling.
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled
 chain or external supervisor.
 
-**Source failover is bounded below by QUIC idle timeout (~30 s at the former 30 s default, ~11 s at
-10 s, the default from moq 0.14.0)** at a hard failure on every build measured. On October 2026 `main` a takeover is a marked programme
+**Source failover is bounded below by QUIC idle timeout (~11 s at 10 s, the default from moq
+0.14.0)** at a hard failure on every build measured. On October 2026 `main` a takeover is a marked programme
 switch to the newest live importer, costing a decoder 1.4–2.5 s of programme at a clean exit
 ([Evidence](../lab/evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
