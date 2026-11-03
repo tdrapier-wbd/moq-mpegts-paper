@@ -18,6 +18,7 @@ spec.loader.exec_module(lm)
 
 OBJ = re.compile(r"Incoming object: .*?group=(\d+), subgroup=\d+.*?, id=(\d+),.*?payload=(\d+) bytes"
 				 r".*?status=(\w+), eos=(\d)")
+STITCH = re.compile(r"no fill to stitch a mid-group stream onto sequence=(\d+)")
 
 
 def objects(path):
@@ -30,6 +31,21 @@ def objects(path):
 			g, o, size, status, eos = m.groups()
 			got[(int(g), int(o))] = (int(size), status, int(eos))
 	return got
+
+
+def split_groups(path):
+	"""Groups delivered on more than one stream: an object ends a stream and another object follows.
+
+	An empty object is only the stream's end, and does not count as one that follows."""
+	seq = {}
+	if os.path.exists(path):
+		for line in open(path, errors="replace"):
+			m = OBJ.search(line)
+			if m:
+				g, o, size, _, eos = m.groups()
+				seq.setdefault(int(g), []).append((int(o), int(size), int(eos)))
+	return sorted(g for g, objs in seq.items()
+				  if any(e == 1 and (n[0], n[1]) != (0, 0) for (_, _, e), n in zip(objs, objs[1:])))
 
 
 def main():
@@ -62,6 +78,10 @@ def main():
 			  f"{sum(1 for g in lost_m if i.get((g, objs[g] - 1), (0, 0, 0))[2] == 1)}; "
 			  f"groups with eos=1 at I that M kept: "
 			  f"{[g for g in full if g not in m_lost and i.get((g, objs[g] - 1), (0, 0, 0))[2] == 1]}")
+		mlog = os.path.join(run, "m.log")
+		warned = sorted(int(s) for s in STITCH.findall(open(mlog, errors="replace").read())) if os.path.exists(mlog) else []
+		print(f"  groups I received on two streams: {split_groups(os.path.join(run, 'i.log'))}; "
+			  f"M's stitch warnings: {warned}")
 
 
 if __name__ == "__main__":

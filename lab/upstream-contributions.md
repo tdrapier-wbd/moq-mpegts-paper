@@ -1212,9 +1212,8 @@ as one issue.
   10 Mb/s.
 - **D:** drafts 14, 16 and 17 fail on the relay's SUBSCRIBE_NAMESPACE.
 
-With the fix to A, the byte-level result stands on draft 18. The WebTransport failure belongs to
-`moq-dev`, whose `reliable-reset` quest plans the missing `reset_stream_at` parameter, so the issue
-only notes it. **Closed by us** once the maintainer pointed to its successor,
+With the fix to A, the byte-level result stands on draft 18. **Closed by us** once the maintainer
+pointed to its successor,
 `moq2ts`, below.
 
 ### `moq2ts`'s paced publisher and its final group — reported as [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
@@ -1239,10 +1238,10 @@ repro needed `export ts --passthrough`. Verified: with it, all three drafts pass
 ### imquic's relay and a group's final object — reported as [meetecho/imquic#44](https://github.com/meetecho/imquic/issues/44)
 
 [T11](test-11-interop.md): through imquic's relay on draft 22, `moq-dev`'s subscriber lacks a
-group's final object, the PCR-only packet, at the same ten of nineteen boundaries in each run.
-The relay holds each and sends it on a second stream of its subgroup, which that subscriber
-drops: imquic's parser marks every object of the chunk carrying a stream's FIN as its end.
-**Open.**
+group's final object at the same ten of nineteen boundaries in each run. The relay holds each
+and sends it on a second stream of its subgroup, which that subscriber drops: imquic's parser
+marks every object of the chunk carrying a stream's FIN as its end. Verified: flagging only the
+chunk's last object removes the split. **Open**; the patch is offered.
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 

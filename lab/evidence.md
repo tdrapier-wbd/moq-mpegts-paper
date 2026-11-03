@@ -565,10 +565,10 @@ oracle ([T11](test-11-interop.md); client public in [`interop/`](interop/README.
 as the interop runner's two cases, a subscriber present from the start and one joining 8.5 s in, on
 the opaque lane (P1, over the internet, one run per relay, `moq-dev` from October 2026 `main` at both
 ends; imquic and red5 three more on early November `main`). **Both cases pass through `moq-dev`'s
-relay, libquicr and moqx; moxygen, Cloudflare and red5 start a subscriber at the next group, not the
-current one, and serve the late one.** Through imquic, `moq-dev`'s subscriber lacks a group's final
-object at the same ten of nineteen boundaries in every replicate: the relay holds each one, and
-sends it on a second stream of its subgroup that this subscriber drops. aiomoqt, moqtail and Nokia carry the stream from the next group but never deliver the catalog
+relay, libquicr and moqx; moxygen, Cloudflare and red5 start a subscriber at the next group and serve
+the late one.** Through imquic, `moq-dev`'s subscriber lacks a group's final object at the same ten
+of nineteen boundaries in every replicate: through a parser defect that a one-line patch removes on
+loopback, the relay sends it on a second stream that this subscriber drops. aiomoqt, moqtail and Nokia carry the stream from the next group but never deliver the catalog
 to a late subscriber; a draft-22 framing ambiguity in the start filter would explain it,
 though their side was not observed.
 

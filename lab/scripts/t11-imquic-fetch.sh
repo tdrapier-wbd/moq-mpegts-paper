@@ -7,7 +7,8 @@
 # The publisher's input is held open 30 s past the fixture's end, so F runs while it is connected.
 #
 #   BIN=<moq dir> SUB=<imquic-moq-sub> FIXTURE=<fixture.ts> t11-imquic-fetch.sh <out dir> [replicates]
-# HOST, PORT and IP select another relay; a self-signed one needs MOQ_CONNECT_TLS_FINGERPRINT.
+# HOST, PORT and IP select another relay; one with a private CA needs MOQ_CONNECT_TLS_ROOT=<ca.pem>.
+# SUB inherits DYLD_LIBRARY_PATH: point it at the libimquic under test.
 set -uo pipefail
 
 BIN=${BIN:?set BIN to the moq build dir}

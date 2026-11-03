@@ -8,7 +8,8 @@ QUIC. **Of nine third-party relay implementations reached, seven carry the TS in
 subscriber's join, and two lost packets after it** in each of two runs, imquic at group ends and red5
 within the group being written when a subscription joins. Three replicates on later `main` mapped
 them: at the same ten of nineteen boundaries imquic's relay sends a group's final object on a second
-stream of its subgroup, which `moq-dev`'s subscriber drops, and red5
+stream of its subgroup, which `moq-dev`'s subscriber drops (a parser defect that a one-line patch
+removes), and red5
 lost nothing after a join at the next group. The join itself splits them. libquicr and moqx start a subscriber at the current group and
 pass both of the runner proposal's cases. moxygen and Cloudflare start at the next group and still
 serve a late subscriber. aiomoqt, moqtail and Nokia (draft 22) also start at the next group, and
@@ -223,11 +224,15 @@ imquic's FETCH of groups 0–19, ascending, from 26 s in, the publisher still co
 - **Before and after a one-line patch (criteria fixed before the first run).** The patch marks an
   object as the stream's end only if it also empties the chunk carrying the FIN. The same rig, three
   replicates each, against imquic's relay at `7b19884` run on the laptop on loopback (`IP=127.0.0.1`,
-  certificate pinned by fingerprint), unpatched and then patched. **Valid:** unpatched, M lacks at
+  its certificate issued by a local CA), unpatched and then patched; in each arm the relay and
+  `imquic-moq-sub` load the same library. **Valid:** unpatched, M lacks at
   least one final object with a stitch warning in two of three replicates; otherwise loopback does
   not reproduce the split and the comparison is void. **Pass:** patched, no replicate has a stitch
   warning or a group I received on two streams, and every final object M lacks is a logged
-  deadline drop.
+  deadline drop. **Valid, and passed.** Unpatched, every replicate splits groups 2, 3, 5, 8, 9, 11,
+  12, 15, 17 and 18: M lacks each one's final object with a stitch warning, and I receives each on
+  two streams. Patched, no replicate splits a group or logs a stitch warning, and M lacks no final
+  object. Neither arm logged a deadline drop. The parser makes the split, and the one line removes it.
 - **Not settled here:** whether `moq-dev` should accept the second stream. Its first stream had
   already ended the group, and the second claims the subgroup's first object at ID 50, so it holds
   no consistent place to put it; a parked tail also waits on the subscription's unrelated join fill
