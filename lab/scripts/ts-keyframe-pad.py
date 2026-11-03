@@ -138,6 +138,7 @@ class Pad:
         self.renumber = renumber
         self.program = Program()
         self.span = {}  # PID -> payload packets emitted since the last boundary
+        self.numbered = set()  # PIDs whose counter this filter has renumbered
         self.held = []  # SI packets waiting to learn which span they belong to
         self.filler = self.total = 0
         self.by_pid = {}  # PID -> filler packets, since the cost is not spread evenly
@@ -145,13 +146,20 @@ class Pad:
 
     def emit(self, p):
         i = pid(p)
-        if i == NULL_PID or not has_payload(p):
-            # Neither carries a continuity counter, so neither belongs to a span.
+        if i == NULL_PID:
+            self.out.write(p)
+            return
+        if not has_payload(p):
+            # It does not advance the counter but repeats its PID's last one, which once renumbered
+            # is the span's (15 just after a boundary, the span having been padded to 16).
+            if self.renumber and i in self.numbered:
+                p = p[:3] + bytes([(p[3] & 0xF0) | ((self.span.get(i, 0) - 1) % 16)]) + p[4:]
             self.out.write(p)
             return
         n = self.span.get(i, 0)
         if self.renumber:
             p = p[:3] + bytes([(p[3] & 0xF0) | (n % 16)]) + p[4:]
+            self.numbered.add(i)
         self.span[i] = n + 1
         self.total += 1
         self.out.write(p)

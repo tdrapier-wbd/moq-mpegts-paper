@@ -464,7 +464,7 @@ def main():
 	print(f"alignment yield: {align['yield_pct']:.4f}%  "
 	      f"(matched {align['matched']}, mismatched {align['mismatched']}, "
 	      f"one-sided {align['missing']}); "
-	      f"rtp timestamps identical {align['rtp_timestamp_identical_pct']:.2f}%")
+	      f"rtp timestamps identical {align.get('rtp_timestamp_identical_pct', 0.0):.2f}%")
 	if merged:
 		print(f"seq-merge: {merged['datagrams']} datagrams, {merged['covered_by_b']} covered by leg B, "
 		      f"lost {merged['lost_datagrams']} datagrams ({merged['lost_ts_packets']} TS packets), "

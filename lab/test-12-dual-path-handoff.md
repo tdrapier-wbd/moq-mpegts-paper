@@ -1053,6 +1053,28 @@ on the seq-merge output.
 *Predicted:* criterion 2 fails, with mismatches confined to the stretches between one leg's TDT
 revision and the other's.
 
+**Results.** D1 and D2 are the runs after a filter fix: the filter had left a payload-less packet's
+counter as the exporter wrote it, where once renumbered it repeats its PID's last, and the
+exporter's PCR-only video packets made 508 continuity errors of it on D0's unpadded leg (0 after).
+[`t12-mismatch-where.py`](scripts/t12-mismatch-where.py) places the mismatches, grouping runs
+under 2 s apart into episodes.
+
+| Cell | Aligned | Pairs differing, from 2 s after B | Seq-merge lost; CC | After a return |
+|---|---|---|---|---|
+| D0 | no offset found | — | — | — |
+| D1 | offset 0 | 5.97 % in 10 episodes, one per 15.1 s TDT/TOT revision, 0.3–2.1 s each | 0; 1 | — |
+| D2 | offset 0 | 41.2 % | 0; 17 | numbered one datagram off on each leg; A diverged 5.8 s, B for the remaining 43 s |
+| D3, unfixed filter | offset 0 | not graded | 0; — | — (B carries on alone) |
+
+1. **Criterion 1 holds**: unfiltered legs never align.
+2. **Criterion 2 fails, only at the clock table.** Every D1 episode holds a TDT/TOT packet, which 66
+   of 134,695 datagrams do; between them the late leg is byte-identical to its partner. Inside, the
+   legs carry the same packets in another order (video against audio, null, teletext and SCTE-35
+   packets, the TDT against the PMT), and re-converge within two GOPs.
+3. **Criterion 3 fails**: each resumed leg is misnumbered by one datagram, and B, returning second,
+   did not re-converge before the run ended. D3's seq-merge loses nothing.
+4. **The filter costs 1.43 % of packets** (136 kb/s), as on the earlier build.
+
 ## Corrections
 
 > Each stale claim is fixed where it was made; each rule is in [method-notes.md](method-notes.md).

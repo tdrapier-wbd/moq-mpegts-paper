@@ -555,11 +555,11 @@ by the later of detection and the standby's group lag.
   [#5895](https://github.com/moq-dev/moq/pull/5895) (groups by the catalog clock) closed unmerged.
   A shared epoch stays only for replicas of one publisher's bytes. Measured in [T6](test-6-relay-resilience.md).
 - **[#6062](https://github.com/moq-dev/moq/issues/6062): a relay lost under one importer resumes at
-  a later group** on moq-lite 07, skipping 7.02 s of programme unflagged
-  ([T6](test-6-relay-resilience.md)), where upstream documents a resume at the first frame lacked.
-  **Fixed** by [#6183](https://github.com/moq-dev/moq/pull/6183) (merged): the dead relay's reset
-  group no longer reads as a cut, and a resumed copy keeps the cached groups its max age (half the
-  delay) holds. Not re-measured.
+  a later group** on moq-lite 07, skipping 7.02 s unflagged ([T6](test-6-relay-resilience.md)), not
+  at the first frame lacked as documented. **Closed** by
+  [#6183](https://github.com/moq-dev/moq/pull/6183): a resumed copy keeps what its max age (half the
+  delay) holds; re-measured ([T56](test-56-media-aware-failover.md)), the rest of the detection
+  interval still skips unflagged, 6.9–8.1 s at 2 s, 2.7 s at 10 s.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 
@@ -662,14 +662,14 @@ rather than from the broadcast. Three such values were isolated ([T12](test-12-d
   due check changed from `!=` to `>` before merging, worth 5.9 points of agreement (T12), so evidence
   measured only on a pre-merge PR is provisional. Its residual, the cadence's origin, is below.
 - **Continuity counters**, numbered from process state, leave exporters that did not start together
-  permanently offset by a constant — the single field whose masking lifts agreement to ~98 %. Filed as
+  offset by a constant — the single field whose masking lifts agreement to ~98 %. Filed as
   [#2779](https://github.com/moq-dev/moq/issues/2779), and prototyped here: padding each span to a
   multiple of 16 packets takes the same pair from 0.4 % to 99.9 % on single-track content and from 24.6 %
-  to 93.6 % on multi-track, at **10–18 kb/s per PID** almost regardless of payload. **Declined upstream.**
+  to 93.6 % on multi-track, at **10–18 kb/s per PID** regardless of payload. **Declined upstream.**
   [#3868](https://github.com/moq-dev/moq/pull/3868) closed the issue as won't-fix. **Byte-identical 1+1
   from two independent exporters is not obtainable from upstream today** without the padding filter or a
   receiver that merges on something other than the whole packet. **`export ts --sync`**, which
-  restarts counters per group for legs of one broadcast, is our [#5949](https://github.com/moq-dev/moq/pull/5949), merged.
+  restarted counters per group for legs of one broadcast, was our [#5949](https://github.com/moq-dev/moq/pull/5949), removed by #6554.
 - **Audio/video interleave**: the exporter emits the earliest *available* frame rather than the earliest
   frame, so legs whose bytes arrive at different moments order the same media differently. Multi-track
   content therefore stops at 94–96 % even when co-started, and at **75.56 %** once the two chains are
