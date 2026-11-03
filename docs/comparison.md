@@ -282,15 +282,15 @@ in each run, which weighs against MoQ,
 and the ~650 ms defect bounds that in MoQ's favour. **On a 116 ms path at an equal 1 s budget, only
 SRT stays whole at 1 % loss**, each MoQ lane losing under a second in one run of three and the
 media-aware lane trailing both by about 0.25 s; at 2 s every lane is, the MoQ lanes at 2.02–2.30 s
-and segmented HTTP at 3.22 s; under packet-counted burst loss segmented HTTP alone loses programme,
-a result of the burst model as much as of the lane. On CUBIC neither MoQ lane carries 0.1 %
+and segmented HTTP at 3.22 s; under burst loss, counted in packets or in time, segmented HTTP alone
+fails to stay whole. On CUBIC neither MoQ lane carries 0.1 %
 ([Evidence](../lab/evidence.md) §3.11). **Neither lane has been graded
 on a hardware IRD** ([Evidence](../lab/evidence.md) §4).
 
 **A deployment constraint separate from latency.** From moq 0.14.0 a release ends the import at a
 backward timestamp step, so a source whose timeline steps back is republished at each step behind a
 supervisor, at 2.8–3.8 s of programme a step and not hitlessly for a 1+1 pair. Upstream's current
-import republishes itself instead, for 1.4–1.6 s at an encoder switch, in no release measured and
+import republishes itself instead, for 0.16–1.6 s at an encoder switch, in no release measured and
 untested for a 1+1 ingest pair or a continuous restarting source ([Evidence](../lab/evidence.md) §3.13).
 
 ### 5.2 Whether the sub-second band matters
@@ -308,7 +308,7 @@ to be answered per route by the destination.
 
 **Segmented HTTP wins the delivery path decisively, and "interoperable" has to say which layer it
 means.** HTTP bytes pass through every CDN and cache, where MoQ's relay is a protocol implementation
-and a MoQ feed crosses seven of nine other implementations' public relays intact after the join, but
+and a MoQ feed crosses eight of nine other implementations' public relays intact after the join, but
 only five for a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). **Delivery-path interop and
 multi-programme carriage are mutually exclusive on segmented HTTP**: "Transport Stream Segments MUST
 contain a single MPEG-2 Program." HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and

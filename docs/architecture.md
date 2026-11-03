@@ -670,7 +670,7 @@ egress topology rather than a given.
 | Failure | Response |
 |---|---|
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and 1.4–2.5 s at a clean exit (measured before the delay was kept), with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. Selected at the receiver instead (§5), the input switch cuts once the failed leg's export falls silent, after a hard kill its delay and about a second of padding later: at a 500 ms receive timeout an importer, relay or export lost cost a decoder 0.8–2.9 s, waiting on no idle timeout. That switch detects only silence and cuts anywhere; one that detects on content or cuts at a random-access point is unmeasured. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
+| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and on early November `main` 0.28–0.36 s at a clean exit, with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. Selected at the receiver instead (§5), the input switch cuts once the failed leg's export falls silent, after a hard kill its delay and about a second of padding later: at a 500 ms receive timeout an importer, relay or export lost cost a decoder 0.8–2.9 s, waiting on no idle timeout. That switch detects only silence and cuts anywhere; one that detects on content or cuts at a random-access point is unmeasured. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today). On the media-aware lane's pair selected at the receiver, a 0.3 s uplink outage costs nothing, and one of 3 to 12 s costs what a hard kill does |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
@@ -929,8 +929,8 @@ should treat it as part of the egress, not as operations tooling.
 chain or external supervisor.
 
 **Source failover is bounded below by QUIC idle timeout (~11 s at 10 s, the default from moq
-0.14.0)** at a hard failure on every build measured. On October 2026 `main` a takeover is a marked programme
-switch to the newest live importer, costing a decoder 1.4–2.5 s of programme at a clean exit
+0.14.0)** at a hard failure on every build measured. On early November 2026 `main` a takeover is a marked programme
+switch to the newest live importer, costing a decoder 0.28–0.36 s of programme at a clean exit
 ([Evidence](../lab/evidence.md) §3.4). Load-bearing
 redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not
 bytes).
@@ -1222,7 +1222,7 @@ Ranked by how much a negative answer would change the architecture.
    [T41](../lab/test-41-import-reanchor-coverage.md); [Evidence](../lab/evidence.md) §3.13). On a
    release, a source whose timeline steps back is republished at each step behind a supervisor, at
    2.8–3.8 s of programme a step and not hitlessly for a 1+1 pair. Upstream's current import
-   republishes itself instead, for 1.4–1.6 s at an encoder switch
+   republishes itself instead, for 0.16 s at a synthetic encoder switch and 1.6 s at the captured one
    ([T67](../lab/test-67-import-step-restart.md)), in no release measured and untested for a 1+1
    ingest pair or a continuous restarting source.
    **T-STD occupancy is tested in software**: behind the media-aware lane it is beyond this gateway's
