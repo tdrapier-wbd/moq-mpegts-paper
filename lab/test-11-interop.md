@@ -7,7 +7,8 @@ against every relay in the interop runner's registry, `moq-dev` publishing and s
 QUIC. **Of nine third-party relay implementations reached, seven carry the TS intact from the
 subscriber's join, and two lost packets after it** in each of two runs, imquic at group ends and red5
 within the group being written when a subscription joins. Three replicates on later `main` mapped
-them: imquic never delivers a group's final object at the same ten of nineteen boundaries, and red5
+them: at the same ten of nineteen boundaries imquic's relay sends a group's final object on a second
+stream of its subgroup, which `moq-dev`'s subscriber drops, and red5
 lost nothing after a join at the next group. The join itself splits them. libquicr and moqx start a subscriber at the current group and
 pass both of the runner proposal's cases. moxygen and Cloudflare start at the next group and still
 serve a late subscriber. aiomoqt, moqtail and Nokia (draft 22) also start at the next group, and
@@ -138,8 +139,8 @@ SUBSCRIBE_NAMESPACE on both transports. Cloudflare's draft-18 relay takes an ano
 **What this establishes.** Relay portability holds for carriage after the join on eight of nine
 third-party relays, and for both of the proposal's cases on libquicr and moqx; moxygen and Cloudflare
 join if a start at the next group is accepted. It is not yet the neutral fabric the architecture
-assumes: two relays lost media and imquic still does, and on three a subscriber joining mid-stream
-never starts.
+assumes: two relays lost media, imquic still splits a group's stream where `moq-dev`'s subscriber
+loses its end, and on three a subscriber joining mid-stream never starts.
 
 ### imquic and red5 replicated, losses mapped (criteria fixed before the first run)
 
@@ -166,10 +167,11 @@ on a synthetic capture with four known packets removed it named those four.
 | red5 | intact from group 1, 3 of 3 | intact from group 1, 3 of 3 | pass, 3 of 3 |
 
 - **Criterion 1 holds** in every replicate.
-- **imquic does not deliver a group's final object at the same ten boundaries of nineteen**, in
-  every replicate and at either delay, the count the first sweep showed. Each is one PCR-only packet,
-  some with a null packet behind it; neither shape, size nor the group's object count (51 in all
-  nineteen) separates the ten from the nine it delivers. Reportable by criterion 3. Group 14's
+- **Through imquic, `moq-dev`'s subscriber lacks a group's final object at the same ten boundaries
+  of nineteen**, in every replicate and at either delay, the count the first sweep showed. Each is
+  one PCR-only packet, some with a null packet behind it; neither shape, size nor the group's object
+  count (51 in all nineteen) separates the ten from the nine delivered. Reportable by criterion 3;
+  the relay sends them on a split stream that subscriber drops (below). Group 14's
   objects, in one replicate, were late: the 1 s export dropped them (its seven deadline drops) and
   the 10 s one has them.
 - **red5 lost nothing in any replicate**: it starts a subscription at the next group, as moxygen and
@@ -192,6 +194,36 @@ imquic's FETCH of groups 0–19, ascending, from 26 s in, the publisher still co
    forwarding. F lacks them: the relay never stored them.
 4. **Diagnostic, not graded:** whether M's lost groups are those whose final object reached I with
    its stream's end, as the probe suggested.
+
+**Results** (`moq-dev` at `204c97f4f`, imquic `7b19884`; three replicates, and a fourth with
+`moq-dev`'s network layer at debug level; graded by
+[`t11-imquic-grade.py`](scripts/t11-imquic-grade.py)):
+
+| Replicate | M lacks the final object of groups | I holds them | F holds them | Groups I received on two streams |
+|---|---|---|---|---|
+| 1 | 0, 2, 3, 5, 8, 9, 11, 12, 15, 17, 18 | the ten from its join | all eleven | those ten |
+| 2 | 2, 3, 5, 8, 9, 11, 12, 15, 17, 18 | all ten | all ten | nine: all but 5 |
+| 3 | 2, 3, 5, 8, 11, 12, 15, 17, 18 | all nine | all nine | those nine |
+| 4 (debug) | 2, 3, 5, 8, 9, 11, 12, 15, 17, 18 | all ten | all ten | those ten |
+
+- **Criterion 1 holds** in every replicate, and **criterion 3 reads `moq-dev`'s subscriber, 3 of 3**:
+  imquic's relay stores every final object and forwards it to both subscribers. Replicate 2's
+  group 5 is a different loss: M lacks it from object 6 on, which the export dropped late at its
+  release deadline (its seven deadline drops).
+- **The trigger is imquic's, and it is a stream split.** In every group M lost from I's join on,
+  the relay ended the subgroup's stream after object 49 and sent object 50 on a second stream of
+  the same subgroup whose header sets FIRST_OBJECT; M logged each such stream as `no fill to stitch
+  a mid-group stream onto` and dropped it. The publisher served each of the twenty groups once, on
+  one stream (fourth replicate, `serving group`), so the relay made the split. imquic's source
+  shows why: its subgroup parser marks every object parsed from the chunk that carries the stream's
+  FIN as the stream's end, so when objects 49 and 50 arrive in one chunk the relay closes its
+  stream on 49 and opens a new one for 50, copying the upstream header's FIRST_OBJECT. No group
+  whose final object is large (1,696 or 1,884 bytes) or whose FIN came on its own was split, and
+  whether a small final is split varies from run to run (groups 5 and 9).
+- **Not settled here:** whether `moq-dev` should accept the second stream. Its first stream had
+  already ended the group, and the second claims the subgroup's first object at ID 50, so it holds
+  no consistent place to put it; a parked tail also waits on the subscription's unrelated join fill
+  until the session ends, which its code says should cost only the group the fill heads.
 
 ### A CDN-hosted moqx deployment, both lanes
 

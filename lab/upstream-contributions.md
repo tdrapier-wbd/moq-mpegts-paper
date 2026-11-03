@@ -722,15 +722,11 @@ For permanent primary distribution the publisher is the process never meant to r
 issue describes publisher RSS over long runs** (#2745 and #3128 are relay-side).
 
 [**#3493**](https://github.com/moq-dev/moq/issues/3493) — **closed** via
-[#3793](https://github.com/moq-dev/moq/pull/3793) (`5d0991b9`). Re-soaks **`3493-check-2h`** and
-**`3493-loop-2h`** invalidated when import hit [#3798](https://github.com/moq-dev/moq/issues/3798)
-at ~600 s / ~631 s. On upstream `main` `9d2a4f6e`, 24 h re-soak `p0h-24h` confirms the fix: importer
-slope +0.23 MB/h vs original +2.83 ([T21 § *The #3493
-re-soak*](test-21-permanence-soak.md#the-3493-re-soak)). The report was **deliberately held** until
-per-process attribution: RSS by command-line signature also matched the wrapper shell. A 6 h re-run
-sampling each PID puts growth at **+2.91 MB/h in `moq import ts` itself** vs +2.83 by signature; the
-issue carries fits, per-PID confirmation, and caveats (exporter +14.5 MB at 5 h; 6 h cannot read
-relay shape).
+[#3793](https://github.com/moq-dev/moq/pull/3793) (`5d0991b9`). On upstream `main` `9d2a4f6e`, a
+24 h re-soak confirms the fix: importer slope +0.23 MB/h vs original +2.83 ([T21 § *The #3493
+re-soak*](test-21-permanence-soak.md#the-3493-re-soak)). Sampled per PID over 6 h, since RSS by
+command-line signature also matched the wrapper shell, growth is **+2.91 MB/h in `moq import ts`
+itself**; the issue carries fits and caveats (exporter +14.5 MB at 5 h; 6 h cannot read relay shape).
 
 ---
 
@@ -1242,9 +1238,11 @@ repro needed `export ts --passthrough`. Verified: with it, all three drafts pass
 
 ### imquic's relay and a group's final object — reported as [meetecho/imquic#44](https://github.com/meetecho/imquic/issues/44)
 
-[T11](test-11-interop.md): through imquic's relay on draft 22, a subscriber never receives a
-group's final object, the PCR-only packet, at the same ten of nineteen group boundaries in each run.
-**Open**, unanswered.
+[T11](test-11-interop.md): through imquic's relay on draft 22, `moq-dev`'s subscriber lacks a
+group's final object, the PCR-only packet, at the same ten of nineteen boundaries in each run.
+The relay holds each and sends it on a second stream of its subgroup, which that subscriber
+drops: imquic's parser marks every object of the chunk carrying a stream's FIN as its end.
+**Open.**
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 
