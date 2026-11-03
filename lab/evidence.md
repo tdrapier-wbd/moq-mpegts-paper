@@ -86,7 +86,7 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 | **Cost** | Wire on a 4.57 %-stuffed clip: MoQ 0.982×, SRT 1.037×, segmented HTTP 1.056× (derived); on a stuffing-free feed MoQ 1.033×, SRT 1.035×, opaque lane 1.054×. Fan-out is linear to a CPU collapse: 1.258 % of a core and 2.62 MB per subscriber on moq-relay 0.15.1 with GSO on; through a CDN-hosted relay, 32 subscribers of a 25 Mb/s feed on the media-aware lane, and 16 for 72 h at about two skips an hour each | A third source; fan-out beyond one relay; the opaque lane through that relay | §3.5, §3.6 |
 | **Isolation** | An abusive receiver cannot reach another's media; the cost is relay memory, 87 MB → 1.9 GB in 60 s, set by abandoned-session retention. A static segmented origin has no such term | Adversarial abuse | §3.14 |
 | **Availability** | With both upstream fixes 0 of 10 subscribers exited on an evicted group, against 4 of 15 without; consistent with the fix but not established by the count | What sets the rate | §3.15 |
-| **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live: 57.212 s against an offline 57.22 s; dead audio in 0.7–1.4 s | A frozen picture in valid access units | §3.12 |
+| **Observability** | **The transport never detects a media-plane failure.** Per-PID access-unit liveness detects every case measured, live, on both lanes; dead video stops the campaign's segmenter outright | A frozen picture in valid access units | §3.12 |
 | **Timeline events** | All five placed PCR events cross with no programme hole on the September 2026 builds measured. From moq 0.14.0 a backward step ends the import by design, and a supervisor's republish costs 2.8–3.8 s of programme per step and is not hitless for a 1+1 pair; `main` republishes in the import, an encoder switch costing 0.16 s on a synthetic stimulus and 1.6 s on the captured one. **A real feed steps back** where its contribution switches between unlocked encodes, unflagged, ending both legs at once; a subscriber lost 9.8 s | Why the other five diverge; how often other contributions switch so; a 1+1 ingest pair across the import's restart | §3.13 |
 | **Interop** | The opaque lane crosses eight of nine other relays intact after the join, and five for a late subscriber; an outside publisher's opaque TS crosses `moq-dev`'s relay only after a one-line fix; OpenMOQ's moq5 and `moq-dev` carry each other's TS byte-exact, neither catalog finding the other's track | Why three relays never start a late subscriber | §3.7 |
 | **Cadence, LL-HLS, entitlement** | Three structurally different hand-off classes; LL-HLS with TS parts publishes free and nothing free receives it; enforcement is exact and revocation a poll whose best worst case is about 1.7 s, 86 s at a CDN | A commercial ABR-to-TS receiver; entitlement across a mesh | §3.8–§3.10 |
@@ -714,29 +714,30 @@ not separated anywhere. On CUBIC neither MoQ lane carries 0.1 %, nor segmented H
 ### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes if it has stopped completely, and only from per-stream instrumentation if it has stopped partly
 
 **For an operator:** session state, process liveness and the TR 101 290 P1 set do not catch a stalled
-programme, and P1 misses a partial stall entirely. Specify per-PID access-unit liveness at the groomed
+programme, and P1 misses a partial stall whose PID stays alive. Specify per-PID access-unit liveness at the groomed
 output, and do not leave the groomer to carry on at CBR when the programme stops.
 
 **The transport never detects a stalled source**
 ([T22](test-22-silent-media-plane-failure.md), P2): with the source frozen for 120 s,
-publisher, relay and exporter logged nothing, because an idle stream is not an error. The groomer's
-content-liveness alarm fired at 1.69–1.88 s. **The segmented lane's transport is equally silent** —
-200 to every request, bytes identical to control — but its playlist media sequence froze for 31.5 s
-against a ≤ 3.1 s steady state, an alarm the media-aware lane has no counterpart for. **A partial
-stall defeats P1** ([T24](test-24-partial-media-plane-stall.md)): dead video behind a live
-mux passes the entire P1 set with a worst interval identical to control, and dead audio moves no
-counter at all. **Per-PID access-unit liveness detects every case, and it runs live**
+publisher, relay and exporter logged nothing. The groomer's content-liveness alarm fired at
+1.69–1.88 s. **The segmented lane's transport is equally silent**, but its playlist media sequence
+froze for 31.5 s against a ≤ 3.1 s steady state. **A partial
+stall defeats P1 while its PID stays alive** ([T24](test-24-partial-media-plane-stall.md)): dead
+video behind a live PCR passes the entire P1 set; dead audio, whose PIDs vanish, raises P1's `PID_error` in 7 s (T79). **On the segmented lane dead video stops
+the campaign's segmenter**, which cuts only at a random-access picture: no segment for 61 s, the
+audio withheld with it, so every source sees only an absence. **CMCD v2 carries an origin outage
+within 0.2 s and nothing inside the stream**; a stalled source reaches it only on resumption
+([T79](test-79-hls-telemetry-faults.md), P1, live on loopback, two runs a fault).
+**Per-PID access-unit liveness detects every case, and it runs live**
 ([T27](test-27-liveness-detector.md), P1): at the groomed output of a cross-host lane it
 measured a 60 s video suppression at **57.212 s** against an offline 57.22 s, caught dead audio
-within **0.7–1.4 s**, localised each to the PID, and fired nothing on healthy material. Its
-thresholds are learned per stream and are wider at the groomed point than in a file; SCTE-35 and
-subtitles have no cadence and are reported as unmonitorable. Per-PID *bitrate* is not a substitute.
+within **0.7–1.4 s**, localised each to the PID, and fired nothing on healthy material.
 
 **Out of reach of all of it**: an encoder emitting valid access units of a frozen picture, equally
 undetectable over SDI and untested here. **The groomer's stall policy decides whether the failure is
 silent downstream**: under `continue` it emits valid CBR with no programme indefinitely; under `mute` the
-carrier stops 0.1 s after the programme. Recovery resumes at the live edge, the programme clock skipping
-exactly the outage, so what was lost is gone and only redundancy mitigates it.
+carrier stops 0.1 s after the programme. Recovery resumes at the live edge: what was lost is gone, and
+only redundancy recovers it.
 
 ### 3.13 Which PCR timeline events does the lane survive? — All five placed classes on the September 2026 builds measured; a real feed steps back, which ends a release's import and which late October 2026 `main` republishes across
 

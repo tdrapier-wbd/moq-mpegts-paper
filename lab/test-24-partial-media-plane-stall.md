@@ -240,11 +240,13 @@ recovery — the discontinuity is declared once, at the seam, and nothing downst
    objection — that reassembling a mux from independently delivered tracks lets one dead track block
    the others — **is measured and does not occur.** This is the result that matters for the
    architecture, and it is a positive one.
-2. **A partial stall is invisible to TR 101 290's P1 set and its PCR checks.** Zero continuity errors,
-   zero PCR intervals over 40 ms, a worst interval identical to the control's, and 57 s with no
-   pictures. Any monitoring design that stops there will report a dead service as healthy,
-   indefinitely. P2's PTS check (2.5, a PTS repetition period over 700 ms) should see the video PID
-   stop carrying PTS; it was not graded.
+2. **Dead video behind a live PCR is invisible to TR 101 290's P1 set and its PCR checks.** Zero
+   continuity errors, zero PCR intervals over 40 ms, a worst interval identical to the control's,
+   and 57 s with no pictures. Any monitoring design that stops there will report a dead service as
+   healthy, indefinitely. P2's PTS check (2.5, a PTS repetition period over 700 ms) should see the
+   video PID stop carrying PTS; it was not graded. Dead audio is not invisible: its PIDs vanish, and
+   P1's `PID_error` (1.6), which these checks did not grade, fires within 7 s
+   ([T79](test-79-hls-telemetry-faults.md)).
 3. **[T22](test-22-silent-media-plane-failure.md)'s recommendation is corrected.** "PCR progression is
    the detector to build on" holds for a total stall and fails for a partial one, because PCR shares a
    PID with the video whose absence it is being asked to report. The detector to build on is
@@ -281,3 +283,11 @@ See [T27](test-27-liveness-detector.md) § Open for shared open items (upstream 
 signal, 2.8 s outage compression, learning-window tail, procurement of per-PID liveness in commercial
 monitors). T27 validated the detector in the distribution path; this file holds the offline
 measurement those arms reproduce.
+
+## Corrections
+
+- **Dead audio was not invisible to P1.** *Believed:* the audio arm moved no TR 101 290 counter.
+  *True:* the stimulus removes the audio PIDs, and P1's `PID_error` (1.6) fires on that within 7 s
+  in TSDuck's analyser ([T79](test-79-hls-telemetry-faults.md)); this file graded continuity and
+  PCR, not `PID_error`. *Rule:* call a TR 101 290 set green only on an analyser that implements
+  every check in it.

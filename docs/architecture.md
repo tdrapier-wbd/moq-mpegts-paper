@@ -1022,8 +1022,7 @@ QUIC's idle timeout does (1.9 s against 34.3 s).
 
 **It is not sufficient, and the insufficiency is the operationally important case.** When only part of
 the programme stops, the clock keeps advancing and **the whole of TR 101 290 P1 passes over a service
-carrying no pictures**; the two wire-observable detectors that do fire are blind to a small stream, and
-an audio-only stall has no wire-observable signature at all
+carrying no pictures**, and the two wire-observable detectors that do fire are blind to a small stream
 ([T24](../lab/test-24-partial-media-plane-stall.md)). The only detector that caught every arm counts
 **access units per elementary stream in media time**, configured from the stream's own PMT. Built and
 run in a real lane, it measures the same suppression at a cross-host groomed output that offline
@@ -1100,8 +1099,7 @@ set.
 that same property is what makes an opaque telemetry track legal on the return path described below —
 so relay-side telemetry can prove that bytes moved and can never prove the media was intact. The
 measured form of this is [Evidence](../lab/evidence.md) §3.12: when only part of a programme stops, the
-whole of TR 101 290 P1 passes over a service carrying no pictures, and an audio-only stall has no
-wire-observable signature at all. Session counts, byte counts and subscription counts are all healthy
+whole of TR 101 290 P1 passes over a service carrying no pictures. Session counts, byte counts and subscription counts are all healthy
 throughout. **The only vantage that can see delivered-media health is wherever the stream is actually
 decoded**, and for primary distribution to affiliates that is someone else's hardware.
 

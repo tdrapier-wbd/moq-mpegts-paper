@@ -138,6 +138,7 @@ no number without the conditions its file states. The rung and gate are from
 | T76 | The segmented lane for seven days on the live feed, withdrawing a segment only on damage one pathway alone carries | 6 over time · P1-aj | rule proven offline; soak running | — | [test-76](test-76-seven-day-soak.md) |
 | T77 | A three-programme segment through CloudFront | 3 · R1 | run; passed | **CloudFront carries a multi-programme segment byte for byte, uncached and cached, every programme intact** (one fixture, one distribution) | [test-77](test-77-mpts-through-cloudfront.md) |
 | T78 | A segmented origin under 4–128 synthetic edges | 5 · R2 | run; no knee | **At 128 edges, 3.2 Gb/s, nginx took 2.4 % of a core and the host 3.8 %, fetches at 18 ms p99** (private network, one run) | [test-78](test-78-origin-under-many-edges.md) |
+| T79 | What the receiver's log, CMCD v2, TR 101 290 and per-PID liveness say about the segmented lane's faults | R8 · P1-ak | run; telemetry half | **Dead video stops the segmenter, so every source sees only an absence; CMCD names only the origin outage** (laptop, two runs a fault) | [test-79](test-79-hls-telemetry-faults.md) |
 
 **Retired roadmap IDs** resolve to the experiment that discharged or holds them: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
 and [T24](test-24-partial-media-plane-stall.md), P0-g → [T21](test-21-permanence-soak.md), P0-i → [T8b](test-8b-congestion-control.md), P0-j → [T34](test-34-real-encoder-severity.md),

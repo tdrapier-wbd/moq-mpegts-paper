@@ -277,9 +277,9 @@ classes; T23's verdict on those arms is unchanged.
    architectural result. A demuxing carriage layer could have destroyed access-unit spacing while
    still delivering conformant bytes, which would have made the only sufficient detector unusable in
    the very architecture that needs it. It does not.
-3. **A dead audio stream is detectable in about a second.** The failure mode with no wire-observable
-   signature at all in T24 — 4 % of the mux, invisible to the stuffing ratio, invisible to every P1
-   check — is caught and localised to the PID.
+3. **A dead audio stream is detectable in about a second.** The failure mode T24's graded detectors
+   missed — 4 % of the mux, invisible to the stuffing ratio, seen by P1 only as `PID_error` after 7 s
+   ([T79](test-79-hls-telemetry-faults.md)) — is caught and localised to the PID.
 4. **Detection latency is bounded and knowable in advance.** It equals the learned threshold, the
    detector reports its thresholds when it arms, and an operator can therefore be told what their
    detection time will be per stream before a fault occurs.
