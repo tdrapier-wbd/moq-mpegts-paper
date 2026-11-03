@@ -358,8 +358,9 @@ most a frame in 26 of 27, and a hard kill loses its detection interval, 1.1–1.
 timeout on Linux with 1.3 s of decoder hole, ending no export in 24. With
 `--passthrough`, which refuses `--stitch`, the serving importer's loss ends the exporter. One
 importer reaching the exporters through two relays, on moq-lite 07, survived the serving relay's
-loss with no error or flag, but skipped 7.02 s of programme in every run, at the default delay and at
-10 s alike. Upstream traced it to two defects, fixed on later `main`; not re-measured.
+loss with no error or flag, but skipped programme unflagged in every run: 7.02 s at either delay,
+and past upstream's fix (early November 2026 `main`) 6.9–8.1 s at a 2 s delay and 2.7 s at 10 s, the
+detection interval less the half-delay a resumed copy keeps. A clean exit there lost 0.28–0.36 s.
 
 **Switched at the receiver between two broadcasts, legs start, restart and return apart at no cost,
 and no detection waits on the transport; it is not hitless** ([T58](test-58-receiver-select.md);
@@ -990,7 +991,7 @@ rebuild.
 | 5 | **Does a commercial ABR-to-TS receiver hand on the segments' packets, and produce P1/P2-conformant output?** | MEG- or TITAN-class hardware | Whether affiliates' own receivers can be the lane's receive stage ([Comparison](../docs/comparison.md) §4.4) |
 | 6 | **Can a CDN carry a multi-programme TS segment in practice?** | The MPTS fixture through the campaign's CloudFront access | MoQ's remaining carriage-fidelity advantage |
 | 7 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
-| 8 | **Can a media-aware failover be brought under a second as a decoder sees it?** Not at any idle timeout tried: at 1 s a hard kill loses 1.1–1.2 s of programme and shows 1.3 s of hole; nor switched at the receiver, which waits out the export's delay; the relay-loss case is not re-measured on the build that fixed it (§3.4) | The relay cell on that build; an input switch that detects on the video PID | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |
+| 8 | **Can a media-aware failover be brought under a second as a decoder sees it?** Not at any idle timeout tried: at 1 s a hard kill loses 1.1–1.2 s of programme and shows 1.3 s of hole; nor switched at the receiver, which waits out the export's delay; a clean exit loses 0.3 s, and a relay loss the detection interval less half the delay, unflagged (§3.4) | An export that flags the skip, or a delay covering it; an input switch that detects on the video PID | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |
 | 9 | **Where does a contended feed lose what a release delay does not cover under a sustained shortfall?** Not at the bottleneck, and not as a function of RTT; on a 5 s dip at 20 ms RTT, in the relay's abandonment of groups past the delay budget (§3.3) | The relay's queue read on the sustained rungs | Whether a delay, or only a rate margin, can protect N contended feeds |
 | 10 | **How much of MoQ's carriage advantage survives a third source?** It is the source's stuffing on two (§3.5) | A third source profile | The largest caveat on the cost model's deciding line |
 | 11 | **Why do three relays never start a late subscriber, and two lose media after the join?** (§3.7) | Those relays' own logs; the draft settling how the start filter is carried | Relay portability, which underwrites the economic argument |

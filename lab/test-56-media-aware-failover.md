@@ -6,8 +6,10 @@ C4 passes; C0, C2, C3, C5 and one-source C6 fail; R1 passes. On the demultiplexe
 event is a switch, including a standby's start. On `66af72315` every switch cost at least the
 export's delay. On `bdc47852a` a switch keeps it: an arrival loses next to no programme, and a hard
 kill loses its detection interval alone, 1.1–1.2 s at a 1 s idle timeout on Linux, with 1.3 s of
-decoder hole. No export ended at a hard kill there. Selection at the receiver, between exports each
-on its own leg, avoided every switch in the relay.
+decoder hole. No export ended at a hard kill there. On `204c97f4f` a clean exit loses 0.28–0.36 s,
+and a relay lost under one importer on moq-lite 07 still skips programme unflagged, by the
+detection interval less half the delay: 6.9–8.1 s at 2 s, 2.7 s at 10 s. Selection at the receiver,
+between exports each on its own leg, avoided every switch in the relay.
 
 ## Objective
 
@@ -233,6 +235,22 @@ exports, a start measured on six):
 No export ended or restarted, and every switch was marked. The decoder hole matches the laptop's;
 the programme lost is 0.45 s more at the median, and the outage 0.2–0.5 s more.
 
+**R4 and R5 on `204c97f4f`** (the tertiary; every run passing the void checks; ranges over six
+exports). In `term` no export ended, every switch was marked and no continuity error fell outside
+one:
+
+| Event | Stall | Decoder hole | Outage | Programme lost | Bad |
+|---|---|---|---|---|---|
+| B's start | 0.10 | 0.23 | — | −0.08 to 0.12 | 1–4 |
+| SIGTERM of B, serving | 0.10 | 0.60 | 0.60 | 0.28–0.36 | 22 |
+| B's restart | 0.10–0.13 | 0.29–0.30 | — | −0.04 to −0.08 | 0 |
+
+In `relay` on moq-lite 07 every export survived with no switch, flag or continuity error, and
+each skipped programme in one unflagged step: 6.88–8.08 s at the 2 s delay, after a 4 s stall, and
+2.70 s at 10 s, with none; each logged *media skipped upstream; resuming at the next group*. On the
+default version the loss was a marked switch losing 7.96 s, and the relay's restart a second,
+repeating 0.06–0.08 s, in two runs of three.
+
 **Two sources (`sources`, 6 s).** Every switch moved the PMT to the other source's PID, with the
 PAT's and PMT's versions bumped and every PID flagged. No export ended. B's start and restart are
 switches onto the separate encode, and SIGKILL and SIGTERM are switches back.
@@ -307,6 +325,14 @@ checked cut by cut. Nothing marks a cut, so each run carries about 61 continuity
 - **R3: C2 still fails, on both counts.** On Linux a 1 s kill loses 1.12–1.20 s of programme and
   shows 1.27–1.30 s of hole. The laptop's 0.64–0.80 s of programme is more than 0.25 s from it, so it
   is the laptop's; the hole is the same on both.
+- **R4 fails, narrowly**: a clean exit loses 0.28–0.36 s, seven to nine frames, against 1.44–2.52 s
+  on `66af72315`, with a 0.60 s hole of 22 corrupt pictures where the switch lands inside a GOP.
+- **R5: C5 fails on moq-lite 07 at both delays**, and the skip is what the fix
+  ([#6183](https://github.com/moq-dev/moq/pull/6183)) leaves by design: a resumed copy keeps the
+  groups the subscriber's max age, half the export's delay, still holds, and the rest of the
+  detection interval is skipped unflagged. By that account, which both delays fit, a relay loss at a
+  6 s idle timeout is seamless only behind a delay of about twice the detection interval, some 16 s
+  (reasoned, not run).
 
 ## Conclusions
 
