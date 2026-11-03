@@ -175,6 +175,24 @@ on a synthetic capture with four known packets removed it named those four.
 - **red5 lost nothing in any replicate**: it starts a subscription at the next group, as moxygen and
   Cloudflare do. The earlier runs' losses within the first group did not recur on this build.
 
+### imquic's final objects: which client loses them (criteria fixed before the first run)
+
+imquic's maintainer asked whether the objects come back on FETCH; a probe from the laptop with
+imquic's own subscriber (`imquic-moq-sub`, imquic `7b19884` on picoquic `629e4b64`) received every
+final object of the groups `moq-dev` lacked. [`t11-imquic-fetch.sh`](scripts/t11-imquic-fetch.sh)
+runs three clients on one publish, three replicates, from the laptop: **M**, `moq export ts
+--passthrough` up before the publisher, mapped by `t11-loss-map.py`; **I**, imquic's SUBSCRIBE from
+2 s in, each object logged with its group, ID, size and whether its stream ended with it; **F**,
+imquic's FETCH of groups 0–19, ascending, from 26 s in, the publisher still connected.
+
+1. **Valid:** M lacks the final object at five or more of the nineteen boundaries.
+2. **Per group M lacks:** whether I received the final object, and whether F did.
+3. **Reading, 3 of 3:** I and F both hold every final object M lacks: the relay stores and forwards
+   them, and the loss is `moq-dev`'s subscriber's. F holds them and I lacks them: the relay's
+   forwarding. F lacks them: the relay never stored them.
+4. **Diagnostic, not graded:** whether M's lost groups are those whose final object reached I with
+   its stream's end, as the probe suggested.
+
 ### A CDN-hosted moqx deployment, both lanes
 
 A private moqx endpoint run by a CDN, offered for draft 16 and 18 over WebTransport or raw QUIC.
@@ -571,8 +589,8 @@ side adopts #2015's framing.
   reproducer first — the input ending between intra frames is the suspected trigger, and that
   should be confirmed against a clip whose final GOP is complete before anything is filed.
 - Raise the 200 ms QUIC→WebSocket fallback timer separately.
-- Report imquic's undelivered final objects (drafted, unsent); the late subscriber aiomoqt, moqtail
-  and Nokia never start waits on their adopting moq-transport#2015's framing.
+- The late subscriber aiomoqt, moqtail and Nokia never start waits on their adopting
+  moq-transport#2015's framing.
 - The two TS cases, fixture and checker are proposed to the runner as
   [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159); once
   it merges, [`interop/`](interop/README.md) retires and this file's method cites the runner.
