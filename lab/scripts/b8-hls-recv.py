@@ -17,7 +17,18 @@ behind a CDN needs and the T30 receiver lacked:
 
 It writes the transport stream to OUT ("-" for stdout, to pipe into a groomer). It joins at the
 live edge, and on recovery it re-anchors there rather than replaying history: a hole, not a lag.
-CMCD and CAT renewal are later increments (lab/test-30 § Tooling).
+CAT renewal is a later increment (lab/test-30 § Tooling).
+
+With --cmcd, every request carries CMCD v2 (CTA-5004-B) in request mode, in the four CMCD-*
+headers or the CMCD query argument, which is the form a CDN's standard access log keeps: the
+session (cid, sf=h, sid, st=l, v=2), the object (ot, d), and per request sn, su on the first
+segment and on the one after a retry, mtp from the last segment, nor, ltc (a dated segment's
+program date-time to its hand-off), bs after a lost segment or playlist outage, msd once. With
+--cmcd-collector it also reports in event mode, a batched POST of application/cmcd records:
+play-state changes (starting, playing, rebuffering, quit or fatal), a response record (rc, url,
+ttfb, ttlb) for each segment and each failed playlist fetch, an error (ec) per anomaly, and an
+interval report every --cmcd-interval seconds. A buffer the receiver does not hold (bl, tbl) is
+not sent.
 
 With --release-ms, a segment the playlist dates (EXT-X-PROGRAM-DATE-TIME, its first PCR's wall-clock
 time, as t61-epochseg.py --pdt writes it) is held until its last PCR's time plus the hold, so every
@@ -36,16 +47,118 @@ marked without re-packetising, and the log names it.
 Usage:
   b8-hls-recv.py URL OUT [--seconds N, 0 for no end] [--poll MS] [--edge N] [--timeout S]
                  [--give-up-ms MS] [--release-ms MS] [--header 'Name: value']... [--log FILE.jsonl]
+                 [--cmcd headers|query] [--cmcd-cid ID] [--cmcd-collector URL] [--cmcd-interval S]
 """
 import argparse
 import datetime
 import http.client
 import json
+import posixpath
+import queue
 import sys
+import threading
 import time
 import urllib.parse
+import uuid
 
 PCR_WRAP = (1 << 33) * 300
+
+
+class Tok(str):
+	"""A CMCD token: written bare, where a string is quoted."""
+
+
+def sf_item(v):
+	"""One value as RFC 8941 writes it: an inner list from a list, a parameter from a tuple."""
+	if isinstance(v, list):
+		return "(" + " ".join(sf_item(x) for x in v) + ")"
+	if isinstance(v, tuple):
+		return f"{sf_item(v[0])};{v[1]}"
+	if isinstance(v, Tok):
+		return str(v)
+	if isinstance(v, str):
+		return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+	return str(int(v))
+
+
+def cmcd_payload(keys):
+	"""Key-value pairs in alphabetical order; a TRUE boolean is its key alone."""
+	return ",".join(k if v is True else f"{k}={sf_item(v)}" for k, v in sorted(keys.items()))
+
+
+class Cmcd:
+	"""One receiver session's CMCD v2: request mode on every fetch, event mode to a collector."""
+
+	SHARD = {"cid": "Session", "msd": "Session", "sf": "Session", "sid": "Session", "st": "Session",
+			 "v": "Session", "d": "Object", "ot": "Object", "bs": "Status"}
+
+	def __init__(self, mode, cid, collector, log):
+		self.mode, self.collector, self.log = mode, collector, log
+		self.session = dict(cid=cid, sf=Tok("h"), sid=str(uuid.uuid4()), st=Tok("l"), v=2)
+		self.sn = {"request": 0, "event": 0}
+		self.events = queue.Queue()
+		self.poster = None
+		if collector:
+			self.poster = threading.Thread(target=self._post, daemon=True)
+			self.poster.start()
+
+	def request(self, url, ot, **keys):
+		"""The URL and headers of one fetch carrying request-mode CMCD."""
+		if not self.mode:
+			return url, {}
+		keys = dict(self.session, ot=Tok(ot), sn=self.sn["request"],
+					**{k: v for k, v in keys.items() if v is not None and v is not False})
+		self.sn["request"] += 1
+		if self.mode == "query":
+			sep = "&" if urllib.parse.urlsplit(url).query else "?"
+			return url + sep + "CMCD=" + urllib.parse.quote(cmcd_payload(keys), safe=""), {}
+		shards = {}
+		for k, v in keys.items():
+			shards.setdefault(self.SHARD.get(k, "Request"), {})[k] = v
+		return url, {f"CMCD-{s}": cmcd_payload(kv) for s, kv in shards.items()}
+
+	def event(self, e, ts=None, **keys):
+		"""Queue one event-mode record; `ts` defaults to now."""
+		if not self.collector:
+			return
+		rec = dict(self.session, e=Tok(e), sn=self.sn["event"], ts=round((ts or time.time()) * 1000),
+				   **{k: v for k, v in keys.items() if v is not None})
+		self.sn["event"] += 1
+		self.events.put(cmcd_payload(rec))
+
+	def close(self):
+		if self.poster:
+			self.events.put(None)
+			self.poster.join(timeout=5)
+
+	def _post(self):
+		"""Send queued records in batches of up to a second's worth, off the fetch loop."""
+		u = urllib.parse.urlsplit(self.collector)
+		cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+		done = False
+		while not done:
+			batch = [self.events.get()]
+			until = time.time() + 1.0
+			while len(batch) < 200 and batch[-1] is not None:
+				try:
+					batch.append(self.events.get(timeout=max(0.0, until - time.time())))
+				except queue.Empty:
+					break
+			done = None in batch
+			batch = [r for r in batch if r is not None]
+			if not batch:
+				continue
+			try:
+				conn = cls(u.netloc, timeout=5)
+				conn.request("POST", u.path or "/", body="\n".join(batch).encode(),
+							 headers={"Content-Type": "application/cmcd"})
+				r = conn.getresponse()
+				r.read()
+				conn.close()
+				if r.status >= 300:
+					self.log("cmcd-post-fail", status=r.status, records=len(batch))
+			except Exception as e:  # noqa: BLE001 - a lost report never stops the receiver
+				self.log("cmcd-post-fail", error=str(e)[:120], records=len(batch))
 
 
 class Client:
@@ -58,16 +171,17 @@ class Client:
 		self.headers = dict(headers, **{"User-Agent": "b8-hls-recv/1"})
 		self.timeout = timeout
 		self.conn = None
+		self.t0 = None  # the last request's start, for CMCD's response records
 
-	def get(self, url):
+	def get(self, url, extra=None):
 		path = urllib.parse.urlsplit(url)
 		path = path.path + ("?" + path.query if path.query else "")
 		if self.conn is None:
 			cls = http.client.HTTPSConnection if self.https else http.client.HTTPConnection
 			self.conn = cls(self.host, timeout=self.timeout)
-		t0 = time.time()
+		t0 = self.t0 = time.time()
 		try:
-			self.conn.request("GET", path, headers=self.headers)
+			self.conn.request("GET", path, headers=dict(self.headers, **(extra or {})))
 			r = self.conn.getresponse()
 			ttfb = time.time() - t0
 			body = r.read()
@@ -83,8 +197,8 @@ class Client:
 
 def parse_media_playlist(text):
 	"""Return (media_sequence, [segment_uri, ...], {uri: program date-time, unix s},
-	{uri that EXT-X-DISCONTINUITY precedes})."""
-	seq, uris, dated, disc, pdt, brk = 0, [], {}, set(), None, False
+	{uri that EXT-X-DISCONTINUITY precedes}, {uri: EXTINF duration, s})."""
+	seq, uris, dated, disc, dur, pdt, brk, extinf = 0, [], {}, set(), {}, None, False, None
 	for line in text.splitlines():
 		line = line.strip()
 		if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
@@ -92,6 +206,11 @@ def parse_media_playlist(text):
 				seq = int(line.split(":", 1)[1])
 			except ValueError:
 				pass
+		elif line.startswith("#EXTINF:"):
+			try:
+				extinf = float(line[8:].split(",", 1)[0])
+			except ValueError:
+				extinf = None
 		elif line.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
 			try:
 				pdt = datetime.datetime.fromisoformat(line.split(":", 1)[1]).timestamp()
@@ -105,8 +224,18 @@ def parse_media_playlist(text):
 				dated[line] = pdt
 			if brk:
 				disc.add(line)
-			pdt, brk = None, False
-	return seq, uris, dated, disc
+			if extinf is not None:
+				dur[line] = extinf
+			pdt, brk, extinf = None, False, None
+	return seq, uris, dated, disc, dur
+
+
+def relative(frm, to):
+	"""`to` relative to `frm`'s directory, as CMCD's nor carries it."""
+	a, b = urllib.parse.urlsplit(frm), urllib.parse.urlsplit(to)
+	if a.netloc != b.netloc:
+		return to
+	return posixpath.relpath(b.path, posixpath.dirname(a.path)) + ("?" + b.query if b.query else "")
 
 
 def mark_discontinuity(data):
@@ -168,6 +297,12 @@ def main():
 					help="hold each dated segment until its last PCR's time plus this")
 	ap.add_argument("--header", action="append", default=[])
 	ap.add_argument("--log", default=None)
+	ap.add_argument("--cmcd", choices=["headers", "query"], default=None,
+					help="send request-mode CMCD v2 on every fetch")
+	ap.add_argument("--cmcd-cid", default=None, help="CMCD content ID; the playlist's path by default")
+	ap.add_argument("--cmcd-collector", default=None, help="POST event-mode CMCD v2 to this URL")
+	ap.add_argument("--cmcd-interval", type=float, default=30.0,
+					help="seconds between event-mode interval reports; 0 sends none")
 	args = ap.parse_args()
 
 	headers = dict(h.split(":", 1) for h in args.header)
@@ -179,8 +314,35 @@ def main():
 
 	out = sys.stdout.buffer if args.out == "-" else open(args.out, "wb", buffering=0)
 	client = Client(args.url, headers, args.timeout)
-	deadline = time.time() + args.seconds if args.seconds > 0 else float("inf")
+	t_start = time.time()
+	deadline = t_start + args.seconds if args.seconds > 0 else float("inf")
 	poll = args.poll / 1000.0
+
+	cmcd = Cmcd(args.cmcd, args.cmcd_cid or urllib.parse.urlsplit(args.url).path, args.cmcd_collector, log)
+	state, once, mtp, ltc = "s", {}, None, None  # play state; keys for the next request only
+	next_report = t_start + args.cmcd_interval if args.cmcd_interval > 0 else float("inf")
+	cmcd.event("ps", ts=t_start, sta=Tok("s"))
+
+	def play_state(sta, **kw):
+		nonlocal state
+		if sta != state:
+			state = sta
+			cmcd.event("ps", sta=Tok(sta), **kw)
+
+	def starved(code):
+		cmcd.event("e", ec=[code])
+		if state == "p":
+			play_state("r")
+			once["bs"] = True
+
+	def response(status, url, meta, ot):
+		cmcd.event("rr", ts=client.t0, rc=status or 0, url=url, ot=Tok(ot),
+				   ttfb=round(meta["ttfb_ms"]) if "ttfb_ms" in meta else None,
+				   ttlb=round(meta["ms"]) if "ms" in meta else None)
+
+	def quit_session():
+		play_state("q")
+		cmcd.close()
 
 	# Segment identity is the URI; a restarted packager starts a new media sequence, and names
 	# derived from the wall clock make the URI unique across restarts.
@@ -192,14 +354,21 @@ def main():
 	down_since = None
 
 	while time.time() < deadline:
+		if time.time() >= next_report:
+			cmcd.event("t", sta=Tok(state), mtp=mtp, ltc=ltc)
+			next_report += args.cmcd_interval
+		url, extra = cmcd.request(args.url, "m", **once)
+		once.clear()
 		try:
-			status, body, meta = client.get(args.url)
+			status, body, meta = client.get(url, extra)
 		except Exception as e:  # noqa: BLE001 - any failure is a retry, by design
 			status, body, meta = None, b"", dict(error=str(e)[:120])
 		if status != 200:
 			n_fail += 1
+			response(status, args.url, meta, "m")
 			if down_since is None:
 				down_since = time.time()
+				starved("pl-fail")
 			log("pl-fail", **meta)
 			time.sleep(poll)
 			continue
@@ -207,15 +376,17 @@ def main():
 			log("pl-recovered", after_s=round(time.time() - down_since, 3))
 			down_since = None
 
-		msn, uris, dated, disc = parse_media_playlist(body.decode("utf-8", "replace"))
+		msn, uris, dated, disc, dur = parse_media_playlist(body.decode("utf-8", "replace"))
 		if last_msn is not None and msn < last_msn and not set(uris) <= last_uris:
 			log("msn-regress", was=last_msn, now=msn)
+			cmcd.event("e", ec=["msn-regress"])
 		# Segments listed and withdrawn between two of our reads: an edge that served a stale
 		# playlist through an origin outage answers 200 throughout, so nothing else shows them.
 		# A restarted packager jumps the sequence too, so this is a count of events, not of loss.
 		if last_msn is not None and msn > last_msn + len(last_uris):
 			n_skip += 1
 			log("msn-skip", was=last_msn, now=msn, unseen=msn - last_msn - len(last_uris))
+			cmcd.event("e", ec=["msn-skip"])
 		if msn != last_msn:
 			log("pl", msn=msn, n=len(uris), **meta)
 		last_msn, last_uris = msn, set(uris)
@@ -228,14 +399,22 @@ def main():
 			joined = True
 			log("join", at=uris[-args.edge] if args.edge else None)
 
-		for u in uris:
+		for i, u in enumerate(uris):
 			if u in seen:
 				continue
+			seg_url = urllib.parse.urljoin(args.url, u)
+			nxt = [relative(seg_url, urllib.parse.urljoin(args.url, uris[i + 1]))] if i + 1 < len(uris) else None
+			url, extra = cmcd.request(seg_url, "av", d=round(dur[u] * 1000) if u in dur else None, nor=nxt,
+									  mtp=mtp, ltc=ltc, su=state != "p", **once)
+			once.clear()
 			try:
-				status, data, meta = client.get(urllib.parse.urljoin(args.url, u))
+				status, data, meta = client.get(url, extra)
 			except Exception as e:  # noqa: BLE001
 				status, data, meta = None, b"", dict(error=str(e)[:120])
+			response(status, seg_url, meta, "av")
 			if status == 200:
+				if meta["ms"] > 0:
+					mtp = max(100, round(len(data) * 8 / meta["ms"] / 100) * 100)
 				if args.release_ms is not None and u in dated and (span := pcr_span(data)) is not None:
 					wait = dated[u] + span + args.release_ms / 1000.0 - time.time()
 					if wait > 0:
@@ -252,7 +431,14 @@ def main():
 					meta["write_ms"] = round((time.time() - t_write) * 1000, 1)
 				except BrokenPipeError:
 					log("downstream-closed")
+					quit_session()
 					return
+				if u in dated:
+					ltc = max(0, round((t_write - dated[u]) * 1000))
+				if state != "p":
+					if not n_seg:
+						once["msd"] = round((t_write - t_start) * 1000)
+					play_state("p", msd=once.get("msd"))
 				seen.add(u)
 				failing.pop(u, None)
 				n_seg += 1
@@ -264,6 +450,7 @@ def main():
 				log("seg-retry", name=u, **meta)
 				break  # keep order: nothing after it until it arrives or is given up
 			log("seg-lost", name=u, **meta)
+			starved("seg-lost")
 			seen.add(u)
 			failing.pop(u, None)
 			n_lost += 1
@@ -271,12 +458,14 @@ def main():
 		# Names that left the playlist unfetched are lost too, and say so.
 		for u in [u for u in failing if u not in uris]:
 			log("seg-lost", name=u, reason="left playlist")
+			starved("seg-lost")
 			seen.add(u)
 			failing.pop(u)
 			n_lost += 1
 		time.sleep(poll)
 
 	log("done", segments=n_seg, lost=n_lost, failures=n_fail, skips=n_skip)
+	quit_session()
 	if out is not sys.stdout.buffer:
 		out.close()
 
