@@ -116,7 +116,7 @@ The `$/Mbps-yr` column is the model's working unit and the bridge between a port
 
 1. **The cheapest published delivery is not on cloud at all; it is on commodity CDN.** bunny.net publishes $0.005/GB, and $0.002/GB at 1–2 PB, against $0.09 first-tier cloud egress — 18× to 45× cheaper, on a public page, with no negotiation. The hyperscalers' own CDNs sit within a few percent of their raw egress, so that spread reflects commercial positioning rather than cost.
 2. **Within a single hyperscaler, the managed video product undercuts the platform it runs on.** MediaConnect reserved outbound bandwidth at the 1500 Mbps tier is $0.017/GB — 5.3× cheaper than raw EC2 data transfer out at first-tier list. A DIY relay fleet on EC2 cannot buy that rate; it is a MediaConnect-only construct. So the "build it ourselves and save the service margin" instinct is **inverted at list prices** — but only inside that hyperscaler, since a commodity CDN undercuts MediaConnect by a further 2–8×.
-3. **List cloud egress is two to three orders of magnitude above the cost of raw carriage, and about one order above the cost of delivery.** At $0.07/Mbps/month a Mbps-year of IP transit is $0.84 against $330 on AWS list — but transit is a port and a BGP session, not a delivery service. Loaded with facilities, hardware and diversity, self-hosted delivery lands at $0.001–0.004/GB (§10.1), which is the same band as commodity CDN list. **Two independent routes to delivery, one built and one bought, agree on the cost; cloud egress sits ten times above both.** That is the single most important result in the model, and it says the trunk case is decided by commercial terms rather than by engineering. Quote the tenfold figure, not the four-hundredfold one — §10.1 explains why the latter is not a rate anyone can transact at.
+3. **List cloud egress is two to three orders of magnitude above the cost of raw carriage, and about one order above the cost of delivery.** At $0.07/Mbps/month a Mbps-year of IP transit is $0.84 against $330 on AWS list — but transit is a port and a BGP session, not a delivery service. Loaded with facilities, hardware and diversity, self-hosted delivery lands at an _illustrative_ $0.001–0.004/GB (§10.1), which is the same band as commodity CDN list. **Two routes to delivery, one built and illustrative and one bought and published, agree on the cost; cloud egress sits ten times above both.** That is the single most important result in the model, and it says the trunk case is decided by commercial terms rather than by engineering. Quote the tenfold figure, not the four-hundredfold one — §10.1 explains why the latter is not a rate anyone can transact at.
 
 ## 5. Result — one channel, one destination, 1+1
 
@@ -325,7 +325,7 @@ An illustrative all-in build-up shows the gap. A 10 Gbps-capable point of presen
 
 ## 12. What to measure or obtain next
 
-The model's open inputs are [economics](../docs/economics.md) §9's questions.
+The model's open inputs are [economics](../docs/economics.md) §10's questions.
 
 ## References
 

@@ -172,4 +172,4 @@ Delivered-quality and resilience are measured; the CUBIC→BBR delta is the head
 - Impairment method reused from: [test-5-network-impairment.md](test-5-network-impairment.md).
 - Congestion control for a permanent fixed-rate trunk (C1–C6): [test-8b-congestion-control.md](test-8b-congestion-control.md).
 - Upstream: [#2432](https://github.com/moq-dev/moq/pull/2432), [#2468](https://github.com/moq-dev/moq/pull/2468), [#1706](https://github.com/moq-dev/moq/pull/1706), [noq #768](https://github.com/n0-computer/noq/issues/768).
-- Findings: [`evidence.md`](evidence.md) §3.3; feeds [`docs/economics.md`](../docs/economics.md) §4 and §9.
+- Findings: [`evidence.md`](evidence.md) §3.3; feeds [`docs/economics.md`](../docs/economics.md) §4 and §10.
