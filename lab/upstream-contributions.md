@@ -495,7 +495,7 @@ With the fix to A, the byte-level result stands on draft 18. **Closed by us** on
 
 ### imquic's relay and a group's final object — reported as [meetecho/imquic#44](https://github.com/meetecho/imquic/issues/44)
 
-[T11](test-11-interop.md): through imquic's relay on draft 22, `moq-dev`'s subscriber lacks a group's final object at the same ten of nineteen boundaries in each run. The relay holds each and sends it on a second stream of its subgroup, which that subscriber drops: imquic's parser marks every object of the chunk carrying a stream's FIN as its end. Verified: flagging only the chunk's last object removes the split. **Fixed by the maintainer**; not re-tested.
+[T11](test-11-interop.md): through imquic's relay on draft 22, `moq-dev`'s subscriber lacks a group's final object at the same ten of nineteen boundaries each run. The relay holds each and sends it on a second stream of its subgroup, which that subscriber drops: imquic's parser marks every object of the chunk carrying a stream's FIN as its end. Verified: flagging only the chunk's last object removes the split. **Fixed by the maintainer**; not re-tested.
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 
