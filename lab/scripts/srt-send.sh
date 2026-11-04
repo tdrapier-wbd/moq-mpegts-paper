@@ -24,10 +24,14 @@
 # line; the SRT passphrase does, because tsp takes it only as an argument.
 #
 # Env: SRC, BCAST, MA_JWT_FILE (~/.moq-live/probe.jwt), SEG_URL_FILE (~/.srt-send/seg.url),
-#   PASSPHRASE_FILE (AES-256), GROUP (239.255.0.1:5000), RATE (26000000), DELAY (2s, both exports),
-#   MA_LAT_MS (1000), SEG_LAT_MS (8000), SEG_RELEASE_MS (1500), LANE_PORT (4490), MOQ_MA
-#   (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-66af7231), PACER
+#   PASSPHRASE_FILE (AES-256), STREAMID (the receiver's stream ID, if it asks one; it reaches the
+#   unit's command line, so not a secret), GROUP (239.255.0.1:5000), RATE (26000000), DELAY (2s,
+#   both exports), MA_LAT_MS (1000), SEG_LAT_MS (8000), SEG_RELEASE_MS (1500), LANE_PORT (4490),
+#   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-66af7231), PACER
 #   (~/pacer-97f3a38/mpegts-pacer).
+#
+# A sender reads its input before the receiver connects, so each connection starts with up to a
+# socket buffer of stale packets and one continuity gap.
 
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -122,7 +126,7 @@ publish() {
 }
 
 sender() {
-	local lane=$1 mode=$2 addr=$3 latency=${4:-1000} in srt crypt=""
+	local lane=$1 mode=$2 addr=$3 latency=${4:-1000} in srt crypt="" sid=""
 	case $mode in
 	listener) srt="--listener 0.0.0.0:$addr" ;;
 	caller) srt="--caller $addr" ;;
@@ -137,8 +141,9 @@ sender() {
 		[ -r "$PASSPHRASE_FILE" ] || die "cannot read $PASSPHRASE_FILE"
 		crypt="--passphrase \"\$(cat '$PASSPHRASE_FILE')\" --pbkeylen 32"
 	fi
+	[ -n "${STREAMID:-}" ] && sid="--streamid $(printf %q "$STREAMID")"
 	unit "srt-send-$lane" /bin/bash -c "exec tsp --buffer-size-mb 1 -I ip $in --local-address 127.0.0.1 \
-		-O srt $srt --transtype live --latency $latency $crypt"
+		-O srt $srt --transtype live --latency $latency $crypt $sid"
 }
 
 start() {
