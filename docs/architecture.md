@@ -1,65 +1,87 @@
 # Reference Architecture: Broadcast-Grade Primary Distribution
 
-Status: working draft. Layer: **above the transport.** Everything in §4–§9 is required and owned by the distributor _whichever_ data plane carries the bytes, and is the substance of this repository. Only §6 (carriage lanes) and §8 (the fan-out fabric) are MoQ-specific; their segmented-HTTP counterparts are in [Comparison](comparison.md) §2 and §3.
+Status: working draft. Layer: **above the transport.** Scope: an end-to-end reference architecture for a platform that delivers professional broadcast primary distribution over an Internet-native transport. It takes the requirement set in [Problem](problem.md) §5 as given and develops R3 (IRD-conformant egress), R6 (redundancy) and R8 (observability). MoQ is the worked example because it is what the prototype runs on; the MoQ-specific sections are marked.
 
 **Contents**
 
-- [1. Purpose and layering](#1-purpose-and-layering)
-  - [1.1 Design principles](#11-design-principles)
-- [2. End-to-end overview](#2-end-to-end-overview)
-  - [2.1 The satellite-hybrid topology, for contrast](#21-the-satellite-hybrid-topology-for-contrast)
-- [3. What the installed base requires](#3-what-the-installed-base-requires)
-  - [3.1 Ingest](#31-ingest)
-- [4. The edge gateway: grooming and egress](#4-the-edge-gateway-grooming-and-egress)
-  - [4.1 The grooming problem, and why it belongs to every data plane](#41-the-grooming-problem-and-why-it-belongs-to-every-data-plane)
-  - [4.2 What is measured, and what is not](#42-what-is-measured-and-what-is-not)
-  - [4.3 Correctness boundaries a groomer must handle, and which are untested](#43-correctness-boundaries-a-groomer-must-handle-and-which-are-untested)
+- [In brief](#in-brief)
+- [1. Scope and principles](#1-scope-and-principles)
+  - [1.1 Principles](#11-principles)
+- [2. Overview](#2-overview)
+  - [2.1 Satellite-hybrid contrast](#21-satellite-hybrid-contrast)
+- [3. Installed base](#3-installed-base)
+- [4. Edge gateway](#4-edge-gateway)
+  - [4.1 Grooming](#41-grooming)
+  - [4.2 Measured scope](#42-measured-scope)
+  - [4.3 Correctness boundaries](#43-correctness-boundaries)
   - [4.4 Placement and scaling](#44-placement-and-scaling)
-  - [4.5 The same gateway on a segmented-HTTP data plane](#45-the-same-gateway-on-a-segmented-http-data-plane)
-- [5. Redundancy and 1+1](#5-redundancy-and-11)
-  - [5.1 Making the pair mergeable is a constraint on the groomer, and it is the design decision that matters](#51-making-the-pair-mergeable-is-a-constraint-on-the-groomer-and-it-is-the-design-decision-that-matters)
-  - [5.2 What a pair protects depends on the lane](#52-what-a-pair-protects-depends-on-the-lane)
-  - [5.3 Separation of responsibilities](#53-separation-of-responsibilities)
+  - [4.5 Segmented-HTTP gateway](#45-segmented-http-gateway)
+- [5. Redundancy (R6)](#5-redundancy-r6)
+  - [5.1 Mergeability](#51-mergeability)
+  - [5.2 Lane protection](#52-lane-protection)
+  - [5.3 Responsibilities](#53-responsibilities)
   - [5.4 Failure scenarios](#54-failure-scenarios)
-  - [5.5 The honest limit](#55-the-honest-limit)
-  - [5.6 Graceful degradation](#56-graceful-degradation)
-- [6. Media carriage and the two lanes _(MoQ-specific)_](#6-media-carriage-and-the-two-lanes-moq-specific)
-  - [6.1 The two lanes](#61-the-two-lanes)
-  - [6.2 What survives the media-aware lane, and what does not](#62-what-survives-the-media-aware-lane-and-what-does-not)
-  - [6.3 What happens to the transport stream, end to end](#63-what-happens-to-the-transport-stream-end-to-end)
-  - [6.4 The limit of "byte-accurate"](#64-the-limit-of-byte-accurate)
+  - [5.5 Degradation](#55-degradation)
+- [6. Carriage lanes (MoQ)](#6-carriage-lanes-moq)
+  - [6.1 Lanes](#61-lanes)
+  - [6.2 Media-aware survival](#62-media-aware-survival)
+  - [6.3 Byte accuracy](#63-byte-accuracy)
 - [7. Publishers](#7-publishers)
-- [8. The fan-out fabric _(MoQ-specific)_](#8-the-fan-out-fabric-moq-specific)
-  - [8.1 Topology, and why the default is simple](#81-topology-and-why-the-default-is-simple)
-  - [8.2 Routing and policy](#82-routing-and-policy)
-  - [8.3 Capacity planning](#83-capacity-planning)
-  - [8.4 Resilience, and its limits](#84-resilience-and-its-limits)
-  - [8.5 Congestion control is a deployment decision](#85-congestion-control-is-a-deployment-decision)
-  - [8.6 Federation, as a research direction](#86-federation-as-a-research-direction)
+  - [7.1 Ingest](#71-ingest)
+- [8. Fan-out fabric (MoQ)](#8-fan-out-fabric-moq)
+  - [8.1 Topology](#81-topology)
+  - [8.2 Routing](#82-routing)
+  - [8.3 Capacity](#83-capacity)
+  - [8.4 Resilience](#84-resilience)
+  - [8.5 Congestion control](#85-congestion-control)
+  - [8.6 Federation](#86-federation)
 - [9. Observability and operations (R8)](#9-observability-and-operations-r8)
-  - [9.1 The four probes that are not obvious](#91-the-four-probes-that-are-not-obvious)
+  - [9.1 Probes](#91-probes)
   - [9.2 Runbooks](#92-runbooks)
-  - [9.3 What changes on a segmented-HTTP data plane](#93-what-changes-on-a-segmented-http-data-plane)
-  - [9.4 The vantage the architecture does not have: delivered-media health at a subscriber](#94-the-vantage-the-architecture-does-not-have-delivered-media-health-at-a-subscriber)
-- [10. Draft and version strategy _(MoQ-specific)_](#10-draft-and-version-strategy-moq-specific)
-- [11. Key decisions and trade-offs](#11-key-decisions-and-trade-offs)
+  - [9.3 Segmented-HTTP operations](#93-segmented-http-operations)
+  - [9.4 Subscriber vantage](#94-subscriber-vantage)
+- [10. Versioning (MoQ)](#10-versioning-moq)
+- [11. Limits](#11-limits)
 - [12. Open questions](#12-open-questions)
+- [13. References](#13-references)
 
-Scope: an end-to-end reference architecture for a platform that delivers professional broadcast primary distribution over an Internet-native transport. It takes the requirement set in [Problem](problem.md) §5 as given and develops R3 (IRD-conformant egress), R6 (redundancy) and R8 (observability). MoQ is used as the worked example because it is what the prototype runs on; the transport-specific parts are marked.
+## In brief
 
-The edge gateway (§4) and redundancy (§5) come first — broadcast-grade components and where most measurement sits. §6 onward is carriage, fabric, operations and design intent.
+**Everything in §4–§9 is required and owned by the distributor _whichever_ data plane carries the bytes, and is the substance of this repository.** Only §6 (carriage lanes) and §8 (the fan-out fabric) are MoQ-specific; their segmented-HTTP counterparts are in [Comparison](comparison.md) §2 and §3. The edge gateway (§4) and redundancy (§5) come first, as the broadcast-grade components and where most measurement sits.
+
+**The edge gateway makes the platform broadcast-grade, and its output is conformant on PCR repetition on the wire in software on both lanes.** Behind the media-aware lane it fails the 13818-1 buffer model, which re-timing cannot repair and only a re-multiplexing stage restores (§4.2, §4.3).
+
+**Only legs of one broadcast merge, so the lane decides what a 1+1 pair protects.** The opaque lane's pair is hitless and leaves the importer single; on the media-aware lane redundancy is a switch at the receiver, which protects the importer and costs a decoder about one to three seconds at each fault (§5.2).
+
+**The transport is a swappable dependency**: packaging, catalog, reassembly and control are specified independently of the draft, so a draft upgrade is thin glue rather than a media rewrite (§10).
+
+The decisions behind these, and what each costs:
+
+| Decision | Rationale | Trade-off accepted |
+| --- | --- | --- |
+| Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
+| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | The stage cannot improve PCR spacing by re-ordering content, so it must **reserve** an output slot on the repetition deadline and defer the displaced packet — 0.34 % of the carrier, and the only thing that clears the gate on the MoQ lane (§4.2). On that lane it also requires a buffer bound set by the source's peak coded frame, which is content-dependent and costs latency, and it cannot repair the lane's T-STD-illegal packet order, which needs exactly the re-multiplexing this row declines (§4.3) |
+| Two independently _stream-clocked_ groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | A multi-track mux on the media-aware lane merges only as a co-started pair, so a leg that joins late needs the opaque lane (§5.1) |
+| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in less bandwidth by the source's stuffing, which it does not carry | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving. For TS-out the default is a transmux with structural limits — packet layout lost, the subscriber as multiplexer, no scrambled feeds, TDT/TOT on the exporter's own emission grid and so later than the source sent them (§6.2) — and holds its place by the fallback's immaturity, narrow evidence and one open implementation, rather than by fit (§6.1) |
+| Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
+| Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the _operator's_ to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable _between_ implementations |
+| Out-of-band, non-fate-sharing control plane (§1.1, [Control](control-plane.md)) | Data plane survives control-plane outages | Revocation needs a token backstop, not just a live signal |
+| ST 2022-7 last-hop redundancy (§5) | Hitless failover using the IRD's existing capability | Doubles egress bandwidth; needs disjoint paths end to end |
+| Hybrid backstop for highest-assurance routes (§11) | Correlated Internet failure is a real residual risk | Retains some managed or satellite cost where used |
+
+**None of it has met a hardware IRD, and that is the gate the architecture waits on**; correlated failure of both Internet paths is not characterised, and graceful degradation, federation and subscriber-side health reporting are design rather than measurement (§11).
 
 ---
 
-## 1. Purpose and layering
+## 1. Scope and principles
 
-This is deliberately _not_ a description of MoQ. The subject is the entire distribution platform — publishers, relays, edge gateways, egress, control plane, entitlement, observability and operations. The transport is one layer among several, and by design the least differentiated.
+**This is deliberately _not_ a description of MoQ, and the transport is by design the least differentiated of its layers.** The subject is the entire distribution platform — publishers, relays, edge gateways, egress, control plane, entitlement, observability and operations — and the transport is one layer among several.
 
 Throughout, three planes are kept separate, because conflating them is the most common source of architectural error in this domain: the **data plane** (the path media takes from publisher to endpoint), the **control plane** (the system that provisions, entitles, routes and observes), and the **management plane** (the human-facing surfaces: APIs, dashboards, NOC integration). Their availability, latency and consistency requirements are radically different.
 
-### 1.1 Design principles
+### 1.1 Principles
 
-Derived from [Problem](problem.md) §1 and §5, and governing every decision below.
+**Six principles, derived from [Problem](problem.md) §1 and §5, govern every decision below.**
 
 1. **The installed base is non-negotiable.** The platform must deliver IRD-grade MPEG-TS to existing hardware without modification to that hardware. Any design that requires replacing receivers is rejected on arrival — which is the line that separates this architecture from the satellite-hybrid model sketched in §2.1, where the repair function can only sit inside a new receiver.
 2. **The transport is a swappable dependency.** Because the transport commoditises and is currently wire-unstable, the media packaging, control, entitlement and egress layers must be independent of the specific transport draft. The value must survive a transport change.
@@ -70,7 +92,9 @@ Derived from [Problem](problem.md) §1 and §5, and governing every decision bel
 
 ---
 
-## 2. End-to-end overview
+## 2. Overview
+
+**A feed crosses a publisher, a fan-out fabric and an edge gateway, and only the fabric changes with the data plane.**
 
 ```mermaid
 flowchart LR
@@ -108,11 +132,11 @@ flowchart LR
 
 Solid lines are the media data plane; dotted lines are control-plane governance. Native subscribers take the feed straight from the fabric, since they need no grooming; hardware IRDs always sit behind an edge gateway, which performs the broadcast-grade adaptation. The control plane governs the distributor's components from the publisher on, not the broadcaster's origination, and sits on none of the media paths. The fabric is drawn as one cluster; its topology is §8.
 
-**The fabric box is the only part that changes with the data plane.** On MoQ it is a relay cluster (§8); on segmented HTTP it is an origin plus a cache tier. Everything to the right of it is identical.
+On MoQ the fabric is a relay cluster (§8); on segmented HTTP it is an origin plus a cache tier. Everything to the right of it is identical.
 
-### 2.1 The satellite-hybrid topology, for contrast
+### 2.1 Satellite-hybrid contrast
 
-The architecture above puts a cache where satellite puts a footprint. **The satellite-hybrid model of [Comparison](comparison.md) §1.2 does the opposite: it keeps the space segment as the fan-out and adds IP only as a repair path.** It is drawn for the contrast about where the broadcast-grade work goes, not because this repository has measured any of it — everything here is _specified_, from VSF TR-06-4 Parts 7 and 8.
+**The architecture above puts a cache where satellite puts a footprint; the satellite-hybrid model of [Comparison](comparison.md) §1.2 does the opposite, keeping the space segment as the fan-out and adding IP only as a repair path.** It is drawn for the contrast about where the broadcast-grade work goes, not because this repository has measured any of it — everything here is _specified_, from VSF TR-06-4 Parts 7 and 8.
 
 ```mermaid
 flowchart LR
@@ -143,9 +167,9 @@ flowchart LR
 
 ---
 
-## 3. What the installed base requires
+## 3. Installed base
 
-The existing receiving plant is not a component the platform builds; it is a constraint the platform must satisfy. It is stated before the design because designing as though it were optional is the most common way Internet-native distribution proposals fail.
+**The existing receiving plant is not a component the platform builds; it is a constraint the platform must satisfy.** It is stated before the design because designing as though it were optional is the most common way Internet-native distribution proposals fail.
 
 A hardware IRD or professional decoder expects, at minimum:
 
@@ -158,15 +182,9 @@ The egress the platform therefore specifies is MPEG-TS over RTP/UDP (payload typ
 
 **Coexistence architecture** — receivers, plant and monitoring stay untouched ([Problem](problem.md) §2.4); native subscribers can bypass the edge gateway, but never as a requirement. That is a property of _this_ architecture rather than of IP distribution generally: the satellite-hybrid alternative in §2.1 buys its repair path with a receiver upgrade at every site that is to benefit.
 
-### 3.1 Ingest
-
-The platform ingests the transports broadcasters already use, in descending order of near-term importance: **RTP/UDP MPEG-TS** including SMPTE 2022-1 FEC and ST 2022-7 dual-path, the established managed-network format; **SRT**, the dominant IP contribution transport, ingested to coexist with existing workflows rather than demand replacement; and **ST 2110 essence** in the longer term, which requires encode/mux before publication and is a heavier integration with its own PTP considerations.
-
-Ingest is a pluggable adaptation layer with no privileged input: the internal representation is a transport stream, and each ingest module must produce it faithfully. That order is design: every ingest measured here is SRT or plain UDP, and none is RTP with FEC or a 2022-7 merge.
-
 ---
 
-## 4. The edge gateway: grooming and egress
+## 4. Edge gateway
 
 **This is the component that makes the architecture broadcast-grade, it is required in the same place with the same responsibilities on either data plane, and it is where nearly all the measured work in this repository sits.**
 
@@ -180,7 +198,7 @@ An edge gateway receives one or more feeds from the nearest fan-out point and, f
 6. **Deterministic output** when the gateway is one half of an ST 2022-7 pair (§5.1).
 7. **Silence detection and mute** when its content source stops. A groomer holding rate against a dead source emits a valid constant-rate carrier with no programme, which every conventional check reports healthy and on which no receiver-side switch fires; muting hands the failure to the receiver ([Evidence](../lab/evidence.md) §3.4, §3.12). This is not optional and it is not obvious; it is the failure mode a component-liveness list misses.
 
-### 4.1 The grooming problem, and why it belongs to every data plane
+### 4.1 Grooming
 
 **Any Internet-native transport delivers media in bursts. Where the lane rebuilds or alters the multiplex, the reassembled stream's PCR fails TR 101 290 — the conformance the installed base enforces (§3); where it carries the bytes verbatim the PCR passes, but the bursts reach the IRD as arrival jitter its clock recovery must absorb. No hardware receiver's reaction to either has been observed here. Grooming is the fix, it sits at the edge, and it is required whichever data plane carries the bytes.**
 
@@ -194,9 +212,9 @@ This is _re-timing_, not re-multiplexing — PIDs, PES, SCTE-35 and service sign
 
 **Placement at the edge rather than the publisher is deliberate** (§4.1, principle 4): whole-path jitter is only known at egress; grooming at the publisher would be undone by the fabric.
 
-### 4.2 What is measured, and what is not
+### 4.2 Measured scope
 
-This is the load-bearing evidence in the repository and it must be read with its domain attached. Full results and limits are in [Evidence](../lab/evidence.md) §3.2. **A _wire_ row grades a software capture of the live output from its bytes**: repetition from the PCR values, accuracy from the values against byte positions at the declared rate. It shows that the stage produced a conformant multiplex in real time, which a _file_ row, run offline, cannot; neither grades when packets left the host, so no row measures delivery timing at an IRD-facing output. How regularly PCRs _arrive_ is a further measure outside TR 101 290's repetition check, which reads the interval between PCR values: it drives the IRD's clock recovery and an analyser's overall jitter and delay factor, and on the groomed output it is known only from arrival gaps of a few milliseconds ([T12](../lab/test-12-dual-path-handoff.md)).
+**This is the repository's load-bearing evidence, and it must be read with its domain attached: the groomed output passes PCR repetition on the wire in software on both lanes, fails the buffer model behind the media-aware lane, and has met no hardware IRD.** Full results and limits are in [Evidence](../lab/evidence.md) §3.2. **A _wire_ row grades a software capture of the live output from its bytes**: repetition from the PCR values, accuracy from the values against byte positions at the declared rate. It shows that the stage produced a conformant multiplex in real time, which a _file_ row, run offline, cannot; neither grades when packets left the host, so no row measures delivery timing at an IRD-facing output. How regularly PCRs _arrive_ is a further measure outside TR 101 290's repetition check, which reads the interval between PCR values: it drives the IRD's clock recovery and an analyser's overall jitter and delay factor, and on the groomed output it is known only from arrival gaps of a few milliseconds ([T12](../lab/test-12-dual-path-handoff.md)).
 
 Rows are ordered as a receiver meets them: what is delivered first, what the arithmetic says second.
 
@@ -218,17 +236,15 @@ Rows are ordered as a receiver meets them: what is delivered first, what the ari
 
 **PCR repetition failed as delivered because the edge stage placed PCR opportunistically** — only in slots it was already stuffing, so frame bursts contained zero null slots and an eightfold cushion ladder moved nothing. **The edge gateway must reserve the slot** (0.34 % of the carrier at a 40 ms limit and 11 Mb/s), independently of buffer depth, exporter cadence and content ([T19](../lab/test-19-pcr-grid-verification.md) measurement 11).
 
-**File validation is optimistic** because the stage ran offline: the same groomer once passed on a file and failed live, where bursty input left it no free slot for a PCR ([Evidence](../lab/evidence.md) §3.2). Departure timing on a general-purpose OS and NIC is graded by neither; it is the hardware gate's, below.
+**File validation is optimistic** because the stage ran offline: the same groomer once passed on a file and failed live, where bursty input left it no free slot for a PCR ([Evidence](../lab/evidence.md) §3.2). Departure timing on a general-purpose OS and NIC is graded by neither; it is the hardware gate's (§11).
 
 **Buffer depth fixes it on the segmented plane and does nothing on the MoQ lane**, where the exporter never hands the groomer a PCR-bearing packet near the deadline and only the reserved slot clears the gate; the segmented arm reaches 0 on the wire with a cushion its segments' spans set, 1–3 s on this clip. So the trade is not buffer-versus-latency, but the conformant MoQ configuration is not free of latency either: it costs **2,447 ms of delivery latency against the 141 ms measured on a build whose wire cannot be made conformant**: about 650 ms is a named upstream regression and the rest is the buffer bound in §12's second open question, the contribution encoder's VBV occupancy moved downstream into this gateway ([Comparison](comparison.md) §5.1, [Evidence](../lab/evidence.md) §3.2, §3.11).
 
-**The architectural consequence is no latency advantage over the other Internet-native plane, and not a sub-second one.** At equal P1/P2 conformance this gateway delivers at 2,447 ms against the segmented plane's 2,604 ms, and does not beat a transparent tunnel, whose egress carries the source's own conformant grid at whatever jitter buffer the operator sets. At the buffer model the segmented wire passes and this gateway has no conformant configuration behind the media-aware lane at all. A re-multiplexing stage supplies one: offline; live, as a laboratory stage in this gateway's place, at 2.2 s behind the source on moq 0.12.1, most of it the lane's own delivery schedule; and in the subscriber, as upstream's merged fixed-delay export, at about 1.1 s with a 1 s delay (§4.3).
+**The architectural consequence is no latency advantage over the other Internet-native plane, and not a sub-second one** ([Comparison](comparison.md) §5.1). At the buffer model the segmented wire passes and this gateway has no conformant configuration behind the media-aware lane at all; §4.3 gives the stages that re-multiplex one, and what each costs.
 
-> **The gate that decides this architecture.** A conformant transport stream on real hardware decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model, graded on the RTP the decoder actually receives — including the ST 2022-7 determinism of §5.1 under loss. Until that evidence exists, the grooming design is **structurally sound, file-validated, and conformant on PCR repetition on the wire in software on both lanes — over 300 s and, on the media-aware lane, over 24.01 h** ([T21](../lab/test-21-permanence-soak.md)). That is still not "proven broadcast-acceptable": nothing in this campaign has been fed to a hardware decoder or graded by a hardware analyser. This remains the single most important validation for the whole architecture and it has not been performed. **Behind the media-aware lane the buffer model fails in software already**, and this gateway cannot repair it. A re-multiplexing stage can: offline, live on one host as a laboratory stage, and in the subscriber as upstream's merged fixed-delay export, each graded in software on one service (§4.3).
+### 4.3 Correctness boundaries
 
-### 4.3 Correctness boundaries a groomer must handle, and which are untested
-
-Re-stamping PCR while carrying PES timestamps unchanged must preserve the PCR-to-PTS/DTS relationship (T-STD validity). Three named cases remain **largely untested** beyond steady-state capture ([Evidence](../lab/evidence.md) §5, [T23](../lab/test-23-pcr-discontinuity-classes.md)): **source-clock drift**; **PCR discontinuities and 33-bit wrap** (partially exercised); and **mid-stream PID/PCR-PID changes**. Hardware acceptance must exercise these, not only clean captures.
+**Re-stamping PCR while carrying PES timestamps unchanged must preserve the PCR-to-PTS/DTS relationship (T-STD validity), and two of the cases that threaten it are untested.** **Source-clock drift** and **mid-stream PID/PCR-PID changes** have met no stage beyond steady-state capture; **PCR discontinuities and the 33-bit wrap** are tested through the exporter and the groomer ([Evidence](../lab/evidence.md) §5, [T23](../lab/test-23-pcr-discontinuity-classes.md); §12, question 3). Hardware acceptance must exercise all three, not only clean captures.
 
 **T-STD occupancy is no longer untested, and behind the media-aware lane it is the boundary this gateway cannot cross.** Graded in software against a calibrated model ([Evidence](../lab/evidence.md) §3.16), the lane's P1/P2-conformant wire overflows the video, audio and PSI transport buffers. The peaks are consistent with what the exporter of moq 0.12.1 does, which is to write one whole frame at a time. No PCR offset makes the audio decoder buffers legal. That holds in both of the gateway's clock modes, and with the exporter's own padding to the mux rate. Fed a byte-faithful transport, the same gateway passes every transport buffer and every 2 s window. Over a whole capture its arrival-clocked mode does not hold the PCR-to-PTS relationship the paragraph above requires. It anchors the regenerated PCR at start-up and lets the offset drift, and the decoder buffers of SRT and of plain UDP then fail at every constant offset. **Its stream-clocked mode holds it**: the same inputs pass every buffer over the whole capture, at the source's own offsets. So a byte-faithful lane keeps the T-STD only behind a stream-clocked gateway, the mode §5.1 already requires for 1+1.
 
@@ -242,11 +258,13 @@ Two problems remain that one host does not exercise. The first is clock recovery
 
 ### 4.4 Placement and scaling
 
-Edge gateways scale horizontally: each handles a bounded set of egress flows, and additional flows are served by additional instances. Because grooming and egress are per-flow and largely stateless across flows, this scales cleanly. The gateway is, however, the most CPU- and timing-sensitive component — CBR pacing and PCR re-stamping are real-time obligations — so capacity planning is dominated by timing headroom, not raw throughput. Relay and gateway therefore scale on different axes and should be capacity-planned separately; §8.3 sizes the relay, and says how its limit ends.
+**Edge gateways scale horizontally, and on timing headroom rather than throughput.** Each handles a bounded set of egress flows, and additional flows are served by additional instances. Because grooming and egress are per-flow and largely stateless across flows, this scales cleanly. The gateway is, however, the most CPU- and timing-sensitive component — CBR pacing and PCR re-stamping are real-time obligations — so capacity planning is dominated by timing headroom, not raw throughput. Relay and gateway therefore scale on different axes and should be capacity-planned separately; §8.3 sizes the relay, and says how its limit ends.
 
 **Gateway placement is open** ([Comparison](comparison.md) §4.5, [Economics](economics.md) §4.5): close to endpoints for timing determinism and hitless pairing, versus regional PoPs to cut the delivery bill. Neither data plane is favoured.
 
-### 4.5 The same gateway on a segmented-HTTP data plane
+### 4.5 Segmented-HTTP gateway
+
+**On segmented HTTP the gateway keeps its expensive responsibilities, and only ingress buffer depth and arithmetic move: it is _easier to write_ and _harder to run_.**
 
 | Gateway responsibility | On MoQ | On segmented HTTP |
 | --- | --- | --- |
@@ -256,17 +274,17 @@ Edge gateways scale horizontally: each handles a bounded set of egress flows, an
 | Byte-locked CBR pacing and PCR re-stamp | required | **required, identically** |
 | FEC, ST 2022-7 pairing, start gating, egress TR 101 290 | required | **required, identically** |
 
-The bottom two rows are the expensive ones and they do not move; what moves is ingress buffer depth and arithmetic — segmented HTTP is _easier to write_ and _harder to run_.
+The bottom two rows are the expensive ones, and they do not move.
 
 Buffer depth is **derived**, not configured: the groomer measures how far ahead of real time its input runs and sizes cushion, cap, start condition and stall timeout from that observation — ~13.1 MB and ~9 s failure-detection on a 2 s-segment 10 Mb/s feed, against MoQ's ~1 s ([Evidence](../lab/evidence.md) §3.2). **Grade pacing with a packet-conservation column beside timing ones** — a flag that raises only stall timeout can produce perfect PCR over 231 continuity errors. Partial segments could shrink the buffer but no freely available client fetches them ([Comparison](comparison.md) §5).
 
 ---
 
-## 5. Redundancy and 1+1
+## 5. Redundancy (R6)
 
-Availability target: no visible failure during contracted content (R6), addressed at every layer on a best-effort substrate, with legs that start and restart at different times.
+**Only a merge is hitless, and only legs of one broadcast merge, so a hitless pair protects everything below one importer but not the importer itself.** The availability target is no visible failure during contracted content (R6), addressed at every layer on a best-effort substrate, with legs that start and restart at different times.
 
-Redundancy is applied end to end, mirroring what broadcasters already do with ST 2022-7 but extending it back to the source. **Only a merge is hitless, and only legs of one broadcast merge**: two importers each mint their own epoch and see their own loss, so upstream treats them as different broadcasts. A hitless pair therefore protects everything below one importer but not the importer itself, and source and importer redundancy are switches. Which pair a route can have depends on its lane (§5.2). The hitless pair:
+Redundancy is applied end to end, mirroring what broadcasters already do with ST 2022-7 but extending it back to the source. Two importers each mint their own epoch and see their own loss, so upstream treats them as different broadcasts, and source and importer redundancy are switches. Which pair a route can have depends on its lane (§5.2). The hitless pair:
 
 ```mermaid
 flowchart LR
@@ -304,9 +322,9 @@ flowchart LR
 4. **Edge** — each leg's receiver feeds a stream-clocked groomer that produces a packet-identical, rate-coherent RTP egress. The groomer _enables_ ST 2022-7 by producing an aligned egress; it does not itself switch.
 5. **Merge** — two IRDs, each taking **both** legs, perform the ST 2022-7 hitless switch. This is where the failover actually happens, using the receiver's existing capability, so the final failover requires no new receiver behaviour.
 
-### 5.1 Making the pair mergeable is a constraint on the groomer, and it is the design decision that matters
+### 5.1 Mergeability
 
-ST 2022-7 requires both legs to send the _same RTP datagrams_: the same packets cut at the same boundaries, under the same sequence number, timestamp and SSRC, with only the IP and UDP headers free to differ, arriving within the receiver's path-delay class. Identity must be computed independently — **whose clock chooses each packet's slot decides whether merge works.** The groomer used here derives each datagram's header from its slot on the output grid: the sequence number from the datagram's index, the timestamp from the slot's PCR, the SSRC set per pair, seven packets a datagram, the marker never set. When the OS wakes it then changes when a datagram leaves, not what it holds, so the host's scheduling jitter reaches the receiver's de-jitter buffer and its class budget, not the merge.
+**Making the pair mergeable is a constraint on the groomer, and it is the design decision that matters.** ST 2022-7 requires both legs to send the _same RTP datagrams_: the same packets cut at the same boundaries, under the same sequence number, timestamp and SSRC, with only the IP and UDP headers free to differ, arriving within the receiver's path-delay class. Identity must be computed independently — **whose clock chooses each packet's slot decides whether merge works.** The groomer used here derives each datagram's header from its slot on the output grid: the sequence number from the datagram's index, the timestamp from the slot's PCR, the SSRC set per pair, seven packets a datagram, the marker never set. When the OS wakes it then changes when a datagram leaves, not what it holds, so the host's scheduling jitter reaches the receiver's de-jitter buffer and its class budget, not the merge.
 
 **Emit-clocked** groomers fail structurally: 39.5 % PID-order disagreement, 28.2 % null-count disagreement — two transports, not one stamped twice. **Stream-clocked** placement keys each slot to source PCR at the locked mux rate; two independent groomers then emit one transport.
 
@@ -323,11 +341,11 @@ ST 2022-7 requires both legs to send the _same RTP datagrams_: the same packets 
 | One _stream-clocked_ groomer per leg, **opaque lane** (the whole multiplex) | **yes** — hitless through a leg joining 8 s late, each leg's loss and return, and one export killed, for one clip on one host | as above | **everything below the importer** |
 | One _stream-clocked_ groomer per leg, **multi-track** mux on the media-aware lane | **no** — 75.56 % over independent chains: the same packets, in an order and slots each leg's own arrivals decide. Behind upstream's merged fixed-delay export a **co-started** pair is byte-identical ([Evidence](../lab/evidence.md) §3.4) | as above | a co-started pair only; otherwise carry it on the opaque lane |
 
-**Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean control** — an unexplained floor that the experiment attributes provisionally to running a 4 Mb/s carrier for a 1.9 Mb/s feed, and which it explicitly declines to draw absolute PCR conclusions from. So PCR repetition is **not** established by these runs; what they establish is PCR accuracy, from the bytes, and mergeability of the RTP datagrams. Second, the receiver is a reference implementation of the ST 2022-7 selection rules, not a hardware IRD's merge engine, so these results can disprove mergeability but cannot substitute for the hardware gate in §4.2, nor say which receiver class a real pair of paths needs.
+**Two qualifications on the "IRD-presentable" column, and neither is small.** First, on the rig that produced these cells **1.4–1.6 % of PCR intervals exceed 40 ms in every cell including the clean control** — an unexplained floor that the experiment attributes provisionally to running a 4 Mb/s carrier for a 1.9 Mb/s feed, and which it explicitly declines to draw absolute PCR conclusions from. So PCR repetition is **not** established by these runs; what they establish is PCR accuracy, from the bytes, and mergeability of the RTP datagrams. Second, the receiver is a reference implementation of the ST 2022-7 selection rules, not a hardware IRD's merge engine, so these results can disprove mergeability but cannot substitute for the hardware gate (§11), nor say which receiver class a real pair of paths needs.
 
 **Build two independently stream-clocked groomers.** Groom-once-and-duplicate is equally hitless but protects the last hop only. Where deterministic grooming cannot be guaranteed, use 1+1 hot-standby rather than a claimed-hitless pair. Stream-derived placement also unlocks stripping null stuffing over the WAN (regenerated at the edge regardless) — measured at 5.3 % below SRT on a clip 4.57 % nulls ([Evidence](../lab/evidence.md) §3.5). On byte-faithful input it is also the mode that keeps the T-STD over a whole capture, which the arrival-clocked mode does not (§4.3).
 
-### 5.2 What a pair protects depends on the lane
+### 5.2 Lane protection
 
 **On the opaque lane the pair is hitless and either leg can be restarted alone, but the importer is not protected.** Passthrough legs carry the importer's packets verbatim, continuity counters included, so two stream-clocked groomers behind two passthrough exports of one broadcast emit one transport. A leg that mutes and returns rejoins its partner's numbering exactly, and a leg joining late puts the same programme in the same slots under the same numbers, so an ST 2022-7 receiver merges the pair through a late join, a blackout and a killed export (§5.1). The importer stays single: its loss ends every passthrough export (§5.4), so the input's protection is the source's (§5.3).
 
@@ -359,9 +377,9 @@ Two broadcasts protect the importer as well as the paths, and the legs start, re
 
 So **a route that needs hitless 1+1 takes the opaque lane and leaves importer protection to the source, and a route on the media-aware lane gets importer protection at the cost of a cut at each fault.** The lane also decides planned maintenance: on the opaque lane one leg can be drained and restored alone under a merging receiver, and a merged media-aware pair must be restored together, which is why §9's runbook says what it says.
 
-### 5.3 Separation of responsibilities
+### 5.3 Responsibilities
 
-The layers compose cleanly only if each failure domain is owned by the layer best able to handle it.
+**The layers compose cleanly only if each failure domain is owned by the layer best able to handle it.**
 
 - **Publisher _input_ redundancy stays outside the platform, permanently.** Choosing between primary and backup _source_ feeds is a contribution-domain concern with mature tools — a TSDuck input switch, a hardware selector, a redundant encoder pair. Putting source-selection logic inside a publisher would re-implement that ecosystem badly and couple input policy to transport. The publisher's job is to take _one_ good input and get it onto the fabric reliably.
   - **The constraint the drills add:** the standby importer must be fed the _same_ selected source, or its takeover changes the programme as well as marking it. The practical topology is **two ingest paths, one selected path fanned into the importer and its standby**, with the second path held as source-side failover for both. The relay serves the newest importer, so starting or restarting the standby is itself a switch. On later October 2026 `main` that switch keeps the export's delay and loses next to no programme, but a start on an open-GOP source still shows about a second of corrupt pictures, so it is still scheduled like maintenance. Selected at the receiver as two broadcasts (§5.2), neither is a switch.
@@ -371,7 +389,7 @@ The layers compose cleanly only if each failure domain is owned by the layer bes
 
 ### 5.4 Failure scenarios
 
-Every response assumes the two legs are actually mergeable, which §5.1 shows is a property of the egress topology rather than a given.
+**Every response assumes the two legs are actually mergeable, which §5.1 shows is a property of the egress topology rather than a given.**
 
 | Failure | Response |
 | --- | --- |
@@ -385,71 +403,73 @@ Every response assumes the two legs are actually mergeable, which §5.1 shows is
 | **Regional** | Routes are re-homed to another region; gateways in the failed region are replaced by gateways in a neighbouring one, at the cost of added path latency |
 | **Control-plane partition** | The data plane continues on last-known-good state; only change operations are suspended |
 
-### 5.5 The honest limit
+### 5.5 Degradation
 
-All of the above assumes the _public-Internet substrate does not fail simultaneously along both disjoint paths_. Disjoint-path routing reduces but does not eliminate correlated failure: a large-scale BGP event or a shared upstream provider can affect both. This is a genuine residual risk that satellite — with its terrestrial-network independence — does not have. The platform mitigates it with path diversity across providers and with the transport-swappable hedge (falling back to a managed transport for the most critical always-on routes), but it does not claim to eliminate it, and it has not been characterised in production.
+**Graceful degradation is an available mechanism and not a measured behaviour.** Where full redundancy cannot prevent impairment, QUIC's per-stream delivery and MoQ's prioritisation _would_ allow the platform to shed lower-priority tracks or renditions while preserving the primary programme, instead of head-of-line-blocking the whole flow as a single ordered byte stream would. The media-aware lane exposes the individual tracks that such a policy would act on, and the opaque fallback does not — it is a single object stream with limited internal prioritisation, and trades this away in exchange for verbatim carriage.
 
-### 5.6 Graceful degradation
-
-Where full redundancy cannot prevent impairment, QUIC's per-stream delivery and MoQ's prioritisation _would_ allow the platform to shed lower-priority tracks or renditions while preserving the primary programme, instead of head-of-line-blocking the whole flow as a single ordered byte stream would. The media-aware lane exposes the individual tracks that such a policy would act on, and the opaque fallback does not — it is a single object stream with limited internal prioritisation, and trades this away in exchange for verbatim carriage.
-
-**This is an available mechanism and not a measured behaviour, and what the lane does today is coarser.** Under congestion it sheds **whole groups** that missed the subscriber's release deadline, which is not selective by track and does not preferentially preserve the primary programme; the degradation is in _time_, uniformly across the mux ([Evidence](../lab/evidence.md) §3.3). Two measured consequences bound how much comfort to take from this section. That the process doing the shedding survives it is not established: with its media and catalog consumers both skipping a superseded group none of ten exited, consistent with survival at too low an event rate to establish it ([Evidence](../lab/evidence.md) §3.15), and without `--linger` it exits when its session drops (§8.4). A subscriber that exits is off air rather than degraded. And widening the subscriber's budget to recover groups rather than shed them does not substitute for a rate margin: with two or three feeds sharing an emulated link at 0.8× their combined rate for 80 s, each lost 14–22 s of video at every release delay from 1 to 6 s, a second of delay buying back about 0.6 s of picture, and against a 5 s dip a 6 s delay absorbed the loss at 200 ms RTT but not at 20 ms. What widening costs is latency set in advance, not a step the impairment leaves: the fixed-delay export's latency is back within 100 ms after every outage measured ([Evidence](../lab/evidence.md) §3.3). **No priority-ordered shedding policy has been built or graded here**; treating graceful degradation as a property of the lane rather than as work still to do would overstate it.
+**What the lane does today is coarser.** Under congestion it sheds **whole groups** that missed the subscriber's release deadline, which is not selective by track and does not preferentially preserve the primary programme; the degradation is in _time_, uniformly across the mux ([Evidence](../lab/evidence.md) §3.3). Two measured consequences bound how much comfort to take from this section. That the process doing the shedding survives it is not established: with its media and catalog consumers both skipping a superseded group none of ten exited, consistent with survival at too low an event rate to establish it ([Evidence](../lab/evidence.md) §3.15), and without `--linger` it exits when its session drops (§8.4). A subscriber that exits is off air rather than degraded. And widening the subscriber's budget to recover groups rather than shed them does not substitute for a rate margin: with two or three feeds sharing an emulated link at 0.8× their combined rate for 80 s, each lost 14–22 s of video at every release delay from 1 to 6 s, a second of delay buying back about 0.6 s of picture, and against a 5 s dip a 6 s delay absorbed the loss at 200 ms RTT but not at 20 ms. What widening costs is latency set in advance, not a step the impairment leaves: the fixed-delay export's latency is back within 100 ms after every outage measured ([Evidence](../lab/evidence.md) §3.3). **No priority-ordered shedding policy has been built or graded here**; treating graceful degradation as a property of the lane rather than as work still to do would overstate it.
 
 ---
 
-## 6. Media carriage and the two lanes _(MoQ-specific)_
+## 6. Carriage lanes (MoQ)
 
-How broadcast media is mapped onto the transport is more consequential than which transport draft is used, because it determines whether the installed base survives transit.
+**How broadcast media is mapped onto the transport is more consequential than which transport draft is used, because it determines whether the installed base survives transit.**
 
-### 6.1 The two lanes
+### 6.1 Lanes
+
+**Media-aware re-muxing is the default lane and opaque transport-stream carriage the fallback.**
 
 **Media-aware re-muxing** parses the elementary streams and republishes them as discrete MoQ tracks. For a TS-out hand-off it is a **transmux**: the subscriber rebuilds a multiplex from tracks. It is the natural fit for the object model, inherits per-track prioritisation and selective subscription, produces the individual renditions endpoints such as OTT origins want, and is the upstream project's own preference — so it is the approach most likely to attract ongoing investment.
 
 **Opaque transport-stream carriage** carries the MPEG-TS verbatim as an opaque payload, as MSFTS's unmodified modes do under an MSF catalog (the draft's `mpeg2ts` packaging, which `moq2ts` writes). `moq-dev`'s whole-multiplex passthrough, the lane measured here, carries it as one track named in its own catalog's `m2ts` section. It preserves service signalling and programme structure _by construction_ and makes no assumptions about the source encode.
 
-**Media-aware is the default and preferred path; opaque carriage is the fallback.** That ordering is supported by what has been measured rather than only by design direction: the media-aware lane is the one carried end-to-end over the public internet, the one whose contribution-feed defects have closed upstream, and the one that costs less bandwidth than SRT, by the source's stuffing, because it declines to carry it ([Evidence](../lab/evidence.md) §3.1, §3.5).
+That ordering is supported by what has been measured rather than only by design direction: the media-aware lane is the one carried end-to-end over the public internet, the one whose contribution-feed defects have closed upstream, and the one that costs less bandwidth than SRT, by the source's stuffing, because it declines to carry it ([Evidence](../lab/evidence.md) §3.1, §3.5).
 
 **The opaque lane's evidence is narrower than its architectural role** — on `moq-dev` it is the source's bytes on two clips on loopback and on one live feed across hosts and over the internet, but one run per arm and build ([Evidence](../lab/evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids assumptions; it forgoes per-track prioritisation and null-stripping savings if truly verbatim. **Rule: media-aware unless a specific feed or endpoint forces the fallback.**
 
 **For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps the opaque lane the fallback is its evidence, narrow as above, and its ecosystem: one open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §9.3). The ordering is therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which routes those are.
 
-### 6.2 What survives the media-aware lane, and what does not
+### 6.2 Media-aware survival
 
-Measured ([Evidence](../lab/evidence.md) §3.1): every elementary stream, PID, `stream_type`, PMT descriptor and SCTE-35 splice PID round-trips intact; the DVB service layer — SDT service name, provider and type, NIT, PMT PID, TSID, ONID — is threaded through the catalog; and EIT, schedule included, round-trips section-for-section, each table on its own snapshot track.
+**The media-aware lane carries the service intact and loses the multiplex as a schedule.** Measured ([Evidence](../lab/evidence.md) §3.1): every elementary stream, PID, `stream_type`, PMT descriptor and SCTE-35 splice PID round-trips intact; the DVB service layer — SDT service name, provider and type, NIT, PMT PID, TSID, ONID — is threaded through the catalog; and EIT, schedule included, round-trips section-for-section, each table on its own snapshot track.
 
 TDT/TOT are now proxied from the source (EIT needs absolute UTC; TOT carries DST policy). **Residual: emission timing** — the exporter re-emits on its own grid, **~14 s late** against a source true to half a second, and can step a receiver's clock backwards where the source ticks slower ([Evidence](../lab/evidence.md) §3.1). Audio frame-sync recovery is **signalled nowhere** at egress — an observability gap, not a carriage one.
 
-**What does not survive, structurally, is the multiplex as a schedule** ([Comparison](comparison.md) §2). The packet layout — each packet's position, and where the PCR and nulls sat — is not carried, so the subscriber becomes the multiplexer and must re-solve the T-STD. The exporters of moq 0.10.0 to 0.13.0 do not, and their wire fails the buffer model while passing P1/P2. A re-multiplexer re-solves it from that wire, offline and, as a laboratory stage, live at 2.2 s of presentation latency on one host; upstream's fixed-delay export, merged on October 2026 `main`, re-solves it in the subscriber itself ([Evidence](../lab/evidence.md) §3.16). The same loss moves the encoder's VBV budget into the edge gateway's buffer (§4.2). And a transmux publisher must read PES headers, so **TS-level scrambling cannot enter this lane**. A scrambled feed is descrambled first or carried opaquely. That last gate is narrow in primary distribution, where protection is the transport's ([Control plane](control-plane.md) §7.3), but it is absolute where it applies.
+**What does not survive, structurally, is the multiplex as a schedule** ([Comparison](comparison.md) §2). The packet layout — each packet's position, and where the PCR and nulls sat — is not carried, so the subscriber becomes the multiplexer and must re-solve the T-STD. The exporters of moq 0.10.0 to 0.13.0 do not, and their wire fails the buffer model while passing P1/P2; §4.3 gives the stages that re-solve it. The same loss moves the encoder's VBV budget into the edge gateway's buffer (§4.2). And a transmux publisher must read PES headers, so **TS-level scrambling cannot enter this lane**. A scrambled feed is descrambled first or carried opaquely. That last gate is narrow in primary distribution, where protection is the transport's ([Control plane](control-plane.md) §7.3), but it is absolute where it applies.
 
-### 6.3 What happens to the transport stream, end to end
+### 6.3 Byte accuracy
 
-Under the opaque lane the transport **segments** the TS without parsing it — timing is lost because **the transport is bursty, not a constant-rate pipe**, not because of re-multiplexing. Path: CBR ingest → optional null stripping → object segmentation → bursty fabric delivery → edge reassembly → grooming (§4.1) → IRD egress. The **media-aware lane** differs at segmentation (demux to tracks); steps 2 and 6 are required either way.
+**Byte-accurate means intact and in order _when delivered_: the opaque lane segments the TS without parsing it, and loses its timing because the transport is bursty, not a constant-rate pipe.** The loss is not from re-multiplexing. Path: CBR ingest → optional null stripping → object segmentation → bursty fabric delivery → edge reassembly → grooming (§4.1) → IRD egress. The **media-aware lane** differs at segmentation (demux to tracks); steps 2 and 6 are required either way.
 
-### 6.4 The limit of "byte-accurate"
-
-Byte-identity holds under reliable, complete delivery at TS-packet payload level, excluding nulls stripped in transit and deliberate PCR re-stamp — not under loss (§5.1). Guarantee: intact and in order _when delivered_.
+Byte-identity holds under reliable, complete delivery at TS-packet payload level, excluding nulls stripped in transit and deliberate PCR re-stamp — not under loss (§5.1).
 
 ---
 
 ## 7. Publishers
 
-The publisher is the point at which a feed enters the platform. Its job is to accept a broadcast source, package it for the transport without discarding what the endpoints will need, publish it to the fabric, and expose enough of itself to the control plane to be provisioned and observed.
+**The publisher is the point at which a feed enters the platform.** Its job is to accept a broadcast source, package it for the transport without discarding what the endpoints will need, publish it to the fabric, and expose enough of itself to the control plane to be provisioned and observed.
 
 **Publisher redundancy.** A publisher is a candidate single point of failure, but only legs of one broadcast merge hitlessly (§5), so the importer is active/standby: a standby on its own epoch whose takeover is a marked programme switch. From the importer on, **active/active is preferred for contracted content** — two fan-out paths carrying one broadcast — because it removes failover-detection latency from the critical path, at the cost of roughly double first-hop bandwidth. This is the trade-off broadcasters already accept for ST 2022-7, carried from the importer on.
 
 **Transport independence.** The publisher's packaging layer — framing, catalog generation, and the reassembly contract with the egress — is specified _independently of the transport draft_: the draft governs how bytes move on the wire, the packaging governs what they mean. Because successive drafts change the wire protocol substantially, binding the media layer to one would make every transport upgrade a media-layer rewrite. This is the concrete mechanism behind principle 2, and it is developed in §10.
 
+### 7.1 Ingest
+
+**The platform ingests the transports broadcasters already use**, in descending order of near-term importance: **RTP/UDP MPEG-TS** including SMPTE 2022-1 FEC and ST 2022-7 dual-path, the established managed-network format; **SRT**, the dominant IP contribution transport, ingested to coexist with existing workflows rather than demand replacement; and **ST 2110 essence** in the longer term, which requires encode/mux before publication and is a heavier integration with its own PTP considerations.
+
+Ingest is a pluggable adaptation layer with no privileged input: the internal representation is a transport stream, and each ingest module must produce it faithfully. That order is design: every ingest measured here is SRT or plain UDP, and none is RTP with FEC or a 2022-7 merge.
+
 ---
 
-## 8. The fan-out fabric _(MoQ-specific)_
+## 8. Fan-out fabric (MoQ)
 
-> The segmented-HTTP counterpart is an ordinary CDN cache — the same topology under a different name, since both collapse upstream carriage to one copy and leave the last mile as N unicast copies ([Comparison](comparison.md) §3, [Economics](economics.md) §4.4).
+**The segmented-HTTP counterpart is an ordinary CDN cache, the same topology under a different name**, since both collapse upstream carriage to one copy and leave the last mile as N unicast copies ([Comparison](comparison.md) §3, [Economics](economics.md) §4.4).
 
 A relay terminates sessions from publishers and downstream subscribers, maintains per-track subscription state, forwards objects, and caches recent objects for late or recovering subscribers. It does **not** groom for IRD conformance, transcode, or make entitlement decisions beyond enforcing what the control plane already granted.
 
 **Keeping the relay "dumb and fast" is an economic position as much as an architectural one.** A relay that stays cache-shaped is one a CDN can operate as an extension of what it already runs, which is the mechanism by which relay capacity could reach commodity pricing ([Economics](economics.md) §4.6); a relay that accumulates broadcast-specific intelligence becomes a media server, which is the shape that has kept every incumbent IP transport in premium per-stream pricing. Complexity pushed into the relay is therefore paid for twice — once in engineering, once in forgoing the cheapest delivery market available.
 
-### 8.1 Topology, and why the default is simple
+### 8.1 Topology
 
 **The topology should be no more elaborate than the destination footprint requires.** The sensible default is a **redundant pair of flows** with endpoints egressing directly from them — the same pattern used with managed services such as MediaConnect. For a bounded, known set of destinations this is sufficient and it keeps the topology, the operational surface and the cost model simple. A tree of relays is not free: each additional fan-out point amplifies egress, so imposing a hierarchy where the destination count does not warrant it adds cost without benefit.
 
@@ -457,15 +477,15 @@ A tiered fabric is therefore an **option, not a requirement**. It becomes approp
 
 **Clustering primitives are shipped** — peer dial, gossip discovery, cost-priced links, two-relay end-to-end carry ([Evidence](../lab/evidence.md) §3.4) — but cross-relay subscription, cache coherence and partition behaviour are the platform's to build. Co-locating relay and gateway reduces last-hop latency but couples commodity fan-out to timing-sensitive grooming; keep them separate under heavy grooming load.
 
-### 8.2 Routing and policy
+### 8.2 Routing
 
-Baseline: shortest-path routing; subscriptions propagate upstream only as far as necessary. Policy (routing pins, sovereignty, link-disjoint paths) lives in the control plane, not the relay — it must survive a transport swap ([Control](control-plane.md)).
+**Routing is shortest-path, and policy lives in the control plane, not the relay.** Subscriptions propagate upstream only as far as necessary, and policy (routing pins, sovereignty, link-disjoint paths) must survive a transport swap ([Control](control-plane.md)).
 
 Relay caching is a small recovery buffer for loss and late attach, not time-shift — live endpoints must not fall seconds behind.
 
-### 8.3 Capacity planning
+### 8.3 Capacity
 
-Relay cost tracks **session count**, not bitrate: a session costs ~0.34 % / 0.87 % / 1.18 % of a core at 2 / 10 / 27 Mbps co-resident, so nearly fourteen times the bitrate costs about three and a half times the CPU and cost per Mbps _falls_ as bitrate rises. One core carries roughly a gigabit. **Size a tier from the cross-host figure, not from the co-resident one.** On `moq-relay` 0.15.1 (noq) that is **1.258 % of a core, 2.62 MB and one full stream copy per remote subscriber** with GSO on, and 1.69 % with it off, which on a 2-vCPU relay is about 100 subscribers, measured. The `moq-relay` 0.14.15 build on quinn measured 0.806 % and 1.39 MB, or 124–139 subscribers per core at ~10 Mb/s, and remains the evidence that the cost is linear and the cliff predictable ([Evidence](../lab/evidence.md) §3.6). Past that limit throughput _collapses_ (up to 95 % aggregate loss while CPU stays pinned), and RSS jumps ~2.5× behind a saturated core, so admission control that refuses the N+1th subscriber beats serving it badly. Three planning consequences:
+**Relay cost tracks session count, not bitrate.** A session costs ~0.34 % / 0.87 % / 1.18 % of a core at 2 / 10 / 27 Mbps co-resident, so nearly fourteen times the bitrate costs about three and a half times the CPU and cost per Mbps _falls_ as bitrate rises. One core carries roughly a gigabit. **Size a tier from the cross-host figure, not from the co-resident one.** On `moq-relay` 0.15.1 (noq) that is **1.258 % of a core, 2.62 MB and one full stream copy per remote subscriber** with GSO on, and 1.69 % with it off, which on a 2-vCPU relay is about 100 subscribers, measured. The `moq-relay` 0.14.15 build on quinn measured 0.806 % and 1.39 MB, or 124–139 subscribers per core at ~10 Mb/s, and remains the evidence that the cost is linear and the cliff predictable ([Evidence](../lab/evidence.md) §3.6). Past that limit throughput _collapses_ (up to 95 % aggregate loss while CPU stays pinned), and RSS jumps ~2.5× behind a saturated core, so admission control that refuses the N+1th subscriber beats serving it badly. Three planning consequences:
 
 - **Count sessions, not gigabits.** High-bitrate contribution feeds are the _cheapest per Mbps_ to relay; the expensive part of an always-on high-bitrate service is egress, not compute.
 - **Host configuration outweighs anything else measured** — the same relay cost ~6× more CPU per Mbps on macOS loopback with UDP GSO disabled than on Linux with it enabled, and on Linux GSO alone moves per-subscriber CPU by 25–29 % on both builds measured. Host tuning is a first-order deployment decision, and instance _family_ matters before core count, because a cloud instance's sustained network allowance can discard more than half the relay's measured capacity.
@@ -474,21 +494,21 @@ Relay cost tracks **session count**, not bitrate: a session costs ~0.34 % / 0.87
 
 Inter-region bandwidth scales with the number of _distinct tracks_ crossing the boundary, not the number of subscribers, while per-region egress scales with local subscriber count. **That asymmetry is the whole of the fan-out saving: it is on the inter-region line, while last-mile egress remains linear in subscribers and is the line that dominates a real bill** ([Economics](economics.md) §4.5).
 
-### 8.4 Resilience, and its limits
+### 8.4 Resilience
 
-Confirmed: byte-identical fan-out, and the publisher survives relay restart/kill — recovery **automatic and bounded, not hitless**. The subscriber's exporter exits at the session drop unless run with `--linger`, which from moq 0.14.0 carries it across a relay restart in the same process; the fixed-delay export flags each resume once on the PCR PID ([Evidence](../lab/evidence.md) §3.4). The linger covers one publisher instance: a replacement, whether a crash's or a clean restart's, is followed only under `--stitch`, as a programme switch with a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out a dead session. One replacement in seven still ended the export, so a supervisor stays as a backstop, and the edge stage should treat it as part of the egress, not as operations tooling.
+**Fan-out is byte-identical, and the publisher survives a relay restart or kill, with recovery automatic and bounded, not hitless.** The subscriber's exporter exits at the session drop unless run with `--linger`, which from moq 0.14.0 carries it across a relay restart in the same process; the fixed-delay export flags each resume once on the PCR PID ([Evidence](../lab/evidence.md) §3.4). The linger covers one publisher instance: a replacement, whether a crash's or a clean restart's, is followed only under `--stitch`, as a programme switch with a new PMT, at 3–6 s a resume on either protocol, up to 13 s where it waits out a dead session. One replacement in seven still ended the export, so a supervisor stays as a backstop, and the edge stage should treat it as part of the egress, not as operations tooling.
 
 **No client-side failover** — one connect URL, no fallback list; moving between relays needs a doubled chain or external supervisor.
 
 **Source failover is bounded below by QUIC idle timeout (~11 s at 10 s, the default from moq 0.14.0)** at a hard failure on every build measured. On early November 2026 `main` a takeover is a marked programme switch to the newest live importer, costing a decoder 0.28–0.36 s of programme at a clean exit ([Evidence](../lab/evidence.md) §3.4). Load-bearing redundancy stays at the receiver (§5), not relay object de-duplication (SHOULD, keyed on object IDs not bytes).
 
-### 8.5 Congestion control is a deployment decision
+### 8.5 Congestion control
 
-Congestion controller is selectable and decisive: CUBIC collapses under uniform loss, and on a 116 ms path neither MoQ lane carries the programme at 0.1 %; BBRv1 holds full rate on par with SRT, and BBRv3 — which reads loss as a congestion signal — collapses as CUBIC does at 100 ms RTT ([Evidence](../lab/evidence.md) §3.3, §3.11). **Pin the controller and the QUIC backend explicitly** — defaults differ per backend, and the same flag selects different BBR generations on each. **No recommendation for a permanent fixed-rate trunk** from what has been run.
+**The congestion controller is a deployment decision, selectable and decisive.** CUBIC collapses under uniform loss, and on a 116 ms path neither MoQ lane carries the programme at 0.1 %; BBRv1 holds full rate on par with SRT, and BBRv3 — which reads loss as a congestion signal — collapses as CUBIC does at 100 ms RTT ([Evidence](../lab/evidence.md) §3.3, §3.11). **Pin the controller and the QUIC backend explicitly** — defaults differ per backend, and the same flag selects different BBR generations on each. **No recommendation for a permanent fixed-rate trunk** from what has been run.
 
-### 8.6 Federation, as a research direction
+### 8.6 Federation
 
-Federation — interconnecting fabrics operated by _different parties_ — is the least mature part of this architecture and should be treated as **a research direction, not a capability it delivers.** Everything the platform needs in the near and mid term works within a single operator's fabric.
+**Federation, interconnecting fabrics operated by _different parties_, is the least mature part of this architecture: a research direction, not a capability it delivers.** Everything the platform needs in the near and mid term works within a single operator's fabric.
 
 The shape, so the design does not paint itself into a corner: a peering is defined by a mutually authenticated trust relationship, a namespace agreement, an entitlement bridge and a capacity/QoS agreement. The key decision is that **entitlement does not blindly transit a boundary** — the originating grant is validated and a domain-local grant is minted for onward propagation, with the mapping recorded for audit, because transparent pass-through would make one operator's compromise another operator's breach.
 
@@ -498,7 +518,7 @@ Cross-operator federation with negotiated entitlement is not something the proto
 
 ## 9. Observability and operations (R8)
 
-The platform must be observable in _two languages simultaneously_: the language of distributed systems (latency, traffic, errors, saturation) and the language of broadcast operations (signal conformance, error seconds, PCR integrity). The broadcast-domain half is identical on either data plane; §9.3 gives the segmented-HTTP differences in the systems half.
+**The platform must be observable in two languages at once**: the language of distributed systems (latency, traffic, errors, saturation) and the language of broadcast operations (signal conformance, error seconds, PCR integrity). The broadcast-domain half is identical on either data plane; §9.3 gives the segmented-HTTP differences in the systems half.
 
 **Broadcast-domain monitoring.** Every edge gateway performs read-only TR 101 290 monitoring of its own egress and reports P1/P2 status, PCR interval statistics, continuity-counter integrity and service presence. The design intent is that a broadcast NOC sees the platform's output in the same terms it sees a satellite or fibre feed today — same probes, same alarms — so that adopting the platform does not require adopting a new operational vocabulary.
 
@@ -508,11 +528,9 @@ The platform must be observable in _two languages simultaneously_: the language 
 
 **Correlation and audit.** The two domains must be correlatable: a TR 101 290 excursion at a gateway should be traceable to a congestion event on a specific path. A common correlation identifier flows from publisher through fabric to gateway so a single delivery incident can be reconstructed end to end. Separately, every control-plane action writes an immutable audit record — a requirement for rights compliance and incident forensics, not merely good practice.
 
-> **Readiness caveat.** This operating model — green TR 101 290 at egress, hitless failover on the last hop, drilled runbooks — is the _target_ state. It presumes the make-or-break validation in §4.2 has been achieved, and that is still open. Until it passes, these runbooks are _designed and rehearsable_ but not _proven_ for contracted content.
+### 9.1 Probes
 
-### 9.1 The four probes that are not obvious
-
-Most of the monitoring surface is standard. Four items are specific to this architecture and were each found by measurement rather than design.
+**Five probes are specific to this architecture, and each was found by measurement rather than design**; the rest of the monitoring surface is standard.
 
 **A healthy transport does not imply a live programme, and a conformant wire does not imply a healthy stage** ([T22](../lab/test-22-silent-media-plane-failure.md), [T21](../lab/test-21-permanence-soak.md)). Neither session state nor wire conformance alone suffices.
 
@@ -532,7 +550,9 @@ _Clock progression_ — alarm when no PCR has advanced for longer than the PCR r
 
 ### 9.2 Runbooks
 
-- **Feed bring-up.** Provision channel/route, configure publisher and gateway, issue entitlement, confirm green TR 101 290 at egress. The measured elapsed time from API call to green is itself the headline operational metric — and it is contingent on §4.2's gate, so today it describes intended operation rather than proven operation.
+**Five runbooks cover operation, each designed and rehearsable and none yet proven for contracted content (§11).**
+
+- **Feed bring-up.** Provision channel/route, configure publisher and gateway, issue entitlement, confirm green TR 101 290 at egress. The measured elapsed time from API call to green is itself the headline operational metric — and it is contingent on the hardware gate (§11), so today it describes intended operation rather than proven operation.
 - **Failover / failback.** Shift to the redundant disjoint path, confirm the ST 2022-7 switch was hitless, service the drained element, restore. Two constraints from measurement: the drained leg must be **confirmed dead by content, not by carrier** (§4), and restoring a single leg is transparent to an input-select receiver, and to a sequence-merge receiver on the opaque lane only; a merged media-aware pair needs restoring together (§5.2).
 - **Entitlement incidents.** Emergency disable or revoke under time pressure; simple enough to execute correctly under stress ([Control](control-plane.md) §4).
 - **Degraded-quality triage.** Use the correlation id to trace a P1/P2 or delivery alarm to a congested path, saturated gateway or failing publisher, then reroute, scale or fail over.
@@ -540,9 +560,9 @@ _Clock progression_ — alarm when no PCR has advanced for longer than the PCR r
 
 **Pre-contract checklist:** congestion controller pinned (§8.5); relay memory per ingested channel (§8.3); groomer silence detection (§4); dual-domain monitoring correlated; drills timed on real topology.
 
-### 9.3 What changes on a segmented-HTTP data plane
+### 9.3 Segmented-HTTP operations
 
-Almost nothing in §9 does. What differs is the set of failure modes the NOC watches for _upstream of the groomer_, and they are worth naming because they are unfamiliar to a broadcast NOC.
+**Almost nothing in §9 changes on a segmented-HTTP data plane.** What differs is the set of failure modes the NOC watches for _upstream of the groomer_, and they are worth naming because they are unfamiliar to a broadcast NOC.
 
 | Concern | On MoQ | On segmented HTTP |
 | --- | --- | --- |
@@ -555,9 +575,9 @@ Almost nothing in §9 does. What differs is the set of failure modes the NOC wat
 
 Segmented HTTP failure modes are _quieter_ — stale playlist, warm cache, no error anywhere. **A segment-fetching leg cannot report a dead source faster than a segment period** (~9 s on a 2 s-segment feed); tighter failover budgets need MoQ or a second monitored path.
 
-### 9.4 The vantage the architecture does not have: delivered-media health at a subscriber
+### 9.4 Subscriber vantage
 
-Everything in §9.1 is instrumented at a monitoring point the distributor owns — the edge gateway's own egress. That is the right place for R3, because the gateway's output is what the contract is written about. It is not sufficient for a distributor whose subscribers take delivery over the public internet onto receivers it does not administer, and the shortfall is structural rather than a gap in the probe set.
+**The architecture cannot see delivered-media health at a subscriber.** Everything in §9.1 is instrumented at a monitoring point the distributor owns — the edge gateway's own egress. That is the right place for R3, because the gateway's output is what the contract is written about. It is not sufficient for a distributor whose subscribers take delivery over the public internet onto receivers it does not administer, and the shortfall is structural rather than a gap in the probe set.
 
 **A relay cannot answer the question, by construction.** The payload is opaque to it — deliberately, and that same property is what makes an opaque telemetry track legal on the return path described below — so relay-side telemetry can prove that bytes moved and can never prove the media was intact. The measured form of this is [Evidence](../lab/evidence.md) §3.12: when only part of a programme stops, the whole of TR 101 290 P1 passes over a service carrying no pictures. Session counts, byte counts and subscription counts are all healthy throughout. **The only vantage that can see delivered-media health is wherever the stream is actually decoded**, and for primary distribution to affiliates that is someone else's hardware.
 
@@ -571,13 +591,13 @@ Everything in §9.1 is instrumented at a monitoring point the distributor owns �
 
 ---
 
-## 10. Draft and version strategy _(MoQ-specific)_
+## 10. Versioning (MoQ)
 
-MoQ's pre-standard instability is the single largest transport risk, and it is managed by architecture rather than wished away.
+**MoQ's pre-standard instability is the single largest transport risk, and it is managed by architecture rather than wished away.**
 
 **The problem.** Successive drafts change the ALPN identifier, the control-message set, the parameter encoding and the data-plane encoding to the point that the working group describes them as "almost a completely new protocol". Broadcasters plan on five-to-ten-year horizons. Neither lane, as measured, sits on the interop target: both ride moq-lite, upstream's own simplified wire protocol, so they track upstream releases rather than the IETF draft series, and a draft-14 endpoint cannot negotiate an ALPN with a draft-18 one.
 
-Multi-draft negotiation from a single build is trending (`moq-dev` carries draft-14–19 alongside moq-lite). **Version fragmentation is a real planning problem; measured, it is not what blocks interop** ([Evidence](../lab/evidence.md) §3.7).
+Multi-draft negotiation from a single build is trending (`moq-dev` carries MOQT drafts 18 and 22 alongside moq-lite on upstream `main` from late October 2026, and 14–22 before). **Version fragmentation is a real planning problem; measured, it is not what blocks interop** ([Evidence](../lab/evidence.md) §3.7).
 
 **Mitigation:** media packaging, catalog, reassembly and control are tested independently of the draft (principle 2) — a draft upgrade is thin glue, not a media rewrite. Fleet migration (ALPN, control semantics, multi-draft coexistence) remains substantial engineering.
 
@@ -585,34 +605,44 @@ Multi-draft negotiation from a single build is trending (`moq-dev` carries draft
 
 ---
 
-## 11. Key decisions and trade-offs
+## 11. Limits
 
-| Decision | Rationale | Trade-off accepted |
-| --- | --- | --- |
-| Grooming at the edge, not the publisher (§4.1) | Absorbs whole-path jitter where determinism is required | CPU/timing-heavy edge; per-flow real-time obligation |
-| Pass-through grooming rather than re-multiplexing (§4.1) | Only a stage that leaves the mux alone preserves SCTE-35 typing, AC-3 labelling and the full PSI a broadcast contract specifies | The stage cannot improve PCR spacing by re-ordering content, so it must **reserve** an output slot on the repetition deadline and defer the displaced packet — 0.34 % of the carrier, and the only thing that clears the gate on the MoQ lane, where neither an eightfold cushion sweep nor an exporter-side fix to PCR _values_ moved it. On that lane it also requires a buffer bound set by the source's peak coded frame, which is content-dependent and costs latency (§4.2), and it cannot repair the lane's T-STD-illegal packet order, which needs exactly the re-multiplexing this row declines (§4.3) |
-| Two independently _stream-clocked_ groomers for 1+1 (§5.1) | Protects the whole chain, not just the last hop, and needs no coordination between legs | Single-track byte-identity settled across independent chains (§5.1); on a multi-track mux, **75.56 %** before upstream's fixed-delay export (reordering, not damage), and behind it byte-identity for a co-started pair only; on the opaque lane a late-joining leg merges too |
-| Media-aware carriage as default, opaque as fallback (§6.1) | MoQ-native, enables per-track prioritisation, and carries the service in less bandwidth by the source's stuffing, which it does not carry | The fallback forgoes per-track prioritisation and, if truly verbatim, the stuffing saving; the default relays TDT/TOT on the exporter's own emission grid, so the clock reaching the edge is later than the one the source sent. For TS-out the default is a transmux with structural limits — packet layout lost, the subscriber as multiplexer, no scrambled feeds (§6.2) — and for TS-out its standing as default rests on the fallback's immaturity — narrow evidence, one open implementation — rather than on fit (§6.1) |
-| Transport-independent media/control layers (§7, §10) | Survives draft churn; the transport commoditises | Extra abstraction; cannot exploit every transport-specific feature |
-| Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the _operator's_ to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable _between_ implementations |
-| Out-of-band, non-fate-sharing control plane (§1.1, [Control](control-plane.md)) | Data plane survives control-plane outages | Revocation needs a token backstop, not just a live signal |
-| ST 2022-7 last-hop redundancy (§5) | Hitless failover using the IRD's existing capability | Doubles egress bandwidth; needs disjoint paths end to end |
-| Hybrid backstop for highest-assurance routes (§5.5) | Correlated Internet failure is a real residual risk | Retains some managed or satellite cost where used |
+**Nothing in this architecture has met a hardware IRD, and that bounds every result in it.** Where an open question would discharge a limit, the limit names it.
+
+- **The gate that decides this architecture has not been run.** It is a conformant transport stream on real hardware decoders, sustained — a clean TR 101 290 P1/P2 pass and the 13818-1 buffer model, graded on the RTP the decoder actually receives — including the ST 2022-7 determinism of §5.1 under loss. Until that evidence exists, the grooming design is **structurally sound, file-validated, and conformant on PCR repetition on the wire in software on both lanes — over 300 s and, on the media-aware lane, over 24.01 h** ([T21](../lab/test-21-permanence-soak.md)). That is still not "proven broadcast-acceptable": nothing in this campaign has been fed to a hardware decoder or graded by a hardware analyser, and the 1+1 receiver of §5.1 is a reference implementation of the ST 2022-7 selection rules, not a hardware merge engine. It is the single most important validation for the whole architecture (§12, question 1).
+- **Until the gate passes, the operating model of §9 is the _target_ state.** Green TR 101 290 at egress, hitless failover on the last hop and drilled runbooks are _designed and rehearsable_ but not _proven_ for contracted content.
+- **Behind the media-aware lane the buffer model fails in software already**, and this gateway cannot repair it. The re-multiplexing stages that can, offline, live on one host as a laboratory stage, and in the subscriber as upstream's merged fixed-delay export, are each graded in software on one service (§4.3).
+- **Two correctness boundaries have met no stage**: source-clock drift and mid-stream PID change (§4.3; §12, question 3).
+- **The redundancy design assumes the _public-Internet substrate does not fail simultaneously along both disjoint paths_.** Disjoint-path routing reduces but does not eliminate correlated failure: a large-scale BGP event or a shared upstream provider can affect both. This is a genuine residual risk that satellite — with its terrestrial-network independence — does not have. The platform mitigates it with path diversity across providers and with the transport-swappable hedge (falling back to a managed transport for the most critical always-on routes), but it does not claim to eliminate it, and it has not been characterised in production (§12, question 7).
+- **Four parts are design, not measurement**: priority-ordered shedding under congestion (§5.5), federation (§8.6), subscriber-side health reporting (§9.4), and RTP ingest with 2022-1 FEC or a 2022-7 merge (§7.1), as is egress FEC, which nothing here implements (§3).
 
 ---
 
 ## 12. Open questions
 
-Ranked by how much a negative answer would change the architecture.
+**Nine questions remain, ranked by how much a negative answer would change the architecture.**
 
-1. **Hardware TR 101 290 P1/P2 validation (§4.2).** The make-or-break gate, and the highest-leverage item outright. Grooming is file-validated, structurally sound and **conformant on PCR repetition on the wire in software on both lanes — on the media-aware lane over 24.01 h and 632 M packets, crossing the 33-bit rollover in flight** ([T21](../lab/test-21-permanence-soak.md)). **Nothing has been near an IRD**, so the gate is not complete. Two qualifications travel with the software result. It is bounded by build rather than by duration: the soak's source replays a clip with its clocks advanced across joins, and no build measured carries both that source and the current import design, so the day is not reproducible on an October 2026 build (question 3; [Evidence](../lab/evidence.md) §3.13). And it costs 2,447 ms of delivery latency, an order of magnitude above the lane's fastest measured figure ([Comparison](comparison.md) §5.1).
+1. **Hardware TR 101 290 P1/P2 validation (§4.2, §11).** The make-or-break gate, and the highest-leverage item outright: **nothing has been near an IRD**. The result it would confirm, conformance on PCR repetition on the wire in software, on the media-aware lane over 24.01 h and 632 M packets, crossing the 33-bit rollover in flight ([T21](../lab/test-21-permanence-soak.md)), carries two qualifications. It is bounded by build rather than by duration: the soak's source replays a clip with its clocks advanced across joins, and no build measured carries both that source and the current import design, so the day is not reproducible on an October 2026 build (question 3; [Evidence](../lab/evidence.md) §3.13). And it costs 2,447 ms of delivery latency, an order of magnitude above the lane's fastest measured figure ([Comparison](comparison.md) §5.1).
 2. **How is the edge gateway's buffer sized for a feed it has not seen?** (§4.2.) The media-aware lane costs a buffer bound set by the **peak coded frame**, not by the bitrate: three sources at 9.5–9.9 Mb/s of programme, with peak frames of 256, 1,826 and 4,562 transport packets, need bounds differing by more than 3×, and the bound that conserves 100 % of two of them loses content on the third. A bound of 3.6× the peak frame's carriage duration sufficed on all three and 2.5× did not ([T19](../lab/test-19-pcr-grid-verification.md) measurement 11). Since a coded frame's carriage duration at the mux rate is the encoder's VBV occupancy for that picture, the figure should be derivable from the contribution encoder's published configuration — **the media-aware lane moves the encoder's VBV budget downstream into the edge gateway's buffer**, because the T-STD schedule that used to carry it lived in the source's byte spacing. What is not established is the coefficient, or what a real network path adds to it on top of the burst.
 3. **Do the correctness boundaries in §4.3 hold?** **PCR discontinuity and wrap are tested** through the exporter and the groomer, not merely reachable: on the September 2026 builds measured, the 33-bit wrap, rewinds, forward jumps and an encoder restart, all six _placed_ classes, cross at the control's content gap ([T23](../lab/test-23-pcr-discontinuity-classes.md)). **A seventh case is the ordinary one**: a continuous timeline whose content restarts. It stops the importer at the first join on moq 0.11.2 and 0.12.1, is published through five joins on moq 0.12.8, and from moq 0.14.0 ends a release's import at the first backward step by design, flagged or not ([T40](../lab/test-40-continuous-join-through-srt.md), [T41](../lab/test-41-import-reanchor-coverage.md); [Evidence](../lab/evidence.md) §3.13). On a release, a source whose timeline steps back is republished at each step behind a supervisor, at 2.8–3.8 s of programme a step and not hitlessly for a 1+1 pair. Upstream's current import republishes itself instead, for 0.16 s at a synthetic encoder switch and 1.6 s at the captured one ([T67](../lab/test-67-import-step-restart.md)), in no release measured and untested for a 1+1 ingest pair or a continuous restarting source. **T-STD occupancy is tested in software**: behind the media-aware lane it is beyond this gateway's reach, and upstream's merged fixed-delay export meets it in the subscriber (§4.3). What remains untested is source-clock drift and mid-stream PID change; each has a reproducible stimulus and an instrument asserted to grade it, but has met neither stage.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled. Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two, and its exports stay identical across a republish in 8 of 13 runs; a leg started later does not. On the opaque lane a leg started later merges, for one clip on one host (§5.1), which makes it the lane for a merged pair that cannot be co-started.
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves most of the delivery bill.
-6. **Relay portability between implementations (§8).** This architecture treats the relay as a commodity layer, which presumes a feed can be carried over a relay somebody else operates. Measured, it partly can: of nine other implementations' relays, seven carry a feed intact after the join, five to a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). Until a route's relays are tested at the join, "commodity relay" is an aspiration and vendor lock-in is the realistic near-term position.
-7. **Correlated-failure behaviour (§5.5).** The residual risk of simultaneous impairment across disjoint Internet paths is not characterised in production.
+6. **Relay portability between implementations (§8).** This architecture treats the relay as a commodity layer, which presumes a feed can be carried over a relay somebody else operates. Measured, it partly can: of nine other implementations' relays, eight carry a feed intact after the join, five to a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). Until a route's relays are tested at the join, "commodity relay" is an aspiration and vendor lock-in is the realistic near-term position.
+7. **Correlated-failure behaviour (§11).** The residual risk of simultaneous impairment across disjoint Internet paths is not characterised in production.
 8. **Cross-operator federation (§8.6).** A long-term aspiration depending on standards, protocol and commercial-trust developments that do not exist today.
 9. **Economics at always-on trunk scale.** Route-specific, strongest for dynamic and long-tail routes, and — unlike the others here — it cannot be settled in public ([Economics](economics.md) §4.4).
 
 These are the questions the rest of this repository exists to reduce. The architecture is deliberately written so that a negative answer to any one of them changes a component or a trade-off, rather than invalidating the whole.
+
+---
+
+## 13. References
+
+The standards this architecture cites. The MoQ streaming formats, segmented-HTTP and satellite-hybrid specifications, and the implementations measured, are listed in [Comparison](comparison.md) §14.
+
+- ETSI TR 101 290 V1.4.1, _Measurement guidelines for DVB systems_ — the P1/P2 checks graded throughout: [https://www.etsi.org/deliver/etsi_tr/101200_101299/101290/01.04.01_60/tr_101290v010401p.pdf](https://www.etsi.org/deliver/etsi_tr/101200_101299/101290/01.04.01_60/tr_101290v010401p.pdf)
+- ISO/IEC 13818-1 | ITU-T H.222.0, MPEG-2 systems — the transport stream and its T-STD buffer model: [https://www.itu.int/rec/T-REC-H.222.0](https://www.itu.int/rec/T-REC-H.222.0)
+- SMPTE ST 2022-1, forward error correction for real-time video/audio transport over IP networks: [https://doi.org/10.5594/SMPTE.ST2022-1.2007](https://doi.org/10.5594/SMPTE.ST2022-1.2007)
+- SMPTE ST 2022-7, seamless protection switching of RTP datagrams: [https://doi.org/10.5594/SMPTE.ST2022-7.2019](https://doi.org/10.5594/SMPTE.ST2022-7.2019)
+- CTA-5004-B, Common Media Client Data (CMCD), version 2 (§9.4)
+- Media over QUIC Transport (MOQT), the IETF draft series (§10): [https://datatracker.ietf.org/doc/draft-ietf-moq-transport/](https://datatracker.ietf.org/doc/draft-ietf-moq-transport/)
