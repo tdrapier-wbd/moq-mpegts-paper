@@ -2,6 +2,21 @@
 
 Status: working draft. Layer: **the requirement** — what Internet-native primary distribution has to do, before any data plane is chosen.
 
+**Contents**
+
+- [1. What primary distribution is](#1-what-primary-distribution-is)
+- [2. The incumbents, and where the IP incumbent stops](#2-the-incumbents-and-where-the-ip-incumbent-stops)
+  - [2.1 Satellite](#21-satellite)
+  - [2.2 Leased fibre and MPLS-based managed IP](#22-leased-fibre-and-mpls-based-managed-ip)
+  - [2.3 Point-to-point IP over the public internet — adopted, and capped](#23-point-to-point-ip-over-the-public-internet--adopted-and-capped)
+  - [2.4 The common thread, and the one property that is missing](#24-the-common-thread-and-the-one-property-that-is-missing)
+- [3. What is changing](#3-what-is-changing)
+  - [The forcing pressure](#the-forcing-pressure)
+  - [What makes a response possible now](#what-makes-a-response-possible-now)
+  - [What the business is asking for](#what-the-business-is-asking-for)
+- [4. What a successor has to change](#4-what-a-successor-has-to-change)
+- [5. The requirement set](#5-the-requirement-set)
+
 **The problem is not that broadcasters are unwilling to move primary distribution onto IP. They have already done it.** Zixi has carried professional feeds over the public internet for years, SRT has been adopted broadly and rapidly on top of that, and managed services — AWS Elemental MediaConnect, LTN, Zixi's own platform and several smaller specialists — sell it as a product today. IP primary distribution is not a proposal. It is an incumbent.
 
 **What it has not done is replace satellite, and the reason is a ceiling on destination count.** The adopted architectures are point-to-point tunnels, so serving N destinations means N sessions originated from the source, or a re-origination tier the operator builds and runs. That is comfortable at tens of endpoints and runs out shortly after (AWS Elemental MediaConnect caps flows at 50 outputs) (§2.3). Beyond that the operator is building fan-out infrastructure, and paying for every copy. Satellite, by contrast, illuminates every receiver in its footprint for the price of one. **So the question this repository asks is not "can broadcast move to IP" but "can an IP path serve hundreds to low thousands of delivery points economically" — because that is what replacing a transponder requires.**

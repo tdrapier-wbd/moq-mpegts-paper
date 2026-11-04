@@ -2,6 +2,34 @@
 
 Status: working draft. Layer: **cross-cutting** — the cost framework is data-plane agnostic; the data plane enters only as a wire multiplier and a delivery price. Scope: a cost framework for comparing Internet-native distribution against incumbent primary distribution, **a numeric model of the always-on case built entirely from published rates**, and the two ownership questions that follow a decision to proceed — whether to operate the fan-out or rent it (§7), and where vendor value actually sits once the control plane is priced honestly (§8). The full working, every rate card and the reproduction script are in [`lab/cost-model.md`](../lab/cost-model.md); this document states the model's inputs, its four results and what they do and do not support.
 
+**Contents**
+
+- [1. The question, and the answer that falls out of it](#1-the-question-and-the-answer-that-falls-out-of-it)
+- [2. What each side's cost structure looks like](#2-what-each-sides-cost-structure-looks-like)
+- [3. The measured inputs](#3-the-measured-inputs)
+- [4. The model, at published rates](#4-the-model-at-published-rates)
+  - [4.1 Assumptions](#41-assumptions)
+  - [4.2 The price ladder, and why the supplier matters more than the category](#42-the-price-ladder-and-why-the-supplier-matters-more-than-the-category)
+  - [4.3 Owning the egress](#43-owning-the-egress)
+  - [4.4 A transponder's worth of channels: the parity threshold](#44-a-transponders-worth-of-channels-the-parity-threshold)
+  - [4.5 Where relay fan-out changes the bill, and where it does not](#45-where-relay-fan-out-changes-the-bill-and-where-it-does-not)
+  - [4.6 The market-structure argument](#46-the-market-structure-argument)
+- [5. Value drivers beyond unit cost](#5-value-drivers-beyond-unit-cost)
+- [6. Where the comparison inverts](#6-where-the-comparison-inverts)
+  - [6.1 The satellite-hybrid case, and the drivers that decide it](#61-the-satellite-hybrid-case-and-the-drivers-that-decide-it)
+- [7. Own the fan-out or rent it](#7-own-the-fan-out-or-rent-it)
+  - [7.1 Transport choice determines build-or-rent options](#71-transport-choice-determines-build-or-rent-options)
+  - [7.2 What renting transfers (§1)](#72-what-renting-transfers-1)
+  - [7.3 The on-prem SRT case is stronger than this paper's direction implies](#73-the-on-prem-srt-case-is-stronger-than-this-papers-direction-implies)
+  - [7.4 The criteria that actually decide it](#74-the-criteria-that-actually-decide-it)
+- [8. Where vendor value concentrates](#8-where-vendor-value-concentrates)
+  - [8.1 Integration is the product, and it does not generalise](#81-integration-is-the-product-and-it-does-not-generalise)
+  - [8.2 But "no vendor value" is too coarse — the control plane has layers, and they differ](#82-but-no-vendor-value-is-too-coarse--the-control-plane-has-layers-and-they-differ)
+  - [8.3 Why in-house is now tractable where it once was not](#83-why-in-house-is-now-tractable-where-it-once-was-not)
+  - [8.4 Where that leaves the value, including one correction](#84-where-that-leaves-the-value-including-one-correction)
+  - [8.5 The consequence nobody is incentivised to fix](#85-the-consequence-nobody-is-incentivised-to-fix)
+- [9. Open questions](#9-open-questions)
+
 > **Confidentiality and provenance.** Every figure here is either published or derived in the open from something published. Published rates — hyperscaler egress tariffs, MediaConnect and its reserved tiers, CDN price pages, marketplace software rates, EC2 reserved-instance prices, surveyed IP transit — are public and verifiable. **Commercially sensitive inputs are excluded**: no customer pricing, no vendor contract or discount terms, no transponder or fibre lease rates, no incumbent's actual or depreciated route cost, and no third-party reports of what anyone pays at negotiated volume. Where the comparison needs the incumbent's side, §4.4 gives a **parity threshold** against our own figures instead of theirs.
 >
 > Three inputs are neither published nor measured, and each is labelled wherever it appears. The negotiated-discount figure in §4.4 is a **hypothetical** percentage off published list — illustrative arithmetic, not anyone's terms. The CDN relay rates are **assumptions** about where a competitive market would land, since only two providers publish a MoQ relay tariff. The self-hosted build-up is **illustrative**. Nothing here should be read as evidence that a particular rate is obtainable.
@@ -119,7 +147,7 @@ _The latency column is source-to-groomed-egress over the public internet from a 
 | Data plane | Who runs the fan-out | Market it is priced in |
 | --- | --- | --- |
 | Segmented HTTP | the commodity delivery market, a dozen suppliers, today | $0.005–0.010/GB commodity CDN list |
-| MoQ | two CDNs today; otherwise you | $0.040–0.050/GB published, or hyperscaler egress if self-run |
+| MoQ | three CDNs today (Cloudflare, Akamai, moq.pro); otherwise you | $0.040–0.050/GB published by two of them, or hyperscaler egress if self-run |
 | SRT / Zixi / RIST | **you, or a managed media service** | own transit, or ~$0.09/GB metered egress, or per-flow premium |
 
 Hyperscalers sell elasticity, so always-on primary distribution should buy committed or commodity delivery instead.
@@ -262,7 +290,7 @@ This conclusion would have implied a capital programme a decade ago and does not
 
 If the largest operators build in-house and vendors serve the small end, then **the interoperability work has no commercial sponsor at the end of the market that could fund it.** This is not speculative: relay portability between implementations is still partial, and §4.6 identifies it as one of four things that would falsify the strongest economic case for MoQ. The broadcasters with the resources to fix interop are precisely the ones whose in-house builds make it a lower priority for them individually, and the vendors who would otherwise carry it serve customers too small to pay for it. **Cooperative or standards-body funding is the structural answer, and the absence of one is a risk to the thesis rather than a detail of it.**
 
-**On segmented HTTP the unsponsored piece is smaller and sits with the distributor.** Delivery is already multi-supplier, and one CDN origin group fails over between origins itself ([Architecture](architecture.md) §5.4); what no specification covers is how a receiver rebuilds an IRD-ready transport stream from HLS and reports what it lost, and the HLS-input receivers on the market align on nothing beyond HLS. Which kind of input a product is decides whether the DVB layer reaches the IRD: one that hands on the segments' packets keeps every table, and one that remuxes keeps none ([Comparison](comparison.md) §4.4, measured on software stacks). A distributor that publishes that receive profile, with an open reference receiver, lets its affiliates choose among conforming products without the distributor adopting a closed one — a sponsorship one large distributor can fund alone, as the relay-interop work above is not.
+**On segmented HTTP the unsponsored piece is smaller and sits with the distributor.** Delivery is already multi-supplier, and one CDN origin group fails over between origins itself ([Architecture](architecture.md) §5.3); what no specification covers is how a receiver rebuilds an IRD-ready transport stream from HLS and reports what it lost, and the HLS-input receivers on the market align on nothing beyond HLS. Which kind of input a product is decides whether the DVB layer reaches the IRD: one that hands on the segments' packets keeps every table, and one that remuxes keeps none ([Comparison](comparison.md) §4.4, measured on software stacks). A distributor that publishes that receive profile, with an open reference receiver, lets its affiliates choose among conforming products without the distributor adopting a closed one — a sponsorship one large distributor can fund alone, as the relay-interop work above is not.
 
 ---
 

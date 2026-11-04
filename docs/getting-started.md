@@ -2,6 +2,14 @@
 
 Two recipes that carry the same MPEG-TS from a publisher to a subscriber on one machine, once over MoQ and once over segmented HTTP, with released tools, and then check what came out against what went in. A third takes the stream from a multicast feed and returns it to one, paced for an IRD. They show each path working; they measure nothing. How the two transports work is in the [Primer](primer.md); how they compare is in the [Comparison](comparison.md).
 
+**Contents**
+
+- [What you need](#what-you-need)
+- [Recipe 1: MoQ, publisher to relay to subscriber](#recipe-1-moq-publisher-to-relay-to-subscriber)
+- [Recipe 2: segmented HTTP, packager to origin to receiver](#recipe-2-segmented-http-packager-to-origin-to-receiver)
+- [Recipe 3: from a multicast feed, to a multicast feed an IRD can read](#recipe-3-from-a-multicast-feed-to-a-multicast-feed-an-ird-can-read)
+- [What the recipes show, and what they do not](#what-the-recipes-show-and-what-they-do-not)
+
 ## What you need
 
 Tested on macOS with these versions, and Recipe 3's multicast commands on Linux with TSDuck 3.44:

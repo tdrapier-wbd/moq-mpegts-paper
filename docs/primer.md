@@ -2,6 +2,14 @@
 
 Status: working draft. Layer: background. How the stream format and the three transports work, for a reader who knows some of them and not others; no verdicts and no measurements. Scope: terms defined in the [Glossary](glossary.md) are linked rather than defined again. Which transport suits primary distribution, and why, is [Comparison](comparison.md); every measurement is in [Evidence](../lab/evidence.md).
 
+**Contents**
+
+- [1. MPEG-TS in a page](#1-mpeg-ts-in-a-page)
+- [2. SRT: a reliable tunnel with a fixed delay](#2-srt-a-reliable-tunnel-with-a-fixed-delay)
+- [3. Segmented HTTP: files a cache can serve](#3-segmented-http-files-a-cache-can-serve)
+- [4. MoQ: subscriptions carried through relays](#4-moq-subscriptions-carried-through-relays)
+- [5. Side by side](#5-side-by-side)
+
 ---
 
 ## 1. MPEG-TS in a page

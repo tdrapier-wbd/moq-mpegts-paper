@@ -2,6 +2,49 @@
 
 Status: working draft. Layer: **above the transport.** Everything in §4–§9 is required and owned by the distributor _whichever_ data plane carries the bytes, and is the substance of this repository. Only §6 (carriage lanes) and §8 (the fan-out fabric) are MoQ-specific; their segmented-HTTP counterparts are in [Comparison](comparison.md) §8 and §2.
 
+**Contents**
+
+- [1. Purpose and layering](#1-purpose-and-layering)
+  - [1.1 Design principles](#11-design-principles)
+- [2. End-to-end overview](#2-end-to-end-overview)
+  - [2.1 The satellite-hybrid topology, for contrast](#21-the-satellite-hybrid-topology-for-contrast)
+- [3. What the installed base requires](#3-what-the-installed-base-requires)
+  - [3.1 Ingest](#31-ingest)
+- [4. The edge gateway: grooming and egress](#4-the-edge-gateway-grooming-and-egress)
+  - [4.1 The grooming problem, and why it belongs to every data plane](#41-the-grooming-problem-and-why-it-belongs-to-every-data-plane)
+  - [4.2 What is measured, and what is not](#42-what-is-measured-and-what-is-not)
+  - [4.3 Correctness boundaries a groomer must handle, and which are untested](#43-correctness-boundaries-a-groomer-must-handle-and-which-are-untested)
+  - [4.4 Placement and scaling](#44-placement-and-scaling)
+  - [4.5 The same gateway on a segmented-HTTP data plane](#45-the-same-gateway-on-a-segmented-http-data-plane)
+- [5. Redundancy and 1+1](#5-redundancy-and-11)
+  - [5.1 Making the pair mergeable is a constraint on the groomer, and it is the design decision that matters](#51-making-the-pair-mergeable-is-a-constraint-on-the-groomer-and-it-is-the-design-decision-that-matters)
+  - [5.2 What a pair protects depends on the lane](#52-what-a-pair-protects-depends-on-the-lane)
+  - [5.3 Separation of responsibilities](#53-separation-of-responsibilities)
+  - [5.4 Failure scenarios](#54-failure-scenarios)
+  - [5.5 The honest limit](#55-the-honest-limit)
+  - [5.6 Graceful degradation](#56-graceful-degradation)
+- [6. Media carriage and the two lanes _(MoQ-specific)_](#6-media-carriage-and-the-two-lanes-moq-specific)
+  - [6.1 The two lanes](#61-the-two-lanes)
+  - [6.2 What survives the media-aware lane, and what does not](#62-what-survives-the-media-aware-lane-and-what-does-not)
+  - [6.3 What happens to the transport stream, end to end](#63-what-happens-to-the-transport-stream-end-to-end)
+  - [6.4 The limit of "byte-accurate"](#64-the-limit-of-byte-accurate)
+- [7. Publishers](#7-publishers)
+- [8. The fan-out fabric _(MoQ-specific)_](#8-the-fan-out-fabric-moq-specific)
+  - [8.1 Topology, and why the default is simple](#81-topology-and-why-the-default-is-simple)
+  - [8.2 Routing and policy](#82-routing-and-policy)
+  - [8.3 Capacity planning](#83-capacity-planning)
+  - [8.4 Resilience, and its limits](#84-resilience-and-its-limits)
+  - [8.5 Congestion control is a deployment decision](#85-congestion-control-is-a-deployment-decision)
+  - [8.6 Federation, as a research direction](#86-federation-as-a-research-direction)
+- [9. Observability and operations (R8)](#9-observability-and-operations-r8)
+  - [9.1 The four probes that are not obvious](#91-the-four-probes-that-are-not-obvious)
+  - [9.2 Runbooks](#92-runbooks)
+  - [9.3 What changes on a segmented-HTTP data plane](#93-what-changes-on-a-segmented-http-data-plane)
+  - [9.4 The vantage the architecture does not have: delivered-media health at a subscriber](#94-the-vantage-the-architecture-does-not-have-delivered-media-health-at-a-subscriber)
+- [10. Draft and version strategy _(MoQ-specific)_](#10-draft-and-version-strategy-moq-specific)
+- [11. Key decisions and trade-offs](#11-key-decisions-and-trade-offs)
+- [12. Open questions](#12-open-questions)
+
 Scope: an end-to-end reference architecture for a platform that delivers professional broadcast primary distribution over an Internet-native transport. It takes the requirement set in [Problem](problem.md) §5 as given and develops R3 (IRD-conformant egress), R6 (redundancy) and R8 (observability). MoQ is used as the worked example because it is what the prototype runs on; the transport-specific parts are marked.
 
 The edge gateway (§4) and redundancy (§5) come first — broadcast-grade components and where most measurement sits. §6 onward is carriage, fabric, operations and design intent.
@@ -30,9 +73,7 @@ Derived from [Problem](problem.md) §1 and §5, and governing every decision bel
 ## 2. End-to-end overview
 
 ```mermaid
-flowchart TD
-    CP["Control Plane\n(provisioning, entitlement,\nrouting policy, observability)"]
-
+flowchart LR
     subgraph Origination["Broadcaster origination"]
         SRC["Playout / origination\n(MPEG-TS, SCTE-35, SDT)"]
     end
@@ -42,10 +83,7 @@ flowchart TD
     end
 
     subgraph Fabric["Fan-out fabric (core)"]
-        direction LR
-        R1["Relay cluster A\n(or CDN cache tier)"]
-        R2["Relay cluster B"]
-        R1 <--> R2
+        R1["Relay cluster\n(or origin and CDN cache tier)"]
     end
 
     subgraph Edge["Regional edge gateway"]
@@ -53,25 +91,22 @@ flowchart TD
     end
 
     subgraph Endpoints["Endpoints"]
-        direction TB
         NSUB["Native subscribers\n(OTT origin, partners)"]
         IRD["Hardware IRDs\n(MPEG-TS / RTP / multicast)"]
     end
 
-    SRC --> PUB
-    PUB --> R1
-    R1 --> GW
-    R2 --> GW
-    GW --> NSUB
-    GW --> IRD
+    CP["Control plane\n(provisioning, entitlement,\nrouting policy, observability)"]
 
-    CP -. governs .-> Origination
+    SRC --> PUB --> R1
+    R1 --> NSUB
+    R1 --> GW --> IRD
+
     CP -. governs .-> Ingest
     CP -. governs .-> Fabric
     CP -. governs .-> Edge
 ```
 
-Solid lines are the media data plane; dotted lines are control-plane governance. Two deliberate properties, one simplified in the diagram: native subscribers can subscribe directly from the fabric without an edge gateway (they need no grooming — a path not drawn), whereas hardware IRDs always sit behind an edge gateway performing the broadcast-grade adaptation. The control plane touches every component and sits on none of the media paths.
+Solid lines are the media data plane; dotted lines are control-plane governance. Native subscribers take the feed straight from the fabric, since they need no grooming; hardware IRDs always sit behind an edge gateway, which performs the broadcast-grade adaptation. The control plane governs the distributor's components from the publisher on, not the broadcaster's origination, and sits on none of the media paths. The fabric is drawn as one cluster; its topology is §8.
 
 **The fabric box is the only part that changes with the data plane.** On MoQ it is a relay cluster (§8); on segmented HTTP it is an origin plus a cache tier. Everything to the right of it is identical.
 
@@ -143,7 +178,7 @@ An edge gateway receives one or more feeds from the nearest fan-out point and, f
 4. **De-jitter pacing and a decoder-safe start gate** so the IRD sees a smoothly paced stream and starts cleanly.
 5. **Read-only TR 101 290 monitoring** of its own output, feeding observability (§9).
 6. **Deterministic output** when the gateway is one half of an ST 2022-7 pair (§5.1).
-7. **Silence detection and mute** when its content source stops (§5.3). This is not optional and it is not obvious; it is the failure mode a component-liveness list misses.
+7. **Silence detection and mute** when its content source stops. A groomer holding rate against a dead source emits a valid constant-rate carrier with no programme, which every conventional check reports healthy and on which no receiver-side switch fires; muting hands the failure to the receiver ([Evidence](../lab/evidence.md) §3.4, §3.12). This is not optional and it is not obvious; it is the failure mode a component-liveness list misses.
 
 ### 4.1 The grooming problem, and why it belongs to every data plane
 
@@ -161,7 +196,7 @@ This is _re-timing_, not re-multiplexing — PIDs, PES, SCTE-35 and service sign
 
 ### 4.2 What is measured, and what is not
 
-This is the load-bearing evidence in the repository and it must be read with its domain attached. Full results and limits are in [Evidence](../lab/evidence.md) §3.2. **A _wire_ row grades a software capture of the live output from its bytes**: repetition from the PCR values, accuracy from the values against byte positions at the declared rate. It shows that the stage produced a conformant multiplex in real time, which a _file_ row, run offline, cannot; neither grades when packets left the host, so no row measures delivery timing at an IRD-facing output. How regularly PCRs _arrive_ is a further measure outside TR 101 290's repetition check, which reads the interval between PCR values: it drives the IRD's clock recovery and an analyser's overall jitter and delay factor, and on the groomed output it is known only from arrival gaps of a few milliseconds (§5.3).
+This is the load-bearing evidence in the repository and it must be read with its domain attached. Full results and limits are in [Evidence](../lab/evidence.md) §3.2. **A _wire_ row grades a software capture of the live output from its bytes**: repetition from the PCR values, accuracy from the values against byte positions at the declared rate. It shows that the stage produced a conformant multiplex in real time, which a _file_ row, run offline, cannot; neither grades when packets left the host, so no row measures delivery timing at an IRD-facing output. How regularly PCRs _arrive_ is a further measure outside TR 101 290's repetition check, which reads the interval between PCR values: it drives the IRD's clock recovery and an analyser's overall jitter and delay factor, and on the groomed output it is known only from arrival gaps of a few milliseconds ([T12](../lab/test-12-dual-path-handoff.md)).
 
 Rows are ordered as a receiver meets them: what is delivered first, what the arithmetic says second.
 
@@ -231,40 +266,30 @@ Buffer depth is **derived**, not configured: the groomer measures how far ahead 
 
 Availability target: no visible failure during contracted content (R6), addressed at every layer on a best-effort substrate, with legs that start and restart at different times.
 
+Redundancy is applied end to end, mirroring what broadcasters already do with ST 2022-7 but extending it back to the source. **Only a merge is hitless, and only legs of one broadcast merge**: two importers each mint their own epoch and see their own loss, so upstream treats them as different broadcasts. A hitless pair therefore protects everything below one importer but not the importer itself, and source and importer redundancy are switches. Which pair a route can have depends on its lane (§5.2). The hitless pair:
+
 ```mermaid
 flowchart LR
-    subgraph Source["Source (playout, outside the platform)"]
-        S1["Playout A"]
-        S2["Playout B"]
-        SEL["Input failover\n(one program selected)"]
-        S1 --> SEL
-        S2 --> SEL
+    subgraph Source["Source (outside the platform)"]
+        S1["Playout A"] --> SEL["Input failover\n(one programme)"]
+        S2["Playout B"] --> SEL
     end
-    subgraph Ingest["Ingest (one importer, one broadcast)"]
-        P1["Importer"]
-        P2["Standby importer\n(own epoch)"]
-    end
+    P["Importer\n(one broadcast)"]
     subgraph Fabric["Fabric (disjoint paths)"]
         RX["Path X"]
         RY["Path Y"]
     end
     subgraph EdgeA["Edge gateway A"]
-        SUBA["Receiver A"] --> PACA["Groomer A"]
+        SUBA["Receiver A"] --> PACA["Stream-clocked\ngroomer A"]
     end
     subgraph EdgeB["Edge gateway B"]
-        SUBB["Receiver B"] --> PACB["Groomer B"]
+        SUBB["Receiver B"] --> PACB["Stream-clocked\ngroomer B"]
     end
-    IRD1["IRD 1\n(ST 2022-7)"]
-    IRD2["IRD 2\n(ST 2022-7)"]
-
-    SEL --> P1
-    SEL -.-> P2
-    P1 --> RX
-    P1 --> RY
-    P2 -.->|"marked switch"| RX
-    P2 -.->|"marked switch"| RY
-    RX --> SUBA
-    RY --> SUBB
+    IRD1["IRD 1\n(ST 2022-7 merge)"]
+    IRD2["IRD 2\n(ST 2022-7 merge)"]
+    SEL --> P
+    P --> RX --> SUBA
+    P --> RY --> SUBB
     RY -.->|"re-home"| SUBA
     RX -.->|"re-home"| SUBB
     PACA -->|"leg A"| IRD1
@@ -273,15 +298,10 @@ flowchart LR
     PACB -->|"leg B"| IRD2
 ```
 
-Redundancy is applied end to end, mirroring what broadcasters already do with ST 2022-7 but extending it back to the source. The hitless 1+1 lives in the _delivery_ legs, which carry the **same broadcast**; source and importer redundancy are switches, not merges. The lane decides what the delivery pair can be:
-
-- **A hitless merge of a multiplex is an opaque-lane route.** Passthrough legs carry the importer's packets verbatim, so two stream-clocked groomers behind two passthrough exports of one broadcast emit one transport, which an ST 2022-7 receiver merges through a leg's late join, loss or restart (§5.1). It protects everything below the importer. The importer stays single: its loss ends every passthrough export (§5.5), and input protection stays at the source (§5.4).
-- **On the media-aware lane, 1+1 is a switch, best made at the receiver.** Its multi-track legs are byte-identical only when co-started (§5.1), and legs are not co-started, so the pair is protected by selection. Made in the relay, by the demultiplexing export following a second importer of one broadcast, each leg's start and restart is itself a switch (§5.4). Made at the receiver, each leg its own broadcast and export into an input switch, legs start, restart and return at their own times at no cost to the output and no failover waits on the transport, but a fault still costs a decoder about one to three seconds (§5.5). Legs fed from separate sources protect the input as well, adding their offset to each cut. This lane keeps per-track egress, prioritisation and selection (§6).
-
-1. **Source** — main/backup playout with input failover _upstream of the platform_ (§5.4). This resolves to **one** program; the switch is break-before-make and rare.
-2. **Ingest** — one importer carries that program onto the fabric as one broadcast, which both paths replicate (an importer can join the relay mesh directly). Only legs of one broadcast merge: two importers each mint their own epoch and see their own loss, so upstream treats them as different broadcasts. A standby importer protects the importer's host; its takeover, like its start, is a marked programme switch (§5.5).
+1. **Source** — main/backup playout with input failover _upstream of the platform_ (§5.3). This resolves to **one** program; the switch is break-before-make and rare.
+2. **Ingest** — one importer carries that program onto the fabric as one broadcast, which both paths replicate (an importer can join the relay mesh directly). It is the pair's single point (§5.2).
 3. **Path** — the fabric carries each leg over a link-disjoint path from the importer on. A subscriber can also re-home to the other path's fan-out point (supervisor-assisted today, §8.4).
-4. **Edge** — each leg's receiver feeds a groomer that produces a packet-identical, rate-coherent RTP egress. The groomer _enables_ ST 2022-7 by producing an aligned egress; it does not itself switch.
+4. **Edge** — each leg's receiver feeds a stream-clocked groomer that produces a packet-identical, rate-coherent RTP egress. The groomer _enables_ ST 2022-7 by producing an aligned egress; it does not itself switch.
 5. **Merge** — two IRDs, each taking **both** legs, perform the ST 2022-7 hitless switch. This is where the failover actually happens, using the receiver's existing capability, so the final failover requires no new receiver behaviour.
 
 ### 5.1 Making the pair mergeable is a constraint on the groomer, and it is the design decision that matters
@@ -292,7 +312,7 @@ ST 2022-7 requires both legs to send the _same RTP datagrams_: the same packets 
 
 **Measured at full strength.** With publisher, relay, exporter, groomer and host all independent per leg in two availability zones, sharing nothing but the source file, single-track content is byte-identical on every shared datagram (46,778/46,778, zero residue), continuity counters and RTP headers included. A seven-stream mux over the same topology reaches **75.56 %**: every media PID carries an identical packet count, **99.95 %** of packets are common as a multiset, but the legs disagree on _order_, which the exporter took from arrival — reordering, not damage. Ordering by media time is not enough either: a leg that places even a few packets of its own shifts every later slot ([Evidence](../lab/evidence.md) §3.4). **The groomer constraint is necessary but not sufficient:** the stage above it must place packets deterministically. Where a multi-track pair cannot be co-started (below), carry 1+1 on the opaque lane, as one pair per elementary stream, or merged above the transport. On the opaque lane a pair with one leg joining 8 s late merges hitlessly through the join, each leg's loss and return, and one leg's export killed, provided each groomer stays silent rather than send a datagram it cannot fill exactly; a groomer that pads or re-primes under a number its partner fills with programme loses packets at the merge (one clip, one host; [Evidence](../lab/evidence.md) §3.4).
 
-**Prerequisite:** slot derivation assumes PCR _value_ and _position_ advance together. A stream whose PCR values are an even grid but whose PCR packets arrive bunched — the fixed MoQ exporter over a byte pipe ([Evidence](../lab/evidence.md) §3.2) — gives the stage no consistent rate and it drops content. Verify both domains on any new upstream build before promoting it. **Upstream's fixed-delay export, merged in October 2026, lays packets on a PCR grid at the mux rate and satisfies it**: on an `[unmerged]` build of it the stream-clocked stage carried the programme at 3.4 % stuffing, and behind it two legs started together are byte-identical, continuity counters included. A leg started later is not ([Evidence](../lab/evidence.md) §3.4), so on the media-aware lane co-starting the pair is a design constraint, not a convenience.
+**Prerequisite:** slot derivation assumes PCR _value_ and _position_ advance together. A stream whose PCR values are an even grid but whose PCR packets arrive bunched — the fixed MoQ exporter over a byte pipe ([Evidence](../lab/evidence.md) §3.2) — gives the stage no consistent rate and it drops content. Verify both domains on any new upstream build before promoting it. **Upstream's fixed-delay export, merged in October 2026, lays packets on a PCR grid at the mux rate and satisfies it**: on an `[unmerged]` build of it the stream-clocked stage carried the programme at 3.4 % stuffing, and behind it two legs started together are byte-identical, continuity counters included. A leg started later is not ([Evidence](../lab/evidence.md) §3.4), so on the media-aware lane a merged pair needs its legs started and restarted together (§5.2).
 
 | Egress topology | Mergeable? | IRD-presentable? | Protects |
 | --- | --- | --- | --- |
@@ -307,47 +327,69 @@ ST 2022-7 requires both legs to send the _same RTP datagrams_: the same packets 
 
 **Build two independently stream-clocked groomers.** Groom-once-and-duplicate is equally hitless but protects the last hop only. Where deterministic grooming cannot be guaranteed, use 1+1 hot-standby rather than a claimed-hitless pair. Stream-derived placement also unlocks stripping null stuffing over the WAN (regenerated at the edge regardless) — measured at 5.3 % below SRT on a clip 4.57 % nulls ([Evidence](../lab/evidence.md) §3.5). On byte-faithful input it is also the mode that keeps the T-STD over a whole capture, which the arrival-clocked mode does not (§4.3).
 
-### 5.2 One leg cannot always be restarted alone
+### 5.2 What a pair protects depends on the lane
 
-Stream clocking removes the constraint that a pair be co-started: a leg that mutes and returns rejoins its partner's numbering exactly, and a leg joining late puts the same programme in the same slots under the same numbers, a median 10 ms from its partner. On the opaque lane that is byte-identity, because the legs carry the importer's continuity counters, and the pair merges through a late join, a blackout and a killed export (§5.1). On the media-aware lane it is not: the exporter renders continuity counters from its own process state, and on a multi-track mux orders units that tie on decode time by its own release clock, so a pair has to be co-started.
+**On the opaque lane the pair is hitless and either leg can be restarted alone, but the importer is not protected.** Passthrough legs carry the importer's packets verbatim, continuity counters included, so two stream-clocked groomers behind two passthrough exports of one broadcast emit one transport. A leg that mutes and returns rejoins its partner's numbering exactly, and a leg joining late puts the same programme in the same slots under the same numbers, so an ST 2022-7 receiver merges the pair through a late join, a blackout and a killed export (§5.1). The importer stays single: its loss ends every passthrough export (§5.4), so the input's protection is the source's (§5.3).
 
-So **the lane decides whether a single leg can be restarted alone**: input-select protection returns immediately on either, while a sequence-merge receiver regains it on the opaque lane and, on the media-aware lane, only when the pair is restarted together. This is an operational constraint on planned maintenance, and it is the reason §9's runbook says what it says.
+**On the media-aware lane a merge needs both legs started together and restarted together, which a 24/7 service cannot promise, so on this lane redundancy is a switch.** The exporter renders continuity counters from its own process state and, on a multi-track mux, orders units that tie on decode time by its own release clock, so only co-started legs are byte-identical (§5.1), and a leg restarted alone does not rejoin the merge. The design therefore makes each leg its own broadcast, from its own importer through its own path and export, into an input switch at the edge gateway:
 
-### 5.3 A groomer must stop when its content stops, and only the groomer can
+```mermaid
+flowchart LR
+    SRC["Selected programme\n(or two sources)"]
+    subgraph Ingest["Ingest (two importers, two broadcasts)"]
+        PA["Importer A"]
+        PB["Importer B"]
+    end
+    subgraph Fabric["Fabric (disjoint paths)"]
+        RX["Path X"]
+        RY["Path Y"]
+    end
+    subgraph Edge["Edge gateway"]
+        XA["Export A"] --> SW["Input switch\n(on absent packets)"]
+        XB["Export B"] --> SW
+        SW --> GR["Groomer"]
+    end
+    IRD["IRD"]
+    SRC --> PA --> RX --> XA
+    SRC --> PB --> RY --> XB
+    GR --> IRD
+```
 
-A groomer holding rate against a dead source emits a byte-perfect CBR carrier with **no programme packets** — every conventional check reports healthy; input-select performs **zero** switches at 50–500 ms; sequence merge prefers the dead leg. **The groomer must detect silence and mute**; with that, publisher/relay/egress kill each produce exactly **one** switch (1–3 continuity errors) ([Evidence](../lab/evidence.md) §3.4). Failure detection cannot beat a leg's burstiness — ungroomed gaps to 242 ms make 50 ms unsafe (413–446 spurious switches); groomed gaps of 3.8–4.3 ms make 50 ms safe. The groomer enables prompt failover detection, not only TR 101 290 conformance (§9.1).
+Two broadcasts protect the importer as well as the paths, and the legs start, restart and return at their own times at no cost to the output, with no failover waiting on the transport. The switch is not hitless: a fault costs a decoder about one to three seconds (§5.4). Legs fed from separate sources protect the input too, adding their offset to each cut. The switch could instead be made in the relay, by the demultiplexing export following a standby importer of the same broadcast, but then each importer's start and restart is itself a marked programme switch (§5.3). This lane keeps per-track egress, prioritisation and selection (§6).
 
-### 5.4 Separation of responsibilities
+So **a route that needs hitless 1+1 takes the opaque lane and leaves importer protection to the source, and a route on the media-aware lane gets importer protection at the cost of a cut at each fault.** The lane also decides planned maintenance: on the opaque lane one leg can be drained and restored alone under a merging receiver, and a merged media-aware pair must be restored together, which is why §9's runbook says what it says.
+
+### 5.3 Separation of responsibilities
 
 The layers compose cleanly only if each failure domain is owned by the layer best able to handle it.
 
 - **Publisher _input_ redundancy stays outside the platform, permanently.** Choosing between primary and backup _source_ feeds is a contribution-domain concern with mature tools — a TSDuck input switch, a hardware selector, a redundant encoder pair. Putting source-selection logic inside a publisher would re-implement that ecosystem badly and couple input policy to transport. The publisher's job is to take _one_ good input and get it onto the fabric reliably.
-  - **The constraint the drills add:** the standby importer must be fed the _same_ selected source, or its takeover changes the programme as well as marking it. The practical topology is **two ingest paths, one selected path fanned into the importer and its standby**, with the second path held as source-side failover for both. The relay serves the newest importer, so starting or restarting the standby is itself a switch. On later October 2026 `main` that switch keeps the export's delay and loses next to no programme, but a start on an open-GOP source still shows about a second of corrupt pictures, so it is still scheduled like maintenance. Selected at the receiver as two broadcasts (§5), neither is a switch.
+  - **The constraint the drills add:** the standby importer must be fed the _same_ selected source, or its takeover changes the programme as well as marking it. The practical topology is **two ingest paths, one selected path fanned into the importer and its standby**, with the second path held as source-side failover for both. The relay serves the newest importer, so starting or restarting the standby is itself a switch. On later October 2026 `main` that switch keeps the export's delay and loses next to no programme, but a start on an open-GOP source still shows about a second of corrupt pictures, so it is still scheduled like maintenance. Selected at the receiver as two broadcasts (§5.2), neither is a switch.
 - **The transport owns per-leg resilience and routing** — reconnection, keep-alive and idle-timeout tuning, cache and fan-out, announce propagation, and route selection across the fabric.
 - **Broadcast-grade _service_ redundancy is a doubled chain below the importer plus downstream hitless selection.** Importer failover in the relay is a marked switch, at least one idle timeout late for a lost host on every build measured, and at the receiver a cut costing about one to three seconds, so from the importer on continuity is delivered the way broadcasters already trust: **one importer → dual fan-out paths → dual receivers → dual groomers → ST 2022-7 selection at the receiver.**
 - **On segmented HTTP the serving node holds no state, so over one CDN the source protection can be the CDN's.** Two co-started packagers of one feed into a shared store on one host emit byte-identical segments (`--intra-close`) with no receiver-side merge; across two hosts sharing an NFS store a pair was hitless only with a fixed input bitrate, a store granting no delegations and a common start, which 5 co-starts in 23 missed silently. A packager started later did not join that namespace in any stock TSDuck configuration (on the clip measured, its names collided with fetched ones, or its table counters and cuts differed from its partner's), and a pair that does **not** share feed and naming is accepted silently. A 24/7 feed restarts packagers, so the pair needs packagers that cut and name each segment by content time: two started apart then publish the same objects, their origins are interchangeable, and one CDN origin group fails over between them per request. Each origin also needs a guard that withdraws a playlist that stops advancing, since a stopped packager's origin goes on answering its last playlist with a 200, which no CDN fails over from. Over CloudFront this covered both receivers and their merge through each failure of one pathway tested. **The last mile is the receivers'**: two at different edges, merged by ST 2022-7, each releasing a segment at the time the origin's program date-time puts on its last PCR plus a fixed hold, which started them within 1.1 ms of each other on one host, where a start alone left them up to ±1.5 s apart. The design assumes one CDN; its own failure, or the feed's, is outside it ([Evidence](../lab/evidence.md) §3.4).
 
-### 5.5 Failure scenarios
+### 5.4 Failure scenarios
 
 Every response assumes the two legs are actually mergeable, which §5.1 shows is a property of the egress topology rather than a given.
 
 | Failure | Response |
 | --- | --- |
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
-| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and on early November `main` 0.28–0.36 s at a clean exit, with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. Selected at the receiver instead (§5), the input switch cuts once the failed leg's export falls silent, after a hard kill its delay and about a second of padding later: at a 500 ms receive timeout an importer, relay or export lost cost a decoder 0.8–2.9 s, waiting on no idle timeout. That switch detects only silence and cuts anywhere; one that detects on content or cuts at a random-access point is unmeasured. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
+| **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and on early November `main` 0.28–0.36 s at a clean exit, with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. Selected at the receiver instead (§5.2), the input switch cuts once the failed leg's export falls silent, after a hard kill its delay and about a second of padding later: at a 500 ms receive timeout an importer, relay or export lost cost a decoder 0.8–2.9 s, waiting on no idle timeout. That switch detects only silence and cuts anywhere; one that detects on content or cuts at a random-access point is unmeasured. A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today). On the media-aware lane's pair selected at the receiver, a 0.3 s uplink outage costs nothing, and one of 3 to 12 s costs what a hard kill does |
 | **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
-| **Content loss behind a healthy groomer** | The groomer must detect and mute (§5.3). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
+| **Content loss behind a healthy groomer** | The groomer must detect and mute (§4). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
 | **A leg that returns** | Rejoins the schedule and the numbering (§5.2). Input-select protection is restored immediately, and on the media-aware lane at no cost to the output, an importer cut off past the idle timeout reconnecting on its own; sequence-merge protection on the opaque lane, and on the media-aware lane only with the pair restarted together |
 | **IRD** | The second IRD, also dual-input, keeps delivering; doubling the receiver removes the last single point |
 | **Regional** | Routes are re-homed to another region; gateways in the failed region are replaced by gateways in a neighbouring one, at the cost of added path latency |
 | **Control-plane partition** | The data plane continues on last-known-good state; only change operations are suspended |
 
-### 5.6 The honest limit
+### 5.5 The honest limit
 
 All of the above assumes the _public-Internet substrate does not fail simultaneously along both disjoint paths_. Disjoint-path routing reduces but does not eliminate correlated failure: a large-scale BGP event or a shared upstream provider can affect both. This is a genuine residual risk that satellite — with its terrestrial-network independence — does not have. The platform mitigates it with path diversity across providers and with the transport-swappable hedge (falling back to a managed transport for the most critical always-on routes), but it does not claim to eliminate it, and it has not been characterised in production.
 
-### 5.7 Graceful degradation
+### 5.6 Graceful degradation
 
 Where full redundancy cannot prevent impairment, QUIC's per-stream delivery and MoQ's prioritisation _would_ allow the platform to shed lower-priority tracks or renditions while preserving the primary programme, instead of head-of-line-blocking the whole flow as a single ordered byte stream would. The media-aware lane exposes the individual tracks that such a policy would act on, and the opaque fallback does not — it is a single object stream with limited internal prioritisation, and trades this away in exchange for verbatim carriage.
 
@@ -482,7 +524,7 @@ _Clock progression_ — alarm when no PCR has advanced for longer than the PCR r
 
 **Edge-stage counters** (buffer occupancy, recovered rate, underrun/drop counts) as time series — the only signals of stage degradation when output stays conformant.
 
-**Programme content, not carrier presence** (§5.3): mute past a grace period and alarm on absence of packets that are neither null **nor adaptation-field-only**.
+**Programme content, not carrier presence** (§4): mute past a grace period and alarm on absence of packets that are neither null **nor adaptation-field-only**.
 
 **A leg that returns is not yet a merging pair** (§5.2) — alarm on live-live but non-mergeable legs.
 
@@ -491,12 +533,12 @@ _Clock progression_ — alarm when no PCR has advanced for longer than the PCR r
 ### 9.2 Runbooks
 
 - **Feed bring-up.** Provision channel/route, configure publisher and gateway, issue entitlement, confirm green TR 101 290 at egress. The measured elapsed time from API call to green is itself the headline operational metric — and it is contingent on §4.2's gate, so today it describes intended operation rather than proven operation.
-- **Failover / failback.** Shift to the redundant disjoint path, confirm the ST 2022-7 switch was hitless, service the drained element, restore. Two constraints from measurement: the drained leg must be **confirmed dead by content, not by carrier** (§5.3), and restoring a single leg is transparent only to an input-select receiver — a sequence-merge receiver needs the pair restored together (§5.2).
+- **Failover / failback.** Shift to the redundant disjoint path, confirm the ST 2022-7 switch was hitless, service the drained element, restore. Two constraints from measurement: the drained leg must be **confirmed dead by content, not by carrier** (§4), and restoring a single leg is transparent to an input-select receiver, and to a sequence-merge receiver on the opaque lane only; a merged media-aware pair needs restoring together (§5.2).
 - **Entitlement incidents.** Emergency disable or revoke under time pressure; simple enough to execute correctly under stress ([Control](control-plane.md) §4).
 - **Degraded-quality triage.** Use the correlation id to trace a P1/P2 or delivery alarm to a congested path, saturated gateway or failing publisher, then reroute, scale or fail over.
 - **Change.** Drain a single layer to its redundant path, change it, restore, repeat on the other path. This applies to gateway and publisher upgrades and, critically, to transport-draft migrations (§10). The drain-and-restore discipline is what makes that migration _hitless_, not what makes it small.
 
-**Pre-contract checklist:** congestion controller pinned (§8.5); relay memory per ingested channel (§8.3); groomer silence detection (§5.3); dual-domain monitoring correlated; drills timed on real topology.
+**Pre-contract checklist:** congestion controller pinned (§8.5); relay memory per ingested channel (§8.3); groomer silence detection (§4); dual-domain monitoring correlated; drills timed on real topology.
 
 ### 9.3 What changes on a segmented-HTTP data plane
 
@@ -555,7 +597,7 @@ Multi-draft negotiation from a single build is trending (`moq-dev` carries draft
 | Dumb-and-fast relays (§8) | Keeps the commodity layer commodity; value moves up-stack | Intelligence and cost concentrate at edge and control plane — and there they are largely the _operator's_ to build, not a vendor's to sell, because the control plane's value is integration with systems that differ at every broadcaster ([Economics](economics.md) §8). Relays are also not yet interchangeable _between_ implementations |
 | Out-of-band, non-fate-sharing control plane (§1.1, [Control](control-plane.md)) | Data plane survives control-plane outages | Revocation needs a token backstop, not just a live signal |
 | ST 2022-7 last-hop redundancy (§5) | Hitless failover using the IRD's existing capability | Doubles egress bandwidth; needs disjoint paths end to end |
-| Hybrid backstop for highest-assurance routes (§5.6) | Correlated Internet failure is a real residual risk | Retains some managed or satellite cost where used |
+| Hybrid backstop for highest-assurance routes (§5.5) | Correlated Internet failure is a real residual risk | Retains some managed or satellite cost where used |
 
 ---
 
@@ -569,7 +611,7 @@ Ranked by how much a negative answer would change the architecture.
 4. **Can a multi-track 1+1 pair be merged at the byte?** (§5.1.) Single-track identity is settled. Behind upstream's merged fixed-delay export a co-started pair merges, on one host or two, and its exports stay identical across a republish in 8 of 13 runs; a leg started later does not. On the opaque lane a leg started later merges, for one clip on one host (§5.1), which makes it the lane for a merged pair that cannot be co-started.
 5. **Where should the edge gateway sit?** (§4.4.) An open cost-versus-determinism decision that moves most of the delivery bill.
 6. **Relay portability between implementations (§8).** This architecture treats the relay as a commodity layer, which presumes a feed can be carried over a relay somebody else operates. Measured, it partly can: of nine other implementations' relays, seven carry a feed intact after the join, five to a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). Until a route's relays are tested at the join, "commodity relay" is an aspiration and vendor lock-in is the realistic near-term position.
-7. **Correlated-failure behaviour (§5.6).** The residual risk of simultaneous impairment across disjoint Internet paths is not characterised in production.
+7. **Correlated-failure behaviour (§5.5).** The residual risk of simultaneous impairment across disjoint Internet paths is not characterised in production.
 8. **Cross-operator federation (§8.6).** A long-term aspiration depending on standards, protocol and commercial-trust developments that do not exist today.
 9. **Economics at always-on trunk scale.** Route-specific, strongest for dynamic and long-tail routes, and — unlike the others here — it cannot be settled in public ([Economics](economics.md) §4.4).
 

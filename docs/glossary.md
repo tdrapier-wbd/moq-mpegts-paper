@@ -2,6 +2,13 @@
 
 The documents in this repository use two vocabularies, and both rest on a handful of internet-transport terms that a broadcast engineer need not have met. This is the whole of each, in the nearest broadcast equivalent. The two are worth reading side by side, because several rows are the same idea under different names — a **group** and a **segment** are both "the point a receiver can join at", and a **catalog** and a **Media Initialization Section** are both "what PAT/PMT tells you".
 
+**Contents**
+
+- [MoQ](#moq)
+- [Segmented HTTP (HLS carrying MPEG-TS)](#segmented-http-hls-carrying-mpeg-ts)
+- [Transport and deployment terms](#transport-and-deployment-terms)
+- [Broadcast terms used without definition](#broadcast-terms-used-without-definition)
+
 ---
 
 ## MoQ

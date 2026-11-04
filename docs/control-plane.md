@@ -2,6 +2,29 @@
 
 Status: working draft. Layer: **above the transport** — required and owned identically whichever data plane carries the bytes. What changes between them is only the _enforcement point_: a relay's authorization hook against a per-request check at a CDN edge ([Comparison](comparison.md) §7).
 
+**Contents**
+
+- [Evidence status: the enforcement mechanism is measured; everything above it is design](#evidence-status-the-enforcement-mechanism-is-measured-everything-above-it-is-design)
+- [1. Purpose and position](#1-purpose-and-position)
+  - [1.1 The out-of-band principle, and its sharp consequence](#11-the-out-of-band-principle-and-its-sharp-consequence)
+- [2. Entities](#2-entities)
+  - [2.1 API surface](#21-api-surface)
+  - [2.2 State and consistency](#22-state-and-consistency)
+- [3. Identity and authentication](#3-identity-and-authentication)
+- [4. Entitlement](#4-entitlement)
+  - [4.1 Revocation, and what deny-by-default does not mean](#41-revocation-and-what-deny-by-default-does-not-mean)
+  - [4.2 Failure handling](#42-failure-handling)
+- [5. Multi-tenancy](#5-multi-tenancy)
+- [6. Policy and orchestration](#6-policy-and-orchestration)
+- [7. Security model](#7-security-model)
+  - [7.1 Threat model](#71-threat-model)
+  - [7.2 Keys and secrets](#72-keys-and-secrets)
+  - [7.3 Data protection](#73-data-protection)
+  - [7.4 Abuse mitigation](#74-abuse-mitigation)
+  - [7.5 Audit](#75-audit)
+- [8. Acceptance criteria](#8-acceptance-criteria)
+- [9. Open questions](#9-open-questions)
+
 Scope: the provisioning, entitlement, tenancy and security model for the platform — the layer that develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive companion to [Architecture](architecture.md) §9.
 
 ---
