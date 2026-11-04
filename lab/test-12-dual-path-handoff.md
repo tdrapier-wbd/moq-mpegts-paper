@@ -1075,6 +1075,22 @@ under 2 s apart into episodes.
    did not re-converge before the run ended. D3's seq-merge loses nothing.
 4. **The filter costs 1.43 % of packets** (136 kb/s), as on the earlier build.
 
+### D1 after upstream's clock-table placement (criteria fixed before the first run)
+
+Upstream now places each TDT/TOT revision at the first media-grid slot at or after its import stamp,
+not on arrival: what D1 asked for ([#7743](https://github.com/moq-dev/moq/issues/7743), closed by
+[#7779](https://github.com/moq-dev/moq/pull/7779)). **Rig.** D1 again, `CELL=control LANE=demux PAD=1
+LATE=8 DELAY=2s RATE=10200000`, the clip's first 175 s, the pacer at `97f3a38`, on the far host
+(loopback, us-west-2): one run with `main` at `204c97f4f`, one at `701b7196a`. Graded as D1, with
+`t12-mismatch-where.py`.
+
+1. **Valid:** at `204c97f4f`, from 2 s after B's first datagram the legs differ in episodes that each
+   hold a TDT/TOT packet. Otherwise this host does not reproduce D1 and the comparison is void.
+2. **Pass:** at `701b7196a`, no pair differs from 2 s after B's first datagram, and the seq-merge has
+   no continuity error. The after build carries every change since `204c97f4f`, not #7779 alone.
+3. **Reported:** any remaining episode and whether it holds a TDT/TOT packet; upstream expects one
+   only where a revision arrives after media has passed its stamp.
+
 ## Corrections
 
 > Each stale claim is fixed where it was made; each rule is in [method-notes.md](method-notes.md).
