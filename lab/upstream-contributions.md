@@ -285,9 +285,9 @@ The question C6 could not close was whether the soft second term converges (+1.8
 
 The first three filings, each saying a design does not generalise, were **accepted in substance** together and planned into quests by [#3619](https://github.com/moq-dev/moq/pull/3619).
 
-### The mTLS identity never reaches the authorization decision — open, and conceded on every point
+### The mTLS identity never reaches the authorization decision — fixed; per-certificate rules requested
 
-[#3603](https://github.com/moq-dev/moq/issues/3603) argued that a client certificate authenticates a peer and is then discarded, so mTLS can only express unrestricted access. The maintainer granted all three parts, preferring per-identity scoping to a global option. **Closed by us as fixed** on `main` at `f8215bc47` ([comment](https://github.com/moq-dev/moq/issues/3603#issuecomment-6084812116)), and measured on `204c97f4f` ([T38](test-38-entitlement-estate.md) Part 5): a certificate admits nothing on its own, its name, fingerprint and issuer reach the auth server (its expiry too, by the code), and a client CA beside `--auth-public` is refused at startup. An endpoint deciding by fingerprint scoped four affiliates exactly; upstream's own server gives every certificate one rule set.
+[#3603](https://github.com/moq-dev/moq/issues/3603) argued that a client certificate authenticates a peer and is then discarded, so mTLS can only express unrestricted access. The maintainer granted all three parts, preferring per-identity scoping to a global option. **Closed by us as fixed** on `main` at `f8215bc47` ([comment](https://github.com/moq-dev/moq/issues/3603#issuecomment-6084812116)), and measured on `204c97f4f` ([T38](test-38-entitlement-estate.md) Part 5): a certificate admits nothing on its own, its name, fingerprint and issuer reach the auth server (its expiry too, by the code), and a client CA beside `--auth-public` is refused at startup. Upstream's own server gives every certificate one rule set; per-certificate rules requested as [#7921](https://github.com/moq-dev/moq/issues/7921).
 
 ### The revalidation window — closed, and folded into a rethink of the whole auth line
 
