@@ -92,6 +92,7 @@ the problem, the structure should show which part is which.
 | Document | Layer | What it is |
 |---|---|---|
 | [Primer](docs/primer.md) | Background | How MPEG-TS, SRT, segmented HTTP and MoQ work, for readers new to one of them |
+| [Getting started](docs/getting-started.md) | Hands-on | One transport stream end to end over MoQ and over segmented HTTP on one machine, with released tools and a check |
 | [Problem](docs/problem.md) | Requirement | Why primary distribution is changing, and the requirement set (R1–R8) everything else is scored against |
 | [Comparison](docs/comparison.md) | **Data plane** | The head-to-head, with the evidence type marked on every verdict row |
 | [Architecture](docs/architecture.md) | **Above the transport** | The reference architecture; the edge gateway and 1+1 redundancy come first as the measured part |
