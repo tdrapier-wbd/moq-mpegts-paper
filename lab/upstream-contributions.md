@@ -1241,7 +1241,7 @@ repro needed `export ts --passthrough`. Verified: with it, all three drafts pass
 group's final object at the same ten of nineteen boundaries in each run. The relay holds each
 and sends it on a second stream of its subgroup, which that subscriber drops: imquic's parser
 marks every object of the chunk carrying a stream's FIN as its end. Verified: flagging only the
-chunk's last object removes the split. **Open**; the patch is offered.
+chunk's last object removes the split. **Open**; the maintainer fixes it.
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 
