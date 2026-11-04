@@ -2,7 +2,7 @@
 
 What this campaign found, reported and verified in other people's projects. It is kept separate from the experiment record because the argument is different from "does MoQ suit broadcast primary distribution".
 
-**Why it belongs in the repository at all.** [Comparison](../docs/comparison.md) §13 scores operational maturity against a pre-1.0 ecosystem. This file is the concrete form: what a broadcaster procures is an implementation, not a specification, so much of what reads as "MoQ does X" is really "this build does X" — and several gaps recorded here have since closed. That is implementations maturing _with_ a specification rather than after it; the gaps were real, and they closed fast.
+**Why it belongs in the repository at all.** [Comparison](../docs/comparison.md) §9.3 scores operational maturity against a pre-1.0 ecosystem. This file is the concrete form: what a broadcaster procures is an implementation, not a specification, so much of what reads as "MoQ does X" is really "this build does X" — and several gaps recorded here have since closed. That is implementations maturing _with_ a specification rather than after it; the gaps were real, and they closed fast.
 
 Each item states what was found, how it was verified, and what remains open. Where a fix was verified here rather than taken on trust, the before/after rigs are named.
 
