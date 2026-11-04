@@ -1,19 +1,28 @@
 # Glossary: the two data planes in broadcast terms
 
-The documents in this repository use two vocabularies, and both rest on a handful of internet-transport terms that a broadcast engineer need not have met. This is the whole of each, in the nearest broadcast equivalent. The two are worth reading side by side, because several rows are the same idea under different names — a **group** and a **segment** are both "the point a receiver can join at", and a **catalog** and a **Media Initialization Section** are both "what PAT/PMT tells you".
+Status: working draft. Layer: reference. Scope: the MoQ and segmented-HTTP vocabularies, the internet-transport terms both rest on, and the broadcast terms in the sense this repository uses them, each in its nearest broadcast equivalent. Reads with: [Primer](primer.md), which explains how the transports work.
 
 **Contents**
 
+- [In brief](#in-brief)
 - [MoQ](#moq)
 - [Segmented HTTP (HLS carrying MPEG-TS)](#segmented-http-hls-carrying-mpeg-ts)
 - [Transport and deployment terms](#transport-and-deployment-terms)
-- [Broadcast terms used without definition](#broadcast-terms-used-without-definition)
+- [Broadcast terms](#broadcast-terms)
+
+## In brief
+
+**The documents in this repository use two vocabularies, and several of their rows are the same idea under different names**: a **group** and a **segment** are both "the point a receiver can join at", and a **catalog** and a **Media Initialization Section** are both "what PAT/PMT tells you" ([MoQ](#moq), [Segmented HTTP](#segmented-http-hls-carrying-mpeg-ts)).
+
+**Both rest on a handful of internet-transport terms that a broadcast engineer need not have met**, given here in the nearest broadcast equivalent ([Transport and deployment terms](#transport-and-deployment-terms)).
+
+**The broadcast terms are listed only to fix the sense in which this repository uses them**, above all TR 101 290 P1/P2, which are not the measurement points P0/P1/P2 ([Broadcast terms](#broadcast-terms)).
 
 ---
 
 ## MoQ
 
-Terms are from the IETF Media over QUIC working group's drafts and from `moq-dev`'s implementation, which is what the prototype runs on.
+**MoQ's terms are from the IETF Media over QUIC working group's drafts and from `moq-dev`'s implementation**, which is what the prototype runs on.
 
 | MoQ term | What it means here |
 | --- | --- |
@@ -34,7 +43,7 @@ Terms are from the IETF Media over QUIC working group's drafts and from `moq-dev
 
 ## Segmented HTTP (HLS carrying MPEG-TS)
 
-Terms are from [HTTP Live Streaming 2nd Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/) (`draft-pantos-hls-rfc8216bis-22`, which obsoletes RFC 8216 and folds in Low-Latency HLS). The comparison that uses them is [Comparison](comparison.md).
+**Segmented HTTP's terms are from [HTTP Live Streaming 2nd Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)** (`draft-pantos-hls-rfc8216bis-22`, which obsoletes RFC 8216 and folds in Low-Latency HLS). The comparison that uses them is [Comparison](comparison.md).
 
 | HLS term | What it means here |
 | --- | --- |
@@ -52,7 +61,7 @@ Terms are from [HTTP Live Streaming 2nd Edition](https://datatracker.ietf.org/do
 
 ## Transport and deployment terms
 
-These carry the reliability, scaling and cost arguments, so they appear in every document.
+**These carry the reliability, scaling and cost arguments, so they appear in every document.**
 
 | Term | What it means here |
 | --- | --- |
@@ -67,9 +76,9 @@ These carry the reliability, scaling and cost arguments, so they appear in every
 | **GSO** (generic segmentation offload) | A Linux host setting that lets a sender hand the kernel many packets in one call. It changes relay CPU cost materially, so every capacity figure names it ([Evidence](../lab/evidence.md) §3.6). |
 | **Supervisor** | A process manager, such as systemd, that restarts a program when it exits. A standing subscriber on the default protocol still needs one to survive a publisher crash, and a publisher on a release needs one wherever its source's timeline steps back, because the released import ends there; upstream's current import republishes itself ([Evidence](../lab/evidence.md) §3.4, §3.13). |
 
-## Broadcast terms used without definition
+## Broadcast terms
 
-Assumed familiar, and listed only to fix the sense in which this repository uses them.
+**Assumed familiar, and listed only to fix the sense in which this repository uses them.**
 
 | Term | Sense used here |
 | --- | --- |
