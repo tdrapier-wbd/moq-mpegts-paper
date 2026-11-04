@@ -2,7 +2,7 @@
 
 ## Objective
 
-[Comparison](../docs/comparison.md) §10.1 argues that RIST should hand a groomer the _cleanest_ egress of the transports this paper weighs, on the reasoning that a packet-level tunnel with a jitter buffer "reconstructs the original packet cadence, delayed, rather than reassembling a stream from objects or segments." That was reasoned and explicitly flagged as unmeasured, and it was the largest unmeasured structural claim in the paper.
+[Comparison](../docs/comparison.md) §1.1 argues that RIST should hand a groomer the _cleanest_ egress of the transports this paper weighs, on the reasoning that a packet-level tunnel with a jitter buffer "reconstructs the original packet cadence, delayed, rather than reassembling a stream from objects or segments." That was reasoned and explicitly flagged as unmeasured, and it was the largest unmeasured structural claim in the paper.
 
 This runs RIST and SRT through the instrument [T14](test-14-data-plane-comparison.md) used, so the point-to-point class can be quoted in the same units as MoQ and segmented HTTP.
 
@@ -234,6 +234,6 @@ The fix that follows is narrow. For a latest-value table the interval should be 
 - [T13 — downstream grooming](test-13-downstream-grooming.md): what no off-the-shelf stage does.
 - [T14 — MoQ against segmented HTTP](test-14-data-plane-comparison.md): the instrument, the burst threshold, and the MoQ and segmented-HTTP columns quoted here.
 - [T17 — SI on snapshot tracks](test-17-si-snapshot-tracks.md): the EIT carriage this clock now accompanies, and the zero-packet gap measurement 4 exists to put in context.
-- [comparison](../docs/comparison.md) §10.1: the claim under test.
+- [comparison](../docs/comparison.md) §1.1: the claim under test.
 - [`t15-cadence.sh`](scripts/t15-cadence.sh), [`t15-bursts.py`](scripts/t15-bursts.py), [`tdt-transports.sh`](scripts/tdt-transports.sh), [`tdt-moq.sh`](scripts/tdt-moq.sh), [`tdt-staleness.py`](scripts/tdt-staleness.py).
 - VSF TR-06-2:2022 (RIST Main Profile) and `draft-sharabayko-srt`: neither mentions any TS table.

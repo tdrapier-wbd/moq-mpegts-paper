@@ -11,7 +11,7 @@ R7 on the segmented lane rested on a derivation: where the CDN authorises every 
 - **C. Common Access Token at the edge.** A segmented stream encrypted per segment (HLS AES-128), every request gated at CloudFront by a CTA-5007 token that a CloudFront Function validates, with revoked token IDs in a KeyValueStore. How long after a revocation does the edge refuse it, and what does the route keep and lose against BISS-CA?
 - **S. A scrambled source through `tsp -O hls`.** Does TSDuck's packager cut a DVB-CISSA-scrambled multiplex, does the segmented chain carry it and its conditional-access PIDs, and does a descrambler after the receiver return the clear source?
 
-**Falsifies:** Comparison §7's derivation, if the edge's own propagation, not the reload cadence, sets the revocation bound; and the planned premise that the segmented lane cannot carry a scrambled source, if `tsp -O hls` does.
+**Falsifies:** Comparison §8's derivation, if the edge's own propagation, not the reload cadence, sets the revocation bound; and the planned premise that the segmented lane cannot carry a scrambled source, if `tsp -O hls` does.
 
 ## Environment
 
@@ -41,7 +41,7 @@ R7 on the segmented lane rested on a derivation: where the CDN authorises every 
 
 1. **Control.** Each refusal case in step 1 is refused at both PoPs, for all three object types, and the valid token is admitted. Otherwise the gate is faulty and nothing below is graded.
 2. **Decryption.** Over 150 s, every segment the receiver fetched decrypts to its clear bytes (SHA-256 equal to the origin's record), none of the ciphertexts equals its clear segment, and the run crosses at least two key changes.
-3. **Revocation**, measured, not passed: per PoP, the median and maximum time from the end of the write to the first refusal over ten trials, and how many requests were admitted after the first refusal (requests served by edge servers that had not yet seen the write). _Predicted:_ a few seconds, under 10 s, which would make the edge's propagation, not a 0.28–2 s reload cadence, the bound Comparison §7 derives.
+3. **Revocation**, measured, not passed: per PoP, the median and maximum time from the end of the write to the first refusal over ten trials, and how many requests were admitted after the first refusal (requests served by edge servers that had not yet seen the write). _Predicted:_ a few seconds, under 10 s, which would make the edge's propagation, not a 0.28–2 s reload cadence, the bound Comparison §8 derives.
 4. **A revoked viewer**, measured: seconds of programme handed on after the write ends, and whether a refused key request or a refused segment request ends it.
 5. **Expiry.** Every request after the token's `exp`, at the edge's second, is refused, and none before it.
 

@@ -15,7 +15,7 @@ So this is an operational property with a knob on it rather than a defect, and *
 
 Establish whether one badly-behaved subscriber can degrade the service other subscribers of a permanent feed receive through the same relay, and whether anything it costs the relay is reclaimed when it leaves.
 
-This is a viability question rather than a comparison. Both economic models in this paper assume multi-tenancy, and [Comparison](../docs/comparison.md) §2 notes that a relay holding per-subscription state is structurally more exposed than a cache serving idempotent GETs. That observation has never been tested, and the paper should either support it or stop making it.
+This is a viability question rather than a comparison. Both economic models in this paper assume multi-tenancy, and [Comparison](../docs/comparison.md) §3 notes that a relay holding per-subscription state is structurally more exposed than a cache serving idempotent GETs. That observation has never been tested, and the paper should either support it or stop making it.
 
 **Not a security assessment.** No attempt is made to find the worst achievable attack, to exhaust the host, or to exploit anything. The arms are all things an ordinary client can do by accident — a crashing receiver, a retry loop, a subscriber whose disk filled — which is what makes them operational rather than adversarial.
 
@@ -170,7 +170,7 @@ This is the segmented half of **P2-b**, unblocked by [T42](test-42-h3-receiver-f
 
 ### What this establishes, and the claim it revises
 
-[Comparison](../docs/comparison.md) §2 asserts that a relay holding per-subscription state is structurally more exposed than a cache serving idempotent GETs, and this experiment existed because that claim had no evidence. **It now has some, and it is narrower than the assertion:** the exposure is real and large, it is reached by an ordinary client using only the shipped CLI, and it lands entirely on the relay's memory rather than on any other subscriber's stream.
+[Comparison](../docs/comparison.md) §3 asserts that a relay holding per-subscription state is structurally more exposed than a cache serving idempotent GETs, and this experiment existed because that claim had no evidence. **It now has some, and it is narrower than the assertion:** the exposure is real and large, it is reached by an ordinary client using only the shipped CLI, and it lands entirely on the relay's memory rather than on any other subscriber's stream.
 
 It also **qualifies this campaign's own finding that relay memory is not an audience term** ([T9](test-9-performance.md), T8b C6). That result holds for a _steady_ audience and is confirmed here by the held variant at 1.6 MB per subscriber. It does not extend to subscription churn: 40 subscribers arriving and leaving every 5 s cost 1.8 GB in a minute, where the same 40 established subscribers cost 65 MB. **The growth term is subscription lifetime against churn rate, not concurrency** — which is the distinction the "not an audience term" phrasing elides, and it is now stated wherever that finding is.
 

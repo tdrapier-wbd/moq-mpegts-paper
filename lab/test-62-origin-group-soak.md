@@ -4,7 +4,7 @@
 
 ## Objective
 
-_Permanent operation_ reads _unknown_ for the segmented lane ([Comparison](../docs/comparison.md) §13.1): every figure it has rests on runs of minutes. P1-aj asks for 72 h of the chain through CloudFront, across a PTS wrap. Its subject is the design the author has chosen and [T61](test-61-origin-group-failover.md) grades by failure class: two interchangeable origins in one origin group, two aligned receivers of the one distribution, merged by ST 2022-7. Nothing is injected; what a healthy chain does over three days, unattended, is the question.
+_Permanent operation_ reads _unknown_ for the segmented lane ([Comparison](../docs/comparison.md) §11.1): every figure it has rests on runs of minutes. P1-aj asks for 72 h of the chain through CloudFront, across a PTS wrap. Its subject is the design the author has chosen and [T61](test-61-origin-group-failover.md) grades by failure class: two interchangeable origins in one origin group, two aligned receivers of the one distribution, merged by ST 2022-7. Nothing is injected; what a healthy chain does over three days, unattended, is the question.
 
 ## Environment
 
@@ -68,4 +68,4 @@ _Graded by [`t62-grade.py`](scripts/t62-grade.py) from the three hosts' logs; ho
 1. **Over 72 h the single-CDN design added no failure of its own.** Every loss, stall and failover traces to the contribution or to one TCP retransmission at an edge; memory is flat, the skew within ±1.1 ms, four PTS wraps crossed cleanly, and the origins stayed byte-identical.
 2. **Its availability is set by the segmenter's withdrawal rule, not by its redundancy.** Six continuity breaks in the contribution cost 54 s of programme (99.98 % of the run delivered), on both pathways at once, so 1+1 covered none of it. The rule is this rig's, not segmented HTTP's; one that withdraws only a pathway whose segments differ from its peer's is untested.
 3. **The groomer soaked carried a wrong clock for its last 43 h**, which no criterion graded. A soak of `97f3a38` grading PTS against PCR on the merged wire would discharge it.
-4. 72 h is short of the 7 days _Permanent operation_ asks ([Comparison](../docs/comparison.md) §13.1).
+4. 72 h is short of the 7 days _Permanent operation_ asks ([Comparison](../docs/comparison.md) §11.1).

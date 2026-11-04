@@ -46,7 +46,7 @@ SRT (Secure Reliable Transport) is an open protocol with an open-source library,
 
 **Securing.** Payloads can be encrypted with AES at 128, 192 or 256 bits, using keys derived from a pre-shared passphrase and exchanged in the handshake.
 
-**Scaling.** Every receiver needs its own session, and every session its own copy of the stream from whatever holds the other end. Serving N destinations takes N sessions from the source, or a tier of gateways that each take one session in and send several out, a tier the operator builds, runs and pays for ([Problem](problem.md) §2.3). RIST and Zixi have the same shape; RIST is the openly specified, multi-vendor member of the family ([Comparison](comparison.md) §10).
+**Scaling.** Every receiver needs its own session, and every session its own copy of the stream from whatever holds the other end. Serving N destinations takes N sessions from the source, or a tier of gateways that each take one session in and send several out, a tier the operator builds, runs and pays for ([Problem](problem.md) §2.3). RIST and Zixi have the same shape; RIST is the openly specified, multi-vendor member of the family ([Comparison](comparison.md) §3).
 
 SRT neither reads nor changes the transport stream. It delivers the source's bytes, in the source's order, at the source's timing, late by the latency.
 
@@ -60,9 +60,9 @@ Segmented HTTP turns a live stream into a series of files and lets ordinary web 
 
 **Receiving.** There is no session, and nothing is pushed. The receiver fetches the playlist, then each new segment by its URL, and re-fetches the playlist to learn what has appeared since. Each fetch is an ordinary HTTP request, over TCP (HTTP/1.1 or HTTP/2) or over QUIC (HTTP/3).
 
-**Scaling.** A segment is an immutable object with a name, so any HTTP cache can serve it. A CDN edge fetches it from the origin once and serves every receiver behind it. Fan-out is the delivery network's job, bought as a commodity, and the origin sees one request per edge rather than one per receiver ([Comparison](comparison.md) §2).
+**Scaling.** A segment is an immutable object with a name, so any HTTP cache can serve it. A CDN edge fetches it from the origin once and serves every receiver behind it. Fan-out is the delivery network's job, bought as a commodity, and the origin sees one request per edge rather than one per receiver ([Comparison](comparison.md) §3).
 
-**Recovering.** Loss inside a fetch is repaired by the transport's own retransmission. A fetch that fails can be retried, from the same edge or another, for as long as the segment remains in its availability window. Redundant variant streams and content steering give a receiver a second path. So recovery is a property of the cache, not of a session ([Comparison](comparison.md) §3.2).
+**Recovering.** Loss inside a fetch is repaired by the transport's own retransmission. A fetch that fails can be retried, from the same edge or another, for as long as the segment remains in its availability window. Redundant variant streams and content steering give a receiver a second path. So recovery is a property of the cache, not of a session ([Comparison](comparison.md) §6.2).
 
 **Latency.** A receiver cannot fetch a segment until it is complete, and it starts a few segments back from the live edge so that it does not stall, so latency is a multiple of the segment duration. Low-Latency HLS cuts that multiple three ways. It publishes [partial segments](glossary.md) of a few hundred milliseconds before the whole segment is complete. It lets the receiver hold a playlist request open until the next part exists. And it sets the starting distance from the edge with [`PART-HOLD-BACK`](glossary.md), whose floor is the structural limit on its latency ([Comparison](comparison.md) §5).
 

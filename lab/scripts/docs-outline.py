@@ -10,7 +10,8 @@
 `outline` flags LONG (a heading over 40 characters) and NOCLAIM (a section that does not open on a
 bold sentence). `renumber` rewrites the § references to docs/X.md, in X itself and in every file
 citing it, from an `old<TAB>new` map; a section absent from the map takes its parent's new number.
-It changes README.md only with --readme, because the README's wording needs the author's approval.
+It changes README.md only with --readme, because the README's wording needs the author's approval,
+and a file with uncommitted changes only with --dirty, because those changes may be someone else's.
 """
 
 import argparse
@@ -208,11 +209,17 @@ def cmd_renumber(args):
         rewritten = re.sub(NUM, lambda n: new(n.group(0)), old)
         if rewritten != old:
             edits.setdefault(path, []).append((i, m.start(), m.end(), old, rewritten))
+    status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=ROOT).stdout
+    dirty = {line[3:] for line in status.split("\n") if line[:2].strip()}
     for path, items in sorted(edits.items()):
         rel = os.path.relpath(path, ROOT)
-        held = rel == "README.md" and not args.readme
+        held = ""
+        if rel == "README.md" and not args.readme:
+            held = "  (held: README)"
+        elif rel in dirty and not args.dirty:
+            held = "  (held: uncommitted changes)"
         for i, _, _, old, rewritten in items:
-            print(f"{rel}:{i + 1}: {old} -> {rewritten}{'  (held: README)' if held else ''}")
+            print(f"{rel}:{i + 1}: {old} -> {rewritten}{held}")
         if args.write and not held:
             lines = read(path).split("\n")
             for i, start, end, _, rewritten in sorted(items, key=lambda e: (e[0], -e[1])):
@@ -237,6 +244,7 @@ def main():
     s.add_argument("map")
     s.add_argument("--write", action="store_true")
     s.add_argument("--readme", action="store_true")
+    s.add_argument("--dirty", action="store_true")
     args = p.parse_args()
     handler = {"outline": cmd_outline, "refs": cmd_refs, "toc": cmd_toc, "check": cmd_check}
     return handler.get(args.cmd, cmd_renumber)(args) or 0

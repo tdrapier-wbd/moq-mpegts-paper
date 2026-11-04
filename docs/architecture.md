@@ -1,6 +1,6 @@
 # Reference Architecture: Broadcast-Grade Primary Distribution
 
-Status: working draft. Layer: **above the transport.** Everything in §4–§9 is required and owned by the distributor _whichever_ data plane carries the bytes, and is the substance of this repository. Only §6 (carriage lanes) and §8 (the fan-out fabric) are MoQ-specific; their segmented-HTTP counterparts are in [Comparison](comparison.md) §8 and §2.
+Status: working draft. Layer: **above the transport.** Everything in §4–§9 is required and owned by the distributor _whichever_ data plane carries the bytes, and is the substance of this repository. Only §6 (carriage lanes) and §8 (the fan-out fabric) are MoQ-specific; their segmented-HTTP counterparts are in [Comparison](comparison.md) §2 and §3.
 
 **Contents**
 
@@ -112,7 +112,7 @@ Solid lines are the media data plane; dotted lines are control-plane governance.
 
 ### 2.1 The satellite-hybrid topology, for contrast
 
-The architecture above puts a cache where satellite puts a footprint. **The satellite-hybrid model of [Comparison](comparison.md) §10.2 does the opposite: it keeps the space segment as the fan-out and adds IP only as a repair path.** It is drawn for the contrast about where the broadcast-grade work goes, not because this repository has measured any of it — everything here is _specified_, from VSF TR-06-4 Parts 7 and 8.
+The architecture above puts a cache where satellite puts a footprint. **The satellite-hybrid model of [Comparison](comparison.md) §1.2 does the opposite: it keeps the space segment as the fan-out and adds IP only as a repair path.** It is drawn for the contrast about where the broadcast-grade work goes, not because this repository has measured any of it — everything here is _specified_, from VSF TR-06-4 Parts 7 and 8.
 
 ```mermaid
 flowchart LR
@@ -411,7 +411,7 @@ How broadcast media is mapped onto the transport is more consequential than whic
 
 **The opaque lane's evidence is narrower than its architectural role** — on `moq-dev` it is the source's bytes on two clips on loopback and on one live feed across hosts and over the internet, but one run per arm and build ([Evidence](../lab/evidence.md) §3.1). Use it when a receiver needs carried wall clock or unknown provenance forbids assumptions; it forgoes per-track prioritisation and null-stripping savings if truly verbatim. **Rule: media-aware unless a specific feed or endpoint forces the fallback.**
 
-**For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps the opaque lane the fallback is its evidence, narrow as above, and its ecosystem: one open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §12). The ordering is therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which routes those are.
+**For TS-out that preference is by elimination, not by fit.** The media-aware lane's limits at a TS hand-off are structural (§6.2), and byte-faithful carriage has none of them by construction. What keeps the opaque lane the fallback is its evidence, narrow as above, and its ecosystem: one open implementation subscribes to whole-TS carriage ([Comparison](comparison.md) §9.3). The ordering is therefore current rather than settled. A scrambled feed forces the fallback outright; a route whose receivers cannot tolerate a non-conformant buffer schedule may too, once hardware has said which routes those are.
 
 ### 6.2 What survives the media-aware lane, and what does not
 
@@ -419,7 +419,7 @@ Measured ([Evidence](../lab/evidence.md) §3.1): every elementary stream, PID, `
 
 TDT/TOT are now proxied from the source (EIT needs absolute UTC; TOT carries DST policy). **Residual: emission timing** — the exporter re-emits on its own grid, **~14 s late** against a source true to half a second, and can step a receiver's clock backwards where the source ticks slower ([Evidence](../lab/evidence.md) §3.1). Audio frame-sync recovery is **signalled nowhere** at egress — an observability gap, not a carriage one.
 
-**What does not survive, structurally, is the multiplex as a schedule** ([Comparison](comparison.md) §8). The packet layout — each packet's position, and where the PCR and nulls sat — is not carried, so the subscriber becomes the multiplexer and must re-solve the T-STD. The exporters of moq 0.10.0 to 0.13.0 do not, and their wire fails the buffer model while passing P1/P2. A re-multiplexer re-solves it from that wire, offline and, as a laboratory stage, live at 2.2 s of presentation latency on one host; upstream's fixed-delay export, merged on October 2026 `main`, re-solves it in the subscriber itself ([Evidence](../lab/evidence.md) §3.16). The same loss moves the encoder's VBV budget into the edge gateway's buffer (§4.2). And a transmux publisher must read PES headers, so **TS-level scrambling cannot enter this lane**. A scrambled feed is descrambled first or carried opaquely. That last gate is narrow in primary distribution, where protection is the transport's ([Control plane](control-plane.md) §7.3), but it is absolute where it applies.
+**What does not survive, structurally, is the multiplex as a schedule** ([Comparison](comparison.md) §2). The packet layout — each packet's position, and where the PCR and nulls sat — is not carried, so the subscriber becomes the multiplexer and must re-solve the T-STD. The exporters of moq 0.10.0 to 0.13.0 do not, and their wire fails the buffer model while passing P1/P2. A re-multiplexer re-solves it from that wire, offline and, as a laboratory stage, live at 2.2 s of presentation latency on one host; upstream's fixed-delay export, merged on October 2026 `main`, re-solves it in the subscriber itself ([Evidence](../lab/evidence.md) §3.16). The same loss moves the encoder's VBV budget into the edge gateway's buffer (§4.2). And a transmux publisher must read PES headers, so **TS-level scrambling cannot enter this lane**. A scrambled feed is descrambled first or carried opaquely. That last gate is narrow in primary distribution, where protection is the transport's ([Control plane](control-plane.md) §7.3), but it is absolute where it applies.
 
 ### 6.3 What happens to the transport stream, end to end
 
@@ -443,7 +443,7 @@ The publisher is the point at which a feed enters the platform. Its job is to ac
 
 ## 8. The fan-out fabric _(MoQ-specific)_
 
-> The segmented-HTTP counterpart is an ordinary CDN cache — the same topology under a different name, since both collapse upstream carriage to one copy and leave the last mile as N unicast copies ([Comparison](comparison.md) §2, [Economics](economics.md) §4.4).
+> The segmented-HTTP counterpart is an ordinary CDN cache — the same topology under a different name, since both collapse upstream carriage to one copy and leave the last mile as N unicast copies ([Comparison](comparison.md) §3, [Economics](economics.md) §4.4).
 
 A relay terminates sessions from publishers and downstream subscribers, maintains per-track subscription state, forwards objects, and caches recent objects for late or recovering subscribers. It does **not** groom for IRD conformance, transcode, or make entitlement decisions beyond enforcing what the control plane already granted.
 
@@ -548,7 +548,7 @@ Almost nothing in §9 does. What differs is the set of failure modes the NOC wat
 | --- | --- | --- |
 | Liveness signal | subscription state; relay memory against its per-ingested-channel ceiling | playlist freshness — a stalled packager looks like a served-but-stale playlist, not a dropped connection |
 | Silent failure mode | **a stalled source behind a healthy session, indefinitely.** The idle timeout catches an _idle_ peer — a publisher with no subscriber dies to it at ~30 s and a frozen relay at 34.3 s, both at the 30 s default of the builds measured — but a publisher whose input has stopped is not idle from QUIC's point of view, and [T22](../lab/test-22-silent-media-plane-failure.md) froze one for 120 s without provoking a single error, timeout or reconnect anywhere. Detection has to come from the media plane, where it takes ~1.7 s. An edge stage configured `--on-stall continue` then re-hides it, emitting valid empty CBR | **a cache serving the last good segment indefinitely.** There is no connection to drop, so the classic "is it still up?" alarm does not fire |
-| A dead video stream | **contained to its PID**: every other stream flows on, and per-PID liveness names the dead one ([Evidence](../lab/evidence.md) §3.12) | **every stream stops, on the segmenter measured**: it closes a segment only at a random-access picture, so none closed while the video was dead, the audio held back with it, and every monitor saw only an absence ([Evidence](../lab/evidence.md) §3.12; one clip, loopback). A segmenter that also cuts at a time bound should contain it; that is untested |
+| A dead video stream | **contained to its PID**: every other stream flows on, and per-PID liveness names the dead one ([Evidence](../lab/evidence.md) §3.12) | **every stream stops, on the segmenter measured**: it closes a segment only at a random-access picture, so none closed while the video was dead, the audio held back with it, and every monitor saw only an absence ([Evidence](../lab/evidence.md) §3.12; one clip, loopback). A segmenter that also cuts at a time bound should contain it |
 | Buffer to alarm on | milliseconds; a stall is visible almost immediately | seconds; multi-second silences are _normal_, so an alarm below the segment duration chatters and one above it is slow. Measured, the groomer derives ~9 s against the MoQ lane's ~1 s |
 | Third-party surface | the relay, which you or a vendor run | the CDN — cache TTLs, purge behaviour and edge-node health, largely unobservable from your side |
 | Recovery | reconnect and resubscribe | re-fetch; the segment is still addressable, which is genuinely easier |

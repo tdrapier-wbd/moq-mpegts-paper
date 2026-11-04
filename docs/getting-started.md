@@ -104,7 +104,7 @@ TSDuck 3.45 prints `Error: hls: no URL specified` after the last segment; its ex
 "$REPO/lab/interop/validate-ts.sh" received-hls.ts --reference fixture.ts
 ```
 
-Expect `RESULT pass` again. This time the `byte-identical` line reports a slightly larger file: the packager starts each segment with a PAT and a PMT so that it can be decoded on its own ([Comparison](comparison.md) §8). Joined back together, the segments carry the source's own packets.
+Expect `RESULT pass` again. This time the `byte-identical` line reports a slightly larger file: the packager starts each segment with a PAT and a PMT so that it can be decoded on its own ([Comparison](comparison.md) §2). Joined back together, the segments carry the source's own packets.
 
 Stop the origin with Ctrl-C.
 
@@ -161,4 +161,4 @@ Stop everything with Ctrl-C, remove the route, and clean up with `rm -rf /tmp/gs
 
 Both paths deliver the service intact: the same services and elementary streams, no continuity error, no transport error, PAT and PMT present; after the pacer, every PCR is accurate and frequent enough at a constant mux rate. That is all the checks claim. They check interoperability, not conformance: the rest of TR 101 290, and the grooming of a production output ([Architecture](architecture.md) §4), go unexamined. One machine, no loss, no congestion and one 20 s file exercise none of what the paper measures: latency, redundancy, behaviour under loss, or capacity. Those results, and the conditions under which they hold, are in [Evidence](../lab/evidence.md).
 
-The commands were tested with the fixture alone. What each path does with a real feed's other components, such as SI tables, data streams and scrambled content, is examined lane by lane in the [Comparison](comparison.md) §8.
+The commands were tested with the fixture alone. What each path does with a real feed's other components, such as SI tables, data streams and scrambled content, is examined lane by lane in the [Comparison](comparison.md) §2.
