@@ -564,10 +564,15 @@ metric, grade after the writer exits, `rm -f` each target inside the measurement
 unattended local runs in `caffeinate -dims`, and void a short cell rather than score it clean.
 
 **A run measures the machine it runs on, so what else the machine does is part of the cell.**
-*(T9, T21, T26.)* Give soaks, memory arms and timing rigs a host window of their own, never beside a
+*(T9, T21, T26, T76.)* Give soaks, memory arms and timing rigs a host window of their own, never beside a
 build; run a deliberate saturation (the segmented fan-out) last in a session, and keep a segmented
 origin off any box carrying a MoQ relay. Cheap namespace cells fill a window whose main item is
-posting, reviewing or building.
+posting, reviewing or building. The host's own maintenance is in the window too: a nightly unattended
+upgrade restarted `systemd-networkd`, which replaced the resolver stub and silently dropped a running
+namespaced receiver's `resolv.conf` bind, so one leg of a 1+1 soak lost DNS for 2 h 51 min while
+its partner, pinned in the namespace's `hosts`, carried on. Hold the upgrade timers for a soak's
+length, pin every name a namespaced leg dials, and check a running leg's resolver from its process
+(`nsenter -t <pid> -m cat /etc/resolv.conf`).
 
 **Every statistic the experiment reports is an output the cell prints, and no cleanup job runs against a
 live results tree.** *(T8b C3.)* A mid-matrix janitor deleted four of six captures C3 needed summed. Sum

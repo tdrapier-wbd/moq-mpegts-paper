@@ -5,8 +5,9 @@ Layer: **lab record** — the measurements behind every claim in [Comparison](..
 [Architecture](../docs/architecture.md) and [Economics](../docs/economics.md), gathered across the
 experiments.
 
-This document is organised by **question**. Each subsection of §3 states the answer an operator would
-act on, the finding with the conditions under which it holds, and the experiment behind it. The
+This document is organised by **question**. Each subsection of §3 states the finding with the
+conditions under which it holds, and the experiment behind it; what an operator should do about it is
+the paper's ([Comparison](../docs/comparison.md), [Architecture](../docs/architecture.md)). The
 experimental record — procedures, exact commands, full result tables, pass criteria fixed in advance,
 and the corrections each experiment forced — is in the experiment files it cites ([index](README.md)).
 
@@ -98,11 +99,6 @@ A signpost, not a substitute: every entry carries its qualifications in the sect
 
 ### 3.1 Does the transport carry a broadcast mux intact? — Yes on all three lanes, each departing from verbatim in a different direction; the opaque lane does not depart
 
-**For an operator:** no lane is ruled out on clear content. SRT changes nothing; segmented HTTP adds
-at most a PAT/PMT pair per segment, received by an HLS input that hands on the segments' bytes; the
-media-aware lane loses the mux's timing, so it depends on the groomer of §3.2, and carries nothing
-scrambled.
-
 **Over the public internet, by one instrument on one window** ([T4](test-4-remote-e2e-srt.md),
 ungroomed): **byte-faithful SRT is transparent on every criterion** — 13 of 13 PIDs at their source
 numbers, SDT, NIT, TDT/TOT, splice PIDs, stuffing, the source mux rate exactly (9,945,951 b/s), the
@@ -164,11 +160,6 @@ announces no broadcast. TSDuck's HLS packager carries it only without `--intra-c
 
 ### 3.2 What does delivery do to the clock, and can it be repaired? — Yes, on both lanes and on the wire in software; the wire is not the file, and on the media-aware lane the repair costs latency
 
-**For an operator:** put the groomer in front of every receiver fed by the media-aware lane. With it,
-both lanes pass TR 101 290 PCR repetition in software at the socket, for a day on a synthetic source.
-Size its buffer from the source's peak coded frame, not its bitrate; conformance costs this lane
-latency (§3.11).
-
 **Ungroomed**, the PCR values the media-aware lane's re-mux writes leave 0–26 %
 of intervals above 40 ms depending on the source (P1, file;
 [T2](test-2-media-aware-transparency.md), [T7](test-7-timing-integrity.md)), while the
@@ -203,11 +194,6 @@ lane reaches the same wire standard** — 0 intervals above 40 ms and 0 PCR viol
 2 s segments it posts 311 continuity errors, and at 8 s none.
 
 ### 3.3 How does the transport behave under loss? — The controller decides it on every lane, and reordering does not separate substrate-matched lanes; matched with SRT on measured latency, the media-aware lane loses more across an outage, a killed publisher and a relay restarted without its reset key
-
-**For an operator:** on a lossy route the congestion controller and the QUIC stack decide what the
-media-aware lane delivers. Pin the controller, because the default is backend-specific, and choose it
-against the route's own conditions ([Architecture](../docs/architecture.md) §8.5); provisioning margin, queue
-discipline and the receiver's latency budget then govern the feed.
 
 **The controller, not the protocol** ([T8](test-8-srt-vs-moq.md); one run per condition on an
 over-provisioned EC2-to-home path, so non-congestive impairment; the ordering is the result). Under
@@ -317,16 +303,6 @@ every capacity rung (2.4 s against 13–18 s at 0.9× for 60 s), 21–22 s behin
 
 ### 3.4 Can redundancy be made hitless? — Yes; on the media-aware lane it takes a reference receiver, on the segmented lane a pair started together needs none
 
-**For an operator:** on the media-aware lane, build hitless redundancy at the receiver — two legs into
-an ST 2022-7 merge, each behind a stream-clocked groomer. A switched pair belongs at the receiver
-too, as two broadcasts, where legs start and restart apart at no cost and a fault costs a decoder
-0.8–2.9 s; in the relay every arrival is a switch, costing programme even at a clean exit. On
-the segmented lane a pair sharing one feed and one naming scheme is hitless with no merge only if
-started together, unless its packagers name segments by content time. Over one CDN, put the source
-protection in the CDN, as two such packagers' origins in one origin group, and the last mile's in two
-receivers at different edges merged the same way, each released on the origin's program date-time:
-a start alone sets their skew at random within about ±1.5 s.
-
 **At the transport.** Two subscribers of one broadcast produce byte-identical captures, the
 publisher redials and re-announces, and two relays cluster. On builds from moq 0.12.1 the exporter
 exits when its broadcast's last session drops, by upstream design, so a standing egress needs a
@@ -418,7 +394,8 @@ origin group, each behind a guard that answers 404 once its playlist stops advan
 failure of one pathway (its packager killed or frozen, its origin refused, hung or unreachable) cost
 either receiver or the merge anything, and no receiver waited over 5.2 s for a segment. Receivers at
 two edges, each holding a segment until its last PCR's program date-time plus
-1.5 s, started within 1.1 ms of each other in ten trials of ten, against −22 to 379 ms unreleased; a
+1.5 s, started within 1.1 ms of each other in ten trials of ten, against −22 to 379 ms unreleased (a
+start alone sets their skew at random within about ±1.5 s); a
 groomer taking segments in at 12 MB/s left two trials of ten 86–87 ms apart. The hold adds delay,
 receivers on two hosts add their clocks' offset, and a CDN failure is outside the design. **Damage in the feed reaches both pathways together** ([T62](test-62-origin-group-soak.md);
 72 h, one run): six continuity breaks withdrew both playlists until a window was whole, 54 s in
@@ -467,10 +444,6 @@ stops** (§3.12), or no receiver-side switch fires.
 
 ### 3.5 What does carriage cost on the wire? — Verbatim lanes 3–6 % over the source; the media-aware lane saves about the source's stuffing
 
-**For an operator:** the media-aware lane undercuts a byte pipe by the null stuffing it declines to
-carry, which the groomer regenerates, and by little more; quote the source's stuffing ratio with any
-cost figure.
-
 IP bytes per datagram on the sender's interface, two sources, each lane in one window (P1, wire, one
 run per cell): the reference clip EC2 to home at ~25 ms RTT ([T9](test-9-performance.md)),
 and the live feed across two EC2 zones ([T14](test-14-data-plane-comparison.md) § *On the live
@@ -496,12 +469,9 @@ below that** — §3.1's fidelity result and this cost are one finding.
 
 ### 3.6 What does a relay cost to run? — Cheap and predictable, with one bounded memory cost
 
-**For an operator:** size a relay on sessions and memory, not gigabits. CPU per subscriber is linear up
-to a hard collapse, each carried channel holds its retention window in memory, and churn is priced by
-the idle timeout (§3.14). Any capacity figure is a figure about a configuration. **A segmented
-origin's fan-out costs less still** ([T78](test-78-origin-under-many-edges.md); P1, private network,
-synthetic edges, one run): nginx serving 128 independent edges, 3.2 Gb/s, took 2.4 % of a core,
-fetches at 18 ms p99, with no knee.
+**A segmented origin's fan-out costs less still** ([T78](test-78-origin-under-many-edges.md); P1,
+private network, synthetic edges, one run): nginx serving 128 independent edges, 3.2 Gb/s, took 2.4 %
+of a core, fetches at 18 ms p99, with no knee.
 
 **Fan-out is linear in subscribers up to the relay's CPU** — cross-host, the relay alone on one
 instance, in one region at 0.72 ms RTT. On moq-relay 0.14.15 on quinn each subscriber costs **0.806 % of
@@ -557,9 +527,6 @@ congestion control; per-bitrate CPU figures from them are not for sizing.*
 
 ### 3.7 Does it interoperate? — Through eight of nine other relays after the join, and for a late subscriber through five
 
-**For an operator:** another vendor's MoQ relay can carry this feed, but test its join first; relay
-capacity is not yet a substitutable commodity.
-
 The test is media-level — a 20 s transport stream whose own continuity counters and PSI/SI are the
 oracle ([T11](test-11-interop.md); client public in [`interop/`](interop/README.md)) — run
 as the interop runner's two cases, a subscriber present from the start and one joining 8.5 s in, on
@@ -591,9 +558,6 @@ formats do not.
 
 ### 3.8 How do the data planes compare on delivery cadence? — Three structurally different classes
 
-**For an operator:** MoQ hands a groomer small bursts with short silences, SRT and RIST pass the source's
-pacing through unchanged, and segmented HTTP delivers megabyte bursts separated by seconds of silence.
-
 | Class | Granularity set by | Median burst | Largest gap | 10 ms peak/mean |
 |---|---|---|---|---|
 | **MoQ** | the object model — *re-paces* | 12.2–12.4 kB, whatever the source | 149 ms | 24× |
@@ -611,9 +575,6 @@ below a 2 ms threshold.*
 
 ### 3.9 Can low-latency HLS carry MPEG-TS in practice? — It can be published free, and nothing free receives it
 
-**For an operator:** TS-in-HLS runs at classic HLS latency unless a commercial ABR-to-TS receiver is
-bought.
-
 Apple's `mediastreamsegmenter` emits conformant low-latency playlists of MPEG-TS parts of 0.28–0.30 s,
 free and first time ([T14](test-14-data-plane-comparison.md)). **Both freely available clients
 that turn HLS back into a transport stream fetched zero parts and made zero blocking reloads**, while
@@ -625,10 +586,6 @@ products sell the missing receive stage. Without parts, one-second segments thro
 receiver deliver in 2,604 ms (§3.11).
 
 ### 3.10 Is there a credible entitlement substrate? — Enforcement is measured and exact; revocation is a poll with a floor above the proposed target
-
-**For an operator:** the relay enforces a licensing matrix exactly, but withdrawing a grant takes one to
-two re-check cadences and never less than about a second, three plausible cache settings silently
-disable it, and the revocable unit is the signing key, so provision one key per channel.
 
 **Enforcement is exact** ([T36](test-36-entitlement-enforcement.md),
 [T38](test-38-entitlement-estate.md), P2): eight refusing arms each delivered zero payload bytes
@@ -664,10 +621,6 @@ grants on any namespace of their service, and on v0.3.6 a live session outlives 
 every session. **Unmeasured**: a mesh, a real rights system in place of the stub, and rights windows.
 
 ### 3.11 How long does a picture take to cross each data plane? — MoQ by 11× where nothing is conformant, by 6 % over segmented HTTP at P1/P2
-
-**For an operator:** at the configurations measured conformant, SRT and RIST deliver fastest,
-because their latency is a jitter-buffer dial on the source's own grid; MoQ and segmented HTTP sit
-within 6 %, and MoQ's far lower non-conformant figure is not a deployment latency.
 
 Measured source to groomed egress on each picture's PTS, **every figure paired with the conformance of
 the same bytes** ([T18](test-18-delivery-latency.md), P2; 90 s cells, an EC2 origin over a 12.8 ms
@@ -714,10 +667,6 @@ not separated anywhere. On CUBIC neither MoQ lane carries 0.1 %, nor segmented H
 
 ### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes if it has stopped completely, and only from per-stream instrumentation if it has stopped partly
 
-**For an operator:** session state, process liveness and the TR 101 290 P1 set do not catch a stalled
-programme, and P1 misses a partial stall whose PID stays alive. Specify per-PID access-unit liveness at the groomed
-output, and do not leave the groomer to carry on at CBR when the programme stops.
-
 **The transport never detects a stalled source**
 ([T22](test-22-silent-media-plane-failure.md), P2): with the source frozen for 120 s,
 publisher, relay and exporter logged nothing. The groomer's content-liveness alarm fired at
@@ -743,13 +692,6 @@ silent downstream**: under `continue` it emits valid CBR with no programme indef
 carrier stops 0.1 s after the programme. Recovery resumes at the live edge; only redundancy recovers the loss.
 
 ### 3.13 Which PCR timeline events does the lane survive? — All five placed classes on the September 2026 builds measured; a real feed steps back, which ends a release's import and which late October 2026 `main` republishes across
-
-**For an operator:** on the builds measured in September 2026, a PCR base rollover, a forward jump,
-a rewind and an encoder restart each cross the lane with no programme hole and no deep buffer.
-**From moq 0.14.0 a backward timestamp step ends the import instead, flagged or not, on every stream
-kind measured**, so a release is republished at each step behind a supervisor, for 2.8–3.8 s of
-programme. **Late October 2026 `main` republishes in the import**, at a step back or an unflagged
-one forward, and an encoder switch costs 0.16 s on a synthetic stimulus and 1.6 s on the captured one.
 
 **A real feed does step back, where its contribution switches between two encodes whose clocks are
 not locked** ([T34](test-34-real-encoder-severity.md) § *A switch between two encodes*; P1, the
@@ -805,10 +747,6 @@ differed by 0.2–3.5 % on the capture. A 1+1 ingest pair and the SRT gateway pa
 
 ### 3.14 Can one receiver degrade the others? — Not their media; the relay pays in memory, and the price is set by a knob
 
-**For an operator:** a misbehaving receiver cannot damage another subscriber's programme, but receivers
-that crash or churn can drive relay memory into gigabytes. Size that exposure through the QUIC idle
-timeout; a static segmented origin shows no such term.
-
 [T25](test-25-isolation-under-abuse.md) (P1; accidental abuse through the shipped CLI, **not
 a security assessment**). **The media plane is isolated in every arm**: well-behaved subscribers
 deliver within **8 KB of control across 198 MB** at 0 continuity errors, and the relay never refuses
@@ -825,8 +763,8 @@ victim captures byte-identical (wire, P2) — a structural result scoped to a *s
 
 ### 3.15 Does the subscriber survive the loss it is designed to absorb? — With both upstream fixes none exited, consistent with the fix but not established by the count
 
-**For an operator:** a subscriber that exits on a group it was designed to discard leaves a clean
-capture and no programme; only process supervision detects it.
+A subscriber that exits on a group it was designed to discard leaves a clean capture and no
+programme, so only process supervision detects it.
 
 Through a congested bottleneck, 0 of 10 subscribers exited with both upstream fixes, against 4 of 15
 on a build without them ([T8b](test-8b-congestion-control.md); P1, three flows, five
@@ -836,14 +774,6 @@ provokes the failure
 ([upstream contributions](upstream-contributions.md)).
 
 ### 3.16 Is the media-aware lane's TS-out a conformant transport stream? — Not through a pacing groomer: its P1/P2-conformant wire fails the buffer model on the lane's packet order, which only a re-multiplexing stage repairs
-
-**For an operator:** a P1/P2 pass on the media-aware lane does not make its output a conformant
-transport stream, and the pacing groomer cannot close the remainder. For TS-out to an IRD the lane needs
-a stage that re-multiplexes against the decoder model. A laboratory re-multiplexer does this live at
-2.2 s of presentation latency, most of it set by the lane; upstream's fixed-delay export, merged in
-October 2026, builds it into the subscriber and keeps every track and buffer on every join tried;
-sending ahead within the delay, it presents about 1.1 s behind at a 1 s delay. Byte-faithful carriage
-keeps the model behind an edge stage that places each packet on the source's PCR.
 
 **Measured** ([T44](test-44-tstd-grading.md); P1, wire, loopback, one clip, 300 s arms): four
 media-aware configurations from moq 0.10.0 to 0.13.0, each reproducing its P1/P2 pass, against
