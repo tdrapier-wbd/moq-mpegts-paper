@@ -79,9 +79,14 @@ def main():
 			  f"groups with eos=1 at I that M kept: "
 			  f"{[g for g in full if g not in m_lost and i.get((g, objs[g] - 1), (0, 0, 0))[2] == 1]}")
 		mlog = os.path.join(run, "m.log")
-		warned = sorted(int(s) for s in STITCH.findall(open(mlog, errors="replace").read())) if os.path.exists(mlog) else []
+		warned = (sorted(int(s) for s in STITCH.findall(open(mlog, errors="replace").read()))
+				  if os.path.exists(mlog) else [])
 		print(f"  groups I received on two streams: {split_groups(os.path.join(run, 'i.log'))}; "
 			  f"M's stitch warnings: {warned}")
+		unended = [g for g in full if i_groups and g >= min(i_groups) and not any(
+			e == 1 for (gg, _), (_, _, e) in i.items() if gg == g)]
+		print(f"  groups from I's join whose stream I never saw end: {unended}; "
+			  f"F lacks the final object of: {[g for g in full if (g, objs[g] - 1) not in f]}")
 
 
 if __name__ == "__main__":

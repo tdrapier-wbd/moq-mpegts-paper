@@ -3,7 +3,10 @@
 # legs on the origin group, aligned, then the receivers' logs and both origins' access logs for the
 # cell's span, and t61-report.py over them.
 #
-#   t61-cell.sh CELL [SECONDS]     CELL: clean seg-kill seg-freeze origin-down ngx-hang block
+#   t61-cell.sh CELL [SECONDS]     CELL: clean seg-kill seg-freeze origin-down ngx-hang block leg-cut
+#
+# P1-aq: B8=~ubuntu/p59/p1aq-stock-recv.py P1AQ_FETCHER=tsp, and p1aq-rejoin.py in ~ubuntu/p59, which
+# grades leg-cut's rejoin and, as its negative control, clean over the same span.
 
 set -uo pipefail
 CELL=${1:?usage: t61-cell.sh CELL [SECONDS]}
@@ -23,3 +26,10 @@ for o in a b; do
 	ssh -o BatchMode=yes "$h" "awk -v a=$t0 -v b=$t1 '\$1 >= a && \$1 <= b' ~/p59/ngx/access.log" >"$local_dir/access-$o.log"
 done
 python3 "$H/t61-report.py" "$local_dir" | tee "$local_dir/report.json"
+case $CELL in
+leg-cut) span="" ;;
+clean) span="--span 120 150" ;;
+*) exit 0 ;;
+esac
+ssh -o BatchMode=yes moq-tertiary "python3 ~/p59/p1aq-rejoin.py $run $span --tail-s $((SECS - 12))" |
+	tee "$local_dir/rejoin.json"

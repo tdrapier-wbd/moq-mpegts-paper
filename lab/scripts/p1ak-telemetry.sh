@@ -5,7 +5,7 @@
 #   p1ak-telemetry.sh <arm> <out-dir>        arm = control | video | audio | stall | origin
 #
 # Source: the clip through ts-partial-stall.py (control passes it unchanged) and `tsp -P regulate`,
-# into t61-epochseg.py --pdt, the deployed segmenter, served by a local HTTP origin. Receiver:
+# into the segmenter with --pdt (SEG, by default t61-epochseg.py, the deployed one), served by a local HTTP origin. Receiver:
 # b8-hls-recv.py with CMCD v2 in request mode and event mode to p1ak-collector.py; its output goes
 # to TSDuck's `influx --tr-101-290`, posting to the same collector, and to ts-liveness.py, T27's
 # per-PID detector. The fault, AT seconds into the source:
@@ -15,7 +15,8 @@
 # events.log has the wall time of each step; p1ak-grade.py reads the rest.
 #
 # Env: CLIP (~/contrib-10m.ts), SECS (170), AT (50), DUR (60), STALL (30), JOIN (10, the receiver's
-#      start after the source's), PCR_TIMEOUT (6, ts-liveness.py's), ORIGIN_PORT (18501), COL_PORT (18502)
+#      start after the source's), PCR_TIMEOUT (6, ts-liveness.py's), ORIGIN_PORT (18501), COL_PORT (18502),
+#      SEG (the segmenter, t61-epochseg.py; t79-epochseg.py adds the time-bound cut)
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -31,6 +32,7 @@ JOIN=${JOIN:-10}
 PCR_TIMEOUT=${PCR_TIMEOUT:-6}
 ORIGIN_PORT=${ORIGIN_PORT:-18501}
 COL_PORT=${COL_PORT:-18502}
+SEG=${SEG:-$HERE/t61-epochseg.py}
 
 # Passes the source through and records the wall time of its first byte: the fault's clock.
 TAP='import sys, time
@@ -86,6 +88,7 @@ origin() {
 {
 	echo "arm=$ARM secs=$SECS at=$AT dur=$DUR stall=$STALL join=$JOIN"
 	echo "clip=$(basename "$CLIP") size=$(stat -f %z "$CLIP" 2>/dev/null || stat -c %s "$CLIP")"
+	echo "seg=$(basename "$SEG") sha1=$(shasum "$SEG" | cut -c1-12)"
 	echo "tsp=$(tsp --version 2>&1 | head -1)"
 	echo "started=$(date -u +%FT%TZ)"
 } >"$OUT/meta.txt"
@@ -94,7 +97,7 @@ python3 "$HERE/p1ak-collector.py" "$COL_PORT" "$OUT/collector.jsonl" &
 PIDS+=($!)
 origin
 mkfifo "$OUT/src.fifo"
-python3 "$HERE/t61-epochseg.py" "$OUT/www" --file "$OUT/src.fifo" --pdt >"$OUT/seg.log" 2>&1 &
+python3 "$SEG" "$OUT/www" --file "$OUT/src.fifo" --pdt >"$OUT/seg.log" 2>&1 &
 SEG_PID=$!
 PIDS+=("$SEG_PID")
 

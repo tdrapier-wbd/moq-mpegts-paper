@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""t61-epochseg.py with a time-bound cut, so that dead video no longer stops the lane (lab/test-79-*.md).
+
+What it adds: segment K also closes, when no random-access point has closed it, at the first PCR
+packet whose content time reaches (K + 1) * D + B, B being --cut-after; the new segment K + 1
+starts there without a random-access point ("timed k=K+1" on stderr). Content time off the video
+is the PCR plus the lead (PTS less the last PCR) of the last video PES, so it is read from the
+stream's bytes and two packagers reading the same feed cut the same packet. B must exceed the
+stream's longest wait for a random-access point after an epoch starts plus the lead's swing
+between adjacent frames, or healthy video is cut at the bound too, and stay under D, so that a
+timed segment takes the epoch it starts in and the numbers stay consecutive. A packager that has
+seen no video PES since it started cuts nothing at the bound; one that has not yet opened a
+segment opens none, as before. The rest is t61-epochseg.py's:
+
+Each segment starts at the first random-access point (the adaptation field's flag, on the video
+PID) at or after a multiple of D of content time, and is named and numbered by that multiple:
+seg-K.ts, media sequence K, K = PTS // D, the 33-bit PTS unwrapped against the wall clock (which
+two hosts agree on to far better than the 13 h that would make them differ). Nothing in a segment,
+its name, its duration or the playlist depends on when the packager joined or on the host, so two
+packagers reading the same feed publish the same objects, and a CDN can fetch any of them from
+either origin. A segment is an exact slice of the input (no PSI is inserted), so consecutive
+segments concatenate to the input stream.
+
+A packager publishes only while it is provably such a copy: a continuity-counter error, a stall in
+the input or the PTS going back withdraws the playlist at once and holds it until a full window
+of intact segments has been cut again. A pathway that has just joined, or lost input, therefore
+answers 404 for its playlist rather than a window its peer does not share.
+
+With --peer (T76), a continuity error no longer withdraws by itself. Every segment's SHA-1 is
+written beside it (seg-K.sha1), and a segment cut across an error is held out of the playlist
+while the peer's sidecar for K is read: the same digest is damage both pathways carry, published;
+a different one is damage of this pathway's own, so its segment is deleted (the CDN's request for
+it then fails over to the peer) and the playlist withdrawn as before; no sidecar by --peer-wait
+(the peer down, or not cutting K) leaves nothing to differ from, published. A stall, a lost sync
+byte and the PTS going back still withdraw at once.
+
+With --pdt, each segment carries EXT-X-PROGRAM-DATE-TIME: the wall-clock time of its first PCR,
+as the PCR plus an offset fixed from the soonest arrival over the first --pdt-settle seconds after
+a reset. It follows the content exactly and differs between origins only by their offsets, so a
+receiver can release every segment at the same wall-clock time whichever origin or edge served it
+(T63). It is multiplex time, not presentation time: the two differ by the encoder's PTS lead.
+
+  t79-epochseg.py DIR [--group 239.255.0.1:5000] [--duration 2] [--cut-after 1.9] [--window 6]
+                  [--extra 3] [--target 4] [--pdt] [--pdt-settle 2] [--file TS]
+                  [--peer URL --peer-header NAME:FILE --peer-wait 3]
+
+One line per event on stderr: "<unix time> seg k=K dur=S bytes=N sha1=H", "timed k=K", "playlist",
+"reset why", "pdt offset=S"; with --peer, "damaged k=K why", then "shared k=K", "unshared k=K" or "unverified
+k=K why".
+"""
+import argparse
+import datetime
+import hashlib
+import os
+import queue
+import re
+import socket
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+
+WRAP = 1 << 33
+HALF = 1 << 32
+STALL_S = 0.5
+
+
+def pes_pts(p, off):
+	if p[off:off + 3] != b"\x00\x00\x01" or not p[off + 7] & 0x80:
+		return None
+	b = p[off + 9:off + 14]
+	return ((b[0] >> 1) & 7) << 30 | b[1] << 22 | (b[2] >> 1) << 15 | b[3] << 7 | b[4] >> 1
+
+
+def pcr_of(p):
+	"""The packet's PCR base (90 kHz), or None."""
+	if p[3] & 0x20 and p[4] >= 7 and p[5] & 0x10:
+		return p[6] << 25 | p[7] << 17 | p[8] << 9 | p[9] << 1 | p[10] >> 7
+	return None
+
+
+class Peer:
+	"""The other pathway's sidecars: the digest it cut for K, or None if it has none by the deadline."""
+
+	def __init__(self, url, headers, wait):
+		self.url = url if url.endswith("/") else url + "/"
+		self.headers = headers
+		self.wait = wait
+
+	def digest(self, k):
+		deadline = time.monotonic() + self.wait
+		why = "unreachable"
+		while True:
+			try:
+				req = urllib.request.Request(f"{self.url}seg-{k}.sha1", headers=self.headers)
+				with urllib.request.urlopen(req, timeout=1) as r:
+					return r.read().decode().strip(), "answered"
+			except urllib.error.HTTPError as e:
+				why = f"http {e.code}"
+			except (urllib.error.URLError, OSError) as e:
+				why = "missing" if isinstance(getattr(e, "reason", e), FileNotFoundError) else "unreachable"
+			if time.monotonic() >= deadline:
+				return None, why
+			time.sleep(0.1)
+
+
+class Segmenter:
+	def __init__(self, out, duration, window, extra, target, pdt=False, pdt_settle=2.0, peer=None, cut_after=1.9):
+		self.out = out
+		self.span = round(duration * 90000)
+		self.bound = round(cut_after * 90000)
+		self.lead = None  # PTS less the last PCR, at the last video PES (90 kHz)
+		self.last_pcr = None
+		self.window = window
+		self.extra = extra
+		self.target = target
+		self.pdt = pdt
+		self.pdt_settle = pdt_settle
+		self.peer = peer
+		self.playlist = os.path.join(out, "index.m3u8")
+		self.pmt = None
+		self.video = None
+		self.pcr_pid = None
+		self.cc = {}
+		self.last_rx = None
+		self.gen = 0
+		self.held = set()
+		self.answers = queue.SimpleQueue()
+		self.asking = []
+		self.reset("start")
+
+	def event(self, what, detail=""):
+		print(f"{time.time():.3f} {what} {detail}".rstrip(), file=sys.stderr, flush=True)
+
+	def reset(self, why):
+		for k in self.held:
+			self.remove(k)
+		self.held = set()
+		self.gen += 1
+		self.damage = None
+		self.edge_k = None
+		self.cur = None
+		self.done = []
+		self.cc.clear()
+		self.offset = None  # wall clock less PCR time, s: the soonest arrival while settling
+		self.settle_until = None
+		self.settled = False
+		try:
+			os.remove(self.playlist)
+		except FileNotFoundError:
+			pass
+		self.event("reset", why)
+
+	def datagram(self, data, now):
+		if self.last_rx is not None and now - self.last_rx > STALL_S:
+			self.reset(f"input stalled {now - self.last_rx:.3f}s")
+		self.last_rx = now
+		for i in range(0, len(data) - 187, 188):
+			self.packet(data[i:i + 188], now)
+		self.settle()
+
+	def settle(self):
+		while True:
+			try:
+				gen, k, mine, theirs, why = self.answers.get_nowait()
+			except queue.Empty:
+				return
+			if gen != self.gen or k not in self.held:
+				continue
+			self.held.discard(k)
+			if theirs is not None and theirs != mine:
+				self.event("unshared", f"k={k}")
+				self.remove(k)
+				self.reset(f"unshared damage k={k}")
+				continue
+			self.event("shared" if theirs is not None else "unverified", f"k={k}" + ("" if theirs else f" {why}"))
+			if len(self.done) == self.window and not self.held:
+				self.publish()
+
+	def ask(self, gen, k, mine):
+		theirs, why = self.peer.digest(k)
+		self.answers.put((gen, k, mine, theirs, why))
+
+	def finish(self):
+		"""File input: let every pending question be answered before exiting."""
+		for t in self.asking:
+			t.join()
+		self.settle()
+
+	def remove(self, k):
+		for name in (f"seg-{k}.ts", f"seg-{k}.sha1"):
+			try:
+				os.remove(os.path.join(self.out, name))
+			except FileNotFoundError:
+				pass
+
+	def packet(self, p, now):
+		if p[0] != 0x47:
+			self.reset("sync")
+			return
+		pid = (p[1] & 0x1F) << 8 | p[2]
+		afc = p[3] >> 4 & 3
+		if afc & 1 and pid != 0x1FFF:
+			cc = p[3] & 0xF
+			last = self.cc.get(pid)
+			if last is not None and cc != (last + 1) & 0xF and cc != last:
+				if self.peer and self.cur is not None:
+					self.damage = self.damage or f"cc pid={pid}"
+				else:
+					self.reset(f"cc pid={pid}")
+			self.cc[pid] = cc
+		pusi = p[1] & 0x40
+		if pusi and (pid == 0 or pid == self.pmt):
+			self.psi(pid, p, afc)
+		elif pusi and pid == self.video:
+			off = 4 + (1 + p[4] if afc & 2 else 0)
+			pts = pes_pts(p, off) if off + 14 <= 188 else None
+			if pts is not None:
+				ref = int(now * 90000)
+				v = ref + ((pts - ref + HALF) % WRAP) - HALF
+				if afc & 2 and p[4] and p[5] & 0x40:
+					self.rap(v, now)
+				if self.last_pcr is not None:
+					self.lead = v - self.last_pcr
+		if pid == self.pcr_pid and (base := pcr_of(p)) is not None:
+			self.pcr(base, now)
+		if self.cur is not None:
+			self.cur[2] += p
+
+	def pcr(self, base, now):
+		ref = int(now * 90000)
+		u = ref + ((base - ref + HALF) % WRAP) - HALF
+		self.last_pcr = u
+		t = u / 90000
+		if self.pdt:
+			if self.settle_until is None:
+				self.settle_until = now + self.pdt_settle
+			if now <= self.settle_until:
+				self.offset = now - t if self.offset is None else min(self.offset, now - t)
+			elif not self.settled:
+				self.settled = True
+				self.event("pdt", f"offset={self.offset:.6f}")
+		if self.cur is not None and self.lead is not None:
+			c = u + self.lead
+			if c >= (self.cur[0] + 1) * self.span + self.bound:
+				k = (c - self.bound) // self.span
+				if k > self.cur[0] + 1:
+					self.event("gap", f"k={self.cur[0]}->{k}")
+				self.close(c)
+				self.event("timed", f"k={k}")
+				self.edge_k = k
+				self.cur = [k, c, bytearray(), None]
+		if self.cur is not None and self.cur[3] is None:
+			self.cur[3] = t
+
+	def psi(self, pid, p, afc):
+		off = 4 + (1 + p[4] if afc & 2 else 0)
+		s = p[off + 1 + p[off]:]
+		if pid == 0:
+			self.pmt = (s[10] & 0x1F) << 8 | s[11]
+		elif self.video is None:
+			self.pcr_pid = (s[8] & 0x1F) << 8 | s[9]
+			end = 3 + ((s[1] & 0xF) << 8 | s[2]) - 4
+			j = 12 + ((s[10] & 0xF) << 8 | s[11])
+			while j + 5 <= end:
+				if s[j] in (0x02, 0x1B, 0x24):
+					self.video = (s[j + 1] & 0x1F) << 8 | s[j + 2]
+					return
+				j += 5 + ((s[j + 3] & 0xF) << 8 | s[j + 4])
+
+	def rap(self, v, now):
+		k = v // self.span
+		prev, self.edge_k = self.edge_k, k
+		if prev is None or k == prev:
+			return
+		if k < prev:
+			self.reset(f"pts went back {prev}->{k}")
+			self.edge_k = k
+			return
+		if self.cur is not None:
+			self.close(v)
+		if k > prev + 1:
+			self.event("gap", f"k={prev}->{k}")
+		self.cur = [k, v, bytearray(), None]
+
+	def close(self, v):
+		k, v0, buf, pcr0 = self.cur
+		name = f"seg-{k}.ts"
+		digest = hashlib.sha1(buf).hexdigest()
+		tmp = os.path.join(self.out, f".{name}.tmp")
+		with open(tmp, "wb") as f:
+			f.write(buf)
+		os.replace(tmp, os.path.join(self.out, name))
+		if self.peer:
+			tmp = os.path.join(self.out, f".seg-{k}.sha1.tmp")
+			with open(tmp, "w") as f:
+				f.write(digest + "\n")
+			os.replace(tmp, os.path.join(self.out, f"seg-{k}.sha1"))
+		dur = (v - v0) / 90000
+		self.done.append((k, dur, name, pcr0))
+		del self.done[:-self.window]
+		self.event("seg", f"k={k} dur={dur:.3f} bytes={len(buf)} sha1={digest[:16]}")
+		if self.damage:
+			self.event("damaged", f"k={k} {self.damage}")
+			self.damage = None
+			self.held.add(k)
+			t = threading.Thread(target=self.ask, args=(self.gen, k, digest), daemon=True)
+			t.start()
+			self.asking = [a for a in self.asking if a.is_alive()] + [t]
+		if len(self.done) == self.window and not self.held:
+			self.publish()
+		self.prune(self.done[0][0] - self.extra)
+
+	def publish(self):
+		lines = ["#EXTM3U", "#EXT-X-VERSION:3", f"#EXT-X-TARGETDURATION:{self.target}",
+				f"#EXT-X-MEDIA-SEQUENCE:{self.done[0][0]}"]
+		for _, dur, name, pcr0 in self.done:
+			if self.pdt and pcr0 is not None and self.settled:
+				at = datetime.datetime.fromtimestamp(pcr0 + self.offset, datetime.timezone.utc)
+				lines.append("#EXT-X-PROGRAM-DATE-TIME:" + at.isoformat(timespec="milliseconds")[:-6] + "Z")
+			lines += [f"#EXTINF:{dur:.3f},", name]
+		tmp = self.playlist + ".tmp"
+		with open(tmp, "w") as f:
+			f.write("\n".join(lines) + "\n")
+		os.replace(tmp, self.playlist)
+		self.event("playlist", f"msn={self.done[0][0]}")
+
+	def prune(self, below):
+		for f in os.listdir(self.out):
+			m = re.fullmatch(r"seg-(\d+)\.(ts|sha1)", f)
+			if m and int(m.group(1)) < below:
+				os.remove(os.path.join(self.out, f))
+
+
+def main():
+	ap = argparse.ArgumentParser()
+	ap.add_argument("dir")
+	ap.add_argument("--group", default="239.255.0.1:5000")
+	ap.add_argument("--duration", type=float, default=2.0, help="epoch D, seconds")
+	ap.add_argument("--cut-after", type=float, default=1.9,
+					help="B: seconds into an epoch after which, with no random-access point, it is cut anyway")
+	ap.add_argument("--window", type=int, default=6, help="segments listed")
+	ap.add_argument("--extra", type=int, default=3, help="segments kept after leaving the list")
+	ap.add_argument("--target", type=int, default=4, help="EXT-X-TARGETDURATION, the same on every origin")
+	ap.add_argument("--pdt", action="store_true", help="EXT-X-PROGRAM-DATE-TIME on every segment")
+	ap.add_argument("--pdt-settle", type=float, default=2.0, help="seconds to settle the PCR offset")
+	ap.add_argument("--file", help="read a TS file instead of the group (tests)")
+	ap.add_argument("--peer", help="the other pathway's segment directory, as a URL (http:// or file://)")
+	ap.add_argument("--peer-header", metavar="NAME:FILE", help="a header for the peer, its value read from FILE")
+	ap.add_argument("--peer-wait", type=float, default=3.0, help="seconds to wait for the peer's sidecar")
+	args = ap.parse_args()
+	if not 0 < args.cut_after < args.duration:
+		ap.error("--cut-after must lie between 0 and --duration")
+	os.makedirs(args.dir, exist_ok=True)
+	peer = None
+	if args.peer:
+		headers = {}
+		if args.peer_header:
+			name, path = args.peer_header.split(":", 1)
+			with open(path) as f:
+				headers[name] = f.read().strip()
+		peer = Peer(args.peer, headers, args.peer_wait)
+	seg = Segmenter(args.dir, args.duration, args.window, args.extra, args.target, args.pdt, args.pdt_settle, peer,
+					args.cut_after)
+	if args.file:
+		with open(args.file, "rb") as f:
+			while data := f.read(1316):
+				seg.datagram(data, time.time())
+		seg.finish()
+		return
+	group, port = args.group.rsplit(":", 1)
+	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 16 << 20)
+	s.bind((group, int(port)))
+	s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+				socket.inet_aton(group) + socket.inet_aton("127.0.0.1"))
+	while True:
+		seg.datagram(s.recv(65536), time.time())
+
+
+if __name__ == "__main__":
+	main()

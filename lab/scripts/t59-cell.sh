@@ -3,13 +3,14 @@
 #
 #   t59-cell.sh CELL [SECONDS]      CELL: clean pack-kill pack-freeze origin-down recv-restart loss inject
 #                                   T61's: seg-kill seg-freeze ngx-hang block (and clean, origin-down)
+#                                   P1-aq's: leg-cut (leg A's namespace drops every packet, both ways)
 #
 # Leg A's receiver starts at 0 and leg B's at 20 s; the cell's event strikes pathway A at 120 s.
 # Each event is stamped by the host that performs it, so events.txt is on the hosts' clocks.
 # The packagers are not started here: they run across cells (`inject` expects both restarted
 # without --slice-only beforehand). Hosts by ssh alias: PA (pathway A), PB, RX (receivers).
 # LEG_PATH puts both legs on one path (T61: g, the origin group); ALIGN_MS reaches the groomers,
-# SETTLE (s, 40) the grader's b-settled cut.
+# B8 and P1AQ_FETCHER the legs' fetcher (P1-aq), SETTLE (s, 40) the grader's b-settled cut.
 
 set -uo pipefail
 CELL=${1:?usage: t59-cell.sh CELL [SECONDS]}
@@ -30,7 +31,8 @@ T0=$EPOCHREALTIME
 PACER=${PACER:-/home/ubuntu/pacer-5626c88/mpegts-pacer}
 LEG_A=${LEG_PATH:-a}
 LEG_B=${LEG_PATH:-b}
-rx() { ssh "${SSH[@]}" "$RX" "cd ~/p59 && sudo PACER=$PACER ALIGN_MS=${ALIGN_MS:-} bash t59-legs.sh $*"; }
+FETCH="${B8:+B8=$B8} ${P1AQ_FETCHER:+P1AQ_FETCHER=$P1AQ_FETCHER}"
+rx() { ssh "${SSH[@]}" "$RX" "cd ~/p59 && sudo PACER=$PACER ALIGN_MS=${ALIGN_MS:-} $FETCH bash t59-legs.sh $*"; }
 pa() { ssh "${SSH[@]}" "$PA" "cd ~/p59 && NS=a bash t59-pathway.sh $*"; }
 # Run an event on a host and stamp it there: "name epoch_ns" lines, as t55-grade.py reads them.
 ev() {
@@ -51,7 +53,7 @@ rx leg-start a "$RUN" "$URL/$LEG_A/index.m3u8" "$SECS"
 at 20
 rx leg-start b "$RUN" "$URL/$LEG_B/index.m3u8" "$((SECS - 20))"
 
-L="cd ~/p59 && sudo PACER=$PACER ALIGN_MS=${ALIGN_MS:-} bash t59-legs.sh"
+L="cd ~/p59 && sudo PACER=$PACER ALIGN_MS=${ALIGN_MS:-} $FETCH bash t59-legs.sh"
 P="cd ~/p59 && NS=a bash t59-pathway.sh"
 G="cd ~/p59 && bash t61-origin.sh"
 at 120
@@ -88,6 +90,12 @@ loss)
 	ev loss-on "$RX" "$L netem a \"loss 2% delay 20ms\""
 	at 180
 	ev loss-off "$RX" "$L netem a off"
+	;;
+leg-cut)
+	drop="tc qdisc replace dev v59a root netem loss 100%"
+	ev cut-on "$RX" "sudo $drop && sudo ip netns exec p59a ${drop/v59a/v59an}"
+	at 150
+	ev cut-off "$RX" "sudo tc qdisc del dev v59a root; sudo ip netns exec p59a tc qdisc del dev v59an root"
 	;;
 *) echo "unknown cell $CELL" >&2 ;;
 esac

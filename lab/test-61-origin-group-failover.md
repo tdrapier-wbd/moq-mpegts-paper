@@ -82,3 +82,18 @@ The first runs of `seg-kill`, `seg-freeze` and `origin-down` issued their failur
 5. **Failback holds:** A answered `/g/` again within 6.3 s of every restoration. After a packager restart its playlist stays withdrawn until a new window is whole, so B went on answering the playlist for 11.7–13.3 s.
 
 **The skew on one path is not bounded at 50 ms.** Two cells of six exceeded a Class B receiver's window (228 and 232 ms), though both legs read one playlist from one edge. Each leg's groomer reports how much sooner than its starting point a later delivery came (`align_gain_us`). The difference between the two legs' gains matched the skew to within 32 ms in eight of the nine cells run, void runs included (in the two cells above, B gained 276–293 ms and A 47–75 ms). Each leg ties its clock to the soonest delivery in its own 30 s window, and with a playlist cached 1 s and polled every 250 ms, one window's soonest delivery can fall a quarter-second short of the path's. T60's follow-up grades the uncached playlist against this.
+
+## Stock receivers behind the group (P1-aq), criteria fixed before running
+
+[T6](test-6-relay-resilience.md) found no stock TS client that survives an origin restart, its clients facing the origin; behind the group, neither receiver above saw a failed fetch. P1-aq puts TSDuck's `tsp --realtime -I hls --live` in both legs' fetchers, each under [`p1aq-stock-recv.py`](scripts/p1aq-stock-recv.py), which restarts it a second after it exits and logs each burst of output as a segment (`B8=<it> P1AQ_FETCHER=tsp t61-cell.sh CELL`). The rest is the environment above. The six cells, and a seventh on one receiver's path:
+
+| Cell | At 120 s | At 150 s | What CloudFront should see |
+| --- | --- | --- | --- |
+| `leg-cut` | leg A's namespace drops every packet, both ways | restored | nothing |
+
+1. **Void** as criterion 1 above; `leg-cut` also unless the drop began at 120 ± 2 s and ended at 150 ± 2 s.
+2. **The six cells, each leg and the merge:** criteria 2–4 above, a leg's lost segments read as its holes (the stock fetcher logs none), and its fetcher's exits reported beside them.
+3. **`leg-cut`, the merge:** leg B 0 holes, and the merged output 0 lost and 0 continuity errors to the tail. Leg A's hole is reported.
+4. **`leg-cut`, the rejoin** ([`p1aq-rejoin.py`](scripts/p1aq-rejoin.py)): A's first datagram after its gap that is identical to B's under the same RTP number comes within 30 s of the restoration, so the pair is left unprotected no longer than the cut again. From it to the tail, none of A's datagrams is mismatched or unpaired against B, and the skew meets criterion 5 above. Reported: how A came back (its fetcher's exit and restart, or the connection resuming) and the content it skipped. The grader's negative control is `clean`, where it must find no gap in A over 1 s.
+
+_Predicted:_ the six cells pass as with B-8, since no failed fetch reaches a receiver behind the group. On `leg-cut`, `tsp` either exits on the stalled fetch and its restart rejoins at the live edge within seconds, or waits on the dead connection past the restoration.

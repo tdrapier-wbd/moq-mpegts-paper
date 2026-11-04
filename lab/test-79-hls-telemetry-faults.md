@@ -1,6 +1,6 @@
 # Test 79 — What a NOC's sources say about the segmented lane's faults
 
-**State: run, each fault twice and a control; P1-ak's telemetry half.** Its CloudFront half waits on T76's end, which holds the distribution. On this segmenter a dead video stops the segmented lane outright: no segment for 61 s, so every source sees only an absence. CMCD v2 carries an origin outage within 0.2 s and nothing inside the stream; TR 101 290 catches dead audio in 7 s, and per-PID liveness catches every fault.
+**State: run, each fault twice and a control; P1-ak's telemetry half.** Its CloudFront half waits on T76's end, which holds the distribution. On the deployed segmenter a dead video stops the segmented lane outright: no segment for 61 s, so every source sees only an absence. With a time-bound cut the lane hands the audio on through it, and liveness names the dead video in 3.4 s. CMCD v2 carries an origin outage within 0.2 s and nothing inside the stream; TR 101 290 catches dead audio in 7 s, and per-PID liveness catches every fault.
 
 ## Objective
 
@@ -57,17 +57,42 @@ All nine graded runs completed ([`p1ak-grade.py`](scripts/p1ak-grade.py)). Secon
 
 _Prediction:_ held for the stall and the outage. It failed for both partial stalls: dead video became a total stall that every source saw, and TR 101 290 caught dead audio, which T24 had recorded as moving no counter (corrected there).
 
+### A segmenter that also cuts at a time bound (criteria fixed before the first run)
+
+[`t79-epochseg.py`](scripts/t79-epochseg.py) is the deployed segmenter plus one rule: a segment that no random-access point has closed closes at the first PCR packet 1.9 s into the next epoch, in content time read as the PCR plus the last video PES's PTS lead, so two packagers reading one feed cut the same packet. The bound must exceed the clip's longest wait for a random-access point (1.2 s) plus the lead's swing between adjacent frames, and stay under the 2 s epoch so that the numbers stay consecutive. On files first, any failure stopping the rig:
+
+1. **Silent on healthy video:** on the clip, the copy writes the segments `t61-epochseg.py` writes, by name and digest, and cuts nothing at the bound.
+2. **Cuts through dead video:** on the clip with its video suppressed for 60 s from 50 s (the video arm's stimulus), the deployed segmenter closes no segment across the suppression and the copy closes one every epoch, and the copy's segments concatenate to its input from its first segment on.
+3. **Deterministic:** a second instance reading the same file from a later point, once before the suppression and once inside it, writes the same digest for every K both write.
+4. **The rig:** the control and the video arm twice, the copy in place of the deployed segmenter, nothing else changed. **Valid** if the control raises nothing (criterion 1 of the first run) and cuts nothing at the bound. **Pass,** P1-ak's done-when (the audio delivered through the suppression): in both video runs, from the onset to the end plus 10 s, the receiver logs a new segment at least every 6 s, and per-PID liveness raises no clock alarm and none on either audio PID, and raises one on the video PID. Each source's first signal and the repeats are graded as in the first run.
+
+_Predicted:_ dead video reads by cause, in liveness (`no access unit`) and TR 101 290 (`PTS_error`), within a few seconds, and is absent from the receiver log and CMCD.
+
+**Results.** All four criteria hold.
+
+1. **Silent:** on the whole clip the copy wrote the same 298 segments as the deployed segmenter, by name, duration, size and digest, and cut nothing at the bound. The bound first cut healthy video at 1.0 s (8 of 298 segments) and never from 1.2 s, so 1.9 s has at least 0.7 s in hand on this clip.
+2. **Cuts through dead video:** the deployed segmenter wrote one 61.1 s segment of 76 MB and then skipped 30 numbers. The copy cut 29 segments at the bound, each about 2 s, its numbers consecutive, and its segments concatenate byte for byte to its input.
+3. **Deterministic:** the copies started at 30 s and inside the suppression at 70 s shared 83 and 44 numbers with the first (29 of the first set cut at the bound), every digest identical. The later one cut nothing until the video returned.
+4. **The rig:** the control raised nothing in any source and cut nothing at the bound. In both video runs, the receiver logged 38 segments from 5 s before the onset to 10 s after the end, the longest wait 3.6 s. Liveness alarmed only on the video PID (`no access unit`, 3.37 and 3.35 s) and on neither audio PID, with no clock alarm.
+
+| Dead video, 60 s | Receiver log | CMCD v2 | TR 101 290 | Per-PID liveness |
+| --- | --- | --- | --- | --- |
+| Deployed segmenter (above) | _d_ 5.96, 5.92 | _d_ 5.95, 5.90 | _d_ 5.95, 5.91; `PTS_error` 63.19, 63.24 | clock stopped 6.05, 6.01 |
+| With the time-bound cut | none | none | `PTS_error` 62.18, 62.07 | `no access unit` 3.37, 3.35 |
+
+_Prediction:_ held for liveness, the receiver log and CMCD. It failed for TR 101 290, which counts `PTS_error` only when the video returns, not while none arrives.
+
 ## Conclusions
 
-1. **On this segmenter the segmented lane amplifies a dead video into a dead service**, where [T24](test-24-partial-media-plane-stall.md) found the media-aware lane contains it. A segmenter that also closes a segment at a time bound would hand the audio on; to build and re-run once T76's soak, which runs this segmenter, ends.
+1. **A segmenter that cuts only at random-access points amplifies a dead video into a dead service**, where [T24](test-24-partial-media-plane-stall.md) found the media-aware lane contains it. One that also cuts at a content-time bound contains it too: the audio goes on, and every packager cuts the same segments.
 2. **CMCD v2, as B-8 sends it, expresses a transport fault at once and nothing inside the stream.** A dead elementary stream, a continuity hole and a stalled source are not CMCD's to say: the last two appear only as records that stop. A buffer level, or TS counters in custom keys, would carry them; neither is sent.
 3. **TR 101 290 at the receiver gives the cause for dead audio** (`PID_error`) and marks a hole on resumption, but reports nothing while its input is stopped.
-4. **Per-PID liveness detects every fault**, dead audio in 3.4–3.6 s and the rest at its 6 s clock timeout. Its timeout must exceed the gap between segment deliveries, since an ungroomed receiver hands on whole segments.
-5. **For a NOC**, two faults are named by cause: the origin outage within 0.2 s, dead audio within 3.4–7 s (liveness, TR 101 290). Dead video and a stalled source read only as an absence, timed at three segment durations or more; the stalled source has no explicit signal in any source until it resumes, as [T32](test-32-observability-survey.md) found at the origin.
+4. **Per-PID liveness detects every fault**, dead audio in 3.4–3.6 s, dead video in 3.4 s once the segmenter cuts at a bound, and the rest at its 6 s clock timeout. Its timeout must exceed the gap between segment deliveries, since an ungroomed receiver hands on whole segments.
+5. **For a NOC**, three faults are named by cause: the origin outage within 0.2 s, dead audio within 3.4–7 s (liveness, TR 101 290), and, with the time-bound cut, dead video within 3.4 s (liveness alone). Without the cut, dead video reads only as an absence, as does a stalled source, timed at three segment durations or more; the stalled source has no explicit signal in any source until it resumes, as [T32](test-32-observability-survey.md) found at the origin.
 
 ## Limits, stated in advance
 
 - One clip, a local origin and no CDN: the CloudFront half (which CMCD keys reach the real-time logs) waits on T76's end.
 - TSDuck reports TR 101 290 counters, not a vendor probe's alarms; P2-a's survey asks the vendors.
 - The receiver reports no TS-level counters in CMCD (B-8's custom keys are not built), so CMCD's reach is that of the keys CTA-5004-B defines.
-- One segmenter, the campaign's own, and no groomer after the receiver: the deployed lane grooms before the IRD, which smooths what TR 101 290 and liveness see.
+- The campaign's own segmenter alone, in its two variants, and no groomer after the receiver: the deployed lane grooms before the IRD, which smooths what TR 101 290 and liveness see.
