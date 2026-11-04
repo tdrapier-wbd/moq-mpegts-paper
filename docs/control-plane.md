@@ -1,57 +1,57 @@
 # Control, Entitlement and Security
 
-Status: working draft. Layer: **above the transport** — required and owned identically whichever data plane carries the bytes. What changes between them is only the _enforcement point_: a relay's authorization hook against a per-request check at a CDN edge ([Comparison](comparison.md) §8).
+Status: working draft. Layer: **above the transport.** Scope: the provisioning, entitlement, tenancy and security model for the platform, which develops R7 in [Problem](problem.md) §5 and part of R8. Reads with: [Architecture](architecture.md) §9, of which it is the deep-dive companion, and [Comparison](comparison.md) §8.
 
 **Contents**
 
-- [Evidence status: the enforcement mechanism is measured; everything above it is design](#evidence-status-the-enforcement-mechanism-is-measured-everything-above-it-is-design)
-- [1. Purpose and position](#1-purpose-and-position)
-  - [1.1 The out-of-band principle, and its sharp consequence](#11-the-out-of-band-principle-and-its-sharp-consequence)
+- [In brief](#in-brief)
+- [1. Position](#1-position)
+  - [1.1 Out-of-band principle](#11-out-of-band-principle)
 - [2. Entities](#2-entities)
-  - [2.1 API surface](#21-api-surface)
-  - [2.2 State and consistency](#22-state-and-consistency)
-- [3. Identity and authentication](#3-identity-and-authentication)
-- [4. Entitlement](#4-entitlement)
-  - [4.1 Revocation, and what deny-by-default does not mean](#41-revocation-and-what-deny-by-default-does-not-mean)
+  - [2.1 API](#21-api)
+  - [2.2 State](#22-state)
+- [3. Identity](#3-identity)
+- [4. Entitlement (R7)](#4-entitlement-r7)
+  - [4.1 Revocation](#41-revocation)
   - [4.2 Failure handling](#42-failure-handling)
-- [5. Multi-tenancy](#5-multi-tenancy)
-- [6. Policy and orchestration](#6-policy-and-orchestration)
-- [7. Security model](#7-security-model)
-  - [7.1 Threat model](#71-threat-model)
-  - [7.2 Keys and secrets](#72-keys-and-secrets)
+- [5. Tenancy](#5-tenancy)
+- [6. Policy](#6-policy)
+- [7. Security](#7-security)
+  - [7.1 Threats](#71-threats)
+  - [7.2 Keys](#72-keys)
   - [7.3 Data protection](#73-data-protection)
-  - [7.4 Abuse mitigation](#74-abuse-mitigation)
+  - [7.4 Abuse](#74-abuse)
   - [7.5 Audit](#75-audit)
 - [8. Acceptance criteria](#8-acceptance-criteria)
-- [9. Open questions](#9-open-questions)
+- [9. Limits](#9-limits)
+- [10. Open questions](#10-open-questions)
+- [11. References](#11-references)
 
-Scope: the provisioning, entitlement, tenancy and security model for the platform — the layer that develops R7 in [Problem](problem.md) §5, and part of R8. It is the deep-dive companion to [Architecture](architecture.md) §9.
+## In brief
+
+**The enforcement mechanism is measured; everything above it is design.** Three experiments measured admission and refusal against a credential, tenant and path isolation, announcement scope, revocation timing and its mechanism, token expiry as a backstop, de-provisioning granularity, key rotation, key handling, and the CPU cost of authorization, and two of the design's claims did not survive ([Evidence](../lab/evidence.md) §3.10). The entity model, the API shape, the fast-path _push_ the design assumes and the implementation does not provide, tenancy beyond path isolation, orchestration, federation and the SLO targets remain design intent. Where measurement bears on a section, the section states the measured behaviour.
+
+**The layer is required and owned identically whichever data plane carries the bytes; only the _enforcement point_ changes**, from a relay's authorization hook to a per-request check at a CDN edge ([Comparison](comparison.md) §8).
+
+**Enforcement holds, and across two relay implementations it transfers where the token does not** (§3).
+
+**Revocation is a poll, not a push, and three settings disable it silently; that, not its speed, is what binds a primary-broadcast deployment** (§4.1, §8). Read the acceptance criteria in §8 as proposals, one of which §4.1 records as unachievable.
+
+**De-provisioning is surgical only under one key per unit of entitlement** (§4).
+
+**Read what follows as a specification for something an operator builds**, with the token, key and enforcement machinery as the part sensibly adopted rather than written (§6).
+
+**This layer remains the thinner half of the thesis** (§9): the mechanism was measured against one relay driven by a stub, rights windows are unexercised, and nothing here shows the layer materially better for this job than the planes incumbents already ship.
 
 ---
 
-> ## Evidence status: the enforcement mechanism is measured; everything above it is design
->
-> **Most of this document describes a design, not a system; the enforcement layer is the exception.** Three experiments measured it, and two of the design's claims did not survive ([Evidence](../lab/evidence.md) §3.10). What is measured: admission and refusal against a credential, tenant and path isolation, announcement scope, revocation timing and its mechanism, token expiry as a backstop, de-provisioning granularity, key rotation, key handling, and the CPU cost of authorization. Where measurement bears on a section, the section states the measured behaviour.
->
-> Everything else — the entity model, the API shape, the fast-path _push_ the design assumes and the implementation does not provide, tenancy beyond path isolation, orchestration, federation, the SLO targets — remains design intent. **Read the acceptance criteria in §8 as proposals, one of which §4.1 now records as unachievable.**
->
-> This matters beyond ordinary caveating, for two reasons.
->
-> **It remains the thinner half of the thesis.** The thesis holds that because the transport commoditises, durable value accrues in the control, entitlement, egress and observability layers instead. The egress layer has substantial evidence. This one now has evidence for its _mechanism_ and none for the part of the argument that is commercial rather than engineering — and the mechanism is the part that generalises, so it is the part least able to carry the thesis. Three specific holes: there is **one relay** in every measurement, so entitlement across a mesh is untested; a **stub** drove every run, so the integration surface is untested; and **rights windows** — §4's _temporary_ grant type — are unexercised.
->
-> **The market is crowded.** MediaConnect, Zixi, LTN and others ship capable provisioning and management planes. "Value lives in the control plane" is therefore a _necessary_ condition for defensibility, not a sufficient one: it has to be materially better for _this_ job, not merely present. Nothing here demonstrates that it is.
->
-> **And "value lives here" does not mean "a vendor captures it."** The design below is mostly _mechanism_, which generalises; what makes it useful at a large broadcaster is integration with conditional access, rights, scheduling, monitoring, compression, network and service-management systems that differ at every operator. That work is the bulk of the value and it does not generalise, so at the top of the market this layer is predominantly built rather than bought, and the vendor market for it is real mainly further down ([Economics](economics.md) §8). **Read what follows as a specification for something an operator builds**, with the token, key and enforcement machinery as the part sensibly adopted rather than written.
+## 1. Position
 
----
-
-## 1. Purpose and position
-
-The control plane is the authoritative orchestration and governance layer: out-of-band management of the media lifecycle with no runtime dependency on, and no fate-sharing with, the data plane. It provisions routes, manages dynamic and revocable entitlements, enforces multi-tenant isolation, and exposes visibility to the NOC.
+**The control plane is the authoritative orchestration and governance layer**: out-of-band management of the media lifecycle with no runtime dependency on, and no fate-sharing with, the data plane. It provisions routes, manages dynamic and revocable entitlements, enforces multi-tenant isolation, and exposes visibility to the NOC.
 
 It is decoupled from transport mechanics. It interacts only with abstractions: it resolves routing, authorization and tenant-lifecycle policy, then projects materialised configuration onto the data-plane components. The intent is that a wire-protocol, ALPN or draft migration requires no change to control-plane logic ([Architecture](architecture.md) §10).
 
-### 1.1 The out-of-band principle, and its sharp consequence
+### 1.1 Out-of-band principle
 
 **The single most important control-plane decision is that it is out-of-band and non-fate-sharing with the data plane** (principle 3). Data-plane components are pushed configuration, policy and entitlement, and they _cache and enforce it locally_. If the control plane becomes unavailable, established media flows continue on last-known-good state: publishers keep publishing, relays keep forwarding, gateways keep grooming, and existing entitlements remain valid until natural expiry. What is lost is the ability to _make changes_ — not the ability to _keep delivering_.
 
@@ -63,7 +63,7 @@ That has a sharp consequence for entitlement: **revocation cannot depend solely 
 
 ## 2. Entities
 
-Six first-class, versioned, auditable entities.
+**The model has six first-class entities, each versioned and auditable.**
 
 | Entity | What it is |
 | --- | --- |
@@ -74,23 +74,23 @@ Six first-class, versioned, auditable entities.
 | **Entitlement / Token** | A time-bounded, signed, revocable grant authorising a specific endpoint to receive a specific channel over a specific route |
 | **Policy** | Declarative rules for routing, redundancy, geographic placement and resource allocation |
 
-### 2.1 API surface
+### 2.1 API
 
-A versioned, idempotent API mirroring the entity model: create/update/suspend/delete for tenants, channels, routes and endpoints; grant/refresh/revoke for entitlements. Mutations follow an explicit lifecycle: `Draft → Provisioned → Active → Suspended → Revoked/Torn-Down`.
+**The API is versioned and idempotent, and mirrors the entity model**: create/update/suspend/delete for tenants, channels, routes and endpoints; grant/refresh/revoke for entitlements. Mutations follow an explicit lifecycle: `Draft → Provisioned → Active → Suspended → Revoked/Torn-Down`.
 
 Two properties are load-bearing rather than cosmetic. **Idempotency** — every state-modifying call carries an idempotency key, because provisioning is driven by automation that retries and a retried "create route" must not create two routes. **Versioning** — a tenant's own orchestration runs on its own release cycle and cannot be forced to upgrade in lockstep.
 
-### 2.2 State and consistency
+### 2.2 State
 
-State separates into two tiers: an **authoritative store** that is strongly consistent and replicated for tenant records, policy and entitlements, so no two conflicting views of authorization can exist; and **runtime projections**, a local eventually-consistent cache of pushed config at each data-plane node.
+**State separates into two tiers**: an **authoritative store** that is strongly consistent and replicated for tenant records, policy and entitlements, so no two conflicting views of authorization can exist; and **runtime projections**, a local eventually-consistent cache of pushed config at each data-plane node.
 
 This asymmetry — a strongly consistent but comparatively slow control plane, a fast but eventually-consistent data plane — is deliberate and load-bearing. Control operations are human- or automation-paced (seconds), not media-paced (milliseconds).
 
 ---
 
-## 3. Identity and authentication
+## 3. Identity
 
-The platform authenticates **three distinct classes of principal, and conflating them is itself a security error.** The mechanisms below are the credential _profile_ this platform adopts on top of the transport's subscription-time authorization hook and standard PKI — they are deployment choices, not wire-format guarantees the transport defines and enforces across implementations.
+**The platform authenticates three distinct classes of principal, and conflating them is itself a security error.** The mechanisms below are the credential _profile_ this platform adopts on top of the transport's subscription-time authorization hook and standard PKI — they are deployment choices, not wire-format guarantees the transport defines and enforces across implementations.
 
 - **Data-plane peers** (publishers, relays, gateways, federation peers) authenticate with **mTLS**, each holding an identity certificate from a cross-signed or enterprise PKI. mTLS suits long-lived machine-to-machine QUIC sessions and gives strong, revocable transport-layer identity.
 - **Subscribers / endpoints** authenticate with **path-scoped JWTs** that also carry entitlement. For a consuming endpoint, identity and entitlement are answered together and bound in the same credential, because the two questions — who are you, what may you receive — are answered together.
@@ -108,9 +108,9 @@ The platform authenticates **three distinct classes of principal, and conflating
 
 ---
 
-## 4. Entitlement
+## 4. Entitlement (R7)
 
-An entitlement is a time-bounded, revocable grant binding a principal (endpoint) to a resource (channel / track namespace) over a route, subject to policy. It is realised as a short-lived, path-scoped token that the endpoint presents when subscribing and that the relay validates **locally against a public key**. Local validation is what allows the data plane to keep running during a control-plane outage (§1.1).
+**An entitlement is a time-bounded, revocable grant binding a principal (endpoint) to a resource (channel / track namespace) over a route, subject to policy.** It is realised as a short-lived, path-scoped token that the endpoint presents when subscribing and that the relay validates **locally against a public key**. Local validation is what allows the data plane to keep running during a control-plane outage (§1.1).
 
 The distinction this document draws is between **subscription** — a transport-level act — and **entitlement** — a commercial and rights-level fact. A subscription model aligns them naturally, but they are not the same thing: entitlement is the _policy_, subscription the _mechanism_ that enforces it. That alignment is what lets a rights window, partner off-boarding or emergency takedown be a control-plane operation rather than manual reconfiguration of receivers.
 
@@ -124,9 +124,9 @@ The distinction this document draws is between **subscription** — a transport-
 >
 > So narrow is not merely the prudent default against a leak. It is the only topology under which de-provisioning is surgical, and the practical unit is **one key per unit of entitlement**, which sizes the key estate by the licensing matrix rather than by the affiliate count. Holding it costs nothing: grown from 10 to 20,000 keys, the auth server's memory showed no trend and admission did not slow, because it reads the key a token names when asked ([Evidence](../lab/evidence.md) §3.10).
 
-### 4.1 Revocation, and what deny-by-default does not mean
+### 4.1 Revocation
 
-Revocation is the hard part of any entitlement system. The platform uses two paths together:
+**Revocation is the hard part of any entitlement system, and deny-by-default does not make it instant: a valid token is honoured until the relay next re-checks.** The platform uses two paths together:
 
 1. **Fast path** — the relay re-asks its admission question on a timer and drops the affected subscriptions when the answer changes. **Bounded by between one and two re-check periods plus about 0.11 s — the implementation documents two — so its floor is roughly 2.1 s.**
 2. **Backstop** — short token lifetimes with continuous renewal, so the _worst case_ is bounded by the token lifetime even if the fast path is unavailable. Revocation then happens by declining to refresh.
@@ -160,6 +160,8 @@ stateDiagram-v2
 
 ### 4.2 Failure handling
 
+**Every failure resolves toward no new access, never toward open access; that valid tokens outlive an outage is a default, not an invariant.**
+
 - **Expired token** — denied; the endpoint must obtain a fresh grant.
 - **Malformed or absent token** — denied by default.
 - **Control plane unreachable** — existing valid tokens continue to be honoured until expiry **by default**, but _new_ grants and refreshes cannot be issued, so entitlements naturally drain as TTLs elapse. This is a safe failure mode: the system fails toward _no new access_ and toward _revocation by expiry_, never toward open access.
@@ -173,9 +175,9 @@ stateDiagram-v2
 
 ---
 
-## 5. Multi-tenancy
+## 5. Tenancy
 
-Multi-tenancy is the precondition for the platform being operated as _shared_ infrastructure rather than one silo per customer. It is also a primary source of risk, because a tenancy-isolation failure is simultaneously a security breach and a rights-compliance breach.
+**Multi-tenancy is the precondition for the platform being operated as _shared_ infrastructure rather than one silo per customer.** It is also a primary source of risk, because a tenancy-isolation failure is simultaneously a security breach and a rights-compliance breach.
 
 **Namespace isolation.** Every channel, track and routing entity is bound to a cryptographically enforced, hierarchically scoped namespace unique to that tenant. Relays reject any subscription whose presented token scope does not match the target namespace. **This is the primary technical control preventing cross-tenant access.**
 
@@ -187,9 +189,9 @@ Multi-tenancy is the precondition for the platform being operated as _shared_ in
 
 ---
 
-## 6. Policy and orchestration
+## 6. Policy
 
-The control plane translates business rules into declarative policy pushed to the fabric and the edge.
+**The control plane translates business rules into declarative policy pushed to the fabric and the edge.**
 
 - **Subscription policy** — who may subscribe, admission rules, and a strict deny-by-default posture.
 - **Routing policy** — geographic constraints pinning routes to regional clusters for sovereignty or rights; dynamic exclusion of links reporting elevated loss or latency.
@@ -198,15 +200,17 @@ The control plane translates business rules into declarative policy pushed to th
 
 **Where the business rules come from is the hard part, and it is deliberately not specified above.** None of those policies originates in this layer. At a mature broadcaster, "who may subscribe" is a conditional-access and rights question, "for how long" is a scheduling question, "under what geographic constraint" is a rights question again, "which links are eligible" is network management's, "what it costs whom" is finance's, and "who gets paged" is service management's. Each of those lives in a long-established, deliberately isolated system with its own data model. **A control plane that cannot read those systems automates nothing** — it relocates the manual step from a device to a form, and the operator still reconciles by hand.
 
-So the integration surface, not the policy engine, is what determines whether this layer delivers the operational reduction the thesis claims for it. It is also why this layer is predominantly built rather than bought at the top of the market: the engine generalises across operators and the integration does not ([Economics](economics.md) §8). The design consequence for everything above is to keep policy **sourced** rather than **authored** here — the control plane should hold a projection of decisions made in those systems, with provenance, so that a rights change or a schedule change propagates rather than needing re-entry. Authoring policy in the control plane creates a second source of truth for questions the business has already answered elsewhere, and reconciling those is the failure mode that makes platforms of this kind shelfware.
+So the integration surface, not the policy engine, is what determines whether this layer delivers the operational reduction the thesis claims for it. It is also why this layer is predominantly built rather than bought at the top of the market, and its vendor market real mainly further down: the engine generalises across operators and the integration does not ([Economics](economics.md) §8). The design consequence for everything above is to keep policy **sourced** rather than **authored** here — the control plane should hold a projection of decisions made in those systems, with provenance, so that a rights change or a schedule change propagates rather than needing re-entry. Authoring policy in the control plane creates a second source of truth for questions the business has already answered elsewhere, and reconciling those is the failure mode that makes platforms of this kind shelfware.
 
 ---
 
-## 7. Security model
+## 7. Security
 
-### 7.1 Threat model
+**The network substrate is untrusted and the tenants do not trust each other, so each trust boundary is held by its own mechanism**: identity (§3), tenant isolation (§5), keys (§7.2), encryption (§7.3), abuse controls (§7.4) and audit (§7.5).
 
-The platform carries high-value linear content across shared, multi-tenant and partly public infrastructure. Its posture must reflect that the network substrate is not trusted, the tenants do not trust each other, and some content is commercially sensitive under contract.
+### 7.1 Threats
+
+**The platform carries high-value linear content across shared, multi-tenant and partly public infrastructure.** Its posture must reflect that the network substrate is not trusted, the tenants do not trust each other, and some content is commercially sensitive under contract.
 
 **Assets, in rough order of value:** content confidentiality and integrity where the contract requires it; entitlement integrity — that only authorised endpoints receive a feed, which is simultaneously a security and a rights-compliance property; tenant isolation; the control plane itself, compromise of which is the highest-impact target; and the signing keys underpinning entitlement.
 
@@ -214,17 +218,19 @@ The platform carries high-value linear content across shared, multi-tenant and p
 
 **Trust boundaries:** management plane ↔ control plane; control plane ↔ data plane; between tenants; between the platform and a federation peer; and between the platform and the public network substrate. Each is enforced by a distinct mechanism (§3, §5).
 
-### 7.2 Keys and secrets
+### 7.2 Keys
 
-Token-signing private keys and mTLS CA material are generated, stored and used inside HSMs or a cloud KMS. **Relays and gateways hold only the public keys needed to verify signatures locally; they never hold long-lived signing private keys.**
+**Token-signing private keys and mTLS CA material are generated, stored and used inside HSMs or a cloud KMS; relays and gateways hold only the public keys needed to verify signatures locally, and never long-lived signing private keys.**
 
-Signing keys and certificates rotate on a defined schedule with overlapping validity, so rotation does not interrupt live sessions. Local public-key verification means a rotated verification key must be distributed to the edge _ahead of use_ — a control-plane push with its own consistency considerations, and an open question (§9). Certificate revocation and token revocation are distinct paths: the former via PKI revocation or short-lived certificates, the latter via §4.1.
+Signing keys and certificates rotate on a defined schedule with overlapping validity, so rotation does not interrupt live sessions. Local public-key verification means a rotated verification key must be distributed to the edge _ahead of use_ — a control-plane push with its own consistency considerations, and an open question (§10). Certificate revocation and token revocation are distinct paths: the former via PKI revocation or short-lived certificates, the latter via §4.1.
 
 > **Both claims measured, and both hold — the first more strongly than it was stated.** Every key the authorization endpoint could serve was a public verifying key with no private component, and the relay was given **no key material at all**: its entire authorization configuration is the endpoint URL, so there is no key store on the edge node to get wrong. The requirement is met structurally rather than by operational discipline. Rotation with overlapping validity interrupted nothing — the successor session ran on undisturbed — and the retired key stopped being honoured 0.122 s after retirement, inside one re-check period ([T38](../lab/test-38-entitlement-estate.md) Part 5).
 >
-> This does _not_ settle §9's distribution question. With an authorization endpoint the edge holds no key to distribute _to_; the consistency problem moves to the endpoint and to its cache, where §4.1's `max-age` now governs it. Under `--auth-key-dir`, where the relay does hold verifying keys on disk, the question stands as written.
+> This does _not_ settle §10's distribution question. With an authorization endpoint the edge holds no key to distribute _to_; the consistency problem moves to the endpoint and to its cache, where §4.1's `max-age` now governs it. Under `--auth-key-dir`, where the relay does hold verifying keys on disk, the question stands as written.
 
 ### 7.3 Data protection
+
+**All media and control traffic is encrypted in transit, and protection from the operator itself is an option a contract may call for, not a requirement.**
 
 **In transit**, all data-plane traffic runs over QUIC, encrypted by default, and all control-plane traffic over TLS. There is no cleartext media or control path.
 
@@ -236,7 +242,7 @@ Signing keys and certificates rotate on a defined schedule with overlapping vali
 - Every subscriber of a broadcast holds the same secret, and no key rotates inside an epoch. Withdrawing one subscriber's content access therefore means a new secret and epoch for all the others; per-subscriber revocation stays the relay's (§4.1).
 - The `moq` command line's TS import and export do not use it, so neither lane carries it without application code.
 
-**This design treats it as an option a contract may call for, not a requirement**: entitlement and revocation are enforced at the relay whatever the payload.
+Entitlement and revocation are therefore enforced at the relay whatever the payload.
 
 **BISS-CA is the industry's likely answer to that requirement, and it costs the carriage mode.** There is vendor appetite for it: two vendors proposed running BISS-CA (EBU Tech 3292-s1) over MoQ at IBC 2026. It fits the requirement well — entitlement travels in-band as ECMs and EMMs, protection terminates at the receiver's private key rather than at any network element, and it is royalty-free and already deployed in contribution. For primary distribution, though, the gap it closes is narrow. The segments MoQ leaves unprotected are the source to the publisher and the subscriber to the IRD; both are local, and both are carried in the clear today behind SRT and Zixi on exactly the same basis, so within a trusted facility this is the status quo rather than a regression. **Where those environments are not trusted, or the operator is not, BISS-CA is the case in which it earns its cost.** It is the only mechanism that reaches the receiver, since transport protection ends at the relay and object-level encryption ends at the subscriber.
 
@@ -246,19 +252,19 @@ The cost is that scrambling is applied at transport level, so payloads cannot be
 
 **At rest**, logs, audit records and any captures are encrypted, partitioned by tenant and subject to retention limits — captures in particular may contain content and must be tightly controlled. Service identity, routing and entitlement metadata are themselves commercially sensitive, since they reveal who receives what, and are treated as tenant-confidential.
 
-### 7.4 Abuse mitigation
+### 7.4 Abuse
 
-Tokens carry expiry and unique identifiers, so a captured token is bounded in value and anomalous reuse is detectable. Public-facing control-plane endpoints sit behind rate limiting and DDoS protection, with private peering or IP allow-listing preferred for critical nodes. At the data plane, admission control and per-tenant quotas bound the impact of subscription floods. Anomalous subscription patterns — impossible geography, excessive fan-out — should be detectable from the telemetry the relay already emits.
+**Tokens carry expiry and unique identifiers, so a captured token is bounded in value and anomalous reuse is detectable.** Public-facing control-plane endpoints sit behind rate limiting and DDoS protection, with private peering or IP allow-listing preferred for critical nodes. At the data plane, admission control and per-tenant quotas bound the impact of subscription floods. Anomalous subscription patterns — impossible geography, excessive fan-out — should be detectable from the telemetry the relay already emits.
 
 ### 7.5 Audit
 
-Every control-plane action and every entitlement grant, refresh, revocation and delegation writes an immutable record: timestamp, operator or principal identity, tenant context, action, target resource and correlation id. This serves two masters — incident forensics ("who was receiving this feed at 20:03?") and rights-compliance evidence ("prove this partner only received the content they were licensed for") — and should be exportable per tenant and per contract boundary.
+**Every control-plane action and every entitlement grant, refresh, revocation and delegation writes an immutable record**: timestamp, operator or principal identity, tenant context, action, target resource and correlation id. This serves two masters — incident forensics ("who was receiving this feed at 20:03?") and rights-compliance evidence ("prove this partner only received the content they were licensed for") — and should be exportable per tenant and per contract boundary.
 
 ---
 
 ## 8. Acceptance criteria
 
-**The numeric targets below are proposed and illustrative** — engineering hypotheses, not committed figures. Four rows now have measurements against them, and the sub-second revocation _latency_ target is **unachievable as written**. The availability target is deliberately modest because the control plane is out-of-band: an outage suspends _changes_ but does not interrupt established media flows (§1.1), so its availability requirement is lower than the data plane's.
+**The numeric targets below are proposed and illustrative** — engineering hypotheses, not committed figures. Four rows have measurements against them, and the sub-second revocation _latency_ target is **unachievable as written**. The availability target is deliberately modest because the control plane is out-of-band: an outage suspends _changes_ but does not interrupt established media flows (§1.1), so its availability requirement is lower than the data plane's.
 
 The final column records whether a target **binds a primary-broadcast deployment**. It is a statement of requirement, not of evidence: a target that does not bind was still worth measuring against, and the measurement is not weakened by the requirement turning out to be looser than the target assumed. The distinction exists because one unachievable target here has no operational consequence while two _achieved_ behaviours have a serious one, and a table that scores only target-versus-measurement hides that.
 
@@ -284,15 +290,30 @@ Behavioural criteria, which matter more than the numbers:
 - **Key handling.** Keys never present on edge nodes; no cleartext media or control path. **Measured and met** (§7.2); no transport-stream structure was recoverable from the wire.
 - **De-provisioning granularity.** _A criterion from measurement._ Withdrawing one channel from a multi-channel affiliate must not interrupt the channels it keeps. Met only under one key per unit of entitlement (§4).
 
-**Validation plan**, for what is still unvalidated: penetration testing of the API, the token issuance path, tenant-isolation boundaries and federation interconnects; red-team scenarios covering cross-tenant access, token theft and replay, a compromised endpoint, a compromised federation peer over-reaching its negotiated scope, and control-plane privilege escalation. The enforcement, revocation, rotation and isolation paths have been exercised against a single relay driven by a stub ([Evidence](../lab/evidence.md) §3.10); what that leaves is clustering, the integration surface, and rights windows.
+**Validation plan**, for what is still unvalidated: penetration testing of the API, the token issuance path, tenant-isolation boundaries and federation interconnects; red-team scenarios covering cross-tenant access, token theft and replay, a compromised endpoint, a compromised federation peer over-reaching its negotiated scope, and control-plane privilege escalation. The enforcement, revocation, rotation and isolation paths have been exercised against a single relay driven by a stub ([Evidence](../lab/evidence.md) §3.10), which leaves the gaps in §9.
 
 ---
 
-## 9. Open questions
+## 9. Limits
 
-- **Which layers are bought and which are built?** Partly answered: the mechanism — token issue and verification, key rotation, enforcement — generalises and should be adopted rather than written, while policy and the integration with rights, scheduling and CA systems do not generalise and are built ([Economics](economics.md) §8). What remains open is the middle: how much of orchestration and observability a product can supply before its model has to be bent to the operator's, which is the question that decides whether a vendor engagement is a purchase or a bespoke programme with a licence.
+**The mechanism is measured and the case for this layer is not, so it remains the thinner half of the thesis.** The thesis holds that because the transport commoditises, durable value accrues in the control, entitlement, egress and observability layers instead. The egress layer has substantial evidence. This one has evidence for its _mechanism_ and none for the part of the argument that is commercial rather than engineering — and the mechanism is the part that generalises, so it is the part least able to carry the thesis. The evidence-wide limits are in [Evidence](../lab/evidence.md) §4; this layer's own have no experiment scheduled.
+
+- **There is one relay in every measurement**, so entitlement across a mesh, where the admission cache is per node, is untested (§10); no attempt yet.
+- **A stub drove every run**, so the integration surface that §6 makes decisive is untested; no attempt yet.
+- **Rights windows, §4's _temporary_ grant type, are unexercised**: every grant measured is on or off (§10); no attempt yet.
+- **Certificate scoping on upstream's redesigned relay is read from its code, not measured** (§3); a re-run of [T38](../lab/test-38-entitlement-estate.md) Part 5 on such a build would discharge it.
+- **Object-level encryption and BISS-CA's key ladder are unmeasured**; only scrambled carriage is (§7.3). No attempt yet.
+- **The market is crowded.** MediaConnect, Zixi, LTN and others ship capable provisioning and management planes. "Value lives in the control plane" is therefore a _necessary_ condition for defensibility, not a sufficient one: it has to be materially better for _this_ job, not merely present. Nothing here demonstrates that it is.
+
+---
+
+## 10. Open questions
+
+**Ten questions remain, the two commercial ones first, because they decide whether this layer can carry the thesis.**
+
+- **Which layers are bought and which are built?** Partly answered in §6: the mechanism is adopted and the integration built. What remains open is the middle: how much of orchestration and observability a product can supply before its model has to be bent to the operator's, which is the question that decides whether a vendor engagement is a purchase or a bespoke programme with a licence.
 - **Does the operational reduction the thesis claims actually materialise from integration?** This is the load-bearing commercial assumption and nothing here tests it. The cost of the integration is knowable in advance by counting interfaces; the saving is not, and a control plane that automates provisioning while leaving reconciliation manual delivers neither.
-- **What is the right default TTL,** and should it vary by content value and by the reachability characteristics of the endpoint? Halving the TTL roughly doubles the renewal rate. **Sharpened by measurement:** the same question now applies to re-check cadence, where the trade is explicit — a one-second cadence buys the floor revocation bound and costs 27 % on the per-subscriber CPU slope, while ten seconds costs nothing marginal (§4.1).
+- **What is the right default TTL,** and should it vary by content value and by the reachability characteristics of the endpoint? Halving the TTL roughly doubles the renewal rate. The same question applies to re-check cadence, where the trade is explicit — a one-second cadence buys the floor revocation bound and costs 27 % on the per-subscriber CPU slope, while ten seconds costs nothing marginal (§4.1).
 - **How are rotated verification keys distributed to the edge** with strong enough consistency that a valid token is never rejected nor a revoked key honoured during the rotation window? **Partly answered:** with an authorization endpoint there is no key at the edge to distribute, and rotation with overlap is clean (§7.2). The question stands for `--auth-key-dir` deployments, and reappears as cache consistency for endpoint deployments.
 - **Does entitlement survive a relay mesh?** Every measurement to date is against a single relay. The case where a subscriber is admitted by one node and revoked at another — and where the admission cache is per node — is untested and is the harder problem ([T38](../lab/test-38-entitlement-estate.md)).
 - **Do rights windows compose with the re-check cadence?** §4's _temporary_ grant type is the one a distributor actually needs and the one nothing has exercised: every grant measured is on or off. Whether scheduled grant and expiry land cleanly against a poll, or produce a window at each edge, is open.
@@ -300,3 +321,17 @@ Behavioural criteria, which matter more than the numbers:
 - **How is trust established, scoped and _revoked_ across a federation boundary**, and how is a compromised peer contained? ([Architecture](architecture.md) §8.6.)
 - **How is delegated entitlement bounded** so that a chain of re-distribution cannot outlive or exceed the scope of the grant at its root?
 - **When layered compliance policies conflict** — a data-sovereignty constraint against a dynamic failover path rerouting around a congested link — what deterministic hierarchy resolves path selection safely?
+
+---
+
+## 11. References
+
+The token, transport and protection specifications this design cites.
+
+- RFC 7519, JSON Web Token — the path-scoped subscriber credential (§3): [https://www.rfc-editor.org/rfc/rfc7519](https://www.rfc-editor.org/rfc/rfc7519)
+- RFC 9111, HTTP Caching — `Cache-Control` and `max-age`, which set the re-check cadence (§4.1): [https://www.rfc-editor.org/rfc/rfc9111](https://www.rfc-editor.org/rfc/rfc9111)
+- RFC 5861, HTTP Cache-Control Extensions for Stale Content — `stale-while-revalidate` and `stale-if-error` (§4.2): [https://www.rfc-editor.org/rfc/rfc5861](https://www.rfc-editor.org/rfc/rfc5861)
+- RFC 9000, QUIC, and RFC 8446, TLS 1.3 — transport encryption and mTLS peer identity (§3, §7.3): [https://www.rfc-editor.org/rfc/rfc9000](https://www.rfc-editor.org/rfc/rfc9000), [https://www.rfc-editor.org/rfc/rfc8446](https://www.rfc-editor.org/rfc/rfc8446)
+- OpenID Connect Core 1.0 — management-plane identity (§3): [https://openid.net/specs/openid-connect-core-1_0.html](https://openid.net/specs/openid-connect-core-1_0.html)
+- `draft-lcurley-moq-e2ee`, the object-level encryption profile `moq-dev` implements (§7.3): [https://datatracker.ietf.org/doc/draft-lcurley-moq-e2ee/](https://datatracker.ietf.org/doc/draft-lcurley-moq-e2ee/)
+- EBU Tech 3292s1, BISS-CA conditional access mode for BISS2, and EBU Tech 3292, BISS2 (§7.3): [https://tech.ebu.ch/publications/tech3292s1](https://tech.ebu.ch/publications/tech3292s1)

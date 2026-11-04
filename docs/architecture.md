@@ -1,6 +1,6 @@
 # Reference Architecture: Broadcast-Grade Primary Distribution
 
-Status: working draft. Layer: **above the transport.** Scope: an end-to-end reference architecture for a platform that delivers professional broadcast primary distribution over an Internet-native transport. It takes the requirement set in [Problem](problem.md) §5 as given and develops R3 (IRD-conformant egress), R6 (redundancy) and R8 (observability). MoQ is the worked example because it is what the prototype runs on; the MoQ-specific sections are marked.
+Status: working draft. Layer: **above the transport.** Scope: an end-to-end reference architecture for a platform that delivers professional broadcast primary distribution over an Internet-native transport. It takes the requirement set in [Problem](problem.md) §5 as given and develops R3 (IRD-conformant egress), R6 (redundancy) and R8 (observability). MoQ is the worked example because it is what the prototype runs on; the MoQ-specific sections are marked. Reads with: [Comparison](comparison.md), and [Control plane](control-plane.md) for R7.
 
 **Contents**
 
@@ -614,7 +614,7 @@ Multi-draft negotiation from a single build is trending (`moq-dev` carries MOQT 
 - **Behind the media-aware lane the buffer model fails in software already**, and this gateway cannot repair it. The re-multiplexing stages that can, offline, live on one host as a laboratory stage, and in the subscriber as upstream's merged fixed-delay export, are each graded in software on one service (§4.3).
 - **Two correctness boundaries have met no stage**: source-clock drift and mid-stream PID change (§4.3; §12, question 3).
 - **The redundancy design assumes the _public-Internet substrate does not fail simultaneously along both disjoint paths_.** Disjoint-path routing reduces but does not eliminate correlated failure: a large-scale BGP event or a shared upstream provider can affect both. This is a genuine residual risk that satellite — with its terrestrial-network independence — does not have. The platform mitigates it with path diversity across providers and with the transport-swappable hedge (falling back to a managed transport for the most critical always-on routes), but it does not claim to eliminate it, and it has not been characterised in production (§12, question 7).
-- **Four parts are design, not measurement**: priority-ordered shedding under congestion (§5.5), federation (§8.6), subscriber-side health reporting (§9.4), and RTP ingest with 2022-1 FEC or a 2022-7 merge (§7.1), as is egress FEC, which nothing here implements (§3).
+- **Four parts are design, not measurement**: priority-ordered shedding under congestion (§5.5), federation (§8.6), subscriber-side health reporting (§9.4), and RTP ingest with 2022-1 FEC or a 2022-7 merge (§7.1), as is egress FEC, which nothing here implements (§3). No attempt yet.
 
 ---
 
