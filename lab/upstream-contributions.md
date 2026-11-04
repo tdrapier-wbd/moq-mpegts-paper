@@ -950,8 +950,7 @@ video PIDs' tune-in tables peaked at 2,767 B in Bsys's 1,536, and every arm pass
 on every join tried, and a co-started 1+1 pair byte-identical through the groomer
 ([T13](test-13-downstream-grooming.md#on-4645s-pcr-grid-the-deterministic-mode-runs-and-a-co-started-pair-merges-at-the-byte)).
 The passthrough export merged as [#5349](https://github.com/moq-dev/moq/pull/5349)
-([T48](test-48-passthrough-export.md)); `ts-passthrough-export` stays open under
-[#5327](https://github.com/moq-dev/moq/pull/5327)'s acceptance set.
+([T48](test-48-passthrough-export.md)).
 
 **Fixed and verified:** TDT/TOT placement, asked as
 [#7743](https://github.com/moq-dev/moq/issues/7743) and closed by
