@@ -1,10 +1,10 @@
 # Test 38 — The estate: many channels, many affiliates, and a licensing matrix with holes
 
-**State: run, 2026-09-11. Six of seven pass criteria met; criterion 4 met on CPU and not gradeable on memory. The estate behind an auth server, on the build under test: all four of its criteria met.** The third of three experiments behind [Control](../docs/control-plane.md). [T36](test-36-entitlement-enforcement.md) grades one credential against one path and [T37](test-37-entitlement-revocation.md) grades one revocation against the clock. This one asks whether the model survives the shape a real distributor actually has: several channels, several affiliates, and a licensing matrix that is deliberately not full.
+**State: run, 2026-09-11. Six of seven pass criteria met; criterion 4 met on CPU and not gradeable on memory. The estate behind an auth server: all four of its criteria met. Part 5 on the redesigned relay: all five met, in two runs.** The third of three experiments behind [Control](../docs/control-plane.md). [T36](test-36-entitlement-enforcement.md) grades one credential against one path and [T37](test-37-entitlement-revocation.md) grades one revocation against the clock. This one asks whether the model survives the shape a real distributor actually has: several channels, several affiliates, and a licensing matrix that is deliberately not full.
 
 **Headline.** The matrix is enforced combinatorially — all twenty-eight cells correct, every licensed pair delivering and every unlicensed pair refusing. And **narrow topology does achieve surgical de-provisioning**: withdrawing one channel from an affiliate that holds a key per channel left the channel it kept running to the end of the observation window, uninterrupted and indistinguishable from a session that had nothing done to it. Under broad topology the same operation took the kept channel down for **2.78 s** and required re-provisioning it under a new credential, because **the revocable unit is the key, not the grant inside the token.** That is the de-provisioning-granularity term the design document's scope trade-off does not consider, and it decides the topology.
 
-**The sharpest result is about mTLS, and it is a warning.** A client presenting a certificate signed by the relay's configured root, carrying **no token at all**, was served every channel in the estate — including the channel no affiliate licenses and **the other broadcaster's channel**. mTLS confers unrestricted access at whatever path is dialled. It cannot express a licensing matrix, and an operator who issues per-affiliate certificates expecting them to scope access gets the opposite of what they intended. That was `fd4f5d82e`; the build under test hands a certificate's scope to the auth server, unmeasured (§ Open).
+**The sharpest result is about mTLS, and it is a warning.** A client presenting a certificate signed by the relay's configured root, carrying **no token at all**, was served every channel in the estate — including the channel no affiliate licenses and **the other broadcaster's channel**. mTLS confers unrestricted access at whatever path is dialled. It cannot express a licensing matrix, and an operator who issues per-affiliate certificates expecting them to scope access gets the opposite of what they intended. That was `fd4f5d82e`. On the redesigned relay a certificate alone admits nothing, and an endpoint that decides by certificate enforces the matrix exactly and narrows or withdraws one certificate's grant within a re-check; upstream's own server gives every certificate the same grant (§ Part 5 on the redesigned relay).
 
 ## Objective
 
@@ -135,7 +135,7 @@ At a one-second cadence the slope rises **27 %**, to 0.1173. That is the mechani
 
 **Key handling passes by inspection, and by a stronger route than expected.** All eleven keys the authorization endpoint can serve are ES256 public keys carrying `key_ops: ["verify"]` and no private scalar. More to the point, the relay was never given key material at all: its entire authorization configuration is `--auth-api http://…`, so there is no key directory on the relay host to inspect. [Control](../docs/control-plane.md) §7.2's requirement is met structurally rather than by discipline.
 
-**Per-affiliate mTLS certificates cannot express a licensing matrix.** With the relay configured to accept client certificates from an affiliate CA, a client presenting a valid certificate and **no token** was served:
+**On `fd4f5d82e`, per-affiliate mTLS certificates cannot express a licensing matrix.** With the relay configured to accept client certificates from an affiliate CA, a client presenting a valid certificate and **no token** was served:
 
 | Target                                  | Result              |
 | --------------------------------------- | ------------------- |
@@ -182,7 +182,7 @@ This does not contradict [Control](../docs/control-plane.md) §3, which already 
 
 Six of seven met; criterion 4 met on CPU and not answerable on RSS in this rig.
 
-**And one finding sits outside the criteria because no criterion anticipated it**: per-affiliate mTLS certificates confer unrestricted cross-tenant access. Criterion 1 would have been _failed_ by the certificate arm had it been graded as a matrix — which is the right way to read it, and is why the result is reported as a warning rather than folded into a pass.
+**And one finding sits outside the criteria because no criterion anticipated it**: on `fd4f5d82e`, per-affiliate mTLS certificates confer unrestricted cross-tenant access (the redesigned relay: § Part 5 on the redesigned relay). Criterion 1 would have been _failed_ by the certificate arm had it been graded as a matrix — which is the right way to read it, and is why the result is reported as a warning rather than folded into a pass.
 
 ## Limits, stated in advance
 
@@ -195,7 +195,7 @@ Six of seven met; criterion 4 met on CPU and not answerable on RSS in this rig.
 Two limits emerged in the running and belong with the ones fixed in advance.
 
 - **The cost ladder is a comparison of slopes on one host, not a reproduction of [T26](test-26-cross-host-fanout.md).** T26's per-subscriber figures were measured cross-host on EC2; this ladder is loopback on the development machine, over twenty subscribers rather than eighty. The absolute per-subscriber cost here is a property of this hardware and is not comparable with T26's. What _is_ comparable, and what criterion 4 is therefore graded on, is the authenticated arms against an unauthenticated relay **on the same host in the same session**.
-- **mTLS de-provisioning was not measured** because there is nothing per-channel to measure: the credential is all-or-nothing, so withdrawal can only be withdrawal of everything, which is certificate revocation rather than entitlement.
+- **mTLS de-provisioning was not measured on `fd4f5d82e`** because there is nothing per-channel to measure: the credential is all-or-nothing, so withdrawal can only be withdrawal of everything, which is certificate revocation rather than entitlement. On the redesigned relay it was (§ Part 5 on the redesigned relay).
 
 ## Corrections
 
@@ -229,7 +229,7 @@ Two consequences follow:
 1. **Provisioning a new affiliate or channel needs no relay restart.** Writing the `.jwk` is the whole operation.
 2. **Deleting a key file refuses the next session at once, with no restart.** It does not stop a session already admitted: on the build under test that takes a re-check (§ The estate behind an auth server, criterion 3).
 
-**What this does not show.** § Open said "each a key the endpoint must serve _and_ the relay must cache". Only the relay half was measured here; the endpoint half is § The estate behind an auth server. Nor is this a multi-tenancy claim: `--server-tls-root` remains the cross-tenant master key described below, and a large key estate does nothing about it. The rungs are single samples; the figures are flat enough and the mechanism direct enough that repetition would not change the conclusion, but none was run. Keys here are HS256 and minted programmatically rather than through `moq token generate`, with a control cell requiring the relay to accept a minted key before any rung was believed; an asymmetric estate was not measured.
+**What this does not show.** § Open said "each a key the endpoint must serve _and_ the relay must cache". Only the relay half was measured here; the endpoint half is § The estate behind an auth server. The rungs are single samples; the figures are flat enough and the mechanism direct enough that repetition would not change the conclusion, but none was run. Keys here are HS256 and minted programmatically rather than through `moq token generate`, with a control cell requiring the relay to accept a minted key before any rung was believed; an asymmetric estate was not measured.
 
 ## The estate behind an auth server (criteria fixed before the first run)
 
@@ -259,9 +259,45 @@ The same ladder (10 to 20,000 keys, one per affiliate-channel pair, the token si
 - **Criterion 3.** Withdrawn under a live subscription: with `--revalidate 5s`, the last payload byte came 0.88 s after the deletion, because the rig deletes about 4.1 s after admission and the first re-check falls at 5 s; a deletion just after a re-check would wait up to 5 s. With `moq auth revalidate --path`, delivery stopped before the first 0.1 s poll. With no re-check, the session was still delivering 25 s later, when observation ended: **deleting a key refuses the next session, not the current one.**
 - **Criterion 4.** On one edge, an affiliate licensed `ch000` received 8.7 MB of it and nothing of `ch001`; one licensed `ch001`, the reverse; one licensed both, both.
 
+## Part 5 on the redesigned relay (criteria fixed before the first run)
+
+Part 5 ran on `fd4f5d82e`. The relay has since been redesigned: a verified certificate is reported to the auth server as a fact (`tls`: the first SAN name, the leaf's SHA-256, issuer, expiry) and admits nothing on its own; upstream's `moq auth serve` grants every verified certificate one rule set (`--mtls-subscribe`, `--mtls-publish`); and a relay given a client CA with public rules refuses to start. This repeats Part 5 against that design: the matrix, withdrawal, rotation and key handling. Laptop loopback, one relay with `--listen-tls-root` (an affiliate CA) and `--auth-url`; publishers present tokens, and each subscriber is one `moq export ts --passthrough` session presenting one affiliate certificate and no token, graded on payload bytes in an 8 s window. The matrix is Part 1's four single-credential affiliates, A (`ch1`), B (`ch1`, `ch2`), C (`ch2`) and F (`ch1-intl`), against `bcast/ch1`, `bcast/ch1-intl`, `bcast/ch2`, `bcast/nobody` and the other broadcaster's `rival/ch1`: twenty cells. Per-certificate decisions come from a router endpoint ([`t38-cert-router.py`](scripts/t38-cert-router.py)) that forwards each request, by the certificate's fingerprint, to that affiliate's own `moq auth serve --mtls-subscribe`, so upstream's server writes every grant.
+
+**Pass:**
+
+1. **Start-up.** A relay given the affiliate CA and `--auth-public '**'` refuses to start, as does one given the CA and no auth at all.
+2. **A certificate alone admits nothing.** With `moq auth serve` holding keys and no certificate rule, all twenty certificate cells refuse, while a token on `bcast/ch1` delivers.
+3. **The identity reaches the endpoint, and the matrix holds through it.** Every request carrying a certificate names it: `tls.name` is its SAN and `tls.fingerprint` the SHA-256 of its DER. All twenty cells match the matrix; one wrong cell fails. A certificate from another CA receives nothing, and a certificate presented with a token is refused.
+4. **Withdrawing a certificate is a de-provisioning path.** With the backends at `--revalidate 2s --expires 1h`, withdrawing B's certificate at the router stops both of B's sessions within 3 s of the withdrawal. A's `ch1` session keeps delivering, with no continuity errors.
+5. **Rotation and key handling, on ES256 keys whose public halves alone are in the auth server's key directory.** A session on the predecessor's token stops within 3 s of the predecessor's deletion, the successor's runs on with no continuity errors, and a new session on the predecessor's token is refused. No private scalar (`d`) is in the key directory, and the relay's arguments name no key.
+
+**Reported either way:** what `moq auth serve`'s single certificate rule (`--mtls-subscribe bcast/ch1`) gives each of the four certificates; and narrowing B from {`ch1`, `ch2`} to {`ch1`} under the same certificate, whether B's `ch2` session stops and its `ch1` session keeps delivering, which says whether the grant, not the credential, is the revocable unit (§ Open).
+
+**Results, on `204c97f4f`: all five criteria pass, in two runs.** Rig [`t38-part5-mtls.sh`](scripts/t38-part5-mtls.sh); a matrix arm runs its twenty cells at once. The figures are the first run's; the second reproduced every verdict. One deviation: `moq auth serve` refuses an exact certificate pattern (it "has no wildcard"), so every certificate rule ran as a subtree, `bcast/ch1/**` for `bcast/ch1`, which grants the same broadcast.
+
+1. **Start-up.** Both relays exited 1 before listening. The first names the conflict: a client CA "verifies client certificates, which --auth-public ignores"; the second, "no --auth-url or --auth-public configured; nobody can authenticate".
+2. **Alone.** All twenty certificate cells received 0 bytes; the token control received 9.38 MB.
+3. **Through the router**, the matrix held exactly, in megabytes:
+
+| Certificate | `bcast/ch1` | `bcast/ch1-intl` | `bcast/ch2` | `bcast/nobody` | `rival/ch1` |
+| --- | --- | --- | --- | --- | --- |
+| A | 9.41 | 0 | 0 | 0 | 0 |
+| B | 9.41 | 0 | 9.41 | 0 | 0 |
+| C | 0 | 0 | 9.41 | 0 | 0 |
+| F | 0 | 9.41 | 0 | 0 | 0 |
+
+All 123 requests carrying a certificate named the right one, by SAN and by DER fingerprint. An unlicensed channel under `bcast` was admitted and not served; `rival` was refused at connect. The other CA's certificate failed the TLS handshake (`UnknownIssuer`) and never reached the endpoint; A's certificate presented with a token reached A's backend and was refused.
+
+4. **Withdrawal.** Removing B's fingerprint from the router stopped B's `ch1` and `ch2` sessions 0.31 s and 0.32 s later (0.36 s and 0.37 s in the second run); A's `ch1` delivered to the end of the 20 s window with 0 continuity errors.
+5. **Rotation.** Deleting the predecessor's public key stopped its session 0.38 s later in both runs; the successor's delivered to the end of the window with 0 continuity errors, and a new session on the predecessor's token received 0 bytes. The key directory held two ES256 public keys and no `d`; the relay's arguments were its config file, `--listen-tls-root` and `--auth-url`.
+
+The 0.3–0.4 s is where the rig's withdrawal fell in the 2 s re-check, not a floor: one just after a re-check would wait up to 2 s.
+
+**Reported.** `moq auth serve --mtls-subscribe 'bcast/ch1/**'` gave all four certificates `bcast/ch1` (9.41–9.44 MB) and nothing else: upstream's server authenticates certificates but cannot tell affiliates apart, so per-affiliate scope needs an endpoint that decides by `tls.fingerprint` or `tls.name`, here the router. **Narrowing B to `ch1`** at the router, under the same certificate, stopped B's `ch2` session 0.42 s later (0.32 s in the second run), and its `ch1` session delivered to the end of the window with 0 continuity errors. Where the endpoint decides the grant, the grant is the revocable unit, not the credential.
+
 ## Open
 
 - **Per-subscriber RSS under authorization is unmeasured**, for the instrument reason in Part 4. It needs a relay restarted between arms.
-- **`--server-tls-root` is a cross-tenant master key and the relay says nothing about it** on `fd4f5d82e`. On the build under test, a verified certificate admits what the auth server's `--mtls-publish` and `--mtls-subscribe` patterns allow; that form is not measured. A valid client certificate admits the peer to every path on the relay, including other tenants', and the authorization endpoint is not told which certificate was presented, so it cannot object. An operator who configures client-certificate authentication alongside a token-based licensing matrix has silently bypassed the matrix. This is worth an upstream report: at minimum the peer's certificate subject should reach `AuthApiRequest`, so the endpoint can scope what a certificate admits.
-- **De-provisioning at the grant level rather than the key level does not exist** on `fd4f5d82e`. Narrowing an affiliate's entitlement requires a key per unit of entitlement, so the key estate has to be sized by the licensing matrix rather than by the affiliate count. Neither the relay's cost nor the auth server's grows with that estate (§ The key estate costs the relay nothing; § The estate behind an auth server). The build under test re-authorizes a live session in place on revalidation, which may make the grant the revocable unit; not measured.
+- **Per-affiliate certificate scope needs an endpoint upstream does not ship.** Its server grants every verified certificate one rule set (§ Part 5 on the redesigned relay); the router that scoped them here is rig code.
+- **Grant-level de-provisioning is measured for certificates only.** An endpoint that decides a certificate's grant narrows it in place (§ Part 5 on the redesigned relay). Behind upstream's server a token's grant is what the token carries, so narrowing a token still means withdrawing its key, and the key estate is sized by the licensing matrix; neither the relay's cost nor the auth server's grows with it (§ The key estate costs the relay nothing; § The estate behind an auth server).
 - **Rights windows**, per the limits above.

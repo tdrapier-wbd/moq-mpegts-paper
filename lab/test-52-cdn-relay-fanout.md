@@ -1,6 +1,6 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: ramps and the demultiplexed soak done.** The demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
+**State: ramps and the demultiplexed soak done; the opener's refused join reproduced on loopback and fixed in moqx v0.3.7.** The demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
 
 ## Objective
 
@@ -110,6 +110,22 @@ At 18.8 h the soak's publisher exited on the backward step that ended both stand
 **The node's memory grew without bound**, by the operator's reading: about 57 MiB an hour, to 3.06 GiB of its 4 GB by the end, falling back when the sessions ended. He traced part of it to cache metadata moqx v0.3.6 keeps for each evicted group, so it grows with the group rate, about 74 a second here ([moqx#874](https://github.com/openmoq/moqx/issues/874), since fixed). At that rate the node had less than a day left, so 72 h is close to the longest this load can run on that release; a release with the fix is the one to re-soak (P1-j).
 
 **What the criteria could not see.** The byte criterion reads socket bytes, which carry about 1.3 % of QUIC and IP overhead over the publisher's input, so a loss under about 1.2 % would pass it; the subscribers' spread about their median, −0.022 % to +0.014 %, is the finer reading. The monitors cannot see a hole the export has filled. A soak of this lane needs the export's skip count graded.
+
+### The opener's join on a local moqx (criteria fixed before the first run)
+
+moqx v0.3.7 carries [#899](https://github.com/openmoq/moqx/pull/899): with `use_local_forwarders`, a subscriber on the publisher's I/O thread no longer has its joining FETCH refused ([#883](https://github.com/openmoq/moqx/issues/883)). If that is the node's failure, the release fixes it before the node upgrades. Laptop loopback, raw QUIC draft 18, moqx v0.3.6 against v0.3.7 (the macOS arm64 release binaries), in three configurations: **N**, the node's single thread with `use_local_forwarders: true`; **Q**, #883's `threads: 4` with `use_relay_thread` and `use_local_forwarders`; and **D**, the default (no local forwarders), on v0.3.6 only, as the attribution control. A trial is a fresh broadcast: `moq import ts --passthrough` of the synthetic fixture, its catalog published once; 4 s later the opener, `moq export ts --passthrough` for 8 s; 2.5 s after it, a joiner for 6 s. Ten trials per release and configuration, twenty in a configuration where v0.3.6 refuses fewer than half. An opener is refused if it exports no payload in its 8 s and its log shows the joining FETCH refused.
+
+**Void** unless v0.3.6 refuses at least one opener in N or Q: then the node's failure has not been reproduced here, and the release is untested against it. **Pass** if v0.3.7 refuses no opener, in every configuration where v0.3.6 refused one. **Reported:** the joiners on both releases, and D.
+
+**Results: pass.** Rig [`t52-local-join.sh`](scripts/t52-local-join.sh), the client at `204c97f4f`, ten trials each; D ran on both releases.
+
+| Configuration | v0.3.6 openers refused | v0.3.6 joiners refused | v0.3.7 openers refused | v0.3.7 joiners refused |
+| --- | --- | --- | --- | --- |
+| N | 10 of 10 | 10 of 10 | 0 of 10 | 0 of 10 |
+| Q | 10 of 10 | 10 of 10 | 0 of 10 | 0 of 10 |
+| D | 0 of 10 | 0 of 10 | 0 of 10 | 0 of 10 |
+
+Each v0.3.6 refusal is the client's "joining FETCH failed … not found" beside moqx's "Session not found". With local forwarders off, v0.3.6 refused nothing, so the refusal is #883's path. Every v0.3.7 opener exported 1.75–2.00 MB in its 8 s, and every joiner 1.37–1.38 MB in its 6 s. Two results differ from the node's: here the joiner is refused too, where the node's received the catalog; and Q refused every subscriber, where #883 refused one in five on Linux. Neither difference is explained. **v0.3.7 fixes the opener's refusal wherever v0.3.6 reproduced it; the node's own case closes when it upgrades.**
 
 ## Corrections
 

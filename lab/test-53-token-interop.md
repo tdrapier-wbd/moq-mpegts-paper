@@ -1,6 +1,6 @@
 # Test 53 — Token interoperability across relay implementations
 
-**State: run on loopback, drafts 16 and 18; graded.** H2 and H4 hold; H1 and H3 do not. Both relays enforce what they can express, and every refusal delivered zero payload bytes. The estate does not carry across as a token, and moqx v0.3.6 can withdraw a grant only by a restart.
+**State: run on loopback, drafts 16 and 18; graded.** H2 and H4 hold; H1 and H3 do not. Both relays enforce what they can express, and every refusal delivered zero payload bytes. The estate does not carry across as a token, and moqx can withdraw a grant only by a restart. Re-checked on moqx v0.3.7: every moqx verdict the same, and `SIGHUP` no longer ends the process (§ moqx v0.3.7).
 
 ## Objective
 
@@ -22,7 +22,7 @@ Read before running. Two cells are corrected from the results.
 | Keys | HMAC, RSA, ECDSA, EdDSA; scoped keys; the relay can hold verifying material only | HMAC-SHA256 with a key ID; the relay holds the shared secret. **Each key verifies a grant on any namespace of its service** (arm P3k) |
 | Carriage | URL `?jwt=`; the draft's `AUTHORIZATION TOKEN` in SETUP with Token Type 0; one on `SUBSCRIBE` or `PUBLISH_NAMESPACE` grants that request only, and is refused unless its Token Type is 0 | the draft's `AUTHORIZATION_TOKEN` of one configured Token Type (default 0, 16 for CAT4MOQ's wrapper), in SETUP and per request, several per message up to a cap |
 | Grant | path prefixes for publish and subscribe, segment-aware | CAT4MOQ actions with namespace and track matches: exact, prefix, suffix or contains |
-| Withdrawal | an authorization endpoint re-checked on a cadence ([T37](test-37-entitlement-revocation.md)), or expiry | **none on a live session** (Part C): expiry is checked at admission, and the documented `SIGHUP` reload is not in v0.3.6 |
+| Withdrawal | an authorization endpoint re-checked on a cadence ([T37](test-37-entitlement-revocation.md)), or expiry | **none on a live session** (Part C): expiry is checked at admission, and the documented `SIGHUP` reload is in neither v0.3.6 nor v0.3.7 |
 | Anonymous access | a public path | `anonymous_claim`, a floor of actions on matching namespaces |
 
 `moq` on `main` puts its token in the URL only. #6177 adds `--connect-token`, which `moq` writes as moq-transport's `AUTHORIZATION TOKEN` with Token Type 0 in CLIENT_SETUP. OpenMOQ's origin publisher (`openmoq-publisher`, moqxr) reads a token from a file and lets the Token Type be overridden. So the message carries either format; Part A found the clients do not.
@@ -41,9 +41,9 @@ Single host (the laptop), loopback, as in T36: enforcement measured without a ne
 | Component | Build |
 | --- | --- |
 | `moq-relay`, `moq`, `moq auth` | `main` at `f13283b30`; re-run at `66af72315`, every verdict the same but A1x's and the C7–C8 reason |
-| `moq` for the SETUP arms | #6177's branch at `9425db108` |
-| moqx, `moqx-issuer` | release v0.3.6, macOS arm64 binaries |
-| `openmoq-publisher` | release v0.4.10 (`d6a19ab`), macOS binary, not built from source |
+| `moq` for the SETUP arms | #6177's branch at `9425db108`; for draft 18 against v0.3.7, `main` at `204c97f4f` |
+| moqx, `moqx-issuer` | release v0.3.6, macOS arm64 binaries; re-checked on v0.3.7 |
+| `openmoq-publisher` | release v0.4.10 (`d6a19ab`), macOS binary, not built from source; v0.4.12 (`0727808`) for draft 18 against v0.3.7 |
 | Authorization | `moq auth serve` over a directory of public keys, re-checking every 5 s; the relay on `--auth-url` |
 | Source | the synthetic fixture at 1,200 s, on `moq-relay` and moqx's `/h4`; an MP4 of it for `openmoq-publisher` |
 | Transport | moq-transport draft 16 and draft 18 over raw QUIC, each arm on both |
@@ -141,7 +141,7 @@ Payload bytes at the receiver, draft 16 then draft 18.
 
 A1x on draft 18: the relay logged "auth grant cannot be encoded as one AUTH_OK; refusing the token", ended the session's lease, and the client was told unauthorized. `moq auth sign` issues the grant without comment. **On `main` at `66af72315` the exact grant is admitted on both drafts**: 1,981,332 · 1,900,116 bytes, beside A1's 1,787,504 · 1,956,328.
 
-**Disclosure.** On `moq-relay`, both drafts, A was announced `ch1`, B `ch1` and `ch2`, C `ch2`: exactly what each licenses. On moqx, announcements follow the `subscribe_namespace` grant, not the subscribe grant. On `/h4` a subscriber licensed to subscribe under `[bcast, ch1]` alone was announced all four broadcasts (`ch1`, `ch1/sub`, `ch1-intl`, `ch2`). On `/h4n`, with discovery scoped to `[bcast, ch1]`, `moq`'s root-wide request was refused and the subscriber received nothing, its licensed channel included.
+**Disclosure.** On `moq-relay`, both drafts, A was announced `ch1`, B `ch1` and `ch2`, C `ch2`: exactly what each licenses. On moqx, announcements follow the `subscribe_namespace` grant, not the subscribe grant. On `/h4` a subscriber licensed to subscribe under `[bcast, ch1]` alone was announced all four broadcasts (`ch1`, `ch1/sub`, `ch1-intl`, `ch2`). On `/h4n`, with discovery scoped to `[bcast, ch1]`, `moq`'s root-wide request was refused and the subscriber received nothing, its licensed channel included. `moq` at `204c97f4f` received its licensed channel there on draft 18, from v0.3.6 and v0.3.7 alike (1.76–1.79 MB): the client's change, not the relay's.
 
 ### H4: moqx's prefix matcher (`/h4`, subscribe under `[bcast, ch1]`)
 
@@ -160,8 +160,8 @@ The match is on namespace elements, not bytes.
 | --- | --- | --- |
 | `moq-relay` | a token expiring 30 s into a live subscription | ended at +30 s; the client was told "authorization token expired" |
 | `moq-relay` | the HS256 key deleted from the auth server's directory, re-checked every 5 s | ended at the session's next re-check, which fell at the deletion: the auth server refused ("the token's key is unknown") and the client was closed unauthorized within 1 ms. The bound is one cadence (T37) |
-| moqx | a 30 s CAT on a live publisher | still publishing at +80 s, 50 s past expiry: its namespace and publications in moqx's state at every 10 s read, whole groups fetched at +70 s and +80 s. Fetches at +39 s to +60 s returned 5,432 bytes and "failed to read group 1", unexplained |
-| moqx | `SIGHUP` | the process exits. v0.3.6 handles SIGTERM and SIGINT only, though its configuration reference says `SIGHUP` reloads the file |
+| moqx | a 30 s CAT on a live publisher | still publishing at +80 s, 50 s past expiry: its namespace and publications in moqx's state at every 10 s read, whole groups fetched at +70 s and +80 s. Fetches at +39 s to +60 s returned 5,432 bytes and "failed to read group 1"; with the current clients every read from +31 s fetched whole groups, from either release, so that was the old clients' |
+| moqx | `SIGHUP` | the process exits. v0.3.6 handles SIGTERM and SIGINT only, though its configuration reference says `SIGHUP` reloads the file. v0.3.7 logs "Ignoring SIGHUP: config reload is not supported" and runs on |
 | moqx | the key removed and moqx restarted | a new session with that key's CAT refused, "invalid authorization token signature"; a configured key's CAT admitted, 134,281 bytes. The restart ended every session on the relay |
 
 ## Grading
@@ -176,7 +176,7 @@ The match is on namespace elements, not bytes.
    - A8 and A10 had no moqx form.
    - Every refusal on either relay delivered zero payload bytes.
 5. **H4 holds** on moqx's matcher, through `anonymous_claim`: `ch1` and its child admitted, `ch1-intl` and `ch2` refused with zero bytes. Not measured with a CAT.
-6. **Part C.** `moq-relay` ends a session at expiry, and within one re-check cadence of a withdrawal. moqx v0.3.6 does neither: a live session outlives its CAT, and a key is withdrawn only by a restart that ends every session.
+6. **Part C.** `moq-relay` ends a session at expiry, and within one re-check cadence of a withdrawal. moqx v0.3.6 does neither, nor does v0.3.7: a live session outlives its CAT, and a key is withdrawn only by a restart that ends every session.
 
 ## Conclusions
 
@@ -185,15 +185,23 @@ The match is on namespace elements, not bytes.
   - On moqx, discovery is a grant of its own.
   - On moqx, isolation between broadcasters needs one service each, since keys are not scoped. This is read from the configuration, not measured.
   - On a `moq-relay` build without #6621, a grant must be a union of subtrees for draft 17 and later.
-- **On moqx v0.3.6 a token's lifetime does not bound access.** Expiry does not end a live session, and withdrawal before expiry is a restart. On `moq-relay` both are bounded: expiry exactly, withdrawal by one cadence.
+- **On moqx v0.3.6 and v0.3.7 a token's lifetime does not bound access.** Expiry does not end a live session, and withdrawal before expiry is a restart. On `moq-relay` both are bounded: expiry exactly, withdrawal by one cadence.
 - **An exact grant survives a wire upgrade only on a `moq-relay` build with #6621.** Without it, a grant that works on draft 16 is refused on draft 18, and the signer accepts it without warning.
 
-**Defects found, reported upstream** (state in the [ledger](upstream-contributions.md#token-interoperability--6566-and-6567-fixed-moqx786-open-moqxr83-a-mode)):
+**Defects found, reported upstream** (state in the [ledger](upstream-contributions.md#token-interoperability--6566-and-6567-fixed-moqx786-open-moqxr83-fixed)):
 
 - `moq-relay`: the draft-17 refusal of exact grants, undocumented, with the token in the URL too ([#6566](https://github.com/moq-dev/moq/issues/6566); fixed, re-measured above).
 - `moq`: it prints `MALFORMED_AUTH_TOKEN` as an unknown code ([#6567](https://github.com/moq-dev/moq/issues/6567); at `66af72315` it prints "malformed auth token"), and it cannot carry a binary token.
-- moqx v0.3.6: the documented `SIGHUP` reload ends the process ([on #786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516)).
+- moqx v0.3.6: the documented `SIGHUP` reload ends the process ([on #786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516)); v0.3.7 ignores it.
 - `openmoq-publisher`: it exits when a relay refuses PUBLISH; without `--publish-catalog` it publishes to `moq-relay` on draft 18 and exits on draft 16, refusing the relay's request ID ([moqxr#83](https://github.com/openmoq/moqxr/issues/83)).
+
+## moqx v0.3.7
+
+The rig as above, with moqx v0.3.7 and `max_subscription_buffer_kb`, which that release requires (v0.3.6 accepts it). Draft 16 ran with the original clients. On draft 18, v0.3.7 ended their sessions: the #6177 branch's `moq` closed on "invalid value" at its first message, and `openmoq-publisher` v0.4.10 was closed with "Internal error" while awaiting its REQUEST_UPDATE. So draft 18 ran with `moq` at `204c97f4f` and `openmoq-publisher` v0.4.12, and v0.3.6 was run again with the same clients to attribute each difference.
+
+- **The same on both drafts:** C3, C6, C9 and C10 refused with zero bytes; C4 admitted on `/t16`, `/t0` and `/pg`; P1 admitted and P2–P9 refused; **P3k admitted** (114,737 · 129,757 bytes), so keys are still not scoped within a service; H4's matcher as in its table; a 30 s CAT's publisher still publishing at +83 s; a removed key's CAT refused after the restart, a configured key's admitted.
+- **The release's change:** `SIGHUP` is logged and ignored, where v0.3.6 exits. A key is still withdrawn only by a restart.
+- **The client's changes**, the same on v0.3.6: `/h4n` delivers the licensed channel (§ Part B, _Disclosure_), and Part C's fetches return whole groups.
 
 ## Limits
 

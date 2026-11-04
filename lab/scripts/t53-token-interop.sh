@@ -77,6 +77,7 @@ moqx_config() { # moqx_config [omit-key-id]
 	service_defaults:
 	  auth: {max_tokens_per_message: 4}
 	  cache: {enabled: true, max_tracks: 100, max_groups_per_track: 10}
+	  max_subscription_buffer_kb: 51200
 	services:
 	  t0:
 	    match: [{authority: {any: true}, path: {prefix: "/t0"}}]
