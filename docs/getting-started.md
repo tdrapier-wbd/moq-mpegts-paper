@@ -13,7 +13,7 @@ Tested on macOS with these versions, and Recipe 3's multicast commands on Linux 
 | Tool | Version | For |
 |---|---|---|
 | `moq` (crate `moq-cli`) and `moq-relay` | 0.14.12 and 0.17.12 | the MoQ publisher, subscriber and relay |
-| `mpegts-pacer` | 0.1.0 | pacing the subscriber's output for an IRD (Recipe 3) |
+| `mpegts-pacer` | 0.1.1 | pacing the subscriber's output for an IRD (Recipe 3) |
 | TSDuck (`tsp`) | 3.45 | pacing the source, HLS packaging and receiving, the checks |
 | FFmpeg | 9.0 | generating the fixture |
 | Python 3 | any recent | a static HTTP origin |
@@ -22,7 +22,7 @@ With a Rust toolchain installed, the MoQ tools and the pacer build in a few minu
 
 ```bash
 cargo install --locked moq-cli@0.14.12 moq-relay@0.17.12
-cargo install --locked --git https://github.com/tdrapier-wbd/mpegts-pacer --tag v0.1.0 mpegts-pacer
+cargo install --locked --git https://github.com/tdrapier-wbd/mpegts-pacer --tag v0.1.1 mpegts-pacer
 ```
 
 Every command below runs in `/tmp/gs`. From the root of this repository:
