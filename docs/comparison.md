@@ -107,6 +107,11 @@ head-to-head under one shaper ([Evidence](../lab/evidence.md) §3.3):
 - **Under sustained under-capacity the segmented lane takes lateness** at 0 continuity errors,
   invisible to an integrity monitor, until the origin evicts the segment it asks for — a cliff where
   the media-aware lane has a slope.
+- **Burst loss on a long path stalls the segmented lane over TCP** (HTTP/3 untested there): on a
+  116 ms path, a burst that takes most of a fetch is resent only after a retransmission timeout, then
+  one round trip at a time. Under 20 ms bursts covering 1 % of time it fails two replicates of three,
+  and re-requesting the segment on a fresh connection after 1 s does not bound the stall (5.0–5.8 s
+  lost where that fired; [Evidence](../lab/evidence.md) §3.11).
 
 **Against SRT, matched on
 measured latency and graded on content, the media-aware lane loses more programme in every
