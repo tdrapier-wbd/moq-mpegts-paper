@@ -1,33 +1,53 @@
 # The Problem, and What a Successor Must Do
 
-Status: working draft. Layer: **the requirement** — what Internet-native primary distribution has to do, before any data plane is chosen.
+Status: working draft. Layer: **the requirement.** Scope: what primary distribution is, the incumbent architectures and where the IP one stops, the pressures eroding them, what a successor has to change, and the requirement set R1–R8 (§5) that every later document is scored against. Reads with: [Comparison](comparison.md), which scores the data planes against it.
 
 **Contents**
 
-- [1. What primary distribution is](#1-what-primary-distribution-is)
-- [2. The incumbents, and where the IP incumbent stops](#2-the-incumbents-and-where-the-ip-incumbent-stops)
+- [In brief](#in-brief)
+- [1. Primary distribution](#1-primary-distribution)
+  - [1.1 Determinism](#11-determinism)
+  - [1.2 Professional endpoints](#12-professional-endpoints)
+  - [1.3 Accountability](#13-accountability)
+  - [1.4 Topology](#14-topology)
+  - [1.5 Receive estate](#15-receive-estate)
+- [2. Incumbents](#2-incumbents)
   - [2.1 Satellite](#21-satellite)
-  - [2.2 Leased fibre and MPLS-based managed IP](#22-leased-fibre-and-mpls-based-managed-ip)
-  - [2.3 Point-to-point IP over the public internet — adopted, and capped](#23-point-to-point-ip-over-the-public-internet--adopted-and-capped)
-  - [2.4 The common thread, and the one property that is missing](#24-the-common-thread-and-the-one-property-that-is-missing)
-- [3. What is changing](#3-what-is-changing)
-  - [The forcing pressure](#the-forcing-pressure)
-  - [What makes a response possible now](#what-makes-a-response-possible-now)
-  - [What the business is asking for](#what-the-business-is-asking-for)
-- [4. What a successor has to change](#4-what-a-successor-has-to-change)
-- [5. The requirement set](#5-the-requirement-set)
+  - [2.2 Managed IP](#22-managed-ip)
+  - [2.3 Point-to-point IP](#23-point-to-point-ip)
+  - [2.4 Missing property](#24-missing-property)
+- [3. Pressures](#3-pressures)
+  - [3.1 Economics](#31-economics)
+  - [3.2 Linear revenue](#32-linear-revenue)
+  - [3.3 Connected head-ends](#33-connected-head-ends)
+  - [3.4 Commodity substrate](#34-commodity-substrate)
+  - [3.5 Open supply](#35-open-supply)
+  - [3.6 Cloud plant](#36-cloud-plant)
+  - [3.7 Agility](#37-agility)
+  - [3.8 Dynamic rights](#38-dynamic-rights)
+- [4. Successor](#4-successor)
+- [5. Requirements](#5-requirements)
+- [6. Limits](#6-limits)
+- [7. Open questions](#7-open-questions)
+- [8. References](#8-references)
 
-**The problem is not that broadcasters are unwilling to move primary distribution onto IP. They have already done it.** Zixi has carried professional feeds over the public internet for years, SRT has been adopted broadly and rapidly on top of that, and managed services — AWS Elemental MediaConnect, LTN, Zixi's own platform and several smaller specialists — sell it as a product today. IP primary distribution is not a proposal. It is an incumbent.
+## In brief
 
-**What it has not done is replace satellite, and the reason is a ceiling on destination count.** The adopted architectures are point-to-point tunnels, so serving N destinations means N sessions originated from the source, or a re-origination tier the operator builds and runs. That is comfortable at tens of endpoints and runs out shortly after (AWS Elemental MediaConnect caps flows at 50 outputs) (§2.3). Beyond that the operator is building fan-out infrastructure, and paying for every copy. Satellite, by contrast, illuminates every receiver in its footprint for the price of one. **So the question this repository asks is not "can broadcast move to IP" but "can an IP path serve hundreds to low thousands of delivery points economically" — because that is what replacing a transponder requires.**
+**The problem is not that broadcasters are unwilling to move primary distribution onto IP. They have already done it** (§2.3). IP primary distribution is not a proposal. It is an incumbent.
 
-This document states that problem, why the incumbent architectures solved their part of it well, what is eroding them, and — in §5 — the numbered requirement set that every later document is scored against. It deliberately does not name a candidate protocol until the requirements are fixed. Primary distribution has been re-architected before (analogue to digital, ASI to IP, SDI to ST 2110) and each time the transport was the least interesting part of the transition: what changed the industry was the operating model the transport made possible.
+**What it has not done is replace satellite, and the reason is a ceiling on destination count** (§2.3). The adopted architectures are point-to-point tunnels, comfortable at tens of endpoints and out of their range shortly after, where satellite illuminates every receiver in its footprint for the price of one. **So the question this repository asks is not "can broadcast move to IP" but "can an IP path serve hundreds to low thousands of delivery points economically" — because that is what replacing a transponder requires** (§2.4).
 
-Claims here are marked _established_, _likely_ or _uncertain_. Nothing is measured in this document; the measurements are in [Evidence](../lab/evidence.md).
+**The incumbent model is being eroded by pressures largely exogenous to the transport, and economics leads them** (§3).
+
+**A successor has to put something in the path that behaves like a cache** (§4). Two honest alternatives remain: an API-driven control plane over existing managed IP, which narrows the agility mismatch but not the economics of the thousandth destination, and satellite with an IP repair channel, which makes the choice at least three-way.
+
+**R1–R3 decide whether a candidate is usable at all, and R3 and R6–R8 sit above the transport, required whichever data plane is chosen** (§5).
+
+Nothing is measured in this document: its claims are marked _established_, _likely_ or _reasoned_, and the measurements are in [Evidence](../lab/evidence.md) (§6).
 
 ---
 
-## 1. What primary distribution is
+## 1. Primary distribution
 
 **Primary distribution is the trunk of linear television: a small number of extremely high-value feeds moved from a playout or origination facility to a set of _known, contracted_ endpoints** — affiliate stations, cable and DTH headends, OTT origin/packaging facilities, partner broadcasters.
 
@@ -35,47 +55,57 @@ Two adjacent problems are frequently conflated with it. **Contribution** moves s
 
 Primary distribution sits between them, and its defining characteristics have been stable for decades (_established_). They are numbered here because the requirement set in §5 refers back to them.
 
-**§1.1 — Determinism dominates.** The expectation is not "high availability" in the web sense but something closer to "never fails visibly during contracted content". A dropped feed during a tier-one sporting event is a breach, not an incident to apologise for on a status page.
+### 1.1 Determinism
 
-**§1.2 — The endpoints are professional and long-lived.** Hardware IRDs, professional decoders and ASI/SDI plant are capital equipment with a five-to-fifteen-year service life. They enforce TR 101 290 P1/P2 conformance, lock phase-locked loops to the transport stream's programme clock reference (PCR), and expect MPEG-2 transport stream semantics: stable PMT PIDs, SDT service identity, SCTE-35 splice signalling, teletext and subtitling, monotonic continuity counters.
+**Determinism dominates.** The expectation is not "high availability" in the web sense but something closer to "never fails visibly during contracted content". A dropped feed during a tier-one sporting event is a breach, not an incident to apologise for on a status page.
 
-**§1.3 — Trust and accountability are first-class.** Buyers optimise for "never fails" and for a counterparty contractually accountable when it does — hence long sales cycles, heavy procurement, and incumbents that stay sticky well beyond the point where a challenger is technically competitive.
+### 1.2 Professional endpoints
 
-**§1.4 — The topology is one-to-many but not millions.** A national feed may fan out to tens or hundreds of endpoints, sometimes low thousands — not the millions a consumer CDN is built for. That cuts both ways, and both directions matter. The properties that make a transport excellent at consumer-scale fan-out are not automatically the ones that matter here; but the range that _is_ required — hundreds to low thousands — is precisely the range the adopted point-to-point architectures do not reach (§2.3).
+**The endpoints are professional and long-lived.** Hardware IRDs, professional decoders and ASI/SDI plant are capital equipment with a five-to-fifteen-year service life. They enforce TR 101 290 P1/P2 conformance, lock phase-locked loops to the transport stream's programme clock reference (PCR), and expect MPEG-2 transport stream semantics: stable PMT PIDs, SDT service identity, SCTE-35 splice signalling, teletext and subtitling, monotonic continuity counters.
 
-**§1.5 — A distributor no longer supplies its clients' receiving equipment.** This one is newer and decides more than it looks (_established_). The era of shipping an IRD to every affiliate is over — the receive estate is the client's capex and the client's choice. What survives from that era is the _contract_: a conformant transport stream, correctly paced, over ASI or IP, at an agreed demarcation point. This is developed in [Comparison](comparison.md) §4.1, where it turns out to determine which side of the demarcation the expensive engineering falls on.
+### 1.3 Accountability
+
+**Trust and accountability are first-class.** Buyers optimise for "never fails" and for a counterparty contractually accountable when it does — hence long sales cycles, heavy procurement, and incumbents that stay sticky well beyond the point where a challenger is technically competitive.
+
+### 1.4 Topology
+
+**The topology is one-to-many but not millions.** A national feed may fan out to tens or hundreds of endpoints, sometimes low thousands — not the millions a consumer CDN is built for. That cuts both ways, and both directions matter. The properties that make a transport excellent at consumer-scale fan-out are not automatically the ones that matter here; but the range that _is_ required — hundreds to low thousands — is precisely the range the adopted point-to-point architectures do not reach (§2.3).
+
+### 1.5 Receive estate
+
+**A distributor no longer supplies its clients' receiving equipment.** This one is newer and decides more than it looks (_established_). The era of shipping an IRD to every affiliate is over — the receive estate is the client's capex and the client's choice. What survives from that era is the _contract_: a conformant transport stream, correctly paced, over ASI or IP, at an agreed demarcation point. This is developed in [Comparison](comparison.md) §4.1, where it turns out to determine which side of the demarcation the expensive engineering falls on.
 
 ---
 
-## 2. The incumbents, and where the IP incumbent stops
+## 2. Incumbents
 
-Three architectures carry primary distribution today. Each solved the determinism problem in a way that matched the technology and economics of its era, and each retains properties that are genuinely difficult to replicate. The third is the one usually left out of this comparison, and it is the one that defines the actual problem.
+**Three architectures carry primary distribution today, and the IP one stops at a destination count** (§2.3). Each solved the determinism problem in a way that matched the technology and economics of its era, and each retains properties that are genuinely difficult to replicate. The third is the one usually left out of this comparison, and it is the one that defines the actual problem.
 
 ### 2.1 Satellite
 
-A physical-layer broadcast medium: one uplink illuminates a footprint, and every receiver within it sees the same signal at essentially the same time. That yields intrinsic one-to-many economics — **the marginal cost of an additional receiver is close to zero, which is the property everything else in this document is measured against** — plus independence from terrestrial networks (immunity to congestion, BGP events and inter-region fibre cuts) and dedicated, capacity-reserved delivery.
+**A physical-layer broadcast medium: one uplink illuminates a footprint, and every receiver within it sees the same signal at essentially the same time.** That yields intrinsic one-to-many economics — **the marginal cost of an additional receiver is close to zero, which is the property everything else in this document is measured against** — plus independence from terrestrial networks (immunity to congestion, BGP events and inter-region fibre cuts) and dedicated, capacity-reserved delivery.
 
 Its weaknesses are equally structural: half-second geostationary round trips, a widening disadvantage as terrestrial paths improve; rain fade; capital-intensive provisioning; footprint rigidity; and the spectrum and fleet-economics pressure in §3.1.
 
 **Two of those weaknesses now have a specified mitigation, which makes satellite a moving target rather than a fixed baseline.** Rain fade — and, through it, the option of trading fade margin for cheaper or scarcer capacity in a higher band — can be addressed by keeping satellite as the primary path and borrowing the internet only to repair what a given site lost. That is a distinct architecture with published specifications behind it, and it is taken up as one of the two honest alternatives in §4.
 
-### 2.2 Leased fibre and MPLS-based managed IP
+### 2.2 Managed IP
 
-ST 2022-7 hitless redundancy, RTP/FEC and engineered class-of-service brought lower latency and more flexible capacity than satellite. Determinism here is contractual and engineered: reserved-bandwidth label-switched paths with strict QoS, on a private overlay whose failure domains and security posture sit with a single operator, directly compatible with the IP plant broadcasters were already building internally. Weaknesses are cost and agility: a new managed route is a procurement exercise measured in weeks or months, capacity is priced for dedicated use, and reach is bounded by carrier footprint and peering.
+**Leased fibre and MPLS-based managed IP brought lower latency and more flexible capacity than satellite**, with ST 2022-7 hitless redundancy, RTP/FEC and engineered class-of-service. Determinism here is contractual and engineered: reserved-bandwidth label-switched paths with strict QoS, on a private overlay whose failure domains and security posture sit with a single operator, directly compatible with the IP plant broadcasters were already building internally. Weaknesses are cost and agility: a new managed route is a procurement exercise measured in weeks or months, capacity is priced for dedicated use, and reach is bounded by carrier footprint and peering.
 
-### 2.3 Point-to-point IP over the public internet — adopted, and capped
+### 2.3 Point-to-point IP
 
 **This is the part usually described as the future when it is in fact the present** (_established_). Zixi has carried professional feeds over commodity internet for years with its own protocol and broadcaster-operated fan-out; SRT, published as an open protocol with an open-source implementation, was adopted quickly and widely on top of that; and the capability is sold as a managed product by AWS Elemental MediaConnect, LTN, Zixi and a number of smaller specialists. A broadcaster wanting to move a feed from London to a partner in Singapore over the internet, with retransmission, encryption and a management plane, buys that today.
 
 **What none of them changes is the shape of the delivery, and the shape is what caps it.** All are point-to-point tunnels with per-session state. Serving N destinations means N sessions originated from the source, or a re-origination tier the operator builds, runs and pays for. Nothing in the path is a cache, so the marginal destination costs a marginal session and a marginal copy of the bitrate — the opposite of the satellite property in §2.1.
 
-Where the exact commercial ceiling sits varies with bitrate, region and negotiated terms, and it may be somewhat below or above 50 — but that is the region, and it is an order of magnitude short of a transponder's fan-out.
+AWS Elemental MediaConnect caps a flow at 50 outputs. Where the exact commercial ceiling sits varies with bitrate, region and negotiated terms, and it may be somewhat below or above 50 — but that is the region, and it is an order of magnitude short of a transponder's fan-out.
 
 The architectural escape is to chain flows or stand up a re-origination tier, and it is available today. What it is not is free: each tier is another hop of latency, another failure domain, another egress bill on the same bytes, and another thing to operate. Fan-out by replication is a cost that grows with the estate; fan-out by caching is not.
 
-### 2.4 The common thread, and the one property that is missing
+### 2.4 Missing property
 
-All three succeed by _engineering determinism into a dedicated or managed layer and charging for that determinism_. The buyer is not paying for bandwidth but for the guarantee, which is why a technically superior transport does not automatically win.
+**All three succeed by engineering determinism into a dedicated or managed layer and charging for that determinism.** The buyer is not paying for bandwidth but for the guarantee, which is why a technically superior transport does not automatically win.
 
 **The trust argument that blocked the first two has already been settled by the third.** Moving the guarantee onto a best-effort substrate was supposed to be the hard part; §2.3 did it, in production, on contracted feeds, and the industry bought it. Retransmission, encryption, monitoring and an accountable counterparty turned out to be enough. Anyone arguing that broadcast cannot trust the public internet is arguing against deployed practice.
 
@@ -83,40 +113,50 @@ All three succeed by _engineering determinism into a dedicated or managed layer 
 
 ---
 
-## 3. What is changing
+## 3. Pressures
 
-**The incumbent model is not failing on its technical merits — it is being eroded by pressures largely exogenous to the transport itself.** They are ordered here by how much each is actually driving the transition: the economics first, then the enablers that make a response possible, then the operational pull.
+**The incumbent model is not failing on its technical merits — it is being eroded by pressures largely exogenous to the transport itself.** They fall into three groups, ordered by how much each is actually driving the transition: the forcing pressure of economics (§3.1, §3.2), the enablers that make a response possible now (§3.3–§3.5), and what the business is asking for (§3.6–§3.8). Primary distribution has been re-architected before (analogue to digital, ASI to IP, SDI to ST 2110) and each time the transport was the least interesting part of the transition: what changed the industry was the operating model the transport made possible.
 
-### The forcing pressure
+### 3.1 Economics
 
-**3.1 Changing economics** (_the pressure is established; the naive version of it is wrong_). This is the main driver. Spectrum and fleet economics move against satellite over a long horizon — C-band reallocation, more selective replacement-fleet investment, a finite depreciation runway. But **"cloud is cheaper than satellite" is not established.** The always-on case is modelled at published list prices in [Economics](economics.md), and two findings from that model bound the optimism:
+**Changing economics is the main driver** (_the pressure is established; the naive version of it is wrong_). Spectrum and fleet economics move against satellite over a long horizon — C-band reallocation, more selective replacement-fleet investment, a finite depreciation runway. But **"cloud is cheaper than satellite" is not established.** The always-on case is modelled at published list prices in [Economics](economics.md), and two findings from that model bound the optimism:
 
 - Unicast IP cost is **linear in destinations** where satellite fan-out inside the footprint is free, so destination count — not bitrate, and nothing a transport can influence — decides the comparison. Every Internet-native candidate is unicast at the last mile, and a MoQ relay is a cache rather than an exception; only retaining a broadcast medium escapes the linearity, which is the second alternative in §4.
 - Published cloud egress sits about an order of magnitude above what the same delivery costs on a commodity CDN or, costed all-in, on owned infrastructure — which makes this a question about commercial terms rather than engineering.
 
 The first of those is the same fact as the ceiling in §2.3, seen from the invoice rather than the service quota, and it is why this driver leads: **the pressure to leave satellite and the difficulty of replacing it are the same arithmetic.** The durable driver is therefore not unit cost today but the mismatch between a _fixed, provisioned_ cost model and a business that increasingly needs a _variable, on-demand_ one.
 
-**3.2 Shrinking linear revenues** (_established_). Leased transponders and managed fibre were justified against large, stable linear revenues; as viewing migrates to direct-to-consumer streaming, the fixed cost of dedicated capacity becomes a larger and more scrutinised fraction of a declining pie. Linear will not disappear — news, sport and regulated public-service content persist for years — but its cost base must shrink in step. This is what gives §3.1 its teeth: it makes distribution cost a line item under active scrutiny, so change gets forced even where no compelling technical alternative has appeared.
+### 3.2 Linear revenue
 
-### What makes a response possible now
+**Linear revenues are shrinking** (_established_). Leased transponders and managed fibre were justified against large, stable linear revenues; as viewing migrates to direct-to-consumer streaming, the fixed cost of dedicated capacity becomes a larger and more scrutinised fraction of a declining pie. Linear will not disappear — news, sport and regulated public-service content persist for years — but its cost base must shrink in step. This is what gives §3.1 its teeth: it makes distribution cost a line item under active scrutiny, so change gets forced even where no compelling technical alternative has appeared.
 
-**3.3 The head-ends are now well connected** (_established_). The receiving estate has quietly stopped being the constraint. Affiliate stations, cable head-ends and partner facilities that a decade ago had a modest business line for management traffic now typically have robust, often diverse and multi-gigabit internet connectivity, provisioned for their own cloud production and OTT workflows. A destination that can absorb a multi-megabit contribution-grade feed over the public internet no longer has to be specially built to do so, which is a precondition for anything in this document and one that was not true when the incumbent architectures were designed.
+### 3.3 Connected head-ends
 
-**3.4 A commodity software-defined substrate** (_established_). Mature QUIC/HTTP-3 stacks operated at global scale by CDNs and hyperscalers mean the _substrate_ for an Internet-native fabric now exists as a commodity. A decade ago "distribute broadcast over the Internet" meant building the network; today the network is there, and the open question is the layer above it.
+**The head-ends are now well connected** (_established_). The receiving estate has quietly stopped being the constraint. Affiliate stations, cable head-ends and partner facilities that a decade ago had a modest business line for management traffic now typically have robust, often diverse and multi-gigabit internet connectivity, provisioned for their own cloud production and OTT workflows. A destination that can absorb a multi-megabit contribution-grade feed over the public internet no longer has to be specially built to do so, which is a precondition for anything in this document and one that was not true when the incumbent architectures were designed.
 
-**3.5 Open standards and open source are disrupting the supply side** (_established_). The pattern is already visible in the incumbent generation: SRT displaced a good deal of proprietary contribution tooling largely because it was published with a usable open implementation, and RIST was specified in the open for the same reason. That changes who can build, who can integrate, and what a buyer can insist on — a protocol with more than one implementation is a market rather than a supplier relationship. It is also why the data-plane candidates evaluated in [Comparison](comparison.md) are open specifications with open implementations, and why relay portability between them is treated as a precondition rather than a detail: an open standard that only interoperates with itself delivers the disruption in name only.
+### 3.4 Commodity substrate
 
-### What the business is asking for
+**A commodity software-defined substrate exists** (_established_). Mature QUIC/HTTP-3 stacks operated at global scale by CDNs and hyperscalers mean the _substrate_ for an Internet-native fabric now exists as a commodity. A decade ago "distribute broadcast over the Internet" meant building the network; today the network is there, and the open question is the layer above it.
 
-**3.6 Cloud adoption in the media plant** (_established_). Production, playout, origination and OTT packaging have moved decisively into cloud and cloud-adjacent infrastructure, so primary distribution is frequently the _outlier_: software-defined and API-driven on every side but still a physical or carrier-managed procurement itself. Every hand-off between a software-defined domain and a manually provisioned one adds latency, error and operational cost. The pressure is not "cloud is cheaper" (§3.1); it is that the _shape_ of distribution no longer matches the shape of everything it connects to.
+### 3.5 Open supply
 
-**3.7 Operational agility** (_established_). Pop-up channels, event-scoped feeds, short-term rights windows and rapid partner onboarding are routine commercial requests, and distribution is increasingly expected to expose the same APIs and infrastructure-as-code primitives as the rest of the plant. An architecture whose unit of change is a multi-week provisioning ticket cannot serve a business whose unit of change is a same-day commercial decision.
+**Open standards and open source are disrupting the supply side** (_established_). The pattern is already visible in the incumbent generation: SRT displaced a good deal of proprietary contribution tooling largely because it was published with a usable open implementation, and RIST was specified in the open for the same reason. That changes who can build, who can integrate, and what a buyer can insist on — a protocol with more than one implementation is a market rather than a supplier relationship. It is also why the data-plane candidates evaluated in [Comparison](comparison.md) are open specifications with open implementations, and why relay portability between them is treated as a precondition rather than a detail: an open standard that only interoperates with itself delivers the disruption in name only.
 
-**3.8 Global, dynamic rights** (_likely_). A rights holder may need to deliver a feed to partners across several continents for a single event, then tear the whole topology down. Satellite footprints are geographically rigid and managed-fibre reach is bounded by carrier footprint, whereas the public Internet _reaches everywhere a data centre reaches_. The pressure is reach-on-demand: global topology without global procurement.
+### 3.6 Cloud plant
+
+**The media plant has moved to the cloud** (_established_). Production, playout, origination and OTT packaging have moved decisively into cloud and cloud-adjacent infrastructure, so primary distribution is frequently the _outlier_: software-defined and API-driven on every side but still a physical or carrier-managed procurement itself. Every hand-off between a software-defined domain and a manually provisioned one adds latency, error and operational cost. The pressure is not "cloud is cheaper" (§3.1); it is that the _shape_ of distribution no longer matches the shape of everything it connects to.
+
+### 3.7 Agility
+
+**The business asks for operational agility** (_established_). Pop-up channels, event-scoped feeds, short-term rights windows and rapid partner onboarding are routine commercial requests, and distribution is increasingly expected to expose the same APIs and infrastructure-as-code primitives as the rest of the plant. An architecture whose unit of change is a multi-week provisioning ticket cannot serve a business whose unit of change is a same-day commercial decision.
+
+### 3.8 Dynamic rights
+
+**Rights can need global, dynamic delivery** (_likely_). A rights holder may need to deliver a feed to partners across several continents for a single event, then tear the whole topology down. Satellite footprints are geographically rigid and managed-fibre reach is bounded by carrier footprint, whereas the public Internet _reaches everywhere a data centre reaches_. The pressure is reach-on-demand: global topology without global procurement.
 
 ---
 
-## 4. What a successor has to change
+## 4. Successor
 
 **The direction of travel is not "move primary distribution to IP" — §2.3 is that, and it is already happening. The open move is from _tunnels_ to a _fan-out fabric_** (_likely_). Each pressure in §3 pushes distribution toward a layer that is programmable, globally reachable and priced with use, and the substrate for such a layer now exists as a commodity. But the specific thing the adopted architectures cannot do is serve hundreds to low thousands of destinations without replicating the stream once per destination from the source, and that is a property of the data plane rather than of the operator's competence or the network's quality.
 
@@ -130,9 +170,9 @@ The conclusion is not that satellite and managed fibre disappear, but that the _
 
 ---
 
-## 5. The requirement set
+## 5. Requirements
 
-Everything downstream is scored against this list. It merges the characteristics of §1, the transport properties primary distribution imposes, and the contract the installed base enforces.
+**Everything downstream is scored against this list.** It merges the characteristics of §1, the transport properties primary distribution imposes, and the contract the installed base enforces.
 
 The order is deliberate. **R1–R3 are the requirements that decide whether a candidate is usable at all** — carry the multiplex, fan it out at the scale that matters, and hand it over in a form the installed base accepts. R4–R8 are then the requirements that decide whether it is _good_. And **R3 and R6–R8 sit above the transport and are required whichever data plane is chosen**, which is the observation the rest of this repository turns out to be about.
 
@@ -154,3 +194,31 @@ Three notes on how this list is used.
 **R3 is the requirement this repository spends most of its effort on**, and it is the one neither candidate specification addresses. The HLS document contains zero occurrences of PCR, constant bit rate, stuffing or null packet; MoQ has no notion of them either. That is not a criticism of either — it is the boundary of what a transport specification is for — but it means R3 is _built_, on either data plane.
 
 **R3 and R4 are coupled, but not by buffer depth**, which does not buy PCR conformance ([Comparison](comparison.md) §5.1). The two requirements are coupled all the same: the only configuration measured P1/P2-conformant on the media-aware lane delivers an order of magnitude later than one that is not, so a latency figure for it is meaningless without the conformance of the same bytes. And R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same configuration fails the 13818-1 buffer model, and the stages that rebuild the packet schedule pass it at latencies of their own, none sub-second over a whole capture. **R4 at R3 is therefore the open question on this lane, not a settled advantage** ([Evidence](../lab/evidence.md) §3.2, §3.11, §3.16).
+
+---
+
+## 6. Limits
+
+**Nothing is measured in this document.** Its claims are marked _established_, _likely_ or _reasoned_; what it cites as measured is in [Evidence](../lab/evidence.md), whose evidence-wide limits (§4 there) are not restated.
+
+- **Two claims are _likely_ rather than established**: that rights can need global, dynamic delivery (§3.8), and that the open move is from tunnels to a fan-out fabric (§4). They qualify how hard the pressures push and the direction they push in. No attempt yet.
+- **The satellite-hybrid alternative is _reasoned_** (§4): nothing about it is measured here, so the three-way choice rests on its specifications and on [Comparison](comparison.md) §1.2's account of its evidence. No attempt yet.
+- **The cost claims in §3.1 are the economics model's**, at published list prices, and carry its limits ([Economics](economics.md) §9).
+
+---
+
+## 7. Open questions
+
+**Does a sub-second requirement exist on identifiable routes, or is it a preference?** The answer would decide whether R4's "sub-second is desirable" is a requirement on those routes; the question is [Comparison](comparison.md) §5.2's.
+
+---
+
+## 8. References
+
+The broadcast standards this document cites (TR 101 290, ISO/IEC 13818-1, SMPTE ST 2022-7) are listed in [Architecture](architecture.md) §13, and the segmented-HTTP and satellite-hybrid specifications (HLS, VSF TR-06-4 Parts 7 and 8) in [Comparison](comparison.md) §14. The rest:
+
+- ANSI/SCTE 35, _Digital Program Insertion Cueing Message_, the splice signalling of §1.2 and R1.
+- Secure Reliable Transport (SRT), the Internet-Draft: [https://datatracker.ietf.org/doc/draft-sharabayko-srt/](https://datatracker.ietf.org/doc/draft-sharabayko-srt/)
+- RFC 9000, _QUIC: A UDP-Based Multiplexed and Secure Transport_, and RFC 9114, _HTTP/3_ (§3.4): [https://www.rfc-editor.org/rfc/rfc9000](https://www.rfc-editor.org/rfc/rfc9000), [https://www.rfc-editor.org/rfc/rfc9114](https://www.rfc-editor.org/rfc/rfc9114)
+- FCC 20-22, _Expanding Flexible Use of the 3.7 to 4.2 GHz Band_, Report and Order, 2020 — the United States' C-band reallocation (§3.1): [https://docs.fcc.gov/public/attachments/FCC-20-22A1.pdf](https://docs.fcc.gov/public/attachments/FCC-20-22A1.pdf)
+- AWS Elemental MediaConnect quotas, outputs per transport-stream flow (§2.3): [https://docs.aws.amazon.com/mediaconnect/latest/ug/quotas.html](https://docs.aws.amazon.com/mediaconnect/latest/ug/quotas.html)
