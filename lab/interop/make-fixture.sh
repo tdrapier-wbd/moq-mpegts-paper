@@ -26,12 +26,13 @@ START_PID=${START_PID:-0x0100}
 command -v ffmpeg >/dev/null || { echo "make-fixture: ffmpeg not found" >&2; exit 1; }
 
 # -flags +bitexact and -fflags +bitexact keep encoder version strings and other build-dependent
-# metadata out of the output, so the same ffmpeg build reproduces the same bytes.
+# metadata out of the output, and one x264 thread keeps its rate control deterministic, so the same
+# ffmpeg build reproduces the same bytes.
 ffmpeg -nostdin -hide_banner -loglevel error -y \
   -f lavfi -i "testsrc2=size=${WIDTH}x${HEIGHT}:rate=${FPS}:duration=${DURATION}" \
   -f lavfi -i "sine=frequency=1000:sample_rate=48000:duration=${DURATION}" \
   -flags +bitexact -fflags +bitexact \
-  -c:v libx264 -preset veryfast -profile:v main -pix_fmt yuv420p \
+  -c:v libx264 -threads 1 -preset veryfast -profile:v main -pix_fmt yuv420p \
     -g "$GOP" -keyint_min "$GOP" -sc_threshold 0 -bf 0 \
     -b:v "$VBPS" -minrate "$VBPS" -maxrate "$VBPS" -bufsize "$VBPS" \
   -c:a aac -b:a "$ABPS" -ar 48000 -ac 2 \
